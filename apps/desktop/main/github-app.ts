@@ -5,7 +5,7 @@
 
 import { shell } from "electron";
 import { ipcMain } from "electron";
-import { getCloudCredentialMeta } from "./cloud-credentials";
+import { listOrgKeys } from "./cloud-credentials";
 import { PLATFORM_TIMEOUT_MS } from "./deus-cloud-provision";
 import { getStoredDeusCloudSessionToken } from "./deus-cloud-auth";
 import { resolveDeusCloudUrl } from "./deus-cloud-auth-contract";
@@ -30,21 +30,32 @@ const EMPTY_STATE: Omit<GithubAppState, "configured" | "signedIn"> = {
   accessibleRepos: null,
 };
 
-async function orgContext(): Promise<{ token: string; orgId: string } | null> {
-  const [token, meta] = await Promise.all([
+/**
+ * The session, and the organization asked about: `orgId` when given, else the
+ * default organization (the first this device holds a key for, as the backend
+ * counts it).
+ */
+async function orgContext(orgId?: string): Promise<{ token: string; orgId: string } | null> {
+  const [token, keys] = await Promise.all([
     getStoredDeusCloudSessionToken().catch(() => null),
-    getCloudCredentialMeta("agntApiKey").catch(() => null),
+    orgId ? Promise.resolve([]) : listOrgKeys().catch(() => []),
   ]);
-  if (!token || !meta?.orgId) return null;
-  return { token, orgId: meta.orgId };
+  const id = orgId ?? keys[0]?.orgId;
+  if (!token || !id) return null;
+  return { token, orgId: id };
 }
 
-export async function getGithubAppState(): Promise<GithubAppState> {
-  const context = await orgContext();
+/** Only a non-empty string names an organization; anything else (IPC from older callers) is the default. */
+function orgIdArgument(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+export async function getGithubAppState(orgId?: string): Promise<GithubAppState> {
+  const context = await orgContext(orgId);
   if (!context) {
     return { ...EMPTY_STATE, configured: false, signedIn: false };
   }
-  const base = `${resolveDeusCloudUrl()}/orgs/${context.orgId}/github`;
+  const base = `${resolveDeusCloudUrl()}/orgs/${encodeURIComponent(context.orgId)}/github`;
   const headers = { authorization: `Bearer ${context.token}` };
   try {
     const res = await fetch(`${base}/installation`, {
@@ -90,11 +101,14 @@ export async function getGithubAppState(): Promise<GithubAppState> {
   }
 }
 
-export async function startGithubAppInstall(): Promise<{ ok: boolean; error?: string }> {
-  const context = await orgContext();
+export async function startGithubAppInstall(
+  orgId?: string
+): Promise<{ ok: boolean; error?: string }> {
+  const context = await orgContext(orgId);
   if (!context) return { ok: false, error: "Sign in to Deus Cloud first" };
+  const orgPath = encodeURIComponent(context.orgId);
   try {
-    const res = await fetch(`${resolveDeusCloudUrl()}/orgs/${context.orgId}/github/install-url`, {
+    const res = await fetch(`${resolveDeusCloudUrl()}/orgs/${orgPath}/github/install-url`, {
       headers: { authorization: `Bearer ${context.token}` },
       // Bounded like every other user-visible platform call: unbounded, a
       // black-holed endpoint held the Install click for undici's 300s while
@@ -134,6 +148,11 @@ export async function startGithubAppInstall(): Promise<{ ok: boolean; error?: st
 }
 
 export function registerGithubAppHandlers(): void {
-  ipcMain.handle("deus_cloud:github_app_status", () => getGithubAppState());
-  ipcMain.handle("deus_cloud:github_app_install", () => startGithubAppInstall());
+  // An optional organization id; callers that pass nothing get the default organization.
+  ipcMain.handle("deus_cloud:github_app_status", (_event, orgId?: unknown) =>
+    getGithubAppState(orgIdArgument(orgId))
+  );
+  ipcMain.handle("deus_cloud:github_app_install", (_event, orgId?: unknown) =>
+    startGithubAppInstall(orgIdArgument(orgId))
+  );
 }

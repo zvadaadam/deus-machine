@@ -7,7 +7,7 @@ export interface WorkspaceFileTarget extends Record<string, unknown> {
 }
 
 export async function openPath(target: WorkspaceFileTarget): Promise<boolean> {
-  if (!capabilities.ipcInvoke) return false;
+  if (!capabilities.openInExternalApp) return false;
   try {
     return (await invoke<boolean>("native:openPath", target)) ?? false;
   } catch {
@@ -16,7 +16,7 @@ export async function openPath(target: WorkspaceFileTarget): Promise<boolean> {
 }
 
 export async function revealInFinder(target: WorkspaceFileTarget): Promise<boolean> {
-  if (!capabilities.ipcInvoke) return false;
+  if (!capabilities.openInExternalApp) return false;
   try {
     return (await invoke<boolean>("native:revealInFinder", target)) ?? false;
   } catch {

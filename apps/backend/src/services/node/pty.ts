@@ -4,7 +4,7 @@
  * A cloud terminal lives on the sandbox; a local one on node-pty. `write`/
  * `resize`/`kill` route by `ptyId` (the cloud registry answers `isCloudPty`); a
  * spawn routes by the cloud workspace the frontend named. This centralizes the
- * four scattered `isCloudPty` branches that lived in `services/agent/commands.ts`.
+ * `isCloudPty` branches the terminal operations would otherwise each carry.
  *
  * NOTE: a pty is a *stream*, not a request/response resource, so this is NOT part
  * of the `NodeDriver`. The long-term home for streaming across nodes is the NRP
@@ -14,6 +14,7 @@
  */
 import { localProjectEnv, readLocalProjectEnvironment } from "../project-environment.service";
 import { getDatabase } from "../../lib/database";
+import { ConflictError } from "../../lib/errors";
 import { getWorkspaceRaw } from "../../db/queries";
 import { spawnPty, writeToPty, resizePty, killPty } from "../pty.service";
 import {
@@ -46,7 +47,7 @@ export const ptyRouter = {
       const row = getWorkspaceRaw(getDatabase(), params.cloudWorkspaceId);
       const cloudSessionId = row?.current_session_id;
       if (!cloudSessionId) {
-        throw new Error("Cloud workspace has no active session for a terminal");
+        throw new ConflictError("Cloud workspace has no active session for a terminal");
       }
       await openCloudPty(cloudSessionId, {
         ptyId: params.id,

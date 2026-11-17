@@ -3,14 +3,14 @@ import { describe, it, expect, vi } from "vitest";
 // Local lane → git.service; Remote lane → the cloud session socket. Mock both so
 // the test exercises the driver's extraction/mapping, not the real transports.
 vi.mock("../../../src/services/git.service", () => ({
-  resolveParentBranch: vi.fn(() => "main"),
-  getDiffStats: vi.fn(() => ({ additions: 3, deletions: 1 })),
-  getDiffFiles: vi.fn(() => [{ file: "a.ts", additions: 3, deletions: 1 }]),
+  resolveParentBranch: vi.fn(async () => "main"),
+  getDiffStats: vi.fn(async () => ({ additions: 3, deletions: 1 })),
+  getDiffFiles: vi.fn(async () => [{ file: "a.ts", additions: 3, deletions: 1 }]),
   resolveWorkspaceRelativePath: vi.fn((_ws: string, f: string) => f),
-  getFileDiff: vi.fn(() => "@@ local diff @@"),
+  getFileDiff: vi.fn(async () => "@@ local diff @@"),
   extractDiffInfo: vi.fn(() => ({ isNew: false, isDeleted: false, oldPath: "", newPath: "" })),
-  getMergeBase: vi.fn(() => "base-sha"),
-  getGitFileContent: vi.fn(() => "old-bytes"),
+  getMergeBase: vi.fn(async () => "base-sha"),
+  getGitFileContent: vi.fn(async () => "old-bytes"),
 }));
 
 vi.mock("../../../src/services/agent/cloud/driver", () => ({
@@ -19,6 +19,7 @@ vi.mock("../../../src/services/agent/cloud/driver", () => ({
   })),
   getCloudDiffFile: vi.fn(async () => ({ path: "x.ts", diff: "@@ cloud diff @@" })),
   requestCloudFs: vi.fn(async () => ({ content: "cloud-bytes" })),
+  hasLiveCloudSession: vi.fn(() => true),
 }));
 
 import { resolveNode } from "../../../src/services/node/driver";
@@ -68,6 +69,28 @@ describe("NodeDriver — diff dispatch", () => {
       diff: "",
       old_content: null,
       new_content: null,
+    });
+  });
+
+  it("row numbers never connect to a computer with no open channel, or one asleep", async () => {
+    const { getCloudDiffSummary, hasLiveCloudSession } =
+      await import("../../../src/services/agent/cloud/driver");
+    const summary = getCloudDiffSummary as ReturnType<typeof vi.fn>;
+    const live = hasLiveCloudSession as ReturnType<typeof vi.fn>;
+    summary.mockClear();
+
+    live.mockReturnValueOnce(false);
+    expect(await resolveNode(cloud, "").diffStats()).toEqual({ additions: 0, deletions: 0 });
+    for (const init_stage of ["paused", "stopped", "resuming", "error"]) {
+      const sleeping = asWs({ ...cloud, init_stage });
+      expect(await resolveNode(sleeping, "").diffStats()).toEqual({ additions: 0, deletions: 0 });
+    }
+    expect(summary).not.toHaveBeenCalled();
+
+    // The Changes panel's list still asks: it is shown only for an awake computer.
+    live.mockReturnValueOnce(false);
+    expect(await resolveNode(cloud, "").diffFiles()).toEqual({
+      files: [{ file: "x.ts", additions: 2, deletions: 5 }],
     });
   });
 

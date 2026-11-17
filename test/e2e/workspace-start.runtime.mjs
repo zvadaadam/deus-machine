@@ -153,7 +153,11 @@ try {
   // The backend's operations, as the app asks for them (lib/operations.mjs).
   backend = await connectBackend(`http://127.0.0.1:${port}`);
   const workspace = (workspaceId) => backend.read("workspace", { workspaceId });
-  const allWorkspaces = () => backend.read("allWorkspaces");
+  // Every workspace row, whatever its state, from the read the sidebar uses.
+  const allWorkspaces = async () =>
+    (await backend.read("workspaces", { state: "ready,initializing,error,archived" })).flatMap(
+      (group) => group.workspaces
+    );
   // What the backend says when it refuses, or null when it does not.
   const refusal = (asked) =>
     asked.then(

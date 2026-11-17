@@ -39,9 +39,14 @@ export class GitError extends Error {
  */
 export function runGit(
   args: readonly string[],
-  options: { cwd: string; timeoutMs?: number }
+  options: {
+    cwd: string;
+    timeoutMs?: number;
+    /** Each piece of stderr as it arrives (a clone's progress). */
+    onStderr?: (chunk: string) => void;
+  }
 ): Promise<string> {
-  const { cwd, timeoutMs = 10_000 } = options;
+  const { cwd, timeoutMs = 10_000, onStderr } = options;
   return new Promise((resolve, reject) => {
     if (processGroupsStopped()) {
       reject(new GitError(args, "", false, new Error("Deus is closing.")));
@@ -58,7 +63,10 @@ export function runGit(
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8").on("data", (chunk: string) => (stdout += chunk));
-    child.stderr.setEncoding("utf8").on("data", (chunk: string) => (stderr += chunk));
+    child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
+      stderr += chunk;
+      onStderr?.(chunk);
+    });
 
     const signalGroup = (signal: NodeJS.Signals) => {
       if (!child.pid) return;

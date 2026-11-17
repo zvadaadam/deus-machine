@@ -18,6 +18,7 @@ import { AutomationSessionPolicySchema } from "@shared/enums";
 import type { Automation, AutomationRun } from "@shared/types";
 import { httpsOrigin } from "@shared/git-origin";
 import { getDatabase } from "../../lib/database";
+import { ConflictError, NotFoundError, ValidationError } from "../../lib/errors";
 import { getRepositoryById } from "../../db";
 import { sessionEvents } from "@shared/api/sessions";
 import { invalidate } from "../query-engine";
@@ -29,7 +30,11 @@ import * as platform from "./platform";
 import * as store from "./store";
 import { getProviderAccounts } from "../provider-accounts.service";
 import { defaultProviderAccount } from "@shared/types/provider-account";
-import { getCloudConnectionIdentity } from "../agent/cloud/config";
+import {
+  cloudOrgKeyIds,
+  defaultCloudOrgId,
+  getCloudConnectionIdentity,
+} from "../agent/cloud/config";
 import { getCloudModelLists } from "../agent/cloud/models";
 
 /** Platform parity: next-fire gaps must be at least 5 minutes apart. */
@@ -39,7 +44,7 @@ const AUTOMATION_RESOURCES = ["automations", "automationRuns"] as const;
 
 function assertCurrentAccount(identity: string): void {
   if (getCloudConnectionIdentity() !== identity) {
-    throw new Error("Your Deus account changed. Refresh automations and try again.");
+    throw new ConflictError("Your Deus account changed. Refresh automations and try again.");
   }
 }
 
@@ -52,14 +57,14 @@ export function validateSchedule(cron: string, timezone: string | null): void {
     // sampling has to sit inside the try for a bad IANA name to surface here.
     fires = new Cron(cron, { timezone: timezone ?? undefined, paused: true }).nextRuns(25);
   } catch (err) {
-    throw new Error(
+    throw new ValidationError(
       `Invalid schedule: ${err instanceof Error ? err.message : "unparseable cron expression"}`
     );
   }
-  if (fires.length === 0) throw new Error("Invalid schedule: it never fires.");
+  if (fires.length === 0) throw new ValidationError("Invalid schedule: it never fires.");
   for (let i = 1; i < fires.length; i++) {
     if (fires[i].getTime() - fires[i - 1].getTime() < MIN_FIRE_INTERVAL_MS) {
-      throw new Error("Schedules must be at least 5 minutes apart.");
+      throw new ValidationError("Schedules must be at least 5 minutes apart.");
     }
   }
 }
@@ -82,9 +87,9 @@ export function listAutomationRuns(automationId: string): AutomationRun[] {
 
 function repoWithOrigin(repositoryId: string): RepositoryRow & { git_origin_url: string } {
   const repo = getRepositoryById(getDatabase(), repositoryId);
-  if (!repo) throw new Error("Repository not found.");
+  if (!repo) throw new NotFoundError("Repository not found.");
   if (!repo.git_origin_url) {
-    throw new Error(
+    throw new ValidationError(
       "Automations run in cloud sandboxes, so the repository needs a git remote — push it to GitHub first."
     );
   }
@@ -105,83 +110,114 @@ async function repoIdByEnvName(): Promise<Map<string, string>> {
   return new Map(entries);
 }
 
-/** The repo's derived environment, created platform-side when missing. */
-async function ensureRepoEnvironment(repositoryId: string, identity: string): Promise<string> {
+/** The repo's derived environment in the automation's organization, created platform-side when missing. */
+async function ensureRepoEnvironment(
+  repositoryId: string,
+  identity: string,
+  orgId: string | null
+): Promise<string> {
   const repo = repoWithOrigin(repositoryId);
   const origin = httpsOrigin(repo.git_origin_url);
-  const info = await getCloudEnvironmentInfo(origin);
+  const info = await getCloudEnvironmentInfo(origin, orgId);
   assertCurrentAccount(identity);
   if (info.lookupFailed) {
     throw new Error("Deus Cloud is unreachable right now — try again in a moment.");
   }
-  await platform.ensurePlatformEnvironment(info.name, origin, info.configured);
+  await platform.ensurePlatformEnvironment(info.name, origin, info.configured, orgId);
   return info.name;
+}
+
+/** The organization an automation was listed under; a row from before that was kept is the default's. */
+function orgOfAutomation(id: string): string | null {
+  return store.getAutomationRaw(id)?.organization_id ?? defaultCloudOrgId();
 }
 
 // ─── Sync (platform → cache) ─────────────────────────────────
 
-let refreshInFlight: Promise<void> | null = null;
+/** Per organization: the full refresh in flight and when the last one finished. */
+const refreshInFlight = new Map<string | null, Promise<void>>();
 let cacheIdentity: string | null = null;
-let lastFullRefreshAt = 0;
-/** Bumped by every scoped write (create/update/toggle/delete/refresh(id)) —
- *  a full refresh whose platform snapshot predates it must not replace the
- *  cache with stale rows (or resurrect a just-deleted one). */
-let lastScopedWriteAt = 0;
+const lastFullRefreshAt = new Map<string | null, number>();
+/** Per organization, bumped by every scoped write in it (create/update/toggle/
+ *  delete/refresh(id)) — a full refresh of that organization whose platform
+ *  snapshot predates it must not replace the cache with stale rows (or
+ *  resurrect a just-deleted one). Another organization's write says nothing
+ *  about this one's list. */
+const lastScopedWriteAt = new Map<string | null, number>();
 const FULL_REFRESH_MIN_INTERVAL_MS = 5_000;
 
-export function markScopedWrite(): void {
-  lastScopedWriteAt = Date.now();
+export function markScopedWrite(orgId: string | null): void {
+  lastScopedWriteAt.set(orgId, Date.now());
 }
 
 /**
  * Mirror the platform into the cache. With `automationId`, one automation +
- * its run ledger; without, the full list (throttled + single-flight — the
- * view fires this on mount and focus).
+ * its run ledger, in the organization it was listed under; without, one
+ * organization's full list (the default one unless named; throttled +
+ * single-flight per organization — the view fires this on mount and focus).
+ * A full list replaces only that organization's rows.
  */
-export async function refreshAutomations(automationId?: string): Promise<void> {
+export async function refreshAutomations(
+  automationId?: string,
+  organizationId?: string | null
+): Promise<void> {
   if (!platform.platformConfigured()) return;
   const identity = getCloudConnectionIdentity();
   if (cacheIdentity !== identity) {
     cacheIdentity = identity;
-    refreshInFlight = null;
-    lastFullRefreshAt = 0;
-    lastScopedWriteAt = 0;
+    refreshInFlight.clear();
+    lastFullRefreshAt.clear();
+    lastScopedWriteAt.clear();
     store.replaceAutomationsCache([]);
     invalidate([...AUTOMATION_RESOURCES]);
   }
 
   if (automationId) {
+    const orgId =
+      store.getAutomationRaw(automationId)?.organization_id ??
+      organizationId ??
+      defaultCloudOrgId();
     const [summary, runs, envMap] = await Promise.all([
-      platform.fetchAutomation(automationId),
-      platform.fetchRuns(automationId),
+      platform.fetchAutomation(automationId, orgId),
+      platform.fetchRuns(automationId, orgId),
       repoIdByEnvName(),
     ]);
     if (getCloudConnectionIdentity() !== identity) return;
     const previous = store.getAutomationRaw(automationId);
-    store.upsertAutomation(platform.summaryToRow(summary, envMap, previous));
+    store.upsertAutomation(platform.summaryToRow(summary, envMap, previous, orgId));
     store.upsertRuns(runs.map((run) => platform.runSummaryToRow(run, store.getRun(run.id))));
-    markScopedWrite();
+    markScopedWrite(orgId);
     invalidate([...AUTOMATION_RESOURCES]);
     return;
   }
 
-  if (refreshInFlight) return refreshInFlight;
-  if (Date.now() - lastFullRefreshAt < FULL_REFRESH_MIN_INTERVAL_MS) return;
+  const defaultOrgId = defaultCloudOrgId();
+  const orgId = organizationId ?? defaultOrgId;
+  const inFlight = refreshInFlight.get(orgId);
+  if (inFlight) return inFlight;
+  if (Date.now() - (lastFullRefreshAt.get(orgId) ?? 0) < FULL_REFRESH_MIN_INTERVAL_MS) return;
   const refresh = (async () => {
     const snapshotStartedAt = Date.now();
-    const [summaries, envMap] = await Promise.all([platform.fetchAutomations(), repoIdByEnvName()]);
+    const [summaries, envMap] = await Promise.all([
+      platform.fetchAutomations(orgId),
+      repoIdByEnvName(),
+    ]);
     if (getCloudConnectionIdentity() !== identity) return;
     // A scoped write landed while this list was in flight — its snapshot
     // is already stale; dropping it beats restoring an old name/status or
     // resurrecting a deleted row. The next mount/focus refresh converges.
-    if (lastScopedWriteAt > snapshotStartedAt) return;
+    if ((lastScopedWriteAt.get(orgId) ?? 0) > snapshotStartedAt) return;
     const locals = store.localColumnsById();
     // Read BEFORE the replace: an automation whose platform last-run moved
     // has a stale run ledger — the list derives last_run_status from it, so
     // a new timestamp over an old failed row would show "Failed just now".
     const prevLastRun = store.lastRunAtById();
     store.replaceAutomationsCache(
-      summaries.map((summary) => platform.summaryToRow(summary, envMap, locals.get(summary.id)))
+      summaries.map((summary) =>
+        platform.summaryToRow(summary, envMap, locals.get(summary.id), orgId)
+      ),
+      // Rows from before organizations were kept are the default organization's.
+      { organizationId: orgId, includeUnknown: orgId === defaultOrgId }
     );
     const changed = summaries.filter((summary) => {
       const prev = prevLastRun.get(summary.id);
@@ -189,24 +225,24 @@ export async function refreshAutomations(automationId?: string): Promise<void> {
     });
     await Promise.all(
       changed.map(async (summary) => {
-        const runs = await platform.fetchRuns(summary.id);
+        const runs = await platform.fetchRuns(summary.id, orgId);
         if (getCloudConnectionIdentity() !== identity) return;
         store.upsertRuns(runs.map((run) => platform.runSummaryToRow(run, store.getRun(run.id))));
       })
     );
     if (getCloudConnectionIdentity() !== identity) return;
-    lastFullRefreshAt = Date.now();
+    lastFullRefreshAt.set(orgId, Date.now());
     invalidate(changed.length > 0 ? [...AUTOMATION_RESOURCES] : ["automations"]);
   })();
-  refreshInFlight = refresh;
+  refreshInFlight.set(orgId, refresh);
   try {
     await refresh;
   } finally {
-    if (refreshInFlight === refresh) refreshInFlight = null;
+    if (refreshInFlight.get(orgId) === refresh) refreshInFlight.delete(orgId);
   }
 }
 
-/** Boot / credentials-arrived hook: best-effort background mirror. */
+/** Boot / credentials-arrived hook: best-effort background mirror, per organization. */
 export function initAutomations(): void {
   if (!platform.platformConfigured()) {
     // Sign-out (or boot before credentials arrive): the cache must not keep
@@ -214,15 +250,29 @@ export function initAutomations(): void {
     // stay live app-wide and the agent tool reads the same cache. Runs
     // cascade with their automations.
     cacheIdentity = null;
-    refreshInFlight = null;
-    lastFullRefreshAt = 0;
+    refreshInFlight.clear();
+    lastFullRefreshAt.clear();
     store.replaceAutomationsCache([]);
     invalidate([...AUTOMATION_RESOURCES]);
     return;
   }
-  void refreshAutomations().catch((err) => {
-    console.warn("[Automations] initial platform sync failed:", err);
-  });
+  void refreshEveryOrganization();
+}
+
+/**
+ * A full refresh of every organization this backend holds a key for (with only a
+ * developer key, the default one). Each is its own refresh: one that fails keeps
+ * its rows, is logged and stops nothing else. Settles when all have.
+ */
+export async function refreshEveryOrganization(): Promise<void> {
+  const keyed = cloudOrgKeyIds();
+  await Promise.all(
+    (keyed.length > 0 ? keyed : [null]).map((orgId) =>
+      refreshAutomations(undefined, orgId).catch((err) => {
+        console.warn(`[Automations] platform sync failed${orgId ? ` for ${orgId}` : ""}:`, err);
+      })
+    )
+  );
 }
 
 // ─── CRUD ────────────────────────────────────────────────────
@@ -236,6 +286,8 @@ export interface AutomationInput {
   session_policy?: string;
   model?: string | null;
   thinking_level?: string | null;
+  /** A new automation's organization; the default one when omitted. Never changed by an update. */
+  organization_id?: string | null;
 }
 
 interface ValidatedInput {
@@ -257,13 +309,13 @@ const PROMPT_MAX = 32_768;
 // ever execute in Deus Cloud, so the level is read in the platform's vocabulary.
 function requireModel(value: string | null | undefined): string {
   const model = value?.trim();
-  if (!model) throw new Error("Choose the Claude model its runs use.");
+  if (!model) throw new ValidationError("Choose the Claude model its runs use.");
   return model;
 }
 
 function requireThinkingLevel(value: string | null | undefined): CloudThinkingLevel {
   const level = readCloudThinkingLevel(value);
-  if (!level) throw new Error("Choose the thinking level its runs use.");
+  if (!level) throw new ValidationError("Choose the thinking level its runs use.");
   return level;
 }
 
@@ -289,16 +341,17 @@ async function assertCloudRunsChoice(
     thinkingLevel,
     requireListed,
   });
-  if (problem) throw new Error(problem);
+  if (problem) throw new ValidationError(problem);
 }
 
 function validateInput(input: AutomationInput): ValidatedInput {
   const name = input.name?.trim();
-  if (!name) throw new Error("Automation needs a name.");
-  if (name.length > NAME_MAX) throw new Error(`Name is too long (max ${NAME_MAX} characters).`);
+  if (!name) throw new ValidationError("Automation needs a name.");
+  if (name.length > NAME_MAX)
+    throw new ValidationError(`Name is too long (max ${NAME_MAX} characters).`);
   const prompt = input.prompt?.trim();
-  if (!prompt) throw new Error("Automation needs a prompt.");
-  if (prompt.length > PROMPT_MAX) throw new Error("Prompt is too long.");
+  if (!prompt) throw new ValidationError("Automation needs a prompt.");
+  if (prompt.length > PROMPT_MAX) throw new ValidationError("Prompt is too long.");
   const timezone = input.timezone?.trim() || null;
   validateSchedule(input.cron, timezone);
   return {
@@ -317,7 +370,8 @@ export async function createAutomation(
   input: AutomationInput,
   createdBy: "user" | "agent"
 ): Promise<Automation> {
-  platform.requireAutomationPlatform();
+  const orgId = input.organization_id ?? defaultCloudOrgId();
+  platform.requireAutomationPlatform(orgId);
   const identity = getCloudConnectionIdentity();
   const valid = validateInput(input);
   await assertCloudRunsChoice(valid.model, valid.thinking_level, true);
@@ -325,31 +379,37 @@ export async function createAutomation(
   // account cannot make that scheduled turn runnable.
   const accounts = await getProviderAccounts();
   if (defaultProviderAccount(accounts, "claude")?.status !== "connected") {
-    throw new Error(
+    throw new ConflictError(
       "Choose a connected Claude account under Settings → AI Providers before creating an automation."
     );
   }
-  const environment = await ensureRepoEnvironment(valid.repository_id, identity);
+  const environment = await ensureRepoEnvironment(valid.repository_id, identity, orgId);
   assertCurrentAccount(identity);
-  const id = await platform.createPlatformAutomation({
-    displayName: valid.name,
-    prompt: valid.prompt,
-    cron: valid.cron,
-    timezone: valid.timezone,
-    environment,
-    model: valid.model,
-    thinkingLevel: valid.thinking_level,
-    sessionPolicy: valid.session_policy,
-  });
+  const id = await platform.createPlatformAutomation(
+    {
+      displayName: valid.name,
+      prompt: valid.prompt,
+      cron: valid.cron,
+      timezone: valid.timezone,
+      environment,
+      model: valid.model,
+      thinkingLevel: valid.thinking_level,
+      sessionPolicy: valid.session_policy,
+    },
+    orgId
+  );
   assertCurrentAccount(identity);
   // Seed the row directly with its provenance — writing a "user"-labelled row
   // first and patching created_by after would broadcast the intermediate
   // state to every subscriber. A fresh automation has no runs to pull.
   try {
-    const [summary, envMap] = await Promise.all([platform.fetchAutomation(id), repoIdByEnvName()]);
+    const [summary, envMap] = await Promise.all([
+      platform.fetchAutomation(id, orgId),
+      repoIdByEnvName(),
+    ]);
     assertCurrentAccount(identity);
     store.upsertAutomation(
-      platform.summaryToRow(summary, envMap, { created_by: createdBy, workspace_id: null })
+      platform.summaryToRow(summary, envMap, { created_by: createdBy, workspace_id: null }, orgId)
     );
   } catch (err) {
     assertCurrentAccount(identity);
@@ -375,10 +435,11 @@ export async function createAutomation(
       consecutive_failures: 0,
       created_by: createdBy,
       workspace_id: null,
+      organization_id: orgId,
       updated_at: new Date().toISOString(),
     });
   }
-  markScopedWrite();
+  markScopedWrite(orgId);
   invalidate([...AUTOMATION_RESOURCES]);
   const created = getAutomation(id);
   if (!created) throw new Error("Automation not found after creation");
@@ -391,24 +452,25 @@ export async function updateAutomation(
 ): Promise<Automation> {
   const identity = getCloudConnectionIdentity();
   const existing = store.getAutomationRaw(id);
-  if (!existing) throw new Error("Automation not found.");
+  if (!existing) throw new NotFoundError("Automation not found.");
+  const orgId = existing.organization_id ?? defaultCloudOrgId();
 
   // The platform spec is ONE document (full replacement, not a merge target),
   // and the cache doesn't carry every field (mcpServers, delivery, overlap) —
   // so patch on top of the platform's CURRENT spec, never a rebuilt one.
-  const summary = await platform.fetchAutomation(id);
+  const summary = await platform.fetchAutomation(id, orgId);
   assertCurrentAccount(identity);
   const spec = { ...summary.spec };
 
   const name = input.name?.trim() || (summary.description?.trim() ?? summary.name);
   if (input.prompt !== undefined) {
     const prompt = input.prompt.trim();
-    if (!prompt) throw new Error("Automation needs a prompt.");
+    if (!prompt) throw new ValidationError("Automation needs a prompt.");
     spec.prompt = prompt;
   }
   if (input.cron !== undefined || input.timezone !== undefined) {
     const cron = input.cron?.trim() || existing.cron;
-    if (!cron) throw new Error("Automation needs a schedule.");
+    if (!cron) throw new ValidationError("Automation needs a schedule.");
     const timezone =
       input.timezone !== undefined ? input.timezone?.trim() || null : existing.timezone;
     validateSchedule(cron, timezone);
@@ -427,7 +489,7 @@ export async function updateAutomation(
       : spec.thinkingLevel;
   // One saved before AGNT required them must have both chosen before it saves again.
   if (!model || !thinkingLevel) {
-    throw new Error("Choose the model and thinking level its runs use.");
+    throw new ValidationError("Choose the model and thinking level its runs use.");
   }
   // Only a choice made now is checked: an untouched spec stays as the platform holds it.
   if (input.model !== undefined || input.thinking_level !== undefined) {
@@ -436,14 +498,15 @@ export async function updateAutomation(
   const retargeted =
     input.repository_id !== undefined && input.repository_id !== existing.repository_id;
   if (retargeted) {
-    spec.environment = await ensureRepoEnvironment(input.repository_id as string, identity);
+    spec.environment = await ensureRepoEnvironment(input.repository_id as string, identity, orgId);
   }
 
   assertCurrentAccount(identity);
-  await platform.updatePlatformAutomation(id, {
-    description: name,
-    spec: { ...spec, model, thinkingLevel },
-  });
+  await platform.updatePlatformAutomation(
+    id,
+    { description: name, spec: { ...spec, model, thinkingLevel } },
+    orgId
+  );
   assertCurrentAccount(identity);
   // Only AFTER the platform accepted the retarget: the held sandbox belongs
   // to the old repo, but a failed update must not strip the provenance link.
@@ -461,9 +524,10 @@ export async function toggleAutomation(
   status: "active" | "paused"
 ): Promise<Automation> {
   const identity = getCloudConnectionIdentity();
-  if (!store.getAutomationRaw(id)) throw new Error("Automation not found.");
-  if (status === "paused") await platform.pausePlatformAutomation(id);
-  else await platform.resumePlatformAutomation(id);
+  if (!store.getAutomationRaw(id)) throw new NotFoundError("Automation not found.");
+  const orgId = orgOfAutomation(id);
+  if (status === "paused") await platform.pausePlatformAutomation(id, orgId);
+  else await platform.resumePlatformAutomation(id, orgId);
   assertCurrentAccount(identity);
   await refreshAutomations(id);
   assertCurrentAccount(identity);
@@ -474,11 +538,12 @@ export async function toggleAutomation(
 
 export async function deleteAutomation(id: string): Promise<void> {
   const identity = getCloudConnectionIdentity();
-  if (!store.getAutomationRaw(id)) throw new Error("Automation not found.");
-  await platform.deletePlatformAutomation(id);
+  if (!store.getAutomationRaw(id)) throw new NotFoundError("Automation not found.");
+  const orgId = orgOfAutomation(id);
+  await platform.deletePlatformAutomation(id, orgId);
   assertCurrentAccount(identity);
   store.deleteAutomationRow(id);
-  markScopedWrite();
+  markScopedWrite(orgId);
   invalidate([...AUTOMATION_RESOURCES]);
 }
 
@@ -486,8 +551,12 @@ export async function deleteAutomation(id: string): Promise<void> {
 export async function runAutomationNow(id: string): Promise<string> {
   const identity = getCloudConnectionIdentity();
   const automation = store.getAutomationRaw(id);
-  if (!automation) throw new Error("Automation not found.");
-  const { runId, status } = await platform.triggerPlatformAutomation(id, uuidv7());
+  if (!automation) throw new NotFoundError("Automation not found.");
+  const { runId, status } = await platform.triggerPlatformAutomation(
+    id,
+    uuidv7(),
+    automation.organization_id ?? defaultCloudOrgId()
+  );
   assertCurrentAccount(identity);
   // Seed the ledger row immediately; the detail view's live-run refresh
   // converges it onto the platform truth as the run progresses.
@@ -526,9 +595,11 @@ export async function openAutomationRun(
 ): Promise<{ workspaceId: string; sessionId: string }> {
   const identity = getCloudConnectionIdentity();
   const run = store.getRun(runId);
-  if (!run) throw new Error("Run not found.");
+  if (!run) throw new NotFoundError("Run not found.");
   const automation = store.getAutomationRaw(run.automation_id);
-  if (!automation) throw new Error("Automation not found.");
+  if (!automation) throw new NotFoundError("Automation not found.");
+  // The run's sandbox is in the automation's organization.
+  const orgId = automation.organization_id ?? defaultCloudOrgId();
 
   // Already adopted — reuse the rows, but heal the transcript first: the run
   // may have finished (or continued) while deus was closed, and a PARTIAL
@@ -536,7 +607,7 @@ export async function openAutomationRun(
   // freeze it forever. The insert path is idempotent, so backfill always.
   if (run.session_id && run.workspace_id && store.sessionExists(run.session_id)) {
     if (run.provider_session_id) {
-      await backfillTranscript(run.session_id, run.provider_session_id, identity);
+      await backfillTranscript(run.session_id, run.provider_session_id, identity, orgId);
     }
     assertCurrentAccount(identity);
     // The user may have archived the adopted workspace since — an archived
@@ -544,21 +615,21 @@ export async function openAutomationRun(
     // select an id the frontend cannot resolve. Resurface it, like the
     // adoption path does.
     if (store.reviveAdoptedWorkspace(run.workspace_id, run.session_id)) {
-      invalidate(["workspaces", "stats"]);
+      invalidate(["workspaces"]);
     }
     return { workspaceId: run.workspace_id, sessionId: run.session_id };
   }
 
   if (!run.provider_session_id) {
-    throw new Error("This run has no session to open (it was skipped or never started).");
+    throw new ConflictError("This run has no session to open (it was skipped or never started).");
   }
   if (!automation.repository_id) {
-    throw new Error("This automation's repository isn't on this Mac.");
+    throw new NotFoundError("This automation's repository isn't on this Mac.");
   }
 
-  const detail = await platform.fetchSessionDetail(run.provider_session_id);
+  const detail = await platform.fetchSessionDetail(run.provider_session_id, orgId);
   assertCurrentAccount(identity);
-  if (!detail.workspaceId) throw new Error("The run's sandbox is gone.");
+  if (!detail.workspaceId) throw new NotFoundError("The run's sandbox is gone.");
 
   const { workspaceId, sessionId } = store.adoptRunRows({
     runId,
@@ -567,6 +638,7 @@ export async function openAutomationRun(
     automationName: automation.name,
     providerSessionId: run.provider_session_id,
     providerWorkspaceId: detail.workspaceId,
+    organizationId: orgId,
     newWorkspaceSlug: () => generateUniqueName(getDatabase()),
   });
 
@@ -580,7 +652,7 @@ export async function openAutomationRun(
     // Rows no event of the chat announced: whoever has its transcript open reads it again.
     resetSubscribers(sessionEvents, { sessionId });
   }
-  invalidate(["workspaces", "sessions", "session", "stats", ...AUTOMATION_RESOURCES], {
+  invalidate(["workspaces", "sessions", "session", ...AUTOMATION_RESOURCES], {
     sessionIds: [sessionId],
   });
 
@@ -602,10 +674,11 @@ export async function openAutomationRun(
 async function backfillTranscript(
   deusSessionId: string,
   providerSessionId: string,
-  identity: string
+  identity: string,
+  orgId: string | null
 ): Promise<void> {
   try {
-    const detail = await platform.fetchSessionDetail(providerSessionId);
+    const detail = await platform.fetchSessionDetail(providerSessionId, orgId);
     if (getCloudConnectionIdentity() !== identity) return;
     const inserted = store.backfillSessionTranscript(deusSessionId, detail.messages);
     if (inserted > 0) {

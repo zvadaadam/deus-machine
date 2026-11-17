@@ -110,9 +110,15 @@ export function useRunAutomationNow() {
   });
 }
 
-/** Re-mirror the platform into the backend cache (push refreshes the UI). */
-export function refreshAutomations(automationId?: string): void {
-  void call(api.refreshAutomations, { automationId }).catch(() => {
+/**
+ * Re-mirror the platform into the backend cache (push refreshes the UI): one
+ * automation, or one organization's list (the default one when none is named).
+ */
+export function refreshAutomations(automationId?: string, organizationId?: string | null): void {
+  void call(api.refreshAutomations, {
+    automationId,
+    ...(organizationId ? { organizationId } : {}),
+  }).catch(() => {
     // Best-effort — stale cache renders fine; the next refresh converges it.
   });
 }

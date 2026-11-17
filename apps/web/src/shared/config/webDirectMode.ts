@@ -49,6 +49,11 @@ export function isCloudDirectWebMode(): boolean {
   } catch {
     /* no window (tests) — fall through to the flags */
   }
+  return cloudDirectFlag();
+}
+
+/** The build flag, or the localStorage override of it. */
+function cloudDirectFlag(): boolean {
   try {
     const override = localStorage.getItem("deus.cloudDirectWeb");
     if (override === "1") return true;
@@ -58,4 +63,14 @@ export function isCloudDirectWebMode(): boolean {
   }
   const flag = import.meta.env.VITE_CLOUD_DIRECT;
   return flag === "1" || flag === "true";
+}
+
+/**
+ * Whether this build serves the hosted cloud app at `/`, asked from a relay page
+ * (`/connect`), where `isCloudDirectWebMode()` is vetoed. The router's root guard
+ * decides the same way: web-direct, never Electron or web-dev.
+ */
+export function servesCloudAtRoot(): boolean {
+  if (capabilities.ipcInvoke || import.meta.env.VITE_BACKEND_PORT) return false;
+  return cloudDirectFlag();
 }

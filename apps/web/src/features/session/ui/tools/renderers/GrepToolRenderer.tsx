@@ -6,7 +6,7 @@ import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
 
 export function GrepToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
-  const { pattern, path, output_mode, glob, type: fileType } = toolUse.input ?? {};
+  const { pattern, path, glob, type: fileType } = toolUse.input ?? {};
   const patternText = typeof pattern === "string" ? pattern : "pattern";
   const pathPreview = getPathLeaf(typeof path === "string" ? path : undefined, "all files");
   const scopeLabel =

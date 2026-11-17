@@ -2,22 +2,23 @@
  * AutomationsPage — the full-page Automations view (design boards 46a–46c).
  *
  * Cloud-only: the agnt platform schedules and executes automations; deus
- * mirrors them. The page re-mirrors on mount and on window focus, and gates
- * on Deus Cloud being connected. Three modes in one surface: the list, and
- * two split modes (rail + panel) for the editor and the detail. The app
- * sidebar stays; this fills the main inset like Home does.
+ * mirrors them. The page shows the window's organization's automations and
+ * creates in it; it re-mirrors that organization on mount and on window focus,
+ * and gates on the organization being ready on this computer. Three modes in
+ * one surface: the list, and two split modes (rail + panel) for the editor and
+ * the detail. The app sidebar stays; this fills the main inset like Home does.
  */
 
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Cloud } from "lucide-react";
 import { SidebarInset, SidebarMobileBar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui";
-import { apiClient } from "@/shared/api/client";
+import { useWindowOrganization } from "@/features/sidebar/hooks/useWindowOrganization";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { openNewWorkspace } from "@/features/workspace/lib/newWorkspace";
 import type { Automation } from "@/shared/types";
 import { refreshAutomations, useAutomations } from "../api/automations.queries";
+import { automationsInOrganization } from "../lib/organization";
 import { AutomationsListView } from "./AutomationsListView";
 import { AutomationRail } from "./AutomationRail";
 import { AutomationEditor, type EditorPrefill } from "./AutomationEditor";
@@ -45,25 +46,31 @@ export function AutomationsPage() {
     setView({ mode: "detail", automationId: focusId });
     useUIStore.getState().clearAutomationsFocus();
   }, [focusId]);
-  const { data: automations, isLoading } = useAutomations();
+  const { data: allAutomations, isLoading } = useAutomations();
+  const windowOrganization = useWindowOrganization();
+  const organizationId = windowOrganization.id;
+  const { organizations } = windowOrganization;
+  // The window's organization's automations (every one with no list).
+  const automations = allAutomations
+    ? automationsInOrganization(allAutomations, organizations, organizationId)
+    : undefined;
 
-  // Cloud connection gate — automations live on the platform.
-  const cloudStatus = useQuery({
-    queryKey: ["settings", "cloud-status"],
-    queryFn: () => apiClient.get<{ enabled: boolean }>("/settings/cloud"),
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
-  });
-  const cloudReady = cloudStatus.data?.enabled === true;
+  // Cloud gate — automations live on the platform: the window's organization is
+  // ready on this computer (with no list, the cloud is available).
+  const cloudKnown = organizations !== undefined;
+  const cloudReady = windowOrganization.organization
+    ? windowOrganization.organization.ready
+    : organizations?.available === true;
 
-  // Mirror the platform on mount and whenever the window regains focus.
+  // Mirror the window's organization on mount, when it changes, and whenever the
+  // window regains focus.
   useEffect(() => {
     if (!cloudReady) return;
-    refreshAutomations();
-    const onFocus = () => refreshAutomations();
+    refreshAutomations(undefined, organizationId);
+    const onFocus = () => refreshAutomations(undefined, organizationId);
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, [cloudReady]);
+  }, [cloudReady, organizationId]);
 
   const openList = () => setView({ mode: "list" });
   const openTemplates = () => setView({ mode: "templates" });
@@ -76,13 +83,14 @@ export function AutomationsPage() {
   const openEdit = (automationId: string) => setView({ mode: "editor", automationId });
 
   const selectedId = view.mode === "editor" || view.mode === "detail" ? view.automationId : null;
+  // From every automation, so a provenance chip still opens one of another organization.
   const selected =
-    selectedId != null ? ((automations ?? []).find((a) => a.id === selectedId) ?? null) : null;
+    selectedId != null ? ((allAutomations ?? []).find((a) => a.id === selectedId) ?? null) : null;
 
   // A detail whose automation vanished (deleted here or elsewhere) returns to
   // the list — render-time adjustment, guarded so a still-loading cache
   // doesn't bounce the view.
-  if (view.mode === "detail" && automations !== undefined && !selected) {
+  if (view.mode === "detail" && allAutomations !== undefined && !selected) {
     setView({ mode: "list" });
   }
 
@@ -91,7 +99,7 @@ export function AutomationsPage() {
       <div className="bg-bg-surface border-border-subtle flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-xl border">
         <SidebarMobileBar title="Automations" />
         <div className="flex min-h-0 min-w-0 flex-1">
-          {cloudStatus.isSuccess && !cloudReady ? (
+          {cloudKnown && !cloudReady ? (
             <CloudNudge />
           ) : view.mode === "list" ? (
             <AutomationsListView
@@ -101,6 +109,9 @@ export function AutomationsPage() {
               onCreateWithAi={createWithAi}
               onOpenTemplates={openTemplates}
               onOpen={openDetail}
+              organizationName={
+                windowOrganization.several ? (windowOrganization.organization?.name ?? null) : null
+              }
             />
           ) : view.mode === "templates" ? (
             <TemplatesView onBack={openList} onUse={(prefill) => openNew(prefill)} />
@@ -118,6 +129,7 @@ export function AutomationsPage() {
                   key={view.automationId ?? "new"}
                   automation={selected}
                   prefill={view.prefill}
+                  organizationId={organizationId}
                   onBack={openList}
                   onSaved={(a) => setView({ mode: "detail", automationId: a.id })}
                 />

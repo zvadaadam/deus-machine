@@ -14,9 +14,32 @@ import { useEffect } from "react";
 import { create } from "zustand";
 import { api } from "@shared/api";
 import { call, follow, isConnected, onConnectionChange } from "@/platform/ws";
+import type { CloudPreviewChatAddress } from "../lib/cloudPreview";
+
+/**
+ * An address from the chat to show in a cloud workspace's preview: its port and
+ * its path, query and fragment (`rest`). Never its host: the panel puts the rest
+ * on the computer's current template, so a replaced computer gets the same page.
+ */
+export interface CloudPreviewRequest {
+  requestId: string;
+  workspaceId: string;
+  port: number;
+  rest: string;
+}
 
 interface CloudPreviewStore {
   byWorkspace: Record<string, string | null>;
+  /** The latest address to show, until that workspace's preview takes it. */
+  pending: CloudPreviewRequest | null;
+  /**
+   * Per workspace, the port and path the chat last asked its preview for, until
+   * a port is chosen by hand. Kept here, not in the panel: the panel unmounts
+   * while the computer sleeps or is replaced, which is when its template changes.
+   * In memory only (the port itself is in localStorage). Reconnects and account
+   * changes leave it: it holds no host, and only that workspace's preview reads it.
+   */
+  fromChat: Record<string, CloudPreviewChatAddress>;
   /** Bumped on every `cloudIdentity` event. A one-shot read that started under an
    *  earlier generation answers for the previous account and is dropped. */
   generation: number;
@@ -24,10 +47,34 @@ interface CloudPreviewStore {
 
 export const useCloudPreviewStore = create<CloudPreviewStore>()(() => ({
   byWorkspace: {},
+  pending: null,
+  fromChat: {},
   generation: 0,
 }));
 
 export const cloudPreviewActions = {
+  /** Show this port, at this path, in the workspace's preview (the Browser tab). */
+  show(workspaceId: string, port: number, rest: string): void {
+    useCloudPreviewStore.setState((state) => ({
+      pending: { requestId: crypto.randomUUID(), workspaceId, port, rest },
+      fromChat: { ...state.fromChat, [workspaceId]: { port, rest } },
+    }));
+  },
+  /** A port chosen by hand in the workspace's preview: the chat's path no longer applies. */
+  portChosen(workspaceId: string): void {
+    useCloudPreviewStore.setState((state) => {
+      if (!(workspaceId in state.fromChat)) return state;
+      const fromChat = { ...state.fromChat };
+      delete fromChat[workspaceId];
+      return { fromChat };
+    });
+  },
+  /** The preview took the request. */
+  taken(requestId: string): void {
+    useCloudPreviewStore.setState((state) =>
+      state.pending?.requestId === requestId ? { pending: null } : state
+    );
+  },
   /** A live announcement (or the one-shot read) — the value REPLACES. */
   set(workspaceId: string, template: string | null): void {
     useCloudPreviewStore.setState((state) =>

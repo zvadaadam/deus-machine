@@ -7,11 +7,21 @@ import { execSync } from "child_process";
 import { hostname, userInfo, platform } from "os";
 import { getSetting } from "./settings.service";
 
+/** The system's name is read at most once a minute: `relayStatus` asks on every read. */
+const SYSTEM_NAME_TTL_MS = 60_000;
+let systemName: { value: string; readAt: number } | null = null;
+
 /** The name set in Settings, else the Mac's computer name, else its host name. */
 export function getServerName(): string {
   const custom = getSetting("server_name") as string | undefined;
   if (custom) return custom;
+  if (!systemName || Date.now() - systemName.readAt >= SYSTEM_NAME_TTL_MS) {
+    systemName = { value: readSystemName(), readAt: Date.now() };
+  }
+  return systemName.value;
+}
 
+function readSystemName(): string {
   if (platform() === "darwin") {
     try {
       const name = execSync("scutil --get ComputerName", {

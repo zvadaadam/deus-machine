@@ -7,24 +7,30 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRepos } from "@/features/repository";
+import { useWindowOrganization } from "@/features/sidebar/hooks/useWindowOrganization";
 import { getGithubAppStatus, installGithubApp } from "@/platform/native/deus-cloud";
 import { apiClient } from "@/shared/api/client";
-import { useCloudSettings } from "@/shared/hooks/useCloudSettings";
+import { CLOUD_SETTINGS_QUERY_KEY, useCloudSettings } from "@/shared/hooks/useCloudSettings";
 import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
 import { uiActions } from "@/shared/stores/uiStore";
 import { githubAppBlockedLabel } from "../../lib/github-app-label";
 
-/** GitHub App installation and its optional PAT fallback have one settings owner. */
+/**
+ * GitHub App installation and its optional PAT fallback have one settings owner.
+ * Both are the window's organization's (the default one with no list).
+ */
 export function GithubCloudAccess() {
   const queryClient = useQueryClient();
   const signIn = useDeusCloudSignIn();
-  const cloud = useCloudSettings();
+  const windowOrganization = useWindowOrganization();
+  const orgId = windowOrganization.id;
+  const cloud = useCloudSettings({ organizationId: orgId });
   const repos = useRepos();
   const [token, setToken] = useState("");
   const [saving, setSaving] = useState(false);
   const app = useQuery({
-    queryKey: ["settings", "github-app"],
-    queryFn: getGithubAppStatus,
+    queryKey: ["settings", "github-app", orgId],
+    queryFn: () => getGithubAppStatus(orgId),
     staleTime: 30_000,
     // Installation/repository selection happens in a different browser tab.
     refetchOnWindowFocus: true,
@@ -32,7 +38,7 @@ export function GithubCloudAccess() {
   });
   const install = useMutation({
     mutationFn: async () => {
-      const result = await installGithubApp();
+      const result = await installGithubApp(orgId);
       if (!result.ok) throw new Error(result.error ?? "Could not open GitHub");
     },
     onSuccess: () => toast.info("Choose repositories on GitHub, then come back to Deus"),
@@ -55,10 +61,13 @@ export function GithubCloudAccess() {
     setSaving(true);
     try {
       // Credential values must not be retained in the Query mutation cache.
-      await apiClient.post("/settings/cloud/github-token", { token: token.trim() });
+      await apiClient.post("/settings/cloud/github-token", {
+        token: token.trim(),
+        ...(orgId ? { organizationId: orgId } : {}),
+      });
       setToken("");
       toast.success("GitHub token saved");
-      await queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
+      await queryClient.invalidateQueries({ queryKey: CLOUD_SETTINGS_QUERY_KEY });
     } catch (err) {
       toast.error(getErrorMessage(err));
     } finally {
@@ -75,6 +84,11 @@ export function GithubCloudAccess() {
         <p className="text-muted-foreground mt-1 text-sm">
           Install the Deus GitHub App and choose the repositories your cloud workspaces can use.
         </p>
+        {windowOrganization.several && windowOrganization.organization && (
+          <p className="text-muted-foreground mt-1 text-xs">
+            In {windowOrganization.organization.name}
+          </p>
+        )}
       </div>
       <div className="border-border-subtle divide-border-subtle divide-y rounded-lg border">
         <div className="flex flex-wrap items-center justify-between gap-4 p-4">

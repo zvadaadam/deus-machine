@@ -31,6 +31,10 @@ import {
   type SessionFold,
 } from "../../../apps/web/src/features/session/lib/agentEventFold";
 import { createOptimisticUserMessage } from "../../../apps/web/src/features/session/lib/optimisticMessage";
+import {
+  sessionComposerActions,
+  useSessionComposerStore,
+} from "../../../apps/web/src/features/session/store/sessionComposerStore";
 import type { PaginatedMessages } from "@shared/types/session";
 import type { Message } from "../../../shared/types/session";
 import {
@@ -551,6 +555,40 @@ describe("restored cloud conversations", () => {
     expect(h.page()?.messages.map((row) => row.id)).toEqual(["a1", prompt.id]);
     expect(h.page()?.messages[0].parts?.[0]).toMatchObject({ text: "Recovered history" });
     expect(h.qc.getQueryState(messagesKey(SESSION))?.fetchStatus).toBe("idle");
+  });
+
+  it("puts a send the cloud refused back into its composer, ahead of what was typed since, once", async () => {
+    const h = harness();
+    const prompt = createOptimisticUserMessage({
+      sessionId: SESSION,
+      turnId: "refused",
+      content: "Reply with one word",
+    });
+    seed(h.qc, SESSION, [prompt]);
+    sessionComposerActions.setDraft(SESSION, "and then this");
+    const refusal = {
+      type: "error",
+      sessionId: SESSION,
+      turnId: "refused",
+      category: "_provider_account",
+      message: "Your default Claude account must be reconnected.",
+      recoverable: false,
+      _meta: { cloudErrorCode: "MESSAGE_SEND_FAILED" },
+      timestamp: T,
+    } as LifecycleEvent;
+    h.feed(refusal);
+    expect(h.page()?.messages).toEqual([]);
+    await vi.waitFor(() =>
+      expect(useSessionComposerStore.getState().pendingContent[SESSION]?.draft).toBe(
+        "Reply with one word\n\nand then this"
+      )
+    );
+    // Replayed: no bubble to retire, nothing returned twice.
+    h.feed(refusal);
+    await Promise.resolve();
+    expect(useSessionComposerStore.getState().pendingContent[SESSION]?.draft).toBe(
+      "Reply with one word\n\nand then this"
+    );
   });
 
   it("replaces a stale fold so streaming continues from recovered text", () => {

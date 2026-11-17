@@ -29,10 +29,13 @@ export function applyDeusCloudAuthChange(
   //    these are A's repo names and TRANSCRIPTS, cached with staleTime
   //    Infinity; on desktop the mixed list carries A's cloud rows (the local
   //    rows refetch from the Mac backend in the same beat).
-  //  - cloudRepoAccess GATES the create action (B must not reuse A's "ok").
+  //  - cloudRepoAccess GATES the create action (B must not reuse A's "ok");
+  //    cloudRepositories is A's organization's GitHub repositories.
   //  - cloudDirectToken is an account-scoped JWT driving a live agnt socket —
   //    dropping the data tears the socket down (useCloudDirect passes null
   //    params once it's gone).
+  //  - cloudOrganizations is A's organizations: kept, the sidebar files B's
+  //    workspaces under them until the list is read again.
   for (const key of [
     ["settings", "cloud"],
     ["settings", "github-app"],
@@ -43,8 +46,18 @@ export function applyDeusCloudAuthChange(
     ["workspaces"],
     ["sessions"],
     ["cloudRepoAccess"],
+    ["cloudRepositories"],
     ["cloudDirectToken"],
+    ["cloudOrganizations"],
   ]) {
     void queryClient.resetQueries({ queryKey: key });
   }
+  // A project's branches (`queryKeys.repos.branches`): for a project with no folder
+  // here, read from GitHub with an organization's token, so A's.
+  void queryClient.resetQueries({ predicate: isRepoBranchesQuery });
+}
+
+/** `["repos", <repoId>, "branches", <organizationId>]`: no shared prefix, so by shape. */
+export function isRepoBranchesQuery(query: { queryKey: readonly unknown[] }): boolean {
+  return query.queryKey[0] === "repos" && query.queryKey[2] === "branches";
 }

@@ -3,7 +3,7 @@
  *
  * Spins up a real HTTP server + SQLite DB + WebSocket, then exercises every
  * q:* frame type end-to-end:
- *   - q:request → q:response (one-shot queries for all 4 resources)
+ *   - q:request → q:response (one-shot queries)
  *   - q:subscribe → q:snapshot (initial + live push on invalidation)
  *   - q:subscribe → q:event (a stream: scoped delivery, replay, reset)
  *   - q:unsubscribe (stops receiving pushes)
@@ -46,6 +46,12 @@ vi.mock("../../src/server", () => ({
   getServerPort: () => 0,
 }));
 
+const { captureException } = vi.hoisted(() => ({ captureException: vi.fn() }));
+vi.mock("@sentry/node", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@sentry/node")>()),
+  captureException,
+}));
+
 import fs from "fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -58,7 +64,6 @@ import {
 } from "../../src/services/ws.service";
 import { api } from "@shared/api";
 import { publish } from "../../src/services/streams";
-import { resetStatsCache } from "../../src/db";
 import * as queries from "../../src/db";
 import { handleFrame, invalidate } from "../../src/services/query-engine";
 import { restoreCloudSnapshot } from "../../src/services/agent/cloud/snapshot";
@@ -234,8 +239,6 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  resetStatsCache();
-
   // Reset messages to clean state for each test
   testDb.exec("DELETE FROM messages");
   seedMessages();
@@ -284,26 +287,6 @@ describe("q:request → q:response", () => {
       expect(group.repo_name).toBe("test-repo");
       const found = group.workspaces.find((w: any) => w.id === WS_ID);
       expect(found).toBeTruthy();
-    } finally {
-      ws.close();
-    }
-  });
-
-  it("fetches stats", async () => {
-    const { ws } = await connectAndAuth();
-    try {
-      const res = await sendAndReceive(
-        ws,
-        {
-          type: "q:request",
-          id: "req-2",
-          resource: "stats",
-        },
-        "q:response"
-      );
-
-      expect(res.id).toBe("req-2");
-      expect(res.data.workspaces).toBeGreaterThanOrEqual(1);
     } finally {
       ws.close();
     }
@@ -532,18 +515,19 @@ describe("q:subscribe → live q:snapshot push", () => {
   it("only pushes for subscribed resources", async () => {
     const { ws } = await connectAndAuth();
     try {
-      // Subscribe to stats only
+      // Subscribe to one workspace's sessions only
       await sendAndReceive(
         ws,
         {
           type: "q:subscribe",
-          id: "sub_stats_only",
-          resource: "stats",
+          id: "sub_sessions_only",
+          resource: "sessions",
+          params: { workspaceId: WS_ID },
         },
         "q:snapshot"
       );
 
-      // Invalidate workspaces (not stats) — should NOT push to this subscriber
+      // Invalidate workspaces (not sessions) — should NOT push to this subscriber
       invalidate(["workspaces"]);
 
       // Collect messages for a short window — expect nothing
@@ -775,6 +759,45 @@ describe("q:mutate → q:mutate_result", () => {
     }
   });
 
+  it("answers an operation's refusal with its status, without reporting it as unhandled", async () => {
+    const { ws } = await connectAndAuth();
+    captureException.mockClear();
+    try {
+      // A keystroke for a terminal that has exited.
+      const typed = await sendAndReceive(
+        ws,
+        {
+          type: "q:mutate",
+          id: "mut-gone-pty",
+          action: "ptyWrite",
+          params: { id: "gone", data: [13] },
+        },
+        "q:mutate_result"
+      );
+      expect(typed).toMatchObject({
+        success: false,
+        status: 404,
+        error: "PTY instance not found: gone",
+      });
+
+      const archived = await sendAndReceive(
+        ws,
+        {
+          type: "q:mutate",
+          id: "mut-gone-ws",
+          action: "archiveWorkspace",
+          params: { workspaceId: "ws-q-missing" },
+        },
+        "q:mutate_result"
+      );
+      expect(archived).toMatchObject({ success: false, status: 404, error: "Workspace not found" });
+
+      expect(captureException).not.toHaveBeenCalled();
+    } finally {
+      ws.close();
+    }
+  });
+
   it("refuses a write nothing answers, and a read sent as a write", async () => {
     const { ws } = await connectAndAuth();
     try {
@@ -797,7 +820,7 @@ describe("q:mutate → q:mutate_result", () => {
       // The frame decides what may run: a read cannot be asked as a write.
       const wrongKind = await sendAndReceive(
         ws,
-        { type: "q:mutate", id: "mut-kind", action: "stats", params: {} },
+        { type: "q:mutate", id: "mut-kind", action: "workspaces", params: {} },
         "q:mutate_result"
       );
       expect(wrongKind).toMatchObject({ success: false, status: 400 });
@@ -1136,7 +1159,7 @@ describe("client liveness probes", () => {
       });
       const response = await sendAndReceive(
         ws,
-        { type: "q:request", id: "after-probe", resource: "stats" },
+        { type: "q:request", id: "after-probe", resource: "workspaces" },
         "q:response"
       );
       expect(response.id).toBe("after-probe");

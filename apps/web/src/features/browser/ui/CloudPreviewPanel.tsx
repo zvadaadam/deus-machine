@@ -19,17 +19,19 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/shared/lib/utils";
 import type { Workspace } from "@/shared/types";
 import { native } from "@/platform";
+import { capabilities } from "@/platform/capabilities";
 import { BROWSER_NEW_TAB_REQUESTED } from "@shared/events";
 import { BrowserTab, disposeBrowserTab } from "./BrowserTab";
 import { createBrowserTab, type BrowserTabState } from "../types";
 import { webviewManager } from "../webview-manager";
 import {
   CLOUD_PREVIEW_QUICK_PORTS,
+  cloudPreviewAddress,
   normalizePreviewPort,
   readStoredPreviewPort,
-  resolveCloudPreviewUrl,
   storePreviewPort,
 } from "../lib/cloudPreview";
+import { cloudPreviewActions, useCloudPreviewStore } from "../cloud/cloudPreviewStore";
 
 interface CloudPreviewPanelProps {
   workspace: Workspace;
@@ -55,7 +57,27 @@ export function CloudPreviewPanel({
   const [draft, setDraft] = useState(String(port));
   const [generation, setGeneration] = useState(0);
 
-  const url = useMemo(() => resolveCloudPreviewUrl(template, port), [template, port]);
+  // An address opened from the chat names a path too; choosing a port drops it.
+  // Only the path is kept, in the store so it outlives this panel (which unmounts
+  // while the computer is replaced): the host is always the current template's.
+  const address = useCloudPreviewStore((s) => s.fromChat[workspace.id] ?? null);
+  const url = useMemo(
+    () => cloudPreviewAddress(template, port, address),
+    [address, template, port]
+  );
+
+  // A localhost address from this workspace's chat (rule 2, features/workspace/lib/reach.ts).
+  const pending = useCloudPreviewStore((s) =>
+    s.pending?.workspaceId === workspace.id ? s.pending : null
+  );
+  useEffect(() => {
+    if (!pending) return;
+    cloudPreviewActions.taken(pending.requestId);
+    storePreviewPort(workspace.id, pending.port);
+    setPort(pending.port);
+    setDraft(String(pending.port));
+    setGeneration((g) => g + 1);
+  }, [pending, workspace.id]);
 
   // A tab per (url, generation): the port field and Reload both remount.
   const [tab, setTab] = useState<BrowserTabState | null>(null);
@@ -94,6 +116,7 @@ export function CloudPreviewPanel({
       }
       setDraft(String(next));
       storePreviewPort(workspace.id, next);
+      cloudPreviewActions.portChosen(workspace.id);
       setPort(next);
     },
     [port, workspace.id]
@@ -161,7 +184,15 @@ export function CloudPreviewPanel({
         {toolbarAction}
       </div>
       <div className="relative min-h-0 flex-1">
-        {tab ? (
+        {tab && !capabilities.nativeBrowser ? (
+          // A browser has no webview: the preview is a frame of the public address.
+          <iframe
+            key={tab.id}
+            src={tab.url}
+            title="Cloud computer preview"
+            className={cn("bg-bg-base h-full w-full border-0", !visible && "hidden")}
+          />
+        ) : tab ? (
           <BrowserTab
             key={tab.id}
             tab={tab}

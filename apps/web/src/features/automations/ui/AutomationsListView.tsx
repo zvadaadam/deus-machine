@@ -46,6 +46,7 @@ export function AutomationsListView({
   onCreateWithAi,
   onOpenTemplates,
   onOpen,
+  organizationName = null,
 }: {
   automations: Automation[];
   isLoading: boolean;
@@ -53,6 +54,8 @@ export function AutomationsListView({
   onCreateWithAi: () => void;
   onOpenTemplates: () => void;
   onOpen: (automation: Automation) => void;
+  /** The organization shown, named when the account has more than one. */
+  organizationName?: string | null;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
@@ -76,6 +79,7 @@ export function AutomationsListView({
             <p className="text-text-tertiary text-sm">
               Prompts that run on a schedule in your cloud sandboxes — even with this Mac closed.
             </p>
+            {organizationName && <p className="text-text-muted text-xs">In {organizationName}</p>}
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

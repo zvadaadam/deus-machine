@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Monitor, Trash2 } from "lucide-react";
+import { Cloud, Monitor, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { formatTimeAgo } from "@/shared/lib/formatters";
@@ -24,6 +24,7 @@ import {
   type RemoteMachine,
 } from "@/platform/ws/relay-access";
 import { beginWebCloudLogin } from "@/features/session/cloud/webCloudDirectConfig";
+import { servesCloudAtRoot } from "@/shared/config/webDirectMode";
 
 type Listing =
   | { status: "loading" }
@@ -161,6 +162,19 @@ export function ConnectPage() {
               </li>
             ))}
           </ul>
+        )}
+
+        {servesCloudAtRoot() && (
+          // A full page load: the hosted cloud app installs its data path at boot.
+          <div className="text-center">
+            <a
+              href="/"
+              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm"
+            >
+              <Cloud className="size-3.5" />
+              Deus Cloud
+            </a>
+          </div>
         )}
       </div>
     </div>

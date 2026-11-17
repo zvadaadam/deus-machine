@@ -34,35 +34,16 @@ import {
   missedFirstMessages,
   type FirstMessageDelivery,
 } from "../lib/firstMessage";
-import { processImageFiles } from "../lib/imageAttachments";
 import { createOptimisticUserMessage } from "../lib/optimisticMessage";
-import { readUserMessageContent } from "../lib/userMessageContent";
-import {
-  emptyComposer,
-  sessionComposerActions,
-  useSessionComposerStore,
-} from "../store/sessionComposerStore";
+import { returnMessageToComposer } from "../lib/returnToComposer";
+import { emptyComposer, sessionComposerActions } from "../store/sessionComposerStore";
 
-/** Put a message that could not be sent into the chat's composer: text and
- *  images, ahead of anything typed there since (it was written first). */
-async function returnToComposer(sessionId: string, content: string): Promise<void> {
-  const { texts, images } = readUserMessageContent(
+/** Put a message that could not be sent into the chat's composer. */
+function returnToComposer(sessionId: string, content: string): Promise<void> {
+  return returnMessageToComposer(
+    sessionId,
     createOptimisticUserMessage({ sessionId, turnId: newTurnId(), content })
   );
-  // Typed there already, whether the chat's composer exists yet or not.
-  const { composers, pendingContent } = useSessionComposerStore.getState();
-  const typed = (composers[sessionId] ?? pendingContent[sessionId])?.draft ?? "";
-  sessionComposerActions.setDraft(
-    sessionId,
-    [...texts, ...(typed.trim() ? [typed] : [])].join("\n\n")
-  );
-  const files = await Promise.all(
-    images.map(async (src, index) => {
-      const blob = await (await fetch(src)).blob();
-      return new File([blob], `image-${index + 1}`, { type: blob.type });
-    })
-  );
-  sessionComposerActions.addImageAttachments(sessionId, await processImageFiles(files));
 }
 
 export function useFirstMessageDelivery(repoGroups: RepoGroup[], loaded: boolean): void {

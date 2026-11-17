@@ -18,19 +18,22 @@ interface GrantRepositoryAccessModalProps {
   onOpenChange: (open: boolean) => void;
   /** `owner/name` of the repo needing access — bolded in the copy. */
   slug: string | null;
+  /** The organization whose GitHub App is installed; the default one when null. */
+  organizationId?: string | null;
 }
 
 export function GrantRepositoryAccessModal({
   open,
   onOpenChange,
   slug,
+  organizationId = null,
 }: GrantRepositoryAccessModalProps) {
   const [installing, setInstalling] = useState(false);
 
   const grant = async () => {
     setInstalling(true);
     try {
-      const res = await installGithubApp();
+      const res = await installGithubApp(organizationId);
       if (!res.ok) {
         // Web has no install IPC — point the user at the desktop app rather
         // than leaving the button silently dead.

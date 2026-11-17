@@ -2,8 +2,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { useCloudSettings } from "@/shared/hooks/useCloudSettings";
+import { CLOUD_SETTINGS_QUERY_KEY, useCloudSettings } from "@/shared/hooks/useCloudSettings";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
+import { useWindowOrganization } from "@/features/sidebar/hooks/useWindowOrganization";
 import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { uiActions } from "@/shared/stores/uiStore";
@@ -29,9 +30,14 @@ const setupLinks: { section: SettingsSection; title: string; description: string
   },
 ];
 
+/**
+ * Whether this computer can work in the window's organization (its key is here),
+ * and the account's sign-in, which is this computer's for every organization.
+ */
 export function CloudSection() {
   const queryClient = useQueryClient();
-  const status = useCloudSettings();
+  const windowOrganization = useWindowOrganization();
+  const status = useCloudSettings({ organizationId: windowOrganization.id });
   const session = useDeusCloudSession();
   const signIn = useDeusCloudSignIn();
   const retry = useMutation({
@@ -43,7 +49,7 @@ export function CloudSection() {
       toast.success("Cloud workspaces are ready to use");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.deusCloud.session }),
-        queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] }),
+        queryClient.invalidateQueries({ queryKey: CLOUD_SETTINGS_QUERY_KEY }),
       ]);
     },
     onError: (err) => toast.error(getErrorMessage(err)),
@@ -60,6 +66,11 @@ export function CloudSection() {
         <p className="text-muted-foreground mt-1 text-sm">
           Run agents and development environments on a cloud computer.
         </p>
+        {windowOrganization.several && windowOrganization.organization && (
+          <p className="text-muted-foreground mt-1 text-xs">
+            In {windowOrganization.organization.name}
+          </p>
+        )}
       </div>
       <div className="border-border-subtle flex flex-wrap items-center justify-between gap-4 rounded-lg border p-4">
         <div className="min-w-0 flex-1">

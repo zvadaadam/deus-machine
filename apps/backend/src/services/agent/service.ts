@@ -76,7 +76,7 @@ export async function init(): Promise<void> {
     );
   } else if (settled.value.length > 0) {
     console.log(`[AgentService] Settled ${settled.value.length} chat(s) a restart interrupted`);
-    invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: settled.value });
+    invalidate(["workspaces", "sessions", "session"], { sessionIds: settled.value });
   }
   const handler = createAgentEventHandler();
   events = handler;
@@ -364,7 +364,7 @@ async function handleToolRequest(
   const sessionId = requireParam(params, "sessionId", method);
   const requestId = crypto.randomUUID();
   const isUserFacing = isPrompt(method);
-  const sessionResources = ["workspaces", "sessions", "session", "stats"] as const;
+  const sessionResources = ["workspaces", "sessions", "session"] as const;
 
   // User-facing methods: update session status so the sidebar shows
   // "needs input" instead of "working".

@@ -1,23 +1,19 @@
 import { useEffect } from "react";
 import { uiActions } from "@/shared/stores/uiStore";
-import type { Workspace } from "@/shared/types";
 
 interface UseKeyboardShortcutsOptions {
   onRefresh: () => Promise<void>;
   onEscape?: () => void;
   onOpenInApp?: () => void;
-  selectedWorkspace: Workspace | null;
-  modalStates?: {
-    selectedFile?: string | null;
-  };
+  /** ⌃1…⌃9: the location menu's row at that index (0 for ⌃1). */
+  onSwitchPlace?: (index: number) => void;
 }
 
 export function useKeyboardShortcuts({
   onRefresh,
   onEscape,
   onOpenInApp,
-  selectedWorkspace,
-  modalStates = {},
+  onSwitchPlace,
 }: UseKeyboardShortcutsOptions) {
   useEffect(() => {
     async function handleKeyDown(e: KeyboardEvent) {
@@ -35,6 +31,16 @@ export function useKeyboardShortcuts({
         return;
       }
 
+      // ⌃1…⌃9 (the physical Control key alone) - This computer, then each organization
+      if (onSwitchPlace && e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        const digit = /^Digit([1-9])$/.exec(e.code)?.[1];
+        if (digit) {
+          e.preventDefault();
+          onSwitchPlace(Number(digit) - 1);
+          return;
+        }
+      }
+
       // ⌘R or Ctrl+R - Refresh workspace data
       if ((e.metaKey || e.ctrlKey) && e.key === "r") {
         e.preventDefault();
@@ -50,5 +56,5 @@ export function useKeyboardShortcuts({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onRefresh, onEscape, onOpenInApp, selectedWorkspace, modalStates]);
+  }, [onRefresh, onEscape, onOpenInApp, onSwitchPlace]);
 }

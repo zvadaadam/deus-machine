@@ -3,6 +3,7 @@ import { toSnakeCaseKeys } from "@deus-hq/api";
 import { AppError } from "../lib/errors";
 import {
   getCloudSettingsOrganizations,
+  listAccessibleRepos,
   requestCloudSettings,
 } from "../services/cloud-settings.service";
 
@@ -17,17 +18,18 @@ app.use(`${prefix}/*`, async (c, next) => {
   await next();
 });
 app.get(`${prefix}/orgs`, async (c) => c.json(await getCloudSettingsOrganizations()));
-for (const action of ["accessible-repos", "install-url"] as const) {
-  app.get(`${prefix}/orgs/:orgId/github/${action}`, async (c) =>
-    c.json(
-      await requestCloudSettings(
-        `/orgs/${encodeURIComponent(c.req.param("orgId"))}/github/${action}`,
-        { signal: c.req.raw.signal },
-        "product"
-      )
+app.get(`${prefix}/orgs/:orgId/github/accessible-repos`, async (c) =>
+  c.json(await listAccessibleRepos(c.req.param("orgId"), c.req.raw.signal))
+);
+app.get(`${prefix}/orgs/:orgId/github/install-url`, async (c) =>
+  c.json(
+    await requestCloudSettings(
+      `/orgs/${encodeURIComponent(c.req.param("orgId"))}/github/install-url`,
+      { signal: c.req.raw.signal },
+      "product"
     )
-  );
-}
+  )
+);
 app.get(`${prefix}/orgs/:orgId/github/environment`, async (c) =>
   c.json(
     await requestCloudSettings(

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import routes from "../../../src/routes/provider-accounts";
 import { errorHandler } from "../../../src/middleware/error-handler";
 import {
-  getCloudConfig,
+  cloudOrg,
   resetCloudConfigForTests,
   setCloudRuntimeCredentials,
 } from "../../../src/services/agent/cloud/config";
@@ -106,7 +106,7 @@ describe("provider account proxy", () => {
 
   it("manages personal accounts without a provisioned VM key, using only the backend's bearer", async () => {
     // The Deus login can succeed while its separate device-key mint fails.
-    expect(getCloudConfig()).toBeNull();
+    expect(cloudOrg()).toBeNull();
     fetchMock.mockResolvedValue(
       new Response('{"providers":[],"accounts":[],"default_account_ids":{"claude":"account-1"}}', {
         headers: {

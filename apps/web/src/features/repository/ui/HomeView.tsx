@@ -15,10 +15,16 @@ import { RecentWorkspaces, buildRecentWorkspaceGroups } from "./RecentWorkspaces
 import { CloudToggle, BranchPickerButton } from "./composer/ComposerControls";
 import { RepoPicker } from "./composer/RepoPicker";
 import { useNewChatSelection } from "./composer/useNewChatSelection";
+import { useComposerLocation } from "./composer/useComposerLocation";
 import { ModelPicker } from "@/features/session/ui/ModelPicker";
 import type { ThinkingLevel } from "@/shared/agents";
 import { uiActions, useUIStore } from "@/shared/stores/uiStore";
 import { FIRST_MESSAGE_PLACEHOLDER } from "@/features/workspace/lib/newWorkspace";
+import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
+import { addProjectActions, composerProjects, type AddProjectAction } from "../lib/addProject";
+import { cloudOnlyReason, cloudOnlySendBlock } from "../lib/cloudControl";
+import { useRepoBranches } from "@/features/workspace/api";
+import { toast } from "sonner";
 
 // ── Persistence ─────────────────────────────────────────────────────
 const LAST_REPO_KEY = "deus:welcome-last-repo";
@@ -63,12 +69,21 @@ interface HomeViewProps {
     branch?: string,
     location?: "local" | "cloud",
     /** The thinking level picked here; absent for a model with no thinking control. */
-    thinkingLevel?: ThinkingLevel
+    thinkingLevel?: ThinkingLevel,
+    /** In the cloud, the organization it starts in (the composer's). */
+    organizationId?: string | null
   ) => Promise<boolean>;
   onWorkspaceClick?: (workspace: Workspace) => void;
   onOpenProject?: () => void;
   onCloneRepository?: () => void;
   onStartNewProject?: () => void;
+  /**
+   * The cloud's add dialog, for an organization (the composer's, from its
+   * project picker); the window's when none is given.
+   */
+  onAddFromGitHub?: (organizationId?: string | null) => void;
+  /** The ways to add a project by the window's place (the zero state and the footer). */
+  addActions?: AddProjectAction[];
 }
 
 /**
@@ -93,6 +108,8 @@ export function HomeView({
   onOpenProject,
   onCloneRepository,
   onStartNewProject,
+  onAddFromGitHub,
+  addActions: windowAddActions,
 }: HomeViewProps) {
   const hasRepos = repos.length > 0;
 
@@ -136,13 +153,13 @@ export function HomeView({
 
   // ── Repo selection ──────────────────────────────────────────────
   // User-chosen repo ID — null means "use derived default"
-  const [userRepoId, setUserRepoId] = useState<string | null>(() => {
+  // Only a deliberate choice (picked, or named by what sent the user here);
+  // the last project used is the derived default, if it can run where the
+  // composer points.
+  const [userRepoId, setUserRepoId] = useState<string | null>(
     // Not checked against `repos`: a project added a moment ago is not listed yet.
-    if (request?.repoId) return request.repoId;
-    const stored = getStoredRepoId();
-    if (stored && repos.some((r) => r.id === stored)) return stored;
-    return null;
-  });
+    () => request?.repoId ?? null
+  );
 
   // A request that arrives while Home is already showing: take it during
   // render, so the composer never paints the old project first. Text already
@@ -161,14 +178,25 @@ export function HomeView({
     uiActions.clearNewWorkspaceRequest();
   }, [request]);
 
-  // Derive effective repo: user pick > stored > first repo
-  const selectedRepoId = useMemo(() => {
-    if (!hasRepos) return null;
-    if (userRepoId && repos.some((r) => r.id === userRepoId)) return userRepoId;
-    const stored = getStoredRepoId();
-    if (stored && repos.some((r) => r.id === stored)) return stored;
-    return repos[0]?.id ?? null;
-  }, [hasRepos, userRepoId, repos]);
+  // Where the new workspace runs: local worktree (default) or agnt cloud
+  // sandbox. Starts from the window's place (cloud only when ready there) and
+  // follows it.
+  const composerPlace = useComposerLocation();
+  const { setLocation } = composerPlace;
+
+  // The projects the composer offers follow where it points (the sidebar's
+  // rule), and so does its preselection: user pick > stored > first that runs.
+  const [shownRepoId, setShownRepoId] = useState<string | null>(null);
+  const { listed: pickerRepos, selectedId: selectedRepoId } = useMemo(
+    () =>
+      composerProjects(repos, composerPlace.location, {
+        chosen: userRepoId,
+        shown: shownRepoId,
+        stored: getStoredRepoId(),
+      }),
+    [repos, composerPlace.location, userRepoId, shownRepoId]
+  );
+  if (selectedRepoId !== shownRepoId) setShownRepoId(selectedRepoId);
 
   const selectedRepo = useMemo(
     () => repos.find((r) => r.id === selectedRepoId) ?? null,
@@ -178,17 +206,64 @@ export function HomeView({
   const recentWorkspaceGroups = useMemo(() => buildRecentWorkspaceGroups(repoGroups), [repoGroups]);
 
   // ── Branch selection ──────────────────────────────────────────────
-  // Tracks the repo the branch was chosen for — resets when repo changes
-  // Where the new workspace runs: local worktree (default) or agnt cloud
-  // sandbox. Cloud needs a git remote for the sandbox to clone.
-  const [location, setLocation] = useState<"local" | "cloud">("local");
+  // A project with no folder on this computer runs only in the cloud: the
+  // switch is on and cannot be turned off, whatever the composer's own choice.
+  const lockedReason = cloudOnlyReason(selectedRepo);
+  const location = lockedReason ? "cloud" : composerPlace.location;
+  const cloudOrganizationId =
+    location === "cloud" ? (composerPlace.organization?.id ?? null) : null;
+  const ignoreLocation = useCallback(() => {}, []);
   // The model and thinking level the new chat runs on.
   const selection = useNewChatSelection(location);
+
+  // Adding a project follows the place: the picker the composer's, the rest the window's.
+  const folderPicker = { nativeFolderPicker: capabilities.nativeFolderPicker };
+  const pickerActions = addProjectActions(location, folderPicker);
+  const windowActions = windowAddActions ?? addProjectActions("local", folderPicker);
+  const addCards: Record<
+    AddProjectAction,
+    { icon: typeof FolderOpen; title: string; hint: string; link: string; run?: () => void }
+  > = {
+    "start-new": {
+      icon: FolderGit2,
+      title: "Start a new project",
+      hint: "Create a project from scratch or a template",
+      link: "Start new project",
+      run: onStartNewProject,
+    },
+    clone: {
+      icon: GitBranch,
+      title: "Clone from GitHub",
+      hint: "Paste a repository URL or search your GitHub repos",
+      link: "Clone from GitHub",
+      run: onCloneRepository,
+    },
+    "open-local": {
+      icon: FolderOpen,
+      title: "Open a local project",
+      hint: "Browse your filesystem for an existing codebase",
+      link: "Open local project",
+      run: onOpenProject,
+    },
+    "add-from-github": {
+      icon: GitHubIcon as typeof FolderOpen,
+      title: "Add from GitHub",
+      hint: "A repository to work on in the cloud, without cloning it here",
+      link: "Add from GitHub",
+      run: () => onAddFromGitHub?.(),
+    },
+  };
   const [branchSelection, setBranchSelection] = useState<{ repoId: string; branch: string } | null>(
     null
   );
   const selectedBranch = branchSelection?.repoId === selectedRepoId ? branchSelection.branch : null;
-  const displayBranch = selectedBranch ?? selectedRepo?.git_default_branch ?? "main";
+  // A project with no folder here: GitHub names its default branch (listed first).
+  const githubBranches = useRepoBranches(lockedReason ? selectedRepoId : null, cloudOrganizationId);
+  const defaultBranch =
+    (lockedReason ? githubBranches.data?.branches[0]?.name : undefined) ??
+    selectedRepo?.git_default_branch ??
+    "main";
+  const displayBranch = selectedBranch ?? defaultBranch;
 
   const handleSelectRepo = useCallback((repoId: string) => {
     setUserRepoId(repoId);
@@ -200,8 +275,19 @@ export function HomeView({
   const hasContent = message.trim().length > 0 || attachments.length > 0;
   const canSend = hasContent && !!selectedRepoId && !isSubmitting;
 
+  // A project that runs only in the cloud, where the cloud cannot be used now.
+  const sendBlock = cloudOnlySendBlock({
+    repo: selectedRepo,
+    cloudReady: composerPlace.cloudReady,
+    organizationName: composerPlace.organization?.name ?? null,
+  });
+
   const handleSend = useCallback(async () => {
     if (!canSend || !selectedRepoId) return;
+    if (sendBlock) {
+      toast.error(sendBlock);
+      return;
+    }
     const content = buildCombinedContent();
     if (!content) return;
     setIsSubmitting(true);
@@ -214,7 +300,8 @@ export function HomeView({
         selection.model,
         selectedBranch ?? undefined,
         location,
-        selection.sentThinkingLevel
+        selection.sentThinkingLevel,
+        cloudOrganizationId
       );
       if (!started) return;
       clearAttachments();
@@ -225,11 +312,13 @@ export function HomeView({
   }, [
     canSend,
     selectedRepoId,
+    sendBlock,
     buildCombinedContent,
     selection.model,
     selection.sentThinkingLevel,
     selectedBranch,
     location,
+    cloudOrganizationId,
     onSendMessage,
     clearAttachments,
   ]);
@@ -366,12 +455,14 @@ export function HomeView({
               {/* Repo picker trigger */}
               {hasRepos ? (
                 <RepoPicker
-                  repos={repos}
+                  repos={pickerRepos}
                   selectedRepo={selectedRepo}
                   onSelect={handleSelectRepo}
+                  addActions={pickerActions}
                   onOpenProject={onOpenProject}
                   onCloneRepository={onCloneRepository}
                   onStartNewProject={onStartNewProject}
+                  onAddFromGitHub={() => onAddFromGitHub?.(composerPlace.organization?.id ?? null)}
                 />
               ) : (
                 /* Zero repos — "Add a project" label */
@@ -385,9 +476,10 @@ export function HomeView({
               {hasRepos && selectedRepoId && (
                 <BranchPickerButton
                   repoId={selectedRepoId}
+                  organizationId={cloudOrganizationId}
                   displayBranch={displayBranch}
                   onBranchSelect={(name) => {
-                    if (name === selectedRepo?.git_default_branch) {
+                    if (name === defaultBranch) {
                       setBranchSelection(null);
                     } else if (selectedRepoId) {
                       setBranchSelection({ repoId: selectedRepoId, branch: name });
@@ -401,8 +493,13 @@ export function HomeView({
             {hasRepos && (
               <CloudToggle
                 location={location}
-                onLocationChange={setLocation}
+                onLocationChange={lockedReason ? ignoreLocation : setLocation}
+                lockedReason={lockedReason}
                 repoId={selectedRepoId || null}
+                organization={composerPlace.organization}
+                organizations={composerPlace.organizations}
+                onOrganizationChange={composerPlace.setOrganization}
+                cloudReady={composerPlace.cloudReady}
                 withTooltip
               />
             )}
@@ -558,71 +655,28 @@ export function HomeView({
               </p>
 
               <div className="border-border-subtle bg-bg-elevated/60 overflow-hidden rounded-xl border">
-                {onStartNewProject && (
-                  <button
-                    type="button"
-                    onClick={onStartNewProject}
-                    className="hover:bg-bg-raised/40 flex w-full items-start gap-3.5 px-4 py-3.5 text-left transition-colors duration-150"
-                  >
-                    <div className="bg-bg-muted mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
-                      <FolderGit2 className="text-text-tertiary h-4 w-4" />
+                {windowActions.map((action, index) => {
+                  const card = addCards[action];
+                  const Icon = card.icon;
+                  return (
+                    <div key={action}>
+                      {index > 0 && <div className="border-border-subtle/50 mx-4 border-t" />}
+                      <button
+                        type="button"
+                        onClick={card.run}
+                        className="hover:bg-bg-raised/40 flex w-full items-start gap-3.5 px-4 py-3.5 text-left transition-colors duration-150"
+                      >
+                        <div className="bg-bg-muted mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
+                          <Icon className="text-text-tertiary h-4 w-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-text-primary text-sm font-medium">{card.title}</h3>
+                          <p className="text-text-muted mt-0.5 text-xs">{card.hint}</p>
+                        </div>
+                      </button>
                     </div>
-                    <div>
-                      <h3 className="text-text-primary text-sm font-medium">Start a new project</h3>
-                      <p className="text-text-muted mt-0.5 text-xs">
-                        Create a project from scratch or a template
-                      </p>
-                    </div>
-                  </button>
-                )}
-
-                {onStartNewProject && onCloneRepository && (
-                  <div className="border-border-subtle/50 mx-4 border-t" />
-                )}
-
-                {onCloneRepository && (
-                  <button
-                    type="button"
-                    onClick={onCloneRepository}
-                    className="hover:bg-bg-raised/40 flex w-full items-start gap-3.5 px-4 py-3.5 text-left transition-colors duration-150"
-                  >
-                    <div className="bg-bg-muted mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
-                      <GitBranch className="text-text-tertiary h-4 w-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-text-primary text-sm font-medium">Clone from GitHub</h3>
-                      <p className="text-text-muted mt-0.5 text-xs">
-                        Paste a repository URL or search your GitHub repos
-                      </p>
-                    </div>
-                  </button>
-                )}
-
-                {capabilities.nativeFolderPicker &&
-                  onOpenProject &&
-                  (onCloneRepository || onStartNewProject) && (
-                    <div className="border-border-subtle/50 mx-4 border-t" />
-                  )}
-
-                {capabilities.nativeFolderPicker && onOpenProject && (
-                  <button
-                    type="button"
-                    onClick={onOpenProject}
-                    className="hover:bg-bg-raised/40 flex w-full items-start gap-3.5 px-4 py-3.5 text-left transition-colors duration-150"
-                  >
-                    <div className="bg-bg-muted mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
-                      <FolderOpen className="text-text-tertiary h-4 w-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-text-primary text-sm font-medium">
-                        Open a local project
-                      </h3>
-                      <p className="text-text-muted mt-0.5 text-xs">
-                        Browse your filesystem for an existing codebase
-                      </p>
-                    </div>
-                  </button>
-                )}
+                  );
+                })}
               </div>
             </motion.div>
           )}
@@ -642,43 +696,20 @@ export function HomeView({
             className="home-footer-fade pointer-events-none absolute right-0 bottom-0 left-0 z-20 flex w-full justify-center pt-24 pb-6"
           >
             <div className="pointer-events-auto flex items-center gap-3">
-              {onStartNewProject && (
-                <>
-                  <button
-                    type="button"
-                    onClick={onStartNewProject}
-                    className="text-text-disabled hover:text-text-muted text-xs underline-offset-4 transition-colors duration-150 hover:underline"
-                  >
-                    Start new project
-                  </button>
-                  {(onCloneRepository || (capabilities.nativeFolderPicker && onOpenProject)) && (
+              {windowActions.map((action, index) => (
+                <span key={action} className="flex items-center gap-3">
+                  {index > 0 && (
                     <span className="bg-foreground/10 inline-block h-1 w-1 rounded-full" />
                   )}
-                </>
-              )}
-              {onCloneRepository && (
-                <>
                   <button
                     type="button"
-                    onClick={onCloneRepository}
+                    onClick={addCards[action].run}
                     className="text-text-disabled hover:text-text-muted text-xs underline-offset-4 transition-colors duration-150 hover:underline"
                   >
-                    Clone from GitHub
+                    {addCards[action].link}
                   </button>
-                  {capabilities.nativeFolderPicker && onOpenProject && (
-                    <span className="bg-foreground/10 inline-block h-1 w-1 rounded-full" />
-                  )}
-                </>
-              )}
-              {capabilities.nativeFolderPicker && onOpenProject && (
-                <button
-                  type="button"
-                  onClick={onOpenProject}
-                  className="text-text-disabled hover:text-text-muted text-xs underline-offset-4 transition-colors duration-150 hover:underline"
-                >
-                  Open local project
-                </button>
-              )}
+                </span>
+              ))}
             </div>
           </motion.div>
         )}

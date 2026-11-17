@@ -17,7 +17,7 @@ import {
   getPlatformKeyError,
   provisionAfterLogin,
   retryDeviceKeyProvisioning,
-  revokeDeviceKey,
+  revokeDeviceKeys,
 } from "./deus-cloud-provision";
 import {
   buildDesktopLoginUrl,
@@ -89,6 +89,20 @@ let pendingLogin: PendingLogin | null = null;
 let loginStartInProgress = false;
 let loginGeneration = 0;
 
+/**
+ * Bumped by every sign-out and by a session the server revoked. Work started for a session (a key mint at startup, at
+ * sign-in, by Retry) compares it before keeping anything: a change means the
+ * session it was started for is gone.
+ */
+export function currentLoginGeneration(): number {
+  return loginGeneration;
+}
+
+/** End the current session's generation without a sign-out (the server revoked it). */
+export function endLoginGeneration(): void {
+  loginGeneration += 1;
+}
+
 function parseTimestamp(value: string): number | null {
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) ? timestamp : null;
@@ -120,6 +134,7 @@ function toPublicStatus(
       tokenType: null,
       cloudUrl,
       hasPlatformKey: false,
+      platformOrgIds: [],
     };
   }
 
@@ -132,6 +147,7 @@ function toPublicStatus(
     tokenType: stored.tokenType,
     cloudUrl: stored.cloudUrl,
     hasPlatformKey: false,
+    platformOrgIds: [],
     platformKeyError: getPlatformKeyError(),
   };
 }
@@ -144,6 +160,7 @@ async function enrichWithCredentialStatus(
   return {
     ...status,
     hasPlatformKey: creds?.hasPlatformKey ?? false,
+    platformOrgIds: creds?.platformOrgIds ?? [],
     ...(creds?.vaultLocked ? { vaultLocked: true } : {}),
   };
 }
@@ -740,13 +757,13 @@ async function performSignOut(sessionToken: string | null): Promise<DeusCloudAut
     finishPendingLogin(new Error("Deus Cloud sign-in was cancelled"), undefined, pending);
   }
 
-  // Session file first: revokeDeviceKey ends with a credentials push to the
+  // Session file first: revokeDeviceKeys ends with a credentials push to the
   // backend, and that push must read an EMPTY session — not hand the backend
   // a live token for the account the user just left.
   await clearStoredSession();
-  // Revoke THIS device's platform key with the token captured above; local
+  // Revoke THIS device's platform keys with the token captured above; local
   // deletion inside also locks the device out even when offline.
-  await revokeDeviceKey(sessionToken).catch(() => {});
+  await revokeDeviceKeys(sessionToken).catch(() => {});
 
   const session = await getDeusCloudSessionStatus();
   broadcastAuthChanged(session);
@@ -863,22 +880,17 @@ async function completeDesktopLogin(callback: DesktopAuthCallback): Promise<void
 
     // The D1 handshake: mint this device's platform key and hand credentials
     // to the backend, then re-broadcast so Settings flips to "key active".
+    // Captured before the token read: a sign-out during that read ends this run,
+    // even when the read still returns this session's token.
     const provisionGeneration = loginGeneration;
     void (async () => {
       const token = await getStoredDeusCloudSessionToken();
       if (!token) return;
-      await provisionAfterLogin(token, stored.cloudUrl);
-      // Signing out mid-mint used to leave a freshly minted key in the vault
-      // of a signed-out user: revokeDeviceKey ran BEFORE the key existed, so
-      // nothing ever revoked it and the backend cloud lane stayed live.
-      if (provisionGeneration !== loginGeneration) {
-        // Use the CAPTURED token, not a re-read: sign-out has already cleared
-        // the stored session by now, and revokeDeviceKey skips the server-side
-        // DELETE when handed null — which would delete the local copy and
-        // leave the just-minted key alive on the platform forever.
-        await revokeDeviceKey(token).catch(() => {});
-        return;
-      }
+      // A session that ended meanwhile is handled inside: its minted key is
+      // revoked, never stored or pushed. Revoking here as well would delete the
+      // keys of a sign-in that came after it.
+      await provisionAfterLogin(token, stored.cloudUrl, provisionGeneration);
+      if (provisionGeneration !== loginGeneration) return;
       broadcastAuthChanged(await getDeusCloudSessionStatus());
     })();
   } catch (error) {

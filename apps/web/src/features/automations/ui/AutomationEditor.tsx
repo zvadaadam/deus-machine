@@ -28,6 +28,7 @@ import { useCloudModels } from "@/shared/hooks/useCloudModels";
 import type { Automation } from "@/shared/types";
 import { useSaveAutomation } from "../api/automations.queries";
 import { automationModelChoice, thinkingLevelsFor } from "../lib/model-choice";
+import { inOrganization } from "../lib/organization";
 import { SCHEDULE_PRESETS, buildCron, parseSchedule, type ScheduleForm } from "../lib/schedule";
 
 export interface EditorPrefill {
@@ -92,11 +93,14 @@ function initialForm(automation: Automation | null, prefill?: EditorPrefill): Fo
 export function AutomationEditor({
   automation,
   prefill,
+  organizationId = null,
   onBack,
   onSaved,
 }: {
   automation: Automation | null;
   prefill?: EditorPrefill;
+  /** A new automation is created in this organization (the default one when null). */
+  organizationId?: string | null;
   onBack: () => void;
   onSaved: (automation: Automation) => void;
 }) {
@@ -157,16 +161,19 @@ export function AutomationEditor({
             ? { thinking_level: form.thinkingLevel }
             : {}),
         }
-      : {
-          repository_id: form.repositoryId,
-          name: form.name,
-          prompt: form.prompt,
-          cron: buildCron(form.schedule),
-          timezone: browserTimezone,
-          session_policy: form.sessionPolicy,
-          model: form.model,
-          thinking_level: form.thinkingLevel,
-        };
+      : inOrganization(
+          {
+            repository_id: form.repositoryId,
+            name: form.name,
+            prompt: form.prompt,
+            cron: buildCron(form.schedule),
+            timezone: browserTimezone,
+            session_policy: form.sessionPolicy,
+            model: form.model,
+            thinking_level: form.thinkingLevel,
+          },
+          organizationId
+        );
     if (automation && Object.keys(input).length === 1) {
       onSaved(automation);
       return;

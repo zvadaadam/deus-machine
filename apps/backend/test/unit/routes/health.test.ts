@@ -46,12 +46,3 @@ describe("GET /health", () => {
     expect(() => new Date(body.timestamp)).not.toThrow();
   });
 });
-
-describe("GET /port", () => {
-  it("returns port from getServerPort", async () => {
-    const res = await app.request("/port");
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body).toEqual({ port: 3000 });
-  });
-});

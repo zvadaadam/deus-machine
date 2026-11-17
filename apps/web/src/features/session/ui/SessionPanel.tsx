@@ -323,6 +323,7 @@ export function SessionPanel({
         sessionStatus={effectiveSessionStatus}
         workspaceId={workspaceId ?? null}
         workspacePath={workspacePath}
+        cloud={workspaceKind === "cloud"}
         subagentMessages={subagentMessages}
       >
         <div
@@ -340,7 +341,10 @@ export function SessionPanel({
             loading={loading}
             sessionStatus={effectiveSessionStatus}
             errorMessage={cloudDirectState.error ?? session?.error_message}
-            errorCategory={session?.error_category ?? undefined}
+            errorCategory={
+              (cloudDirectState.error ? cloudDirectState.errorCategory : session?.error_category) ??
+              undefined
+            }
             agentHarness={session?.agent_harness}
             latestMessageSentAt={latestMessageSentAt}
             hasOlder={hasOlder}
@@ -438,6 +442,7 @@ export function SessionPanel({
               sessionStatus={effectiveSessionStatus}
               workspaceId={workspaceId ?? null}
               workspacePath={workspacePath}
+              cloud={workspaceKind === "cloud"}
               subagentMessages={subagentMessages}
             >
               <div className={`${CONTENT_WIDTH_CLASSES} mx-auto flex min-h-0 flex-1 flex-col`}>
@@ -448,7 +453,11 @@ export function SessionPanel({
                   loading={loading}
                   sessionStatus={effectiveSessionStatus}
                   errorMessage={cloudDirectState.error ?? session?.error_message}
-                  errorCategory={session?.error_category ?? undefined}
+                  errorCategory={
+                    (cloudDirectState.error
+                      ? cloudDirectState.errorCategory
+                      : session?.error_category) ?? undefined
+                  }
                   agentHarness={session?.agent_harness}
                   latestMessageSentAt={latestMessageSentAt}
                   hasOlder={hasOlder}

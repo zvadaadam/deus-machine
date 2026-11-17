@@ -5,11 +5,13 @@
 // SDK this app ships: deus bundles no cloud list of its own. The list changes
 // with a platform deploy, so a few minutes of staleness is harmless and keeps
 // the automation editor and the create/update checks off the network. It is
-// keyed by the cloud identity: an account switch reads it again.
+// keyed by the cloud identity: an account switch reads it again. The list is
+// the same in every organization, so any one this backend can act in is asked
+// (the default one).
 
 import { listModels } from "@deus-hq/sdk";
 import type { CloudModelList } from "@shared/cloud-models";
-import { getCloudConfig, getCloudConnectionIdentity } from "./config";
+import { cloudOrg, cloudOrgKeyIds, getCloudConnectionIdentity } from "./config";
 
 const MODEL_LIST_TTL_MS = 5 * 60_000;
 const MODEL_LIST_TIMEOUT_MS = 10_000;
@@ -24,7 +26,8 @@ let inFlight: { identity: string; lists: Promise<CloudModelList[]> } | null = nu
  * fall back on, it throws.
  */
 export async function getCloudModelLists(): Promise<CloudModelList[] | null> {
-  const config = getCloudConfig();
+  // The platform's catalog: any organization's key reads it, when the default one's is missing.
+  const config = cloudOrg() ?? cloudOrg(cloudOrgKeyIds()[0]);
   if (!config) return null;
   const identity = getCloudConnectionIdentity();
   const previous = cached?.identity === identity ? cached : null;

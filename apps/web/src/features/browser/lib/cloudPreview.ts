@@ -32,14 +32,50 @@ export function normalizePreviewPort(value: string | number): number | null {
  * The preview URL for a port, or null when the template is absent/malformed.
  * The template must carry the placeholder — a bare host would silently
  * preview the wrong port (the sidecar's own, or nothing).
+ *
+ * `rest` is what an address from the chat adds to the port: its path, query
+ * and fragment (`/dash?a=1`). It never names a host: the host is always the
+ * template's, so a new template (a replaced computer) rebases the same rest.
  */
 export function resolveCloudPreviewUrl(
   template: string | null | undefined,
-  port: number
+  port: number,
+  rest?: string
 ): string | null {
   if (!template || !template.includes(CLOUD_PREVIEW_PORT_PLACEHOLDER)) return null;
   if (normalizePreviewPort(port) === null) return null;
-  return template.split(CLOUD_PREVIEW_PORT_PLACEHOLDER).join(String(port));
+  const base = template.split(CLOUD_PREVIEW_PORT_PLACEHOLDER).join(String(port));
+  if (!rest) return base;
+  try {
+    // Appended to the origin, never resolved against it: `//elsewhere/x` stays a path.
+    return new URL(`${new URL(base).origin}${rest.startsWith("/") ? rest : `/${rest}`}`).href;
+  } catch {
+    return null;
+  }
+}
+
+/** An address opened from the chat, as the preview keeps it: its port and path, no host. */
+export interface CloudPreviewChatAddress {
+  port: number;
+  rest: string;
+}
+
+/**
+ * The address the preview shows for its port: the chat's path while the port is
+ * still the one the chat named, on the current template, so a replaced computer
+ * shows the same page on its own host. A null `fromChat` (a port chosen by hand)
+ * is the port's root.
+ */
+export function cloudPreviewAddress(
+  template: string | null | undefined,
+  port: number,
+  fromChat: CloudPreviewChatAddress | null
+): string | null {
+  return resolveCloudPreviewUrl(
+    template,
+    port,
+    fromChat?.port === port ? fromChat.rest : undefined
+  );
 }
 
 const PORT_STORAGE_PREFIX = "deus:cloud-preview-port:";

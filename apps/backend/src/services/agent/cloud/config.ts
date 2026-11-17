@@ -1,41 +1,74 @@
 // backend/src/services/agent/cloud/config.ts
-// Cloud-workspace (agnt) connection config.
+// Cloud (agnt) connection config: who is signed in, and the key for each organization.
 //
 // Two credential sources, merged: environment variables (dev workflow, read
 // once) and RUNTIME credentials handed over by the desktop main process (the
-// D1 handshake — a per-device key minted after sign-in and its WorkOS session). Runtime values win. `null` config = cloud lane disabled with
-// honest errors at the create/send boundaries.
+// D1 handshake: the person's Deus Cloud session, and one device key per
+// organization of the account). Runtime values win.
+//
+// Three questions, one function each:
+//  - cloudAccount(): the signed-in person (base URLs and the session). Null =
+//    the cloud lane is off, with honest errors at the create/send boundaries.
+//  - cloudOrg(orgId?): the credentials for one organization: its own key (or,
+//    when no organization keys were pushed at all, the fallback key). No id =
+//    the default organization.
+//  - defaultCloudOrgId(): the organization a caller that names none means: the
+//    platform's first, as the desktop says.
+// The connection identity is the account only: keys come and go per
+// organization without closing a socket.
 
 import { assertSecureCloudUrl } from "@shared/cloud-url";
+import { ConflictError } from "../../../lib/errors";
 
-export interface CloudConfig {
+export interface CloudAccount {
   /** agnt backend base URL (REST + session WebSockets). */
+  baseUrl: string;
+  /** Deus Cloud (GitHub App installation tokens, the person's own settings). */
+  deusCloudUrl: string | null;
+  /**
+   * The person's Deus Cloud session. It expires; the desktop re-pushes on auth
+   * changes. Null in development with only a fallback key.
+   */
+  sessionToken: string | null;
+  /** The session's `sub`, read unverified (the platform verifies the token). */
+  accountId: string | null;
+}
+
+export interface CloudOrg {
+  /** The organization these credentials act in; null for a fallback key no organization names. */
+  orgId: string | null;
   baseUrl: string;
   /** Organization API key (agnt_sk_*). */
   apiKey: string;
-  /**
-   * deus-cloud mint context (per-repo GitHub App installation tokens at
-   * provision time). All three or nothing — a partial set disables the mint.
-   * The session token expires; the desktop re-pushes on auth changes, and a
-   * stale token just means no mint (PAT/org-secret path still applies).
-   */
-  deusCloudUrl: string | null;
-  deusCloudSessionToken: string | null;
-  orgId: string | null;
 }
 
 /** Runtime credential handoff shape. `null` clears a value (falls back to env). */
 export interface CloudRuntimeCredentials {
+  /** One device key per organization, in the platform's order. Replaces the whole map. */
+  orgKeys?: Record<string, string> | null;
+  /** Legacy single key: the fallback key, used only when no organization keys were pushed. */
   apiKey?: string | null;
   baseUrl?: string | null;
   deusCloudUrl?: string | null;
   deusCloudSessionToken?: string | null;
+  /**
+   * The default organization: the one the platform lists first, as the desktop last
+   * read it. Pushed with the keys, also when that organization's own key is missing.
+   */
   orgId?: string | null;
 }
 
-const runtime: { [K in keyof CloudRuntimeCredentials]: string | undefined } = {};
+type ScalarCredential = Exclude<keyof CloudRuntimeCredentials, "orgKeys">;
+const SCALARS: readonly ScalarCredential[] = [
+  "apiKey",
+  "baseUrl",
+  "deusCloudUrl",
+  "deusCloudSessionToken",
+  "orgId",
+];
 
-let cached: CloudConfig | null | undefined;
+const runtime: { [K in ScalarCredential]?: string } = {};
+let orgKeys = new Map<string, string>();
 
 /**
  * `DEUS_CLOUD_ENV=local` targets a locally-running platform. The desktop main
@@ -50,10 +83,7 @@ const isLocalCloudEnv = (): boolean => process.env.DEUS_CLOUD_ENV === "local";
 
 /** Personal account settings need the WorkOS session even before VM-key provisioning succeeds. */
 export function getDeusCloudSessionConfig() {
-  const deusCloudUrl =
-    runtime.deusCloudUrl ??
-    process.env.DEUS_CLOUD_URL ??
-    (isLocalCloudEnv() ? LOCAL_DEUS_CLOUD_URL : null);
+  const deusCloudUrl = rawDeusCloudUrl();
   if (deusCloudUrl) assertSecureCloudUrl(deusCloudUrl);
   return {
     deusCloudUrl,
@@ -61,40 +91,110 @@ export function getDeusCloudSessionConfig() {
   };
 }
 
-/** Product settings use a session even when device-key provisioning is unfinished. */
-export function getCloudSettingsConfig() {
-  const baseUrl = (
+function rawAgntBaseUrl(): string {
+  return (
     runtime.baseUrl ??
     process.env.DEUS_CLOUD_AGNT_URL ??
     process.env.AGNT_BASE_URL ??
     (isLocalCloudEnv() ? LOCAL_AGNT_URL : "https://api.deusmachine.ai")
   ).replace(/\/$/, "");
-  assertSecureCloudUrl(baseUrl);
-  return {
-    baseUrl,
-    ...getDeusCloudSessionConfig(),
-    orgId: runtime.orgId ?? null,
-  };
 }
 
-/** Read the cloud config (memoized until credentials change). `null` = lane disabled. */
-export function getCloudConfig(): CloudConfig | null {
-  if (cached !== undefined) return cached;
-  const apiKey =
-    runtime.apiKey ?? process.env.DEUS_CLOUD_AGNT_API_KEY ?? process.env.AGNT_API_KEY ?? "";
-  if (!apiKey) {
-    cached = null;
-    return cached;
-  }
-  cached = { ...getCloudSettingsConfig(), apiKey };
-  return cached;
+function rawDeusCloudUrl(): string | null {
+  return (
+    runtime.deusCloudUrl ??
+    process.env.DEUS_CLOUD_URL ??
+    (isLocalCloudEnv() ? LOCAL_DEUS_CLOUD_URL : null)
+  );
+}
+
+function agntBaseUrl(): string {
+  const baseUrl = rawAgntBaseUrl();
+  assertSecureCloudUrl(baseUrl);
+  return baseUrl;
 }
 
 /**
- * Runtime credential handoff — the seam that makes a key minted mid-session
- * take effect without a process restart. Every getCloudConfig() call site
- * reads the memo, so busting it here is the entire invalidation story.
+ * The key for development, tests and a legacy push. It stands in for an organization
+ * only while no organization keys were pushed: it is one organization's key, and
+ * acting in another with it would record work under the wrong organization.
  */
+function fallbackKey(): string | null {
+  return runtime.apiKey ?? process.env.DEUS_CLOUD_AGNT_API_KEY ?? process.env.AGNT_API_KEY ?? null;
+}
+
+function sessionSubject(token: string | null): string | null {
+  if (!token) return null;
+  try {
+    const claims = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"));
+    return typeof claims.sub === "string" && claims.sub ? claims.sub : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The signed-in person. Null when this backend holds neither a session nor any
+ * key: nothing in the cloud can be reached. A session without keys (provisioning
+ * failed) is an account whose organizations are not set up yet.
+ */
+export function cloudAccount(): CloudAccount | null {
+  const { deusCloudUrl, deusCloudSessionToken } = getDeusCloudSessionConfig();
+  const baseUrl = agntBaseUrl();
+  if (!deusCloudSessionToken && orgKeys.size === 0 && !fallbackKey()) return null;
+  return {
+    baseUrl,
+    deusCloudUrl,
+    sessionToken: deusCloudSessionToken,
+    accountId: sessionSubject(deusCloudSessionToken),
+  };
+}
+
+/**
+ * The organization a caller that names none means: the one the desktop pushed as
+ * the platform's first, whether or not this backend holds its key (a row of it is
+ * then refused, not sent with another organization's key). Without one, the first
+ * organization a key was pushed for, else null.
+ */
+export function defaultCloudOrgId(): string | null {
+  const [first] = orgKeys.keys();
+  return runtime.orgId ?? first ?? null;
+}
+
+/** The credentials for one organization; no id = the default organization. Null = no usable key. */
+export function cloudOrg(orgId?: string | null): CloudOrg | null {
+  const id = orgId ?? defaultCloudOrgId();
+  const apiKey = orgKeys.size > 0 ? (id ? orgKeys.get(id) : undefined) : fallbackKey();
+  if (!apiKey) return null;
+  return { orgId: id, baseUrl: agntBaseUrl(), apiKey };
+}
+
+/** A row's organization's credentials. A row with no organization yet is in the default one. */
+export function cloudOrgOf(row: { organization_id?: string | null }): CloudOrg | null {
+  return cloudOrg(row.organization_id ?? null);
+}
+
+/** {@link cloudOrg}, for the calls that cannot go on without the organization's key. */
+export function requireCloudOrg(orgId?: string | null): CloudOrg {
+  const org = cloudOrg(orgId);
+  if (!org) {
+    throw new ConflictError(
+      "This cloud organization is not set up on this computer. Retry the cloud setup from the sidebar, or sign in to Deus Cloud again."
+    );
+  }
+  return org;
+}
+
+/** Organizations this backend holds its own key for, in the platform's order. */
+export function cloudOrgKeyIds(): string[] {
+  return [...orgKeys.keys()];
+}
+
+/** Whether this backend acts with the fallback key: one is set and no organization keys were pushed. */
+export function hasFallbackCloudKey(): boolean {
+  return orgKeys.size === 0 && fallbackKey() !== null;
+}
+
 /**
  * Registered by the cloud driver. Sockets minted under one platform identity
  * must not survive into another: without this, account B's sends rode a
@@ -131,7 +231,7 @@ export async function runCloudConnectHook(workspaceId: string): Promise<void> {
 }
 
 /** Cache invalidation only; the platform still verifies the JWT before granting access. */
-function sessionPrincipal(token: string | undefined): string | null {
+function sessionPrincipal(token: string | null | undefined): string | null {
   if (!token) return null;
   try {
     const claims = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"));
@@ -143,16 +243,17 @@ function sessionPrincipal(token: string | undefined): string | null {
   return token;
 }
 
-/** Ordinary bearer renewal keeps the same principal and does not tear down live sockets. */
-export function getCloudConnectionIdentity(
-  config: CloudRuntimeCredentials = getCloudConfig() ?? runtime
-): string {
+/**
+ * Who this backend is in the cloud: the platform's addresses and the session's
+ * principal. Keys and organizations are not part of it: adding, removing or
+ * replacing an organization's key closes nothing. Ordinary bearer renewal keeps
+ * the same principal and does not tear down live sockets.
+ */
+export function getCloudConnectionIdentity(): string {
   return JSON.stringify([
-    config.apiKey ?? null,
-    config.baseUrl ?? null,
-    config.orgId ?? null,
-    config.deusCloudUrl ?? null,
-    sessionPrincipal(config.deusCloudSessionToken ?? undefined),
+    rawAgntBaseUrl(),
+    rawDeusCloudUrl(),
+    sessionPrincipal(runtime.deusCloudSessionToken),
   ]);
 }
 
@@ -160,18 +261,14 @@ export function setCloudRuntimeCredentials(update: CloudRuntimeCredentials): voi
   if (update.baseUrl) assertSecureCloudUrl(update.baseUrl);
   if (update.deusCloudUrl) assertSecureCloudUrl(update.deusCloudUrl);
   const identityBefore = getCloudConnectionIdentity();
-  for (const key of [
-    "apiKey",
-    "baseUrl",
-    "deusCloudUrl",
-    "deusCloudSessionToken",
-    "orgId",
-  ] as const) {
+  for (const key of SCALARS) {
     const value = update[key];
     if (value === undefined) continue;
     runtime[key] = value === null ? undefined : value;
   }
-  cached = undefined;
+  if (update.orgKeys !== undefined) {
+    orgKeys = new Map(Object.entries(update.orgKeys ?? {}).filter(([id, key]) => id && key));
+  }
   if (getCloudConnectionIdentity() !== identityBefore) {
     const previous = identityController;
     identityController = new AbortController();
@@ -180,12 +277,10 @@ export function setCloudRuntimeCredentials(update: CloudRuntimeCredentials): voi
   }
 }
 
-/** Test seam: clear the memoized config AND runtime overrides. */
+/** Test seam: clear the runtime overrides. */
 export function resetCloudConfigForTests(): void {
   identityController.abort();
   identityController = new AbortController();
-  for (const key of Object.keys(runtime) as (keyof CloudRuntimeCredentials)[]) {
-    runtime[key] = undefined;
-  }
-  cached = undefined;
+  for (const key of SCALARS) runtime[key] = undefined;
+  orgKeys = new Map();
 }

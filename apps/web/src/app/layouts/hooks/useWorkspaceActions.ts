@@ -9,7 +9,7 @@
  * - Target branch selection for PR creation
  */
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { toast } from "sonner";
 import {
   useArchiveWorkspace,
@@ -22,6 +22,7 @@ import { queueTerminalTask } from "@/features/terminal/store/terminalTaskStore";
 import { simulatorStoreActions } from "@/features/simulator/store";
 import type { ContentTab } from "@/features/workspace/store";
 import type { Workspace } from "@/shared/types";
+import { prTargetBranch } from "@/features/workspace/lib/prState";
 
 interface UseWorkspaceActionsOptions {
   selectedWorkspace: Workspace | null;
@@ -41,17 +42,22 @@ export function useWorkspaceActions({
   >(null);
 
   // Target branch for PR creation/merge — synced from WorkspaceHeader's branch selector
-  const [selectedTargetBranch, setSelectedTargetBranch] = useState<string>(
-    selectedWorkspace?.git_default_branch ?? "main"
-  );
+  // Starts on the workspace's own target (the branch it came from), not the
+  // project's default: they differ for a workspace started from another branch,
+  // and the default may still be corrected after the workspace is selected.
+  const workspaceTarget = prTargetBranch(selectedWorkspace);
+  const [selectedTargetBranch, setSelectedTargetBranch] = useState<string>(workspaceTarget);
 
-  // Reset target branch when workspace changes (render-time pattern).
+  // Reset when the workspace changes, or when what it targets becomes known
+  // (a workspace selected before its row arrived; a corrected default branch).
+  // Render-time pattern.
   const selectedWorkspaceId = selectedWorkspace?.id ?? null;
-  const prevWsIdRef = useRef(selectedWorkspaceId);
+  const targetKey = `${selectedWorkspaceId ?? ""}\u0000${workspaceTarget}`;
+  const [prevTargetKey, setPrevTargetKey] = useState(targetKey);
 
-  if (prevWsIdRef.current !== selectedWorkspaceId) {
-    prevWsIdRef.current = selectedWorkspaceId;
-    setSelectedTargetBranch(selectedWorkspace?.git_default_branch ?? "main");
+  if (prevTargetKey !== targetKey) {
+    setPrevTargetKey(targetKey);
+    setSelectedTargetBranch(workspaceTarget);
   }
 
   // --- PR actions ---

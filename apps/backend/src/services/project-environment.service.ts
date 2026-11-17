@@ -16,7 +16,7 @@ import type { ProjectEnvironmentResponse } from "@shared/types/project-environme
 import { getDatabase } from "../lib/database";
 import { ValidationError } from "../lib/errors";
 import { processGroupsStopped, trackProcessGroup } from "../lib/process-groups";
-import { getCloudConfig } from "./agent/cloud/config";
+import { cloudAccount, cloudOrg, requireCloudOrg } from "./agent/cloud/config";
 import { getCloudEnvironmentInfo } from "./cloud-environment.service";
 import { createBackendChildEnv } from "../runtime/child-env";
 import { invalidate } from "./query-engine";
@@ -99,7 +99,8 @@ export async function readLocalProjectEnvironment(
 ): Promise<ProjectEnvironmentResponse> {
   const file = readProjectFile(directory);
   if (file) return projectEnvironmentResponse(file, "repository", "local");
-  if (repoUrl && getCloudConfig()) {
+  // A local workspace's saved cloud recipe is the default organization's.
+  if (repoUrl && cloudOrg()) {
     const saved = await getCloudEnvironmentInfo(repoUrl);
     if (saved.lookupFailed)
       throw new ValidationError(
@@ -117,9 +118,9 @@ export async function readWorkspaceEnvironment(
 ): Promise<ProjectEnvironmentResponse> {
   if (workspace.kind !== "cloud")
     return readLocalProjectEnvironment(directory, workspace.git_origin_url);
-  const config = getCloudConfig();
-  if (!config || !workspace.provider_workspace_id)
+  if (!cloudAccount() || !workspace.provider_workspace_id)
     throw new ValidationError("Cloud workspace is not ready.");
+  const config = requireCloudOrg(workspace.organization_id);
   const remote = await getWorkspace(workspace.provider_workspace_id, {
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,

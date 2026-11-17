@@ -112,6 +112,11 @@ export function composeSnapshot(catalog: Catalog, state: IntegrationsState): Int
         installed.installedRef !== skill.source.ref,
       readiness: skillReadiness(installed),
       error: installed?.error ?? null,
+      cloud:
+        state.cloudTurns &&
+        installed?.status === "ready" &&
+        installed.enabled &&
+        installed.installedRef !== null,
     };
   });
 

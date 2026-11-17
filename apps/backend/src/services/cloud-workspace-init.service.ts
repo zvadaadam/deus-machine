@@ -29,8 +29,17 @@ import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 import { getRepositoryById } from "../db";
 import { invalidate } from "./query-engine";
 import { generateUniqueName } from "./workspace.service";
-import { getCloudConfig, getCloudIdentitySignal, setCloudConnectHook } from "./agent/cloud/config";
+import {
+  cloudAccount,
+  cloudOrg,
+  cloudOrgOf,
+  requireCloudOrg,
+  getCloudIdentitySignal,
+  setCloudConnectHook,
+  type CloudOrg,
+} from "./agent/cloud/config";
 import { getCloudWorkspaceUserId } from "./cloud-settings.service";
+import { isPublicGithubRepo, mintRepoInstallationToken } from "./github-remote";
 import {
   ensureCloudSession,
   announceCloudEnv,
@@ -42,15 +51,20 @@ import {
   enableCloudEnvironmentSimulator,
 } from "./cloud-environment.service";
 
-const WORKSPACE_RESOURCES = ["workspaces", "sessions", "session", "stats"] as const;
-
-/** Provisioning waits on the mint, so it must fail fast rather than park the row. */
-const MINT_TIMEOUT_MS = 10_000;
+const WORKSPACE_RESOURCES = ["workspaces", "sessions", "session"] as const;
 
 export interface CreateCloudWorkspaceParams {
   repositoryId: string;
   /** Branch the sandbox checks out; defaults to the repo's default branch. */
   sourceBranch?: string;
+  /** The organization it runs in; the default organization when omitted. */
+  organizationId?: string | null;
+}
+
+/** The columns a cloud workspace's platform calls are derived from. */
+interface CloudWorkspaceRef {
+  provider_workspace_id?: string | null;
+  organization_id?: string | null;
 }
 
 /**
@@ -62,18 +76,18 @@ export function createCloudWorkspace(params: CreateCloudWorkspaceParams): {
   workspaceId: string;
   slug: string;
 } {
-  const config = getCloudConfig();
-  if (!config) {
-    throw new Error(
+  if (!cloudAccount()) {
+    throw new ValidationError(
       "Cloud workspaces are not configured — set DEUS_CLOUD_AGNT_API_KEY (and DEUS_CLOUD_AGNT_URL for a non-production backend)."
     );
   }
+  const org = requireCloudOrg(params.organizationId);
 
   const db = getDatabase();
   const repo = getRepositoryById(db, params.repositoryId);
-  if (!repo) throw new Error(`Repository not found: ${params.repositoryId}`);
+  if (!repo) throw new NotFoundError(`Repository not found: ${params.repositoryId}`);
   if (!repo.git_origin_url) {
-    throw new Error(
+    throw new ValidationError(
       "Cloud workspaces need a git remote: this repository has no origin URL for the sandbox to clone."
     );
   }
@@ -89,17 +103,16 @@ export function createCloudWorkspace(params: CreateCloudWorkspaceParams): {
   db.prepare(
     `INSERT INTO workspaces (
        id, repository_id, slug, kind, git_branch, git_target_branch,
-       state, init_stage, updated_at
-     ) VALUES (?, ?, ?, 'cloud', ?, ?, 'initializing', 'creating cloud workspace', datetime('now'))`
-  ).run(workspaceId, params.repositoryId, slug, workBranch, sourceBranch);
+       organization_id, state, init_stage, updated_at
+     ) VALUES (?, ?, ?, 'cloud', ?, ?, ?, 'initializing', 'creating cloud workspace', datetime('now'))`
+  ).run(workspaceId, params.repositoryId, slug, workBranch, sourceBranch, org.orgId);
   invalidate([...WORKSPACE_RESOURCES], {});
 
   void provisionInBackground(
     workspaceId,
     httpsOrigin(repo.git_origin_url),
     { source: sourceBranch, work: workBranch },
-    config.baseUrl,
-    config.apiKey
+    org
   );
 
   return { workspaceId, slug };
@@ -112,19 +125,25 @@ export function createCloudWorkspace(params: CreateCloudWorkspaceParams): {
  * repeat. Once a computer exists, waking it is the way back.
  */
 export function retryCloudWorkspace(workspaceId: string): void {
-  const config = getCloudConfig();
-  if (!config) throw new ValidationError("Sign in to Deus Cloud to try this workspace again.");
+  if (!cloudAccount())
+    throw new ValidationError("Sign in to Deus Cloud to try this workspace again.");
   const db = getDatabase();
   const workspace = db
     .prepare(
-      "SELECT repository_id, git_branch, git_target_branch FROM workspaces WHERE id = ? AND kind = 'cloud'"
+      "SELECT repository_id, git_branch, git_target_branch, organization_id FROM workspaces WHERE id = ? AND kind = 'cloud'"
     )
     .get(workspaceId) as
-    | { repository_id: string; git_branch: string | null; git_target_branch: string | null }
+    | {
+        repository_id: string;
+        git_branch: string | null;
+        git_target_branch: string | null;
+        organization_id: string | null;
+      }
     | undefined;
   const repo = workspace && getRepositoryById(db, workspace.repository_id);
   if (!workspace?.git_branch || !repo?.git_origin_url)
     throw new NotFoundError("Workspace not found");
+  const org = requireCloudOrg(workspace.organization_id);
   // The claim: two clicks, or two devices, provision it once.
   const claimed = db
     .prepare(
@@ -143,19 +162,20 @@ export function retryCloudWorkspace(workspaceId: string): void {
       source: workspace.git_target_branch || repo.git_default_branch || "main",
       work: workspace.git_branch,
     },
-    config.baseUrl,
-    config.apiKey
+    org
   );
 }
 
 /** Archive suspends the VM and keeps both its filesystem and remote backups. */
-export async function pauseCloudWorkspace(providerWorkspaceId: string): Promise<void> {
-  const config = getCloudConfig();
-  if (!config) throw new Error("Cloud workspaces are not configured");
+export async function pauseCloudWorkspace(
+  workspace: CloudWorkspaceRef & { provider_workspace_id: string }
+): Promise<void> {
+  if (!cloudAccount()) throw new ValidationError("Cloud workspaces are not configured");
+  const config = requireCloudOrg(workspace.organization_id);
   // Let the lifecycle owner decide: a disconnected VM may report stopped
   // while its processes are still running.
   try {
-    await agntPauseWorkspace(providerWorkspaceId, {
+    await agntPauseWorkspace(workspace.provider_workspace_id, {
       baseUrl: config.baseUrl,
       apiKey: config.apiKey,
     });
@@ -170,11 +190,13 @@ export async function pauseCloudWorkspace(providerWorkspaceId: string): Promise<
 }
 
 /** Platform-truth status of the sandbox ("paused" | "stopped" | "running" | ...), null if unreachable. */
-async function getCloudWorkspaceStatus(providerWorkspaceId: string): Promise<string | null> {
-  const config = getCloudConfig();
+async function getCloudWorkspaceStatus(
+  workspace: CloudWorkspaceRef & { provider_workspace_id: string }
+): Promise<string | null> {
+  const config = cloudOrgOf(workspace);
   if (!config) return null;
   try {
-    const summary = await agntGetWorkspace(providerWorkspaceId, {
+    const summary = await agntGetWorkspace(workspace.provider_workspace_id, {
       baseUrl: config.baseUrl,
       apiKey: config.apiKey,
     });
@@ -206,12 +228,13 @@ async function getCloudWorkspaceStatus(providerWorkspaceId: string): Promise<str
  * restart vehicle must treat false as "nothing moved" (unconfigured cloud,
  * no origin, identity change mid-lookup) and revert their optimistic state.
  */
-export async function refreshWorkspaceGithubToken(workspace: {
-  repository_id: string | null;
-  provider_workspace_id?: string | null;
-}): Promise<boolean> {
+export async function refreshWorkspaceGithubToken(
+  workspace: CloudWorkspaceRef & { repository_id: string | null }
+): Promise<boolean> {
   if (!workspace.repository_id) return false;
-  const config = getCloudConfig();
+  // The workspace's own organization: its environment, its secrets and the
+  // GitHub App installation token are all that organization's.
+  const config = cloudOrgOf(workspace);
   // Only the AGNT config gates this function: the deus-cloud session bits
   // gate the MINT, and mintRepoInstallationToken already no-ops to null
   // without them — the tokenless re-create (public repos, org-PAT setups,
@@ -221,7 +244,7 @@ export async function refreshWorkspaceGithubToken(workspace: {
   const originUrl = getRepositoryById(getDatabase(), workspace.repository_id)?.git_origin_url;
   if (!originUrl) return false;
   const generationAtStart = getCloudIdentityGeneration();
-  const envInfo = await getCloudEnvironmentInfo(originUrl);
+  const envInfo = await getCloudEnvironmentInfo(originUrl, config.orgId);
   if (envInfo.lookupFailed) {
     // UNKNOWN is not unconfigured: falling through to the inline lane would
     // re-create a NAMED-environment workspace from agnt-base and replace its
@@ -243,8 +266,7 @@ export async function refreshWorkspaceGithubToken(workspace: {
     const repositoryAuth = await refreshEnvironmentGithubTokenOnce(
       originUrl,
       envInfo.environmentId,
-      config.baseUrl,
-      config.apiKey
+      config
     );
     if (workspace.provider_workspace_id) {
       // Re-resolve the (just-refreshed) environment secrets into the DO's
@@ -286,7 +308,7 @@ export async function refreshWorkspaceGithubToken(workspace: {
   // stored token keeps working until its own expiry; the next refresh
   // retries.
   if (!workspace.provider_workspace_id) return false;
-  const mint = await mintRepoInstallationToken(originUrl);
+  const mint = await mintRepoInstallationToken(originUrl, config.orgId);
   if (!mint.token && !mint.definitive) {
     // Unknown outcome — proceed with the tokenless re-create only when the
     // DO map provably holds nothing worth protecting: stamp 0 = the map is
@@ -372,13 +394,14 @@ export async function refreshWorkspaceGithubTokenIfStale(
 ): Promise<void> {
   const row = getDatabase()
     .prepare(
-      "SELECT kind, repository_id, provider_workspace_id, last_inline_mint_at FROM workspaces WHERE id = ?"
+      "SELECT kind, repository_id, provider_workspace_id, organization_id, last_inline_mint_at FROM workspaces WHERE id = ?"
     )
     .get(workspaceId) as
     | {
         kind?: string;
         repository_id?: string | null;
         provider_workspace_id?: string | null;
+        organization_id?: string | null;
         last_inline_mint_at?: number | null;
       }
     | undefined;
@@ -397,6 +420,7 @@ export async function refreshWorkspaceGithubTokenIfStale(
   const flight = refreshWorkspaceGithubToken({
     repository_id: row.repository_id ?? null,
     provider_workspace_id: id,
+    organization_id: row.organization_id ?? null,
   }).finally(() => {
     if (tokenRefreshFlights.get(id) === flight) tokenRefreshFlights.delete(id);
   });
@@ -433,6 +457,7 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
   provider_workspace_id: string;
   current_session_id: string | null;
   repository_id?: string | null;
+  organization_id?: string | null;
 }): Promise<{ ok: boolean; status: string; error?: string }> {
   const db = getDatabase();
   const sessionId = workspace.current_session_id;
@@ -441,7 +466,7 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
   };
   const setStage = (stage: string | null) => {
     db.prepare("UPDATE workspaces SET init_stage = ? WHERE id = ?").run(stage, workspace.id);
-    invalidate(["workspaces", "stats"], {});
+    invalidate(["workspaces"], {});
   };
 
   const isServing = () => {
@@ -452,7 +477,7 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
     return row?.state === "ready" && (row.init_stage === null || row.init_stage === "running");
   };
 
-  const status = await getCloudWorkspaceStatus(workspace.provider_workspace_id);
+  const status = await getCloudWorkspaceStatus(workspace);
   // HTTP status can fail while the existing session still serves the computer.
   // A channel alone is insufficient: it also stays open while the VM sleeps.
   const refreshing = status === "running" || (status === null && isServing());
@@ -470,12 +495,13 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
     await refreshWorkspaceGithubToken({
       repository_id: workspace.repository_id ?? null,
       provider_workspace_id: workspace.provider_workspace_id,
+      organization_id: workspace.organization_id ?? null,
     });
   } catch (err) {
     console.warn(`[WORKSPACE] legacy GitHub refresh unavailable: ${err}`);
   }
   try {
-    await resumeCloudWorkspace(workspace.provider_workspace_id);
+    await resumeCloudWorkspace(workspace);
   } catch (err) {
     console.warn(`[WORKSPACE] cloud wake failed: ${err}`);
     if (refreshing && isServing()) return { ok: false, status: "running" };
@@ -496,27 +522,32 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
       console.warn(`[WORKSPACE] cloud wake reconnect failed (continuing): ${err}`);
     }
   }
-  invalidate(["workspaces", "stats"], {});
+  invalidate(["workspaces"], {});
   return { ok: true, status: status === "running" ? "running" : "resuming" };
 }
 
 /** Release an explicit pause and resume the retained VM. */
-export async function resumeCloudWorkspace(providerWorkspaceId: string): Promise<void> {
-  const config = getCloudConfig();
-  if (!config) throw new Error("Cloud workspaces are not configured");
-  await agntResumeWorkspace(providerWorkspaceId, {
+export async function resumeCloudWorkspace(
+  workspace: CloudWorkspaceRef & { provider_workspace_id: string }
+): Promise<void> {
+  if (!cloudAccount()) throw new ValidationError("Cloud workspaces are not configured");
+  const config = requireCloudOrg(workspace.organization_id);
+  await agntResumeWorkspace(workspace.provider_workspace_id, {
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
   });
 }
 
-/** Connection and repository access; provider accounts have their own personal API. */
-export async function getCloudSettingsStatus(): Promise<{
+/**
+ * Connection and repository access in one organization (the default when
+ * omitted); provider accounts have their own personal API.
+ */
+export async function getCloudSettingsStatus(organizationId?: string | null): Promise<{
   enabled: boolean;
   baseUrl: string | null;
   hasGithubToken: boolean;
 }> {
-  const config = getCloudConfig();
+  const config = cloudOrg(organizationId);
   if (!config) return { enabled: false, baseUrl: null, hasGithubToken: false };
   let hasGithubToken = false;
   try {
@@ -538,9 +569,12 @@ export async function getCloudSettingsStatus(): Promise<{
 }
 
 /** Store the org github_token secret (unlocks private repos in sandboxes). */
-export async function saveCloudGithubToken(token: string): Promise<void> {
-  const config = getCloudConfig();
-  if (!config) throw new Error("Cloud workspaces are not configured");
+export async function saveCloudGithubToken(
+  token: string,
+  organizationId?: string | null
+): Promise<void> {
+  if (!cloudAccount()) throw new ValidationError("Cloud workspaces are not configured");
+  const config = requireCloudOrg(organizationId);
   await agntCreateSecret("github_token", token, {
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
@@ -548,113 +582,10 @@ export async function saveCloudGithubToken(token: string): Promise<void> {
   });
 }
 
-/**
- * Mint a per-repo GitHub App installation token via deus-cloud (1-hour,
- * down-scoped to exactly this repository). Best-effort by design: missing
- * mint context, an expired session, an uncovered repo, or an unregistered
- * App all resolve to a null token — the workspace then rides the org PAT
- * secret (or clones anonymously when the repo is public).
- *
- * `definitive` is the DESTRUCTIVE-ACTION gate: true only when deus-cloud
- * positively answered "this identity may not mint for this repo" (403/404)
- * or the origin has no slug at all. A timeout, 5xx, network error or
- * missing mint context is an UNKNOWN — callers that remove or blank
- * existing credentials on a null token must not do so on unknowns, or a
- * ten-second deus-cloud blip strips a working sandbox of its git access.
- */
-async function mintRepoInstallationToken(
-  originUrl: string
-): Promise<{ token: string | null; definitive: boolean }> {
-  const config = getCloudConfig();
-  // A missing desktop session says nothing about the cloud's installation.
-  // Preserve existing provenance and let the runtime renew its own lease.
-  if (!config?.deusCloudUrl || !config.deusCloudSessionToken || !config.orgId)
-    return { token: null, definitive: false };
-  const slug = githubRepoSlug(originUrl);
-  if (!slug) return { token: null, definitive: true };
-  try {
-    const res = await fetch(
-      `${config.deusCloudUrl}/orgs/${config.orgId}/github/installation-token`,
-      {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${config.deusCloudSessionToken}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ repository: slug }),
-        // This await sits on user-visible paths — before workspace creation
-        // at provision time, and on the wake/send refresh — so an
-        // unresponsive deus-cloud would otherwise stall them for undici's
-        // 300s header timeout. Best-effort by design: giving up fast falls
-        // back to the PAT path.
-        signal: AbortSignal.timeout(MINT_TIMEOUT_MS),
-      }
-    );
-    if (!res.ok) {
-      console.warn(`[CloudInit] GitHub App token mint unavailable (${res.status}) for ${slug}`);
-      // 404 is definitive ONLY when deus-cloud itself answered (its
-      // AppError body is JSON: "No GitHub App installation for …"). A bare
-      // routing 404 — GitHub routes not deployed yet, a worker fallthrough —
-      // is a deployment skew, and stripping credentials on it would break a
-      // working sandbox during a deploy mismatch.
-      let definitive = res.status === 403;
-      if (res.status === 404) {
-        // Only deus-cloud's OWN answer is permission truth. Its AppError
-        // serializes as { error: "NOT_FOUND", message: "No GitHub App
-        // installation for <owner>", … } — a proxy/routing 404 (plain text,
-        // {"error":"Not Found"}, null) must stay UNKNOWN, or a deployment
-        // skew strips a working credential.
-        const body = await res.text().catch(() => "");
-        try {
-          const parsed = JSON.parse(body) as { error?: unknown; message?: unknown } | null;
-          definitive =
-            parsed?.error === "NOT_FOUND" &&
-            typeof parsed.message === "string" &&
-            parsed.message.includes("GitHub App installation");
-        } catch {
-          definitive = false;
-        }
-      }
-      return { token: null, definitive };
-    }
-    const body = (await res.json()) as { token?: string };
-    return { token: body.token ?? null, definitive: body.token ? true : false };
-  } catch {
-    return { token: null, definitive: false };
-  }
-}
-
-/**
- * Is this GitHub repo public — i.e. cloneable by a tokenless sandbox?
- *
- * Unauthenticated GitHub API: a public repo answers 200, a private (or
- * missing) one answers 404 — GitHub hides private repos from anonymous
- * callers. We deliberately send NO credential so the answer reflects what the
- * *sandbox* (which has none) can reach, NOT what the user's local git creds
- * can. TRI-STATE: 200 -> public, 404 -> private (invisible to anon), anything
- * else (rate-limit — the anon limit is 60/hr PER IP, a shared quota on the
- * hosted backend — 5xx, network) -> null = "couldn't tell". The null case is
- * what stops a rate-limited probe from being read as "private" and wrongly
- * emitting needs_grant on a public repo.
- */
-async function isPublicGithubRepo(slug: string): Promise<boolean | null> {
-  try {
-    const res = await fetch(`https://api.github.com/repos/${slug}`, {
-      headers: { accept: "application/vnd.github+json", "user-agent": "deus-machine" },
-      signal: AbortSignal.timeout(MINT_TIMEOUT_MS),
-    });
-    if (res.status === 200) return true;
-    if (res.status === 404) return false;
-    return null;
-  } catch {
-    return null;
-  }
-}
-
 /** The App grant path is only usable when a deus-cloud session is configured. */
-function isGrantPathConfigured(): boolean {
-  const c = getCloudConfig();
-  return !!(c?.deusCloudUrl && c.deusCloudSessionToken && c.orgId);
+function isGrantPathConfigured(orgId: string | null): boolean {
+  const c = cloudAccount();
+  return !!(c?.deusCloudUrl && c.sessionToken && orgId);
 }
 
 /**
@@ -670,10 +601,12 @@ function isGrantPathConfigured(): boolean {
  */
 async function classifyRepoAccess(
   slug: string,
-  mint: { token: string | null; definitive: boolean }
+  mint: { token: string | null; definitive: boolean },
+  orgId: string | null,
+  fresh = false
 ): Promise<CloudRepoAccessStatus> {
   if (mint.token) return "ok";
-  const isPublic = await isPublicGithubRepo(slug);
+  const isPublic = await isPublicGithubRepo(slug, { fresh });
   if (isPublic) return "ok";
   if (isPublic === null) return "unknown"; // probe couldn't tell → never block
   // isPublic === false: provably not anonymously cloneable. Emit needs_grant
@@ -682,7 +615,7 @@ async function classifyRepoAccess(
   // setup that clones private repos via the org PAT server-side), so prompting
   // to install an App that isn't in use would dead-end AND wrongly block a
   // create that succeeds via the PAT. That stays "unknown".
-  if (mint.definitive && isGrantPathConfigured()) return "needs_grant";
+  if (mint.definitive && isGrantPathConfigured(orgId)) return "needs_grant";
   return "unknown";
 }
 
@@ -694,14 +627,21 @@ async function classifyRepoAccess(
  * No cloud session / no origin / non-GitHub origin all resolve to "unknown":
  * there is nothing to grant, and the composer only ever acts on "needs_grant".
  */
-export async function resolveCloudRepoAccess(repoId: string): Promise<CloudRepoAccess> {
-  if (!getCloudConfig()) return { status: "unknown", slug: null };
+export async function resolveCloudRepoAccess(
+  repoId: string,
+  /** The organization the workspace would run in; the default when omitted. */
+  organizationId?: string | null,
+  /** Ask again rather than reuse a recent answer: the gate is waiting for a grant. */
+  { fresh = false }: { fresh?: boolean } = {}
+): Promise<CloudRepoAccess> {
+  const org = cloudOrg(organizationId);
+  if (!org) return { status: "unknown", slug: null };
   const originUrl = getRepositoryById(getDatabase(), repoId)?.git_origin_url;
   if (!originUrl) return { status: "unknown", slug: null };
   const slug = githubRepoSlug(originUrl);
   if (!slug) return { status: "unknown", slug: null };
-  const mint = await mintRepoInstallationToken(originUrl);
-  return { status: await classifyRepoAccess(slug, mint), slug };
+  const mint = await mintRepoInstallationToken(originUrl, org.orgId, { fresh });
+  return { status: await classifyRepoAccess(slug, mint, org.orgId, fresh), slug };
 }
 
 /**
@@ -722,9 +662,12 @@ export async function resolveCloudRepoAccess(repoId: string): Promise<CloudRepoA
  */
 /** Best-effort: the workspace still provisions without device support, and
  *  Start then says so. Enabling twice is harmless. */
-async function enableEnvironmentSimulator(environmentId: string): Promise<void> {
+async function enableEnvironmentSimulator(
+  environmentId: string,
+  orgId: string | null
+): Promise<void> {
   try {
-    await enableCloudEnvironmentSimulator(environmentId);
+    await enableCloudEnvironmentSimulator(environmentId, orgId);
     console.log(`[CloudInit] enabled hosted devices on environment ${environmentId}`);
   } catch (err) {
     console.warn(
@@ -736,21 +679,22 @@ async function enableEnvironmentSimulator(environmentId: string): Promise<void> 
 function refreshEnvironmentGithubTokenOnce(
   originUrl: string,
   environmentId: string,
-  baseUrl: string,
-  apiKey: string
+  org: CloudOrg
 ): Promise<RepositoryAuth | null> {
   // Normalized key: provisioning passes the https form, wake/send pass the
   // raw stored origin — an ssh-form remote would otherwise key two separate
   // flights for the same environment and re-open the delete-vs-write race
-  // the single-flight exists to close.
-  const key = httpsOrigin(originUrl);
+  // the single-flight exists to close. Keyed by organization too: the same
+  // repository has a different environment, and a different installation
+  // token, in each organization; sharing a flight would hand one
+  // organization's token to the other.
+  const key = JSON.stringify([org.orgId, httpsOrigin(originUrl)]);
   const inFlight = githubTokenRefreshes.get(key);
   if (inFlight) return inFlight;
   const run: Promise<RepositoryAuth | null> = refreshEnvironmentGithubToken(
     originUrl,
     environmentId,
-    baseUrl,
-    apiKey
+    org
   ).finally(() => {
     // Only OUR entry: the identity-change clear may have let a replacement
     // flight occupy this key — an unconditional delete would evict it and
@@ -776,10 +720,10 @@ export function clearGithubTokenRefreshFlights(): void {
 async function refreshEnvironmentGithubToken(
   originUrl: string,
   environmentId: string,
-  baseUrl: string,
-  apiKey: string
+  org: CloudOrg
 ): Promise<RepositoryAuth | null> {
-  const mint = await mintRepoInstallationToken(originUrl);
+  const { baseUrl, apiKey } = org;
+  const mint = await mintRepoInstallationToken(originUrl, org.orgId);
   try {
     if (mint.token) {
       await agntCreateSecret("github_token", mint.token, {
@@ -831,18 +775,18 @@ async function provisionInBackground(
   workspaceId: string,
   originUrl: string,
   branch: { source: string; work: string },
-  baseUrl: string,
-  apiKey: string
+  org: CloudOrg
 ): Promise<void> {
   const db = getDatabase();
   const identity = getCloudIdentitySignal();
+  const { baseUrl, apiKey } = org;
   try {
-    const userId = await getCloudWorkspaceUserId();
+    const userId = await getCloudWorkspaceUserId(org.orgId);
     identity.throwIfAborted();
     // A specialized environment (agent-authored via agnt_configure_environment,
     // resolved by the derived repo name) wins; absence of one IS the default —
     // the inline recipe below, exactly as before.
-    const envInfo = await getCloudEnvironmentInfo(originUrl);
+    const envInfo = await getCloudEnvironmentInfo(originUrl, org.orgId);
     identity.throwIfAborted();
     if (envInfo.lookupFailed)
       throw new Error(
@@ -862,12 +806,8 @@ async function provisionInBackground(
       // fails on a private repo. So write the mint as an environment-scoped
       // secret just before create; agnt resolves it by environment id.
       repositoryAuth =
-        (await refreshEnvironmentGithubTokenOnce(
-          originUrl,
-          envInfo.environmentId,
-          baseUrl,
-          apiKey
-        )) ?? undefined;
+        (await refreshEnvironmentGithubTokenOnce(originUrl, envInfo.environmentId, org)) ??
+        undefined;
       identity.throwIfAborted();
       // Every cloud workspace shows a Simulator tab; an environment saved
       // before devices existed cannot honour it, and the recipe is captured
@@ -875,7 +815,7 @@ async function provisionInBackground(
       // billing starts with a device). Best-effort: the workspace still
       // provisions without it, and Start then says so.
       if (envInfo.simulator === false) {
-        await enableEnvironmentSimulator(envInfo.environmentId);
+        await enableEnvironmentSimulator(envInfo.environmentId, org.orgId);
       }
       // Adding a personal secret scope must not select a same-name personal recipe.
       environment = envInfo.environmentId;
@@ -892,7 +832,7 @@ async function provisionInBackground(
       // secret: it drives agnt's git-auth step and NEVER lands in pg — the
       // DO refreshes secrets on every ensure, so each provision gets a
       // fresh mint instead of replaying a stale one.
-      const mint = await mintRepoInstallationToken(originUrl);
+      const mint = await mintRepoInstallationToken(originUrl, org.orgId);
       identity.throwIfAborted();
       repositoryAuth = mint.token
         ? { type: "github_app" }
@@ -913,7 +853,7 @@ async function provisionInBackground(
         // still provisions. NOTE: only the INLINE lane — a repo with a named
         // environment resolves its token separately and relies on the modal.
         const slug = githubRepoSlug(originUrl);
-        if (slug && (await classifyRepoAccess(slug, mint)) === "needs_grant") {
+        if (slug && (await classifyRepoAccess(slug, mint, org.orgId)) === "needs_grant") {
           db.prepare("UPDATE workspaces SET state = 'error', error_message = ? WHERE id = ?").run(
             `GitHub access required — install the Deus GitHub App for ${slug} to run it in the cloud.`,
             workspaceId

@@ -4,7 +4,6 @@ import { z } from "zod";
 import { WorkspaceStateSchema, WorkspaceStatusSchema } from "../enums";
 import type { GhCliStatus, PRStatus } from "../types/github";
 import type { ProjectEnvironmentResponse, TaskRunResponse } from "../types/project-environment";
-import type { Stats } from "../types/repository";
 import type { DiffStats, FileChange, RepoGroup, Workspace } from "../types/workspace";
 import { live, out, read, write } from "./op";
 import { stream } from "./stream";
@@ -22,12 +21,7 @@ export const workspaces = live({
   output: out<RepoGroup[]>(),
 });
 
-export const stats = live({ name: "stats", output: out<Stats>() });
-
 export const workspace = read({ name: "workspace", input: workspaceId, output: out<Workspace>() });
-
-/** Every workspace, archived ones included. */
-export const allWorkspaces = read({ name: "allWorkspaces", output: out<Workspace[]>() });
 
 /** The project's environment and Run commands, read on the node that owns the workspace. */
 export const workspaceEnvironment = read({
@@ -86,6 +80,8 @@ export const createWorkspace = write({
     pr_title: z.string().optional(),
     /** The pull request's base branch: what the diff is measured against. */
     target_branch: branchName.optional(),
+    /** A cloud workspace's organization; the default organization when omitted. */
+    organization_id: z.string().min(1).optional(),
   }),
   /** The row exists at once in `initializing`; the rest arrives on `workspaces`. */
   output: out<{ workspaceId: string }>(),
@@ -156,8 +152,8 @@ export const wakeCloudWorkspace = write({
 
 /**
  * Open a cloud workspace's session channel without waking its sandbox, so the
- * row learns the sandbox's real state. Answers at once; the truth arrives on
- * `workspaces`.
+ * row learns the sandbox's real state. Answers once the channel is open, or after
+ * a few seconds if it does not open; the truth arrives on `workspaces`.
  */
 export const connectCloudWorkspace = write({
   name: "connectCloudWorkspace",

@@ -52,7 +52,13 @@ app.get("/workspaces/:id/file-preview", withWorkspace, (c) => {
   const filePath = c.req.query("path");
   if (!filePath) throw new ValidationError("path parameter is required");
 
+  // This reads this computer's disk. A cloud workspace's files are on its own
+  // computer (the Files tab reads them there); "" must never fall through to
+  // the backend's own working folder.
   const workspacePath = c.get("workspacePath");
+  if (c.get("workspace").kind === "cloud" || !workspacePath) {
+    throw new ValidationError("This workspace's files are not on this computer");
+  }
   const safeRelativePath = gitService.resolveWorkspaceRelativePath(workspacePath, filePath);
   if (!safeRelativePath) throw new ValidationError("Invalid file path");
 

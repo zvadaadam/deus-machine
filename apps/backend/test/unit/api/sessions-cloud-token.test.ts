@@ -14,13 +14,9 @@ vi.mock("../../../src/db", async (importOriginal) => ({
   getSessionRaw: mockGetSessionRaw,
 }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: vi.fn() }));
-vi.mock("../../../src/services/agent/cloud/config", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../../src/services/agent/cloud/config")>()),
-  // The workspace-init service registers its pre-connect refresh at import.
-  setCloudConnectHook: () => {},
-  getCloudConfig: mockGetCloudConfig,
-  getCloudConnectionIdentity: (config?: unknown) => JSON.stringify(config ?? mockGetCloudConfig()),
-}));
+vi.mock("../../../src/services/agent/cloud/config", async () =>
+  (await import("../../cloud-config-mock")).cloudConfigMock(mockGetCloudConfig)
+);
 vi.mock("@deus-hq/sdk", () => ({ createSessionToken: mockCreateSessionToken }));
 
 import sessionHandlers from "../../../src/api/sessions";
@@ -96,6 +92,20 @@ describe("cloudDirectToken (a client's own channel to a cloud chat)", () => {
     expect(JSON.stringify(refusal)).not.toContain("alice-token");
     expect((refusal as Error).message).not.toContain("alice-token");
     expect(mockCreateSessionToken).not.toHaveBeenCalled();
+  });
+
+  it("needs no organization key: the token is exchanged with the person's session", async () => {
+    mockGetSessionRaw.mockReturnValue({ id: "s1", provider_session_id: "prov-1" });
+    // Signed in, but no organization is set up on this computer.
+    mockGetCloudConfig.mockReturnValue({
+      baseUrl: "https://api.agnt",
+      deusCloudSessionToken: "alice",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ token: "alice-token", expires_in: 600 })))
+    );
+    expect(await token()).toMatchObject({ token: "alice-token" });
   });
 
   it("requires a product sign-in even when the device has an org key", async () => {

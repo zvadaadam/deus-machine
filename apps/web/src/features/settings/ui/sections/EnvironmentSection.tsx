@@ -35,6 +35,7 @@ import { RepositoryEnvironmentSettings } from "./RepositoryEnvironmentSettings";
 import { ConnectEnvironmentRepositories } from "./ConnectEnvironmentRepositories";
 import { EnvironmentSettingsError } from "./EnvironmentSettingsError";
 import { SetUpEnvironmentWithAgent } from "./SetUpEnvironmentWithAgent";
+import { useSectionOrganization } from "../../hooks/useSectionOrganization";
 
 export function EnvironmentSection() {
   const session = useDeusCloudSession();
@@ -48,7 +49,6 @@ export function EnvironmentSection() {
   return <EnvironmentSettings key={accountId ?? "signed-out"} accountId={accountId} />;
 }
 function EnvironmentSettings({ accountId }: { accountId: string | null }) {
-  const [selectedOrg, setSelectedOrg] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const organizations = useQuery({
     queryKey: queryKeys.settings.environments.organizations(accountId),
@@ -57,11 +57,7 @@ function EnvironmentSettings({ accountId }: { accountId: string | null }) {
     staleTime: 30_000,
     retry: false,
   });
-  const orgId =
-    selectedOrg ??
-    organizations.data?.currentOrganizationId ??
-    organizations.data?.items[0]?.id ??
-    null;
+  const [orgId, setSelectedOrg] = useSectionOrganization(organizations.data?.items);
   function confirmNavigation() {
     if (dirty && !window.confirm("Discard unsaved setup changes?")) return false;
     setDirty(false);
@@ -111,7 +107,6 @@ function EnvironmentSettings({ accountId }: { accountId: string | null }) {
           orgId={orgId}
           onBeforeNavigate={confirmNavigation}
           onDirtyChange={setDirty}
-          activeOrganization={orgId === organizations.data?.currentOrganizationId}
         />
       )}
     </div>
@@ -122,13 +117,11 @@ function RepositoryEnvironments({
   orgId,
   onBeforeNavigate,
   onDirtyChange,
-  activeOrganization,
 }: {
   accountId: string | null;
   orgId: string | null;
   onBeforeNavigate: () => boolean;
   onDirtyChange: (dirty: boolean) => void;
-  activeOrganization: boolean;
 }) {
   const target = useUIStore((s) => s.environmentSettingsTarget);
   // Cloud shortcuts carry a Git remote; normalize it once, as the repository list does.
@@ -261,7 +254,7 @@ function RepositoryEnvironments({
               <SetUpEnvironmentWithAgent
                 repoId={selection.local?.id}
                 location={setupLocation}
-                activeOrganization={activeOrganization}
+                organizationId={orgId}
                 onBeforeStart={onBeforeNavigate}
               />
             </div>
@@ -362,7 +355,7 @@ function RepositoryEnvironments({
                       · {row.environment.name}
                     </span>
                   )}
-                  {row.local && (
+                  {row.local?.root_path && (
                     <span
                       className="text-text-muted block truncate text-xs"
                       title={row.local.root_path}

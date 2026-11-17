@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { cn } from "@/shared/lib/utils";
 import type { Workspace } from "@/shared/types";
 import { workspaceStart } from "@/features/workspace/lib/startState";
+import { localFolder } from "@/features/workspace/lib/reach";
 import { useWorkspaceStartStore } from "@/features/workspace/store/workspaceStartStore";
 import { SessionProvider } from "../context";
 import { createOptimisticUserMessage } from "../lib/optimisticMessage";
@@ -65,7 +66,8 @@ export function WorkspaceStartState({ workspace, className }: WorkspaceStartStat
                   <SessionProvider
                     sessionStatus="idle"
                     workspaceId={workspace.id}
-                    workspacePath={workspace.workspace_path}
+                    workspacePath={localFolder(workspace)}
+                    cloud={workspace.kind === "cloud"}
                     subagentMessages={NO_SUBAGENTS}
                   >
                     <MessageItem message={waiting} isLastInTurn />

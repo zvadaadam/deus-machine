@@ -107,8 +107,10 @@ vi.mock("../../../src/services/streams", () => ({
   publish: (...args: unknown[]) => mockPublish(...args),
 }));
 
-const mockRun = vi.fn();
-const mockGet = vi.fn(() => ({ kind: "cloud", provider_workspace_id: "agnt-ws-1" }));
+const mockRun = vi.fn((..._args: unknown[]) => ({ changes: 0, lastInsertRowid: 0 }));
+const mockGet = vi.fn(
+  (): Record<string, unknown> => ({ kind: "cloud", provider_workspace_id: "agnt-ws-1" })
+);
 const mockPrepare = vi.fn<(sql: string) => Pick<Database.Statement, "run" | "get">>(() => ({
   run: mockRun,
   get: mockGet,
@@ -151,6 +153,7 @@ import {
   parseCloudSimulatorPlatform,
   getCloudSimulatorStatus,
   readCloudPreviewTemplate,
+  getCloudIdentityGeneration,
 } from "../../../src/services/agent/cloud/driver";
 import { getCloudPreviewTemplate } from "../../../src/services/agent/cloud/preview";
 import {
@@ -327,6 +330,40 @@ describe("cloud driver frame → fold contract", () => {
       category: "sidecar_unreachable",
       message: "boom",
       recoverable: false,
+    });
+  });
+
+  it("reads a refused send as the platform's sentence, and an account refusal as not internal", () => {
+    capturedOnFrame!({
+      type: "error",
+      code: "MESSAGE_SEND_FAILED",
+      message:
+        "PROVIDER_ACCOUNT_RECONNECT_REQUIRED: Your default Claude account must be reconnected in Settings → AI Providers, or choose another default.",
+      messageId: "turn-refused",
+    });
+
+    expect(handler.abortTurn).toHaveBeenCalledWith("deus-session-1", "turn-refused");
+    expect(handler.handle.mock.calls[0][0].event).toMatchObject({
+      type: "error",
+      category: "_provider_account",
+      message:
+        "Your default Claude account must be reconnected in Settings → AI Providers, or choose another default.",
+      turnId: "turn-refused",
+      _meta: { cloudErrorCode: "MESSAGE_SEND_FAILED" },
+    });
+  });
+
+  it("keeps a refusal with no way out internal, its sentence whole and without codes", () => {
+    capturedOnFrame!({
+      type: "error",
+      code: "MESSAGE_SEND_FAILED",
+      message: "TURN_ID_IN_USE: This turn was admitted concurrently; retry with a new turn ID.",
+      messageId: "turn-x",
+    });
+
+    expect(handler.handle.mock.calls[0][0].event).toMatchObject({
+      category: "internal",
+      message: "This turn was admitted concurrently; retry with a new turn ID.",
     });
   });
 
@@ -1340,6 +1377,99 @@ describe("cloud driver session lifecycle", () => {
     );
     await ensureCloudSession("deus-session-1");
     expect(capturedToken).toBe("bob-session");
+  });
+
+  it("records the organization every snapshot names on a row that has none or another", () => {
+    mockRun.mockClear();
+    mockInvalidate.mockClear();
+    mockRun.mockImplementationOnce(() => ({ changes: 1, lastInsertRowid: 0 }));
+    capturedOnFrame!(simulatorSnapshot({}));
+    expect(mockPrepare).toHaveBeenCalledWith(
+      "UPDATE workspaces SET organization_id = ? WHERE id = ? AND kind = 'cloud' AND organization_id IS NOT ?"
+    );
+    expect(mockRun).toHaveBeenCalledWith("org-1", "deus-ws-1", "org-1");
+    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces"], {});
+    // Already recorded: nothing changes, nobody is told.
+    mockInvalidate.mockClear();
+    capturedOnFrame!(simulatorSnapshot({}, "provisioning"));
+    expect(mockInvalidate.mock.calls.filter(([names]) => names[0] === "workspaces")).toHaveLength(
+      1 // the provisioning status's own row update, not the organization
+    );
+  });
+
+  it("keeps open sockets, and the identity, when an organization's key is added or replaced", async () => {
+    setCloudRuntimeCredentials({ orgKeys: { org_a: "key_a" } });
+    const generation = getCloudIdentityGeneration();
+    const first = await ensureCloudSession("deus-session-1");
+    mockClose.mockClear();
+    mockPublish.mockClear();
+    connectCount = 0;
+
+    setCloudRuntimeCredentials({ orgKeys: { org_a: "key_a", org_b: "key_b" } });
+    setCloudRuntimeCredentials({ orgKeys: { org_a: "key_a2", org_b: "key_b" } });
+
+    expect(getCloudIdentityGeneration()).toBe(generation);
+    expect(mockClose).not.toHaveBeenCalled();
+    expect(published(mockPublish, cloudIdentity)).toEqual([]);
+    expect(await ensureCloudSession("deus-session-1")).toBe(first);
+    expect(connectCount).toBe(0);
+  });
+
+  it("names a workspace's own organization key on its organization-scoped calls", async () => {
+    setCloudRuntimeCredentials({ orgKeys: { org_a: "key_a", org_b: "key_b" } });
+    shutdownCloudDriver();
+    initCloudDriver(handler);
+    const fetchMock = vi.fn(async (url: unknown, _init?: RequestInit) =>
+      String(url).includes("/dashboard/sessions/")
+        ? new Response(JSON.stringify({ token: "session-jwt", expires_in: 86400 }))
+        : new Response(null)
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    mockGet.mockImplementation(() => ({
+      kind: "cloud",
+      provider_workspace_id: "agnt-ws-1",
+      organization_id: "org_b",
+    }));
+    try {
+      await ensureCloudSession("deus-session-1");
+      await vi.waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith(
+          "https://agnt.test/sessions/agnt-session-1/metadata",
+          expect.objectContaining({
+            method: "PATCH",
+            headers: expect.objectContaining({ authorization: "Bearer key_b" }),
+          })
+        )
+      );
+    } finally {
+      mockGet.mockImplementation(() => ({ kind: "cloud", provider_workspace_id: "agnt-ws-1" }));
+    }
+  });
+
+  it("still connects a workspace whose organization has no key here: the socket is the person's", async () => {
+    setCloudRuntimeCredentials({ apiKey: null, orgKeys: { org_a: "key_a" } });
+    shutdownCloudDriver();
+    initCloudDriver(handler);
+    connectCount = 0;
+    const fetchMock = vi.fn(async (url: unknown, _init?: RequestInit) =>
+      String(url).includes("/dashboard/sessions/")
+        ? new Response(JSON.stringify({ token: "session-jwt", expires_in: 86400 }))
+        : new Response(null)
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    mockGet.mockImplementation(() => ({
+      kind: "cloud",
+      provider_workspace_id: "agnt-ws-1",
+      organization_id: "org_elsewhere",
+    }));
+    try {
+      await ensureCloudSession("deus-session-1");
+      expect(connectCount).toBe(1);
+      // No key for its organization: the organization-scoped metadata push is skipped.
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/metadata"))).toBe(false);
+    } finally {
+      mockGet.mockImplementation(() => ({ kind: "cloud", provider_workspace_id: "agnt-ws-1" }));
+    }
   });
 
   it("lazily creates the agnt session for a bare new-tab session row", async () => {

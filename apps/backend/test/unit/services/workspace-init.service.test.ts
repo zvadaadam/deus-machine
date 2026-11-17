@@ -13,7 +13,9 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("../../../src/lib/database", () => ({ getDatabase: () => mocks.db }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: vi.fn() }));
-vi.mock("../../../src/services/agent/cloud/config", () => ({ getCloudConfig: mocks.cloud }));
+vi.mock("../../../src/services/agent/cloud/config", async () =>
+  (await import("../../cloud-config-mock")).cloudConfigMock(mocks.cloud)
+);
 vi.mock("../../../src/services/cloud-environment.service", () => ({
   getCloudEnvironmentInfo: mocks.saved,
 }));
@@ -108,7 +110,7 @@ describe("local project environment journey", () => {
   it("uses saved defaults only when this checkout has no file, never another branch's file", async () => {
     const directory = await initialize();
     project({ version: 1, setup: "exit 89" }); // Main checkout edited after the workspace branched.
-    mocks.cloud.mockReturnValue({});
+    mocks.cloud.mockReturnValue({ baseUrl: "https://cloud.test", apiKey: "key" });
     mocks.saved.mockResolvedValue({
       configured: true,
       project: { version: 1, setup: "printf saved > saved.txt" },
@@ -133,7 +135,7 @@ describe("local project environment journey", () => {
     expect(fs.readFileSync(path.join(directory, "proof.txt"), "utf8")).toBe("repaired");
   });
   it("reports a missing checkout without falling back or recreating it", async () => {
-    mocks.cloud.mockReturnValue({});
+    mocks.cloud.mockReturnValue({ baseUrl: "https://cloud.test", apiKey: "key" });
     fs.rmSync(root, { recursive: true });
     await expect(readLocalProjectEnvironment(root, "https://github.com/test/app")).rejects.toThrow(
       "Local repository folder not found"
@@ -143,7 +145,7 @@ describe("local project environment journey", () => {
     expect(fs.existsSync(root)).toBe(false);
   });
   it("fails on unavailable saved settings and missing required names without exposing values", async () => {
-    mocks.cloud.mockReturnValue({});
+    mocks.cloud.mockReturnValue({ baseUrl: "https://cloud.test", apiKey: "key" });
     mocks.saved.mockResolvedValue({ configured: false, lookupFailed: true });
     const directory = await initialize();
     expect(row().setup_status).toBe("failed");

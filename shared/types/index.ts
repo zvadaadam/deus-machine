@@ -29,7 +29,7 @@ export type {
 export type { Automation, AutomationRun } from "./automation";
 
 // Repository types
-export type { Repository, Stats } from "./repository";
+export type { Repository } from "./repository";
 
 // Settings types
 export type { Settings, SettingsSection } from "./settings";

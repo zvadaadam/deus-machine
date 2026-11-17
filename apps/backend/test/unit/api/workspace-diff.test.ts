@@ -25,14 +25,14 @@ vi.mock("../../../src/middleware/workspace-loader", () => ({
 }));
 
 const git = vi.hoisted(() => ({
-  getDiffStats: vi.fn(() => ({ additions: 3, deletions: 1 })),
-  getDiffFiles: vi.fn(() => [{ file: "a.ts", additions: 3, deletions: 1 }]),
-  resolveParentBranch: vi.fn(() => "main"),
+  getDiffStats: vi.fn(async () => ({ additions: 3, deletions: 1 })),
+  getDiffFiles: vi.fn(async () => [{ file: "a.ts", additions: 3, deletions: 1 }]),
+  resolveParentBranch: vi.fn(async () => "main"),
   resolveWorkspaceRelativePath: vi.fn((_p: string, f: string) => f),
-  getFileDiff: vi.fn(() => "@@ local diff @@"),
+  getFileDiff: vi.fn(async () => "@@ local diff @@"),
   extractDiffInfo: vi.fn(() => ({ isNew: true, isDeleted: false, oldPath: "", newPath: "" })),
-  getMergeBase: vi.fn(() => "base"),
-  getGitFileContent: vi.fn(() => ""),
+  getMergeBase: vi.fn(async () => "base"),
+  getGitFileContent: vi.fn(async () => ""),
 }));
 vi.mock("../../../src/services/git.service", () => git);
 
@@ -43,6 +43,8 @@ const cloud = vi.hoisted(() => ({
   getCloudDiffFile: vi.fn(async () => ({ path: "x.ts", diff: "@@ cloud diff @@" })),
   requestCloudFs: vi.fn(async () => ({ content: "cloud-bytes" })),
   getCloudIdentityGeneration: vi.fn(() => 0),
+  // The row numbers ask only a computer with an open channel (node/driver.ts).
+  hasLiveCloudSession: vi.fn(() => true),
 }));
 vi.mock("../../../src/services/agent/cloud/driver", () => cloud);
 

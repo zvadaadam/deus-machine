@@ -68,7 +68,7 @@ import {
   type DecodedWireEventEnvelope,
 } from "@shared/protocol-types";
 import type { PaginatedMessages } from "@shared/types/session";
-import { dropOptimisticMessage } from "./optimisticMessage";
+import { returnRefusedMessage } from "./returnToComposer";
 
 // ---- Per-session fold ----
 
@@ -245,7 +245,9 @@ function applyEvent(
     event.turnId &&
     !fold.state.turns.some((turn) => turn.turnId === event.turnId)
   ) {
-    dropOptimisticMessage(ctx.queryClient, sessionId, event.turnId);
+    // The platform refused the send after the backend took it: the message
+    // goes back into the composer, never lost (see returnToComposer.ts).
+    returnRefusedMessage(ctx.queryClient, sessionId, event.turnId);
   }
   const { state, changes } = reduceConversationWithChanges(fold.state, event);
   fold.state = state;

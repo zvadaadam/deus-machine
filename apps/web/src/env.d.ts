@@ -55,7 +55,7 @@ interface Window {
       session: import("@shared/types").DeusCloudSessionStatus;
       error?: string;
     }>;
-    getGithubAppStatus: () => Promise<{
+    getGithubAppStatus: (orgId?: string) => Promise<{
       configured: boolean;
       signedIn: boolean;
       installations: Array<{ installationId: number; accountLogin: string }>;
@@ -63,7 +63,7 @@ interface Window {
       accessibleRepos: string[] | null;
       error?: string;
     }>;
-    installGithubApp: () => Promise<{ ok: boolean; error?: string }>;
+    installGithubApp: (orgId?: string) => Promise<{ ok: boolean; error?: string }>;
     signOutDeusCloud: () => Promise<{
       success: boolean;
       session: import("@shared/types").DeusCloudSessionStatus;

@@ -6,6 +6,8 @@
  * then global items below (dimmed at the card level).
  * When no repoPath is set, only global items are shown at full opacity.
  * When project scope is active but empty, an empty state is shown.
+ * The project scope is the workspace's own folder (its worktree), so it says that
+ * a change there is part of the workspace's branch.
  *
  * CRUD support: category views pass editingItem / addingInScope / pendingDeleteItem
  * along with a renderEditForm render-prop. This component handles placement of
@@ -149,6 +151,7 @@ export function CategoryContentArea({
           {!isLoading && hasProjectScope && (
             <ScopeSection
               label={repoName ?? "Project"}
+              note={PROJECT_SCOPE_NOTE}
               items={visibleProjectItems}
               dimmed={false}
               isEditingItem={isEditingItem}
@@ -197,12 +200,18 @@ export function CategoryContentArea({
   );
 }
 
+/** The project scope reads and writes the workspace's own folder (`agentConfigOf`). */
+const PROJECT_SCOPE_NOTE =
+  "Project settings are this workspace's own. Changes here are part of its branch.";
+
 /* ------------------------------------------------------------------ */
 /*  ScopeSection — extracted to reduce duplication between scopes      */
 /* ------------------------------------------------------------------ */
 
 interface ScopeSectionProps {
   label?: string;
+  /** One quiet line under the label. */
+  note?: string;
   items: ConfigDisplayItem[];
   dimmed: boolean;
   isEditingItem: (item: ConfigDisplayItem) => boolean;
@@ -218,6 +227,7 @@ interface ScopeSectionProps {
 
 function ScopeSection({
   label,
+  note,
   items,
   dimmed,
   isEditingItem,
@@ -244,6 +254,7 @@ function ScopeSection({
           {label}
         </p>
       )}
+      {note && <p className="text-muted-foreground/60 text-2xs -mt-1 mb-2">{note}</p>}
       {isEmpty ? (
         <EmptyState category={categoryLabel?.toLowerCase() ?? "items"} />
       ) : (

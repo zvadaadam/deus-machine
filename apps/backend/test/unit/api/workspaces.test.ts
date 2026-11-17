@@ -64,22 +64,26 @@ vi.mock("../../../src/services/cloud-workspace-init.service", () => ({
   wakeCloudWorkspaceWithFeedback: cloud.wake,
 }));
 
+const driver = vi.hoisted(() => ({ ensureCloudSession: vi.fn() }));
+vi.mock("../../../src/services/agent/cloud/driver", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  ensureCloudSession: (...args: unknown[]) => driver.ensureCloudSession(...args),
+}));
+
 vi.mock("../../../src/services/git.service", () => ({
-  detectDefaultBranch: vi.fn<(...args: any[]) => any>(() => "main"),
-  getDiffStats: vi.fn<(...args: any[]) => any>(() => ({ additions: 0, deletions: 0 })),
-  getDiffFiles: vi.fn<(...args: any[]) => any>(() => ({
+  detectDefaultBranch: vi.fn<(...args: any[]) => any>(async () => "main"),
+  getDiffStats: vi.fn<(...args: any[]) => any>(async () => ({ additions: 0, deletions: 0 })),
+  getDiffFiles: vi.fn<(...args: any[]) => any>(async () => ({
     files: [],
     truncated: false,
     total_count: 0,
   })),
-  getMergeBase: vi.fn<(...args: any[]) => any>(() => "abc123"),
-  getGitFileContent: vi.fn<(...args: any[]) => any>(() => null),
+  getMergeBase: vi.fn<(...args: any[]) => any>(async () => "abc123"),
+  getGitFileContent: vi.fn<(...args: any[]) => any>(async () => null),
   resolveWorkspaceRelativePath: vi.fn<(...args: any[]) => any>((p: string) => p),
-  getOpenCommand: vi.fn<(...args: any[]) => any>(() => "open"),
 }));
 
 vi.mock("child_process", () => ({
-  execSync: vi.fn<(...args: any[]) => any>(() => "testuser"),
   execFile: vi.fn<(...args: any[]) => any>(),
   spawn: vi.fn<(...args: any[]) => any>(),
 }));
@@ -168,7 +172,9 @@ beforeEach(() => {
   mockDb.prepare.mockReturnValue(mockStmt);
   mockDb.transaction.mockImplementation((fn: Function) => fn);
   mockInitializeWorkspace.mockResolvedValue(undefined);
-  mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
+  mockExecFileAsync.mockImplementation((_cmd: string, args: string[]) =>
+    Promise.resolve({ stdout: args[0] === "config" ? "testuser\n" : "", stderr: "" })
+  );
 });
 
 // ─── createWorkspace ──────────────────────────────────────────────
@@ -193,11 +199,25 @@ describe("createWorkspace", () => {
     });
   });
 
+  it("refuses a local workspace for a project that is not on this computer", async () => {
+    mockStmt.get.mockReturnValueOnce({ ...MOCK_REPO, name: "cloudy", root_path: null });
+
+    await expect(create()).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringContaining("cloudy is not on this computer"),
+    });
+    expect(mockInitializeWorkspace).not.toHaveBeenCalled();
+    expect(mockExecFileAsync).not.toHaveBeenCalled();
+    expect(
+      mockDb.prepare.mock.calls.some(([sql]) => String(sql).includes("INSERT INTO workspaces"))
+    ).toBe(false);
+  });
+
   it("answers with the new workspace's id and tells subscribers", async () => {
     mockStmt.get.mockReturnValueOnce(MOCK_REPO);
 
     expect(await create()).toEqual({ workspaceId: "ws-test-uuid" });
-    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "stats"]);
+    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces"]);
   });
 
   it("creates the row in initializing state, with the branch it starts from", async () => {
@@ -349,7 +369,7 @@ describe("updateWorkspace", () => {
       "UPDATE workspaces SET state = CASE WHEN current_session_id IS NULL THEN 'error' ELSE 'ready' END WHERE id = ?"
     );
     expect(mockStmt.run).toHaveBeenCalledWith("ws-test-uuid");
-    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "sessions", "stats"]);
+    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "sessions"]);
   });
 });
 
@@ -431,5 +451,64 @@ describe("cloud wake and archive ordering", () => {
     expect(woken).toEqual({ answer: { ok: true, status: "resuming" } });
     expect(state()).toBe("archived");
     expect(running).toBe(false);
+  });
+});
+
+describe("connectCloudWorkspace", () => {
+  function cloudWorkspace() {
+    mockStmt.get.mockReturnValue({
+      ...MOCK_CREATED_WORKSPACE,
+      kind: "cloud",
+      state: "ready",
+      current_session_id: "session-1",
+      root_path: null,
+    });
+  }
+  const connect = () => run(api.connectCloudWorkspace, { workspaceId: "ws-test-uuid" });
+
+  it("answers once the channel is open, not before", async () => {
+    cloudWorkspace();
+    let open!: () => void;
+    driver.ensureCloudSession.mockReturnValue(
+      new Promise<void>((resolve) => {
+        open = resolve;
+      })
+    );
+    let answered = false;
+    const answer = connect().then((result) => {
+      answered = true;
+      return result;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(driver.ensureCloudSession).toHaveBeenCalledWith("session-1");
+    expect(answered).toBe(false);
+
+    open();
+    await expect(answer).resolves.toEqual({ ok: true });
+  });
+
+  it("answers at the limit when the channel never opens", async () => {
+    vi.useFakeTimers();
+    try {
+      cloudWorkspace();
+      driver.ensureCloudSession.mockReturnValue(new Promise(() => {}));
+      let answered = false;
+      const answer = connect().then((result) => {
+        answered = true;
+        return result;
+      });
+      await vi.advanceTimersByTimeAsync(4_900);
+      expect(answered).toBe(false);
+      await vi.advanceTimersByTimeAsync(200);
+      await expect(answer).resolves.toEqual({ ok: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("answers when the connect fails, without throwing", async () => {
+    cloudWorkspace();
+    driver.ensureCloudSession.mockRejectedValue(new Error("platform unreachable"));
+    await expect(connect()).resolves.toEqual({ ok: true });
   });
 });

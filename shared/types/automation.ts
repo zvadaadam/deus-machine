@@ -49,6 +49,8 @@ export interface Automation {
   created_by: string;
   /** Adopted deus workspace row for the automation's held sandbox, once opened. */
   workspace_id: string | null;
+  /** The cloud organization it was listed under (null for rows from before that was kept). */
+  organization_id: string | null;
   /** When this cache row last mirrored the platform. */
   synced_at: string;
   updated_at: string;

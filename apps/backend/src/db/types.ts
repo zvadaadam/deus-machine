@@ -28,7 +28,8 @@ import type { ErrorCategory } from "@shared/protocol-types";
 export interface RepositoryRow {
   id: string;
   name: string;
-  root_path: string;
+  /** Null for a project that is not on this computer (cloud only). */
+  root_path: string | null;
   git_default_branch: string;
   sort_order: number;
   git_origin_url: string | null;
@@ -55,6 +56,8 @@ export interface WorkspaceRow {
   kind: WorkspaceKind;
   /** agnt workspace id backing a cloud workspace (null for local). */
   provider_workspace_id: string | null;
+  /** The cloud organization it runs in (null for local, or not yet known: the default one). */
+  organization_id: string | null;
   state: WorkspaceState;
   status: WorkspaceStatus;
   current_session_id: string | null;
@@ -88,6 +91,8 @@ export interface WorkspaceWithDetailsRow {
   kind: WorkspaceKind;
   /** agnt workspace id backing a cloud workspace (null for local). */
   provider_workspace_id: string | null;
+  /** The cloud organization it runs in (null for local, or not yet known: the default one). */
+  organization_id: string | null;
   state: WorkspaceState;
   status: WorkspaceStatus;
   current_session_id: string | null;
@@ -223,6 +228,8 @@ export interface AutomationRow {
   created_by: string;
   /** Adopted deus workspace row for the held sandbox. */
   workspace_id: string | null;
+  /** The cloud organization it was listed under (null for rows from before that was kept). */
+  organization_id: string | null;
   synced_at: string;
   updated_at: string;
 }
@@ -249,20 +256,4 @@ export interface AutomationRunRow {
   error_message: string | null;
   cost: number | null;
   summary: string | null;
-}
-
-// ─── stats ───────────────────────────────────────────────────
-
-export interface StatsRow {
-  workspaces: number;
-  workspaces_ready: number;
-  workspaces_archived: number;
-  workspaces_backlog: number;
-  workspaces_in_progress: number;
-  workspaces_in_review: number;
-  repositories: number;
-  sessions: number;
-  sessions_idle: number;
-  sessions_working: number;
-  messages: number;
 }

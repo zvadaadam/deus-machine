@@ -23,6 +23,7 @@ import { pipeline } from "stream/promises";
 import { promisify } from "util";
 import { parse as parseYaml } from "yaml";
 import { DB_PATH } from "../../lib/database";
+import { ConflictError, NotFoundError, ValidationError } from "../../lib/errors";
 import type { LocalSkill, SkillContent, SkillSource } from "@shared/integrations/types";
 
 const execFileAsync = promisify(execFile);
@@ -64,7 +65,7 @@ function disabledDir(): string {
 }
 
 function assertSkillName(name: string): void {
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) throw new Error(`Invalid skill name: ${name}`);
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) throw new ValidationError(`Invalid skill name: ${name}`);
 }
 
 function readMarker(dir: string): SkillMarker | null {
@@ -107,11 +108,9 @@ async function resolveRef(repo: string, ref: string): Promise<string> {
     }
   );
   if (!response.ok) {
-    throw new Error(
-      response.status === 404
-        ? `GitHub has no ${repo} at "${ref}"`
-        : `GitHub answered ${response.status} resolving ${repo}@${ref}`
-    );
+    throw response.status === 404
+      ? new NotFoundError(`GitHub has no ${repo} at "${ref}"`)
+      : new Error(`GitHub answered ${response.status} resolving ${repo}@${ref}`);
   }
   const sha = (await response.text()).trim();
   if (!/^[0-9a-f]{40}$/i.test(sha)) throw new Error(`Unexpected commit from GitHub: ${sha}`);
@@ -192,15 +191,15 @@ export async function fetchSkill(source: SkillSource): Promise<FetchedSkill> {
     fs.mkdirSync(extracted);
     await execFileAsync("tar", ["-xzf", tarball, "-C", extracted], { timeout: 120_000 });
     const [top] = fs.readdirSync(extracted);
-    if (!top) throw new Error(`${source.repo} is empty`);
+    if (!top) throw new ValidationError(`${source.repo} is empty`);
     const root = path.join(extracted, top);
     const skillRoot = path.resolve(root, source.path || ".");
     const skillMd = path.join(skillRoot, "SKILL.md");
     if (!fs.existsSync(skillMd) || !fs.lstatSync(skillMd).isFile()) {
-      throw new Error(`No SKILL.md at ${source.repo}/${source.path || "(root)"}`);
+      throw new ValidationError(`No SKILL.md at ${source.repo}/${source.path || "(root)"}`);
     }
     // A path with `..`, or a folder that is a link out of the repository, is refused.
-    if (!contains(root, skillRoot)) throw new Error("Skill path leaves the repository");
+    if (!contains(root, skillRoot)) throw new ValidationError("Skill path leaves the repository");
     const frontmatter = parseSkillFrontmatter(fs.readFileSync(skillMd, "utf8"));
     const name = String(frontmatter.name ?? path.basename(skillRoot))
       .trim()
@@ -248,7 +247,7 @@ export function parseSkillSource(input: string): SkillSource {
     const [, owner, repo, rest] = short;
     return { repo: `${owner}/${repo}`, ref: "HEAD", path: rest ?? "" };
   }
-  throw new Error("Paste a GitHub link to a skill folder, or owner/repo/path");
+  throw new ValidationError("Paste a GitHub link to a skill folder, or owner/repo/path");
 }
 
 // ---------------------------------------------------------------------------
@@ -336,7 +335,7 @@ export function placeSkill(input: {
 }): void {
   assertSkillName(input.name);
   const conflict = placementConflict(input.name, input.id);
-  if (conflict) throw new Error(conflict);
+  if (conflict) throw new ConflictError(conflict);
   const marker: SkillMarker = {
     installedBy: "deus",
     id: input.id,
@@ -404,9 +403,10 @@ export function setSkillPlaced(name: string, id: string, placed: boolean): void 
   const parked = path.join(disabledDir(), name);
   if (placed) {
     if (!isOurs(canonical, id)) {
-      if (!isOurs(parked, id)) throw new Error(`The files for "${name}" are missing; reinstall it`);
+      if (!isOurs(parked, id))
+        throw new ConflictError(`The files for "${name}" are missing; reinstall it`);
       const conflict = placementConflict(name, id);
-      if (conflict) throw new Error(conflict);
+      if (conflict) throw new ConflictError(conflict);
       moveDir(parked, canonical);
     }
     linkForClaude(name);

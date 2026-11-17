@@ -18,7 +18,6 @@ import type {
   MessageRowWithParts,
   PartRow,
   CompactionRow,
-  StatsRow,
 } from "./types";
 
 // ─── Workspace Queries ───────────────────────────────────────
@@ -30,7 +29,7 @@ import type {
  */
 const WORKSPACE_ROW_COLUMNS = `
     w.id, w.repository_id, w.slug, w.title, w.git_branch,
-    w.git_target_branch, w.kind, w.provider_workspace_id,
+    w.git_target_branch, w.kind, w.provider_workspace_id, w.organization_id,
     w.state, w.status, w.current_session_id,
     w.pr_url, w.pr_number,
     w.pr_state, w.pr_is_draft, w.pr_review_status, w.pr_has_conflicts, w.pr_ci_status, w.pr_checked_at,
@@ -52,18 +51,6 @@ const WORKSPACE_DETAILS_SELECT = `
   SELECT ${WORKSPACE_ROW_COLUMNS}
   ${WORKSPACE_JOINS}
 `;
-
-export function getAllWorkspaces(db: Database.Database): WorkspaceWithDetailsRow[] {
-  return db
-    .prepare(
-      `
-    ${WORKSPACE_DETAILS_SELECT}
-    ORDER BY w.updated_at DESC
-    LIMIT 100
-  `
-    )
-    .all() as WorkspaceWithDetailsRow[];
-}
 
 export function getWorkspacesByRepo(
   db: Database.Database,
@@ -141,7 +128,7 @@ export function getWorkspacesBySessionIds(
       `
     SELECT
       w.id, w.repository_id, w.slug, w.title, w.git_branch,
-      w.git_target_branch, w.kind, w.provider_workspace_id,
+      w.git_target_branch, w.kind, w.provider_workspace_id, w.organization_id,
       w.state, w.status, w.current_session_id,
       w.pr_url, w.pr_number,
       w.pr_state, w.pr_is_draft, w.pr_review_status, w.pr_has_conflicts, w.pr_ci_status, w.pr_checked_at,
@@ -162,25 +149,9 @@ export function getWorkspacesBySessionIds(
     .all(...sessionIds) as WorkspaceWithDetailsRow[];
 }
 
-/**
- * Non-archived workspaces for query engine and relay clients.
- * Used by: query-engine snapshots, relay initial state, relay data requests.
- */
-export function getDashboardWorkspaces(db: Database.Database): WorkspaceWithDetailsRow[] {
-  return db
-    .prepare(
-      `
-    ${WORKSPACE_DETAILS_SELECT}
-    WHERE w.state != 'archived'
-    ORDER BY r.sort_order ASC, r.name ASC, w.updated_at DESC
-  `
-    )
-    .all() as WorkspaceWithDetailsRow[];
-}
-
 // ─── Session Queries ─────────────────────────────────────────
 
-/** Coerce SQLite INTEGER booleans (0/1) to JS booleans so HTTP and IPC return the same shape. */
+/** Coerce SQLite INTEGER booleans (0/1) to JS booleans so every reader gets the same shape. */
 function coerceSessionBooleans<T extends SessionRow>(row: T): T {
   return { ...row, is_hidden: Boolean(row.is_hidden) };
 }
@@ -199,19 +170,6 @@ const SESSION_DETAILS_SELECT = `
   LEFT JOIN workspaces current_ws ON s.id = current_ws.current_session_id
   LEFT JOIN workspaces owner_ws ON owner_ws.id = s.workspace_id
 `;
-
-export function getAllSessions(db: Database.Database): SessionWithDetailsRow[] {
-  const rows = db
-    .prepare(
-      `
-    ${SESSION_DETAILS_SELECT}
-    ORDER BY s.updated_at DESC
-    LIMIT 50
-  `
-    )
-    .all() as SessionWithDetailsRow[];
-  return rows.map(coerceSessionBooleans);
-}
 
 export function getSessionById(
   db: Database.Database,
@@ -301,12 +259,6 @@ export function getMessages(
 export function hasOlderMessages(db: Database.Database, sessionId: string, seq: number): boolean {
   return !!db
     .prepare("SELECT 1 FROM messages WHERE session_id = ? AND seq < ? LIMIT 1")
-    .get(sessionId, seq);
-}
-
-export function hasNewerMessages(db: Database.Database, sessionId: string, seq: number): boolean {
-  return !!db
-    .prepare("SELECT 1 FROM messages WHERE session_id = ? AND seq > ? LIMIT 1")
     .get(sessionId, seq);
 }
 
@@ -423,14 +375,20 @@ export function getAllRepositories(db: Database.Database): RepositoryWithCountsR
 }
 
 /** Lightweight repo list for backfilling empty groups in by-repo queries. */
-export function getAllRepositorySummaries(
-  db: Database.Database
-): { id: string; name: string; sort_order: number; git_origin_url: string | null }[] {
+export interface RepositorySummaryRow {
+  id: string;
+  name: string;
+  sort_order: number;
+  git_origin_url: string | null;
+  root_path: string | null;
+}
+
+export function getAllRepositorySummaries(db: Database.Database): RepositorySummaryRow[] {
   return db
     .prepare(
-      "SELECT id, name, sort_order, git_origin_url FROM repositories ORDER BY sort_order, name"
+      "SELECT id, name, sort_order, git_origin_url, root_path FROM repositories ORDER BY sort_order, name"
     )
-    .all() as { id: string; name: string; sort_order: number; git_origin_url: string | null }[];
+    .all() as RepositorySummaryRow[];
 }
 
 export function getRepositoryById(db: Database.Database, id: string): RepositoryRow | undefined {
@@ -451,53 +409,4 @@ export function getMaxRepositorySortOrder(db: Database.Database): number {
     max: number | null;
   };
   return row?.max ?? 0;
-}
-
-// ─── Stats Queries ───────────────────────────────────────────
-
-let cachedStats: StatsRow | null = null;
-let cachedAt = 0;
-const STATS_TTL_MS = 5_000;
-
-export function getStats(db: Database.Database): StatsRow {
-  const now = Date.now();
-  if (cachedStats && now - cachedAt < STATS_TTL_MS) return cachedStats;
-  // Consolidated: 3 table scans (workspaces, sessions, scalar subqueries)
-  // instead of 11 separate COUNT(*) subqueries.
-  cachedStats = db
-    .prepare(
-      `
-    SELECT
-      w.workspaces, w.workspaces_ready, w.workspaces_archived,
-      w.workspaces_backlog, w.workspaces_in_progress, w.workspaces_in_review,
-      (SELECT COUNT(*) FROM repositories) as repositories,
-      s.sessions, s.sessions_idle, s.sessions_working,
-      (SELECT COUNT(*) FROM messages) as messages
-    FROM (
-      SELECT
-        COUNT(*) as workspaces,
-        COUNT(CASE WHEN state = 'ready' THEN 1 END) as workspaces_ready,
-        COUNT(CASE WHEN state = 'archived' THEN 1 END) as workspaces_archived,
-        COUNT(CASE WHEN status = 'backlog' AND state != 'archived' THEN 1 END) as workspaces_backlog,
-        COUNT(CASE WHEN status = 'in-progress' AND state != 'archived' THEN 1 END) as workspaces_in_progress,
-        COUNT(CASE WHEN status = 'in-review' AND state != 'archived' THEN 1 END) as workspaces_in_review
-      FROM workspaces
-    ) w, (
-      SELECT
-        COUNT(*) as sessions,
-        COUNT(CASE WHEN status = 'idle' THEN 1 END) as sessions_idle,
-        COUNT(CASE WHEN status = 'working' THEN 1 END) as sessions_working
-      FROM sessions
-    ) s
-  `
-    )
-    .get() as StatsRow;
-  cachedAt = now;
-  return cachedStats;
-}
-
-/** Reset the in-memory stats cache (for testing). */
-export function resetStatsCache(): void {
-  cachedStats = null;
-  cachedAt = 0;
 }

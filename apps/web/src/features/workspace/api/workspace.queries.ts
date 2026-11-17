@@ -14,15 +14,15 @@ import type { RepoGroup, DiffStats } from "../types";
 import type { PRStatus } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
 import { mergeWorkspaceDelta } from "../lib/workspace.utils";
+import { diffStatsToAsk } from "../lib/diffStats";
 import { track } from "@/platform/analytics";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 
 /**
  * Fetch workspaces grouped by repository.
  *
- * WS subscription pushes data directly into cache via q:snapshot.
- * HTTP queryFn is fallback for initial load before WS connects.
- * Event-driven invalidation via IPC events also works (both paths coexist).
+ * The subscription pushes each new value into the cache (`q:snapshot`, then
+ * `q:delta`); the query function reads it once for the first paint.
  */
 /**
  * The states the sidebar shows. 'error' is included so a failed cloud
@@ -74,15 +74,14 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
     return Array.from(new Set(ids)).sort();
   }, [repoGroups]);
 
-  // IDs of workspaces with active sessions — only these need polling.
-  const workingIds = useMemo(() => {
-    return repoGroups
-      .flatMap((g) => g.workspaces)
-      .filter((w) => w.state === "ready" && w.session_status === "working")
-      .map((w) => w.id);
-  }, [repoGroups]);
+  // The ready rows themselves: what `diffStatsToAsk` reads.
+  const readyRows = useMemo(
+    () => repoGroups.flatMap((g) => g.workspaces).filter((w) => w.state === "ready"),
+    [repoGroups]
+  );
 
-  const hasWorkingWorkspaces = workingIds.length > 0;
+  // Only workspaces with active sessions need polling.
+  const hasWorkingWorkspaces = readyRows.some((w) => w.session_status === "working");
 
   return useQuery({
     queryKey: ["bulk-diff-stats", workspaceIds],
@@ -101,8 +100,7 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
       }
 
       // Fetch: missing workspaces + working workspaces (need fresh data)
-      const missingIds = workspaceIds.filter((id) => !(id in results));
-      const idsToFetch = [...new Set([...missingIds, ...workingIds])];
+      const idsToFetch = diffStatsToAsk(readyRows, (id) => results[id]);
 
       if (idsToFetch.length === 0) return results;
 
@@ -125,6 +123,18 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
       return results;
     },
   });
+}
+
+/**
+ * The open cloud workspace's channel just opened, or its computer woke: its diff
+ * numbers are read again, instead of the zero read before (`lib/diffStats.ts`).
+ */
+export function rereadDiffStats(
+  queryClient: Pick<ReturnType<typeof useQueryClient>, "removeQueries" | "invalidateQueries">,
+  workspaceId: string
+): void {
+  queryClient.removeQueries({ queryKey: queryKeys.workspaces.diffStats(workspaceId), exact: true });
+  void queryClient.invalidateQueries({ queryKey: ["bulk-diff-stats"] });
 }
 
 /**
@@ -205,10 +215,11 @@ export function useRepoPrs(repoId: string | null) {
  * during app startup and Vite HMR). We retry with exponential backoff
  * so the query self-heals once the WS is ready (~1-2s after load).
  */
-export function useRepoBranches(repoId: string | null) {
+export function useRepoBranches(repoId: string | null, organizationId?: string | null) {
   return useQuery({
-    queryKey: queryKeys.repos.branches(repoId || ""),
-    queryFn: () => call(api.repoBranches, { repoId: repoId! }),
+    queryKey: queryKeys.repos.branches(repoId || "", organizationId),
+    // A project with no folder here is read from GitHub, with this organization's access.
+    queryFn: () => call(api.repoBranches, { repoId: repoId!, organizationId }),
     enabled: !!repoId,
     staleTime: 30_000,
     retry: 5,
@@ -276,6 +287,8 @@ type CreateWorkspaceParams =
       repositoryId: string;
       /** 'cloud' provisions an agnt sandbox instead of a local worktree. */
       location?: "local" | "cloud";
+      /** With `location: "cloud"`, the organization it starts in (the backend's default when absent). */
+      organization_id?: string;
       source_branch?: string;
       pr_number?: number;
       pr_url?: string;

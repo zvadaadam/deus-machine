@@ -36,12 +36,10 @@ export const queryKeys = {
     detail: (id: string) => ["repos", "detail", id] as const,
     environment: (id: string) => ["repos", "environment", id] as const,
     prs: (repoId: string) => ["repos", repoId, "prs"] as const,
-    branches: (repoId: string) => ["repos", repoId, "branches"] as const,
-  },
-
-  // Stats
-  stats: {
-    all: ["stats"] as const,
+    branches: (repoId: string, organizationId?: string | null) =>
+      ["repos", repoId, "branches", organizationId ?? null] as const,
+    /** A cloud organization's reachable GitHub repositories (the add dialog). */
+    cloud: (organizationId: string | null) => ["cloudRepositories", organizationId] as const,
   },
 
   // GitHub CLI

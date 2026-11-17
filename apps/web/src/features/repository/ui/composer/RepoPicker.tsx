@@ -14,7 +14,11 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { githubRepoSlug } from "@shared/git-origin";
+import { match } from "ts-pattern";
 import { capabilities } from "@/platform/capabilities";
+import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
+import { addProjectActions, type AddProjectAction } from "../../lib/addProject";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { cn } from "@/shared/lib/utils";
 import type { Repository } from "../../types";
@@ -23,15 +27,25 @@ interface RepoPickerProps {
   repos: Repository[];
   selectedRepo: Repository | null;
   onSelect: (repoId: string) => void;
+  /** The ways to add a project, by the composer's place; this computer's when not given. */
+  addActions?: AddProjectAction[];
   onOpenProject?: () => void;
   onCloneRepository?: () => void;
   onStartNewProject?: () => void;
+  onAddFromGitHub?: () => void;
 }
 
 function abbreviatePath(path: string): string {
   const home = path.match(/^\/Users\/[^/]+/)?.[0];
   if (home) return path.replace(home, "~");
   return path;
+}
+
+/** Where a project lives: its folder, or `owner/name` for one not on this computer. */
+function repoLocation(repo: Repository): string {
+  if (repo.root_path) return abbreviatePath(repo.root_path);
+  const origin = repo.git_origin_url ?? "";
+  return githubRepoSlug(origin) ?? origin;
 }
 
 export function RepoPicker({
@@ -41,6 +55,8 @@ export function RepoPicker({
   onOpenProject,
   onCloneRepository,
   onStartNewProject,
+  onAddFromGitHub,
+  addActions,
 }: RepoPickerProps) {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
@@ -73,22 +89,35 @@ export function RepoPicker({
         close();
         onSelect(repoId);
       }}
-      actions={[
-        onStartNewProject && {
-          icon: FolderGit2,
-          label: "Start new project",
-          run: onStartNewProject,
-        },
-        onCloneRepository && {
-          icon: GitBranch,
-          label: "Clone from GitHub",
-          run: onCloneRepository,
-        },
-        capabilities.nativeFolderPicker &&
-          onOpenProject && { icon: FolderOpen, label: "Open local...", run: onOpenProject },
-      ]
-        .filter((action) => !!action)
-        .map((action) => ({ ...action, run: () => (close(), action.run()) }))}
+      actions={(
+        addActions ??
+        addProjectActions("local", { nativeFolderPicker: capabilities.nativeFolderPicker })
+      )
+        .map((action) =>
+          match(action)
+            .with("start-new", () => ({
+              icon: FolderGit2,
+              label: "Start new project",
+              run: onStartNewProject,
+            }))
+            .with("clone", () => ({
+              icon: GitBranch,
+              label: "Clone from GitHub",
+              run: onCloneRepository,
+            }))
+            .with("open-local", () => ({
+              icon: FolderOpen,
+              label: "Open local...",
+              run: onOpenProject,
+            }))
+            .with("add-from-github", () => ({
+              icon: GitHubIcon as typeof FolderOpen,
+              label: "Add from GitHub",
+              run: onAddFromGitHub,
+            }))
+            .exhaustive()
+        )
+        .flatMap(({ run, ...action }) => (run ? [{ ...action, run: () => (close(), run()) }] : []))}
     />
   );
 
@@ -105,7 +134,8 @@ export function RepoPicker({
           <span className="bg-accent-green relative h-1.5 w-1.5 rounded-full" />
         </span>
         <span className="max-w-[200px] truncate font-medium">
-          {selectedRepo?.name ?? "Select repo"}
+          {/* Nothing here can run where the composer points: its way to add one. */}
+          {selectedRepo?.name ?? (repos.length === 0 ? "Add a project" : "Select repo")}
         </span>
         <ChevronDown
           className={cn(
@@ -242,7 +272,7 @@ function RepoList({
                 {/* Where it lives, when there is room to say. */}
                 {!roomy && (
                   <span className="text-text-disabled text-2xs max-w-[120px] truncate">
-                    {abbreviatePath(repo.root_path)}
+                    {repoLocation(repo)}
                   </span>
                 )}
                 {isSelected && (

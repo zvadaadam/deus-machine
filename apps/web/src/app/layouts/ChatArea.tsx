@@ -18,6 +18,7 @@ import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useUnreadStore, unreadActions } from "@/features/session/store/unreadStore";
 import { WorkspaceStartState } from "@/features/session/ui/WorkspaceStartState";
 import { workspaceStart } from "@/features/workspace/lib/startState";
+import { localFolder } from "@/features/workspace/lib/reach";
 import { useWorkspaceStartStore } from "@/features/workspace/store/workspaceStartStore";
 import type { Workspace } from "@/shared/types";
 import { useChatTabs } from "./useChatTabs";
@@ -137,7 +138,7 @@ export function ChatArea({
             sessionId={tabSessionId}
             workspaceId={workspace.id}
             workspaceKind={workspace.kind}
-            workspacePath={workspace.workspace_path}
+            workspacePath={localFolder(workspace) ?? ""}
             workspaceRepoName={workspace.repo_name}
             workspaceParentBranch={workspace.git_target_branch}
             workspaceStart={startedHere ? workspaceStart(workspace) : undefined}

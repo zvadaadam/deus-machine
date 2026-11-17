@@ -1,59 +1,164 @@
-import { PanelLeftClose } from "lucide-react";
+import { match } from "ts-pattern";
+import {
+  Check,
+  ChevronDown,
+  Cloud,
+  Monitor,
+  PanelLeftClose,
+  Settings,
+  type LucideIcon,
+} from "lucide-react";
 import { SidebarHeader as SidebarHeaderUI, useSidebar } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { capabilities } from "@/platform/capabilities";
+import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
+import { useComputerName } from "@/features/settings/api/auth.queries";
 import { cn } from "@/shared/lib/utils";
+import {
+  activityElsewhere,
+  CLOUD_LABEL,
+  organizationRowHint,
+  rowSwitches,
+  type PlaceActivity,
+  type PlaceRow,
+} from "../lib/location";
+import { OrganizationTile } from "./OrganizationTile";
 import type { SidebarHeaderProps, SidebarProfile } from "../model/types";
 
 const PLACEHOLDER_LABEL = "My Account";
-
-function deriveLabel(profile: SidebarProfile | undefined): string {
-  return profile?.displayName || profile?.login || PLACEHOLDER_LABEL;
-}
 
 function deriveInitials(profile: SidebarProfile | undefined): string {
   const source = profile?.displayName || profile?.login || PLACEHOLDER_LABEL;
   return source.slice(0, 2).toUpperCase();
 }
 
+function ProfileAvatar({
+  profile,
+  label,
+  className,
+}: {
+  profile?: SidebarProfile;
+  label: string;
+  className?: string;
+}) {
+  return (
+    <Avatar shape="square" className={cn("h-6 w-6 shrink-0 rounded-md", className)}>
+      {profile?.avatarUrl && (
+        <AvatarImage src={profile.avatarUrl} alt={label} className="rounded-md" />
+      )}
+      <AvatarFallback shape="square" className="text-2xs rounded-md font-semibold">
+        {deriveInitials(profile)}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
+
+function CloudGlyph({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        "bg-muted text-text-secondary flex h-6 w-6 shrink-0 items-center justify-center rounded-md",
+        className
+      )}
+    >
+      <Cloud className="size-3.5" />
+    </span>
+  );
+}
+
 /**
- * SidebarHeader — V2: Jony Ive
+ * SidebarHeader — where this window's workspaces run.
  *
- * Avatar + name. Subtle hover bg signals it's clickable.
- * No chevron — it promised a dropdown but delivered settings.
+ * The trigger names the window's place (this computer, an organization, or the one
+ * cloud); the menu lists each place (⌃1…⌃9), or signs in or sets up when a place
+ * cannot be reached yet, leads to the account's computers on the web, and opens
+ * Settings.
  */
 export function SidebarHeader({
   profile,
+  places,
   onOpenSettings,
   onToggleSidebar,
   isExpanded,
 }: SidebarHeaderProps) {
   const { isMobile } = useSidebar();
-  const label = deriveLabel(profile);
-  const initials = deriveInitials(profile);
+  const withComputer = places.rows.some((row) => row.kind === "local");
+  const computerName = useComputerName(withComputer).data;
 
-  const modKey = typeof navigator !== "undefined" && /Mac/.test(navigator.platform) ? "⌘" : "Ctrl+";
+  const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
+  const modKey = isMac ? "⌘" : "Ctrl+";
   const toggleTitle = `${isExpanded ? "Collapse" : "Expand"} sidebar (${modKey}B)`;
+  const localLabel = computerName || (capabilities.isDesktop ? "This Mac" : "This computer");
+  const here = places.rows.find((row) => row.key === places.current);
+  const label = here ? rowLabel(here, localLabel) : CLOUD_LABEL;
+  // Work the sidebar does not list: a place other than this one has it.
+  const elsewhere = activityElsewhere(places.activity, places.current);
+  const hereMark = placeMark(here);
 
   return (
     <SidebarHeaderUI className="drag-region flex-row items-center justify-between gap-1 px-1.5 py-1.5">
-      <button
-        type="button"
-        aria-label="Open settings"
-        onClick={onOpenSettings}
-        className="control-interaction hover:bg-foreground/[0.04] flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5"
-      >
-        <Avatar shape="square" className="h-6 w-6 shrink-0 rounded-md">
-          {profile?.avatarUrl && (
-            <AvatarImage src={profile.avatarUrl} alt={label} className="rounded-md" />
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label={`${spoken(label, hereMark?.words)}, switch where workspaces run`}
+            className="control-interaction hover:bg-foreground/[0.04] data-[state=open]:bg-foreground/[0.04] flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 outline-none"
+          >
+            <span className="relative flex shrink-0">
+              <RowGlyph row={here} label={label} profile={profile} />
+              {elsewhere && (
+                <ActivityDot
+                  activity={elsewhere}
+                  className="ring-sidebar absolute -top-0.5 -right-0.5 ring-2"
+                />
+              )}
+            </span>
+            {isExpanded && (
+              <>
+                <span className="text-text-primary truncate text-sm font-medium">{label}</span>
+                <PlaceMarkIcon mark={hereMark} />
+                <ChevronDown className="text-text-muted size-3.5 shrink-0" />
+              </>
+            )}
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-64">
+          <AccountEmail />
+          {places.rows.map((row) => (
+            <PlaceItem
+              key={row.key}
+              row={row}
+              label={rowLabel(row, localLabel)}
+              current={row.key === places.current && rowSwitches(row)}
+              activity={places.activity[row.key] ?? null}
+              profile={profile}
+              showShortcut={isMac}
+              onChoose={places.onChoose}
+            />
+          ))}
+          {!capabilities.isDesktop && (
+            // A full page load: the relay pages and the hosted root boot different data paths.
+            <DropdownMenuItem onSelect={() => window.location.assign("/connect")}>
+              <Monitor />
+              Your computers
+            </DropdownMenuItem>
           )}
-          <AvatarFallback shape="square" className="text-2xs rounded-md font-semibold">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
-        {isExpanded && (
-          <span className="text-text-primary truncate text-sm font-medium">{label}</span>
-        )}
-      </button>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={onOpenSettings}>
+            <Settings />
+            Settings
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <button
         type="button"
@@ -68,5 +173,168 @@ export function SidebarHeader({
         <PanelLeftClose className="h-[18px] w-[18px]" />
       </button>
     </SidebarHeaderUI>
+  );
+}
+
+function rowLabel(row: PlaceRow, localLabel: string): string {
+  return match(row)
+    .with({ kind: "local" }, () => localLabel)
+    .with({ kind: "cloud" }, () => CLOUD_LABEL)
+    .with({ kind: "organization" }, (org) => org.name || CLOUD_LABEL)
+    .exhaustive();
+}
+
+/**
+ * What kind of place a row is, shown after its name in the cloud workspace row's
+ * convention (a small muted icon): this computer, or an organization in the cloud. The
+ * nameless "Deus Cloud" row has none: its glyph is the cloud already.
+ */
+interface PlaceMark {
+  Icon: LucideIcon;
+  /** The mark in words, for the row's accessible name. */
+  words: string;
+}
+
+function placeMark(row: PlaceRow | undefined): PlaceMark | null {
+  if (!row) return null;
+  return match(row)
+    .with({ kind: "local" }, (): PlaceMark => ({ Icon: Monitor, words: "this computer" }))
+    .with({ kind: "cloud" }, () => null)
+    .with({ kind: "organization" }, (): PlaceMark => ({ Icon: Cloud, words: "cloud" }))
+    .exhaustive();
+}
+
+function PlaceMarkIcon({ mark }: { mark: PlaceMark | null }) {
+  if (!mark) return null;
+  return (
+    <mark.Icon data-slot="place-mark" aria-hidden className="text-text-muted size-3 shrink-0" />
+  );
+}
+
+/**
+ * An accessible name of words joined by commas. It is an `aria-label`, not hidden text,
+ * so a row's `innerText` stays the words it shows.
+ */
+function spoken(...words: (string | null | undefined)[]): string {
+  return words.filter(Boolean).join(", ");
+}
+
+function RowGlyph({
+  row,
+  label,
+  profile,
+  className,
+}: {
+  row: PlaceRow | undefined;
+  label: string;
+  profile?: SidebarProfile;
+  className?: string;
+}) {
+  if (!row || row.kind === "cloud") return <CloudGlyph className={className} />;
+  if (row.kind === "organization") return <OrganizationTile name={label} className={className} />;
+  return <ProfileAvatar profile={profile} label={label} className={className} />;
+}
+
+/** What a row that cannot switch yet says; choosing it does that (useWindowPlace). */
+function rowHint(row: PlaceRow): string | null {
+  return match(row)
+    .with({ kind: "local" }, () => null)
+    .with({ kind: "cloud" }, (cloud) =>
+      match(cloud.state)
+        .with("ready", () => null)
+        .with("unavailable", () => "Not signed in")
+        .with("signing-in", () => "Signing in…")
+        .with("setting-up", () => "Setting up…")
+        .with("retry", () => "Retry")
+        .with("sign-in", () => "Sign in")
+        .exhaustive()
+    )
+    .with({ kind: "organization" }, (org) => organizationRowHint(org.state))
+    .exhaustive();
+}
+
+function PlaceItem({
+  row,
+  label,
+  current,
+  activity,
+  profile,
+  showShortcut,
+  onChoose,
+}: {
+  row: PlaceRow;
+  label: string;
+  current: boolean;
+  activity: PlaceActivity | null;
+  profile?: SidebarProfile;
+  showShortcut: boolean;
+  onChoose: (row: PlaceRow) => void;
+}) {
+  const hint = rowHint(row);
+  const mark = placeMark(row);
+  const disabled =
+    (row.kind === "cloud" || row.kind === "organization") && row.state === "unavailable";
+  return (
+    <DropdownMenuItem
+      disabled={disabled}
+      onSelect={() => onChoose(row)}
+      aria-current={current ? "true" : undefined}
+      aria-label={spoken(label, mark?.words, activity && activityWords(activity), hint)}
+    >
+      <RowGlyph row={row} label={label} profile={profile} className="h-5 w-5" />
+      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span className="min-w-0 truncate">{label}</span>
+        <PlaceMarkIcon mark={mark} />
+      </span>
+      {activity && <ActivityDot activity={activity} />}
+      {hint ? (
+        <span className="text-text-muted shrink-0 text-xs">{hint}</span>
+      ) : current ? (
+        <Check className="text-text-secondary" />
+      ) : (
+        showShortcut &&
+        row.shortcut && (
+          <DropdownMenuShortcut className="tracking-normal">{row.shortcut}</DropdownMenuShortcut>
+        )
+      )}
+    </DropdownMenuItem>
+  );
+}
+
+/**
+ * A place's activity, in the sidebar row's colours: unread is the row's gold dot,
+ * working the colour of its working indicator.
+ */
+function ActivityDot({ activity, className }: { activity: PlaceActivity; className?: string }) {
+  return (
+    <span
+      data-slot="place-activity"
+      data-activity={activity}
+      aria-label={activityWords(activity)}
+      className={cn(
+        "size-1.5 shrink-0 rounded-full",
+        activity === "unread" ? "bg-accent-gold" : "bg-muted-foreground",
+        className
+      )}
+    />
+  );
+}
+
+function activityWords(activity: PlaceActivity): string {
+  return activity === "unread" ? "Unread reply" : "Working";
+}
+
+/** The Deus account's email, read only while the menu is open; nothing when signed out. */
+function AccountEmail() {
+  const session = useDeusCloudSession().data;
+  const email = session?.signedIn ? session.accountEmail : null;
+  if (!email) return null;
+  return (
+    <>
+      <DropdownMenuLabel className="text-text-muted truncate font-normal">
+        {email}
+      </DropdownMenuLabel>
+      <DropdownMenuSeparator />
+    </>
   );
 }

@@ -1,8 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  getCloudConfig,
+  cloudAccount,
+  cloudOrg,
+  cloudOrgOf,
+  defaultCloudOrgId,
+  getCloudConnectionIdentity,
   getCloudIdentitySignal,
   getDeusCloudSessionConfig,
+  hasFallbackCloudKey,
+  requireCloudOrg,
   resetCloudConfigForTests,
   setCloudRuntimeCredentials,
   setCloudIdentityChangedHandler,
@@ -36,15 +42,15 @@ afterEach(() => {
   resetCloudConfigForTests();
 });
 
+const bearer = (sub: string, exp = 1000) =>
+  `header.${Buffer.from(JSON.stringify({ sub, iss: "deus-cloud", exp })).toString("base64url")}.signature`;
+
 describe("cloud config runtime credentials", () => {
   it("invalidates on product principal changes, while same-account token renewal retains sockets", () => {
-    const bearer = (sub: string, exp = 1000) =>
-      `header.${Buffer.from(JSON.stringify({ sub, iss: "deus-cloud", exp })).toString("base64url")}.signature`;
     const changed = vi.fn();
     setCloudIdentityChangedHandler(changed);
     setCloudRuntimeCredentials({
-      apiKey: "shared-org-key",
-      orgId: "shared-org",
+      orgKeys: { "shared-org": "shared-org-key" },
       deusCloudSessionToken: bearer("alice"),
     });
     changed.mockClear();
@@ -60,74 +66,157 @@ describe("cloud config runtime credentials", () => {
     expect(getCloudIdentitySignal().aborted).toBe(false);
     setCloudRuntimeCredentials({ deusCloudSessionToken: null });
     expect(changed).toHaveBeenCalledTimes(2);
-    expect(getCloudConfig()?.apiKey).toBe("shared-org-key");
+    expect(cloudOrg()?.apiKey).toBe("shared-org-key");
+  });
+
+  it("the identity is the account: adding, removing or replacing a key changes nothing", () => {
+    const changed = vi.fn();
+    setCloudRuntimeCredentials({
+      deusCloudSessionToken: bearer("alice"),
+      orgKeys: { org_a: "key_a" },
+    });
+    setCloudIdentityChangedHandler(changed);
+    const signal = getCloudIdentitySignal();
+    const identity = getCloudConnectionIdentity();
+
+    setCloudRuntimeCredentials({ orgKeys: { org_a: "key_a", org_b: "key_b" } });
+    setCloudRuntimeCredentials({ orgKeys: { org_a: "key_a2", org_b: "key_b" } });
+    setCloudRuntimeCredentials({ orgKeys: { org_b: "key_b" } });
+    setCloudRuntimeCredentials({ apiKey: "legacy", orgId: "org_c" });
+    setCloudRuntimeCredentials({ orgKeys: null, apiKey: null, orgId: null });
+
+    expect(changed).not.toHaveBeenCalled();
+    expect(signal.aborted).toBe(false);
+    expect(getCloudConnectionIdentity()).toBe(identity);
+    expect(identity).not.toContain("key_");
+    expect(identity).not.toContain("org_");
   });
 
   it("no env, no runtime → lane disabled (null)", () => {
-    expect(getCloudConfig()).toBeNull();
+    expect(cloudAccount()).toBeNull();
+    expect(cloudOrg()).toBeNull();
   });
 
-  it("a runtime key enables the lane AFTER the memo already read null — the invalidation seam", () => {
-    // First read memoizes "disabled" — exactly the state a freshly started
-    // backend is in before the desktop mints a key.
-    expect(getCloudConfig()).toBeNull();
+  it("a runtime key enables the lane AFTER a read found it disabled — the invalidation seam", () => {
+    expect(cloudOrg()).toBeNull();
 
-    setCloudRuntimeCredentials({ apiKey: "agnt_sk_minted_later" });
+    setCloudRuntimeCredentials({ orgKeys: { org_1: "agnt_sk_minted_later" } });
 
-    const config = getCloudConfig();
-    expect(config).not.toBeNull();
-    expect(config?.apiKey).toBe("agnt_sk_minted_later");
-    expect(config?.baseUrl).toBe("https://api.deusmachine.ai");
+    const config = cloudOrg();
+    expect(config).toEqual({
+      orgId: "org_1",
+      baseUrl: "https://api.deusmachine.ai",
+      apiKey: "agnt_sk_minted_later",
+    });
+    expect(cloudAccount()?.baseUrl).toBe("https://api.deusmachine.ai");
+  });
+
+  it("picks each organization's own key; the default is the first one pushed", () => {
+    setCloudRuntimeCredentials({
+      deusCloudSessionToken: bearer("alice"),
+      orgKeys: { org_a: "key_a", org_b: "key_b" },
+    });
+    expect(defaultCloudOrgId()).toBe("org_a");
+    expect(cloudOrg()).toMatchObject({ orgId: "org_a", apiKey: "key_a" });
+    expect(cloudOrg("org_b")).toMatchObject({ orgId: "org_b", apiKey: "key_b" });
+    // An organization without a key, and no fallback: not set up here.
+    expect(cloudOrg("org_c")).toBeNull();
+    expect(() => requireCloudOrg("org_c")).toThrow(/not set up on this computer/);
+    // A row with no organization yet is the default one's.
+    expect(cloudOrgOf({ organization_id: null })).toMatchObject({ apiKey: "key_a" });
+    expect(cloudOrgOf({ organization_id: "org_b" })).toMatchObject({ apiKey: "key_b" });
+    expect(cloudAccount()).toMatchObject({ accountId: "alice", sessionToken: bearer("alice") });
+  });
+
+  it("the fallback key serves any organization only while no organization keys were pushed", () => {
+    process.env.AGNT_API_KEY = "agnt_sk_from_env";
+    expect(defaultCloudOrgId()).toBeNull();
+    expect(cloudOrg()).toMatchObject({ orgId: null, apiKey: "agnt_sk_from_env" });
+    expect(cloudOrg("org_x")).toMatchObject({ orgId: "org_x", apiKey: "agnt_sk_from_env" });
+    expect(hasFallbackCloudKey()).toBe(true);
+
+    // One organization's key is pushed: the developer key no longer stands in for another.
+    setCloudRuntimeCredentials({ orgKeys: { org_a: "key_a" } });
+    expect(cloudOrg("org_a")?.apiKey).toBe("key_a");
+    expect(cloudOrg("org_x")).toBeNull();
+    expect(() => requireCloudOrg("org_x")).toThrow(/not set up on this computer/);
+    expect(hasFallbackCloudKey()).toBe(false);
+  });
+
+  it("the default is the organization the desktop names, even when its key is missing", () => {
+    setCloudRuntimeCredentials({
+      deusCloudSessionToken: bearer("alice"),
+      orgKeys: { org_b: "key_b" },
+      orgId: "org_a",
+    });
+    expect(defaultCloudOrgId()).toBe("org_a");
+    // A row of the default organization is refused in words, never sent with org_b's key.
+    expect(cloudOrg()).toBeNull();
+    expect(cloudOrgOf({ organization_id: null })).toBeNull();
+    expect(() => requireCloudOrg(null)).toThrow(/not set up on this computer/);
+    expect(cloudOrg("org_b")).toMatchObject({ orgId: "org_b", apiKey: "key_b" });
+  });
+
+  it("still takes the legacy single key: it is the fallback, its organization the default", () => {
+    setCloudRuntimeCredentials({ apiKey: "agnt_sk_legacy", orgId: "org_legacy" });
+    expect(defaultCloudOrgId()).toBe("org_legacy");
+    expect(cloudOrg()).toMatchObject({ orgId: "org_legacy", apiKey: "agnt_sk_legacy" });
+    expect(cloudOrg("org_other")?.apiKey).toBe("agnt_sk_legacy");
   });
 
   it("runtime values win over env; null clears back to env", () => {
     process.env.DEUS_CLOUD_AGNT_API_KEY = "agnt_sk_from_env";
-    expect(getCloudConfig()?.apiKey).toBe("agnt_sk_from_env");
+    expect(cloudOrg()?.apiKey).toBe("agnt_sk_from_env");
 
     setCloudRuntimeCredentials({ apiKey: "agnt_sk_runtime" });
-    expect(getCloudConfig()?.apiKey).toBe("agnt_sk_runtime");
+    expect(cloudOrg()?.apiKey).toBe("agnt_sk_runtime");
 
     setCloudRuntimeCredentials({ apiKey: null });
-    expect(getCloudConfig()?.apiKey).toBe("agnt_sk_from_env");
+    expect(cloudOrg()?.apiKey).toBe("agnt_sk_from_env");
   });
 
-  it("clearing the only key disables the lane again (sign-out on a keyless env)", () => {
-    setCloudRuntimeCredentials({ apiKey: "agnt_sk_device" });
-    expect(getCloudConfig()).not.toBeNull();
+  it("clearing the only key disables the organization calls again (sign-out on a keyless env)", () => {
+    setCloudRuntimeCredentials({ orgKeys: { org_1: "agnt_sk_device" } });
+    expect(cloudOrg()).not.toBeNull();
 
-    setCloudRuntimeCredentials({ apiKey: null });
-    expect(getCloudConfig()).toBeNull();
+    setCloudRuntimeCredentials({ orgKeys: {} });
+    expect(cloudOrg()).toBeNull();
+    expect(cloudAccount()).toBeNull();
   });
 
   it("strips trailing slash on runtime baseUrl", () => {
     setCloudRuntimeCredentials({ apiKey: "agnt_sk_x", baseUrl: "https://agnt.example/" });
-    expect(getCloudConfig()?.baseUrl).toBe("https://agnt.example");
+    expect(cloudOrg()?.baseUrl).toBe("https://agnt.example");
   });
 
-  it("partial updates retain the product session and device key", () => {
-    setCloudRuntimeCredentials({ apiKey: "agnt_sk_x", deusCloudSessionToken: "workos-token" });
-    setCloudRuntimeCredentials({ orgId: "org-a" });
-    const config = getCloudConfig();
-    expect(config?.apiKey).toBe("agnt_sk_x");
-    expect(config?.deusCloudSessionToken).toBe("workos-token");
-    expect(config?.orgId).toBe("org-a");
+  it("partial updates retain the product session and device keys", () => {
+    setCloudRuntimeCredentials({
+      orgKeys: { "org-a": "agnt_sk_x" },
+      deusCloudSessionToken: "workos-token",
+    });
+    setCloudRuntimeCredentials({ deusCloudUrl: "https://cloud.test" });
+    expect(cloudOrg()).toMatchObject({ orgId: "org-a", apiKey: "agnt_sk_x" });
+    expect(cloudAccount()).toMatchObject({
+      sessionToken: "workos-token",
+      deusCloudUrl: "https://cloud.test",
+    });
   });
 
   it.each(["baseUrl", "deusCloudUrl"] as const)(
     "rejects an insecure runtime %s before changing the current credentials",
     (field) => {
       setCloudRuntimeCredentials({ apiKey: "agnt_sk_device", deusCloudUrl: "https://cloud.test" });
-      const config = getCloudConfig();
+      const account = cloudAccount();
       const signal = getCloudIdentitySignal();
       expect(() => setCloudRuntimeCredentials({ [field]: "http://cloud.test" })).toThrow(/HTTPS/);
-      expect(getCloudConfig()).toBe(config);
+      expect(cloudAccount()).toEqual(account);
       expect(signal.aborted).toBe(false);
     }
   );
 
   it("rejects an insecure product environment URL even before VM-key provisioning", () => {
     process.env.DEUS_CLOUD_URL = "http://cloud.test";
-    expect(getCloudConfig()).toBeNull();
+    expect(cloudOrg()).toBeNull();
     expect(() => getDeusCloudSessionConfig()).toThrow(/HTTPS/);
   });
 });
@@ -141,9 +230,8 @@ describe("DEUS_CLOUD_ENV=local", () => {
     process.env.DEUS_CLOUD_ENV = "local";
     setCloudRuntimeCredentials({ apiKey: "agnt_sk_test" });
 
-    const config = getCloudConfig();
-    expect(config?.baseUrl).toBe("http://127.0.0.1:8788");
-    expect(config?.deusCloudUrl).toBe("http://127.0.0.1:5788");
+    expect(cloudOrg()?.baseUrl).toBe("http://127.0.0.1:8788");
+    expect(cloudAccount()?.deusCloudUrl).toBe("http://127.0.0.1:5788");
   });
 
   it("yields to an explicit URL override", () => {
@@ -151,14 +239,13 @@ describe("DEUS_CLOUD_ENV=local", () => {
     process.env.DEUS_CLOUD_AGNT_URL = "https://staging.example";
     setCloudRuntimeCredentials({ apiKey: "agnt_sk_test" });
 
-    expect(getCloudConfig()?.baseUrl).toBe("https://staging.example");
+    expect(cloudOrg()?.baseUrl).toBe("https://staging.example");
   });
 
   it("leaves production alone when unset", () => {
     setCloudRuntimeCredentials({ apiKey: "agnt_sk_test" });
 
-    const config = getCloudConfig();
-    expect(config?.baseUrl).toBe("https://api.deusmachine.ai");
-    expect(config?.deusCloudUrl).toBeNull();
+    expect(cloudOrg()?.baseUrl).toBe("https://api.deusmachine.ai");
+    expect(cloudAccount()?.deusCloudUrl).toBeNull();
   });
 });

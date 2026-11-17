@@ -41,10 +41,18 @@ export const automationRuns = live({
 /** Create an automation, or with `automationId` change the fields named and keep the rest. */
 export const saveAutomation = write({
   name: "saveAutomation",
-  input: z.union([automationFields.partial().extend(automationId.shape), automationFields], {
-    error:
-      "expected an automationId with the fields to change, or a new automation's repository_id, name, prompt and cron",
-  }),
+  input: z.union(
+    [
+      automationFields.partial().extend(automationId.shape),
+      // A new automation's organization; the default organization when omitted.
+      // Chosen at creation only: an automation never moves.
+      automationFields.extend({ organization_id: z.string().min(1).optional() }),
+    ],
+    {
+      error:
+        "expected an automationId with the fields to change, or a new automation's repository_id, name, prompt and cron",
+    }
+  ),
   output: out<Automation>(),
 });
 
@@ -69,12 +77,16 @@ export const runAutomationNow = write({
 });
 
 /**
- * Read Deus Cloud again: one automation and its runs, or without an id the
- * whole list. The result arrives on `automations` and `automationRuns`.
+ * Read Deus Cloud again: one automation and its runs, or without an id one
+ * organization's whole list (`organizationId`, the default one when omitted).
+ * The result arrives on `automations` and `automationRuns`.
  */
 export const refreshAutomations = write({
   name: "refreshAutomations",
-  input: z.object({ automationId: z.string().optional() }),
+  input: z.object({
+    automationId: z.string().optional(),
+    organizationId: z.string().min(1).optional(),
+  }),
   output: out<void>(),
 });
 

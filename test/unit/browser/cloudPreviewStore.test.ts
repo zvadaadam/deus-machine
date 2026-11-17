@@ -24,6 +24,7 @@ import {
   ensureCloudPreviewSubscription,
   useCloudPreviewStore,
 } from "@/features/browser/cloud/cloudPreviewStore";
+import { cloudPreviewAddress } from "@/features/browser/lib/cloudPreview";
 
 /** The backend announces a workspace's preview address, under that workspace. */
 const announce = (workspaceId: string, value: string | null) =>
@@ -38,7 +39,7 @@ const identityChanged = (generation: number) => emit(follow, api.cloudIdentity, 
 const template = () => useCloudPreviewStore.getState().byWorkspace["ws-1"];
 
 beforeEach(() => {
-  useCloudPreviewStore.setState({ byWorkspace: {} });
+  useCloudPreviewStore.setState({ byWorkspace: {}, pending: null, fromChat: {} });
   ensureCloudPreviewSubscription();
 });
 
@@ -145,5 +146,41 @@ describe("cloudPreviewStore registered while the socket is down", () => {
       connectedNow.value = true;
       vi.resetModules();
     }
+  });
+});
+
+describe("the chat's path for a workspace's preview", () => {
+  const fromChat = (workspaceId: string) =>
+    useCloudPreviewStore.getState().fromChat[workspaceId] ?? null;
+
+  it("outlives the request and the panel, and rebases on a replaced computer", () => {
+    announce("ws-1", "https://{{port}}-old.e2b.app");
+    cloudPreviewActions.show("ws-1", 5173, "/dash?a=1#top");
+    const request = useCloudPreviewStore.getState().pending;
+    // The panel takes the request, then unmounts while the computer is replaced.
+    cloudPreviewActions.taken(request?.requestId ?? "");
+    announce("ws-1", "https://{{port}}-new.e2b.app");
+
+    // A panel mounted later reads it back on the new computer's host.
+    expect(useCloudPreviewStore.getState().pending).toBeNull();
+    expect(cloudPreviewAddress(template(), 5173, fromChat("ws-1"))).toBe(
+      "https://5173-new.e2b.app/dash?a=1#top"
+    );
+  });
+
+  it("is cleared by a port chosen by hand, and only for that workspace", () => {
+    cloudPreviewActions.show("ws-1", 5173, "/a");
+    cloudPreviewActions.show("ws-2", 3000, "/b");
+
+    cloudPreviewActions.portChosen("ws-1");
+
+    expect(fromChat("ws-1")).toBeNull();
+    expect(fromChat("ws-2")).toEqual({ port: 3000, rest: "/b" });
+  });
+
+  it("survives an account change, which forgets the templates (as a reconnect does)", () => {
+    cloudPreviewActions.show("ws-1", 5173, "/a");
+    identityChanged(99);
+    expect(fromChat("ws-1")).toEqual({ port: 5173, rest: "/a" });
   });
 });

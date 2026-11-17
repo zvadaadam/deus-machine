@@ -37,6 +37,8 @@ export function AppSidebar({
   onAddRepository,
   onCloneRepository,
   onStartNewProject,
+  onAddFromGitHub,
+  addActions,
   onArchive,
   onStatusChange,
   onOpenAutomations,
@@ -45,6 +47,7 @@ export function AppSidebar({
   customizeActive,
   diffStatsMap,
   profile,
+  places,
 }: AppSidebarProps) {
   const { state, hoverOpen, toggleSidebar, isMobile, setOpenMobile } = useSidebar();
   const openSettings = useUIStore((s) => s.openSettings);
@@ -115,6 +118,7 @@ export function AppSidebar({
     <Sidebar variant="inset" collapsible="offcanvas" className="p-0">
       <SidebarHeader
         profile={profile}
+        places={places}
         onOpenSettings={openSettings}
         onToggleSidebar={toggleSidebar}
         isExpanded={isExpanded}
@@ -202,6 +206,7 @@ export function AppSidebar({
                     onWorkspaceClick={handleWorkspaceClick}
                     onNewWorkspace={onNewWorkspace}
                     onNewWorkspaceFromGitHub={onNewWorkspaceFromGitHub}
+                    windowLocation={places.location}
                     onArchive={onArchive}
                     onStatusChange={onStatusChange}
                     diffStatsMap={diffStatsMap}
@@ -219,6 +224,8 @@ export function AppSidebar({
         onAddRepository={onAddRepository}
         onCloneRepository={onCloneRepository}
         onStartNewProject={onStartNewProject}
+        onAddFromGitHub={onAddFromGitHub}
+        addActions={addActions}
       />
     </Sidebar>
   );

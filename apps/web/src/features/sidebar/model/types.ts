@@ -3,8 +3,10 @@
  * Extracted from AppSidebar.tsx for better organization
  */
 
+import type { AddProjectAction } from "@/features/repository/lib/addProject";
 import type { Workspace, DiffStats, RepoGroup } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
+import type { PlaceActivity, PlaceRow, WorkspaceLocation } from "../lib/location";
 
 /**
  * Sidebar profile chip — derived from `gh api user` via useGhStatus().
@@ -32,6 +34,10 @@ export interface AppSidebarProps {
   onAddRepository?: () => void;
   onCloneRepository?: () => void;
   onStartNewProject?: () => void;
+  /** The cloud's way to add a project: a GitHub repository, no clone. */
+  onAddFromGitHub?: () => void;
+  /** The ways "Add project" offers, by the window's place. */
+  addActions?: AddProjectAction[];
   onArchive?: (workspaceId: string) => void;
   onStatusChange?: (workspaceId: string, status: WorkspaceStatus) => void;
   onOpenAutomations?: () => void;
@@ -40,6 +46,22 @@ export interface AppSidebarProps {
   onOpenCustomize?: () => void;
   customizeActive?: boolean;
   profile?: SidebarProfile;
+  /** Where this window's workspaces run; `repositories` lists only those. */
+  places: SidebarPlaces;
+}
+
+/** The header's location menu: where the window can be, and where it is. */
+export interface SidebarPlaces {
+  /** This computer (where there is one), then each organization, or the one cloud. */
+  rows: PlaceRow[];
+  /** The key of the row the window is in. */
+  current: string;
+  /** Where the window is: this computer or the cloud. */
+  location: WorkspaceLocation;
+  /** Working or unread workspaces, by place key (`placeActivity`). */
+  activity: Partial<Record<string, PlaceActivity>>;
+  /** Choosing a row (or its ⌃ digit) does what it says. */
+  onChoose: (row: PlaceRow) => void;
 }
 
 /**
@@ -54,6 +76,8 @@ export interface RepositoryItemProps {
   onWorkspaceClick: (workspace: Workspace) => void;
   onNewWorkspace: (repoId?: string) => void;
   onNewWorkspaceFromGitHub?: (repoId: string) => void;
+  /** Where the window is (`offersNewFromBranch`). */
+  windowLocation: WorkspaceLocation;
   onArchive?: (workspaceId: string) => void;
   onStatusChange?: (workspaceId: string, status: WorkspaceStatus) => void;
   // Avoid mounting workspace list when sidebar is offcanvas-collapsed.
@@ -77,6 +101,7 @@ export interface WorkspaceItemProps {
  */
 export interface SidebarHeaderProps {
   profile?: SidebarProfile;
+  places: SidebarPlaces;
   onOpenSettings: () => void;
   onToggleSidebar: () => void;
   isExpanded: boolean;
@@ -89,4 +114,7 @@ export interface SidebarFooterProps {
   onAddRepository?: () => void;
   onCloneRepository?: () => void;
   onStartNewProject?: () => void;
+  onAddFromGitHub?: () => void;
+  /** The ways to add a project here; this computer's when not given. */
+  addActions?: AddProjectAction[];
 }

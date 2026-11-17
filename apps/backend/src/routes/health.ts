@@ -16,8 +16,4 @@ app.get("/health", (c) => {
   });
 });
 
-app.get("/port", (c) => {
-  return c.json({ port: getServerPort() });
-});
-
 export default app;

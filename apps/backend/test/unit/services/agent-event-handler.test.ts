@@ -439,7 +439,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       handler.handle(envelope(created()));
 
       expect(mockPersistAgentSessionId).toHaveBeenCalledWith(SESSION, "native-abc");
-      expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "sessions", "session", "stats"], {
+      expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "sessions", "session"], {
         sessionIds: [SESSION],
       });
     });
@@ -946,7 +946,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       const [, state, changes] = mockPersistChanges.mock.calls[0];
       expect(changes).toEqual([{ kind: "usage_updated" }]);
       expect((state as ConversationState).usage).toMatchObject({ used: 1234, size: 200_000 });
-      expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "sessions", "session", "stats"], {
+      expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "sessions", "session"], {
         sessionIds: [SESSION],
       });
       expect(pushedEnvelopes()).toHaveLength(0);
@@ -1312,7 +1312,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       handler.handleTitle(SESSION, "Fix the login bug");
 
       expect(mockPersistSessionTitle).toHaveBeenCalledWith(SESSION, "Fix the login bug");
-      expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "sessions", "session", "stats"], {
+      expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "sessions", "session"], {
         sessionIds: [SESSION],
       });
     });

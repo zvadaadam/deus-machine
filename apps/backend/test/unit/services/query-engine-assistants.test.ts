@@ -14,7 +14,6 @@ const agent = vi.hoisted(() => ({
 vi.mock("../../../src/lib/database", () => ({ getDatabase: vi.fn() }));
 vi.mock("../../../src/db", () => ({
   getWorkspacesBySessionIds: vi.fn(),
-  resetStatsCache: vi.fn(),
 }));
 vi.mock("../../../src/services/agent", () => ({
   answerToolRequest: agent.answer,

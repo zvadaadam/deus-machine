@@ -15,7 +15,9 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("../../../src/lib/database", () => ({ getDatabase: () => mocks.db }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mocks.invalidate }));
-vi.mock("../../../src/services/agent/cloud/config", () => ({ getCloudConfig: () => null }));
+vi.mock("../../../src/services/agent/cloud/config", async () =>
+  (await import("../../cloud-config-mock")).cloudConfigMock(() => null)
+);
 vi.mock("../../../src/services/cloud-environment.service", () => ({
   getCloudEnvironmentInfo: vi.fn(),
 }));

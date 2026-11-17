@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  cloudPreviewAddress,
   normalizePreviewPort,
   resolveCloudPreviewUrl,
   DEFAULT_CLOUD_PREVIEW_PORT,
@@ -19,9 +20,52 @@ describe("cloud preview URL", () => {
     expect(resolveCloudPreviewUrl(undefined, 3000)).toBeNull();
   });
 
+  it("puts an address's path, query and fragment on the template's host", () => {
+    expect(resolveCloudPreviewUrl(template, 5173, "/dash?a=1#top")).toBe(
+      "https://5173-i9a1b2c3d4e5.e2b.app/dash?a=1#top"
+    );
+    expect(resolveCloudPreviewUrl(template, 3000, "/")).toBe("https://3000-i9a1b2c3d4e5.e2b.app/");
+    // The same rest on a replaced computer's template is the new computer's page.
+    expect(resolveCloudPreviewUrl("https://{{port}}-new.e2b.app", 5173, "/dash?a=1")).toBe(
+      "https://5173-new.e2b.app/dash?a=1"
+    );
+  });
+
+  it("never lets the rest name a host", () => {
+    expect(resolveCloudPreviewUrl(template, 3000, "//elsewhere.test/x")).toBe(
+      "https://3000-i9a1b2c3d4e5.e2b.app//elsewhere.test/x"
+    );
+    expect(resolveCloudPreviewUrl(null, 3000, "/a")).toBeNull();
+  });
+
   it("refuses an invalid port", () => {
     expect(resolveCloudPreviewUrl(template, 0)).toBeNull();
     expect(resolveCloudPreviewUrl(template, 70000)).toBeNull();
+  });
+});
+
+describe("the preview's address after a link from the chat", () => {
+  const fromChat = { port: 5173, rest: "/dash?a=1" };
+
+  it("keeps the chat's path on the current computer's host", () => {
+    expect(cloudPreviewAddress("https://{{port}}-old.e2b.app", 5173, fromChat)).toBe(
+      "https://5173-old.e2b.app/dash?a=1"
+    );
+    // The computer was replaced: the same request is the new sandbox's page.
+    expect(cloudPreviewAddress("https://{{port}}-new.e2b.app", 5173, fromChat)).toBe(
+      "https://5173-new.e2b.app/dash?a=1"
+    );
+  });
+
+  it("drops the path once a port is chosen by hand", () => {
+    // Another port: the chat's path was for its own port only.
+    expect(cloudPreviewAddress("https://{{port}}-new.e2b.app", 3000, fromChat)).toBe(
+      "https://3000-new.e2b.app"
+    );
+    // Choosing a port clears what the chat asked for, even the same port.
+    expect(cloudPreviewAddress("https://{{port}}-new.e2b.app", 5173, null)).toBe(
+      "https://5173-new.e2b.app"
+    );
   });
 });
 

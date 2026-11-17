@@ -164,10 +164,15 @@ describe("the other writes", () => {
     expect(service.runAutomationNow).toHaveBeenCalledWith("auto-1");
   });
 
-  it("refreshes one automation, or with no id the whole list", async () => {
+  it("refreshes one automation, or with no id one organization's whole list", async () => {
     expect(await run(api.refreshAutomations, { automationId: "auto-1" })).toBeUndefined();
     expect(await run(api.refreshAutomations)).toBeUndefined();
-    expect(service.refreshAutomations.mock.calls).toEqual([["auto-1"], [undefined]]);
+    expect(await run(api.refreshAutomations, { organizationId: "org_b" })).toBeUndefined();
+    expect(service.refreshAutomations.mock.calls).toEqual([
+      ["auto-1", undefined],
+      [undefined, undefined],
+      [undefined, "org_b"],
+    ]);
   });
 
   it("opening a run answers with the workspace and chat to show", async () => {

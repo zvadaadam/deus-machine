@@ -18,9 +18,11 @@ import type { Workspace, RepoGroup } from "@/shared/types";
 interface CommandPaletteProps {
   /** Runtime action overrides for commands that need native/mutation context */
   actionOverrides?: Record<string, () => void>;
+  /** Commands not offered here (the ways to add a project another place has). */
+  hiddenCommands?: string[];
 }
 
-export function CommandPalette({ actionOverrides = {} }: CommandPaletteProps) {
+export function CommandPalette({ actionOverrides = {}, hiddenCommands = [] }: CommandPaletteProps) {
   const open = useUIStore((s) => s.commandPaletteOpen);
   const closeCommandPalette = useUIStore((s) => s.closeCommandPalette);
 
@@ -93,8 +95,11 @@ export function CommandPalette({ actionOverrides = {} }: CommandPaletteProps) {
     [page, search]
   );
 
-  // Group commands for rendering
+  // Group commands for rendering. Keyed by the hidden list's contents: a new
+  // array each render is the same list.
+  const hiddenKey = hiddenCommands.join("\n");
   const grouped = useMemo(() => {
+    const hidden = new Set(hiddenKey.split("\n"));
     const groups: Record<CmdGroup, typeof staticCommands> = {
       workspace: [],
       project: [],
@@ -103,10 +108,11 @@ export function CommandPalette({ actionOverrides = {} }: CommandPaletteProps) {
     };
     for (const cmd of staticCommands) {
       if (cmd.when && !cmd.when()) continue;
+      if (hidden.has(cmd.id)) continue;
       groups[cmd.group].push(cmd);
     }
     return groups;
-  }, []);
+  }, [hiddenKey]);
 
   return (
     <CommandDialog open={open} onOpenChange={handleOpenChange}>

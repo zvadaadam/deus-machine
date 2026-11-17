@@ -28,6 +28,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { SessionErrorEventSchema } from "@deus-hq/api";
+import { readSendRefusal } from "@shared/lib/send-refusal";
 import {
   flushDeltas,
   patchSessionDetail,
@@ -40,7 +41,7 @@ import {
 import { connectCloudSessionSocket } from "../cloud/cloudSessionSocket";
 import { hasParkedDirectQuestion, setDirectQuestionParked } from "../cloud/directQuestionState";
 import { makeCloudFrameHandler } from "../cloud/cloudFrameHandler";
-import { dropOptimisticMessage } from "../lib/optimisticMessage";
+import { returnRefusedMessage } from "../lib/returnToComposer";
 import type { ToolRequestEventData } from "@shared/types/query-protocol";
 import {
   registerDirectSession,
@@ -294,6 +295,8 @@ export type CloudDirectStatus = "idle" | "connecting" | "open" | "down" | "error
 export interface CloudDirectSessionState {
   status: CloudDirectStatus;
   error: string | null;
+  /** The error's category, when it has one (a refused send: `readSendRefusal`). */
+  errorCategory: string | null;
 }
 
 export function useCloudDirectSession(
@@ -301,7 +304,7 @@ export function useCloudDirectSession(
 ): CloudDirectSessionState {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<CloudDirectStatus>("idle");
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ message: string; category: string | null } | null>(null);
   // Bumped when a terminally-down socket is asked to deliver something: the
   // effect below re-runs and opens a fresh socket (reconnect on demand, not
   // on a timer — a dead network would otherwise loop through retry cycles).
@@ -324,6 +327,8 @@ export function useCloudDirectSession(
     const folds = foldsFor(queryClient);
     let closed = false;
     pruneFolds(queryClient, folds);
+    const setError = (message: string | null, category: string | null = null) =>
+      setFailure(message === null ? null : { message, category });
     setStatus("connecting");
     setError(null);
 
@@ -562,6 +567,8 @@ export function useCloudDirectSession(
       // rejections — they fall through to the fold (which records them on the
       // turn), exactly as the Mac driver splits them.
       if (frame.type === "error" && typeof frame.category !== "string") {
+        // The platform's sentence, not its codes (and an account refusal's category).
+        const refusal = readSendRefusal(frame.code, frame.message ?? "Command failed");
         if (frame.code === "MESSAGE_SEND_FAILED") {
           if (
             !pendingTurn ||
@@ -569,19 +576,16 @@ export function useCloudDirectSession(
             folds.get(sessionId)?.state.turns.some((turn) => turn.turnId === pendingTurn?.turnId)
           )
             return;
-          dropOptimisticMessage(queryClient, sessionId, pendingTurn.turnId);
+          returnRefusedMessage(queryClient, sessionId, pendingTurn.turnId);
           pendingTurn = null;
           if (activeTurnId(sessionId, queryClient)) {
             // This command failed while another client's turn is still live.
             // Keep that execution visible and report only the rejected send.
-            toast.error(
-              typeof frame.message === "string" ? frame.message : "Failed to send message"
-            );
+            toast.error(refusal.message);
             return;
           }
         }
-        const message = typeof frame.message === "string" ? frame.message : "Command failed";
-        setError(typeof frame.code === "string" ? `${frame.code}: ${message}` : message);
+        setError(refusal.message, refusal.category);
         return;
       }
       // A fatal agent error is its OWN ws event (`session.error`), not a fold
@@ -712,5 +716,5 @@ export function useCloudDirectSession(
     };
   }, [sessionId, providerSessionId, baseUrl, token, tokenUpdatedAt, queryClient, reconnectNonce]);
 
-  return { status, error };
+  return { status, error: failure?.message ?? null, errorCategory: failure?.category ?? null };
 }

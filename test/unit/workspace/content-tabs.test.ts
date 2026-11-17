@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach, vi } from "vitest";
-import { anyContentTabVisible, isTabVisible } from "@/app/layouts/content-tabs";
+import { anyContentTabVisible, isTabVisible, tabsFor } from "@/app/layouts/content-tabs";
 import type { Settings } from "@shared/types/settings";
 
 const simulatorOn: Settings = {
@@ -28,25 +28,76 @@ describe("content tab visibility", () => {
     expect(isTabVisible("simulator", {}, { simulatorAvailable: true })).toBe(false);
   });
 
-  describe("cloud simulator", () => {
+  describe("a cloud workspace's tabs are the cloud computer's", () => {
     it("shows the simulator for a cloud computer without the Mac capability or the experimental flag", () => {
       // The device lives in the platform, not on this Mac: neither the local
       // simctl capability nor the experimental toggle has a say.
-      expect(isTabVisible("simulator", {}, { cloudSimulator: true })).toBe(true);
-      expect(
-        isTabVisible("simulator", {}, { simulatorAvailable: false, cloudSimulator: true })
-      ).toBe(true);
+      expect(isTabVisible("simulator", {}, { cloud: true })).toBe(true);
+      expect(isTabVisible("simulator", {}, { simulatorAvailable: false, cloud: true })).toBe(true);
     });
 
     it("still hides the simulator for a local workspace when nothing local serves it", () => {
-      expect(
-        isTabVisible("simulator", {}, { simulatorAvailable: false, cloudSimulator: false })
-      ).toBe(false);
-      expect(isTabVisible("simulator", simulatorOn, { cloudSimulator: false })).toBe(false);
+      expect(isTabVisible("simulator", {}, { simulatorAvailable: false, cloud: false })).toBe(
+        false
+      );
+      expect(isTabVisible("simulator", simulatorOn, { cloud: false })).toBe(false);
     });
 
-    it("counts the cloud simulator toward the content pane being available", () => {
-      expect(anyContentTabVisible({}, { cloudSimulator: true })).toBe(true);
+    it("counts the cloud computer's tabs toward the content pane being available", () => {
+      expect(anyContentTabVisible({}, { cloud: true })).toBe(true);
+    });
+
+    // Every combination of this computer's local settings and capabilities.
+    const combos = [true, false].flatMap((browserSetting) =>
+      [true, false].flatMap((simulatorSetting) =>
+        [true, false].flatMap((simulatorAvailable) =>
+          [true, false].map((nativeBrowser) => ({
+            browserSetting,
+            simulatorSetting,
+            simulatorAvailable,
+            nativeBrowser,
+          }))
+        )
+      )
+    );
+
+    it.each(combos)(
+      "browser %o: the cloud's Browser and Simulator always show; a local one follows this computer",
+      async ({ browserSetting, simulatorSetting, simulatorAvailable, nativeBrowser }) => {
+        const { capabilities } = await import("@/platform/capabilities");
+        const original = capabilities.nativeBrowser;
+        (capabilities as { nativeBrowser: boolean }).nativeBrowser = nativeBrowser;
+        try {
+          const settings: Settings = {
+            experimental_browser: browserSetting,
+            experimental_simulator: simulatorSetting,
+          };
+          const cloud = tabsFor({ kind: "cloud" }, simulatorAvailable);
+          for (const tab of [
+            "changes",
+            "files",
+            "terminal",
+            "browser",
+            "simulator",
+            "config",
+          ] as const) {
+            expect(isTabVisible(tab, settings, cloud)).toBe(true);
+          }
+          const local = tabsFor({ kind: "worktree" }, simulatorAvailable);
+          expect(isTabVisible("browser", settings, local)).toBe(nativeBrowser && browserSetting);
+          expect(isTabVisible("simulator", settings, local)).toBe(
+            simulatorAvailable && simulatorSetting
+          );
+        } finally {
+          (capabilities as { nativeBrowser: boolean }).nativeBrowser = original;
+        }
+      }
+    );
+
+    it("shows no tab on the hosted web, cloud or not", () => {
+      vi.stubEnv("VITE_CLOUD_DIRECT", "1");
+      expect(isTabVisible("browser", {}, { cloud: true })).toBe(false);
+      expect(isTabVisible("simulator", {}, { cloud: true })).toBe(false);
     });
   });
 });

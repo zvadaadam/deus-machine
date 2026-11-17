@@ -112,8 +112,11 @@ const electronAPI = {
   startDeusCloudLogin: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:start_login"),
   signOutDeusCloud: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:sign_out"),
   retryDeusCloudProvision: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:retry_provision"),
-  getGithubAppStatus: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:github_app_status"),
-  installGithubApp: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:github_app_install"),
+  // An organization id, or nothing for the default organization.
+  getGithubAppStatus: (orgId?: string): Promise<unknown> =>
+    ipcRenderer.invoke("deus_cloud:github_app_status", orgId),
+  installGithubApp: (orgId?: string): Promise<unknown> =>
+    ipcRenderer.invoke("deus_cloud:github_app_install", orgId),
   onDeusCloudAuthChanged: (callback: (session: unknown) => void): (() => void) => {
     const listener = (_e: Electron.IpcRendererEvent, session: unknown): void => callback(session);
     ipcRenderer.on("deus_cloud:changed", listener);

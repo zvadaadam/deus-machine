@@ -29,6 +29,8 @@ export interface CloudDirectResult {
   active: boolean;
   status: CloudDirectStatus;
   error: string | null;
+  /** The direct lane's error category, when its error has one. */
+  errorCategory: string | null;
   retry: () => void;
   retrying: boolean;
 }
@@ -82,6 +84,7 @@ export function useCloudDirect(
     active: enabled && !!conn,
     status: direct.status,
     error: direct.error ?? tokenError,
+    errorCategory: direct.error ? direct.errorCategory : null,
     retry: () => {
       void tokenQuery.refetch({ cancelRefetch: false });
     },

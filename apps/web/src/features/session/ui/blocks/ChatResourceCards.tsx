@@ -18,100 +18,58 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { browserWindowActions } from "@/features/browser/store/browserWindowStore";
 import { useSession } from "@/features/session/context";
-import {
-  createWorkspacePreviewUrl,
-  type ChatResource,
-  type ResourceAction,
-} from "@/features/session/lib/chatResources";
-import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
-import { getBaseURL } from "@/shared/config/api.config";
+import type { ChatResource, ResourceAction } from "@/features/session/lib/chatResources";
+import { offeredActions, runChatAction } from "@/features/session/lib/openFromChat";
 import { cn } from "@/shared/lib/utils";
-import { native } from "@/platform/native";
 
 interface ChatResourceCardsProps {
   resources: ChatResource[];
 }
 
 export function ChatResourceCards({ resources }: ChatResourceCardsProps) {
-  const { workspaceId } = useSession();
-
-  const openBrowserUrl = useCallback(
-    (url: string) => {
-      if (!workspaceId) return;
-      workspaceLayoutActions.openContentTab(workspaceId, "browser");
-      browserWindowActions.requestNewTab(workspaceId, url);
-    },
-    [workspaceId]
-  );
-
-  const getBrowserPreviewUrl = useCallback(
-    async (path: string) => {
-      if (!workspaceId) return null;
-      const baseUrl = await getBaseURL();
-      return createWorkspacePreviewUrl(baseUrl, workspaceId, path);
-    },
-    [workspaceId]
-  );
+  const { workspaceId, workspacePath, cloud } = useSession();
 
   const runAction = useCallback(
     async (action: ResourceAction) => {
       if (!workspaceId) return;
-
-      if (action.kind === "deus-browser") {
-        openBrowserUrl(action.url);
-        return;
-      }
-
-      if (action.kind === "system-browser") {
-        await native.window.openExternal(action.url);
-        return;
-      }
-
-      if (action.kind === "deus-browser-file") {
-        try {
-          const url = await getBrowserPreviewUrl(action.path);
-          if (url) openBrowserUrl(url);
-        } catch (error) {
-          console.warn("[chat-resource] Failed to open file preview:", error);
-        }
-        return;
-      }
-
-      if (action.kind === "deus-file") {
-        workspaceLayoutActions.openFileInContent(workspaceId, action.path, action.target);
-        return;
-      }
-
-      const target = { workspaceId, relativePath: action.path };
-
-      if (action.kind === "system-file") {
-        await native.files.openPath(target);
-        return;
-      }
-
-      await native.files.revealInFinder(target);
+      await runChatAction(workspaceId, action, { cloud, folder: workspacePath });
     },
-    [getBrowserPreviewUrl, openBrowserUrl, workspaceId]
+    [workspaceId, cloud, workspacePath]
   );
 
   if (resources.length === 0) return null;
 
   return (
     <div className="mt-1 flex max-w-full flex-col gap-2 px-2 pb-1">
-      {resources.map((resource) => (
-        <ResourceCard key={resource.id} resource={resource} onAction={runAction} />
-      ))}
+      {resources.map((resource) => {
+        const [primary, ...secondary] = offeredActions(resource, {
+          cloud,
+          folder: workspacePath,
+        });
+        return (
+          <ResourceCard
+            key={resource.id}
+            resource={resource}
+            primary={primary}
+            secondary={secondary}
+            onAction={runAction}
+          />
+        );
+      })}
     </div>
   );
 }
 
 function ResourceCard({
   resource,
+  primary,
+  secondary,
   onAction,
 }: {
   resource: ChatResource;
+  primary: ResourceAction | undefined;
+  secondary: ResourceAction[];
   onAction: (action: ResourceAction) => void | Promise<void>;
 }) {
   return (
@@ -130,22 +88,33 @@ function ResourceCard({
         <div className="text-muted-foreground truncate text-xs">{resource.subtitle}</div>
       </div>
 
-      <ResourceActionButton resource={resource} onAction={onAction} />
+      {primary && (
+        <ResourceActionButton
+          title={resource.title}
+          primary={primary}
+          secondary={secondary}
+          onAction={onAction}
+        />
+      )}
     </div>
   );
 }
 
 function ResourceActionButton({
-  resource,
+  title,
+  primary,
+  secondary,
   onAction,
 }: {
-  resource: ChatResource;
+  title: string;
+  primary: ResourceAction;
+  secondary: ResourceAction[];
   onAction: (action: ResourceAction) => void | Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const hasSecondaryActions = resource.secondaryActions.length > 0;
+  const hasSecondaryActions = secondary.length > 0;
 
   function handleOpen() {
     if (!hasSecondaryActions) return;
@@ -171,11 +140,11 @@ function ResourceActionButton({
         type="button"
         size="sm"
         variant="outline"
-        onClick={() => void onAction(resource.primaryAction)}
+        onClick={() => void onAction(primary)}
         className="h-8 gap-1.5 px-2.5"
       >
-        <ActionIcon action={resource.primaryAction} className="h-3.5 w-3.5" />
-        {resource.primaryAction.label}
+        <ActionIcon action={primary} className="h-3.5 w-3.5" />
+        {primary.label}
       </Button>
     );
   }
@@ -185,11 +154,11 @@ function ResourceActionButton({
       <div className="border-border flex h-8 shrink-0 items-center rounded-md border">
         <button
           type="button"
-          onClick={() => void onAction(resource.primaryAction)}
+          onClick={() => void onAction(primary)}
           className="control-interaction text-foreground hover:bg-control-hover active:bg-control-pressed flex h-full shrink-0 items-center gap-1.5 rounded-l-lg px-2.5 text-sm font-normal"
         >
-          <ActionIcon action={resource.primaryAction} className="h-3.5 w-3.5 shrink-0" />
-          <span className="shrink-0">{resource.primaryAction.label}</span>
+          <ActionIcon action={primary} className="h-3.5 w-3.5 shrink-0" />
+          <span className="shrink-0">{primary.label}</span>
         </button>
 
         <div className="bg-border h-4 w-px shrink-0" />
@@ -197,7 +166,7 @@ function ResourceActionButton({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            aria-label={`Choose open target for ${resource.title}`}
+            aria-label={`Choose open target for ${title}`}
             className="control-interaction text-muted-foreground hover:bg-control-hover active:bg-control-pressed hover:text-foreground flex h-full shrink-0 items-center rounded-r-lg px-1.5"
             onPointerEnter={handleOpen}
             onPointerLeave={handleClose}
@@ -214,7 +183,7 @@ function ResourceActionButton({
         onPointerEnter={handleOpen}
         onPointerLeave={handleClose}
       >
-        {resource.secondaryActions.map((action) => (
+        {secondary.map((action) => (
           <DropdownMenuItem key={getActionKey(action)} onClick={() => void onAction(action)}>
             <ActionIcon action={action} className="h-4 w-4" />
             <span>{action.label}</span>

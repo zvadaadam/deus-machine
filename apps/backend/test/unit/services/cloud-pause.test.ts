@@ -9,13 +9,15 @@ vi.mock("@deus-hq/sdk", async (original) => ({
   ...(await original<typeof import("@deus-hq/sdk")>()),
   pauseWorkspace: pause,
 }));
-vi.mock("../../../src/services/agent/cloud/config", () => ({
-  getCloudConfig: () => ({ baseUrl: "https://cloud.test", apiKey: "test-key" }),
-  setCloudConnectHook: vi.fn(),
-}));
+vi.mock("../../../src/services/agent/cloud/config", async () =>
+  (await import("../../cloud-config-mock")).cloudConfigMock(() => ({
+    baseUrl: "https://cloud.test",
+    apiKey: "test-key",
+  }))
+);
 
 const app = new Hono().post("/pause", async (c) => {
-  await pauseCloudWorkspace("test-workspace");
+  await pauseCloudWorkspace({ provider_workspace_id: "test-workspace" });
   return c.json({ ok: true });
 });
 app.onError(errorHandler);
@@ -42,6 +44,8 @@ describe("cloud pause error boundary", () => {
   it("does not relabel an unrelated cloud failure as a startup conflict", async () => {
     const error = new DeusError("AUTHENTICATION_FAILED", "Invalid key", 401);
     pause.mockRejectedValue(error);
-    await expect(pauseCloudWorkspace("test-workspace")).rejects.toBe(error);
+    await expect(pauseCloudWorkspace({ provider_workspace_id: "test-workspace" })).rejects.toBe(
+      error
+    );
   });
 });

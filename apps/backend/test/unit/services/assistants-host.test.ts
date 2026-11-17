@@ -105,6 +105,7 @@ function workspace(overrides: Partial<Workspace> = {}): Workspace {
     git_target_branch: "main",
     kind: "worktree",
     provider_workspace_id: null,
+    organization_id: null,
     state: "ready",
     status: "in-progress",
     current_session_id: "s-voyager",
@@ -1339,7 +1340,7 @@ describe("a held call, before the caller's connection is cut", () => {
 });
 
 describe("projects", () => {
-  it("are every project on this computer, so list_sessions names one with no session", async () => {
+  it("are every project with a folder on this computer, so list_sessions names one with no session", async () => {
     expect(await createDeusHost().groups!(LOCAL_CALLER)).toEqual(["demo-shop"]);
     rows.workspaces = [];
     const listed = await callTool(LOCAL_CALLER, "list_sessions");
@@ -1665,6 +1666,7 @@ describe("agentMcp", () => {
       ["stop_session", false],
       ["read_changes", true],
       ["archive_workspace", false],
+      ["add_project", false],
       ["send_feedback", true],
     ]);
   });

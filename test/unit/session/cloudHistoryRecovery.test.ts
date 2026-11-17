@@ -34,17 +34,13 @@ vi.mock("../../../apps/backend/src/services/query-engine", () => ({ invalidate }
 vi.mock("../../../apps/backend/src/services/pr-snapshot.service", () => ({
   refreshPrSnapshotForSession: refreshPr,
 }));
-vi.mock("../../../apps/backend/src/services/agent/cloud/config", () => ({
-  setCloudConnectHook: vi.fn(),
-  setCloudIdentityChangedHandler: vi.fn(),
-  runCloudConnectHook: vi.fn(),
-  getCloudConfig: () => ({
+vi.mock("../../../apps/backend/src/services/agent/cloud/config", async () =>
+  (await import("../../../apps/backend/test/cloud-config-mock")).cloudConfigMock(() => ({
     baseUrl: "https://agnt.test",
     apiKey: "agnt_test",
     deusCloudSessionToken: "workos-test",
-  }),
-  getCloudConnectionIdentity: () => "history-test",
-}));
+  }))
+);
 vi.mock("@deus-hq/sdk", () => ({
   createSession: vi.fn(),
 }));

@@ -42,7 +42,23 @@ export interface CloudSecretInput extends CloudSecretScope {
 
 export interface CloudSettingsOrganizations {
   accountId: string;
-  currentOrganizationId?: string | null;
   items: Array<{ id: string; name: string; role: string }>;
+}
+
+/**
+ * This backend's cloud, as every client of it reads it (`cloudOrganizations`, a
+ * live read). `ready`: the backend can act in that organization (it holds the
+ * organization's key, or a development fallback key). Signed out with no key:
+ * not available, no account and no items.
+ */
+export interface CloudOrganizations {
+  /** This backend can act in the cloud: it holds a key for its default organization
+   *  (or a developer key). */
+  available: boolean;
+  accountId: string | null;
+  /** The backend's default organization (where a caller that names none creates), else
+   *  the first listed. */
+  defaultOrganizationId: string | null;
+  items: Array<{ id: string; name: string; role: string; ready: boolean }>;
 }
 import type { ProjectEnvironment } from "@deus-hq/api";

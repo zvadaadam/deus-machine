@@ -7,19 +7,17 @@ import * as api from "@shared/api/workspaces";
 import type { ParsedInputOf } from "@shared/api/op";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../lib/database";
-import { AppError, NotFoundError, ValidationError } from "../lib/errors";
+import { AppError, ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 import { groupWorkspacesByRepo, toWorkspace } from "../lib/workspace-grouping";
 import { loadWorkspace } from "../middleware/workspace-loader";
 import {
   getAllRepositorySummaries,
-  getAllWorkspaces,
   getRepositoryById,
-  getStats,
   getWorkspaceById,
   getWorkspaceRaw,
   getWorkspacesByRepo,
 } from "../db";
-import { getCloudConfig } from "../services/agent/cloud/config";
+import { cloudAccount } from "../services/agent/cloud/config";
 import { ensureCloudSession } from "../services/agent/cloud/driver";
 import {
   createCloudWorkspace,
@@ -47,6 +45,9 @@ import {
 import { autoProgressStatus, setWorkspaceStatus } from "../services/workspace-status.service";
 import { handle } from "./registry";
 
+/** How long `connectCloudWorkspace` waits for the channel to open before answering. */
+const CONNECT_ANSWER_LIMIT_MS = 5_000;
+
 /** The workspace's files, on whichever node owns them (this computer or its cloud sandbox). */
 function nodeOf(workspaceId: string) {
   const { workspace, workspacePath } = loadWorkspace(workspaceId);
@@ -71,7 +72,7 @@ async function createWorkspace(
   // workspace.state events through the cloud driver.
   if (input.location === "cloud") {
     // Signed out is a state the person can fix, not a server fault.
-    if (!getCloudConfig()) {
+    if (!cloudAccount()) {
       throw new ValidationError(
         "Sign in to Deus Cloud to create cloud workspaces (Settings → Cloud)."
       );
@@ -79,6 +80,7 @@ async function createWorkspace(
     return createCloudWorkspace({
       repositoryId: input.repository_id,
       sourceBranch: input.source_branch,
+      organizationId: input.organization_id,
     });
   }
 
@@ -86,9 +88,15 @@ async function createWorkspace(
   // (services/workspace-init) fetches origin, makes the worktree, runs setup
   // and opens the first chat; each stage and any failure reaches clients on
   // `workspaces`, and a failure can be retried on this same row.
+  const rootPath = repo.root_path;
+  if (!rootPath) {
+    throw new ConflictError(
+      `${repo.name} is not on this computer, so it can only run in the cloud. Turn on Cloud, or open its folder on this Mac first.`
+    );
+  }
   const sourceBranch = input.source_branch || repo.git_default_branch || "main";
   const workspaceId = uuidv7();
-  const { slug, branchName } = await pickWorkspaceName(repo.root_path!);
+  const { slug, branchName } = await pickWorkspaceName(rootPath);
 
   db.prepare(
     `INSERT INTO workspaces (
@@ -110,15 +118,15 @@ async function createWorkspace(
   // Not awaited, and it never rejects: the pipeline records its own failure.
   void initializeWorkspace({
     workspaceId,
-    repoRootPath: repo.root_path!,
-    workspacePath: path.join(repo.root_path!, ".deus", slug),
+    repoRootPath: rootPath,
+    workspacePath: path.join(rootPath, ".deus", slug),
     branchName,
     sourceBranch,
     repoOriginUrl: repo.git_origin_url,
   });
 
   // Clients see the row in `initializing` at once.
-  invalidate(["workspaces", "stats"]);
+  invalidate(["workspaces"]);
   return { workspaceId };
 }
 
@@ -139,7 +147,7 @@ async function updateWorkspace({
   } else if (state) {
     db.prepare("UPDATE workspaces SET state = ? WHERE id = ?").run(state, workspaceId);
   }
-  invalidate(["workspaces", "sessions", "stats"]);
+  invalidate(["workspaces", "sessions"]);
 }
 
 export default [
@@ -151,9 +159,7 @@ export default [
       getAllRepositorySummaries(db)
     );
   }),
-  handle(api.stats, () => getStats(getDatabase())),
   handle(api.workspace, ({ workspaceId }) => readWorkspace(workspaceId)),
-  handle(api.allWorkspaces, () => getAllWorkspaces(getDatabase()).map(toWorkspace)),
   handle(api.workspaceEnvironment, ({ workspaceId }) => {
     const { workspace, workspacePath } = loadWorkspace(workspaceId);
     return readWorkspaceEnvironment(workspace, workspacePath);
@@ -189,7 +195,7 @@ export default [
   handle(api.updateWorkspace, updateWorkspace),
   handle(api.archiveWorkspace, async ({ workspaceId }) => {
     await archiveWorkspace(workspaceId);
-    invalidate(["workspaces", "stats"]);
+    invalidate(["workspaces"]);
   }),
   handle(api.updateWorkspaceTitle, ({ workspaceId, title }) => {
     const db = getDatabase();
@@ -199,7 +205,7 @@ export default [
   }),
   handle(api.updateWorkspaceStatus, ({ workspaceId, status }) => {
     setWorkspaceStatus(workspaceId, status);
-    invalidate(["workspaces", "stats"]);
+    invalidate(["workspaces"]);
   }),
   handle(api.retryWorkspaceInit, ({ workspaceId }) => {
     const workspace = getWorkspaceRaw(getDatabase(), workspaceId);
@@ -233,18 +239,31 @@ export default [
   }),
 
   handle(api.wakeCloudWorkspace, ({ workspaceId }) => wakeWorkspace(workspaceId)),
-  handle(api.connectCloudWorkspace, ({ workspaceId }) => {
+  handle(api.connectCloudWorkspace, async ({ workspaceId }) => {
     const workspace = getWorkspaceById(getDatabase(), workspaceId);
     if (!workspace) throw new NotFoundError("Workspace not found");
     if (workspace.kind !== "cloud" || workspace.state === "archived") return { ok: false };
     // The channel ends at the platform, reachable while the sandbox sleeps, and
     // its snapshot carries the session's status: how a restarted backend learns
     // "paused". Attaching wakes nothing; only a send or an explicit wake does.
+    // Answered once the channel is open (what the client reads next needs it), or
+    // at the limit; the connect goes on either way.
     const sessionId = workspace.current_session_id;
     if (sessionId) {
-      void ensureCloudSession(sessionId).catch((error) => {
-        console.warn(`[WORKSPACE] cloud channel connect failed for ${workspace.id}: ${error}`);
-      });
+      const opened = ensureCloudSession(sessionId).then(
+        () => {},
+        (error) => {
+          console.warn(`[WORKSPACE] cloud channel connect failed for ${workspace.id}: ${error}`);
+        }
+      );
+      let limit: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        opened,
+        new Promise<void>((resolve) => {
+          limit = setTimeout(resolve, CONNECT_ANSWER_LIMIT_MS);
+        }),
+      ]);
+      clearTimeout(limit);
     }
     return { ok: true };
   }),

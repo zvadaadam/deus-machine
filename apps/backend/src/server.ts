@@ -25,6 +25,10 @@ import {
   stopBackgroundRefresh as stopLocalServerDiscovery,
 } from "./services/local-servers.service";
 import { initAutomations } from "./services/automations";
+import {
+  refreshCloudOrganizations,
+  stampDefaultOrganization,
+} from "./services/cloud-settings.service";
 import { forgetUnusedAssistants } from "./services/assistants";
 import { startIntegrations } from "./services/integrations";
 import { failInterruptedWorkspaces } from "./services/workspace-init.service";
@@ -42,7 +46,7 @@ Sentry.init({
 /**
  * Deus Backend Server
  *
- * Handles workspace CRUD, sessions, repos, config, and stats.
+ * Handles workspace CRUD, sessions, repos and config.
  * Runs the agent engine (@zvada/agent-server) in this process.
  */
 
@@ -63,7 +67,10 @@ async function backfillGitOriginUrls(): Promise<void> {
 
   try {
     const nullUrlRepos = db
-      .prepare("SELECT id, root_path FROM repositories WHERE git_origin_url IS NULL")
+      // A project with no folder here has nothing for git to read.
+      .prepare(
+        "SELECT id, root_path FROM repositories WHERE git_origin_url IS NULL AND root_path IS NOT NULL"
+      )
       .all() as { id: string; root_path: string }[];
     if (nullUrlRepos.length === 0) return;
 
@@ -149,9 +156,15 @@ async function onListening(port: number): Promise<void> {
   setLocalServerRefreshListener(() => invalidate(["localServers"]));
   startLocalServerDiscovery();
 
+  // Rows with no organization are given the default one when it is known already.
+  // Today it never is at startup (the desktop pushes it later, and the credentials
+  // route stamps then); this keeps a start that has it from waiting for a push.
+  stampDefaultOrganization();
   // Automations are cloud-only (agnt schedules + executes) — just mirror the
   // platform into the local cache when credentials are already present.
   initAutomations();
+  // This backend's cloud, read from the platform when an account is already here.
+  refreshCloudOrganizations();
 }
 
 // Bind 0.0.0.0 to accept connections from all interfaces.

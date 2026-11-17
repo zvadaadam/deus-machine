@@ -9,6 +9,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { readAgentConfig } from "@/features/agent-config/api/agent-config.service";
 import type { SkillItem, CommandItem } from "@shared/types/agent-config";
+import type { AgentConfigReach } from "@/features/workspace/lib/reach";
 
 export interface SlashCommandItem {
   name: string;
@@ -20,8 +21,13 @@ export interface SlashCommandItem {
 interface UseSlashCommandOptions {
   /** Current textarea value */
   value: string;
-  /** Workspace repo path for project-scoped items */
-  workspacePath?: string | null;
+  /**
+   * Whose configuration the agent has (`agentConfigOf`): on this computer, its
+   * own and the workspace folder's; in the cloud, none of this computer's.
+   */
+  config: AgentConfigReach;
+  /** In the cloud: what reaches the agent from here (the skills a cloud turn carries). */
+  cloudItems?: SlashCommandItem[];
   /** Callback to update the textarea value after inserting a command */
   onChange: (newValue: string) => void;
   /** Disable the hook entirely (e.g. for Codex which doesn't support skills) */
@@ -65,9 +71,61 @@ function isSlashTriggerActive(value: string): boolean {
   return !value.slice(1).includes(" ");
 }
 
+/** Skills first, then commands, then alphabetically within each group. */
+function sortItems(items: SlashCommandItem[]): SlashCommandItem[] {
+  return [...items].sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === "skill" ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+/**
+ * What the `/` menu lists for an agent on this computer: this computer's own
+ * skills and commands (`~/.claude`) and the workspace folder's, the folder's
+ * first (they override this computer's with the same name). `read` is
+ * injectable for tests.
+ */
+export async function readLocalSlashItems(
+  folder: string | null,
+  read: typeof readAgentConfig = readAgentConfig
+): Promise<SlashCommandItem[]> {
+  const [globalSkills, globalCommands, projectSkills, projectCommands] = await Promise.allSettled([
+    read("skills", "global"),
+    read("commands", "global"),
+    folder ? read("skills", "project", folder) : [],
+    folder ? read("commands", "project", folder) : [],
+  ]);
+
+  const items: SlashCommandItem[] = [];
+  const seen = new Set<string>();
+  const addItems = (
+    result: PromiseSettledResult<SkillItem[] | CommandItem[]>,
+    kind: "skill" | "command"
+  ) => {
+    if (result.status !== "fulfilled" || !Array.isArray(result.value)) return;
+    for (const item of result.value) {
+      if (!seen.has(item.name)) {
+        seen.add(item.name);
+        items.push({ name: item.name, description: item.description, kind });
+      }
+    }
+  };
+  addItems(projectSkills, "skill");
+  addItems(projectCommands, "command");
+  addItems(globalSkills, "skill");
+  addItems(globalCommands, "command");
+  return sortItems(items);
+}
+
+/** The `/` menu's items for a cloud agent: only what reaches it from here, never this computer's folders. */
+export function cloudSlashItems(cloudItems: SlashCommandItem[] | undefined): SlashCommandItem[] {
+  return sortItems(cloudItems ?? []);
+}
+
 export function useSlashCommand({
   value,
-  workspacePath,
+  config,
+  cloudItems,
   onChange,
   enabled = true,
   onAddSkill,
@@ -76,7 +134,13 @@ export function useSlashCommand({
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   // Cached items from backend (fetched per workspace, filtered client-side)
-  const [allItems, setAllItems] = useState<SlashCommandItem[]>([]);
+  const [localItems, setLocalItems] = useState<SlashCommandItem[]>([]);
+  const cloud = config.where === "cloud";
+  const workspacePath = config.where === "local" ? config.folder : null;
+  const allItems = useMemo(
+    () => (cloud ? cloudSlashItems(cloudItems) : localItems),
+    [cloud, cloudItems, localItems]
+  );
   const [loading, setLoading] = useState(false);
   const fetchedWorkspaceRef = useRef<string | null>(null);
 
@@ -96,7 +160,8 @@ export function useSlashCommand({
 
   // Fetch skills + commands when popover first opens (re-fetches on workspace change)
   useEffect(() => {
-    if (!isOpen) return;
+    // A cloud agent does not run here: nothing on this computer's disk applies.
+    if (!isOpen || cloud) return;
     const cacheKey = workspacePath ?? "__global__";
     if (fetchedWorkspaceRef.current === cacheKey) return;
     fetchedWorkspaceRef.current = cacheKey;
@@ -104,44 +169,7 @@ export function useSlashCommand({
     const fetchItems = async () => {
       setLoading(true);
       try {
-        const [globalSkills, globalCommands, projectSkills, projectCommands] =
-          await Promise.allSettled([
-            readAgentConfig("skills", "global"),
-            readAgentConfig("commands", "global"),
-            workspacePath ? readAgentConfig("skills", "project", workspacePath) : [],
-            workspacePath ? readAgentConfig("commands", "project", workspacePath) : [],
-          ]);
-
-        const items: SlashCommandItem[] = [];
-        const seen = new Set<string>();
-
-        // Project items first (they override global ones with the same name)
-        const addItems = (
-          result: PromiseSettledResult<SkillItem[] | CommandItem[]>,
-          kind: "skill" | "command"
-        ) => {
-          if (result.status !== "fulfilled" || !Array.isArray(result.value)) return;
-          for (const item of result.value) {
-            if (!seen.has(item.name)) {
-              seen.add(item.name);
-              items.push({ name: item.name, description: item.description, kind });
-            }
-          }
-        };
-
-        addItems(projectSkills, "skill");
-        addItems(projectCommands, "command");
-        addItems(globalSkills, "skill");
-        addItems(globalCommands, "command");
-
-        // Sort skills first, then commands, then alphabetically within each group
-        items.sort((a, b) => {
-          if (a.kind !== b.kind) {
-            return a.kind === "skill" ? -1 : 1;
-          }
-          return a.name.localeCompare(b.name);
-        });
-        setAllItems(items);
+        setLocalItems(await readLocalSlashItems(workspacePath));
       } catch (err) {
         console.error("[useSlashCommand] Failed to fetch items:", err);
       } finally {
@@ -150,7 +178,7 @@ export function useSlashCommand({
     };
 
     fetchItems();
-  }, [isOpen, workspacePath]);
+  }, [isOpen, cloud, workspacePath]);
 
   // Filter items by query (client-side fuzzy match)
   const results = useMemo(() => {

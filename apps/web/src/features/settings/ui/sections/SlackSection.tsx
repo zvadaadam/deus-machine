@@ -53,6 +53,7 @@ import {
   writeRoutingRuleDraft,
 } from "../../lib/routing-rule-drafts";
 import { routingTarget } from "../../lib/slack-routing";
+import { useSectionOrganization } from "../../hooks/useSectionOrganization";
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
@@ -103,18 +104,13 @@ export function SlackSection() {
 }
 
 function SlackSettings({ accountId }: { accountId: string }) {
-  const [selectedOrg, setSelectedOrg] = useState<string | null>(null);
   const organizations = useQuery({
     queryKey: queryKeys.settings.environments.organizations(accountId),
     queryFn: ({ signal }) => listSecretOrganizations(signal),
     staleTime: 30_000,
     retry: false,
   });
-  const preferredOrg = selectedOrg ?? organizations.data?.currentOrganizationId;
-  const orgId =
-    organizations.data?.items.find((org) => org.id === preferredOrg)?.id ??
-    organizations.data?.items[0]?.id ??
-    null;
+  const [orgId, setSelectedOrg] = useSectionOrganization(organizations.data?.items);
 
   return (
     <div className="space-y-6">

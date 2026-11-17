@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { McpConfigFile, AgentConfigFile, SettingsFile } from "../lib/schemas";
+import { ValidationError } from "../lib/errors";
 import type {
   SkillItem,
   CommandItem,
@@ -23,14 +24,14 @@ const SETTINGS_PATH = path.join(CLAUDE_DIR, "settings.json");
 function resolveClaudeDir(projectPath?: string): string {
   if (!projectPath) return CLAUDE_DIR;
   if (!path.isAbsolute(projectPath)) {
-    throw new Error("projectPath must be an absolute path");
+    throw new ValidationError("projectPath must be an absolute path");
   }
   return path.join(projectPath, ".claude");
 }
 
 function sanitizeName(name: string): string {
   if (!name || !/^[a-zA-Z0-9_-]+$/.test(name)) {
-    throw new Error("Invalid name: must be alphanumeric, hyphens, or underscores only");
+    throw new ValidationError("Invalid name: must be alphanumeric, hyphens, or underscores only");
   }
   return name;
 }

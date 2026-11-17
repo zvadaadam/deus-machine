@@ -1,9 +1,15 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { api } from "@shared/api";
 import { call } from "@/platform/ws";
 import type { ThinkingLevel } from "@/shared/agents";
-import { CloneRepositoryModal, StartNewProjectModal } from "@/features/repository";
+import {
+  AddRepositoryDialog,
+  CloneRepositoryModal,
+  StartNewProjectModal,
+} from "@/features/repository";
+import { addProjectActions, hiddenAddProjectCommands } from "@/features/repository/lib/addProject";
 import { SettingsSidebar, SettingsPage, useAssistantArrivals } from "@/features/settings";
 import {
   useKeyboardShortcuts,
@@ -15,6 +21,7 @@ import {
 import {
   useWorkspacesByRepo,
   useBulkDiffStats,
+  rereadDiffStats,
   usePRStatus,
   useGhStatus,
   useArchiveWorkspace,
@@ -30,6 +37,11 @@ import { openNewWorkspace } from "@/features/workspace/lib/newWorkspace";
 import { pendingFirstMessages } from "@/features/workspace/store/workspaceStartStore";
 import { useFirstMessageDelivery } from "@/features/session/hooks/useFirstMessageDelivery";
 import { useSidebarStore } from "@/features/sidebar/store";
+import { useWindowPlace } from "@/features/sidebar/hooks/useWindowPlace";
+import { offersNewFromBranch } from "@/features/sidebar/lib/location";
+import { openableFolder } from "@/features/workspace/lib/reach";
+import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
+import { wokeUp, type OpenCloudWorkspace } from "@/features/workspace/lib/diffStats";
 import { uiActions, useUIStore } from "@/shared/stores/uiStore";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
 import type { Workspace } from "@/shared/types";
@@ -124,6 +136,8 @@ export function MainLayout() {
     return null;
   }, [selectedWorkspaceId, repoGroups]);
 
+  const webDirect = isCloudDirectWebMode();
+
   const selectedWorkspaceIdRef = useRef(selectedWorkspaceId);
   useEffect(() => {
     selectedWorkspaceIdRef.current = selectedWorkspaceId;
@@ -135,12 +149,31 @@ export function MainLayout() {
   // "Sandbox paused — wakes on your next message". Idempotent server-side.
   const selectedCloudWorkspaceId =
     selectedWorkspace?.kind === "cloud" ? selectedWorkspace.id : null;
+  // Its channel open (the connect answers once it is), its diff numbers are read
+  // again: the sidebar's were read with none open, as zeros.
+  const queryClient = useQueryClient();
   useEffect(() => {
     if (!selectedCloudWorkspaceId) return;
-    call(api.connectCloudWorkspace, { workspaceId: selectedCloudWorkspaceId }).catch(() => {
-      // Best-effort — an unreachable platform just means no truth refresh.
-    });
-  }, [selectedCloudWorkspaceId]);
+    call(api.connectCloudWorkspace, { workspaceId: selectedCloudWorkspaceId })
+      .then(() => rereadDiffStats(queryClient, selectedCloudWorkspaceId))
+      .catch(() => {
+        // Best-effort — an unreachable platform just means no truth refresh.
+      });
+  }, [selectedCloudWorkspaceId, queryClient]);
+  // Its computer waking, they are read again too: read while it slept, as zeros.
+  const selectedCloudPresence =
+    selectedWorkspace?.kind === "cloud" ? cloudPresence(selectedWorkspace) : null;
+  const openCloudRef = useRef<OpenCloudWorkspace | null>(null);
+  useEffect(() => {
+    const current =
+      selectedCloudWorkspaceId && selectedCloudPresence
+        ? { workspaceId: selectedCloudWorkspaceId, presence: selectedCloudPresence }
+        : null;
+    if (wokeUp(openCloudRef.current, current) && current) {
+      rereadDiffStats(queryClient, current.workspaceId);
+    }
+    openCloudRef.current = current;
+  }, [selectedCloudWorkspaceId, selectedCloudPresence, queryClient]);
 
   // Bulk-fetch diff stats for all workspaces: one query for the whole sidebar
   const bulkDiffStatsQuery = useBulkDiffStats(repoGroups);
@@ -201,11 +234,22 @@ export function MainLayout() {
       model: string,
       branch?: string,
       location?: "local" | "cloud",
-      thinkingLevel?: ThinkingLevel
+      thinkingLevel?: ThinkingLevel,
+      organizationId?: string | null
     ) => {
       try {
         const workspace = await welcomeCreateMutation.mutateAsync(
-          branch || location ? { repositoryId: repoId, source_branch: branch, location } : repoId
+          branch || location
+            ? {
+                repositoryId: repoId,
+                source_branch: branch,
+                location,
+                // A cloud workspace starts in the organization the composer names.
+                ...(location === "cloud" && organizationId
+                  ? { organization_id: organizationId }
+                  : {}),
+              }
+            : repoId
         );
         // Store pending message — will be sent when workspace gets a session
         pendingFirstMessages.set(workspace.id, { message, model, thinkingLevel });
@@ -231,7 +275,9 @@ export function MainLayout() {
       setupEnvironmentPrompt(pendingEnvSetup.location),
       pendingEnvSetup.model,
       undefined,
-      pendingEnvSetup.location
+      pendingEnvSetup.location,
+      undefined,
+      pendingEnvSetup.organizationId
     );
   }, [pendingEnvSetup, handleStartWorkspace]);
 
@@ -241,13 +287,6 @@ export function MainLayout() {
     const group = repoGroups.find((g) => g.repo_id === githubPickerRepoId);
     return group?.repo_name ?? "";
   }, [githubPickerRepoId, repoGroups]);
-
-  // Hide native WebContentsViews when any dialog is open — they render above
-  // the DOM so dialogs would appear behind them. BrowserTab's own visible
-  // effect handles re-showing when the dialog closes.
-  const commandPaletteOpen = useUIStore((s) => s.commandPaletteOpen);
-  // Note: <webview> elements stack normally under dialogs/modals — no
-  // hideAll IPC dance needed when dialogs open.
 
   // --- Archive with undo (ref-stable for memoized sidebar items) ---
 
@@ -340,9 +379,13 @@ export function MainLayout() {
   // Disable CSS transitions during native window resize to prevent content "sticking"
   useWindowResizing();
 
+  // Rule 1: an editor opens the workspace's folder on this computer; with
+  // none (a cloud workspace, or no checkout yet) ⌘O and the palette offer nothing.
+  const selectedFolder = selectedWorkspace ? openableFolder(selectedWorkspace) : null;
+  const canOpenInApp = selectedFolder !== null;
   function openInLastApp() {
     const lastAppId = getLastOpenInAppId();
-    const path = selectedWorkspace?.workspace_path;
+    const path = selectedFolder;
     if (lastAppId && path) {
       track("open_in_app", { app_id: lastAppId });
       native.apps.openIn(lastAppId, path).catch((err) => {
@@ -350,23 +393,6 @@ export function MainLayout() {
       });
     }
   }
-
-  // Keyboard shortcuts
-  useKeyboardShortcuts({
-    onRefresh: async () => {
-      workspacesQuery.refetch();
-      if (selectedWorkspace) {
-        prStatusQuery.refetch();
-      }
-    },
-    onOpenInApp: capabilities.openInExternalApp ? openInLastApp : undefined,
-    selectedWorkspace,
-  });
-
-  // Archive + workflow status are Mac-backend mutations; web-direct has no
-  // transport for them, so the sidebar gets no handlers and never renders the
-  // hover archive button or the status menu (the toasts above stay as a net).
-  const webDirect = isCloudDirectWebMode();
 
   const handleWorkspaceClick = useCallback(
     (workspace: Workspace) => {
@@ -388,6 +414,56 @@ export function MainLayout() {
     [selectWorkspace, expandRepo]
   );
 
+  // Where this window's workspaces run: this computer, or the cloud (by organization).
+  // The sidebar lists that place; the rest of the app reads the full list.
+  const {
+    place: windowPlace,
+    rows: placeRows,
+    current: currentPlace,
+    activity: activityByPlace,
+    choose: choosePlace,
+    chooseIndex: choosePlaceAt,
+    repositories: placeRepositories,
+  } = useWindowPlace({
+    repoGroups,
+    selectedWorkspaceId,
+    selectedWorkspace,
+    openWorkspace: handleWorkspaceClick,
+    selectWorkspace,
+  });
+  // Adding a project follows the window's place: a folder on this computer, a
+  // GitHub repository (no clone) in the cloud, in the window's organization.
+  const folderPicker = { nativeFolderPicker: capabilities.nativeFolderPicker };
+  const addActions = addProjectActions(windowPlace.location, folderPicker);
+  const { openAddFromGitHub } = repoActions;
+  const handleAddFromGitHub = useCallback(
+    (organizationId?: string | null) =>
+      openAddFromGitHub(organizationId !== undefined ? organizationId : windowPlace.organizationId),
+    [openAddFromGitHub, windowPlace.organizationId]
+  );
+  const sidebarPlaces = useMemo(
+    () => ({
+      rows: placeRows,
+      current: currentPlace,
+      location: windowPlace.location,
+      activity: activityByPlace,
+      onChoose: choosePlace,
+    }),
+    [placeRows, currentPlace, windowPlace.location, activityByPlace, choosePlace]
+  );
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    onRefresh: async () => {
+      workspacesQuery.refetch();
+      if (selectedWorkspace) {
+        prStatusQuery.refetch();
+      }
+    },
+    onOpenInApp: canOpenInApp ? openInLastApp : undefined,
+    onSwitchPlace: choosePlaceAt,
+  });
+
   return (
     <SidebarProvider
       className="h-full"
@@ -406,7 +482,8 @@ export function MainLayout() {
         <SidebarSkeleton />
       ) : (
         <AppSidebar
-          repositories={repoGroups}
+          repositories={placeRepositories}
+          places={sidebarPlaces}
           selectedWorkspaceId={selectedWorkspace?.id || null}
           diffStatsMap={bulkDiffStatsQuery.data}
           onWorkspaceClick={handleWorkspaceClick}
@@ -416,6 +493,11 @@ export function MainLayout() {
           onAddRepository={repoActions.handleOpenProject}
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
           onStartNewProject={() => repoActions.setShowStartNewModal(true)}
+          onAddFromGitHub={() => handleAddFromGitHub()}
+          addActions={addActions}
+          // Archive + workflow status are Mac-backend mutations; web-direct has no
+          // transport for them, so the sidebar gets no handlers and never renders the
+          // hover archive button or the status menu (the toasts above stay as a net).
           onArchive={webDirect ? undefined : archiveWorkspace}
           onStatusChange={webDirect ? undefined : handleStatusChange}
           onOpenAutomations={openAutomations}
@@ -444,6 +526,8 @@ export function MainLayout() {
           onOpenProject={repoActions.handleOpenProject}
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
           onStartNewProject={() => repoActions.setShowStartNewModal(true)}
+          onAddFromGitHub={handleAddFromGitHub}
+          addActions={addActions}
           repos={repos}
           repoGroups={repoGroups}
           repoGroupsLoading={workspacesQuery.isLoading}
@@ -463,6 +547,14 @@ export function MainLayout() {
         onClose={repoActions.closeCloneModal}
         onClone={repoActions.handleCloneRepository}
         onClearError={repoActions.clearCloneError}
+      />
+
+      <AddRepositoryDialog
+        open={!!repoActions.addFromGitHub}
+        organizationId={repoActions.addFromGitHub?.organizationId ?? null}
+        onClose={repoActions.closeAddFromGitHub}
+        onAdded={repoActions.handleCloudRepoAdded}
+        projects={repoGroups}
       />
 
       <StartNewProjectModal
@@ -485,15 +577,29 @@ export function MainLayout() {
 
       {/* Command Palette (Cmd+K) */}
       <CommandPalette
+        hiddenCommands={[
+          ...hiddenAddProjectCommands(windowPlace.location, folderPicker),
+          ...(canOpenInApp ? [] : ["open-in-app"]),
+          // A workspace from a pull request or branch is local: not from the cloud.
+          ...(windowPlace.location === "local" ? [] : ["new-workspace-from"]),
+        ]}
         actionOverrides={{
+          "add-from-github": () => handleAddFromGitHub(),
           "open-project": repoActions.handleOpenProject,
           "clone-repository": () => repoActions.setShowCloneModal(true),
           "start-new-project": () => repoActions.setShowStartNewModal(true),
           // A pull request or branch belongs to a project: the one on screen, else the first.
           "new-workspace-from": () => {
             const repoId = selectedWorkspace?.repository_id ?? repos[0]?.id;
-            if (repoId) setGithubPickerRepoId(repoId);
-            else toast("Add a project first");
+            const project = repoGroups.find((g) => g.repo_id === repoId);
+            if (!repoId || !project) toast("Add a project first");
+            else if (!offersNewFromBranch(windowPlace.location, project))
+              toast(
+                project.has_folder === false
+                  ? `${project.repo_name} is not on this Mac`
+                  : `${project.repo_name} is not a GitHub repository`
+              );
+            else setGithubPickerRepoId(repoId);
           },
           "open-in-app": openInLastApp,
         }}

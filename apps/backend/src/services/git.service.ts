@@ -1,12 +1,23 @@
-import { execFileSync } from "child_process";
-import fs from "fs";
+import { execFile } from "child_process";
+import fs from "fs/promises";
 import path from "path";
+import { promisify } from "util";
 import { isExecError } from "@shared/lib/errors";
 
-const parentBranchCache = new Map<string, { branch: string; expiresAt: number }>();
-const PARENT_BRANCH_CACHE_TTL_MS = 5000;
+// Every git call here is asynchronous: the backend's event loop also runs the
+// agent engine, and the web app asks for diff stats of every working
+// workspace every few seconds. A synchronous spawn stalls every chat stream.
+const execFileAsync = promisify(execFile);
 
-export function verifyBranchExists(root_path: string, branch: string): string {
+/**
+ * Outlasts several 5-second diff polls. The key holds the workspace's target
+ * and default branch, so retargeting a workspace misses the cache at once;
+ * only a ref appearing or vanishing for the same key waits for expiry.
+ */
+const parentBranchCache = new Map<string, { branch: string; expiresAt: number }>();
+const PARENT_BRANCH_CACHE_TTL_MS = 30_000;
+
+export async function verifyBranchExists(root_path: string, branch: string): Promise<string> {
   const checks = [
     `refs/heads/${branch}`,
     `refs/remotes/origin/${branch}`,
@@ -15,7 +26,7 @@ export function verifyBranchExists(root_path: string, branch: string): string {
   ];
   for (const ref of checks) {
     try {
-      execFileSync("git", ["show-ref", "--verify", "--quiet", ref], {
+      await execFileAsync("git", ["show-ref", "--verify", "--quiet", ref], {
         cwd: root_path,
         timeout: 2000,
       });
@@ -27,39 +38,45 @@ export function verifyBranchExists(root_path: string, branch: string): string {
   return "main";
 }
 
-export function detectDefaultBranch(root_path: string): string {
+export async function detectDefaultBranch(root_path: string): Promise<string> {
   const strategies = [
     {
       name: "origin HEAD",
-      fn: () => {
-        const output = execFileSync("git", ["symbolic-ref", "refs/remotes/origin/HEAD"], {
-          cwd: root_path,
-          encoding: "utf-8",
-          timeout: 2000,
-        }).trim();
-        return output.replace(/^refs\/remotes\/origin\//, "");
+      fn: async () => {
+        const { stdout } = await execFileAsync(
+          "git",
+          ["symbolic-ref", "refs/remotes/origin/HEAD"],
+          {
+            cwd: root_path,
+            encoding: "utf-8",
+            timeout: 2000,
+          }
+        );
+        return stdout.trim().replace(/^refs\/remotes\/origin\//, "");
       },
     },
     {
       name: "current branch",
-      fn: () =>
-        execFileSync("git", ["branch", "--show-current"], {
+      fn: async () => {
+        const { stdout } = await execFileAsync("git", ["branch", "--show-current"], {
           cwd: root_path,
           encoding: "utf-8",
           timeout: 2000,
-        }).trim(),
+        });
+        return stdout.trim();
+      },
     },
     {
       name: "default fallback",
-      fn: () => "main",
+      fn: async () => "main",
     },
   ];
 
   for (const strategy of strategies) {
     try {
-      const branch = strategy.fn();
+      const branch = await strategy.fn();
       if (branch) {
-        return verifyBranchExists(root_path, branch);
+        return await verifyBranchExists(root_path, branch);
       }
     } catch {}
   }
@@ -82,11 +99,11 @@ export function detectDefaultBranch(root_path: string): string {
  * This is the authoritative implementation of parent branch resolution.
  * ──────────────────────────────────────────────────────────────────
  */
-export function resolveParentBranch(
+export async function resolveParentBranch(
   workspacePath: string,
   parentBranch: string | null,
   defaultBranch: string | null
-): string {
+): Promise<string> {
   const cacheKey = `${workspacePath}::${parentBranch || ""}::${defaultBranch || ""}`;
   const cached = parentBranchCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
@@ -113,7 +130,7 @@ export function resolveParentBranch(
 
   for (const { refPath, result } of refs) {
     try {
-      execFileSync("git", ["show-ref", "--verify", "--quiet", refPath], {
+      await execFileAsync("git", ["show-ref", "--verify", "--quiet", refPath], {
         cwd: workspacePath,
         timeout: 2000,
       });
@@ -233,33 +250,33 @@ export function extractDiffInfo(diffOutput: string): DiffInfo {
   return { oldPath, newPath, isNew, isDeleted };
 }
 
-export function getGitFileContent(
+export async function getGitFileContent(
   workspacePath: string,
   ref: string,
   filePath: string
-): string | null {
+): Promise<string | null> {
   if (!filePath) return null;
   try {
-    return execFileSync("git", ["show", `${ref}:${filePath}`], {
+    const { stdout } = await execFileAsync("git", ["show", `${ref}:${filePath}`], {
       cwd: workspacePath,
       encoding: "utf-8",
       maxBuffer: 10 * 1024 * 1024,
       timeout: 5000,
-    }).toString();
+    });
+    return stdout;
   } catch {
     return null;
   }
 }
 
-export function getMergeBase(workspacePath: string, parentBranch: string): string {
+export async function getMergeBase(workspacePath: string, parentBranch: string): Promise<string> {
   try {
-    return execFileSync("git", ["merge-base", parentBranch, "HEAD"], {
+    const { stdout } = await execFileAsync("git", ["merge-base", parentBranch, "HEAD"], {
       cwd: workspacePath,
       encoding: "utf-8",
       timeout: 5000,
-    })
-      .toString()
-      .trim();
+    });
+    return stdout.trim();
   } catch {
     // Fallback to HEAD — shows only uncommitted changes.
     // Previous fallback (parentBranch) caused phantom diffs when origin/main
@@ -270,15 +287,14 @@ export function getMergeBase(workspacePath: string, parentBranch: string): strin
 }
 
 /** Returns untracked files (not ignored, not staged) in the workspace. */
-function getUntrackedFiles(workspacePath: string): string[] {
+async function getUntrackedFiles(workspacePath: string): Promise<string[]> {
   try {
-    const output = execFileSync("git", ["ls-files", "--others", "--exclude-standard"], {
+    const { stdout } = await execFileAsync("git", ["ls-files", "--others", "--exclude-standard"], {
       cwd: workspacePath,
       encoding: "utf-8",
       timeout: 5000,
-    })
-      .toString()
-      .trim();
+    });
+    const output = stdout.trim();
     return output ? output.split("\n") : [];
   } catch {
     return [];
@@ -286,11 +302,11 @@ function getUntrackedFiles(workspacePath: string): string[] {
 }
 
 /** Counts newlines in a file. Returns 0 for binary, oversized, or unreadable files. */
-function countFileLines(filePath: string): number {
+async function countFileLines(filePath: string): Promise<number> {
   try {
-    const stat = fs.statSync(filePath);
+    const stat = await fs.stat(filePath);
     if (stat.size > 10 * 1024 * 1024) return 0;
-    const buf = fs.readFileSync(filePath);
+    const buf = await fs.readFile(filePath);
     // Detect binary files (null bytes in first 8KB)
     const sample = buf.subarray(0, 8192);
     if (sample.includes(0)) return 0;
@@ -314,28 +330,27 @@ function countFileLines(filePath: string): number {
  * Uses `git diff <merge-base>` (without HEAD) to include committed + staged + unstaged
  * changes to tracked files. Separately counts untracked file lines as additions.
  */
-export function getDiffStats(
+export async function getDiffStats(
   workspacePath: string,
   parentBranch: string
-): { additions: number; deletions: number } {
+): Promise<{ additions: number; deletions: number }> {
   try {
-    const mergeBase = getMergeBase(workspacePath, parentBranch);
+    const mergeBase = await getMergeBase(workspacePath, parentBranch);
 
     // Diff merge-base against working directory (committed + staged + unstaged tracked changes)
-    const output = execFileSync("git", ["diff", mergeBase, "--shortstat"], {
+    const { stdout } = await execFileAsync("git", ["diff", mergeBase, "--shortstat"], {
       cwd: workspacePath,
       encoding: "utf-8",
       timeout: 5000,
-    })
-      .toString()
-      .trim();
+    });
+    const output = stdout.trim();
 
     let additions = parseInt(output.match(/(\d+)\s+insertion(?:s)?/)?.[1] || "0", 10);
     const deletions = parseInt(output.match(/(\d+)\s+deletion(?:s)?/)?.[1] || "0", 10);
 
     // Add untracked files (each line counts as an addition)
-    for (const file of getUntrackedFiles(workspacePath)) {
-      additions += countFileLines(path.join(workspacePath, file));
+    for (const file of await getUntrackedFiles(workspacePath)) {
+      additions += await countFileLines(path.join(workspacePath, file));
     }
 
     return { additions, deletions };
@@ -348,22 +363,21 @@ export function getDiffStats(
  * Per-file change list from merge-base to working directory.
  * Includes tracked changes (committed + staged + unstaged) and untracked files.
  */
-export function getDiffFiles(
+export async function getDiffFiles(
   workspacePath: string,
   parentBranch: string
-): Array<{ file: string; additions: number; deletions: number }> {
+): Promise<Array<{ file: string; additions: number; deletions: number }>> {
   try {
-    const mergeBase = getMergeBase(workspacePath, parentBranch);
+    const mergeBase = await getMergeBase(workspacePath, parentBranch);
     const files: Array<{ file: string; additions: number; deletions: number }> = [];
 
     // Tracked changes: diff merge-base against working directory
-    const output = execFileSync("git", ["diff", mergeBase, "--numstat"], {
+    const { stdout } = await execFileAsync("git", ["diff", mergeBase, "--numstat"], {
       cwd: workspacePath,
       encoding: "utf-8",
       timeout: 5000,
-    })
-      .toString()
-      .trim();
+    });
+    const output = stdout.trim();
 
     if (output) {
       for (const line of output.split("\n")) {
@@ -377,8 +391,8 @@ export function getDiffFiles(
     }
 
     // Untracked files: count lines as additions
-    for (const file of getUntrackedFiles(workspacePath)) {
-      const lineCount = countFileLines(path.join(workspacePath, file));
+    for (const file of await getUntrackedFiles(workspacePath)) {
+      const lineCount = await countFileLines(path.join(workspacePath, file));
       files.push({ file, additions: lineCount, deletions: 0 });
     }
 
@@ -392,43 +406,41 @@ export function getDiffFiles(
  * Unified diff patch for a single file from merge-base to working directory.
  * Falls back to `--no-index` for untracked files.
  */
-export function getFileDiff(workspacePath: string, parentBranch: string, filePath: string): string {
+export async function getFileDiff(
+  workspacePath: string,
+  parentBranch: string,
+  filePath: string
+): Promise<string> {
   // Defense-in-depth: validate even though callers should already sanitize
   const safePath = resolveWorkspaceRelativePath(workspacePath, filePath);
   if (!safePath) {
     throw new Error(`Invalid file path: ${filePath}`);
   }
 
-  const mergeBase = getMergeBase(workspacePath, parentBranch);
+  const mergeBase = await getMergeBase(workspacePath, parentBranch);
 
   // Diff merge-base against working directory for tracked files
-  const output = execFileSync("git", ["diff", mergeBase, "--", safePath], {
+  const { stdout: output } = await execFileAsync("git", ["diff", mergeBase, "--", safePath], {
     cwd: workspacePath,
     encoding: "utf-8",
     maxBuffer: 10 * 1024 * 1024,
     timeout: 5000,
-  }).toString();
+  });
 
   if (output) return output;
 
   // File might be untracked — use --no-index to generate a diff from /dev/null
   // git diff --no-index exits with code 1 when differences exist, so catch the error
   try {
-    return execFileSync("git", ["diff", "--no-index", "--", "/dev/null", safePath], {
-      cwd: workspacePath,
-      encoding: "utf-8",
-      maxBuffer: 10 * 1024 * 1024,
-      timeout: 5000,
-    }).toString();
+    const { stdout } = await execFileAsync(
+      "git",
+      ["diff", "--no-index", "--", "/dev/null", safePath],
+      { cwd: workspacePath, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024, timeout: 5000 }
+    );
+    return stdout;
   } catch (e: unknown) {
     // Exit code 1 = differences found (expected); stdout contains the diff
     if (isExecError(e) && e.stdout) return e.stdout.toString();
     throw e;
   }
-}
-
-export function getOpenCommand(target: string): { cmd: string; args: string[] } {
-  if (process.platform === "win32") return { cmd: "cmd", args: ["/c", "start", "", target] };
-  if (process.platform === "darwin") return { cmd: "open", args: [target] };
-  return { cmd: "xdg-open", args: [target] };
 }

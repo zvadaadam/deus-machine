@@ -32,9 +32,6 @@ export const messages = read({
   output: out<PaginatedMessages>(),
 });
 
-/** Every chat on this computer, hidden ones included. */
-export const allSessions = read({ name: "allSessions", output: out<Session[]>() });
-
 /**
  * A short-lived token that lets this client open a cloud chat's own channel
  * to Deus Cloud, without this computer in between.

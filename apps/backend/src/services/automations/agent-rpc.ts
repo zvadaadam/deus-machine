@@ -17,6 +17,7 @@ import {
   listAutomations,
   listAutomationRuns,
   refreshAutomations,
+  refreshEveryOrganization,
   toggleAutomation,
   updateAutomation,
   type AutomationInput,
@@ -26,6 +27,7 @@ import { getCloudModelLists } from "../agent/cloud/models";
 
 interface SessionDefaults {
   repository_id: string;
+  organization_id: string | null;
 }
 
 function defaultsFromSession(sessionId: string): SessionDefaults {
@@ -34,7 +36,12 @@ function defaultsFromSession(sessionId: string): SessionDefaults {
   if (!session) throw new Error(`automation: session not found: ${sessionId}`);
   const workspace = getWorkspaceRaw(db, session.workspace_id);
   if (!workspace) throw new Error(`automation: workspace not found: ${session.workspace_id}`);
-  return { repository_id: workspace.repository_id };
+  // A cloud chat's automation goes to the organization its workspace runs in;
+  // a local chat's (or an older row's) to the default one.
+  return {
+    repository_id: workspace.repository_id,
+    organization_id: workspace.kind === "cloud" ? workspace.organization_id : null,
+  };
 }
 
 /** Resolve an automationId that may be an agnt id or an exact display name. */
@@ -83,9 +90,9 @@ export async function handleAutomationToolRequest(
 
   return match(rawMode as Mode)
     .with("list", async () => {
-      await refreshAutomations().catch(() => {
-        // Stale cache beats a failed list — the platform may be briefly away.
-      });
+      // Every organization's rows are answered, so every organization's list is read.
+      // One that fails keeps its rows: a stale cache beats a failed list.
+      await refreshEveryOrganization();
       return { automations: listAutomations() };
     })
     .with("view", async () => {
@@ -104,6 +111,7 @@ export async function handleAutomationToolRequest(
         session_policy: readStringParam(params, "sessionPolicy"),
         model: readStringParam(params, "model"),
         thinking_level: readStringParam(params, "thinkingLevel"),
+        organization_id: defaults.organization_id,
       };
       return { automation: await createAutomation(input, "agent") };
     })

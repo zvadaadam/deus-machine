@@ -31,6 +31,8 @@ export interface Workspace {
   kind: WorkspaceKind;
   /** agnt workspace id backing a cloud workspace (null for local). */
   provider_workspace_id: string | null;
+  /** The cloud organization a cloud workspace runs in (null for local, or not yet known). */
+  organization_id: string | null;
   state: WorkspaceState;
   status: WorkspaceStatus;
   current_session_id: string | null;
@@ -74,6 +76,12 @@ export interface RepoGroup {
   repo_name: string;
   sort_order: number;
   git_origin_url?: string | null;
+  /**
+   * Whether the project has a folder on this computer. False for a project
+   * added from GitHub, which runs only in the cloud. Absent where no backend
+   * says (the hosted web's groups).
+   */
+  has_folder?: boolean;
   workspaces: Workspace[];
 }
 

@@ -77,7 +77,7 @@ describe("starting the engine", () => {
     // Its turn runs in a sandbox and may really still be running.
     expect(status("remote").status).toBe("working");
     const [resources, ctx] = state.invalidate.mock.calls[0]!;
-    expect(resources).toEqual(["workspaces", "sessions", "session", "stats"]);
+    expect(resources).toEqual(["workspaces", "sessions", "session"]);
     expect([...ctx.sessionIds].sort()).toEqual(["asking", "planning", "working"]);
     // Before the engine could admit a turn.
     expect(state.invalidate.mock.invocationCallOrder[0]).toBeLessThan(

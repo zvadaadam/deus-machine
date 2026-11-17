@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import type { CloudComputeUsage as Usage } from "@shared/types/compute-usage";
@@ -13,19 +12,16 @@ import {
 import { queryKeys } from "@/shared/api/queryKeys";
 import { listSecretOrganizations } from "../../api/environment-secrets.service";
 import { requestCloudSettings } from "../../api/cloud-settings.service";
+import { useSectionOrganization } from "../../hooks/useSectionOrganization";
 
 export function CloudComputeUsage({ accountId }: { accountId: string }) {
-  const [selectedOrg, setSelectedOrg] = useState<string | null>(null);
   const organizations = useQuery({
     queryKey: queryKeys.settings.environments.organizations(accountId),
     queryFn: ({ signal }) => listSecretOrganizations(signal),
     staleTime: 30_000,
     retry: false,
   });
-  const preferredOrg = selectedOrg ?? organizations.data?.currentOrganizationId;
-  const orgId =
-    organizations.data?.items.find((org) => org.id === preferredOrg)?.id ??
-    organizations.data?.items[0]?.id;
+  const [orgId, setSelectedOrg] = useSectionOrganization(organizations.data?.items);
   const usage = useQuery({
     queryKey: ["settings", "compute-usage", accountId, orgId],
     queryFn: ({ signal }) =>
@@ -57,7 +53,7 @@ export function CloudComputeUsage({ accountId }: { accountId: string }) {
         </div>
         <div className="flex items-center gap-2">
           {(organizations.data?.items.length ?? 0) > 1 && (
-            <Select value={orgId} onValueChange={setSelectedOrg}>
+            <Select value={orgId ?? ""} onValueChange={setSelectedOrg}>
               <SelectTrigger aria-label="Usage organization" className="max-w-48">
                 <SelectValue />
               </SelectTrigger>

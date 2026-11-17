@@ -287,7 +287,7 @@ function openFirstSession(workspaceId: string): void {
       workspaceId
     );
   })();
-  invalidate(["workspaces", "stats", "sessions"]);
+  invalidate(["workspaces", "sessions"]);
 }
 
 // ─── Failure ────────────────────────────────────────────────────
@@ -338,7 +338,7 @@ function failWorkspace(workspaceId: string, stage: string, failure: Failure): vo
        WHERE id = ?`
     )
     .run(stage, failure.message, failure.detail, workspaceId);
-  invalidate(["workspaces", "stats"]);
+  invalidate(["workspaces"]);
 }
 
 // ─── Start, retry, delete ───────────────────────────────────────
@@ -438,7 +438,7 @@ export function retryWorkspaceInit(workspaceId: string): void {
     )
     .run(workspaceId);
   if (claimed.changes === 0) throw new ConflictError("This workspace is not waiting for a retry.");
-  invalidate(["workspaces", "stats"]);
+  invalidate(["workspaces"]);
   void initializeWorkspace({
     workspaceId,
     repoRootPath: row.root_path,
@@ -470,7 +470,7 @@ export function deleteFailedWorkspace(workspaceId: string): void {
   // Its sessions go with it (ON DELETE CASCADE). The failed attempt already
   // removed its folder and branch.
   db.prepare("DELETE FROM workspaces WHERE id = ? AND state = 'error'").run(workspaceId);
-  invalidate(["workspaces", "stats", "sessions"]);
+  invalidate(["workspaces", "sessions"]);
 }
 
 /**

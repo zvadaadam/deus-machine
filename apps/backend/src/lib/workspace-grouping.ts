@@ -15,7 +15,13 @@ export function toWorkspace(row: WorkspaceWithDetailsRow): Workspace {
 
 export function groupWorkspacesByRepo(
   workspaces: WorkspaceWithDetailsRow[],
-  allRepos: { id: string; name: string; sort_order: number; git_origin_url: string | null }[]
+  allRepos: {
+    id: string;
+    name: string;
+    sort_order: number;
+    git_origin_url: string | null;
+    root_path: string | null;
+  }[]
 ): RepoGroup[] {
   const grouped: Record<string, RepoGroup> = {};
 
@@ -27,6 +33,7 @@ export function groupWorkspacesByRepo(
         repo_name: workspace.repo_name || "Unknown",
         sort_order: workspace.repo_sort_order ?? 999,
         git_origin_url: workspace.git_origin_url ?? null,
+        has_folder: !!workspace.root_path,
         workspaces: [],
       };
     }
@@ -40,6 +47,7 @@ export function groupWorkspacesByRepo(
         repo_name: repo.name,
         sort_order: repo.sort_order ?? 999,
         git_origin_url: repo.git_origin_url ?? null,
+        has_folder: !!repo.root_path,
         workspaces: [],
       };
     }

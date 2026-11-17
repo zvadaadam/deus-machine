@@ -6,6 +6,7 @@
 // does with its answers.
 
 import { getErrorMessage } from "@shared/lib/errors";
+import { ConflictError, ValidationError } from "../../lib/errors";
 import type { CatalogApp, ConnectAppResult } from "@shared/integrations/types";
 import { attachConnection, finishRemoval } from "./accounts";
 import { signInReturnUrl } from "./auth/callback";
@@ -60,7 +61,7 @@ async function startThroughCloud(
   route: Extract<SignInRoute, { via: "cloud" }>
 ): Promise<ConnectAppResult> {
   const accountId = cloudAccountId();
-  if (!accountId) throw new Error(`Sign in to your Deus account to connect ${app.name}`);
+  if (!accountId) throw new ValidationError(`Sign in to your Deus account to connect ${app.name}`);
   // A disconnect of this same account still on its way lands first: started
   // after this sign-in, it would take the account the sign-in had just made.
   await Promise.all(
@@ -70,7 +71,7 @@ async function startThroughCloud(
   );
   // Another Deus account signed in meanwhile: the request is the first one's.
   if (cloudAccountId() !== accountId) {
-    throw new Error(`The Deus account changed; connect ${app.name} again`);
+    throw new ConflictError(`The Deus account changed; connect ${app.name} again`);
   }
   const existing = cloudRow(app.id, accountId);
   const row =
@@ -138,7 +139,8 @@ export async function completeCloudCallback(attempt: string): Promise<string> {
   const connectionId = cloudAttempt(attempt);
   const connection = connectionId ? getConnection(connectionId) : null;
   const app = connection ? findApp(connection.appId) : null;
-  if (!connection || !app) throw new Error("This sign-in link has expired. Start again from Deus.");
+  if (!connection || !app)
+    throw new ValidationError("This sign-in link has expired. Start again from Deus.");
   if (connection.status === "active") return app.name;
 
   let connected = false;
@@ -155,12 +157,12 @@ export async function completeCloudCallback(attempt: string): Promise<string> {
   // Disconnected or removed while Deus Cloud was being asked: the attempt is
   // gone with its row, and landing it now would bring the account back.
   if (cloudAttempt(attempt) !== connection.id) {
-    throw new Error("This sign-in was cancelled. Start again from Deus.");
+    throw new ConflictError("This sign-in was cancelled. Start again from Deus.");
   }
   if (!connected) {
     updateConnection(connection.id, { lastError: "The sign-in was not finished" });
     integrationsChanged();
-    throw new Error("The sign-in was not finished. Start again from Deus.");
+    throw new ConflictError("The sign-in was not finished. Start again from Deus.");
   }
   cloudAccountLanded(connection);
   return app.name;

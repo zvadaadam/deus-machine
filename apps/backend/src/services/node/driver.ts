@@ -25,7 +25,12 @@ import type { FileMatch, FileTreeResponse } from "@shared/types/files";
 import { ValidationError } from "../../lib/errors";
 import * as gitService from "../git.service";
 import * as filesService from "../files.service";
-import { getCloudDiffSummary, getCloudDiffFile, requestCloudFs } from "../agent/cloud/driver";
+import {
+  getCloudDiffSummary,
+  getCloudDiffFile,
+  hasLiveCloudSession,
+  requestCloudFs,
+} from "../agent/cloud/driver";
 import {
   listCloudTree,
   invalidateCloudTree,
@@ -89,7 +94,7 @@ class LocalNodeDriver implements NodeDriver {
     private readonly workspacePath: string
   ) {}
 
-  private parentBranch(): string {
+  private parentBranch(): Promise<string> {
     return gitService.resolveParentBranch(
       this.workspacePath,
       this.workspace.git_target_branch,
@@ -98,23 +103,23 @@ class LocalNodeDriver implements NodeDriver {
   }
 
   async diffStats(): Promise<DiffStats> {
-    return gitService.getDiffStats(this.workspacePath, this.parentBranch());
+    return gitService.getDiffStats(this.workspacePath, await this.parentBranch());
   }
 
   async diffFiles(): Promise<DiffFilesResult> {
-    return { files: gitService.getDiffFiles(this.workspacePath, this.parentBranch()) };
+    return { files: await gitService.getDiffFiles(this.workspacePath, await this.parentBranch()) };
   }
 
   async diffFile(file: string): Promise<DiffFileOutcome> {
     const workspacePath = this.workspacePath;
-    const parentBranch = this.parentBranch();
+    const parentBranch = await this.parentBranch();
     const safeFilePath = gitService.resolveWorkspaceRelativePath(workspacePath, file);
     if (!safeFilePath) throw new ValidationError("Invalid file path");
 
     try {
-      const output = gitService.getFileDiff(workspacePath, parentBranch, safeFilePath);
+      const output = await gitService.getFileDiff(workspacePath, parentBranch, safeFilePath);
       const diffInfo = gitService.extractDiffInfo(output);
-      const mergeBase = gitService.getMergeBase(workspacePath, parentBranch);
+      const mergeBase = await gitService.getMergeBase(workspacePath, parentBranch);
       const safeOldPath =
         gitService.resolveWorkspaceRelativePath(workspacePath, diffInfo.oldPath || safeFilePath) ||
         safeFilePath;
@@ -128,7 +133,7 @@ class LocalNodeDriver implements NodeDriver {
       if (diffInfo.isNew) {
         oldContent = "";
       } else {
-        oldContent = gitService.getGitFileContent(workspacePath, mergeBase, safeOldPath);
+        oldContent = await gitService.getGitFileContent(workspacePath, mergeBase, safeOldPath);
       }
 
       if (diffInfo.isDeleted) {
@@ -136,12 +141,12 @@ class LocalNodeDriver implements NodeDriver {
       } else {
         // Read from working directory (not HEAD) since we diff merge-base against workdir
         try {
-          const buf = fs.readFileSync(path.resolve(workspacePath, safeNewPath));
+          const buf = await fs.promises.readFile(path.resolve(workspacePath, safeNewPath));
           // Detect binary files (null bytes in first 8KB)
           const sample = buf.subarray(0, 8192);
           newContent = sample.includes(0) ? null : buf.toString("utf-8");
         } catch {
-          newContent = gitService.getGitFileContent(workspacePath, "HEAD", safeNewPath);
+          newContent = await gitService.getGitFileContent(workspacePath, "HEAD", safeNewPath);
         }
       }
 
@@ -250,7 +255,22 @@ class RemoteNodeDriver implements NodeDriver {
     }
   }
 
+  /**
+   * The sidebar's numbers ask every ready workspace on mount and on focus. A
+   * `diff.request` to a computer whose agent is not connected makes the platform
+   * connect it, which resumes an idle-paused sandbox (AGNT `client-handler.ts`
+   * `sidecarConnected` → `WorkspaceDO.requestConnection` → `recoverSandbox`). So
+   * the numbers ask only a computer this backend already holds a channel to and
+   * that is not asleep; any other answers the empty shape without connecting.
+   */
   async diffStats(): Promise<DiffStats> {
+    const sessionId = this.workspace.current_session_id;
+    const asleep = ["paused", "stopped", "resuming", "error"].includes(
+      this.workspace.init_stage ?? ""
+    );
+    if (!sessionId || asleep || !hasLiveCloudSession(sessionId)) {
+      return { additions: 0, deletions: 0 };
+    }
     const summary = await this.summary();
     return (summary?.files ?? []).reduce(
       (acc, f) => ({

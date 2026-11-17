@@ -11,6 +11,7 @@ vi.mock("electron", () => ({
   app: {
     getPath: () => electronMocks.userDataDir,
   },
+  BrowserWindow: { getAllWindows: () => [] },
   safeStorage: {
     isEncryptionAvailable: () => true,
     encryptString: (value: string) => Buffer.from(value, "utf8"),
@@ -19,17 +20,24 @@ vi.mock("electron", () => ({
 }));
 
 import {
-  getCloudCredential,
-  getCloudCredentialMeta,
-  setCloudCredential,
+  getOrgKey,
+  getOrgKeys,
+  listOrgKeys,
+  setOrgKey,
 } from "../../../apps/desktop/main/cloud-credentials";
 import {
-  ensureDeviceKey,
+  ensureDeviceKeys,
+  getPlatformKeyError,
   parseOrgList,
+  provisionAfterLogin,
   pushCloudCredentialsToBackend,
   resolveAgntBaseUrl,
-  revokeDeviceKey,
+  revokeDeviceKeys,
 } from "../../../apps/desktop/main/deus-cloud-provision";
+import {
+  currentLoginGeneration,
+  signOutDeusCloud,
+} from "../../../apps/desktop/main/deus-cloud-auth";
 
 const fetchMock = vi.fn();
 
@@ -38,6 +46,9 @@ beforeEach(async () => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
   vi.stubEnv("DEUS_CLOUD_AGNT_URL", "https://agnt.test");
+  vi.stubEnv("DEUS_BACKEND_PORT", "");
+  // Forget the previous test's account (its listed default organization).
+  await revokeDeviceKeys(null);
 });
 
 afterEach(async () => {
@@ -86,110 +97,184 @@ describe("parseOrgList", () => {
   });
 });
 
-describe("ensureDeviceKey", () => {
-  it("looks up the org with the session token, mints with hostname label, stores key + meta", async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse([{ id: "org_1", name: "Adam's Organization" }]))
-      .mockResolvedValueOnce(
-        jsonResponse({ id: "key_9", key: "agnt_sk_live_minted", label: "deus-desktop mac" }, 201)
-      );
+/**
+ * A URL-dispatched platform: the probes and mints for different organizations
+ * run in PARALLEL, so sequence-based mocks would depend on scheduling order.
+ */
+function platformMock(handlers: {
+  orgs?: () => Response | Promise<Response>;
+  /** The key probe: `key` is the bearer it was asked with. */
+  secrets?: (key: string) => Response | Promise<Response>;
+  mint?: (orgId: string) => Response | Promise<Response>;
+  revoke?: (orgId: string, keyId: string) => Response;
+}) {
+  fetchMock.mockImplementation(async (input: unknown, init?: RequestInit) => {
+    const url = String(input);
+    const bearer = String(
+      (init?.headers as Record<string, string> | undefined)?.authorization ?? ""
+    ).replace(/^Bearer /, "");
+    if (url.endsWith("/secrets")) {
+      return handlers.secrets ? handlers.secrets(bearer) : jsonResponse({ items: [] });
+    }
+    const mint = url.match(/\/dashboard\/orgs\/([^/]+)\/api-keys$/);
+    if (mint) {
+      if (!handlers.mint) throw new Error(`unexpected mint for ${mint[1]}`);
+      return handlers.mint(mint[1]);
+    }
+    const revoke = url.match(/\/dashboard\/orgs\/([^/]+)\/api-keys\/([^/]+)$/);
+    if (revoke && init?.method === "DELETE") {
+      return handlers.revoke ? handlers.revoke(revoke[1], revoke[2]) : jsonResponse({ ok: true });
+    }
+    if (url.includes("/api/settings/cloud/credentials")) return jsonResponse({ ok: true });
+    if (url.endsWith("/orgs")) {
+      return handlers.orgs ? handlers.orgs() : jsonResponse({ items: [{ id: "org_1" }] });
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+}
 
-    await ensureDeviceKey("session-jwt", "https://cloud.test");
+const minted = (orgId: string) =>
+  jsonResponse({ id: `key_${orgId}`, key: `agnt_sk_${orgId}`, label: "deus-desktop mac" }, 201);
+const urls = () => fetchMock.mock.calls.map((call) => String(call[0]));
+const mints = () => urls().filter((url) => url.endsWith("/api-keys"));
 
-    const [orgCall, mintCall] = fetchMock.mock.calls;
+describe("ensureDeviceKeys", () => {
+  it("looks up the orgs with the session token, mints with hostname label, stores key + meta", async () => {
+    platformMock({
+      orgs: () => jsonResponse([{ id: "org_1", name: "Adam's Organization" }]),
+      mint: minted,
+    });
+
+    expect(await ensureDeviceKeys("session-jwt", "https://cloud.test")).toBeNull();
+
+    const orgCall = fetchMock.mock.calls.find((call) => String(call[0]).endsWith("/orgs"))!;
     expect(orgCall[0]).toBe("https://cloud.test/orgs");
     expect(orgCall[1].headers.authorization).toBe("Bearer session-jwt");
+    const mintCall = fetchMock.mock.calls.find((call) => String(call[0]).endsWith("/api-keys"))!;
     expect(mintCall[0]).toBe("https://agnt.test/dashboard/orgs/org_1/api-keys");
     expect(JSON.parse(mintCall[1].body).label).toContain("deus-desktop");
 
-    expect(await getCloudCredential("agntApiKey")).toBe("agnt_sk_live_minted");
-    expect(await getCloudCredentialMeta("agntApiKey")).toMatchObject({
-      keyId: "key_9",
-      orgId: "org_1",
-    });
+    expect(await getOrgKey("org_1")).toBe("agnt_sk_org_1");
+    expect(await listOrgKeys()).toMatchObject([{ orgId: "org_1", keyId: "key_org_1" }]);
   });
 
-  /** URL-dispatched mock: the ownership+validity probes run in PARALLEL, so
-   *  sequence-based mocks would depend on scheduling order. */
-  function probeMock(handlers: {
-    secrets?: () => Response | Promise<Response>;
-    orgs?: () => Response | Promise<Response>;
-    mint?: () => Response;
-  }) {
-    fetchMock.mockImplementation(async (input: unknown) => {
-      const url = String(input);
-      if (url.includes("/secrets")) {
-        return handlers.secrets ? handlers.secrets() : jsonResponse({ items: [] });
-      }
-      if (url.includes("/api-keys")) {
-        if (!handlers.mint) throw new Error("unexpected mint");
-        return handlers.mint();
-      }
-      if (url.includes("/orgs")) {
-        return handlers.orgs ? handlers.orgs() : jsonResponse({ items: [{ id: "org_1" }] });
-      }
-      throw new Error(`unexpected fetch: ${url}`);
+  it("gets two organizations two keys, in the platform's order", async () => {
+    platformMock({
+      orgs: () => jsonResponse({ items: [{ id: "org_b" }, { id: "org_a" }] }),
+      mint: minted,
     });
-  }
 
-  it("is idempotent: a valid key owned by this account skips the mint", async () => {
-    await setCloudCredential("agntApiKey", "agnt_sk_existing", { keyId: "key_1", orgId: "org_1" });
-    probeMock({});
+    await ensureDeviceKeys("session-jwt", "https://cloud.test");
 
-    await ensureDeviceKey("session-jwt", "https://cloud.test");
-
-    expect(await getCloudCredential("agntApiKey")).toBe("agnt_sk_existing");
-    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
-    expect(urls.some((u) => u.includes("/api-keys"))).toBe(false);
+    expect(await getOrgKeys()).toEqual({ org_b: "agnt_sk_org_b", org_a: "agnt_sk_org_a" });
+    expect(Object.keys(await getOrgKeys())).toEqual(["org_b", "org_a"]);
   });
 
-  it("keeps the stored key when neither probe can reach the platform", async () => {
-    await setCloudCredential("agntApiKey", "agnt_sk_existing", { keyId: "key_1", orgId: "org_1" });
-    probeMock({
+  it("is idempotent: a valid key in each listed organization skips the mint", async () => {
+    await setOrgKey("org_1", "agnt_sk_existing", { keyId: "key_1" });
+    platformMock({});
+
+    await ensureDeviceKeys("session-jwt", "https://cloud.test");
+
+    expect(await getOrgKey("org_1")).toBe("agnt_sk_existing");
+    expect(mints()).toEqual([]);
+  });
+
+  it("deletes nothing and mints nothing when the list's order changes", async () => {
+    await setOrgKey("org_a", "agnt_sk_a", { keyId: "key_a" });
+    await setOrgKey("org_b", "agnt_sk_b", { keyId: "key_b" });
+    platformMock({ orgs: () => jsonResponse({ items: [{ id: "org_b" }, { id: "org_a" }] }) });
+
+    expect(await ensureDeviceKeys("session-jwt", "https://cloud.test")).toBeNull();
+
+    expect(await getOrgKeys()).toEqual({ org_b: "agnt_sk_b", org_a: "agnt_sk_a" });
+    expect(mints()).toEqual([]);
+    expect(fetchMock.mock.calls.some((call) => call[1]?.method === "DELETE")).toBe(false);
+    // The new first organization is the default now.
+    expect((await listOrgKeys()).map((key) => key.orgId)).toEqual(["org_b", "org_a"]);
+  });
+
+  it("retires the key of an organization the account no longer lists", async () => {
+    await setOrgKey("org_a", "agnt_sk_a", { keyId: "key_a" });
+    await setOrgKey("org_gone", "agnt_sk_gone", { keyId: "key_gone" });
+    platformMock({ orgs: () => jsonResponse({ items: [{ id: "org_a" }] }) });
+
+    await ensureDeviceKeys("session-jwt", "https://cloud.test");
+
+    expect(await getOrgKeys()).toEqual({ org_a: "agnt_sk_a" });
+    const revoke = fetchMock.mock.calls.find((call) => call[1]?.method === "DELETE")!;
+    expect(revoke[0]).toBe("https://agnt.test/dashboard/orgs/org_gone/api-keys/key_gone");
+    expect(revoke[1].headers.authorization).toBe("Bearer session-jwt");
+  });
+
+  it("re-mints for a DIFFERENT account: the previous account's organization is not on its list", async () => {
+    // A 401-expired session clears only the session file; without the
+    // ownership check, signing into account B silently reused A's org key.
+    await setOrgKey("org_a", "agnt_sk_org_a", { keyId: "key_a" });
+    platformMock({ mint: minted });
+
+    await ensureDeviceKeys("session-jwt", "https://cloud.test");
+
+    expect(await getOrgKeys()).toEqual({ org_1: "agnt_sk_org_1" });
+  });
+
+  it("one failing mint does not block the other organization", async () => {
+    platformMock({
+      orgs: () =>
+        jsonResponse({
+          items: [
+            { id: "org_a", name: "Acme" },
+            { id: "org_b", name: "Beta" },
+          ],
+        }),
+      mint: (orgId) =>
+        orgId === "org_a" ? jsonResponse({ error: "FORBIDDEN" }, 403) : minted(orgId),
+    });
+
+    const failure = await ensureDeviceKeys("session-jwt", "https://cloud.test");
+
+    expect(failure).toBe("Acme: device key mint failed (403)");
+    expect(await getOrgKeys()).toEqual({ org_b: "agnt_sk_org_b" });
+  });
+
+  it("keeps the stored keys when neither probe can reach the platform", async () => {
+    await setOrgKey("org_1", "agnt_sk_existing", { keyId: "key_1" });
+    platformMock({
       secrets: () => Promise.reject(new Error("ENOTFOUND")),
       orgs: () => Promise.reject(new Error("ENOTFOUND")),
     });
 
-    // Offline is neither revoked nor foreign: the ownership probe swallows
-    // its own failure, so the key is kept and no mint is attempted.
-    await ensureDeviceKey("session-jwt", "https://cloud.test");
+    // Offline is neither revoked nor foreign: the key is kept and no mint is attempted.
+    expect(await ensureDeviceKeys("session-jwt", "https://cloud.test")).toBeNull();
 
-    expect(await getCloudCredential("agntApiKey")).toBe("agnt_sk_existing");
+    expect(await getOrgKey("org_1")).toBe("agnt_sk_existing");
+    expect(mints()).toEqual([]);
   });
 
-  it("re-mints when the stored key was revoked server-side", async () => {
-    await setCloudCredential("agntApiKey", "agnt_sk_revoked", { keyId: "key_1", orgId: "org_1" });
-    probeMock({
+  it("re-mints when a stored key was revoked server-side", async () => {
+    await setOrgKey("org_1", "agnt_sk_revoked", { keyId: "key_1" });
+    platformMock({
       secrets: () => jsonResponse({ error: "UNAUTHORIZED" }, 401),
       mint: () => jsonResponse({ id: "key_2", key: "agnt_sk_fresh", label: "Mac" }),
     });
 
-    await ensureDeviceKey("session-jwt", "https://cloud.test");
+    await ensureDeviceKeys("session-jwt", "https://cloud.test");
 
-    expect(await getCloudCredential("agntApiKey")).toBe("agnt_sk_fresh");
-  });
-
-  it("re-mints when the stored key belongs to a DIFFERENT account's org", async () => {
-    // A 401-expired session clears only the session file; without the
-    // ownership probe, signing into account B silently reused A's org key.
-    await setCloudCredential("agntApiKey", "agnt_sk_org_a", { keyId: "key_a", orgId: "org_a" });
-    probeMock({
-      mint: () => jsonResponse({ id: "key_b", key: "agnt_sk_org_b", label: "Mac" }),
-    });
-
-    await ensureDeviceKey("session-jwt", "https://cloud.test");
-
-    expect(await getCloudCredential("agntApiKey")).toBe("agnt_sk_org_b");
-    expect(await getCloudCredentialMeta("agntApiKey")).toMatchObject({ orgId: "org_1" });
+    expect(await getOrgKey("org_1")).toBe("agnt_sk_fresh");
   });
 
   it("surfaces a mint failure without storing anything", async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ items: [{ id: "org_1" }] }))
-      .mockResolvedValueOnce(jsonResponse({ error: "FORBIDDEN" }, 403));
+    platformMock({ mint: () => jsonResponse({ error: "FORBIDDEN" }, 403) });
 
-    await expect(ensureDeviceKey("session-jwt", "https://cloud.test")).rejects.toThrow("403");
-    expect(await getCloudCredential("agntApiKey")).toBeNull();
+    expect(await ensureDeviceKeys("session-jwt", "https://cloud.test")).toContain("403");
+    expect(await getOrgKeys()).toEqual({});
+  });
+
+  it("throws when the list cannot be read and nothing is stored", async () => {
+    platformMock({ orgs: () => jsonResponse({ items: [] }) });
+    await expect(ensureDeviceKeys("session-jwt", "https://cloud.test")).rejects.toThrow(
+      /no organization/
+    );
   });
 });
 
@@ -200,10 +285,11 @@ describe("pushCloudCredentialsToBackend", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("posts stored credentials to the local credentials route with the backend auth token", async () => {
+  it("posts every organization's key to the local credentials route with the backend auth token", async () => {
     vi.stubEnv("DEUS_BACKEND_PORT", "51999");
     vi.stubEnv("DEUS_AUTH_TOKEN", "local-token");
-    await setCloudCredential("agntApiKey", "agnt_sk_live_x");
+    await setOrgKey("org_a", "agnt_sk_live_a");
+    await setOrgKey("org_b", "agnt_sk_live_b");
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
 
     expect(await pushCloudCredentialsToBackend()).toBe(true);
@@ -211,43 +297,123 @@ describe("pushCloudCredentialsToBackend", () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("http://127.0.0.1:51999/api/settings/cloud/credentials");
     expect(init.headers.authorization).toBe("Bearer local-token");
-    // The full contract: credentials PLUS the deus-cloud mint context the
-    // backend needs to request per-repo GitHub App installation tokens.
+    // The full contract: one key per organization PLUS the deus-cloud mint
+    // context the backend needs to request per-repo GitHub App installation tokens.
     expect(JSON.parse(init.body)).toEqual({
-      apiKey: "agnt_sk_live_x",
       deusCloudUrl: expect.any(String),
       deusCloudSessionToken: null,
-      orgId: null,
+      orgKeys: { org_a: "agnt_sk_live_a", org_b: "agnt_sk_live_b" },
+      // Before the list is read, the first stored key's organization is the default.
+      orgId: "org_a",
     });
+  });
+
+  const pushedBodies = () =>
+    fetchMock.mock.calls
+      .filter((call) => String(call[0]).includes("/api/settings/cloud/credentials"))
+      .map((call) => JSON.parse(call[1].body));
+
+  it("names the platform's first organization the default, also when its key is missing", async () => {
+    vi.stubEnv("DEUS_BACKEND_PORT", "51999");
+    vi.stubEnv("DEUS_AUTH_TOKEN", "local-token");
+    platformMock({
+      orgs: () => jsonResponse({ items: [{ id: "org_a" }, { id: "org_b" }] }),
+      mint: (orgId) =>
+        orgId === "org_a" ? jsonResponse({ error: "FORBIDDEN" }, 403) : minted(orgId),
+    });
+
+    await provisionAfterLogin("session-jwt", "https://cloud.test", currentLoginGeneration());
+
+    expect(pushedBodies().at(-1)).toMatchObject({
+      orgKeys: { org_b: "agnt_sk_org_b" },
+      orgId: "org_a",
+    });
+  });
+
+  it("names the first stored key's organization when the list cannot be read", async () => {
+    vi.stubEnv("DEUS_BACKEND_PORT", "51999");
+    vi.stubEnv("DEUS_AUTH_TOKEN", "local-token");
+    await setOrgKey("org_b", "agnt_sk_b", { keyId: "key_b" });
+    await setOrgKey("org_a", "agnt_sk_a", { keyId: "key_a" });
+    platformMock({ orgs: () => Promise.reject(new Error("ENOTFOUND")) });
+
+    await provisionAfterLogin("session-jwt", "https://cloud.test", currentLoginGeneration());
+
+    expect(pushedBodies().at(-1)).toMatchObject({ orgId: "org_b" });
+  });
+
+  it("revokes, never stores or pushes, a key whose mint finishes after a sign-out", async () => {
+    vi.stubEnv("DEUS_BACKEND_PORT", "51999");
+    vi.stubEnv("DEUS_AUTH_TOKEN", "local-token");
+    let finishMint: (response: Response) => void = () => {};
+    let mintStarted: () => void = () => {};
+    const started = new Promise<void>((resolve) => (mintStarted = resolve));
+    platformMock({
+      mint: () =>
+        new Promise<Response>((resolve) => {
+          finishMint = resolve;
+          mintStarted();
+        }),
+    });
+
+    const provisioning = provisionAfterLogin(
+      "session-jwt",
+      "https://cloud.test",
+      currentLoginGeneration()
+    );
+    await started;
+    await signOutDeusCloud();
+    finishMint(minted("org_1"));
+    await provisioning;
+
+    expect(await listOrgKeys()).toEqual([]);
+    const revoke = fetchMock.mock.calls.find((call) => call[1]?.method === "DELETE");
+    expect(revoke?.[0]).toBe("https://agnt.test/dashboard/orgs/org_1/api-keys/key_org_1");
+    expect(revoke?.[1].headers.authorization).toBe("Bearer session-jwt");
+    // Only sign-out's own push of the cleared credentials reached the backend.
+    expect(pushedBodies()).toEqual([expect.objectContaining({ orgKeys: {}, orgId: null })]);
   });
 });
 
-describe("revokeDeviceKey", () => {
-  it("revokes server-side when possible, always deletes locally, and clears the backend", async () => {
+describe("revokeDeviceKeys", () => {
+  it("revokes every organization's key server-side when possible, deletes locally, and clears the backend", async () => {
     vi.stubEnv("DEUS_BACKEND_PORT", "51999");
     vi.stubEnv("DEUS_AUTH_TOKEN", "local-token");
-    await setCloudCredential("agntApiKey", "agnt_sk_live_x", { keyId: "key_9", orgId: "org_1" });
+    await setOrgKey("org_1", "agnt_sk_live_x", { keyId: "key_9" });
+    await setOrgKey("org_2", "agnt_sk_live_y", { keyId: "key_8" });
     fetchMock.mockResolvedValue(jsonResponse({ ok: true }));
 
-    await revokeDeviceKey("session-jwt");
+    await revokeDeviceKeys("session-jwt");
 
-    const revokeCall = fetchMock.mock.calls[0];
-    expect(revokeCall[0]).toBe("https://agnt.test/dashboard/orgs/org_1/api-keys/key_9");
-    expect(revokeCall[1].method).toBe("DELETE");
-    expect(await getCloudCredential("agntApiKey")).toBeNull();
+    const revokes = fetchMock.mock.calls.filter((call) => call[1]?.method === "DELETE");
+    expect(revokes.map((call) => call[0]).sort()).toEqual([
+      "https://agnt.test/dashboard/orgs/org_1/api-keys/key_9",
+      "https://agnt.test/dashboard/orgs/org_2/api-keys/key_8",
+    ]);
+    expect(await getOrgKeys()).toEqual({});
 
-    // The backend push at the end must clear the key (null), not resend it.
+    // The backend push at the end must clear the keys, not resend them.
     const pushCall = fetchMock.mock.calls.at(-1);
     expect(pushCall?.[0]).toContain("/api/settings/cloud/credentials");
-    expect(JSON.parse(pushCall?.[1].body).apiKey).toBeNull();
+    expect(JSON.parse(pushCall?.[1].body).orgKeys).toEqual({});
   });
 
-  it("offline sign-out still deletes the local key", async () => {
-    await setCloudCredential("agntApiKey", "agnt_sk_live_x", { keyId: "key_9", orgId: "org_1" });
+  it("offline sign-out still deletes the local keys", async () => {
+    await setOrgKey("org_1", "agnt_sk_live_x", { keyId: "key_9" });
     fetchMock.mockRejectedValue(new Error("offline"));
 
-    await revokeDeviceKey("session-jwt");
+    await revokeDeviceKeys("session-jwt");
 
-    expect(await getCloudCredential("agntApiKey")).toBeNull();
+    expect(await getOrgKeys()).toEqual({});
+  });
+
+  it("sign-out clears the provisioning error the account left behind", async () => {
+    platformMock({ mint: () => jsonResponse({ error: "FORBIDDEN" }, 403) });
+    await provisionAfterLogin("session-jwt", "https://cloud.test", currentLoginGeneration());
+    expect(getPlatformKeyError()).toContain("403");
+
+    await revokeDeviceKeys("session-jwt");
+
+    expect(getPlatformKeyError()).toBeNull();
   });
 });
