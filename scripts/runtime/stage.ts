@@ -1,8 +1,7 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  CLI_RUNTIME_DEPENDENCIES,
   DEUS_APP_ID,
   DEUS_DB_FILENAME,
   DEUS_PREFERENCES_FILENAME,
@@ -31,26 +30,10 @@ export interface RuntimeManifest {
       backend: string;
     };
   };
-  nodeRuntimeDependencies: readonly string[];
 }
 
 function relativeFromProjectRoot(projectRoot: string, targetPath: string): string {
   return path.relative(projectRoot, targetPath).split(path.sep).join("/");
-}
-
-function assertCliRuntimeDependencies(projectRoot: string, log: (line: string) => void): void {
-  const cliPackagePath = path.join(projectRoot, "apps", "cli", "package.json");
-  const cliPackage = JSON.parse(readFileSync(cliPackagePath, "utf8")) as {
-    dependencies?: Record<string, string>;
-  };
-  const declared = new Set(Object.keys(cliPackage.dependencies ?? {}));
-  const missing = CLI_RUNTIME_DEPENDENCIES.filter((dependency) => !declared.has(dependency));
-
-  if (missing.length > 0) {
-    throw new Error(`apps/cli/package.json is missing runtime dependencies: ${missing.join(", ")}`);
-  }
-
-  log(`✓ CLI runtime dependencies declared (${CLI_RUNTIME_DEPENDENCIES.length})`);
 }
 
 export function stageRuntime(options: StageRuntimeOptions = {}): RuntimeManifest {
@@ -66,8 +49,6 @@ export function stageRuntime(options: StageRuntimeOptions = {}): RuntimeManifest
       throw new Error(`Missing ${label}: ${sourcePath}`);
     }
   }
-
-  assertCliRuntimeDependencies(projectRoot, log);
 
   if (options.preserveElectron === true) {
     rmSync(stagePaths.common.root, { recursive: true, force: true });
@@ -92,7 +73,6 @@ export function stageRuntime(options: StageRuntimeOptions = {}): RuntimeManifest
         backend: relativeFromProjectRoot(projectRoot, stagePaths.common.backendBundle),
       },
     },
-    nodeRuntimeDependencies: CLI_RUNTIME_DEPENDENCIES,
   };
 
   writeFileSync(stagePaths.manifest, JSON.stringify(manifest, null, 2) + "\n");

@@ -25,6 +25,8 @@ const external = [
   "device-use",
 ];
 
+const IMPORT_META_URL = "__deusBundleUrl";
+
 const result = Bun.spawnSync({
   cmd: [
     "bun",
@@ -34,6 +36,15 @@ const result = Bun.spawnSync({
     "--format=cjs",
     "--sourcemap=none",
     `--outfile=${path.join(backendDir, "dist/server.bundled.cjs")}`,
+    // `import.meta.url` (createRequire in lib/sqlite.ts and pty.service.ts)
+    // has no meaning in CommonJS: Bun 1.2 leaves it as written, which Node
+    // cannot parse, and Bun 1.3 writes in the build machine's path, from
+    // which the external packages are not found. Give it the bundle's own
+    // URL, so they resolve from wherever the bundle is installed.
+    "--define",
+    `import.meta.url=${IMPORT_META_URL}`,
+    "--banner",
+    `var ${IMPORT_META_URL} = require("node:url").pathToFileURL(__filename).href;`,
     ...external.flatMap((dependency) => ["--external", dependency]),
   ],
   stdout: "inherit",

@@ -8,14 +8,20 @@ type BetterSqlite3Constructor = new (
   options?: BetterSqlite3.Options
 ) => BetterSqlite3.Database;
 
+interface BunSqliteStatement {
+  get(...params: unknown[]): unknown;
+  all(...params: unknown[]): unknown[];
+  run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint };
+}
+
 type BunSqliteDatabaseConstructor = new (
   filename: string,
-  options?: { readonly?: boolean; create?: boolean; readwrite?: boolean }
+  options?: { readonly?: boolean; create?: boolean; readwrite?: boolean; strict?: boolean }
 ) => {
   close(): void;
   exec(sql: string): unknown;
   query(sql: string): { all(...params: unknown[]): unknown[] };
-  prepare(sql: string): unknown;
+  prepare(sql: string): BunSqliteStatement;
   transaction<T extends (...args: never[]) => unknown>(fn: T): T;
 };
 
@@ -48,12 +54,47 @@ function loadBunSqlite(): BunSqliteDatabaseConstructor {
   return mod.Database;
 }
 
-function withBetterSqlitePragmaShape(
+/**
+ * Make a Bun statement answer as a better-sqlite3 one:
+ * - `get` with no row is `undefined` (Bun says `null`; the backend tests
+ *   `=== undefined`);
+ * - `run().changes` counts the rows the statement itself changed. Bun counts
+ *   the rows its triggers changed as well (an UPDATE of one session reports 2,
+ *   its `updated_at` trigger included); better-sqlite3 reports SQLite's
+ *   `changes()`, as `changesNow` reads it here.
+ * A BLOB stays a `Uint8Array` under Bun (a Buffer under better-sqlite3): the
+ * schema has no BLOB column, and a reader of another database's BLOBs (the
+ * browser cookie import) takes `Buffer.from(value)`, which both give.
+ * `all`, `iterate` and the rest are Bun's own.
+ */
+function withBetterSqliteStatementShape(
+  statement: BunSqliteStatement,
+  changesNow: () => number
+): BunSqliteStatement {
+  const get = statement.get.bind(statement);
+  const run = statement.run.bind(statement);
+  statement.get = (...params) => get(...params) ?? undefined;
+  statement.run = (...params) => {
+    const result = run(...params);
+    return result.changes > 0 ? { ...result, changes: changesNow() } : result;
+  };
+  return statement;
+}
+
+function withBetterSqliteShape(
   db: InstanceType<BunSqliteDatabaseConstructor>
 ): BetterSqlite3.Database {
   const candidate = db as InstanceType<BunSqliteDatabaseConstructor> & {
     pragma?: (source: string) => unknown;
   };
+
+  const prepare = candidate.prepare.bind(candidate);
+  let changes: BunSqliteStatement | undefined;
+  const changesNow = () => {
+    changes ??= prepare("SELECT changes() AS changes");
+    return (changes.get() as { changes: number }).changes;
+  };
+  candidate.prepare = (sql: string) => withBetterSqliteStatementShape(prepare(sql), changesNow);
 
   candidate.pragma = (source: string) => {
     const trimmed = source.trim();
@@ -71,9 +112,13 @@ export function openSqliteDatabase(
   if (isBunRuntime()) {
     // deus-runtime is a Bun-compiled executable. Use Bun's built-in SQLite
     // there instead of crossing back into better-sqlite3's Node native addon.
+    // `strict` binds `{ id }` to `@id` and refuses a missing named parameter,
+    // as better-sqlite3 does; without it Bun binds NULL for both, silently.
     const BunDatabase = loadBunSqlite();
-    const bunOptions = options?.readonly ? { readonly: true } : { create: true, readwrite: true };
-    return withBetterSqlitePragmaShape(new BunDatabase(filename, bunOptions));
+    const bunOptions = options?.readonly
+      ? { readonly: true, strict: true }
+      : { create: true, readwrite: true, strict: true };
+    return withBetterSqliteShape(new BunDatabase(filename, bunOptions));
   }
 
   const Database = loadBetterSqlite3();

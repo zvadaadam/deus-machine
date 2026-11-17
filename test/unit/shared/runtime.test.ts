@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  CLI_RUNTIME_DEPENDENCIES,
   DEUS_APP_ID,
   DEUS_DB_FILENAME,
   resolveDefaultDataDir,
@@ -39,18 +38,5 @@ describe("runtime contract", () => {
     expect(resolveDefaultDataDir({ platform: "linux", homeDir: "/home/deus" })).toBe(
       "/home/deus/.local/share/deus"
     );
-  });
-
-  it("declares the runtime packages the published CLI must carry", () => {
-    expect(CLI_RUNTIME_DEPENDENCIES).toEqual([
-      "@anthropic-ai/claude-agent-sdk",
-      "@hono/node-server",
-      "@napi-rs/canvas",
-      "@sentry/node",
-      "agent-browser",
-      "better-sqlite3",
-      "node-pty",
-      "ws",
-    ]);
   });
 });
