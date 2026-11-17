@@ -153,22 +153,3 @@ export async function callSimBridge(
     );
   });
 }
-
-export async function isBridgeAvailable(
-  options?: SimBridgeCallOptions
-): Promise<{ available: boolean; reason?: string }> {
-  if (!findBridgePath()) {
-    return {
-      available: false,
-      reason: "Binary not built. Run: cd native && swift build -c release",
-    };
-  }
-
-  try {
-    const response = await callSimBridge({ command: "doctor" }, options);
-    if (response.success) return { available: true };
-    return { available: false, reason: response.error?.message ?? "Unknown issue" };
-  } catch (err) {
-    return { available: false, reason: err instanceof Error ? err.message : String(err) };
-  }
-}

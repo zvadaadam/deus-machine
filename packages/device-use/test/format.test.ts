@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatCompact, formatTree } from "../src/engine/snapshot/format.js";
+import { formatTree } from "../src/engine/snapshot/format.js";
 import { buildSnapshot } from "../src/engine/snapshot/build.js";
 import type { AccessibilityNode } from "../src/engine/types.js";
 
@@ -42,23 +42,5 @@ describe("formatTree", () => {
     const text = formatTree(snap.tree);
     expect(text).toContain("Button");
     expect(text).toContain('"X"');
-  });
-});
-
-describe("formatCompact", () => {
-  test("one line per ref, with ref/type/label/coords", () => {
-    const snap = buildSnapshot([
-      n({ type: "Button", label: "Sign In", center: { x: 100, y: 200 } }),
-    ]);
-    const line = formatCompact(snap.refs);
-    expect(line).toMatch(/^@e1 Button "Sign In" @\(100,200\)$/);
-  });
-
-  test("truncates long labels", () => {
-    const long = "a".repeat(100);
-    const snap = buildSnapshot([n({ type: "Button", label: long })]);
-    const line = formatCompact(snap.refs);
-    expect(line.length).toBeLessThan(120);
-    expect(line).toContain("…");
   });
 });

@@ -1,18 +1,4 @@
-import type { RefEntry, SnapshotNode } from "../types.js";
-
-/** Flat compact view — one interactive element per line. */
-export function formatCompact(entries: RefEntry[]): string {
-  return entries
-    .map((e) => {
-      const label = e.label ? ` "${truncate(e.label, 60)}"` : "";
-      const value = e.value ? ` [${truncate(e.value, 40)}]` : "";
-      const id = e.identifier ? ` #${e.identifier}` : "";
-      const coords = `@(${Math.round(e.center.x)},${Math.round(e.center.y)})`;
-      const disabled = e.enabled ? "" : " (disabled)";
-      return `${e.ref} ${e.type}${label}${value}${id} ${coords}${disabled}`;
-    })
-    .join("\n");
-}
+import type { SnapshotNode } from "../types.js";
 
 /**
  * Indented tree view.

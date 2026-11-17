@@ -1,5 +1,3 @@
-import type { z } from "zod";
-
 // ---------------------------------------------------------------------------
 // Command execution
 // ---------------------------------------------------------------------------
@@ -18,46 +16,6 @@ export interface ExecResult {
 }
 
 export type CommandExecutor = (command: string[], opts?: ExecOptions) => Promise<ExecResult>;
-
-// ---------------------------------------------------------------------------
-// Command definition
-// ---------------------------------------------------------------------------
-
-export interface CommandDefinition<TParams = unknown> {
-  name: string;
-  aliases?: string[];
-  description: string;
-  usage: string;
-  examples?: string[];
-  schema: z.ZodType<TParams>;
-  handler: (params: TParams, ctx: CommandContext) => Promise<CommandResult>;
-}
-
-export interface CommandContext {
-  executor: CommandExecutor;
-  flags: GlobalFlags;
-}
-
-export interface GlobalFlags {
-  json: boolean;
-  verbose: boolean;
-  simulator?: string;
-  noColor: boolean;
-  timeoutMs?: number;
-}
-
-export interface CommandResult {
-  success: boolean;
-  data?: unknown;
-  message?: string;
-  nextSteps?: NextStep[];
-  warnings?: string[];
-}
-
-export interface NextStep {
-  command: string;
-  label: string;
-}
 
 // ---------------------------------------------------------------------------
 // Accessibility tree
@@ -168,35 +126,6 @@ export interface AppInfo {
   type: AppType;
   bundlePath?: string;
 }
-
-export interface AppState {
-  bundleId: string;
-  installed: boolean;
-  running: boolean;
-  pid?: number;
-}
-
-// ---------------------------------------------------------------------------
-// Privacy / permissions
-// ---------------------------------------------------------------------------
-
-/** Services supported by `simctl privacy`. */
-export type PermissionService =
-  | "all"
-  | "calendar"
-  | "contacts-limited"
-  | "contacts"
-  | "location"
-  | "location-always"
-  | "photos-add"
-  | "photos"
-  | "media-library"
-  | "microphone"
-  | "motion"
-  | "reminders"
-  | "siri";
-
-export type PermissionAction = "grant" | "revoke" | "reset";
 
 // ---------------------------------------------------------------------------
 // simbridge protocol

@@ -1,13 +1,5 @@
-import type {
-  AppInfo,
-  AppState,
-  CommandExecutor,
-  ExecOptions,
-  PermissionAction,
-  PermissionService,
-  Simulator,
-} from "./types.js";
-import { SimctlError, ValidationError } from "./errors.js";
+import type { AppInfo, CommandExecutor, Simulator } from "./types.js";
+import { SimctlError } from "./errors.js";
 
 interface SimctlListOutput {
   devices: Record<string, SimctlDevice[]>;
@@ -37,10 +29,9 @@ function runtimeName(runtimeId: string): string {
 async function runSimctl(
   executor: CommandExecutor,
   cmd: string[],
-  errorMsg: string,
-  execOpts?: ExecOptions
+  errorMsg: string
 ): Promise<string> {
-  const result = await executor(["xcrun", "simctl", ...cmd], execOpts);
+  const result = await executor(["xcrun", "simctl", ...cmd]);
   if (!result.success) {
     throw new SimctlError(errorMsg, result.exitCode, result.error);
   }
@@ -73,41 +64,6 @@ export async function listSimulators(
   );
 }
 
-export async function resolveSimulator(
-  executor: CommandExecutor,
-  nameOrUdid: string
-): Promise<Simulator> {
-  const simulators = await listSimulators(executor);
-  const uuidPattern = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i;
-
-  const isUuid = uuidPattern.test(nameOrUdid);
-  const match = simulators.find((s) => (isUuid ? s.udid : s.name) === nameOrUdid);
-
-  if (!match) {
-    throw new SimctlError(
-      `Simulator not found: "${nameOrUdid}". Run "device-use list" to see available simulators.`
-    );
-  }
-
-  return match;
-}
-
-export async function bootSimulator(executor: CommandExecutor, udid: string): Promise<void> {
-  const result = await executor(["xcrun", "simctl", "boot", udid]);
-  if (!result.success) {
-    if (result.error?.includes("current state: Booted")) return;
-    throw new SimctlError(`Failed to boot simulator ${udid}`, result.exitCode, result.error);
-  }
-}
-
-export async function shutdownSimulator(executor: CommandExecutor, udid: string): Promise<void> {
-  const result = await executor(["xcrun", "simctl", "shutdown", udid]);
-  if (!result.success) {
-    if (result.error?.includes("current state: Shutdown")) return;
-    throw new SimctlError(`Failed to shutdown simulator ${udid}`, result.exitCode, result.error);
-  }
-}
-
 export async function installApp(
   executor: CommandExecutor,
   udid: string,
@@ -131,14 +87,6 @@ export async function launchApp(
   return output.trim().split(":").pop()?.trim() ?? "";
 }
 
-export async function terminateApp(
-  executor: CommandExecutor,
-  udid: string,
-  bundleId: string
-): Promise<void> {
-  await runSimctl(executor, ["terminate", udid, bundleId], `Failed to terminate ${bundleId}`);
-}
-
 export async function takeScreenshot(
   executor: CommandExecutor,
   udid: string,
@@ -153,31 +101,6 @@ export async function takeScreenshot(
     outputPath,
   ];
   await runSimctl(executor, cmd, "Failed to take screenshot");
-}
-
-export async function openUrl(executor: CommandExecutor, udid: string, url: string): Promise<void> {
-  await runSimctl(executor, ["openurl", udid, url], `Failed to open URL: ${url}`);
-}
-
-export async function uninstallApp(
-  executor: CommandExecutor,
-  udid: string,
-  bundleId: string
-): Promise<void> {
-  await runSimctl(executor, ["uninstall", udid, bundleId], `Failed to uninstall ${bundleId}`);
-}
-
-export async function getBootedSimulator(
-  executor: CommandExecutor
-): Promise<Simulator | undefined> {
-  const simulators = await listSimulators(executor, { booted: true });
-  return simulators[0];
-}
-
-export async function eraseSimulator(executor: CommandExecutor, udid: string): Promise<void> {
-  await runSimctl(executor, ["erase", udid], `Failed to erase simulator ${udid}`, {
-    timeout: 30_000,
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -240,67 +163,6 @@ export async function listApps(
 
   apps.sort((a, b) => a.name.localeCompare(b.name));
   return apps;
-}
-
-/**
- * Inspect an app's install + running state.
- * Running detection greps `launchctl list` for `UIKitApplication:<bundleId>`.
- */
-export async function getAppState(
-  executor: CommandExecutor,
-  udid: string,
-  bundleId: string
-): Promise<AppState> {
-  // Install check: get_app_container succeeds only if the app is installed.
-  const container = await executor(["xcrun", "simctl", "get_app_container", udid, bundleId]);
-  const installed = container.success;
-
-  // Running check: spawn launchctl list inside the sim and look for the bundle.
-  const list = await executor(["xcrun", "simctl", "spawn", udid, "launchctl", "list"]);
-  let running = false;
-  let pid: number | undefined;
-
-  if (list.success) {
-    const needle = `UIKitApplication:${bundleId}`;
-    for (const line of list.output.split("\n")) {
-      const idx = line.indexOf(needle);
-      if (idx === -1) continue;
-      // Line format: "<pid>\t<status>\t<label>" — pid is "-" when not running
-      const parts = line.split(/\s+/);
-      const pidStr = parts[0];
-      if (pidStr && pidStr !== "-") {
-        const n = Number(pidStr);
-        if (Number.isFinite(n)) {
-          running = true;
-          pid = n;
-          break;
-        }
-      }
-    }
-  }
-
-  return { bundleId, installed, running, ...(pid !== undefined ? { pid } : {}) };
-}
-
-/**
- * Grant, revoke, or reset a privacy permission for an app.
- * `bundleId` is required for grant/revoke; optional for reset (omit to reset all).
- */
-export async function setPermission(
-  executor: CommandExecutor,
-  udid: string,
-  action: PermissionAction,
-  service: PermissionService,
-  bundleId?: string
-): Promise<void> {
-  if ((action === "grant" || action === "revoke") && !bundleId) {
-    throw new ValidationError(`${action} requires a bundle identifier`);
-  }
-
-  const args = ["privacy", udid, action, service];
-  if (bundleId) args.push(bundleId);
-
-  await runSimctl(executor, args, `Failed to ${action} ${service} for ${bundleId ?? "all apps"}`);
 }
 
 function shellQuote(s: string): string {
