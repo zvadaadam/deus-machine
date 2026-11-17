@@ -95,7 +95,7 @@ function findDevNode(...searchPaths: string[]): string {
   for (const searchPath of searchPaths) {
     for (const dir of searchPath.split(delimiter)) {
       if (!dir) continue;
-      const candidate = join(dir, "node");
+      const candidate = join(dir, process.platform === "win32" ? "node.exe" : "node");
       if (isExecutableFile(candidate)) return candidate;
     }
   }
