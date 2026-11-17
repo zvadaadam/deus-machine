@@ -30,7 +30,6 @@ import {
   normalizePreviewPort,
   readStoredPreviewPort,
   storePreviewPort,
-  type CloudPreviewChatAddress,
 } from "../lib/cloudPreview";
 import { cloudPreviewActions, useCloudPreviewStore } from "../cloud/cloudPreviewStore";
 
@@ -59,8 +58,9 @@ export function CloudPreviewPanel({
   const [generation, setGeneration] = useState(0);
 
   // An address opened from the chat names a path too; choosing a port drops it.
-  // Only the path is kept: the host is always the current template's.
-  const [address, setAddress] = useState<CloudPreviewChatAddress | null>(null);
+  // Only the path is kept, in the store so it outlives this panel (which unmounts
+  // while the computer is replaced): the host is always the current template's.
+  const address = useCloudPreviewStore((s) => s.fromChat[workspace.id] ?? null);
   const url = useMemo(
     () => cloudPreviewAddress(template, port, address),
     [address, template, port]
@@ -76,7 +76,6 @@ export function CloudPreviewPanel({
     storePreviewPort(workspace.id, pending.port);
     setPort(pending.port);
     setDraft(String(pending.port));
-    setAddress({ port: pending.port, rest: pending.rest });
     setGeneration((g) => g + 1);
   }, [pending, workspace.id]);
 
@@ -117,7 +116,7 @@ export function CloudPreviewPanel({
       }
       setDraft(String(next));
       storePreviewPort(workspace.id, next);
-      setAddress(null);
+      cloudPreviewActions.portChosen(workspace.id);
       setPort(next);
     },
     [port, workspace.id]
