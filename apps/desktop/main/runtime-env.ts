@@ -1,23 +1,9 @@
 import { delimiter, join } from "path";
+import { BACKEND_CHILD_ENV_DENYLIST } from "../../../shared/lib/child-env";
 import { PACKAGED_SYSTEM_PATHS } from "../../../shared/runtime";
 
-export const PACKAGED_RUNTIME_ENV_DENYLIST = [
-  "AUTH_TOKEN",
-  "BUN_OPTIONS",
-  "DATABASE_PATH",
-  "DEUS_AUTH_TOKEN",
-  "DEUS_BUNDLED_BIN_DIR",
-  "DEUS_BACKEND_PORT",
-  "DEUS_DATA_DIR",
-  "DEUS_PACKAGED",
-  "DEUS_RESOURCES_PATH",
-  "ELECTRON_RUN_AS_NODE",
-  "DEUS_RUNTIME",
-  "DEUS_RUNTIME_COMMAND",
-  "DEUS_RUNTIME_EXECUTABLE",
-  "NODE_PATH",
-  "PORT",
-] as const;
+// Named for the packaging check (scripts/runtime/electron-builder-before-pack.cjs).
+export const PACKAGED_RUNTIME_ENV_DENYLIST = BACKEND_CHILD_ENV_DENYLIST;
 
 export function configurePackagedMainRuntimeEnv(options: {
   isPackaged: boolean;
