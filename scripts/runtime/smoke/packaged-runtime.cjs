@@ -77,11 +77,19 @@ async function smokeBackendCommands(port) {
     return;
   }
 
-  // The first simctl call on a fresh machine starts CoreSimulator, which can outlast the backend's 30 s.
-  await promisify(execFile)("xcrun", ["simctl", "list", "devices", "-j"], {
-    timeout: 120_000,
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  // The first simctl call on a fresh machine starts CoreSimulator, which can outlast the backend's
+  // 30 s. Where simctl itself does not answer, the backend's answer says nothing about the app.
+  try {
+    await promisify(execFile)("xcrun", ["simctl", "list", "devices", "-j"], {
+      timeout: 120_000,
+      maxBuffer: 64 * 1024 * 1024,
+    });
+  } catch (error) {
+    console.log(
+      `[runtime-smoke] packaged backend simulator command smoke skipped: simctl does not answer on this machine (${error.signal ?? error.code})`
+    );
+    return;
+  }
   const answer = await readFromBackend(port, "simListDevices", {}, 45_000);
   if (!Array.isArray(answer?.devices)) {
     throw new Error(`simListDevices returned unexpected payload: ${JSON.stringify(answer)}`);
