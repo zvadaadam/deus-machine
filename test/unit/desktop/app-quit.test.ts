@@ -33,6 +33,7 @@ vi.mock("electron", () => ({
     };
     on = vi.fn();
     loadFile = vi.fn();
+    loadURL = vi.fn();
     isDestroyed = () => false;
   },
   ipcMain: {
@@ -40,6 +41,8 @@ vi.mock("electron", () => ({
     on: vi.fn(),
   },
   shell: {},
+  protocol: { registerSchemesAsPrivileged: vi.fn(), handle: vi.fn() },
+  net: { fetch: vi.fn() },
 }));
 vi.mock("electron-updater", () => ({
   autoUpdater: Object.assign(new EventEmitter(), {
@@ -49,7 +52,6 @@ vi.mock("electron-updater", () => ({
 }));
 vi.mock("@electron-toolkit/utils", () => ({ is: { dev: false } }));
 vi.mock("../../../apps/desktop/main/backend-process", () => ({
-  CDP_PORT: "19222",
   spawnBackend: vi.fn().mockResolvedValue({ port: 12345, authToken: "fixture" }),
   stopBackend: mocks.stop,
 }));

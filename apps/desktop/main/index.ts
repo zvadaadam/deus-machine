@@ -16,7 +16,14 @@ import { app, BrowserWindow, shell } from "electron";
 import { join } from "path";
 import { homedir } from "os";
 import { is } from "@electron-toolkit/utils";
-import { spawnBackend, stopBackend, CDP_PORT } from "./backend-process";
+import { spawnBackend, stopBackend } from "./backend-process";
+import {
+  APP_URL,
+  originOf,
+  registerAppScheme,
+  rendererOrigin,
+  serveRenderer,
+} from "./app-protocol";
 import { registerNativeHandlers } from "./native-handlers";
 import { registerBrowserEmulationHandlers } from "./browser-emulation";
 import { registerBrowserCookieHandlers } from "./browser-cookies";
@@ -61,12 +68,11 @@ if (!app.requestSingleInstanceLock()) {
   process.exit(0);
 }
 
-// Enable Chrome DevTools Protocol so agent-browser can connect to IDE browser views
-// via CDP instead of spawning a separate Chrome process. Listens on 127.0.0.1 only.
-// Agent tools use `agent-browser --cdp <port>` to interact with the same browser
-// the user sees — shared cookies, real-time visibility of agent actions.
-app.commandLine.appendSwitch("remote-debugging-port", CDP_PORT);
-app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
+// The window loads from app://deus (app-protocol.ts); the scheme must be
+// registered before `ready`. No remote-debugging port is opened: it would let
+// any process on this computer drive the window, and agents' browser tools run
+// their own browser.
+registerAppScheme();
 
 let mainWindow: BrowserWindow | null = null;
 let quitState: "running" | "stopping" | "stopped" = "running";
@@ -218,12 +224,16 @@ async function createWindow(): Promise<void> {
     return { action: "deny" };
   });
 
+  // The window's origin: Vite's in dev, app://deus otherwise (the one the
+  // backend was told to trust, backend-process.ts).
+  const windowOrigin = rendererOrigin({
+    isDev: is.dev,
+    rendererUrl: process.env.ELECTRON_RENDERER_URL,
+  });
+
   // Block top-level navigation to external URLs (security: prevent redirect hijacks)
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    const appUrl = is.dev
-      ? process.env.ELECTRON_RENDERER_URL
-      : `file://${join(__dirname, "../renderer")}`;
-    if (appUrl && url.startsWith(appUrl)) return; // allow app navigation
+    if (originOf(url) === windowOrigin) return; // allow app navigation
     event.preventDefault();
     try {
       const parsed = new URL(url);
@@ -248,11 +258,12 @@ async function createWindow(): Promise<void> {
     mainWindow?.webContents.send("fullscreen-change", { isFullscreen: false });
   });
 
-  // Dev: load Vite dev server. Prod: load built files.
+  // Dev: load Vite dev server. Prod: the built files, at app://deus.
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
   } else {
-    mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
+    serveRenderer(join(__dirname, "../renderer"));
+    mainWindow.loadURL(APP_URL);
   }
 }
 

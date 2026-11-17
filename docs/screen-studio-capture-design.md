@@ -75,7 +75,7 @@ flowchart LR
 ## Deus integration
 
 - `apps/agent-server/agents/deus-tools/recording.ts` imports the package's public entry (`packages/screen-studio/src/index`), the same API other hosts use.
-- `recording_start` records the session's browser tab — the managed BrowserView in Electron, otherwise the tab agent-browser drives, found through `agent-browser get cdp-url` — or, with `target: "simulator"`, the session's simulator. The global `AGENT_BROWSER_STREAM_PORT=9223`, which every session shared, is gone.
+- `recording_start` records the session's browser tab, the one agent-browser drives for that session, found through `agent-browser get cdp-url` — or, with `target: "simulator"`, the session's simulator. The global `AGENT_BROWSER_STREAM_PORT=9223`, which every session shared, is gone.
 - Browser actions come from the page observer, so browser tools report nothing. Simulator taps, swipes, typing and key presses are reported by the simulator tools with the points they acted on (`recordSimulatorAction`). Typed text is never read, only counted.
 - The tools themselves come from the package's `createAgentTools`; Deus supplies the source, the bundle directory and element-ref lookup. New: `recording_focus` (by element ref) and `recording_hold`. `recording_stop` renders a preset and returns the shape the chat's recording card already renders, plus the render's warnings.
 

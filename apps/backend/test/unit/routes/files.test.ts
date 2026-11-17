@@ -76,6 +76,16 @@ describe("GET /workspaces/:id/file-preview", () => {
     );
   });
 
+  it("sandboxes a repository's HTML so its scripts get no origin of the backend's", async () => {
+    const res = await app.request("/workspaces/ws-123/file-preview?path=site/index.html");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(res.headers.get("content-security-policy")).toBe("sandbox allow-scripts");
+
+    const image = await app.request("/workspaces/ws-123/file-preview?path=assets/icon.png");
+    expect(image.headers.get("content-security-policy")).toBeNull();
+  });
+
   it("refuses a cloud workspace in words instead of reading the backend's own folder", async () => {
     mockWithWorkspace.mockImplementationOnce((c: any, next: any) => {
       c.set("workspace", { id: "ws-cloud", kind: "cloud", root_path: null, slug: "cloud-ws" });

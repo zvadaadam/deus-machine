@@ -30,6 +30,9 @@ const { testDb, TEST_DB_PATH, TEST_DIR } = vi.hoisted(() => {
   fs.mkdirSync(testDir, { recursive: true });
   const dbPath = path.join(testDir, "deus.db");
 
+  // As the desktop app starts it: its window is the one page it trusts.
+  process.env.DEUS_WEB_ORIGINS = "app://deus";
+
   const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
@@ -154,6 +157,35 @@ describe("WebSocket: localhost auto-auth", () => {
     } finally {
       ws.close();
     }
+  });
+});
+
+describe("WebSocket: who may open a localhost socket", () => {
+  /** Open /ws from loopback with these headers: "connected", or the HTTP status that refused it. */
+  async function open(headers: Record<string, string>): Promise<string | number> {
+    const socket = new RemoteWebSocket(`ws://127.0.0.1:${port}/ws`, { headers });
+    try {
+      return await new Promise<string | number>((resolve, reject) => {
+        socket.once("message", (data) => resolve(JSON.parse(String(data)).type));
+        socket.once("unexpected-response", (_req, res) => resolve(res.statusCode ?? 0));
+        socket.once("error", reject);
+      });
+    } finally {
+      socket.terminate();
+    }
+  }
+
+  it("admits the app's window and callers that are not a page", async () => {
+    expect(await open({ Origin: "app://deus" })).toBe("connected");
+    expect(await open({})).toBe("connected");
+  });
+
+  it("refuses any other page, and a name rebound to this computer, before upgrading", async () => {
+    expect(await open({ Origin: "https://evil.example" })).toBe(403);
+    expect(await open({ Origin: "null" })).toBe(403);
+    expect(await open({ Origin: "file://" })).toBe(403);
+    expect(await open({ Origin: `http://127.0.0.1:${port}` })).toBe(403);
+    expect(await open({ Host: `evil.example:${port}` })).toBe(403);
   });
 });
 

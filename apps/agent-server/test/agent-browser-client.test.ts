@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockExecFile, mockSpawn } = vi.hoisted(() => ({
-  mockExecFile: vi.fn(),
-  mockSpawn: vi.fn(),
-}));
+const { mockExecFile, mockSpawn } = vi.hoisted(() => {
+  // Before the client loads (imports are hoisted above plain statements), as an
+  // older desktop app set it: it must not matter.
+  process.env.CDP_PORT = "19222";
+  return { mockExecFile: vi.fn(), mockSpawn: vi.fn() };
+});
 
 vi.mock("child_process", () => ({
   execFile: mockExecFile,
@@ -17,7 +19,7 @@ vi.mock("@shared/lib/cli-path", () => ({
   resolveCliExecutable: vi.fn((tool: string) => `/__deus_missing_bundled_bin__/${tool}`),
 }));
 
-import { execAgentBrowser } from "../agents/deus-tools/agent-browser-client";
+import { execAgentBrowser, getRecordingTarget } from "../agents/deus-tools/agent-browser-client";
 
 const originalEnv = { ...process.env };
 
@@ -66,5 +68,36 @@ describe("agent-browser client", () => {
     expect(options.env.ELECTRON_RUN_AS_NODE).toBeUndefined();
     expect(options.env.NODE_PATH).toBeUndefined();
     expect(options.env.PORT).toBeUndefined();
+  });
+
+  it("never attaches to a DevTools port: every command runs in the session's own browser", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await execAgentBrowser("session-1", ["open", "https://example.com"]);
+    expect(mockExecFile.mock.calls[0][1]).toEqual(["open", "https://example.com"]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("records the tab agent-browser drives for the session, found through agent-browser itself", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    mockExecFile.mockImplementation((_binary, args: string[], _options, callback) => {
+      const reply =
+        args[1] === "cdp-url"
+          ? { success: true, data: { cdpUrl: "ws://127.0.0.1:41000/devtools/page/A" } }
+          : { success: true, data: { url: "https://example.com/" } };
+      callback(null, `${JSON.stringify(reply)}\n`, "");
+      return { on: vi.fn() };
+    });
+
+    await expect(getRecordingTarget("session-1")).resolves.toEqual({
+      endpoint: "ws://127.0.0.1:41000/devtools/page/A",
+      url: "https://example.com/",
+    });
+    expect(mockExecFile.mock.calls.map((call) => call[1])).toEqual([
+      ["get", "cdp-url", "--json"],
+      ["get", "url", "--json"],
+    ]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 });

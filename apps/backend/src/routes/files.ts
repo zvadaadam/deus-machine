@@ -88,16 +88,21 @@ app.get("/workspaces/:id/file-preview", withWorkspace, (c) => {
   const mimeType = ALLOWED_WORKSPACE_PREVIEW_EXT[ext];
   if (!mimeType) throw new ValidationError("Unsupported preview file type");
 
+  const headers: Record<string, string> = {
+    "Content-Type": mimeType,
+    "Content-Length": String(stat.size),
+    "Content-Disposition": `inline; filename="${path.basename(realPath).replace(/"/g, "")}"`,
+    "Cache-Control": "private, max-age=60",
+  };
+  // A repository's HTML runs here, on the backend's own origin, where a
+  // same-origin read carries no Origin for the gate to refuse. The sandbox gives
+  // it an opaque origin instead: its scripts run, but what it asks the backend
+  // is sent as `Origin: null` and refused (middleware/loopback-origin-gate.ts).
+  if (mimeType.startsWith("text/html")) {
+    headers["Content-Security-Policy"] = "sandbox allow-scripts";
+  }
   const stream = fs.createReadStream(realPath);
-  return new Response(toResponseBody(stream), {
-    status: 200,
-    headers: {
-      "Content-Type": mimeType,
-      "Content-Length": String(stat.size),
-      "Content-Disposition": `inline; filename="${path.basename(realPath).replace(/"/g, "")}"`,
-      "Cache-Control": "private, max-age=60",
-    },
-  });
+  return new Response(toResponseBody(stream), { status: 200, headers });
 });
 
 /**

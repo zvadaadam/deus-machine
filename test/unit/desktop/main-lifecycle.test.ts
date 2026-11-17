@@ -13,6 +13,10 @@ const mocks = vi.hoisted(() => ({
   showMessageBox: vi.fn(),
   quit: vi.fn(),
   setTrayStatus: vi.fn(),
+  appendSwitch: vi.fn(),
+  registerSchemes: vi.fn(),
+  handleProtocol: vi.fn(),
+  openExternal: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
@@ -20,7 +24,7 @@ vi.mock("electron", () => ({
     isPackaged: true,
     setPath: vi.fn(),
     requestSingleInstanceLock: () => true,
-    commandLine: { appendSwitch: vi.fn() },
+    commandLine: { appendSwitch: mocks.appendSwitch },
     whenReady: () => Promise.resolve(),
     on: (event: string, handler: (...args: unknown[]) => void) => mocks.events.set(event, handler),
     quit: mocks.quit,
@@ -35,6 +39,7 @@ vi.mock("electron", () => ({
     }
     on = (event: string, handler: () => void) => this.handlers.set(event, handler);
     loadFile = vi.fn();
+    loadURL = vi.fn();
     isDestroyed = () => this.destroyed;
     // A destroyed BrowserWindow throws on use, as Electron's does.
     private live() {
@@ -46,12 +51,13 @@ vi.mock("electron", () => ({
   },
   dialog: { showMessageBox: mocks.showMessageBox },
   ipcMain: { handle: vi.fn(), on: vi.fn() },
-  shell: { showItemInFolder: vi.fn() },
+  shell: { showItemInFolder: vi.fn(), openExternal: mocks.openExternal },
+  protocol: { registerSchemesAsPrivileged: mocks.registerSchemes, handle: mocks.handleProtocol },
+  net: { fetch: vi.fn() },
 }));
 vi.mock("electron-updater", () => ({ autoUpdater: new EventEmitter() }));
 vi.mock("@electron-toolkit/utils", () => ({ is: { dev: false } }));
 vi.mock("../../../apps/desktop/main/backend-process", () => ({
-  CDP_PORT: "19222",
   spawnBackend: mocks.spawn,
   stopBackend: mocks.stop,
 }));
@@ -180,4 +186,46 @@ it("tells the tray when a backend starts and when it exits", async () => {
   expect(mocks.setTrayStatus).toHaveBeenLastCalledWith("running");
   hooks.onExit("backend", 1, null);
   expect(mocks.setTrayStatus).toHaveBeenLastCalledWith("offline");
+});
+
+it("loads the packaged window from app://deus and opens no debugging port", async () => {
+  mocks.spawn.mockResolvedValue({ port: 12345, authToken: "fixture" });
+  await import("../../../apps/desktop/main/index");
+  await vi.waitFor(() => expect(mocks.windows).toHaveLength(1));
+  const win = mocks.windows[0] as unknown as {
+    loadURL: ReturnType<typeof vi.fn>;
+    loadFile: ReturnType<typeof vi.fn>;
+    webContents: { on: ReturnType<typeof vi.fn> };
+  };
+
+  // Registered before ready, as Electron requires, with an origin and fetch.
+  expect(mocks.registerSchemes).toHaveBeenCalledWith([
+    { scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true } },
+  ]);
+  expect(mocks.handleProtocol).toHaveBeenCalledWith("app", expect.any(Function));
+  expect(win.loadURL).toHaveBeenCalledWith("app://deus/");
+  expect(win.loadFile).not.toHaveBeenCalled();
+  expect(mocks.appendSwitch).not.toHaveBeenCalledWith("remote-debugging-port", expect.anything());
+  expect(mocks.appendSwitch).not.toHaveBeenCalledWith(
+    "remote-debugging-address",
+    expect.anything()
+  );
+
+  // The window navigates within its own origin; anything else is refused, and
+  // a web page goes to the system browser.
+  const willNavigate = win.webContents.on.mock.calls.find(
+    ([event]) => event === "will-navigate"
+  )![1] as (event: { preventDefault: () => void }, url: string) => void;
+  const navigate = (url: string) => {
+    const preventDefault = vi.fn();
+    willNavigate({ preventDefault }, url);
+    return preventDefault.mock.calls.length === 0;
+  };
+  expect(navigate("app://deus/index.html")).toBe(true);
+  expect(navigate("app://deus.evil/")).toBe(false);
+  expect(
+    navigate("file:///Applications/Deus.app/Contents/Resources/app.asar/out/renderer/index.html")
+  ).toBe(false);
+  expect(navigate("https://example.com/")).toBe(false);
+  expect(mocks.openExternal).toHaveBeenCalledWith("https://example.com/");
 });

@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getDevStagedCliDirectory } from "../../shared/lib/cli-path";
+import { LOOPBACK_WEB_ORIGINS, WEB_ORIGINS_ENV } from "../../shared/web-origins";
 
 const runtimeDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(runtimeDir, "../..");
@@ -58,6 +59,8 @@ function startBackend(): Promise<{ process: ChildProcess; port: number } | null>
       env: {
         ...process.env,
         PORT: "0",
+        // The web app Vite serves (port 1420, or the next free one).
+        [WEB_ORIGINS_ENV]: LOOPBACK_WEB_ORIGINS,
         DEUS_BUNDLED_BIN_DIR: getDevStagedCliDirectory(projectRoot) ?? "",
       },
     });
