@@ -4,7 +4,8 @@
  * Exposes a typed API to the renderer via contextBridge.
  * This is the ONLY way the renderer communicates with the main process.
  *
- * Security: contextIsolation=true, nodeIntegration=false, sandbox=false (ESM preload requires sandbox=false).
+ * Security: contextIsolation=true, nodeIntegration=false, sandboxed (so this
+ * builds to one CommonJS file that requires only `electron`).
  * The renderer has zero direct access to Node.js or Electron APIs.
  *
  * The generic invoke/on bridge is guarded by an allowlist so the renderer

@@ -28,6 +28,7 @@ vi.mock("electron", () => ({
     whenReady: () => Promise.resolve(),
     on: (event: string, handler: (...args: unknown[]) => void) => mocks.events.set(event, handler),
     quit: mocks.quit,
+    enableSandbox: vi.fn(),
   },
   autoUpdater: new EventEmitter(),
   BrowserWindow: class {

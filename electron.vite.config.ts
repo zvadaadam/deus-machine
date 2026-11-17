@@ -81,7 +81,8 @@ export default defineConfig({
   },
 
   // ---------------------------------------------------------------------------
-  // Preload scripts (apps/desktop/preload/)
+  // Preload scripts (apps/desktop/preload/). Renderers are sandboxed, and a
+  // sandboxed preload is one CommonJS file that requires only `electron`.
   // ---------------------------------------------------------------------------
   preload: {
     build: {
@@ -91,6 +92,7 @@ export default defineConfig({
           index: resolve(__dirname, "apps/desktop/preload/index.ts"),
           "browser-preload": resolve(__dirname, "apps/desktop/preload/browser-preload.ts"),
         },
+        output: { format: "cjs", entryFileNames: "[name].cjs" },
       },
       outDir: "out/preload",
     },

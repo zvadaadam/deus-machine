@@ -72,6 +72,10 @@ if (!app.requestSingleInstanceLock()) {
 // their own browser.
 registerAppScheme();
 
+// Every renderer runs in Chromium's sandbox: the window, and each Browser tab
+// guest. Their preloads are single CommonJS files that require only `electron`.
+app.enableSandbox();
+
 let mainWindow: BrowserWindow | null = null;
 let quitState: "running" | "stopping" | "stopped" = "running";
 
@@ -96,10 +100,9 @@ async function createWindow(): Promise<void> {
       ? { icon: join(__dirname, "../../resources/icons/icon.png") }
       : {}),
     webPreferences: {
-      preload: join(__dirname, "../preload/index.mjs"),
+      preload: join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false, // ESM preload requires sandbox: false (package.json "type": "module")
       webviewTag: true, // Phase 1 of WebContentsView→<webview> migration — enables <webview> for guest pages
     },
   });
@@ -118,7 +121,7 @@ async function createWindow(): Promise<void> {
   //   3. Strip disallowed guest-supplied webview attributes from params.
   const ALLOWED_WEBVIEW_PARAM_KEYS = new Set(["src", "partition", "useragent"]);
   mainWindow.webContents.on("will-attach-webview", (_event, webPreferences, params) => {
-    webPreferences.preload = join(__dirname, "../preload/browser-preload.mjs");
+    webPreferences.preload = join(__dirname, "../preload/browser-preload.cjs");
     webPreferences.contextIsolation = true;
     webPreferences.nodeIntegration = false;
 
