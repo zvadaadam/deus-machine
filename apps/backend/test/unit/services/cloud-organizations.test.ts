@@ -9,6 +9,7 @@ vi.mock("../../../src/services/query-engine", () => ({ invalidate }));
 import {
   getCloudOrganizations,
   getCloudWorkspaceUserId,
+  getGithubApp,
   refreshCloudOrganizations,
   resetCloudOrganizationsForTests,
 } from "../../../src/services/cloud-settings.service";
@@ -256,5 +257,41 @@ describe("cloudOrganizations, the live value", () => {
     // An organization the list lacks is asked about once more before it is refused.
     await expect(getCloudWorkspaceUserId("org_x")).rejects.toThrow("organization changed");
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("the organization's GitHub App", () => {
+  beforeEach(() =>
+    setCloudRuntimeCredentials({
+      deusCloudUrl: "https://cloud.test",
+      deusCloudSessionToken: session("alice"),
+    })
+  );
+
+  it("reads the installations, then what they reach", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        Response.json({
+          installations: [{ github_installation_identifier: 7, account_login: "acme" }],
+          app_slug: "deus",
+        })
+      )
+      .mockResolvedValueOnce(Response.json({ repos: ["acme/app"] }));
+    expect(await getGithubApp("org_b")).toEqual({
+      configured: true,
+      signedIn: true,
+      installations: [{ installationId: 7, accountLogin: "acme" }],
+      appSlug: "deus",
+      accessibleRepos: ["acme/app"],
+    });
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      "https://cloud.test/orgs/org_b/github/installation",
+      "https://cloud.test/orgs/org_b/github/accessible-repos",
+    ]);
+  });
+
+  it.each([503, 404])("is not configured when Deus Cloud answers %s", async (status) => {
+    fetchMock.mockResolvedValueOnce(new Response("Unavailable", { status }));
+    expect(await getGithubApp("org_b")).toMatchObject({ configured: false, signedIn: true });
   });
 });

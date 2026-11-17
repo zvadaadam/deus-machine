@@ -27,9 +27,6 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "exit_onboarding_mode",
 
   // CLI / environment checks
-  "check_cli_tool",
-  "start_gh_auth_login",
-  "logout_gh_auth",
   "get_installed_apps",
   "open_in_app",
 
@@ -107,16 +104,9 @@ const electronAPI = {
   // ---------------------------------------------------------------------------
 
   getDeusCloudSession: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:get_session"),
-  mintDeusCloudDirectToken: (providerSessionId: string): Promise<unknown> =>
-    ipcRenderer.invoke("deus_cloud:mint_direct_token", providerSessionId),
   startDeusCloudLogin: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:start_login"),
   signOutDeusCloud: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:sign_out"),
   retryDeusCloudProvision: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:retry_provision"),
-  // An organization id, or nothing for the default organization.
-  getGithubAppStatus: (orgId?: string): Promise<unknown> =>
-    ipcRenderer.invoke("deus_cloud:github_app_status", orgId),
-  installGithubApp: (orgId?: string): Promise<unknown> =>
-    ipcRenderer.invoke("deus_cloud:github_app_install", orgId),
   onDeusCloudAuthChanged: (callback: (session: unknown) => void): (() => void) => {
     const listener = (_e: Electron.IpcRendererEvent, session: unknown): void => callback(session);
     ipcRenderer.on("deus_cloud:changed", listener);

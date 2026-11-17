@@ -23,7 +23,12 @@ import {
   createCloudWorkspace,
   retryCloudWorkspace,
 } from "../services/cloud-workspace-init.service";
-import { getGhIdentity } from "../services/gh-identity.service";
+import {
+  getGhIdentity,
+  ghLoginDone,
+  logoutGh,
+  startGhLogin,
+} from "../services/gh-identity.service";
 import { resolveNode } from "../services/node/driver";
 import { fetchAndApplyPrStatus } from "../services/pr-snapshot.service";
 import {
@@ -190,6 +195,9 @@ export default [
     return fetchAndApplyPrStatus(workspace.id, workspacePath);
   }),
   handle(api.ghStatus, () => getGhIdentity()),
+  handle(api.ghLogin, startGhLogin),
+  handle(api.ghLoginDone, ghLoginDone),
+  handle(api.ghLogout, logoutGh),
 
   handle(api.createWorkspace, createWorkspace),
   handle(api.updateWorkspace, updateWorkspace),

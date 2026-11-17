@@ -4,9 +4,12 @@
  */
 
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { produce } from "immer";
 import { api } from "@shared/api";
+import { toast } from "sonner";
+import { getErrorMessage } from "@shared/lib/errors";
+import { native } from "@/platform";
 import { call } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
@@ -188,6 +191,37 @@ export function useGhStatus() {
     staleTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
   });
+}
+
+/**
+ * Sign this computer's GitHub CLI in (`ghLogin`): GitHub's page opens, and
+ * `page` holds the one-time code to enter there (and that page, `openPage`)
+ * until gh is done, for the surface to show. Then `ghStatus` is read again;
+ * `onSignedIn` runs once it shows the account.
+ */
+export function useGhSignIn(onSignedIn?: () => unknown) {
+  const ghStatus = useGhStatus();
+  const [page, setPage] = useState<{ code: string; url: string } | null>(null);
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const started = await call(api.ghLogin);
+      setPage(started);
+      void native.window.openExternal(started.url);
+      try {
+        await call(api.ghLoginDone, undefined, { timeoutMs: 11 * 60_000 });
+      } finally {
+        setPage(null);
+      }
+      if (!(await ghStatus.refetch()).data?.isAuthenticated) {
+        throw new Error("GitHub sign-in finished, but Deus could not verify it yet");
+      }
+      toast.success("GitHub connected");
+      await onSignedIn?.();
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
+  });
+  const openPage = () => page && void native.window.openExternal(page.url);
+  return { ...mutation, page, openPage };
 }
 
 /**

@@ -9,6 +9,14 @@ export function parseGitHubRepo(url: string): string | null {
   return null;
 }
 
+/** A GitHub App install link from the network, only if it is the github.com page it claims to be. */
+export function githubInstallUrl(url: string | undefined): string {
+  const parsed = URL.parse(url ?? "");
+  if (parsed?.protocol !== "https:" || parsed.hostname !== "github.com")
+    throw new Error("GitHub connection returned an invalid installation link.");
+  return parsed.toString();
+}
+
 export interface GhAuthAccount {
   authenticated: boolean;
   login: string | null;
