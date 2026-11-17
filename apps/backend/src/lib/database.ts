@@ -11,7 +11,6 @@ import {
   SCHEMA_SQL,
 } from "@shared/schema";
 import { openSqliteDatabase } from "./sqlite";
-import { migrateMessageTurns } from "../db/migrate-turns";
 import { makeProjectFolderOptional } from "../db/migrate-project-folder";
 
 const DEFAULT_DB_PATH = resolveDefaultDatabasePath({
@@ -132,9 +131,6 @@ function initDatabase(): BetterSqlite3.Database {
       const message = error instanceof Error ? error.message : String(error);
       throw prelaunchSchemaError(`Schema initialization failed: ${message}`);
     }
-    // Preserve existing transcript history before checking retired columns. A
-    // failed data move rolls back and must not suggest deleting the database.
-    migrateMessageTurns(dbInstance);
     // One-time rebuild so a project need not be a folder on this computer. It
     // copies the database aside first and rolls back on failure; its error
     // never suggests deleting the database.
