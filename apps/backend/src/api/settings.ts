@@ -9,7 +9,6 @@ import type { AgentConfigBySection, AgentConfigSection } from "@shared/types/age
 import { getWorkspaceForMiddleware } from "../db";
 import { getDatabase } from "../lib/database";
 import { AppError, NotFoundError, ValidationError } from "../lib/errors";
-import { invalidateRemoteGateCache } from "../middleware/remote-gate";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
 import { getLocalAgents } from "../services/agent";
 import { getCloudModelLists } from "../services/agent/cloud/models";
@@ -35,17 +34,12 @@ import { getAllSettings, PRIVATE_SETTINGS, saveSetting } from "../services/setti
 import { disconnectDirectDevices } from "../services/ws.service";
 import { handle } from "./registry";
 
-/**
- * Store one preference and do what follows from it. Also what `POST /settings`
- * runs: the remote-access test stack turns remote access on and off over HTTP.
- */
-export function writeSetting(key: string, value: unknown): void {
+/** Store one preference and do what follows from it. */
+function writeSetting(key: string, value: unknown): void {
   if (PRIVATE_SETTINGS.has(key)) throw new ValidationError(`${key} is not a setting`);
   saveSetting(key, value);
 
   if (key === "remote_access_enabled") {
-    // The gate refuses the local network from now on, not in five seconds.
-    invalidateRemoteGateCache();
     // Turning it on is also how a computer removed from the account is added again.
     reconcileRelay({ restart: value === true });
     if (value !== true) disconnectDirectDevices();

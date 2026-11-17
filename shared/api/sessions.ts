@@ -63,6 +63,7 @@ export const sendMessage = write({
   name: "sendMessage",
   input: sessionId.extend({
     content: z.string().min(1),
+    /** The bare model id (`opus`), not the picker's `claude-code:opus`: the harness is `agentHarness`. */
     model: z.string().min(1),
     agentHarness: AgentHarnessSchema,
     /** The caller's id for this turn: its optimistic bubble and the agent's echo share it. */

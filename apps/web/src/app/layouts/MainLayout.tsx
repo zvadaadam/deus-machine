@@ -308,23 +308,32 @@ export function MainLayout() {
 
   const archiveWorkspace = useCallback(
     async (workspaceId: string) => {
+      // Said at once, though a cloud workspace's archive waits for its computer
+      // to pause. Undo waits for the archive too, and undoes only one that
+      // happened: a failed archive has nothing to restore (it is reported below).
+      const archiving = archiveMutationRef.current.mutateAsync(workspaceId);
+      const archived = toast("Workspace archived", {
+        duration: 5000,
+        action: {
+          label: "Undo",
+          onClick: () => {
+            void archiving.then(
+              () =>
+                unarchiveMutationRef.current.mutateAsync(workspaceId).catch((error) => {
+                  toast.error(getErrorMessage(error));
+                }),
+              () => {}
+            );
+          },
+        },
+      });
       try {
-        await archiveMutationRef.current.mutateAsync(workspaceId);
+        await archiving;
         if (selectedWorkspaceRef.current?.id === workspaceId) {
           selectWorkspace(null);
         }
-        toast("Workspace archived", {
-          duration: 5000,
-          action: {
-            label: "Undo",
-            onClick: () => {
-              unarchiveMutationRef.current.mutateAsync(workspaceId).catch((error) => {
-                toast.error(getErrorMessage(error));
-              });
-            },
-          },
-        });
       } catch (error) {
+        toast.dismiss(archived);
         console.error("Error archiving workspace:", error);
         toast.error(
           isCloudDirectWebMode()

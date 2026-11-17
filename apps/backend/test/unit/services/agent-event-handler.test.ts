@@ -28,6 +28,7 @@ const {
   mockPersistChanges,
   mockPersistSessionError,
   mockPersistSessionTitle,
+  mockPersistSessionWorking,
   mockInvalidate,
   mockPublish,
   mockOpenWith,
@@ -40,6 +41,7 @@ const {
   mockPersistChanges: vi.fn<(...args: any[]) => any>(),
   mockPersistSessionError: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
   mockPersistSessionTitle: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
+  mockPersistSessionWorking: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
   mockInvalidate: vi.fn<(...args: any[]) => any>(),
   mockPublish: vi.fn<(...args: any[]) => any>(),
   mockOpenWith: vi.fn<(...args: any[]) => any>(),
@@ -52,6 +54,7 @@ vi.mock("../../../src/services/agent/persistence", () => ({
   persistChanges: mockPersistChanges,
   persistSessionError: mockPersistSessionError,
   persistSessionTitle: mockPersistSessionTitle,
+  persistSessionWorking: mockPersistSessionWorking,
 }));
 
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
@@ -1062,6 +1065,8 @@ describe("agent event handler (canonical lifecycle stream)", () => {
         envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
       );
       handler.handle(envelope(turnEnded()));
+      // Our own turn was marked working by its send.
+      expect(mockPersistSessionWorking).not.toHaveBeenCalled();
 
       handler.handle(
         envelope({
@@ -1072,6 +1077,8 @@ describe("agent event handler (canonical lifecycle stream)", () => {
         })
       );
       expect(handler.liveTurnId(SESSION)).toBe("browser-turn");
+      // Another client's turn: the chat is working from its first event.
+      expect(mockPersistSessionWorking).toHaveBeenCalledExactlyOnceWith(SESSION);
       handler.handle(
         envelope(
           turnEnded({

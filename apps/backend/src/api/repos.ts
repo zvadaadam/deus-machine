@@ -534,32 +534,36 @@ async function listRemoteBranches(
 ): Promise<{ branches: BranchSummary[] }> {
   const repo = requireRepo(repoId);
   if (!repo.root_path) return listGithubBranches(repo, organizationId);
-  let output: string;
-  try {
-    const { stdout } = await execFileAsync(
-      "git",
-      [
-        "for-each-ref",
-        "--sort=-committerdate",
-        "--format=%(refname:short)",
-        "refs/remotes/origin/",
-        "--count=100",
-      ],
-      { cwd: repo.root_path, encoding: "utf-8", timeout: 5000 }
-    );
-    output = stdout;
-  } catch {
-    return { branches: [] };
+  // The clone's remote-tracking refs (`origin/<name>` where they show); a
+  // project with no origin has only its own branches.
+  for (const [refs, depth, where] of [
+    ["refs/remotes/origin/", 3, "is_remote"],
+    ["refs/heads/", 2, "is_local"],
+  ] as const) {
+    let output: string;
+    try {
+      const { stdout } = await execFileAsync(
+        "git",
+        [
+          "for-each-ref",
+          "--sort=-committerdate",
+          `--format=%(refname:lstrip=${depth})`,
+          refs,
+          "--count=100",
+        ],
+        { cwd: repo.root_path, encoding: "utf-8", timeout: 5000 }
+      );
+      output = stdout;
+    } catch {
+      return { branches: [] };
+    }
+    const names = output
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((name) => name && name !== "HEAD");
+    if (names.length > 0) return { branches: names.map((name) => ({ name, [where]: true })) };
   }
-
-  const names = output
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((ref) => ref.replace(/^origin\//, ""))
-    .filter((name) => name !== "HEAD");
-  // The clone's remote-tracking refs: `origin/<name>` where they show.
-  return { branches: names.map((name) => ({ name, is_remote: true })) };
+  return { branches: [] };
 }
 
 export default [

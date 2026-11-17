@@ -87,31 +87,10 @@ export function SessionErrorCard({
                 </Button>
               ) : null
             )
-            .with("rate_limit", () =>
-              onRetryInNewChat ? (
-                <Button variant="ghost" size="xs" onClick={onRetryInNewChat}>
-                  Retry in new chat
-                </Button>
-              ) : null
-            )
-            .with("network", () =>
-              onRetryInNewChat ? (
-                <Button variant="ghost" size="xs" onClick={onRetryInNewChat}>
-                  Retry in new chat
-                </Button>
-              ) : null
-            )
-            .with("process_exit", () =>
-              onRetryInNewChat ? (
-                <Button variant="ghost" size="xs" onClick={onRetryInNewChat}>
-                  Retry in new chat
-                </Button>
-              ) : null
-            )
             .otherwise(() =>
               onRetryInNewChat ? (
                 <Button variant="ghost" size="xs" onClick={onRetryInNewChat}>
-                  Retry in new chat
+                  New chat
                 </Button>
               ) : null
             )}
