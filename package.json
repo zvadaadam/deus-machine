@@ -36,7 +36,6 @@
     "build:all": "bun run prepare:device-use --force && bun run build:runtime && bun run build",
     "package:mac": "bun run build:all && electron-builder --mac",
     "package:mac:dir": "node scripts/runtime/package-mac-dir.cjs",
-    "package:win": "node scripts/runtime/unsupported-packaged-platform.cjs Windows",
     "package:linux": "bun run build:all && electron-builder --linux",
     "postinstall": "bun run prepare:device-use",
     "native:node": "node scripts/runtime/rebuild-node-native.cjs",

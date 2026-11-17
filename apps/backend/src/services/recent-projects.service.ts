@@ -104,16 +104,6 @@ function parseFileUriPath(uri: string): string | null {
 }
 
 function getEditorStateDbPath(appName: string, homeDir: string): string {
-  if (process.platform === "win32") {
-    return join(
-      process.env.APPDATA || join(homeDir, "AppData", "Roaming"),
-      appName,
-      "User",
-      "globalStorage",
-      "state.vscdb"
-    );
-  }
-
   if (process.platform === "darwin") {
     return join(
       homeDir,

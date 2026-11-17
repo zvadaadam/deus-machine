@@ -16,16 +16,6 @@ describe("runtime contract", () => {
     );
   });
 
-  it("resolves the canonical Windows data directory", () => {
-    expect(
-      resolveDefaultDataDir({
-        platform: "win32",
-        homeDir: "C:/Users/deus",
-        appData: "C:/Users/deus/AppData/Roaming",
-      })
-    ).toBe(String.raw`C:\Users\deus\AppData\Roaming\com.deus.app`);
-  });
-
   it("resolves the canonical Linux data directory", () => {
     expect(
       resolveDefaultDataDir({

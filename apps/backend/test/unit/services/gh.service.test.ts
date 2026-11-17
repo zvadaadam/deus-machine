@@ -173,7 +173,7 @@ describe("runGh", () => {
 
   it("prefers the bundled gh executable when present", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "deus-gh-service-"));
-    const bundledGhPath = path.join(dir, process.platform === "win32" ? "gh.exe" : "gh");
+    const bundledGhPath = path.join(dir, "gh");
     process.env.DEUS_BUNDLED_BIN_DIR = dir;
     mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
 

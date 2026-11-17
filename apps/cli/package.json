@@ -35,6 +35,10 @@
   "engines": {
     "node": ">=20"
   },
+  "os": [
+    "darwin",
+    "linux"
+  ],
   "scripts": {
     "build": "bunx tsx build.ts"
   },

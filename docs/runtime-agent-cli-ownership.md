@@ -92,29 +92,28 @@ are Bun's own.
 
 ## Script Map
 
-| Path                                                | Class                 | Responsibility                                                                                                                            |
-| --------------------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `scripts/runtime/build.ts`                          | build/stage           | Canonical runtime payload entrypoint for release and packaging.                                                                           |
-| `scripts/runtime/stage.ts`                          | stage                 | Common backend and agent-server runtime bundle staging.                                                                                   |
-| `scripts/runtime/native-runtime.ts`                 | build/validate        | Native `deus-runtime` binary build, manifest, architecture, signature, and optional runnable validation.                                  |
-| `scripts/runtime/agent-clis.ts`                     | stage/validate        | Full bundled Claude/Codex/agent-browser CLI matrix, hashes, and manifest validation.                                                      |
-| `scripts/runtime/prepare-agent-clis.ts`             | stage wrapper         | CLI wrapper for the production agent CLI matrix.                                                                                          |
-| `scripts/runtime/prepare-dev-agent-clis.ts`         | dev-only stage        | Host-runtime-key agent CLI preflight for local dev; does not write the full packaging manifest.                                           |
-| `scripts/runtime/validate.ts`                       | validate              | Static package-boundary gate for staged runtime, agent CLIs, native runtime, GitHub CLI, and freshness.                                   |
-| `scripts/runtime/electron-builder-before-pack.cjs`  | package/validate      | Electron builder boundary guard for runtime staging, Electron output freshness, packaged main contract, and device-use payload readiness. |
-| `scripts/runtime/package-mac-dir.cjs`               | package/smoke support | Local macOS `.app` directory package command for smoke verification without producing release DMGs.                                       |
-| `scripts/runtime/dev.ts`                            | dev-only              | Development backend/frontend startup orchestration.                                                                                       |
-| `scripts/runtime/rebuild-node-native.cjs`           | dev/test support      | Rebuilds Node ABI native modules before backend/dev tests.                                                                                |
-| `scripts/runtime/unsupported-packaged-platform.cjs` | package guard         | Explicit unsupported-platform package command failure.                                                                                    |
-| `scripts/runtime/gh-cli-contract.json`              | package contract      | Expected GitHub CLI version, archive hashes, and target matrix.                                                                           |
-| `scripts/runtime/lib/device-use-payloads.cjs`       | package/smoke helper  | Shared device-use payload and simulator helper contract used by packaging guards and smokes.                                              |
-| `scripts/runtime/smoke/*.cjs`                       | smoke                 | Source, native runtime, packaged resource, packaged app, packaged desktop, packaged runtime, and DMG smoke harnesses.                     |
-| `scripts/runtime/smoke/lib/smoke-helpers.cjs`       | smoke helper          | Smoke-only process, runtime env, readiness, and packaged resource assertions.                                                             |
-| `scripts/runtime/smoke/runtime-rpc.cjs`             | smoke helper          | Agent-server JSON-RPC assertions used by source/native/packaged smokes.                                                                   |
-| `scripts/runtime/smoke/run-version-check.cjs`       | smoke helper          | Isolated executable version probe used by native runtime validation and packaged app smoke.                                               |
-| `scripts/prepare-device-use.mjs`                    | build/stage           | Builds and stages `packages/device-use` bundles, frontend payload, skill, and native helpers.                                             |
-| `scripts/prepare-gh-cli.mjs`                        | stage                 | Stages GitHub CLI binaries and manifest for packaged runtime bins.                                                                        |
-| `scripts/runtime/electron-builder-after-pack.cjs`   | package/validate      | Prunes duplicate package payloads and verifies packaged app/native runtime contents after pack.                                           |
+| Path                                               | Class                 | Responsibility                                                                                                                            |
+| -------------------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts/runtime/build.ts`                         | build/stage           | Canonical runtime payload entrypoint for release and packaging.                                                                           |
+| `scripts/runtime/stage.ts`                         | stage                 | Common backend and agent-server runtime bundle staging.                                                                                   |
+| `scripts/runtime/native-runtime.ts`                | build/validate        | Native `deus-runtime` binary build, manifest, architecture, signature, and optional runnable validation.                                  |
+| `scripts/runtime/agent-clis.ts`                    | stage/validate        | Full bundled Claude/Codex/agent-browser CLI matrix, hashes, and manifest validation.                                                      |
+| `scripts/runtime/prepare-agent-clis.ts`            | stage wrapper         | CLI wrapper for the production agent CLI matrix.                                                                                          |
+| `scripts/runtime/prepare-dev-agent-clis.ts`        | dev-only stage        | Host-runtime-key agent CLI preflight for local dev; does not write the full packaging manifest.                                           |
+| `scripts/runtime/validate.ts`                      | validate              | Static package-boundary gate for staged runtime, agent CLIs, native runtime, GitHub CLI, and freshness.                                   |
+| `scripts/runtime/electron-builder-before-pack.cjs` | package/validate      | Electron builder boundary guard for runtime staging, Electron output freshness, packaged main contract, and device-use payload readiness. |
+| `scripts/runtime/package-mac-dir.cjs`              | package/smoke support | Local macOS `.app` directory package command for smoke verification without producing release DMGs.                                       |
+| `scripts/runtime/dev.ts`                           | dev-only              | Development backend/frontend startup orchestration.                                                                                       |
+| `scripts/runtime/rebuild-node-native.cjs`          | dev/test support      | Rebuilds Node ABI native modules before backend/dev tests.                                                                                |
+| `scripts/runtime/gh-cli-contract.json`             | package contract      | Expected GitHub CLI version, archive hashes, and target matrix.                                                                           |
+| `scripts/runtime/lib/device-use-payloads.cjs`      | package/smoke helper  | Shared device-use payload and simulator helper contract used by packaging guards and smokes.                                              |
+| `scripts/runtime/smoke/*.cjs`                      | smoke                 | Source, native runtime, packaged resource, packaged app, packaged desktop, packaged runtime, and DMG smoke harnesses.                     |
+| `scripts/runtime/smoke/lib/smoke-helpers.cjs`      | smoke helper          | Smoke-only process, runtime env, readiness, and packaged resource assertions.                                                             |
+| `scripts/runtime/smoke/runtime-rpc.cjs`            | smoke helper          | Agent-server JSON-RPC assertions used by source/native/packaged smokes.                                                                   |
+| `scripts/runtime/smoke/run-version-check.cjs`      | smoke helper          | Isolated executable version probe used by native runtime validation and packaged app smoke.                                               |
+| `scripts/prepare-device-use.mjs`                   | build/stage           | Builds and stages `packages/device-use` bundles, frontend payload, skill, and native helpers.                                             |
+| `scripts/prepare-gh-cli.mjs`                       | stage                 | Stages GitHub CLI binaries and manifest for packaged runtime bins.                                                                        |
+| `scripts/runtime/electron-builder-after-pack.cjs`  | package/validate      | Prunes duplicate package payloads and verifies packaged app/native runtime contents after pack.                                           |
 
 ## Structural Deferrals
 

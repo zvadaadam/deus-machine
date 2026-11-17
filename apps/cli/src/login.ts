@@ -76,20 +76,11 @@ export function detectClaudeCli(): ClaudeCliInfo {
 
   // Try PATH discovery
   try {
-    const claudePath =
-      platform() === "win32"
-        ? execSync("where claude", {
-            encoding: "utf-8",
-            timeout: 5000,
-            stdio: ["pipe", "pipe", "pipe"],
-          })
-            .trim()
-            .split(/\r?\n/)[0]
-        : execSync(`${process.env.SHELL || "/bin/sh"} -lc "command -v claude"`, {
-            encoding: "utf-8",
-            timeout: 5000,
-            stdio: ["pipe", "pipe", "pipe"],
-          }).trim();
+    const claudePath = execSync(`${process.env.SHELL || "/bin/sh"} -lc "command -v claude"`, {
+      encoding: "utf-8",
+      timeout: 5000,
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
 
     if (claudePath) {
       try {

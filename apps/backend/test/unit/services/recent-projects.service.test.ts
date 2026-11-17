@@ -35,16 +35,6 @@ function createTempRoot(): string {
 }
 
 function getEditorStateDbPath(homeDir: string, appName: string): string {
-  if (process.platform === "win32") {
-    return path.join(
-      process.env.APPDATA || path.join(homeDir, "AppData", "Roaming"),
-      appName,
-      "User",
-      "globalStorage",
-      "state.vscdb"
-    );
-  }
-
   if (process.platform === "darwin") {
     return path.join(
       homeDir,

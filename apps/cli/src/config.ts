@@ -48,10 +48,7 @@ export function getConfigDir(): string {
   if (os === "darwin") {
     return join(homedir(), ".config", "deus");
   }
-  if (os === "win32") {
-    return join(process.env.APPDATA || join(homedir(), "AppData", "Roaming"), "deus");
-  }
-  // Linux / other — XDG
+  // Linux — XDG
   return join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "deus");
 }
 

@@ -56,7 +56,6 @@ const canonicalUserDataPath =
   resolveDefaultDataDir({
     platform: process.platform,
     homeDir: process.env.HOME || homedir(),
-    appData: process.env.APPDATA,
     xdgDataHome: process.env.XDG_DATA_HOME,
   });
 app.setPath("userData", canonicalUserDataPath);

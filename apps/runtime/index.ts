@@ -87,7 +87,6 @@ function isExecutableFile(filePath: string): boolean {
   if (!existsSync(filePath)) return false;
   const stat = statSync(filePath);
   if (!stat.isFile()) return false;
-  if (process.platform === "win32") return true;
   return (stat.mode & 0o111) !== 0;
 }
 

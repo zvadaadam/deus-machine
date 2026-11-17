@@ -16,7 +16,6 @@ import { makeProjectFolderOptional } from "../db/migrate-project-folder";
 const DEFAULT_DB_PATH = resolveDefaultDatabasePath({
   platform: process.platform,
   homeDir: process.env.HOME || os.homedir(),
-  appData: process.env.APPDATA,
   xdgDataHome: process.env.XDG_DATA_HOME,
 });
 

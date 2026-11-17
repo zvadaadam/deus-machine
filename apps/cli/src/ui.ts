@@ -56,28 +56,25 @@ function rgb(r: number, g: number, b: number, text: string): string {
 
 // ── Symbols ──────────────────────────────────────────────────────────
 
-// Unicode symbols with ASCII fallbacks for limited terminals
-const isUnicode = process.platform !== "win32" || !!process.env.WT_SESSION;
-
 export const sym = {
-  tick: isUnicode ? "✓" : "√",
-  cross: isUnicode ? "✗" : "×",
-  dot: isUnicode ? "●" : "*",
-  dash: isUnicode ? "─" : "-",
-  arrow: isUnicode ? "→" : "->",
-  diamond: isUnicode ? "◆" : "*",
-  pointer: isUnicode ? "❯" : ">",
+  tick: "✓",
+  cross: "✗",
+  dot: "●",
+  dash: "─",
+  arrow: "→",
+  diamond: "◆",
+  pointer: "❯",
   info: "i",
-  warning: isUnicode ? "⚠" : "!",
-  bullet: isUnicode ? "•" : "-",
+  warning: "⚠",
+  bullet: "•",
 
   // Box drawing
-  tl: isUnicode ? "╭" : "+",
-  tr: isUnicode ? "╮" : "+",
-  bl: isUnicode ? "╰" : "+",
-  br: isUnicode ? "╯" : "+",
-  h: isUnicode ? "─" : "-",
-  v: isUnicode ? "│" : "|",
+  tl: "╭",
+  tr: "╮",
+  bl: "╰",
+  br: "╯",
+  h: "─",
+  v: "│",
 };
 
 // ── Logo / Banner ────────────────────────────────────────────────────
@@ -173,7 +170,7 @@ function renderLogoFrame(letterCount: number): string[] {
 export function banner(version?: string): void {
   console.log("");
 
-  if (isUnicode && !noColor) {
+  if (!noColor) {
     for (const line of renderLogoFrame(4)) {
       console.log(line);
     }
@@ -193,10 +190,10 @@ export function banner(version?: string): void {
 /**
  * Animated banner — letters reveal left-to-right.
  * Total animation: ~320ms (4 letters x 80ms).
- * Falls back to static banner in no-color or non-unicode terminals.
+ * Falls back to static banner in no-color terminals.
  */
 export async function animatedBanner(version?: string): Promise<void> {
-  if (!isUnicode || noColor || !process.stdout.isTTY) {
+  if (noColor || !process.stdout.isTTY) {
     banner(version);
     return;
   }
@@ -238,9 +235,7 @@ export async function animatedBanner(version?: string): Promise<void> {
 
 // ── Spinner ──────────────────────────────────────────────────────────
 
-const SPINNER_FRAMES = isUnicode
-  ? ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-  : ["-", "\\", "|", "/"];
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 const SPINNER_INTERVAL = 80;
 
@@ -467,8 +462,8 @@ export function statusLine(getText: () => string, intervalMs = 1000): { stop: ()
 // ── Progress Bar ─────────────────────────────────────────────────────
 
 const BAR_WIDTH = 30;
-const BAR_FILLED = isUnicode ? "█" : "#";
-const BAR_EMPTY = isUnicode ? "░" : ".";
+const BAR_FILLED = "█";
+const BAR_EMPTY = "░";
 
 export function progressBar(current: number, total: number, label?: string): void {
   if (!process.stderr.isTTY) return;

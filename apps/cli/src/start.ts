@@ -244,7 +244,6 @@ function resolveDataDir(customDir?: string): string {
     resolveDefaultDataDir({
       platform: process.platform,
       homeDir: homedir(),
-      appData: process.env.APPDATA,
       xdgDataHome: process.env.XDG_DATA_HOME,
     });
 
