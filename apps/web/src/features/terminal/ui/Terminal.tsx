@@ -198,7 +198,9 @@ export function Terminal({
       stopOutput = follow(api.terminalOutput, { id: spawnId }, (output) => {
         if (disposed) return;
         if (output.type === "data") {
-          xterm.write(new TextDecoder().decode(new Uint8Array(output.data)));
+          // Bytes, not text: a character can arrive split across two events,
+          // and xterm puts it back together.
+          xterm.write(new Uint8Array(output.data));
           return;
         }
         dead = true;

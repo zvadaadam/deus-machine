@@ -29,7 +29,6 @@ const MAC_CODESIGN_PAGE_SIZE = "4096";
 const PACKAGED_VERSION_TIMEOUT_MS = 20_000;
 const PACKAGED_VERSION_STOP_TIMEOUT_MS = 5_000;
 const PACKAGE_RECOVERY_TIMEOUT_MS = 60_000;
-const NODE_PTY_REBUILD_TIMEOUT_MS = 120_000;
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const PACKAGED_VERSION_ENV_ALLOWLIST = ["LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "TZ"];
 
@@ -45,49 +44,6 @@ function resourcesDirForContext(context) {
     return path.join(context.appOutDir, `${productName}.app`, "Contents", "Resources");
   }
   return path.join(context.appOutDir, "resources");
-}
-
-function pruneNodePtyRuntimeBinaries(context) {
-  if (context.electronPlatformName !== "darwin" && context.electronPlatformName !== "linux") {
-    return { removed: 0, kept: 0 };
-  }
-
-  const targetArch = ARCH_BY_BUILDER_VALUE.get(context.arch);
-  if (!targetArch) return { removed: 0, kept: 0 };
-  const targetPrebuild = `${context.electronPlatformName}-${targetArch}`;
-
-  const resourcesDir = context.resourcesDir ?? resourcesDirForContext(context);
-  const nodePtyRoot = path.join(resourcesDir, "app.asar.unpacked", "node_modules", "node-pty");
-  if (!fs.existsSync(nodePtyRoot)) return { removed: 0, kept: 0 };
-
-  let removed = 0;
-  let kept = 0;
-  const buildDir = path.join(nodePtyRoot, "build");
-  if (fs.existsSync(buildDir)) {
-    fs.rmSync(buildDir, { recursive: true, force: true });
-    removed++;
-  }
-
-  const prebuildsDir = path.join(nodePtyRoot, "prebuilds");
-  if (fs.existsSync(prebuildsDir)) {
-    for (const entry of fs.readdirSync(prebuildsDir, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const entryPath = path.join(prebuildsDir, entry.name);
-      if (entry.name === targetPrebuild) {
-        kept++;
-        continue;
-      }
-      fs.rmSync(entryPath, { recursive: true, force: true });
-      removed++;
-    }
-  }
-
-  if (removed > 0 || kept > 0) {
-    console.log(
-      `[runtime] kept node-pty prebuild ${targetPrebuild}; removed ${removed} non-runtime node-pty native dirs`
-    );
-  }
-  return { removed, kept };
 }
 
 function pruneCanvasRuntimeBinaries(context) {
@@ -125,101 +81,6 @@ function pruneCanvasRuntimeBinaries(context) {
     );
   }
   return { removed, kept };
-}
-
-function fileArch(filePath) {
-  const output = execFileSync("file", [filePath], {
-    encoding: "utf8",
-    timeout: 20_000,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  const description = output.includes(":") ? output.slice(output.indexOf(":") + 1) : output;
-  if (/\barm64\b/.test(description)) return "arm64";
-  if (/\bx86[_-]64\b/.test(description)) return "x64";
-  return null;
-}
-
-function bunNodeTargetVersion() {
-  return execFileSync("bun", ["-e", "console.log(process.version.replace(/^v/, ''))"], {
-    cwd: PROJECT_ROOT,
-    encoding: "utf8",
-    timeout: 20_000,
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
-}
-
-function installBetterSqlitePrebuild(packageRoot, targetArch) {
-  const prebuildInstall = path.join(PROJECT_ROOT, "node_modules", "prebuild-install", "bin.js");
-  fs.rmSync(path.join(packageRoot, "build"), { recursive: true, force: true });
-  const result = spawnSync(
-    process.execPath,
-    [
-      prebuildInstall,
-      "--runtime",
-      "node",
-      "--target",
-      bunNodeTargetVersion(),
-      "--arch",
-      targetArch,
-      "--platform",
-      process.env.DEUS_BETTER_SQLITE_PREBUILD_PLATFORM || process.platform,
-    ],
-    {
-      cwd: packageRoot,
-      encoding: "utf8",
-      timeout: 20_000,
-      stdio: ["ignore", "pipe", "pipe"],
-    }
-  );
-  const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
-  if (result.error) {
-    throw new Error(
-      `Failed to install packaged better-sqlite3 ${process.platform}-${targetArch} prebuild: ${
-        result.error.code || result.error.message
-      }${output ? `\n${output}` : ""}`
-    );
-  }
-  if (result.status !== 0) {
-    throw new Error(
-      `Failed to install packaged better-sqlite3 ${process.platform}-${targetArch} prebuild: ${output}`
-    );
-  }
-}
-
-function prepareBetterSqliteRuntimeBinding(context) {
-  if (context.electronPlatformName !== "darwin" && context.electronPlatformName !== "linux") {
-    return { updated: false };
-  }
-
-  const targetArch = ARCH_BY_BUILDER_VALUE.get(context.arch);
-  if (!targetArch) return { updated: false };
-
-  const resourcesDir = context.resourcesDir ?? resourcesDirForContext(context);
-  const packageRoot = path.join(
-    resourcesDir,
-    "app.asar.unpacked",
-    "node_modules",
-    "better-sqlite3"
-  );
-  const nativeBinding = path.join(packageRoot, "build", "Release", "better_sqlite3.node");
-  if (!fs.existsSync(packageRoot)) return { updated: false };
-  if (fs.existsSync(nativeBinding) && fileArch(nativeBinding) === targetArch) {
-    return { updated: false };
-  }
-
-  console.log(`[runtime] installing better-sqlite3 prebuild for ${context.electronPlatformName}-${targetArch}`);
-  const previousPlatform = process.env.DEUS_BETTER_SQLITE_PREBUILD_PLATFORM;
-  process.env.DEUS_BETTER_SQLITE_PREBUILD_PLATFORM = context.electronPlatformName;
-  try {
-    installBetterSqlitePrebuild(packageRoot, targetArch);
-  } finally {
-    if (previousPlatform === undefined) delete process.env.DEUS_BETTER_SQLITE_PREBUILD_PLATFORM;
-    else process.env.DEUS_BETTER_SQLITE_PREBUILD_PLATFORM = previousPlatform;
-  }
-  if (!fs.existsSync(nativeBinding) || fileArch(nativeBinding) !== targetArch) {
-    throw new Error(`better-sqlite3 prebuild did not produce ${context.electronPlatformName}-${targetArch} binding`);
-  }
-  return { updated: true };
 }
 
 function assertExecutable(filePath, label) {
@@ -447,68 +308,6 @@ function ensureCanvasRuntimePackage(context) {
   }
 }
 
-function ensureLinuxNodePtyRuntimePrebuild(context) {
-  if (context.electronPlatformName !== "linux") return { copied: 0 };
-
-  const targetArch = ARCH_BY_BUILDER_VALUE.get(context.arch);
-  if (!targetArch) return { copied: 0 };
-
-  const resourcesDir = context.resourcesDir ?? resourcesDirForContext(context);
-  const nodePtyRoot = path.join(resourcesDir, "app.asar.unpacked", "node_modules", "node-pty");
-  if (!fs.existsSync(nodePtyRoot)) return { copied: 0 };
-
-  const targetPrebuild = `${context.electronPlatformName}-${targetArch}`;
-  const prebuildDir = path.join(nodePtyRoot, "prebuilds", targetPrebuild);
-  const requiredFiles = ["pty.node"];
-  if (requiredFiles.every((name) => fs.existsSync(path.join(prebuildDir, name)))) {
-    return { copied: 0 };
-  }
-
-  const packagedBuildReleaseDir = path.join(nodePtyRoot, "build", "Release");
-  const sourceNodePtyRoot = fs.existsSync(path.join(nodePtyRoot, "binding.gyp"))
-    ? nodePtyRoot
-    : path.join(PROJECT_ROOT, "node_modules", "node-pty");
-  const packagedBuildHasPayload = requiredFiles.every((name) =>
-    fs.existsSync(path.join(packagedBuildReleaseDir, name))
-  );
-  const sourceBuildReleaseDir = packagedBuildHasPayload
-    ? packagedBuildReleaseDir
-    : path.join(sourceNodePtyRoot, "build", "Release");
-
-  if (!requiredFiles.every((name) => fs.existsSync(path.join(sourceBuildReleaseDir, name)))) {
-    if (process.platform !== "linux" || process.arch !== targetArch) return { copied: 0 };
-    if (!fs.existsSync(path.join(sourceNodePtyRoot, "binding.gyp"))) return { copied: 0 };
-
-    const nodeGypPath = path.join(PROJECT_ROOT, "node_modules", "node-gyp", "bin", "node-gyp.js");
-    if (!fs.existsSync(nodeGypPath)) return { copied: 0 };
-
-    console.log(`[runtime] rebuilding node-pty native payload for ${targetPrebuild}`);
-    execFileSync(process.execPath, [nodeGypPath, "rebuild"], {
-      cwd: sourceNodePtyRoot,
-      env: {
-        ...process.env,
-        npm_config_build_from_source: "true",
-      },
-      stdio: "inherit",
-      timeout: NODE_PTY_REBUILD_TIMEOUT_MS,
-    });
-  }
-
-  for (const name of requiredFiles) {
-    const sourcePath = path.join(sourceBuildReleaseDir, name);
-    if (!fs.existsSync(sourcePath)) return { copied: 0 };
-  }
-
-  fs.mkdirSync(prebuildDir, { recursive: true });
-  for (const name of requiredFiles) {
-    const destinationPath = path.join(prebuildDir, name);
-    fs.copyFileSync(path.join(sourceBuildReleaseDir, name), destinationPath);
-    if (name === "spawn-helper") fs.chmodSync(destinationPath, 0o755);
-  }
-  console.log(`[runtime] copied node-pty build/Release output into ${targetPrebuild} prebuild`);
-  return { copied: requiredFiles.length };
-}
-
 function verifyManifestFileEntry(entry, filePath, label, options = {}) {
   assertExecutable(filePath, label);
   if (!entry || typeof entry !== "object") {
@@ -599,8 +398,6 @@ function verifyPackagedRuntimeManifests(binDir, targetArchOrRuntimeKey, options 
 function verifyPackagedRuntimeExternalModules(resourcesDir, targetArchOrRuntimeKey, options = {}) {
   const unpackedNodeModules = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
   const requiredFiles = [
-    ["better-sqlite3 package", path.join(unpackedNodeModules, "better-sqlite3", "package.json")],
-    ["node-pty package", path.join(unpackedNodeModules, "node-pty", "package.json")],
     [
       "@napi-rs/canvas package",
       path.join(unpackedNodeModules, "@napi-rs", "canvas", "package.json"),
@@ -617,26 +414,6 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArchOrRuntimeK
   const expectedFileFormat = runtimeKey ? FILE_FORMAT_BY_RUNTIME_KEY.get(runtimeKey) : undefined;
 
   if (runtimeKey && targetPlatform && targetArch) {
-    const betterSqliteNative = path.join(
-      unpackedNodeModules,
-      "better-sqlite3",
-      "build",
-      "Release",
-      "better_sqlite3.node"
-    );
-    const nodePtyPackageRoot = path.join(unpackedNodeModules, "node-pty");
-    const nodePtyPrebuildFiles = [
-      path.join(nodePtyPackageRoot, "prebuilds", runtimeKey, "pty.node"),
-    ];
-    if (targetPlatform === "darwin") {
-      nodePtyPrebuildFiles.push(
-        path.join(nodePtyPackageRoot, "prebuilds", runtimeKey, "spawn-helper")
-      );
-    }
-    requiredFiles.push([
-      `better-sqlite3 native binding for ${runtimeKey}`,
-      betterSqliteNative,
-    ]);
     const canvasNativePackage =
       targetPlatform === "linux" ? `canvas-linux-${targetArch}-gnu` : `canvas-darwin-${targetArch}`;
     const canvasNativeFile =
@@ -651,29 +428,10 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArchOrRuntimeK
       `@napi-rs/canvas native binding for ${runtimeKey}`,
       path.join(unpackedNodeModules, "@napi-rs", canvasNativePackage, canvasNativeFile),
     ]);
-    nativePayloads.push(
-      [`better-sqlite3 native binding for ${runtimeKey}`, betterSqliteNative],
-      [`node-pty native binding for ${runtimeKey}`, nodePtyPrebuildFiles[0]],
-      [`@napi-rs/canvas native binding for ${runtimeKey}`, path.join(unpackedNodeModules, "@napi-rs", canvasNativePackage, canvasNativeFile)]
-    );
-    if (targetPlatform === "darwin" && nodePtyPrebuildFiles[1]) {
-      nativePayloads.push([`node-pty spawn helper for ${runtimeKey}`, nodePtyPrebuildFiles[1]]);
-    }
-
-    const hasNodePtyPrebuild = nodePtyPrebuildFiles.every((filePath) => fs.existsSync(filePath));
-    const staleNodePtyBuild = path.join(nodePtyPackageRoot, "build", "Release", "pty.node");
-    if (fs.existsSync(staleNodePtyBuild)) {
-      throw new Error(
-        `Packaged node-pty build output is still present: ${staleNodePtyBuild}. ` +
-          `node-pty resolves build/Release before prebuilds, so packaged deus-runtime must keep only the target ${runtimeKey} prebuild.`
-      );
-    }
-    if (!hasNodePtyPrebuild) {
-      throw new Error(
-        `Missing unpacked runtime external module node-pty prebuild files for ${runtimeKey}: ` +
-          `${nodePtyPrebuildFiles.join(", ")}. Bun-compiled deus-runtime cannot rely on Electron app.asar module resolution.`
-      );
-    }
+    nativePayloads.push([
+      `@napi-rs/canvas native binding for ${runtimeKey}`,
+      path.join(unpackedNodeModules, "@napi-rs", canvasNativePackage, canvasNativeFile),
+    ]);
 
     const napiRsRoot = path.join(unpackedNodeModules, "@napi-rs");
     const expectedCanvasPackage = canvasNativePackage;
@@ -967,10 +725,7 @@ async function verifyPackagedAgentClis(context, options = {}) {
 
 module.exports = async function afterPack(context) {
   ensureCanvasRuntimePackage(context);
-  ensureLinuxNodePtyRuntimePrebuild(context);
-  pruneNodePtyRuntimeBinaries(context);
   pruneCanvasRuntimeBinaries(context);
-  prepareBetterSqliteRuntimeBinding(context);
   await verifyPackagedAgentClis(context, {
     runVersionChecks: false,
     verifyManifestHashes: true,
@@ -980,10 +735,7 @@ module.exports = async function afterPack(context) {
 };
 
 module.exports.ensureCanvasRuntimePackage = ensureCanvasRuntimePackage;
-module.exports.ensureLinuxNodePtyRuntimePrebuild = ensureLinuxNodePtyRuntimePrebuild;
-module.exports.pruneNodePtyRuntimeBinaries = pruneNodePtyRuntimeBinaries;
 module.exports.pruneCanvasRuntimeBinaries = pruneCanvasRuntimeBinaries;
-module.exports.prepareBetterSqliteRuntimeBinding = prepareBetterSqliteRuntimeBinding;
 module.exports.verifyPackagedRuntimeManifests = verifyPackagedRuntimeManifests;
 module.exports.verifyPackagedRuntimeExternalModules = verifyPackagedRuntimeExternalModules;
 module.exports.verifyPackagedAgentClis = verifyPackagedAgentClis;

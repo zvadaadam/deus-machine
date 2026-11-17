@@ -280,19 +280,21 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Rebuild better-sqlite3 for Node.js
+      - name: Rebuild better-sqlite3 and node-pty for Node.js
         # bun install compiles native modules for Bun's ABI, but vitest runs
-        # under Node.js which has a different NODE_MODULE_VERSION. Rebuild
-        # better-sqlite3 specifically for the Node.js version used in CI.
-        run: cd node_modules/better-sqlite3 && bunx node-gyp rebuild
+        # under Node.js which has a different NODE_MODULE_VERSION; node-pty
+        # ships no Linux prebuild, and pty-parity opens real terminals.
+        run: |
+          (cd node_modules/better-sqlite3 && bunx node-gyp rebuild)
+          (cd node_modules/node-pty && bunx node-gyp rebuild)
 
       - name: Run tests
         run: bun run test:backend
 
-      - name: SQLite parity on Bun (the packaged app's engine)
-        # The same file test:backend just ran on Node and better-sqlite3, run
-        # by Bun's test runner against bun:sqlite behind src/lib/sqlite.ts.
-        run: bun run test:sqlite-bun
+      - name: SQLite and terminal parity on Bun (the packaged app's engine)
+        # The same files test:backend just ran on Node (better-sqlite3,
+        # node-pty), run by Bun's test runner against bun:sqlite and Bun's terminal.
+        run: bun run test:bun
 
   agent-server-tests:
     name: Agent Server Tests

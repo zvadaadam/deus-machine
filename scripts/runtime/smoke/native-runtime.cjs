@@ -109,10 +109,6 @@ async function smokeNativeRuntime(options) {
     label: "Native runtime",
     binDir,
     resourcesPath: resourcesDir,
-    expectedNodePaths: [
-      path.join(resourcesDir, "app.asar.unpacked", "node_modules"),
-      path.join(PROJECT_ROOT, "node_modules"),
-    ],
   });
   console.log(`[runtime-smoke] native runtime self-test binDir: ${selfTest.binDir}`);
 
