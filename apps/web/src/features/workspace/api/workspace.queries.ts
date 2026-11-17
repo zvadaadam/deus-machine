@@ -4,7 +4,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { produce } from "immer";
 import { api } from "@shared/api";
 import { toast } from "sonner";
@@ -194,26 +194,23 @@ export function useGhStatus() {
 }
 
 /**
- * Sign this computer's GitHub CLI in (`ghLogin`): GitHub's page opens and the
- * one-time code to enter there stays on screen until gh is done. Then `ghStatus`
- * is read again; `onSignedIn` runs once it shows the account.
+ * Sign this computer's GitHub CLI in (`ghLogin`): GitHub's page opens, and
+ * `page` holds the one-time code to enter there (and that page, `openPage`)
+ * until gh is done, for the surface to show. Then `ghStatus` is read again;
+ * `onSignedIn` runs once it shows the account.
  */
 export function useGhSignIn(onSignedIn?: () => unknown) {
   const ghStatus = useGhStatus();
-  return useMutation({
+  const [page, setPage] = useState<{ code: string; url: string } | null>(null);
+  const mutation = useMutation({
     mutationFn: async () => {
-      const { code, url } = await call(api.ghLogin);
-      const openGitHub = () => void native.window.openExternal(url);
-      toast.loading(`Enter ${code} on GitHub to sign in`, {
-        id: "gh-sign-in",
-        duration: Infinity,
-        action: { label: "Open GitHub", onClick: openGitHub },
-      });
-      openGitHub();
+      const started = await call(api.ghLogin);
+      setPage(started);
+      void native.window.openExternal(started.url);
       try {
         await call(api.ghLoginDone, undefined, { timeoutMs: 11 * 60_000 });
       } finally {
-        toast.dismiss("gh-sign-in");
+        setPage(null);
       }
       if (!(await ghStatus.refetch()).data?.isAuthenticated) {
         throw new Error("GitHub sign-in finished, but Deus could not verify it yet");
@@ -223,6 +220,8 @@ export function useGhSignIn(onSignedIn?: () => unknown) {
     },
     onError: (error) => toast.error(getErrorMessage(error)),
   });
+  const openPage = () => page && void native.window.openExternal(page.url);
+  return { ...mutation, page, openPage };
 }
 
 /**

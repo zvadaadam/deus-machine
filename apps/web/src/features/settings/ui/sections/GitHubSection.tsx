@@ -158,13 +158,23 @@ export function GitHubSection() {
                 <p className="text-sm font-medium">GitHub account</p>
               </div>
               <p className="text-muted-foreground mt-0.5 text-sm">
-                {checking
-                  ? "Checking GitHub status."
-                  : installed === false
-                    ? "Bundled GitHub CLI is unavailable. Restart Deus, then check again."
-                    : signInMutation.isPending
-                      ? "Complete sign-in in your browser."
-                      : "Connect GitHub to enable pull requests and GitHub workspaces."}
+                {checking ? (
+                  "Checking GitHub status."
+                ) : installed === false ? (
+                  "Bundled GitHub CLI is unavailable. Restart Deus, then check again."
+                ) : signInMutation.page ? (
+                  <>
+                    Enter{" "}
+                    <span className="text-text-primary font-mono select-all">
+                      {signInMutation.page.code}
+                    </span>{" "}
+                    on GitHub to finish signing in.
+                  </>
+                ) : signInMutation.isPending ? (
+                  "Complete sign-in in your browser."
+                ) : (
+                  "Connect GitHub to enable pull requests and GitHub workspaces."
+                )}
               </p>
             </div>
           )}
@@ -245,15 +255,21 @@ export function GitHubSection() {
               <Button
                 size="sm"
                 className="gap-1.5"
-                onClick={() => signInMutation.mutate()}
-                disabled={!canSignIn}
+                onClick={() =>
+                  signInMutation.page ? signInMutation.openPage() : signInMutation.mutate()
+                }
+                disabled={!canSignIn && !signInMutation.page}
               >
-                {signInMutation.isPending ? (
+                {signInMutation.isPending && !signInMutation.page ? (
                   <Loader2 className="size-3.5 animate-spin" />
                 ) : (
                   <GitHubIcon className="size-3.5" />
                 )}
-                {signInMutation.isPending ? "Signing in" : "Sign in"}
+                {signInMutation.page
+                  ? "Open GitHub"
+                  : signInMutation.isPending
+                    ? "Signing in"
+                    : "Sign in"}
               </Button>
             </div>
           </>

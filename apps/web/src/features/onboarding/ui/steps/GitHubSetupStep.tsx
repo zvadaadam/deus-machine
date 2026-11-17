@@ -35,9 +35,11 @@ export function GitHubSetupStep({ onNext, onBack }: GitHubSetupStepProps) {
     cliAvailable === null || checkingAccount ? null : cliAvailable === true && authenticated;
   const canSignIn = cliAvailable === true && !ghStatus.isLoading && !authenticated;
   const ghAuthActionLabel = canSignIn
-    ? ghAuthLogin.isPending
-      ? "Signing in"
-      : "Sign in"
+    ? ghAuthLogin.page
+      ? "Open GitHub"
+      : ghAuthLogin.isPending
+        ? "Signing in"
+        : "Sign in"
     : undefined;
 
   async function retryGitHubChecks(): Promise<void> {
@@ -49,6 +51,7 @@ export function GitHubSetupStep({ onNext, onBack }: GitHubSetupStepProps) {
       return "Bundled GitHub CLI is unavailable";
     }
     if (ghStatus.isLoading) return "Checking authentication...";
+    if (ghAuthLogin.page) return `Enter ${ghAuthLogin.page.code} on GitHub to finish signing in`;
     if (ghAuthLogin.isPending) return "Complete sign-in in your browser";
     return "Not connected";
   }
@@ -101,9 +104,15 @@ export function GitHubSetupStep({ onNext, onBack }: GitHubSetupStepProps) {
           detail={getDetail()}
           actionLabel={ghAuthActionLabel}
           actionIcon={<GitHubIcon className="h-3 w-3" />}
-          actionBusy={ghAuthLogin.isPending}
+          actionBusy={ghAuthLogin.isPending && !ghAuthLogin.page}
           actionDisabled={!canSignIn}
-          onAction={canSignIn ? () => ghAuthLogin.mutate() : undefined}
+          onAction={
+            !canSignIn
+              ? undefined
+              : ghAuthLogin.page
+                ? ghAuthLogin.openPage
+                : () => ghAuthLogin.mutate()
+          }
           onRetry={() => void retryGitHubChecks()}
           retryLabel="Check again"
           showRetry={cliAvailable === false}

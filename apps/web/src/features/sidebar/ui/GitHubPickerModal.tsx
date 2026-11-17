@@ -125,19 +125,37 @@ export function GitHubPickerModal({
             </div>
           ) : activeTab === "prs" && !ghAuthenticated ? (
             <div className="flex flex-col items-center gap-3 px-3 py-6 text-center">
-              <p className="text-muted-foreground text-sm">Connect GitHub to load pull requests.</p>
+              <p className="text-muted-foreground text-sm">
+                {signInMutation.page ? (
+                  <>
+                    Enter{" "}
+                    <span className="text-text-primary font-mono select-all">
+                      {signInMutation.page.code}
+                    </span>{" "}
+                    on GitHub to finish signing in.
+                  </>
+                ) : (
+                  "Connect GitHub to load pull requests."
+                )}
+              </p>
               <Button
                 size="sm"
                 className="gap-1.5"
-                onClick={() => signInMutation.mutate()}
-                disabled={signInMutation.isPending}
+                onClick={() =>
+                  signInMutation.page ? signInMutation.openPage() : signInMutation.mutate()
+                }
+                disabled={signInMutation.isPending && !signInMutation.page}
               >
-                {signInMutation.isPending ? (
+                {signInMutation.isPending && !signInMutation.page ? (
                   <Loader2 className="size-3.5 animate-spin" />
                 ) : (
                   <GitHubIcon className="size-3.5" />
                 )}
-                {signInMutation.isPending ? "Signing in" : "Sign in"}
+                {signInMutation.page
+                  ? "Open GitHub"
+                  : signInMutation.isPending
+                    ? "Signing in"
+                    : "Sign in"}
               </Button>
             </div>
           ) : (
