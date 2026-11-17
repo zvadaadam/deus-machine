@@ -83,7 +83,7 @@ export interface DeusTurnOptions {
   /** Extra env for the agent process (a Codex session's own CODEX_HOME). */
   env?: Record<string, string>;
   /** The device the workspace's Simulator tab shows, named to the agent. */
-  simulator?: { name: string; udid: string } | null;
+  simulator?: { udid: string } | null;
 }
 
 /**

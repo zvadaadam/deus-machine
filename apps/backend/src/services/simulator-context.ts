@@ -59,7 +59,6 @@ export async function simctl(
 
 export interface SimulatorContext {
   udid: string;
-  name: string;
   streaming: boolean;
 }
 
@@ -416,7 +415,6 @@ export function getContextForWorkspace(workspaceId: string): SimulatorContext | 
   if (!session) return null;
   return {
     udid: session.udid,
-    name: session.deviceName,
     streaming: session.streaming,
   };
 }

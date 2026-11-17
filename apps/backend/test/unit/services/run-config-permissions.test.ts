@@ -32,7 +32,7 @@ describe.each(harnesses)("%s local permission policy", (harness) => {
 
 describe.each(harnesses)("%s and the Simulator tab", (harness) => {
   it("names the tab's device to the agent, and nothing without one", () => {
-    const simulator = { name: "iPhone 17", udid: "5E4E0C2F-7025-4AAE-86D4-75A9BCD7AF06" };
+    const simulator = { udid: "5E4E0C2F-7025-4AAE-86D4-75A9BCD7AF06" };
     const shown = buildTurnStartParams("session", "turn", harness, "Check it", {
       cwd: "/workspace",
       simulator,

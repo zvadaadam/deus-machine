@@ -148,6 +148,13 @@ async function screenGeometry(
 export async function simulatorBackend(spec: SimulatorSourceSpec): Promise<CaptureBackend> {
   const devices = await listSimulators(spec.deviceSet);
   const booted = devices.filter((d) => d.state === "Booted");
+  // "booted" names the only booted device: with several, picking one would
+  // record a simulator other than the one being used.
+  if (spec.udid === "booted" && booted.length > 1) {
+    throw new ScreenStudioError("source_unavailable", "Several simulators are booted", {
+      hint: `Name one: ${booted.map((d) => `${d.name} (${d.udid})`).join(", ")}`,
+    });
+  }
   const device =
     spec.udid === "booted"
       ? booted[0]
