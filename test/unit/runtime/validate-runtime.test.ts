@@ -12,7 +12,6 @@ import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CLI_RUNTIME_DEPENDENCIES } from "@shared/runtime";
 import { stageRuntime } from "../../../scripts/runtime/stage";
 import { validateRuntimeStage } from "../../../scripts/runtime/validate";
 
@@ -78,19 +77,6 @@ function writeExecutable(filePath: string, contents: string): void {
 
 function writeProjectFixture(projectRoot: string): void {
   writeFile(path.join(projectRoot, "apps", "backend", "dist", "server.bundled.cjs"), "backend");
-  writeFile(
-    path.join(projectRoot, "apps", "cli", "package.json"),
-    JSON.stringify(
-      {
-        name: "deus-cli-fixture",
-        dependencies: Object.fromEntries(
-          CLI_RUNTIME_DEPENDENCIES.map((dependency) => [dependency, "1.0.0"])
-        ),
-      },
-      null,
-      2
-    )
-  );
   writeFile(
     path.join(projectRoot, "scripts", "runtime", "gh-cli-contract.json"),
     JSON.stringify({ ghVersion: TEST_GH_VERSION, targets: TEST_GH_TARGETS }, null, 2)

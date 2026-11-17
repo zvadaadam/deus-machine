@@ -505,17 +505,20 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build CLI
-        run: |
-          bun run build:runtime
-          cd apps/cli && bun run build
+        run: bun run build:runtime
+
+      - name: Build, pack and smoke CLI
+        # Builds apps/cli, packs it, installs the tarball into an empty
+        # directory with npm and requires `deus --version` to print the version.
+        run: bun run smoke:cli-package -- --tarball "$RUNNER_TEMP/deus-machine.tgz"
 
       - name: Publish to npm
         working-directory: apps/cli
         run: |
           # Bun builds and packs; npm's publisher performs the GitHub OIDC exchange.
           # Clear setup-node's token config so publishing uses workflow identity.
+          # The tarball is the one the smoke installed and ran.
           unset NODE_AUTH_TOKEN NPM_CONFIG_TOKEN NPM_CONFIG_USERCONFIG
-          bun pm pack --filename "$RUNNER_TEMP/deus-machine.tgz"
           bunx npm@11.14.1 publish "$RUNNER_TEMP/deus-machine.tgz" --access public
 
   # ── Step 5: Publish GitHub Release after CLI publish succeeds ───────

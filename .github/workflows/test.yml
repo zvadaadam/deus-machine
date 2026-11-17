@@ -255,6 +255,12 @@ jobs:
           test -x "$resources_dir/bin/agent-browser"
           file "$resources_dir/bin/deus-runtime" | grep 'ELF 64-bit'
 
+      - name: Smoke the npm CLI package
+        # `build:all` above ran `build:runtime`, the release's first step. This
+        # builds and packs the CLI as the release does, installs the tarball
+        # with npm and runs `deus --version`.
+        run: bun run smoke:cli-package
+
   backend-tests:
     name: Backend Tests
     runs-on: ubuntu-latest
@@ -282,6 +288,11 @@ jobs:
 
       - name: Run tests
         run: bun run test:backend
+
+      - name: SQLite parity on Bun (the packaged app's engine)
+        # The same file test:backend just ran on Node and better-sqlite3, run
+        # by Bun's test runner against bun:sqlite behind src/lib/sqlite.ts.
+        run: bun run test:sqlite-bun
 
   agent-server-tests:
     name: Agent Server Tests

@@ -90,4 +90,23 @@ describe("release workflow", () => {
     expect(result.status).toBe(0);
     expect(result.output).toBe(`version=${version}\ntag=v${version}\n`);
   });
+
+  it("publishes the CLI tarball the package smoke installed and ran", () => {
+    const steps = parsed.jobs["publish-cli"].steps;
+    const smoke = steps.findIndex((step) => step.run?.includes("bun run smoke:cli-package"));
+    const publish = steps.findIndex((step) => step.run?.includes("npm@"));
+    expect(smoke).toBeGreaterThan(-1);
+    expect(publish).toBeGreaterThan(smoke);
+    expect(steps[smoke].run).toContain('--tarball "$RUNNER_TEMP/deus-machine.tgz"');
+    expect(steps[publish].run).toContain('publish "$RUNNER_TEMP/deus-machine.tgz"');
+    expect(steps[publish].run).not.toContain("pm pack");
+  });
+
+  it("smokes the CLI package on pull requests too", () => {
+    const tests = load(
+      readFileSync(path.join(process.cwd(), ".github/workflows/test.yml"), "utf8")
+    ) as typeof parsed;
+    const runs = Object.values(tests.jobs).flatMap((job) => job.steps.map((step) => step.run));
+    expect(runs.some((run) => run?.includes("bun run smoke:cli-package"))).toBe(true);
+  });
 });

@@ -6,17 +6,6 @@ export const DEUS_PREFERENCES_FILENAME = "preferences.json";
 export const RUNTIME_MANIFEST_VERSION = 1;
 export const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"] as const;
 
-export const CLI_RUNTIME_DEPENDENCIES = [
-  "@anthropic-ai/claude-agent-sdk",
-  "@hono/node-server",
-  "@napi-rs/canvas",
-  "@sentry/node",
-  "agent-browser",
-  "better-sqlite3",
-  "node-pty",
-  "ws",
-] as const;
-
 export interface RuntimePathOptions {
   platform: NodeJS.Platform;
   homeDir: string;

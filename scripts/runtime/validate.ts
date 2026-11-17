@@ -4,7 +4,6 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  CLI_RUNTIME_DEPENDENCIES,
   DEUS_APP_ID,
   DEUS_DB_FILENAME,
   DEUS_PREFERENCES_FILENAME,
@@ -277,7 +276,6 @@ function buildExpectedManifest(projectRoot: string): RuntimeManifest {
         backend: relativeFromProjectRoot(projectRoot, stagePaths.common.backendBundle),
       },
     },
-    nodeRuntimeDependencies: CLI_RUNTIME_DEPENDENCIES,
   };
 }
 

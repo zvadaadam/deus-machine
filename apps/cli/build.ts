@@ -4,13 +4,14 @@
  * 1. Bundle the CLI TypeScript → dist/cli.js (esbuild)
  * 2. Stage the shared runtime artifact (the backend bundle, which runs the engine)
  * 3. Copy the staged runtime bundles into bundles/ for npm distribution
+ * 4. Check that every package the published files import is declared
  */
 
 import { build } from "esbuild";
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { resolve, join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { stageRuntime } from "../../scripts/runtime/stage";
+import { assertCliBundleDependencies, stageRuntime } from "../../scripts/runtime/stage";
 import { resolveRuntimeStagePaths } from "../../shared/runtime";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -78,6 +79,10 @@ async function main() {
     cpSync(copy.src, copy.dest, { recursive: true });
     console.log(`   ✓ ${copy.name}`);
   }
+
+  // Step 5: Everything the published files import must reach an npm install
+  console.log("\n5. Checking the CLI's imports against its dependencies...");
+  assertCliBundleDependencies(cliDir, (line) => console.log(`   ${line}`));
 
   console.log("\n✓ Build complete!");
   console.log(`  CLI: ${join(cliDir, "dist/cli.js")}`);

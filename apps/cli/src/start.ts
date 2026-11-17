@@ -10,8 +10,9 @@
  * 3. Show pairing code + QR for remote access
  */
 
-import { execSync, spawn, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
@@ -21,7 +22,6 @@ import {
   resolveDefaultDataDir,
   resolveRuntimeStagePaths,
 } from "../../../shared/runtime";
-import { validateRuntimeStage } from "../../../scripts/runtime/validate";
 import {
   spinner as createSpinner,
   statusLine,
@@ -70,8 +70,19 @@ export async function start(options: StartOptions): Promise<void> {
     process.exit(1);
   }
 
-  // Resolve Node binary
-  const nodeCmd = resolveNodeBinary();
+  // The backend runs on the Node that runs this CLI, and needs its SQLite.
+  const sqliteFailure = sqliteLoadFailure();
+  if (sqliteFailure) {
+    error(`SQLite (better-sqlite3) does not load under Node ${process.version}: ${sqliteFailure}`);
+    blank();
+    hint(
+      paths.monorepo
+        ? `Run ${c.cyan("bun run native:node")} from the monorepo root, then start again.`
+        : `Reinstall Deus with ${c.cyan("npm install -g deus-machine")}, then start again.`
+    );
+    blank();
+    process.exit(1);
+  }
 
   // Resolve database
   const dbPath = resolveDataDir(dataDir);
@@ -115,10 +126,8 @@ export async function start(options: StartOptions): Promise<void> {
 
   const s1 = createSpinner("Starting backend...");
   const started = await startBackendProcess({
-    command: nodeCmd,
     backendEntry: paths.backend,
     backendCwd: dirname(paths.backend),
-    forceElectronRunAsNode: nodeCmd !== process.execPath,
     env: {
       DATABASE_PATH: dbPath,
       PORT: "0",
@@ -193,29 +202,38 @@ export async function start(options: StartOptions): Promise<void> {
 
 // ── Bundle resolution ────────────────────────────────────────────────
 
-function resolveBundlePaths(): { backend: string } | null {
+function resolveBundlePaths(): { backend: string; monorepo: boolean } | null {
   const cliRoot = resolve(__dirname, "..");
 
   // Bundled mode (npm package)
   const bundledDir = join(cliRoot, "bundles");
   if (existsSync(join(bundledDir, "server.bundled.cjs"))) {
-    return { backend: join(bundledDir, "server.bundled.cjs") };
+    return { backend: join(bundledDir, "server.bundled.cjs"), monorepo: false };
   }
 
-  // Dev mode (monorepo)
+  // Dev mode (monorepo): the backend bundle `bun run build:runtime` stages.
   const monorepoRoot = resolve(cliRoot, "../..");
-  const runtimePaths = resolveRuntimeStagePaths(monorepoRoot);
+  const backend = resolveRuntimeStagePaths(monorepoRoot).common.backendBundle;
+  if (existsSync(backend)) return { backend, monorepo: true };
 
-  try {
-    validateRuntimeStage({ projectRoot: monorepoRoot, log: () => {} });
-    return { backend: runtimePaths.common.backendBundle };
-  } catch (error) {
-    warn(
-      `Staged runtime is missing or stale in monorepo mode: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-
+  warn(`The staged runtime is missing in the monorepo: ${backend} does not exist.`);
   return null;
+}
+
+// ── SQLite ───────────────────────────────────────────────────────────
+
+/** Why better-sqlite3 cannot open a database under this Node, or null if it can. */
+function sqliteLoadFailure(): string | null {
+  try {
+    const Database = createRequire(import.meta.url)("better-sqlite3") as new (filename: string) => {
+      close(): void;
+    };
+    new Database(":memory:").close();
+    return null;
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    return message.split("\n")[0];
+  }
 }
 
 // ── Data directory ───────────────────────────────────────────────────
@@ -234,54 +252,22 @@ function resolveDataDir(customDir?: string): string {
   return join(dir, DEUS_DB_FILENAME);
 }
 
-// ── Node binary resolution ───────────────────────────────────────────
-
-function resolveNodeBinary(): string {
-  if (process.env.ELECTRON_RUN_AS_NODE === "1") return process.execPath;
-
-  try {
-    const electronPath = execSync(
-      "node -e \"try { console.log(require('electron')) } catch { process.exit(1) }\"",
-      { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
-    ).trim();
-
-    if (electronPath && existsSync(electronPath)) {
-      try {
-        execSync(
-          "node -e \"const D = require('better-sqlite3'); const d = new D(':memory:'); d.close()\"",
-          { timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
-        );
-        return process.execPath;
-      } catch {
-        return electronPath;
-      }
-    }
-  } catch {
-    // ignore — fall through to default
-  }
-
-  return process.execPath;
-}
+// ── Backend process ──────────────────────────────────────────────────
 
 async function startBackendProcess(opts: {
-  command: string;
   backendEntry: string;
   backendCwd: string;
   env: Record<string, string>;
-  forceElectronRunAsNode: boolean;
   onUnexpectedExit: (code: number | null, signal: NodeJS.Signals | null) => void;
 }): Promise<{ process: ChildProcess; backendPort: number } | null> {
-  const { command, backendEntry, backendCwd, env, forceElectronRunAsNode, onUnexpectedExit } = opts;
+  const { backendEntry, backendCwd, env, onUnexpectedExit } = opts;
 
   return new Promise((resolve) => {
-    const child = spawn(command, [backendEntry], {
+    // The Node that runs this CLI runs the backend.
+    const child = spawn(process.execPath, [backendEntry], {
       cwd: backendCwd,
       stdio: ["ignore", "pipe", "pipe"],
-      env: {
-        ...process.env,
-        ...(forceElectronRunAsNode ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
-        ...env,
-      },
+      env: { ...process.env, ...env },
     });
 
     let buffer = "";
