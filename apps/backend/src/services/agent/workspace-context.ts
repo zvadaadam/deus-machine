@@ -17,15 +17,16 @@ export function getProjectName(cwd: string): string {
   return path.basename(cwd.substring(0, idx));
 }
 
-/**
- * Builds concise workspace context for any agent.
- * Includes project name, worktree path, and orchestrator info.
- */
+/** The device a workspace's Simulator tab shows. */
 export interface Simulator {
   name: string;
   udid: string;
 }
 
+/**
+ * Builds concise workspace context for any agent.
+ * Includes project name, worktree path, and orchestrator info.
+ */
 export function buildWorkspaceContext(cwd?: string, simulator?: Simulator | null): string {
   if (!cwd) return "";
 
