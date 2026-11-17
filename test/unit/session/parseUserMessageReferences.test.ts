@@ -49,22 +49,6 @@ describe("parseUserMessageReferences", () => {
     });
   });
 
-  it("parses inspect refs before legacy markdown diff comments", () => {
-    const legacyDiff = [
-      "### 💬 Diff comment",
-      "- **File:** `apps/web/src/App.tsx`",
-      "- **Line:** 42 (addition)",
-      "Please fix this",
-    ].join("\n");
-    const segments = parseUserMessageReferences(`${inspect}\n\n${legacyDiff}`);
-
-    expect(segments.map((segment) => segment.type)).toEqual(["inspect", "text", "diff-comment"]);
-    expect(segments[2]).toMatchObject({
-      type: "diff-comment",
-      comment: { file: "apps/web/src/App.tsx", line: 42, text: "Please fix this" },
-    });
-  });
-
   it("keeps plain text plain when there are no reference tags", () => {
     expect(parseUserMessageReferences("hello world")).toEqual([]);
   });

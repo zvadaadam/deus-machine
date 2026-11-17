@@ -102,9 +102,7 @@ async function main() {
 
   switch (resolvedCommand) {
     // ── Start headless server ──────────────────────────────────────
-    case "start":
-    case "serve": {
-      // backward compat
+    case "start": {
       const { values } = parseArgs({
         args: commandArgs,
         options: {
@@ -120,9 +118,7 @@ async function main() {
     }
 
     // ── Install desktop app ────────────────────────────────────────
-    case "install":
-    case "desktop": {
-      // backward compat
+    case "install": {
       // Check if already installed — just launch
       const installedPath = findInstalledApp();
       if (installedPath) {

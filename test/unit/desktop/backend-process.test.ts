@@ -273,7 +273,6 @@ describe("desktop backend process", () => {
     process.env.DEUS_PACKAGED = "stale-packaged";
     process.env.DEUS_RESOURCES_PATH = "/tmp/stale-resources";
     process.env.DEUS_RUNTIME = "1";
-    process.env.DEUS_RUNTIME_COMMAND = "self-test";
     process.env.DEUS_RUNTIME_EXECUTABLE = "/tmp/stale-runtime";
     process.env.NODE_PATH = "/tmp/stale-node-modules";
     process.env.NODE_ENV = "development";
@@ -300,7 +299,6 @@ describe("desktop backend process", () => {
     expect(options.env.DEUS_BACKEND_PORT).toBeUndefined();
     expect(options.env.DEUS_DATA_DIR).toBeUndefined();
     expect(options.env.DEUS_RUNTIME).toBeUndefined();
-    expect(options.env.DEUS_RUNTIME_COMMAND).toBeUndefined();
     expect(options.env.NODE_PATH).toBeUndefined();
     expect(options.env.DEUS_PACKAGED).toBe("1");
     expect(options.env.NODE_ENV).toBe("production");

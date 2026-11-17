@@ -12,13 +12,11 @@ import Codex from "./codex.svg?react";
 
 export type AgentLogoComponent = FC<SVGProps<SVGSVGElement>>;
 
-/** Agent harness (and the spellings older rows saved) → its logo. */
+/** Agent harness → its logo. */
 const agentLogos: Record<string, AgentLogoComponent> = {
   "claude-code": ClaudeCode,
-  claude: ClaudeCode,
   "codex-sdk": Codex,
   "codex-app-server": Codex,
-  "codex-server": Codex,
 };
 
 /** Get agent logo component, returns undefined if not found */

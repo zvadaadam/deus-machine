@@ -58,24 +58,19 @@ export function resolveBundledCliPath(tool: string): string | null {
 export function getBundledCliPathCandidates(tool: string): string[] {
   if (!CLI_TOOL_NAME_PATTERN.test(tool)) return [];
 
-  const executableName = process.platform === "win32" ? `${tool}.exe` : tool;
   return getBundledCliDirectoryCandidates().map((bundledCliDirectory) =>
-    join(bundledCliDirectory, executableName)
+    join(bundledCliDirectory, tool)
   );
 }
 
 function missingPackagedCliPath(tool: string): string {
-  const executableName = process.platform === "win32" ? `${tool}.exe` : tool;
-  return process.platform === "win32"
-    ? join("C:\\", "__deus_missing_bundled_bin__", executableName)
-    : join("/", "__deus_missing_bundled_bin__", executableName);
+  return join("/", "__deus_missing_bundled_bin__", tool);
 }
 
 function isExecutableFile(filePath: string): boolean {
   if (!existsSync(filePath)) return false;
   const stat = statSync(filePath);
   if (!stat.isFile()) return false;
-  if (process.platform === "win32") return true;
   return (stat.mode & 0o111) !== 0;
 }
 

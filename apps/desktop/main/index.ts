@@ -58,7 +58,6 @@ const canonicalUserDataPath =
   resolveDefaultDataDir({
     platform: process.platform,
     homeDir: process.env.HOME || homedir(),
-    appData: process.env.APPDATA,
     xdgDataHome: process.env.XDG_DATA_HOME,
   });
 app.setPath("userData", canonicalUserDataPath);
@@ -131,7 +130,7 @@ async function createWindow(): Promise<void> {
       preload: join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      webviewTag: true, // Phase 1 of WebContentsView→<webview> migration — enables <webview> for guest pages
+      webviewTag: true, // the Browser tab renders guest pages in <webview>
     },
   });
 
@@ -150,6 +149,9 @@ async function createWindow(): Promise<void> {
   const ALLOWED_WEBVIEW_PARAM_KEYS = new Set(["src", "partition", "useragent"]);
   mainWindow.webContents.on("will-attach-webview", (_event, webPreferences, params) => {
     webPreferences.preload = join(__dirname, "../preload/browser-preload.cjs");
+    // One session for every guest, the one whose permissions are limited
+    // (permissions.ts), whatever partition the page asked for.
+    webPreferences.partition = WEBVIEW_PARTITION;
     webPreferences.contextIsolation = true;
     webPreferences.nodeIntegration = false;
 

@@ -16,7 +16,6 @@ vi.mock("../../../src/lib/database", () => ({
 
 // The service keeps what it read; each test reads its own file afresh.
 let getAllSettings: typeof import("../../../src/services/settings.service").getAllSettings;
-let removeSettings: typeof import("../../../src/services/settings.service").removeSettings;
 let saveSetting: typeof import("../../../src/services/settings.service").saveSetting;
 
 const EXPECTED_PREFS_PATH = "/tmp/test-deus/preferences.json";
@@ -26,8 +25,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   mockFs.existsSync.mockReturnValue(false);
   vi.resetModules();
-  ({ getAllSettings, removeSettings, saveSetting } =
-    await import("../../../src/services/settings.service"));
+  ({ getAllSettings, saveSetting } = await import("../../../src/services/settings.service"));
 });
 
 describe("getAllSettings", () => {
@@ -118,24 +116,7 @@ describe("saveSetting", () => {
   });
 });
 
-describe("removeSettings", () => {
-  it("deletes only the named keys and writes once", () => {
-    mockFs.existsSync.mockReturnValue(true);
-    mockFs.readFileSync.mockReturnValue(
-      JSON.stringify({ theme: "dark", relay_token: "old", relay_server_id: "abcd1234" })
-    );
-    expect(removeSettings(["relay_token", "relay_server_id"])).toBe(true);
-    expect(mockFs.writeFileSync).toHaveBeenCalledOnce();
-    expect(JSON.parse(mockFs.writeFileSync.mock.calls[0][1] as string)).toEqual({ theme: "dark" });
-  });
-
-  it("writes nothing when none of the keys exist", () => {
-    mockFs.existsSync.mockReturnValue(true);
-    mockFs.readFileSync.mockReturnValue(JSON.stringify({ theme: "dark" }));
-    expect(removeSettings(["relay_token"])).toBe(false);
-    expect(mockFs.writeFileSync).not.toHaveBeenCalled();
-  });
-
+describe("private settings", () => {
   it("keeps machine secrets out of the settings API", () => {
     mockFs.existsSync.mockReturnValue(true);
     mockFs.readFileSync.mockReturnValue(

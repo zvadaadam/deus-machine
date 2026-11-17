@@ -54,16 +54,6 @@ function writePreferences(settings: Record<string, any>): void {
  */
 export const PRIVATE_SETTINGS: ReadonlySet<string> = new Set(["relay_machines"]);
 
-/** Delete settings outright (not set them to null). Returns whether any existed. */
-export function removeSettings(keys: readonly string[]): boolean {
-  const prefs = readPreferences();
-  const present = keys.filter((key) => key in prefs);
-  if (present.length === 0) return false;
-  for (const key of present) delete prefs[key];
-  writePreferences(prefs);
-  return true;
-}
-
 export function getAllSettings(): Record<string, any> {
   const prefs = readPreferences();
   for (const key of PRIVATE_SETTINGS) delete prefs[key];

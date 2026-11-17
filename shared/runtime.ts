@@ -7,7 +7,6 @@ export const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"] 
 export interface RuntimePathOptions {
   platform: NodeJS.Platform;
   homeDir: string;
-  appData?: string;
   xdgDataHome?: string;
 }
 
@@ -22,32 +21,19 @@ export interface RuntimeStagePaths {
   };
 }
 
-function getPathModule(platform: NodeJS.Platform): typeof path.posix | typeof path.win32 {
-  return platform === "win32" ? path.win32 : path.posix;
-}
-
 export function resolveDefaultDataDir(options: RuntimePathOptions): string {
-  const targetPath = getPathModule(options.platform);
-
   if (options.platform === "darwin") {
-    return targetPath.join(options.homeDir, "Library", "Application Support", DEUS_APP_ID);
+    return path.posix.join(options.homeDir, "Library", "Application Support", DEUS_APP_ID);
   }
 
-  if (options.platform === "win32") {
-    return targetPath.join(
-      options.appData || targetPath.join(options.homeDir, "AppData", "Roaming"),
-      DEUS_APP_ID
-    );
-  }
-
-  return targetPath.join(
-    options.xdgDataHome || targetPath.join(options.homeDir, ".local", "share"),
+  return path.posix.join(
+    options.xdgDataHome || path.posix.join(options.homeDir, ".local", "share"),
     "deus"
   );
 }
 
 export function resolveDefaultDatabasePath(options: RuntimePathOptions): string {
-  return getPathModule(options.platform).join(resolveDefaultDataDir(options), DEUS_DB_FILENAME);
+  return path.posix.join(resolveDefaultDataDir(options), DEUS_DB_FILENAME);
 }
 
 export function resolveRuntimeStagePaths(projectRoot: string): RuntimeStagePaths {

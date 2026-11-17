@@ -188,7 +188,7 @@ export function Terminal({
 
     // Spawn PTY — cloud terminals ride the sandbox session channel; the
     // backend picks the shell there, so command/cwd only matter locally.
-    const shell = navigator.platform?.startsWith("Win") ? "powershell.exe" : "/bin/zsh";
+    const shell = "/bin/zsh";
     let stopOutput = () => {};
     const startPty = () => {
       ready = false;

@@ -10,7 +10,6 @@ afterEach(() => {
 describe("backend child process environment", () => {
   it("scrubs packaged runtime internals while preserving caller overrides", () => {
     process.env.DEUS_RUNTIME = "1";
-    process.env.DEUS_RUNTIME_COMMAND = "backend";
     process.env.DEUS_RUNTIME_EXECUTABLE =
       "/Applications/Deus.app/Contents/Resources/bin/deus-runtime";
     process.env.DEUS_BUNDLED_BIN_DIR = "/Applications/Deus.app/Contents/Resources/bin";
@@ -33,7 +32,6 @@ describe("backend child process environment", () => {
     expect(env.DEUS_PORT).toBe("9000");
     expect(env.PATH).toBe("/Applications/Deus.app/Contents/Resources/bin:/usr/bin:/bin");
     expect(env.DEUS_RUNTIME).toBeUndefined();
-    expect(env.DEUS_RUNTIME_COMMAND).toBeUndefined();
     expect(env.DEUS_RUNTIME_EXECUTABLE).toBeUndefined();
     expect(env.DEUS_BUNDLED_BIN_DIR).toBeUndefined();
     expect(env.DEUS_RESOURCES_PATH).toBeUndefined();

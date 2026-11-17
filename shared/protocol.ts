@@ -4,10 +4,6 @@
 // used to keep camelCase/UPPERCASE spellings and translate at the backend
 // edge; that dialect is gone, so a composer value travels unchanged from the
 // picker to the engine's RunConfig.
-//
-// `readThinkingLevel` still absorbs the retired UPPERCASE spellings, because
-// `default_thinking_level` lives in preferences.json — a file the pre-launch
-// database reset does NOT clear. Read-time normalization, no migration.
 
 import {
   PermissionModeSchema as EnginePermissionModeSchema,
@@ -29,25 +25,14 @@ export type { PermissionMode };
 export const ThinkingLevelSchema = EngineThinkingLevelSchema as unknown as z.ZodType<ThinkingLevel>;
 export type { ThinkingLevel };
 
-/** Retired deus spellings → engine values. Read-time only; never written. */
-const RETIRED_THINKING_LEVELS: Record<string, ThinkingLevel> = {
-  NONE: "off",
-  LOW: "low",
-  MEDIUM: "medium",
-  HIGH: "high",
-  XHIGH: "xhigh",
-};
-
 /** Validate an incoming permission mode; undefined when unrecognized. */
 export function readPermissionMode(value: unknown): PermissionMode | undefined {
   const parsed = PermissionModeSchema.safeParse(value);
   return parsed.success ? parsed.data : undefined;
 }
 
-/** Normalize a stored/incoming thinking level; undefined when unrecognized. */
+/** Validate a stored/incoming thinking level; undefined when unrecognized. */
 export function readThinkingLevel(value: unknown): ThinkingLevel | undefined {
-  if (typeof value !== "string") return undefined;
-  const migrated = RETIRED_THINKING_LEVELS[value] ?? value;
-  const parsed = ThinkingLevelSchema.safeParse(migrated);
+  const parsed = ThinkingLevelSchema.safeParse(value);
   return parsed.success ? parsed.data : undefined;
 }

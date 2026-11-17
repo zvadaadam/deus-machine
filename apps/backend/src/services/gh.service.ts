@@ -2,42 +2,20 @@ import { promisify } from "util";
 import type { PRStatus } from "@shared/types/github";
 import { execFile } from "child_process";
 import { getErrorMessage, isExecError } from "@shared/lib/errors";
+import { createBackendChildEnv } from "@shared/lib/child-env";
 import { extendCliPath, resolveCliExecutable } from "@shared/lib/cli-path";
 import { parseGitHubRepo } from "@shared/lib/github";
 import { getGitRemoteUrl } from "../lib/git-remotes";
 export { parseGitHubRepo };
 
 const execFileAsync = promisify(execFile);
-const GH_CHILD_ENV_DENYLIST = [
-  "AUTH_TOKEN",
-  "BUN_OPTIONS",
-  "DATABASE_PATH",
-  "DEUS_AUTH_TOKEN",
-  "DEUS_BACKEND_PORT",
-  "DEUS_BUNDLED_BIN_DIR",
-  "DEUS_DATA_DIR",
-  "DEUS_PACKAGED",
-  "DEUS_RESOURCES_PATH",
-  "DEUS_RUNTIME",
-  "DEUS_RUNTIME_COMMAND",
-  "DEUS_RUNTIME_EXECUTABLE",
-  "ELECTRON_RUN_AS_NODE",
-  "NODE_PATH",
-  "PORT",
-] as const;
-
 export function ghChildEnv(): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  for (const key of GH_CHILD_ENV_DENYLIST) {
-    delete env[key];
-  }
-  return {
-    ...env,
+  return createBackendChildEnv({
     PATH: extendCliPath(process.env.PATH),
     GIT_TERMINAL_PROMPT: "0",
     GH_PROMPT_DISABLED: "1",
     GH_NO_UPDATE_NOTIFIER: "1",
-  };
+  });
 }
 
 // Helper: run gh CLI command with timeout, explicit error classification

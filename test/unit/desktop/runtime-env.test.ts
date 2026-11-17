@@ -42,45 +42,4 @@ describe("desktop packaged runtime environment", () => {
       );
     }
   );
-
-  it("removes inherited dev runtime variables from packaged main", () => {
-    const env: NodeJS.ProcessEnv = {
-      AUTH_TOKEN: "stale-auth-token",
-      DATABASE_PATH: "/tmp/stale.db",
-      DEUS_AUTH_TOKEN: "stale-main-auth-token",
-      DEUS_BUNDLED_BIN_DIR: "/tmp/stale-bin",
-      DEUS_BACKEND_PORT: "45678",
-      DEUS_DATA_DIR: "/tmp/stale-data",
-      DEUS_PACKAGED: "stale-packaged",
-      DEUS_RESOURCES_PATH: "/tmp/stale-resources",
-      DEUS_RUNTIME: "1",
-      DEUS_RUNTIME_COMMAND: "backend",
-      DEUS_RUNTIME_EXECUTABLE: "/tmp/deus-runtime",
-      ELECTRON_RUN_AS_NODE: "1",
-      NODE_PATH: "/repo/node_modules",
-      PATH: "/opt/homebrew/bin:/usr/bin",
-      PORT: "45678",
-    };
-
-    configurePackagedMainRuntimeEnv({
-      isPackaged: true,
-      platform: "darwin",
-      resourcesPath: "/Applications/Deus.app/Contents/Resources",
-      env,
-    });
-
-    expect(env.AUTH_TOKEN).toBeUndefined();
-    expect(env.DATABASE_PATH).toBeUndefined();
-    expect(env.DEUS_AUTH_TOKEN).toBeUndefined();
-    expect(env.DEUS_BUNDLED_BIN_DIR).toBe("/Applications/Deus.app/Contents/Resources/bin");
-    expect(env.DEUS_BACKEND_PORT).toBeUndefined();
-    expect(env.DEUS_DATA_DIR).toBeUndefined();
-    expect(env.DEUS_RUNTIME).toBeUndefined();
-    expect(env.DEUS_RUNTIME_COMMAND).toBeUndefined();
-    expect(env.DEUS_RUNTIME_EXECUTABLE).toBeUndefined();
-    expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined();
-    expect(env.NODE_PATH).toBeUndefined();
-    expect(env.PORT).toBeUndefined();
-    expect(env.DEUS_PACKAGED).toBe("1");
-  });
 });

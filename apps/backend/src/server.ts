@@ -10,7 +10,6 @@ import {
 import { syncKeepAwake } from "./services/keep-awake.service";
 import { notifyDevicesChanged } from "./services/remote-auth.service";
 import { reconcileRelay, disconnectFromRelay } from "./services/relay.service";
-import { retireLegacyRelayCredentials } from "./services/remote-machine.service";
 import * as agentService from "./services/agent";
 import { destroyAllPtySessions } from "./services/pty.service";
 import { destroyAllWatchers } from "./services/fs-watcher.service";
@@ -138,7 +137,6 @@ async function onListening(port: number): Promise<void> {
   console.log("Server ready!\n");
 
   // Waits for the desktop's account session when it is not handed over yet.
-  retireLegacyRelayCredentials();
   reconcileRelay();
   // A connected device can keep the Mac awake (the desktop holds the blocker).
   onDeviceConnectionsChange(() => {

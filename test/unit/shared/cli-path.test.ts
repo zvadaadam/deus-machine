@@ -53,7 +53,7 @@ describe("cli path helpers", () => {
 
   it("resolves a bundled executable when it exists", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "deus-cli-path-"));
-    const executablePath = path.join(dir, process.platform === "win32" ? "gh.exe" : "gh");
+    const executablePath = path.join(dir, "gh");
     process.env.DEUS_BUNDLED_BIN_DIR = dir;
 
     try {
@@ -77,15 +77,14 @@ describe("cli path helpers", () => {
 
   it("does not resolve a bundled file that is not executable", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "deus-cli-path-mode-"));
-    const filePath = path.join(dir, process.platform === "win32" ? "gh.exe" : "gh");
+    const filePath = path.join(dir, "gh");
     process.env.DEUS_BUNDLED_BIN_DIR = dir;
 
     try {
       writeFileSync(filePath, "");
-      if (process.platform !== "win32") chmodSync(filePath, 0o644);
+      chmodSync(filePath, 0o644);
 
-      const expected = process.platform === "win32" ? filePath : null;
-      expect(resolveBundledCliPath("gh")).toBe(expected);
+      expect(resolveBundledCliPath("gh")).toBeNull();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -93,12 +92,12 @@ describe("cli path helpers", () => {
 
   it("does not resolve a bundled directory as an executable", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "deus-cli-path-dir-"));
-    const toolDir = path.join(dir, process.platform === "win32" ? "gh.exe" : "gh");
+    const toolDir = path.join(dir, "gh");
     process.env.DEUS_BUNDLED_BIN_DIR = dir;
 
     try {
       mkdirSync(toolDir, { recursive: true });
-      if (process.platform !== "win32") chmodSync(toolDir, 0o755);
+      chmodSync(toolDir, 0o755);
 
       expect(resolveBundledCliPath("gh")).toBeNull();
     } finally {
@@ -117,7 +116,7 @@ describe("cli path helpers", () => {
   it("uses DEUS_RESOURCES_PATH as the packaged runtime resources root", () => {
     const root = mkdtempSync(path.join(tmpdir(), "deus-cli-resources-"));
     const binDir = path.join(root, "bin");
-    const executablePath = path.join(binDir, process.platform === "win32" ? "gh.exe" : "gh");
+    const executablePath = path.join(binDir, "gh");
     delete process.env.DEUS_BUNDLED_BIN_DIR;
     process.env.DEUS_RESOURCES_PATH = root;
 

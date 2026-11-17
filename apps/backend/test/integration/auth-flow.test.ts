@@ -60,7 +60,7 @@ import { SCHEMA_SQL } from "@shared/schema";
 import { createApp } from "../../src/app";
 import { _clearAll as clearAuthState, revokeDevice } from "../../src/services/remote-auth.service";
 import { closeAll as closeAllWs } from "../../src/services/ws.service";
-import { removeSettings, saveSetting } from "../../src/services/settings.service";
+import { saveSetting } from "../../src/services/settings.service";
 
 // Headers that simulate a remote client (non-localhost IP)
 const REMOTE_HEADERS = { "x-forwarded-for": "203.0.113.50" };
@@ -79,7 +79,7 @@ beforeEach(() => {
   // Clean slate for each test: clear in-memory auth state + DB rows + preferences
   clearAuthState();
   testDb.exec("DELETE FROM paired_devices");
-  removeSettings(["remote_access_enabled"]);
+  saveSetting("remote_access_enabled", false);
 });
 
 afterAll(() => {

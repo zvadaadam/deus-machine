@@ -35,16 +35,6 @@ function createTempRoot(): string {
 }
 
 function getEditorStateDbPath(homeDir: string, appName: string): string {
-  if (process.platform === "win32") {
-    return path.join(
-      process.env.APPDATA || path.join(homeDir, "AppData", "Roaming"),
-      appName,
-      "User",
-      "globalStorage",
-      "state.vscdb"
-    );
-  }
-
   if (process.platform === "darwin") {
     return path.join(
       homeDir,
@@ -242,18 +232,7 @@ describe("recent-projects.service", () => {
       isIgnoredRecentProjectPath("/Applications/Conductor.app", { homeDir: "/Users/deus" })
     ).toBe(true);
     expect(
-      isIgnoredRecentProjectPath("/Users/deus/Developer/project/.opendevs/alpha", {
-        homeDir: "/Users/deus",
-      })
-    ).toBe(true);
-    expect(
       isIgnoredRecentProjectPath("/Users/deus/Developer/project", { homeDir: "/Users/deus" })
-    ).toBe(false);
-    expect(isIgnoredRecentProjectPath("C:/Users/deus", { homeDir: "C:/Users/deus" })).toBe(true);
-    expect(
-      isIgnoredRecentProjectPath("C:/Users/deus/Developer/project", {
-        homeDir: "C:/Users/deus",
-      })
     ).toBe(false);
   });
 

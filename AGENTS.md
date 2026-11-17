@@ -654,7 +654,7 @@ the catalog can move to a package the day Deus Cloud reads it too.
 Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 13 tables: `repositories`, `workspaces`, `sessions`, `messages`, `turns`, `parts`, `compactions`, `paired_devices`, `assistants`, `automations`, `automation_runs`, `extension_installations`, `integration_connections`.
 
 - `repositories.root_path` is nullable (a project not on this computer). A database from before is rebuilt once at startup (`db/migrate-project-folder.ts`): it runs only while the column is still `NOT NULL`, first writes a copy next to the database (`<db>.before-optional-project-folder.bak`; no copy, no rebuild), then rebuilds the table in one transaction with foreign keys off and checked, and rolls back on any failure without the reset hint.
-- Turn accounting, execution, provider account snapshots and outcomes belong to `turns`, keyed by `(session_id, turn_id)`. Messages contain transcript content only. `db/migrate-turns.ts` moves existing message accounting once at startup without deleting history.
+- Turn accounting, execution, provider account snapshots and outcomes belong to `turns`, keyed by `(session_id, turn_id)`. Messages contain transcript content only.
 - Only the backend writes to DB
 - All indexes/triggers defined in `shared/schema.ts`
 - Use `sessions.last_user_message_at` instead of correlated subqueries

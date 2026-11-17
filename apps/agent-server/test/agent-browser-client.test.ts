@@ -37,17 +37,7 @@ afterEach(() => {
 });
 
 describe("agent-browser client", () => {
-  it("scrubs packaged runtime-only environment from child CLI processes", async () => {
-    process.env.DEUS_RUNTIME = "1";
-    process.env.DEUS_RUNTIME_COMMAND = "agent-server";
-    process.env.DEUS_RUNTIME_EXECUTABLE =
-      "/Applications/Deus.app/Contents/Resources/bin/deus-runtime";
-    process.env.DEUS_BUNDLED_BIN_DIR = "/Applications/Deus.app/Contents/Resources/bin";
-    process.env.DEUS_RESOURCES_PATH = "/Applications/Deus.app/Contents/Resources";
-    process.env.ELECTRON_RUN_AS_NODE = "1";
-    process.env.NODE_PATH = "/repo/node_modules";
-    process.env.PORT = "1234";
-
+  it("runs the bundled CLI in the chat's own browser session", async () => {
     await expect(execAgentBrowser("session-1", ["snapshot"])).resolves.toMatchObject({
       success: true,
       data: { ok: true },
@@ -60,14 +50,6 @@ describe("agent-browser client", () => {
     expect(options.env.AGENT_BROWSER_HEADED).toBe("1");
     // Recording attaches to the session's own DevTools endpoint; no shared stream port.
     expect(options.env.AGENT_BROWSER_STREAM_PORT).toBeUndefined();
-    expect(options.env.DEUS_RUNTIME).toBeUndefined();
-    expect(options.env.DEUS_RUNTIME_COMMAND).toBeUndefined();
-    expect(options.env.DEUS_RUNTIME_EXECUTABLE).toBeUndefined();
-    expect(options.env.DEUS_BUNDLED_BIN_DIR).toBeUndefined();
-    expect(options.env.DEUS_RESOURCES_PATH).toBeUndefined();
-    expect(options.env.ELECTRON_RUN_AS_NODE).toBeUndefined();
-    expect(options.env.NODE_PATH).toBeUndefined();
-    expect(options.env.PORT).toBeUndefined();
   });
 
   it("never attaches to a DevTools port: every command runs in the session's own browser", async () => {

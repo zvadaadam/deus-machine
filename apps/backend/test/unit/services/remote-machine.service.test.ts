@@ -8,8 +8,6 @@ const state = vi.hoisted(() => ({
 vi.mock("../../../src/services/settings.service", () => ({
   getSetting: (key: string) => state.settings.get(key) ?? null,
   saveSetting: (key: string, value: unknown) => state.settings.set(key, value),
-  removeSettings: (keys: string[]) =>
-    keys.map((key) => state.settings.delete(key)).some((deleted) => deleted),
 }));
 vi.mock("../../../src/services/agent/cloud/config", () => ({
   getDeusCloudSessionConfig: () => state.session,
@@ -23,7 +21,6 @@ import {
   isMachineRemoved,
   MachineRemovedError,
   obtainHostTicket,
-  retireLegacyRelayCredentials,
 } from "../../../src/services/remote-machine.service";
 
 const sessionFor = (sub: string) =>
@@ -178,19 +175,5 @@ describe("host tickets", () => {
     );
     await obtainHostTicket(currentAccountSession()!, `  ${"M".repeat(120)}  `, signal());
     expect(calls[0].body.name).toBe("M".repeat(80));
-  });
-});
-
-describe("pre-account relay credentials", () => {
-  it("are removed from disk; this computer's machine records stay", () => {
-    state.settings.set("relay_server_id", "abcd1234");
-    state.settings.set("relay_token", "t".repeat(64));
-    state.settings.set("relay_machines", { user_a: { machineId: "m", secret: "s" } });
-    retireLegacyRelayCredentials();
-    expect(state.settings.has("relay_server_id")).toBe(false);
-    expect(state.settings.has("relay_token")).toBe(false);
-    expect(state.settings.get("relay_machines")).toEqual({
-      user_a: { machineId: "m", secret: "s" },
-    });
   });
 });
