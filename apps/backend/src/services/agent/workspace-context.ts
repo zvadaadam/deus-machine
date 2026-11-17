@@ -37,7 +37,7 @@ export function buildWorkspaceContext(cwd?: string, simulator?: Simulator | null
     `You can only edit files within this worktree. Each workspace has a .context directory (gitignored) for cross-agent collaboration.\n` +
     `A built-in browser is available for testing UI changes.\n` +
     (simulator
-      ? `This workspace's Simulator tab shows the simulator ${simulator.udid}: pass \`--udid ${simulator.udid}\` to agent-device, and \`destination: "${simulator.udid}"\` to recording_start, so the person sees what you do.\n`
+      ? `This workspace's Simulator tab shows the simulator ${simulator.udid}: pass \`--udid ${simulator.udid}\` to agent-device so the person sees what you do.\n`
       : "") +
     `You can render live HTML+CSS previews inline in chat using the \`html-preview\` code fence — it renders in an isolated Shadow DOM instead of showing code. Use this naturally whenever showing is clearer than describing (design options, component variations, layout ideas).`
   );

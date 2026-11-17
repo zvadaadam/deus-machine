@@ -38,6 +38,10 @@ describe.each(harnesses)("%s and the Simulator tab", (harness) => {
       simulator,
     });
     expect(shown.config.systemPromptAppend).toContain(`--udid ${simulator.udid}`);
+    // Only Claude has the recording tools, so only Claude is told how to record that device.
+    expect(shown.config.systemPromptAppend?.includes(`destination "${simulator.udid}"`)).toBe(
+      harness === "claude-code"
+    );
     const none = buildTurnStartParams("session", "turn", harness, "Check it", {
       cwd: "/workspace",
     });

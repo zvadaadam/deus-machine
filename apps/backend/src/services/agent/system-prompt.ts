@@ -36,5 +36,9 @@ export function buildSystemPromptAppend(
 ): string {
   const workspaceContext = buildWorkspaceContext(cwd, simulator) || FALLBACK_CONTEXT;
   if (harness !== "claude-code") return workspaceContext;
-  return `${workspaceContext}\n${SCREEN_RECORDING}`.trim();
+  // Claude alone has the recording tools: it records the simulator its tab shows.
+  const recordingDevice = simulator
+    ? `To record this workspace's simulator, call recording_start with target "simulator" and destination "${simulator.udid}".\n`
+    : "";
+  return `${workspaceContext}\n${SCREEN_RECORDING}${recordingDevice}`.trim();
 }
