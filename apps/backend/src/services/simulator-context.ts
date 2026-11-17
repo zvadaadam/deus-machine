@@ -525,6 +525,11 @@ export async function startStream(
     const devices = await listDevices();
     const deviceInfo = devices.find((d) => d.udid === udid);
 
+    // A helper that exited since it said it was ready found no session to fail.
+    if (activeStreams.get(udid) !== stream) {
+      throw new Error("The simulator stream stopped while it was starting.");
+    }
+
     if (previousSession) {
       releaseWorkspaceSession(workspaceId, udid);
     }

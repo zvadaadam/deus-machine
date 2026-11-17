@@ -66,7 +66,8 @@ function filterSimBridgeStderr(raw: string, verbose: boolean): string {
 /**
  * Where a helper is, or null: the override when it exists, then Deus's
  * packaged `Resources/simulator`, then this package's `bin/` (from
- * `src/engine/` or a bundle in `dist/`), then next to a compiled CLI.
+ * `src/engine/` or a bundle in `dist/`), next to a compiled CLI, then a
+ * local `native/.build/release/`.
  */
 function findHelper(name: string, override: string | undefined): string | null {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -77,6 +78,8 @@ function findHelper(name: string, override: string | undefined): string | null {
     join(here, "../../bin", name),
     join(here, "../bin", name),
     join(dirname(process.execPath), name),
+    // Where `swift build -c release` (and the CLI's install) puts it.
+    ...["../../native", "../native"].map((dir) => join(here, dir, ".build/release", name)),
   ];
   return candidates.find((path): path is string => !!path && existsSync(path)) ?? null;
 }
