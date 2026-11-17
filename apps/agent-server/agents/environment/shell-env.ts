@@ -64,6 +64,8 @@ export function getShellEnvironment(): Record<string, string> {
     // An interactive shell ignores SIGTERM, so a profile that hangs would hold
     // the backend's start for as long as it hangs: kill it outright.
     killSignal: "SIGKILL",
+    // What a profile prints to stderr stays out of the backend's log.
+    stdio: ["pipe", "pipe", "ignore"],
     env: {
       // Prevent Oh My Zsh from blocking with auto-update prompts
       DISABLE_AUTO_UPDATE: "true",
