@@ -8,6 +8,7 @@ import { DEUS_DB_FILENAME, PACKAGED_SYSTEM_PATHS } from "../../../shared/runtime
 import { extendCliPath, getDevStagedCliDirectory } from "../../../shared/lib/cli-path";
 import { PACKAGED_RUNTIME_ENV_DENYLIST } from "./runtime-env";
 import { handleKeepAwakeLine, setKeepAwakeWanted } from "./keep-awake";
+import { getLaunchPath } from "./shell-env";
 
 export const CDP_PORT = "19222";
 
@@ -89,12 +90,14 @@ function isExecutableFile(filePath: string): boolean {
   return (stat.mode & 0o111) !== 0;
 }
 
-/** The `node` the dev backend runs on: the first on the backend's PATH. */
-function findDevNode(searchPath: string): string {
-  for (const dir of searchPath.split(delimiter)) {
-    if (!dir) continue;
-    const candidate = join(dir, "node");
-    if (isExecutableFile(candidate)) return candidate;
+/** The `node` the dev backend runs on: the first found on these PATHs, in order. */
+function findDevNode(...searchPaths: string[]): string {
+  for (const searchPath of searchPaths) {
+    for (const dir of searchPath.split(delimiter)) {
+      if (!dir) continue;
+      const candidate = join(dir, "node");
+      if (isExecutableFile(candidate)) return candidate;
+    }
   }
   throw new Error(
     "The dev backend runs on Node.js, and no `node` is on the PATH. " +
@@ -208,7 +211,10 @@ export async function spawnBackend(
   // Packaged: the bundled deus-runtime. Dev: the backend runs on the system
   // Node, as `bun run dev:web` and the tests do, so the native modules are
   // built once, for that Node (`bun run native:node`), never for Electron.
-  const backendCommand = runtime.runtimeExecutable ?? findDevNode(sharedEnv.PATH!);
+  // That is the terminal's `node`, so the PATH the app started with is
+  // searched first: the login shell's PATH (shell sync) may put another Node
+  // ahead. An app started from Finder has none there and uses the synced PATH.
+  const backendCommand = runtime.runtimeExecutable ?? findDevNode(getLaunchPath(), sharedEnv.PATH!);
 
   return new Promise((resolve, reject) => {
     let settled = false;

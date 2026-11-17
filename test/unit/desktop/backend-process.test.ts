@@ -5,19 +5,23 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { mockApp, mockBrowserWindow, mockSpawn, mockPushCredentials } = vi.hoisted(() => ({
-  mockApp: {
-    isPackaged: true,
-    getPath: vi.fn((name: string) =>
-      name === "userData" ? "/Users/test/Library/Application Support/Deus" : "/tmp"
-    ),
-  },
-  mockBrowserWindow: {
-    getAllWindows: vi.fn(() => []),
-  },
-  mockSpawn: vi.fn(),
-  mockPushCredentials: vi.fn(async () => true),
-}));
+const { mockApp, mockBrowserWindow, mockSpawn, mockExecFile, mockPushCredentials } = vi.hoisted(
+  () => ({
+    mockApp: {
+      isPackaged: true,
+      getPath: vi.fn((name: string) =>
+        name === "userData" ? "/Users/test/Library/Application Support/Deus" : "/tmp"
+      ),
+    },
+    mockBrowserWindow: {
+      getAllWindows: vi.fn(() => []),
+    },
+    mockSpawn: vi.fn(),
+    // The login shell that shell sync asks for its PATH (shell-env.ts).
+    mockExecFile: vi.fn(),
+    mockPushCredentials: vi.fn(async () => true),
+  })
+);
 
 vi.mock("electron", () => ({
   app: mockApp,
@@ -26,6 +30,7 @@ vi.mock("electron", () => ({
 
 vi.mock("child_process", () => ({
   spawn: mockSpawn,
+  execFile: mockExecFile,
 }));
 
 vi.mock("../../../apps/desktop/main/deus-cloud-provision", () => ({
@@ -346,6 +351,56 @@ describe("desktop backend process", () => {
 
     await expect(spawnBackend()).rejects.toThrow(/no `node` is on the PATH\. Install Node 22/);
     expect(mockSpawn).not.toHaveBeenCalled();
+  });
+
+  it("starts the dev backend on the launch PATH's node when shell sync put another first", async () => {
+    mockApp.isPackaged = false;
+    const root = mkdtempSync(path.join(os.tmpdir(), "deus-desktop-dev-node-"));
+    tempRoots.push(root);
+    const emptyDir = path.join(root, "empty");
+    const terminalNodeDir = path.join(root, "terminal-node");
+    const shellNodeDir = path.join(root, "login-shell-node");
+    for (const dir of [emptyDir, terminalNodeDir, shellNodeDir]) mkdirSync(dir);
+    for (const dir of [terminalNodeDir, shellNodeDir]) {
+      writeFileSync(path.join(dir, "node"), "#!/bin/sh\n");
+      chmodSync(path.join(dir, "node"), 0o755);
+    }
+    const shellPath = [shellNodeDir, terminalNodeDir].join(path.delimiter);
+    Object.defineProperty(process, "platform", { configurable: true, value: "darwin" });
+    delete process.env.DEUS_PACKAGED;
+    delete process.env.DEUS_RUNTIME;
+    process.env.DEUS_BUNDLED_BIN_DIR = emptyDir;
+    process.env.PATH = terminalNodeDir;
+    mockExecFile.mockImplementation((file: string, _args: string[], ...rest: unknown[]) => {
+      const callback = rest.at(-1) as (err: Error | null, out: { stdout: string }) => void;
+      callback(null, {
+        stdout: file === "dscl" ? "UserShell: /bin/zsh\n" : `__PATH__=${shellPath}\n`,
+      });
+    });
+    // Fresh modules: the launch PATH is kept once per process, at the first sync.
+    vi.resetModules();
+    const shellEnv = await import("../../../apps/desktop/main/shell-env");
+    const backend = await import("../../../apps/desktop/main/backend-process");
+    await shellEnv.syncShellEnvironment();
+    expect(process.env.PATH).toBe(shellPath);
+    const child = createFakeChild();
+    mockSpawn.mockReturnValue(child);
+
+    try {
+      const starting = backend.spawnBackend();
+      child.stdout.write("[BACKEND_PORT]45678\n");
+      await starting;
+
+      const [command, , options] = mockSpawn.mock.calls[0];
+      expect(command).toBe(path.join(terminalNodeDir, "node"));
+      // The backend's own PATH is still built from the synced one.
+      expect(options.env.PATH.split(path.delimiter).indexOf(shellNodeDir)).toBeLessThan(
+        options.env.PATH.split(path.delimiter).indexOf(terminalNodeDir)
+      );
+    } finally {
+      await backend.stopBackend();
+      mockExecFile.mockReset();
+    }
   });
 
   it("starts packaged Linux backend through bundled deus-runtime", async () => {

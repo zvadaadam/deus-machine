@@ -16,6 +16,18 @@ import { promisify } from "util";
 
 const execFileAsync = promisify(execFile);
 
+/** PATH as the app was started, before the first sync replaced it. */
+let launchPath: string | undefined;
+
+/**
+ * The PATH the app was started with: the terminal's for `bun run dev` (whose
+ * `node` the native modules were built for by `bun run native:node`), Finder's
+ * minimal one otherwise. The current PATH when no sync has replaced it.
+ */
+export function getLaunchPath(): string {
+  return launchPath ?? process.env.PATH ?? "";
+}
+
 export async function syncShellEnvironment(): Promise<void> {
   if (process.platform !== "darwin") return;
   if (process.env.DEUS_PACKAGED === "1" || process.env.DEUS_RUNTIME === "1") return;
@@ -47,6 +59,7 @@ export async function syncShellEnvironment(): Promise<void> {
     // Parse the PATH from output
     const match = stdout.match(/__PATH__=(.+)/);
     if (match?.[1]) {
+      launchPath ??= process.env.PATH ?? "";
       process.env.PATH = match[1].trim();
     }
   } catch (err) {

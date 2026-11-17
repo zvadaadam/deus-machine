@@ -21,7 +21,7 @@
   "scripts": {
     "setup": "bun install --frozen-lockfile && (cd apps/cloud-relay && bun install --frozen-lockfile) && (cd apps/landing && bun install --frozen-lockfile)",
     "doctor": "bun scripts/doctor.mjs",
-    "dev": "bun run native:node && node node_modules/electron/install.js && bun scripts/runtime/prepare-dev-agent-clis.ts && electron-vite dev",
+    "dev": "bun run native:node && bun run electron:install && bun scripts/runtime/prepare-dev-agent-clis.ts && electron-vite dev",
     "dev:cloud-local": "DEUS_CLOUD_ENV=local bun run dev",
     "dev:web": "bun run native:node && bun scripts/runtime/prepare-dev-agent-clis.ts && bun scripts/runtime/dev.ts",
     "dev:frontend": "vite --config apps/web/vite.config.ts",
@@ -40,6 +40,7 @@
     "package:linux": "bun run build:all && electron-builder --linux",
     "postinstall": "bun run prepare:device-use",
     "native:node": "node scripts/runtime/rebuild-node-native.cjs",
+    "electron:install": "node node_modules/electron/install.js",
     "prepare:device-use": "node scripts/prepare-device-use.mjs",
     "prepare:gh-cli": "node scripts/prepare-gh-cli.mjs",
     "prepare:agent-clis": "bun scripts/runtime/prepare-agent-clis.ts",
