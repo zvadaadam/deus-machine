@@ -328,7 +328,7 @@ try {
   const cardText = await card.innerText();
   assert.ok(!/MESSAGE_SEND_FAILED|PROVIDER_ACCOUNT_RECONNECT_REQUIRED/.test(cardText), cardText);
   assert.equal(await card.getByRole("button", { name: "Open AI Providers" }).count(), 1);
-  assert.equal(await card.getByRole("button", { name: "Retry in new chat" }).count(), 0);
+  assert.equal(await card.getByRole("button", { name: "New chat" }).count(), 0);
   await page.screenshot({ path: path.join(shots, "2b-refused-send.png") });
   await card.getByRole("button", { name: "Open AI Providers" }).click();
   await page.getByRole("heading", { name: "AI Providers" }).first().waitFor();

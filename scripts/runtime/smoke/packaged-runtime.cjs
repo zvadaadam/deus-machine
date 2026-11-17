@@ -159,7 +159,6 @@ async function smokePackagedRuntime(options) {
     label: "Packaged runtime",
     binDir,
     resourcesPath: resourcesDir,
-    expectedNodePaths: [path.join(resourcesDir, "app.asar.unpacked", "node_modules")],
   });
   console.log(`[runtime-smoke] packaged runtime self-test binDir: ${selfTest.binDir}`);
 

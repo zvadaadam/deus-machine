@@ -425,10 +425,10 @@ export function buildDeusRuntime(options: BuildDeusRuntimeOptions = {}): DeusRun
         `--target=${target.bunTarget}`,
         "--sourcemap=none",
         `--outfile=${output}`,
+        // Without it a compiled Bun reads no package.json, so no package loads from disk.
+        "--compile-autoload-package-json",
         "--external",
         "better-sqlite3",
-        "--external",
-        "node-pty",
         "--external",
         "@napi-rs/canvas",
         "--external",

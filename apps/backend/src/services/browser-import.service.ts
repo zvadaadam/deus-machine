@@ -22,6 +22,7 @@ import { promisify } from "node:util";
 import { homedir, tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import fs from "node:fs";
+import { AppError } from "../lib/errors";
 import { openSqliteDatabase } from "../lib/sqlite";
 import type { BrowserId, BrowserProfile, ImportCookie } from "@shared/types/browser-import";
 
@@ -138,7 +139,9 @@ async function getAesKey(def: BrowserDef): Promise<Buffer> {
     "-w",
     "-s",
     def.keychainService,
-  ]);
+  ]).catch(() => {
+    throw new AppError(403, `The Keychain did not give Deus ${def.name}'s cookie key.`);
+  });
   const password = stdout.trim();
   if (!password) throw new Error(`Empty Keychain password for "${def.keychainService}"`);
   // Chromium's fixed macOS KDF params.

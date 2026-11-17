@@ -30,10 +30,15 @@ import {
 } from "../db";
 import { resolveCloudRepoAccess } from "../services/cloud-workspace-init.service";
 import { defaultCloudOrgId } from "../services/agent/cloud/config";
-import { listAccessibleRepos } from "../services/cloud-settings.service";
+import {
+  getGithubApp,
+  listAccessibleRepos,
+  requestCloudSettings,
+} from "../services/cloud-settings.service";
 import * as githubRemote from "../services/github-remote";
 import { detectDefaultBranch } from "../services/git.service";
 import { parseGitHubRepo, runGh } from "../services/gh.service";
+import { githubInstallUrl } from "@shared/lib/github";
 import { readProjectFile, writeProjectFile } from "../services/project-environment.service";
 import { invalidate } from "../services/query-engine";
 import { listRecentProjects } from "../services/recent-projects.service";
@@ -529,32 +534,36 @@ async function listRemoteBranches(
 ): Promise<{ branches: BranchSummary[] }> {
   const repo = requireRepo(repoId);
   if (!repo.root_path) return listGithubBranches(repo, organizationId);
-  let output: string;
-  try {
-    const { stdout } = await execFileAsync(
-      "git",
-      [
-        "for-each-ref",
-        "--sort=-committerdate",
-        "--format=%(refname:short)",
-        "refs/remotes/origin/",
-        "--count=100",
-      ],
-      { cwd: repo.root_path, encoding: "utf-8", timeout: 5000 }
-    );
-    output = stdout;
-  } catch {
-    return { branches: [] };
+  // The clone's remote-tracking refs (`origin/<name>` where they show); a
+  // project with no origin has only its own branches.
+  for (const [refs, depth, where] of [
+    ["refs/remotes/origin/", 3, "is_remote"],
+    ["refs/heads/", 2, "is_local"],
+  ] as const) {
+    let output: string;
+    try {
+      const { stdout } = await execFileAsync(
+        "git",
+        [
+          "for-each-ref",
+          "--sort=-committerdate",
+          `--format=%(refname:lstrip=${depth})`,
+          refs,
+          "--count=100",
+        ],
+        { cwd: repo.root_path, encoding: "utf-8", timeout: 5000 }
+      );
+      output = stdout;
+    } catch {
+      return { branches: [] };
+    }
+    const names = output
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((name) => name && name !== "HEAD");
+    if (names.length > 0) return { branches: names.map((name) => ({ name, [where]: true })) };
   }
-
-  const names = output
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((ref) => ref.replace(/^origin\//, ""))
-    .filter((name) => name !== "HEAD");
-  // The clone's remote-tracking refs: `origin/<name>` where they show.
-  return { branches: names.map((name) => ({ name, is_remote: true })) };
+  return { branches: [] };
 }
 
 export default [
@@ -571,6 +580,17 @@ export default [
     listRemoteBranches(repoId, organizationId)
   ),
   handle(api.cloudRepositories, ({ organizationId }) => listCloudRepositories(organizationId)),
+  handle(api.githubApp, ({ organizationId }) => getGithubApp(organizationFor(organizationId))),
+  handle(api.githubAppInstallUrl, async ({ organizationId }) => {
+    const orgId = organizationFor(organizationId);
+    if (!orgId) throw new ConflictError("Sign in to Deus Cloud first");
+    const { url } = (await requestCloudSettings(
+      `/orgs/${encodeURIComponent(orgId)}/github/install-url`,
+      {},
+      "product"
+    )) as { url?: string };
+    return { url: githubInstallUrl(url) };
+  }),
   // An unknown repository or one without an origin is a status the composer
   // ignores, never a 404: it only acts on "needs_grant".
   handle(api.cloudRepoAccess, ({ repoId, organizationId, fresh }) =>

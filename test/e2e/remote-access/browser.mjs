@@ -22,6 +22,7 @@ export async function testBrowser({
   sessions,
   pairCode,
   hostApi,
+  hostWrite,
   hostUrl,
 }) {
   const vite = await createServer({
@@ -194,7 +195,7 @@ export async function testBrowser({
 
     // ---- A QR scanned, then the Mac goes offline before it can approve ----
     const remoteAccess = async (value, state) => {
-      await hostApi("/settings", { method: "POST", body: { key: "remote_access_enabled", value } });
+      await hostWrite("saveSetting", { key: "remote_access_enabled", value });
       await until(async () => (await hostApi("/relay/status")).state === state, 30_000, state);
     };
     const asleep = await phone(sessions.aliceWeb);

@@ -12,14 +12,10 @@ vi.mock("../../../src/services/settings.service", () => ({
 // What follows from turning remote access on or off.
 const remote = vi.hoisted(() => ({
   reconcileRelay: vi.fn(),
-  invalidateRemoteGateCache: vi.fn(),
   disconnectDirectDevices: vi.fn(),
   syncKeepAwake: vi.fn(),
 }));
 vi.mock("../../../src/services/relay.service", () => ({ reconcileRelay: remote.reconcileRelay }));
-vi.mock("../../../src/middleware/remote-gate", () => ({
-  invalidateRemoteGateCache: remote.invalidateRemoteGateCache,
-}));
 vi.mock("../../../src/services/ws.service", () => ({
   disconnectDirectDevices: remote.disconnectDirectDevices,
 }));
@@ -129,10 +125,9 @@ describe("saveSetting", () => {
     expect(saveSetting).not.toHaveBeenCalled();
   });
 
-  it("opens remote access at once: the gate, the tunnel and the keep-awake report", async () => {
+  it("opens remote access at once: the tunnel and the keep-awake report", async () => {
     await run(api.saveSetting, { key: "remote_access_enabled", value: true });
     expect(saveSetting).toHaveBeenCalledWith("remote_access_enabled", true);
-    expect(remote.invalidateRemoteGateCache).toHaveBeenCalledOnce();
     // Turning it on is also how a computer removed from the account is added again.
     expect(remote.reconcileRelay).toHaveBeenCalledExactlyOnceWith({ restart: true });
     expect(remote.disconnectDirectDevices).not.toHaveBeenCalled();
@@ -141,7 +136,6 @@ describe("saveSetting", () => {
 
   it("closes remote access at once, dropping the devices on the local network", async () => {
     await run(api.saveSetting, { key: "remote_access_enabled", value: false });
-    expect(remote.invalidateRemoteGateCache).toHaveBeenCalledOnce();
     expect(remote.reconcileRelay).toHaveBeenCalledExactlyOnceWith({ restart: false });
     expect(remote.disconnectDirectDevices).toHaveBeenCalledOnce();
     expect(remote.syncKeepAwake).toHaveBeenCalledOnce();
@@ -151,7 +145,6 @@ describe("saveSetting", () => {
     await run(api.saveSetting, { key: "remote_keep_awake", value: false });
     expect(remote.syncKeepAwake).toHaveBeenCalledOnce();
     expect(remote.reconcileRelay).not.toHaveBeenCalled();
-    expect(remote.invalidateRemoteGateCache).not.toHaveBeenCalled();
   });
 
   it("does nothing more for any other preference", async () => {

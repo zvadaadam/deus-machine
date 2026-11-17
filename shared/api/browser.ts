@@ -1,6 +1,7 @@
 /** Browser: local dev servers found on this computer and a cloud workspace's preview address. */
 
 import { z } from "zod";
+import type { BrowserId, BrowserProfile, ImportCookie } from "../types/browser-import";
 import type { LocalServersSnapshot } from "../types/local-server";
 import { live, out, read } from "./op";
 import { stream } from "./stream";
@@ -25,4 +26,20 @@ export const cloudPreviewChanges = stream({
   name: "cloudPreviewChanges",
   scope: z.object({ workspaceId: z.string() }),
   event: out<CloudPreviewEvent>(),
+});
+
+/** The Chromium browser profiles on this computer whose sign-ins the Browser tab can import. */
+export const browserProfiles = read({ name: "browserProfiles", output: out<BrowserProfile[]>() });
+
+/**
+ * One profile's cookies, decrypted, for the desktop to put into the Browser tab.
+ * The first read per browser waits on the macOS Keychain prompt. This computer's window only.
+ */
+export const browserCookies = read({
+  name: "browserCookies",
+  input: z.object({
+    browserId: z.enum(["chrome", "brave", "edge", "arc"] as const satisfies readonly BrowserId[]),
+    profileDir: z.string().min(1),
+  }),
+  output: out<ImportCookie[]>(),
 });

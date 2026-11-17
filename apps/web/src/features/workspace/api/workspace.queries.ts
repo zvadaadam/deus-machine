@@ -4,9 +4,12 @@
  */
 
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { produce } from "immer";
 import { api } from "@shared/api";
+import { toast } from "sonner";
+import { getErrorMessage } from "@shared/lib/errors";
+import { native } from "@/platform";
 import { call } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
@@ -191,6 +194,37 @@ export function useGhStatus() {
 }
 
 /**
+ * Sign this computer's GitHub CLI in (`ghLogin`): GitHub's page opens, and
+ * `page` holds the one-time code to enter there (and that page, `openPage`)
+ * until gh is done, for the surface to show. Then `ghStatus` is read again;
+ * `onSignedIn` runs once it shows the account.
+ */
+export function useGhSignIn(onSignedIn?: () => unknown) {
+  const ghStatus = useGhStatus();
+  const [page, setPage] = useState<{ code: string; url: string } | null>(null);
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const started = await call(api.ghLogin);
+      setPage(started);
+      void native.window.openExternal(started.url);
+      try {
+        await call(api.ghLoginDone, undefined, { timeoutMs: 11 * 60_000 });
+      } finally {
+        setPage(null);
+      }
+      if (!(await ghStatus.refetch()).data?.isAuthenticated) {
+        throw new Error("GitHub sign-in finished, but Deus could not verify it yet");
+      }
+      toast.success("GitHub connected");
+      await onSignedIn?.();
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
+  });
+  const openPage = () => page && void native.window.openExternal(page.url);
+  return { ...mutation, page, openPage };
+}
+
+/**
  * Fetch open pull requests for a repository.
  * Used by the "Create Workspace from PR" picker modal.
  * Enabled only when a repoId is provided (i.e., modal is open).
@@ -205,11 +239,8 @@ export function useRepoPrs(repoId: string | null) {
 }
 
 /**
- * Fetch remote branches for a repository.
+ * Fetch a repository's branches: origin's, or its own when it has no origin.
  * Used by BranchSelector (welcome screen + Create PR).
- *
- * Currently remote-only (refs/remotes/origin/*). Local-only branches
- * are not included yet — backend endpoint needs to be updated.
  *
  * The request rejects immediately if the WS isn't connected yet (common
  * during app startup and Vite HMR). We retry with exponential backoff

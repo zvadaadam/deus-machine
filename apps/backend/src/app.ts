@@ -20,7 +20,6 @@ import environmentSecretRoutes from "./routes/environment-secrets";
 import slackRoutes from "./routes/slack";
 import authRoutes from "./routes/remote-auth";
 import filesRoutes from "./routes/files";
-import browserImportRoutes from "./routes/browser-import";
 import integrationRoutes from "./routes/integrations";
 export function createApp() {
   serveOperations(registry);
@@ -49,7 +48,6 @@ export function createApp() {
   app.route("/api", slackRoutes);
   app.route("/api", computeUsageRoutes);
   app.route("/api", filesRoutes);
-  app.route("/api", browserImportRoutes);
   app.route("/api", integrationRoutes);
 
   // The tunnel's state, for the `deus` CLI and scripts on this computer. The

@@ -93,7 +93,7 @@ export function Chat({
   // Chat owns its scroll behavior entirely — refs, hook, and button.
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  // "Retry in new chat" opens a fresh tab through the Mac backend; web-direct
+  // "New chat" opens a fresh tab through the Mac backend; web-direct
   // has no such lane, so the offer hides rather than failing on click.
   const retryInNewChat = isCloudDirectWebMode() ? undefined : onRetryInNewChat;
 

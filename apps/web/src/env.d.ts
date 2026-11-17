@@ -38,32 +38,11 @@ interface Window {
     openExternal: (url: string) => Promise<void>;
     confirm: (message: string, detail?: string) => Promise<boolean>;
     getDeusCloudSession: () => Promise<import("@shared/types").DeusCloudSessionStatus>;
-    /** Mint a direct-agnt session token from the stored deus_cloud_session bearer
-     *  (Path B, WorkOS source). The bearer stays in main; only the token returns. */
-    mintDeusCloudDirectToken: (providerSessionId: string) => Promise<
-      | {
-          ok: true;
-          token: string;
-          base_url: string;
-          provider_session_id: string;
-          expires_in: number;
-        }
-      | { ok: false; error: string }
-    >;
     startDeusCloudLogin: () => Promise<{
       success: boolean;
       session: import("@shared/types").DeusCloudSessionStatus;
       error?: string;
     }>;
-    getGithubAppStatus: (orgId?: string) => Promise<{
-      configured: boolean;
-      signedIn: boolean;
-      installations: Array<{ installationId: number; accountLogin: string }>;
-      appSlug: string | null;
-      accessibleRepos: string[] | null;
-      error?: string;
-    }>;
-    installGithubApp: (orgId?: string) => Promise<{ ok: boolean; error?: string }>;
     signOutDeusCloud: () => Promise<{
       success: boolean;
       session: import("@shared/types").DeusCloudSessionStatus;

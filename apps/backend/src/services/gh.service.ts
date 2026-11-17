@@ -26,7 +26,7 @@ const GH_CHILD_ENV_DENYLIST = [
   "PORT",
 ] as const;
 
-function ghChildEnv(): NodeJS.ProcessEnv {
+export function ghChildEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
   for (const key of GH_CHILD_ENV_DENYLIST) {
     delete env[key];

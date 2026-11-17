@@ -237,7 +237,7 @@ ids), a streamed reply, a question, the end of the turn, and dropped sockets.
   A message the platform refuses (`MESSAGE_SEND_FAILED` with
   `PROVIDER_ACCOUNT_RECONNECT_REQUIRED`) is back in the composer, and the card reads
   the platform's sentence without its codes, offers "Open AI Providers" (which opens
-  that Settings section) and no "Retry in new chat".
+  that Settings section) and no "New chat".
   With the window on this computer (⌃1), a turn in the cloud (learnt from the
   platform's snapshot when the backend attaches again) puts a working dot on the
   header's trigger, and its end an unread one there and on the cloud's row.

@@ -35,8 +35,6 @@ export function GrantRepositoryAccessModal({
     try {
       const res = await installGithubApp(organizationId);
       if (!res.ok) {
-        // Web has no install IPC — point the user at the desktop app rather
-        // than leaving the button silently dead.
         toast.error("Couldn't open GitHub", {
           description: res.error ?? "Grant access from the desktop app's cloud settings.",
         });

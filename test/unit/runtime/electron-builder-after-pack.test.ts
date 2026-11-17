@@ -15,24 +15,12 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
 const {
-  ensureLinuxNodePtyRuntimePrebuild,
   pruneCanvasRuntimeBinaries,
-  pruneNodePtyRuntimeBinaries,
   verifyPackagedRuntimeExternalModules,
   verifyPackagedRuntimeManifests,
   validateVersionOutput,
 } = require("../../../scripts/runtime/electron-builder-after-pack.cjs") as {
-  ensureLinuxNodePtyRuntimePrebuild: (context: {
-    electronPlatformName: string;
-    arch: string | number;
-    resourcesDir: string;
-  }) => { copied: number };
   pruneCanvasRuntimeBinaries: (context: {
-    electronPlatformName: string;
-    arch: string | number;
-    resourcesDir: string;
-  }) => { removed: number; kept: number };
-  pruneNodePtyRuntimeBinaries: (context: {
     electronPlatformName: string;
     arch: string | number;
     resourcesDir: string;
@@ -150,8 +138,6 @@ function writePackagedRuntimeFixture(binDir: string): void {
 function writeRuntimeExternalModuleFixture(resourcesDir: string): void {
   const unpackedNodeModules = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
   for (const packagePath of [
-    ["better-sqlite3"],
-    ["node-pty"],
     ["@napi-rs", "canvas"],
     ["@napi-rs", "canvas-darwin-arm64"],
   ]) {
@@ -159,60 +145,10 @@ function writeRuntimeExternalModuleFixture(resourcesDir: string): void {
     mkdirSync(dir, { recursive: true });
     writeFileSync(path.join(dir, "package.json"), "{}");
   }
-  mkdirSync(path.join(unpackedNodeModules, "better-sqlite3", "build", "Release"), {
-    recursive: true,
-  });
-  writeFileSync(
-    path.join(unpackedNodeModules, "better-sqlite3", "build", "Release", "better_sqlite3.node"),
-    "better-sqlite-native"
-  );
-  mkdirSync(path.join(unpackedNodeModules, "node-pty", "prebuilds", "darwin-arm64"), {
-    recursive: true,
-  });
-  writeFileSync(
-    path.join(unpackedNodeModules, "node-pty", "prebuilds", "darwin-arm64", "pty.node"),
-    "pty-native"
-  );
-  writeFileSync(
-    path.join(unpackedNodeModules, "node-pty", "prebuilds", "darwin-arm64", "spawn-helper"),
-    "pty-helper"
-  );
   writeFileSync(
     path.join(unpackedNodeModules, "@napi-rs", "canvas-darwin-arm64", "skia.darwin-arm64.node"),
     "canvas-native"
   );
-}
-
-function writeNodePtyPruneFixture(resourcesDir: string): string {
-  const nodePtyRoot = path.join(resourcesDir, "app.asar.unpacked", "node_modules", "node-pty");
-  for (const fileParts of [
-    ["build", "Release", "pty.node"],
-    ["build", "Release", "spawn-helper"],
-    ["prebuilds", "darwin-arm64", "pty.node"],
-    ["prebuilds", "darwin-arm64", "spawn-helper"],
-    ["prebuilds", "darwin-x64", "pty.node"],
-    ["prebuilds", "darwin-x64", "spawn-helper"],
-  ]) {
-    const filePath = path.join(nodePtyRoot, ...fileParts);
-    mkdirSync(path.dirname(filePath), { recursive: true });
-    writeFileSync(filePath, fileParts.join("/"));
-  }
-  return nodePtyRoot;
-}
-
-function writeLinuxNodePtyBuildFixture(resourcesDir: string): string {
-  const nodePtyRoot = path.join(resourcesDir, "app.asar.unpacked", "node_modules", "node-pty");
-  for (const fileParts of [
-    ["build", "Release", "pty.node"],
-    ["build", "Release", "spawn-helper"],
-    ["prebuilds", "darwin-arm64", "pty.node"],
-    ["prebuilds", "darwin-arm64", "spawn-helper"],
-  ]) {
-    const filePath = path.join(nodePtyRoot, ...fileParts);
-    mkdirSync(path.dirname(filePath), { recursive: true });
-    writeFileSync(filePath, fileParts.join("/"));
-  }
-  return nodePtyRoot;
 }
 
 function writeCanvasPruneFixture(resourcesDir: string): string {
@@ -326,76 +262,6 @@ describe("electron-builder afterPack", () => {
     ).toThrow(/@napi-rs\/canvas package/);
   });
 
-  it("requires the better-sqlite3 native binding outside app.asar", () => {
-    const resourcesDir = createTempRoot("deus-runtime-sqlite");
-    tempRoots.push(resourcesDir);
-    writeRuntimeExternalModuleFixture(resourcesDir);
-
-    rmSync(
-      path.join(
-        resourcesDir,
-        "app.asar.unpacked",
-        "node_modules",
-        "better-sqlite3",
-        "build",
-        "Release",
-        "better_sqlite3.node"
-      ),
-      { force: true }
-    );
-
-    expect(() =>
-      verifyPackagedRuntimeExternalModules(resourcesDir, "arm64", {
-        verifyNativePayloads: false,
-      })
-    ).toThrow(/better-sqlite3 native binding/);
-  });
-
-  it("prunes node-pty build output so packaged runtime resolves target prebuilds", () => {
-    const resourcesDir = createTempRoot("deus-node-pty-prune");
-    tempRoots.push(resourcesDir);
-    const nodePtyRoot = writeNodePtyPruneFixture(resourcesDir);
-
-    expect(
-      pruneNodePtyRuntimeBinaries({
-        electronPlatformName: "darwin",
-        arch: "arm64",
-        resourcesDir,
-      })
-    ).toEqual({ removed: 2, kept: 1 });
-
-    expect(readdirSync(path.join(nodePtyRoot, "prebuilds"))).toEqual(["darwin-arm64"]);
-    expect(() => readdirSync(path.join(nodePtyRoot, "build"))).toThrow();
-  });
-
-  it("promotes Linux node-pty build output into target prebuilds before pruning", () => {
-    const resourcesDir = createTempRoot("deus-node-pty-linux-prebuild");
-    tempRoots.push(resourcesDir);
-    const nodePtyRoot = writeLinuxNodePtyBuildFixture(resourcesDir);
-
-    expect(
-      ensureLinuxNodePtyRuntimePrebuild({
-        electronPlatformName: "linux",
-        arch: "x64",
-        resourcesDir,
-      })
-    ).toEqual({ copied: 1 });
-
-    expect(
-      pruneNodePtyRuntimeBinaries({
-        electronPlatformName: "linux",
-        arch: "x64",
-        resourcesDir,
-      })
-    ).toEqual({ removed: 2, kept: 1 });
-
-    expect(readdirSync(path.join(nodePtyRoot, "prebuilds"))).toEqual(["linux-x64"]);
-    expect(readFileSync(path.join(nodePtyRoot, "prebuilds", "linux-x64", "pty.node"), "utf8")).toBe(
-      "build/Release/pty.node"
-    );
-    expect(() => readdirSync(path.join(nodePtyRoot, "build"))).toThrow();
-  });
-
   it("prunes @napi-rs/canvas native packages to the target arch", () => {
     const resourcesDir = createTempRoot("deus-canvas-prune");
     tempRoots.push(resourcesDir);
@@ -410,29 +276,6 @@ describe("electron-builder afterPack", () => {
     ).toEqual({ removed: 3, kept: 1 });
 
     expect(readdirSync(napiRsRoot).sort()).toEqual(["canvas", "canvas-darwin-arm64"]);
-  });
-
-  it("rejects packaged node-pty build output before target prebuilds", () => {
-    const resourcesDir = createTempRoot("deus-node-pty-stale-build");
-    tempRoots.push(resourcesDir);
-    writeRuntimeExternalModuleFixture(resourcesDir);
-    const staleBuild = path.join(
-      resourcesDir,
-      "app.asar.unpacked",
-      "node_modules",
-      "node-pty",
-      "build",
-      "Release",
-      "pty.node"
-    );
-    mkdirSync(path.dirname(staleBuild), { recursive: true });
-    writeFileSync(staleBuild, "electron-abi-build");
-
-    expect(() =>
-      verifyPackagedRuntimeExternalModules(resourcesDir, "arm64", {
-        verifyNativePayloads: false,
-      })
-    ).toThrow(/node-pty build output/);
   });
 
   it("rejects non-target @napi-rs/canvas native packages", () => {

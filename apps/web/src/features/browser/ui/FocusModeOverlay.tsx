@@ -13,7 +13,7 @@
  * here, the chat picks it up on remount; keep typing mid-draft, the
  * draft follows.
  */
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { SessionComposer } from "@/features/session/ui/SessionComposer";
 import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
@@ -80,16 +80,6 @@ export function FocusModeOverlay({ anchorEl, workspaceId, onExit }: FocusModeOve
       window.removeEventListener("scroll", schedule, true);
     };
   }, [anchorEl]);
-
-  // Esc exits focus mode (BrowserPanel has its own listener too; this
-  // keeps the overlay self-contained when reused elsewhere).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onExit();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onExit]);
 
   if (!rect) return null;
 

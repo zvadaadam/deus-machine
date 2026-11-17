@@ -150,7 +150,9 @@ share one cache projection. Agent folds and cloud-direct channels belong to that
 same cache and survive reconnects (only disposal drops them). Reconnect restores
 reads and streams; it never resends writes. A lost acknowledgment is an
 `unknown-outcome`, not permission to retry a write. Correlated ping/pong probes detect silent
-connections (30s interval, 10s timeout). When a relay host is replaced,
+connections (30s interval, 10s timeout). The server pings each socket every 30s
+(`{ "type": "ping" }`) and closes one that has sent nothing (a `pong` or any frame)
+for 40s. When a relay host is replaced,
 already-authorized viewers reconnect and authorize again before their
 subscriptions resume; a connected tunnel alone is not readiness.
 
@@ -673,10 +675,11 @@ bun run test:e2e:cloud        # test/e2e/cloud/ (a cloud workspace in the real a
 Vitest with `vi.mock()` and `vi.hoisted()`. Tests live outside `src/` — never colocate.
 
 What ships is not what those run on, so two checks run the shipped thing. The
-packaged app's backend is Bun with `bun:sqlite` behind `apps/backend/src/lib/sqlite.ts`:
-`bun run test:sqlite-bun` runs `sqlite-parity.test.ts` on it (the same file runs
-on Node inside `test:backend`); add a case there when the backend starts using
-another SQLite call. `bun run smoke:cli-package` packs the npm CLI, installs the
+packaged app's backend is Bun, with `bun:sqlite` behind `apps/backend/src/lib/sqlite.ts`
+and Bun's own terminal behind `openTerminal` in `services/pty.service.ts`:
+`bun run test:bun` runs `sqlite-parity.test.ts` and `pty-parity.test.ts` on it
+(the same files run on Node inside `test:backend`); add a case there when the
+backend starts using another SQLite or terminal call. `bun run smoke:cli-package` packs the npm CLI, installs the
 tarball into an empty folder and runs `deus --version` and `deus start`. It
 installs with npm, the one place npm is used, because that is how a person
 installs it.
@@ -743,8 +746,9 @@ Buttons reuse `radius-lg` (10px circular fallback, 12.5px continuous corners);
 circular controls retain `radius-full`. See `design/controls.md`.
 
 Working notes for the Pencil editor: set variables before nodes; the canvas has no
-autosave, so save with `osascript -e 'tell application "Pen" to activate' -e 'tell
-application "System Events" to keystroke "s" using command down'`; layout/render goes
+autosave, so save with the Pencil MCP's `save` tool, and always before switching
+branches (Pen keeps the open document in memory and writes it back over the
+checked-out one); layout/render goes
 stale after long editing sessions — save and relaunch Pen to get accurate screenshots. A
 component instance resolves its theme once per document, so light-mode sheets are built
 from primitives rather than instances.

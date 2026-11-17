@@ -701,7 +701,7 @@ describe("repoPrs", () => {
 describe("repoBranches", () => {
   it("lists origin's branches by name, marked as the clone's remote-tracking refs", async () => {
     mockStmt.get.mockReturnValueOnce(REPO);
-    git(() => "origin/main\norigin/HEAD\norigin/feature/login\n\n");
+    git(() => "main\nHEAD\nfeature/login\n\n");
 
     await expect(run(api.repoBranches, { repoId: REPO.id })).resolves.toEqual({
       branches: [
@@ -715,6 +715,18 @@ describe("repoBranches", () => {
       expect.objectContaining({ cwd: REPO.root_path }),
       expect.any(Function)
     );
+  });
+
+  it("lists the project's own branches when it has no origin", async () => {
+    mockStmt.get.mockReturnValueOnce(REPO);
+    git((args) => (args.includes("refs/heads/") ? "main\nwip\n" : ""));
+
+    await expect(run(api.repoBranches, { repoId: REPO.id })).resolves.toEqual({
+      branches: [
+        { name: "main", is_local: true },
+        { name: "wip", is_local: true },
+      ],
+    });
   });
 
   it("answers with no branches when git fails", async () => {

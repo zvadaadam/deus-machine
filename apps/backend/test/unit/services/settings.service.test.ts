@@ -14,18 +14,20 @@ vi.mock("../../../src/lib/database", () => ({
   DB_PATH: "/tmp/test-deus/deus.db",
 }));
 
-import {
-  getAllSettings,
-  removeSettings,
-  saveSetting,
-} from "../../../src/services/settings.service";
+// The service keeps what it read; each test reads its own file afresh.
+let getAllSettings: typeof import("../../../src/services/settings.service").getAllSettings;
+let removeSettings: typeof import("../../../src/services/settings.service").removeSettings;
+let saveSetting: typeof import("../../../src/services/settings.service").saveSetting;
 
 const EXPECTED_PREFS_PATH = "/tmp/test-deus/preferences.json";
 const EXPECTED_TMP_PATH = "/tmp/test-deus/preferences.json.tmp";
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
   mockFs.existsSync.mockReturnValue(false);
+  vi.resetModules();
+  ({ getAllSettings, removeSettings, saveSetting } =
+    await import("../../../src/services/settings.service"));
 });
 
 describe("getAllSettings", () => {
