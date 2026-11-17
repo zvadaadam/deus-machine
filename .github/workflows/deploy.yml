@@ -57,9 +57,9 @@ jobs:
       web: ${{ steps.filter.outputs.web }}
       landing: ${{ steps.filter.outputs.landing }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -84,7 +84,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' && contains(fromJSON('["relay","all"]'), github.event.inputs.service)) ||
       (github.event_name == 'push' && needs.changes.outputs.relay == 'true')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -98,7 +98,7 @@ jobs:
         run: cd apps/cloud-relay && bunx tsc --noEmit
 
       - name: Deploy relay to Cloudflare
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -124,7 +124,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' && contains(fromJSON('["web","all"]'), github.event.inputs.service)) ||
       (github.event_name == 'push' && needs.changes.outputs.web == 'true')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -143,7 +143,7 @@ jobs:
           VITE_CLOUD_DIRECT: "1"
 
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -166,7 +166,7 @@ jobs:
       ((github.event_name == 'workflow_dispatch' && contains(fromJSON('["landing","all"]'), github.event.inputs.service)) ||
       (github.event_name == 'push' && needs.changes.outputs.landing == 'true'))
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -180,7 +180,7 @@ jobs:
         run: cd apps/landing && bun run build
 
       - name: Deploy landing to Cloudflare
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
