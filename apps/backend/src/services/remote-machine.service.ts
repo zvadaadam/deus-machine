@@ -10,7 +10,7 @@
 
 import { randomBytes } from "crypto";
 import { currentAccountSession, type AccountSession } from "./account-session";
-import { getSetting, removeSettings, saveSetting } from "./settings.service";
+import { getSetting, saveSetting } from "./settings.service";
 
 // The tunnel follows this session; its callers read it from here.
 export { currentAccountSession };
@@ -44,15 +44,6 @@ export class CloudRequestError extends Error {
 }
 
 const RECORDS_SETTING = "relay_machines";
-/** The pre-account relay identity: a self-chosen server id and its bearer token. */
-const LEGACY_RELAY_SETTINGS = ["relay_server_id", "relay_token"] as const;
-
-/** The relay no longer accepts the pre-account credentials; drop them from disk. */
-export function retireLegacyRelayCredentials(): void {
-  if (removeSettings(LEGACY_RELAY_SETTINGS)) {
-    console.log("[Relay] Removed the pre-account relay credentials");
-  }
-}
 const CLOUD_TIMEOUT_MS = 15_000;
 
 function records(): Record<string, MachineRecord> {

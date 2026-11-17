@@ -1,4 +1,5 @@
-const BACKEND_CHILD_ENV_DENYLIST = [
+/** What a Deus process keeps from the processes it starts: its token, port, database and runtime paths. */
+export const BACKEND_CHILD_ENV_DENYLIST = [
   "AUTH_TOKEN",
   "BUN_OPTIONS",
   "DATABASE_PATH",
@@ -10,7 +11,6 @@ const BACKEND_CHILD_ENV_DENYLIST = [
   "DEUS_PACKAGED",
   "DEUS_RESOURCES_PATH",
   "DEUS_RUNTIME",
-  "DEUS_RUNTIME_COMMAND",
   "DEUS_RUNTIME_EXECUTABLE",
   "ELECTRON_RUN_AS_NODE",
   "NODE_PATH",

@@ -1,12 +1,12 @@
 import { spawn, type ChildProcess } from "child_process";
 import { pushCloudCredentialsToBackend } from "./deus-cloud-provision";
 import { existsSync, statSync, writeFileSync } from "fs";
-import { delimiter, extname, join } from "path";
+import { delimiter, join } from "path";
 import { app, BrowserWindow } from "electron";
 import crypto from "crypto";
 import { DEUS_DB_FILENAME, PACKAGED_SYSTEM_PATHS } from "../../../shared/runtime";
 import { extendCliPath, getDevStagedCliDirectory } from "../../../shared/lib/cli-path";
-import { PACKAGED_RUNTIME_ENV_DENYLIST } from "./runtime-env";
+import { BACKEND_CHILD_ENV_DENYLIST } from "../../../shared/lib/child-env";
 import { handleKeepAwakeLine, setKeepAwakeWanted } from "./keep-awake";
 import { getLaunchPath } from "./shell-env";
 import { rendererOrigin } from "./app-protocol";
@@ -22,7 +22,6 @@ let stableTimer: ReturnType<typeof setTimeout> | null = null;
 const MAX_RESTART_ATTEMPTS = 5;
 const STABLE_UPTIME_MS = 60_000;
 const STARTUP_TIMEOUT_MS = 30_000;
-const WINDOWS_EXECUTABLE_EXTENSIONS = new Set([".exe", ".cmd", ".bat", ".ps1", ".com"]);
 
 export interface BackendSpawnHooks {
   /** Each backend that starts, the first and every restart, with its port. */
@@ -84,9 +83,6 @@ function isExecutableFile(filePath: string): boolean {
   if (!existsSync(filePath)) return false;
   const stat = statSync(filePath);
   if (!stat.isFile()) return false;
-  if (process.platform === "win32") {
-    return WINDOWS_EXECUTABLE_EXTENSIONS.has(extname(filePath).toLowerCase());
-  }
   return (stat.mode & 0o111) !== 0;
 }
 
@@ -95,7 +91,7 @@ function findDevNode(...searchPaths: string[]): string {
   for (const searchPath of searchPaths) {
     for (const dir of searchPath.split(delimiter)) {
       if (!dir) continue;
-      const candidate = join(dir, process.platform === "win32" ? "node.exe" : "node");
+      const candidate = join(dir, "node");
       if (isExecutableFile(candidate)) return candidate;
     }
   }
@@ -191,7 +187,7 @@ export async function spawnBackend(
   // already honors, so a worktree dev run can point at a scratch database
   // instead of the real userData one (whose schema may not match the branch).
   // A PACKAGED app never honors it: stray shell env must not redirect the
-  // real database (same doctrine as PACKAGED_RUNTIME_ENV_DENYLIST).
+  // real database (same doctrine as BACKEND_CHILD_ENV_DENYLIST).
   const dbPath =
     (!app.isPackaged && process.env.DATABASE_PATH) ||
     join(app.getPath("userData"), DEUS_DB_FILENAME);
@@ -224,7 +220,7 @@ export async function spawnBackend(
 
     const childEnv: NodeJS.ProcessEnv = { ...process.env };
     if (runtime.runtimeExecutable) {
-      for (const key of PACKAGED_RUNTIME_ENV_DENYLIST) {
+      for (const key of BACKEND_CHILD_ENV_DENYLIST) {
         delete childEnv[key];
       }
     }

@@ -1,8 +1,5 @@
 import type { DiffCommentReference } from "./parseDiffCommentTags";
-import {
-  diffCommentReferenceFromTag,
-  parseLegacyDiffCommentReference,
-} from "./parseDiffCommentTags";
+import { diffCommentReferenceFromTag } from "./parseDiffCommentTags";
 import type { InspectElement } from "./parseInspectTags";
 import { inspectElementFromTag } from "./parseInspectTags";
 import { normalizeEscapedInspectTags } from "./messageTagCodec";
@@ -38,15 +35,6 @@ export function parseUserMessageReferences(text: string): UserMessageReferenceSe
   }
 
   const remainingText = lastIndex < source.length ? source.slice(lastIndex) : "";
-  const legacyDiffComment = parseLegacyDiffCommentReference(remainingText);
-  if (legacyDiffComment) {
-    if (legacyDiffComment.before) {
-      segments.push({ type: "text", text: legacyDiffComment.before });
-    }
-    segments.push({ type: "diff-comment", comment: legacyDiffComment.comment });
-    return segments;
-  }
-
   if (segments.length === 0) return [];
   if (remainingText) segments.push({ type: "text", text: remainingText });
   return segments;

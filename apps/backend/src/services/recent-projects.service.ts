@@ -23,8 +23,6 @@ const IGNORED_PATH_SEGMENTS = [
   "/.claude/worktrees/",
   "/.cursor/worktrees/",
   "/copilot-worktree/",
-  "/.opendevs/",
-  "/.hive/",
   "/.superset/worktrees/",
   "/conductor/workspaces/",
 ] as const;
@@ -81,39 +79,15 @@ interface ResolvedClaudeProject {
   activityMtimeMs: number;
 }
 
-function normalizePathForMatching(fsPath: string): string {
-  return fsPath.replace(/\\/g, "/");
-}
-
-function isAbsoluteNormalizedPath(normalizedPath: string): boolean {
-  return (
-    normalizedPath.startsWith("/") ||
-    normalizedPath.startsWith("//") ||
-    /^[A-Za-z]:\//.test(normalizedPath)
-  );
-}
-
 function parseFileUriPath(uri: string): string | null {
   try {
-    const parsed = new URL(uri);
-    const isUncPath = parsed.host !== "" && parsed.host !== "localhost";
-    return fileURLToPath(parsed, isUncPath ? { windows: true } : undefined);
+    return fileURLToPath(uri);
   } catch {
     return null;
   }
 }
 
 function getEditorStateDbPath(appName: string, homeDir: string): string {
-  if (process.platform === "win32") {
-    return join(
-      process.env.APPDATA || join(homeDir, "AppData", "Roaming"),
-      appName,
-      "User",
-      "globalStorage",
-      "state.vscdb"
-    );
-  }
-
   if (process.platform === "darwin") {
     return join(
       homeDir,
@@ -132,14 +106,11 @@ function getEditorStateDbPath(appName: string, homeDir: string): string {
 export function isIgnoredRecentProjectPath(fsPath: string, options: ReaderOptions = {}): boolean {
   if (!fsPath) return true;
 
-  const normalizedPath = normalizePathForMatching(fsPath);
-  const normalizedHome = normalizePathForMatching(options.homeDir ?? homedir());
+  if (!fsPath.startsWith("/")) return true;
+  if (fsPath === "/" || fsPath === (options.homeDir ?? homedir())) return true;
+  if (fsPath.endsWith(".app")) return true;
 
-  if (!isAbsoluteNormalizedPath(normalizedPath)) return true;
-  if (normalizedPath === "/" || normalizedPath === normalizedHome) return true;
-  if (normalizedPath.endsWith(".app")) return true;
-
-  return IGNORED_PATH_SEGMENTS.some((segment) => normalizedPath.includes(segment));
+  return IGNORED_PATH_SEGMENTS.some((segment) => fsPath.includes(segment));
 }
 
 function resolveGitProjectRoot(fsPath: string): string | null {

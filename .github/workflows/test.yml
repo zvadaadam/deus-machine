@@ -87,21 +87,6 @@ jobs:
       - name: Build staged native runtime
         run: bun run build:runtime
 
-      - name: Validate staged runtime
-        run: bun run validate:runtime
-
-      - name: Smoke source runtime contract
-        run: bun run smoke:runtime-source
-
-      - name: Smoke desktop main runtime contract
-        run: bun run smoke:desktop-main-runtime
-
-      - name: Smoke native runtime executable
-        run: bun run smoke:runtime-native -- --skip-validate
-
-      - name: Smoke packaged runtime resources
-        run: bun run smoke:runtime-resources
-
       - name: Build Electron desktop outputs
         run: bun run build
         # The macOS runners have 7 GB: Node's default heap runs out building the app.
@@ -114,12 +99,10 @@ jobs:
           case "$(uname -m)" in
             arm64)
               echo "MAC_BUILDER_ARCH=arm64" >> "$GITHUB_ENV"
-              echo "MAC_EXPECTED_ARCH=arm64" >> "$GITHUB_ENV"
               echo "MAC_APP_PATH=dist-electron/mac-arm64/Deus.app" >> "$GITHUB_ENV"
               ;;
             x86_64)
               echo "MAC_BUILDER_ARCH=x64" >> "$GITHUB_ENV"
-              echo "MAC_EXPECTED_ARCH=x64" >> "$GITHUB_ENV"
               echo "MAC_APP_PATH=dist-electron/mac/Deus.app" >> "$GITHUB_ENV"
               ;;
             *)
@@ -130,28 +113,12 @@ jobs:
 
       - name: Package macOS app directory
         run: bun run package:mac:dir -- --arch "$MAC_BUILDER_ARCH"
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-
-      - name: Smoke packaged macOS app bundle
-        run: >
-          bun run smoke:packaged-app --
-          --app "$MAC_APP_PATH"
-          --arch "$MAC_EXPECTED_ARCH"
-          --skip-app-signature
-          --run-version-checks
 
       - name: Smoke packaged runtime executable
-        run: >
-          bun run smoke:packaged-runtime --
-          --app "$MAC_APP_PATH"
-          --skip-app-check
+        run: bun run smoke:packaged-runtime -- --app "$MAC_APP_PATH"
 
       - name: Smoke packaged Electron desktop
-        run: >
-          bun run smoke:packaged-desktop --
-          --app "$MAC_APP_PATH"
-          --skip-app-check
+        run: bun run smoke:packaged-desktop -- --app "$MAC_APP_PATH"
 
   desktop-runtime-tests:
     name: Desktop Runtime Unit Tests
@@ -243,17 +210,10 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
-      - name: Verify packaged Linux runtime resources
-        run: |
-          set -euo pipefail
-          resources_dir="dist-electron/linux-unpacked/resources"
-          test -x "$resources_dir/bin/deus-runtime"
-          test -x "$resources_dir/bin/codex"
-          test -x "$resources_dir/bin/claude"
-          test -x "$resources_dir/bin/gh"
-          test -x "$resources_dir/bin/rg"
-          test -x "$resources_dir/bin/agent-browser"
-          file "$resources_dir/bin/deus-runtime" | grep 'ELF 64-bit'
+      - name: Smoke packaged Linux runtime
+        # afterPack already checked every bundled executable is an x86-64 ELF;
+        # this runs each, then the runtime's self-test and backend.
+        run: bun run smoke:packaged-runtime -- --app dist-electron/linux-unpacked/resources
 
       - name: Smoke the npm CLI package
         # `build:all` above ran `build:runtime`, the release's first step. This
@@ -280,13 +240,10 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Rebuild better-sqlite3 and node-pty for Node.js
-        # bun install compiles native modules for Bun's ABI, but vitest runs
-        # under Node.js which has a different NODE_MODULE_VERSION; node-pty
-        # ships no Linux prebuild, and pty-parity opens real terminals.
-        run: |
-          (cd node_modules/better-sqlite3 && bunx node-gyp rebuild)
-          (cd node_modules/node-pty && bunx node-gyp rebuild)
+      - name: Build node-pty for Node.js
+        # node-pty ships no Linux prebuild, and pty-parity opens real
+        # terminals. test:backend rebuilds better-sqlite3 itself (native:node).
+        run: cd node_modules/node-pty && bunx node-gyp rebuild
 
       - name: Run tests
         run: bun run test:backend

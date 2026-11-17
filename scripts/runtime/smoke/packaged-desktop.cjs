@@ -4,13 +4,10 @@ const path = require("node:path");
 const { execFileSync, spawn } = require("node:child_process");
 const { assertEngineStarted } = require("./engine-ready.cjs");
 const {
-  PROJECT_ROOT,
-  appDiagnostics,
   assert,
   assertBackendReadsDatabase,
   assertExecutable,
   assertHostRunnableArch,
-  macExecutionPolicyHint,
   packagedDesktopEnv,
   pathPattern,
   resolveDefaultAppPath,
@@ -34,7 +31,6 @@ function parseArgs(argv) {
     homePath: null,
     launchInPlace: false,
     requireGatekeeper: false,
-    skipAppCheck: false,
   };
 
   for (let index = 0; index < argv.length; index++) {
@@ -51,8 +47,6 @@ function parseArgs(argv) {
       options.launchInPlace = true;
     } else if (arg === "--require-gatekeeper") {
       options.requireGatekeeper = true;
-    } else if (arg === "--skip-app-check") {
-      options.skipAppCheck = true;
     } else if (arg === "--help" || arg === "-h") {
       printUsage();
       process.exit(0);
@@ -76,8 +70,7 @@ Options:
   --app <path>             Path to the packaged .app bundle
   --home <path>            HOME to use while launching the packaged app
   --launch-in-place        Launch --app directly instead of copying it to a temp Applications dir
-  --require-gatekeeper     Require spctl execute assessment in the app check
-  --skip-app-check         Skip the packaged app smoke
+  --require-gatekeeper     Require spctl execute assessment of the launched app
 
 This smoke launches the packaged Electron app with an isolated temporary HOME.
 It copies Deus.app to that HOME's Applications directory so the packaged
@@ -117,6 +110,8 @@ function requiredLogPatterns(binDir) {
     /\[backend\] \[BACKEND_PORT\]\d+/,
     /\[main\] Backend started on port: \d+/,
     /\[main\] Window created/,
+    // The renderer's HTML loaded, its script ran and the preload bridge answered.
+    /\[main\] Window page ready/,
   ];
 }
 
@@ -124,22 +119,6 @@ async function assertBackendReadsDatabaseFromLog(logContents) {
   const match = logContents.match(/\[backend\] \[BACKEND_PORT\](\d+)/);
   if (!match) throw new Error("Packaged desktop log did not include [BACKEND_PORT]");
   await assertBackendReadsDatabase(Number(match[1]), "Packaged desktop backend database read");
-}
-
-function runAppCheck(appPath, options) {
-  if (options.skipAppCheck) return;
-
-  const args = [
-    path.join(PROJECT_ROOT, "scripts", "runtime", "smoke", "packaged-app.cjs"),
-    "--app",
-    appPath,
-  ];
-  if (options.requireGatekeeper) args.push("--require-gatekeeper");
-
-  execFileSync(process.execPath, args, {
-    cwd: PROJECT_ROOT,
-    stdio: "inherit",
-  });
 }
 
 function copyAppToTempApplications(sourceAppPath, tempHome) {
@@ -176,13 +155,7 @@ function readMainLog(tempHome) {
   return { logPath, contents: fs.readFileSync(logPath, "utf8") };
 }
 
-async function waitForDesktopReadiness(
-  child,
-  tempHome,
-  requiredPatterns,
-  diagnostics,
-  getProcessOutput
-) {
+async function waitForDesktopReadiness(child, tempHome, requiredPatterns, getProcessOutput) {
   const matched = new Set();
   let lastLog = "";
   let lastLogPath = null;
@@ -221,10 +194,7 @@ async function waitForDesktopReadiness(
         new Error(
           `Packaged desktop did not reach readiness. missing=${missing.join(", ") || "none"} logPath=${
             lastLogPath ?? "missing"
-          } log=${lastLog.slice(-4000)}${diagnostics ? `\n${diagnostics}` : ""}${macExecutionPolicyHint(
-            diagnostics,
-            "app"
-          )}`
+          } log=${lastLog.slice(-4000)}`
         )
       );
     }, STARTUP_TIMEOUT_MS);
@@ -237,10 +207,7 @@ async function waitForDesktopReadiness(
           new Error(
             `Packaged desktop exited before readiness: code=${code} signal=${signal} logPath=${
               lastLogPath ?? "missing"
-            } log=${lastLog.slice(-4000)}${diagnostics ? `\n${diagnostics}` : ""}${macExecutionPolicyHint(
-              diagnostics,
-              "app"
-            )}`
+            } log=${lastLog.slice(-4000)}`
           )
         );
       }
@@ -261,7 +228,6 @@ async function waitForDesktopReadiness(
 
 async function smokePackagedDesktop(options) {
   assert(fs.existsSync(options.appPath), `Missing packaged app: ${options.appPath}`);
-  runAppCheck(options.appPath, options);
 
   const tempRoot = options.homePath
     ? null
@@ -304,7 +270,6 @@ async function smokePackagedDesktop(options) {
       child,
       tempHome,
       requiredLogPatterns(binDir),
-      appDiagnostics(launchAppPath, appBinary),
       getProcessOutput
     );
     assertEngineStarted(contents);

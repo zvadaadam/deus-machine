@@ -47,42 +47,25 @@ export async function invoke<T = unknown>(
  *
  *   listen(FS_CHANGED, (e) => e.payload.workspace_path)
  *
- * Also accepts arbitrary event names with an explicit generic for backwards
- * compat during incremental migration.
- *
  * Returns a Promise<UnlistenFn> for API consistency,
  * even though Electron's IPC returns unsubscribe synchronously.
  */
 export async function listen<K extends AppEventName>(
   event: K,
   handler: (event: { payload: AppEventMap[K] }) => void
-): Promise<() => void>;
-export async function listen<T>(
-  event: string,
-  handler: (event: { payload: T }) => void
-): Promise<() => void>;
-export async function listen(
-  event: string,
-  handler: (event: { payload: unknown }) => void
 ): Promise<() => void> {
   if (!isElectronEnv) {
     console.warn(`[Platform] Electron listen called in non-Electron environment: ${event}`);
     return () => {};
   }
 
-  const schema = (AppEventSchemaMap as Record<string, import("zod").ZodTypeAny>)[event];
+  const schema = AppEventSchemaMap[event];
 
   // Register via preload bridge — electronAPI.on returns a sync unsubscribe fn.
   // We wrap the callback to match the { payload } shape expected by consumers.
   const unlisten = window.electronAPI!.on(event, (...args: unknown[]) => {
     // Electron IPC sends payload as the first arg after the stripped IpcRendererEvent
-    const payload = args[0];
-
-    if (!schema) {
-      // Unknown event (not in AppEventMap) — pass through without validation
-      handler({ payload });
-      return;
-    }
+    const payload = args[0] as AppEventMap[K];
 
     const result = schema.safeParse(payload);
     if (!result.success) {
@@ -95,7 +78,7 @@ export async function listen(
       return;
     }
     // Pass validated + stripped payload (extra keys removed by Zod)
-    handler({ payload: result.data });
+    handler({ payload: result.data as AppEventMap[K] });
   });
 
   return unlisten;

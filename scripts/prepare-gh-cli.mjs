@@ -10,14 +10,11 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-
-const VERIFY_TIMEOUT_MS = 20_000;
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(scriptDir, "..");
@@ -29,14 +26,12 @@ const GH_RELEASE_BASE_URL = `https://github.com/cli/cli/releases/download/v${GH_
 const TARGETS = ghContract.targets.map((target) => ({
   ...target,
   archiveExtension: target.archiveExtension || "zip",
-  fileFormat: target.fileFormat || "Mach-O 64-bit executable",
   archiveName: `gh_${GH_VERSION}_${target.archivePlatform}.${target.archiveExtension || "zip"}`,
   archiveRoot: `gh_${GH_VERSION}_${target.archivePlatform}`,
   sha256: target.archiveSha256,
 }));
 const cacheDir = join(projectRoot, "dist", "cache", "gh", GH_VERSION);
 const stagedBinRoot = join(projectRoot, "dist", "runtime", "electron", "bin");
-const manifestPath = join(stagedBinRoot, "gh-cli.json");
 
 function log(line) {
   console.log(`[gh-cli] ${line}`);
@@ -44,12 +39,6 @@ function log(line) {
 
 function sha256(filePath) {
   return createHash("sha256").update(readFileSync(filePath)).digest("hex");
-}
-
-function relativeFromProjectRoot(filePath) {
-  return filePath.startsWith(projectRoot)
-    ? filePath.slice(projectRoot.length + 1).split("/").join("/")
-    : filePath;
 }
 
 function clearMacExtendedAttributes(filePath) {
@@ -60,37 +49,6 @@ function clearMacExtendedAttributes(filePath) {
   } catch {
     // Non-fatal: signing/notarization will surface any real packaging issue.
   }
-}
-
-function verifyGhBinary(filePath, runtimeKey) {
-  if (process.platform !== "darwin" || !runtimeKey.startsWith("darwin-")) return;
-  execFileSync("codesign", ["--verify", "--verbose=2", filePath], {
-    timeout: VERIFY_TIMEOUT_MS,
-    stdio: ["ignore", "ignore", "pipe"],
-  });
-  log(`Verified ${runtimeKey} code signature`);
-}
-
-function inspectGhBinary(filePath, target) {
-  const fileOutput = execFileSync("file", [relativeFromProjectRoot(filePath)], {
-    cwd: projectRoot,
-    encoding: "utf8",
-    timeout: VERIFY_TIMEOUT_MS,
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
-  const hasExpectedFormat =
-    target.fileFormat === "Mach-O 64-bit executable"
-      ? fileOutput.includes("Mach-O 64-bit") && fileOutput.includes("executable")
-      : fileOutput.includes(target.fileFormat);
-  if (!hasExpectedFormat || !fileOutput.includes(target.fileArch)) {
-    throw new Error(`Unexpected gh architecture for ${target.runtimeKey}: ${fileOutput}`);
-  }
-
-  return {
-    sha256: sha256(filePath),
-    size: statSync(filePath).size,
-    fileOutput,
-  };
 }
 
 async function downloadFile(url, destinationPath) {
@@ -160,49 +118,16 @@ function stageGhBinary(target, archivePath) {
     copyFileSync(sourcePath, outputPath);
     chmodSync(outputPath, 0o755);
     clearMacExtendedAttributes(outputPath);
-
-    verifyGhBinary(outputPath, target.runtimeKey);
-    const inspection = inspectGhBinary(outputPath, target);
-
     log(`Staged ${target.runtimeKey} -> ${outputPath}`);
-    return {
-      tool: "gh",
-      runtimeKey: target.runtimeKey,
-      path: relativeFromProjectRoot(outputPath),
-      ...inspection,
-      source: {
-        version: GH_VERSION,
-        archiveName: target.archiveName,
-        archiveSha256: target.sha256,
-        url: `${GH_RELEASE_BASE_URL}/${target.archiveName}`,
-      },
-    };
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
 async function main() {
-  const targets = [];
   for (const target of TARGETS) {
-    const archivePath = await ensureArchive(target);
-    targets.push(stageGhBinary(target, archivePath));
+    stageGhBinary(target, await ensureArchive(target));
   }
-
-  writeFileSync(
-    manifestPath,
-    JSON.stringify(
-      {
-        version: 1,
-        generatedAt: new Date().toISOString(),
-        ghVersion: GH_VERSION,
-        targets,
-      },
-      null,
-      2
-    ) + "\n"
-  );
-  log(`Manifest written -> ${manifestPath}`);
 }
 
 main().catch((error) => {

@@ -6,7 +6,7 @@
 import type { SessionStatus } from "./session";
 
 // Canonical enum types — defined as Zod schemas in shared/enums.ts,
-// imported here for local use and re-exported for backwards compat.
+// imported here for local use; the ones workspace importers read are re-exported.
 import type {
   InitFetchIssue,
   WorkspaceKind,
@@ -14,7 +14,7 @@ import type {
   SetupStatus,
   WorkspaceStatus,
 } from "../enums";
-export type { InitFetchIssue, WorkspaceKind, WorkspaceState, SetupStatus, WorkspaceStatus };
+export type { WorkspaceState, SetupStatus, WorkspaceStatus };
 
 /**
  * Core workspace entity
