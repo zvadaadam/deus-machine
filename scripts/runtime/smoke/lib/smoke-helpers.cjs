@@ -455,7 +455,7 @@ function assertHostRunnableArch(filePath, label) {
     process.arch === "arm64" ? "arm64" : process.arch === "x64" ? "x86_64" : null;
   if (!expectedArch) return;
 
-  const output = execFileSync("file", [filePath], {
+  const output = execFileSync("file", ["-b", filePath], {
     encoding: "utf8",
     timeout: 20_000,
     stdio: ["ignore", "pipe", "pipe"],
