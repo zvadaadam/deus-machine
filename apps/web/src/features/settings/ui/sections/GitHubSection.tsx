@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { GithubCloudAccess } from "./GithubCloudAccess";
 import {
   ArrowUpRight,
@@ -21,11 +21,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
+import { api } from "@shared/api";
+import { getErrorMessage } from "@shared/lib/errors";
 import { native } from "@/platform";
-import { queryKeys } from "@/shared/api/queryKeys";
+import { call } from "@/platform/ws";
 import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 import { cn } from "@/shared/lib/utils";
-import { useGhStatus } from "@/features/workspace/api";
+import { useGhSignIn, useGhStatus } from "@/features/workspace/api";
 
 function GitHubStatusBadge({
   installed,
@@ -48,20 +50,6 @@ function GitHubStatusBadge({
   return <XCircle className="text-muted-foreground size-4" aria-label="Not connected" />;
 }
 
-function getCliLocation(path: string | null | undefined): { label: string; path: string } | null {
-  if (!path) return null;
-
-  const normalizedPath = path.replaceAll("\\", "/");
-  const isBundled =
-    normalizedPath.includes("/Contents/Resources/bin/") ||
-    normalizedPath.includes("/dist/runtime/electron/bin/");
-
-  // Bundled gh is the default — no need to surface it in the UI.
-  if (isBundled) return null;
-
-  return { label: "Using system GitHub CLI.", path };
-}
-
 function getInitials(displayName: string | null, login: string | null): string {
   if (displayName) {
     const parts = displayName.trim().split(/\s+/);
@@ -73,42 +61,13 @@ function getInitials(displayName: string | null, login: string | null): string {
 }
 
 export function GitHubSection() {
-  const queryClient = useQueryClient();
   const ghStatus = useGhStatus();
-  const ghCli = useQuery({
-    queryKey: ["settings", "github", "cli-check"],
-    queryFn: () => native.cli.checkCliTool("gh"),
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  });
-
-  const signInMutation = useMutation({
-    mutationFn: () => native.cli.startGhAuthLogin(),
-    onSuccess: async (result) => {
-      if (!result.success) {
-        toast.error(result.error ?? "GitHub sign-in did not complete");
-        return;
-      }
-
-      await queryClient.invalidateQueries({ queryKey: queryKeys.github.ghStatus });
-      const refreshed = await ghStatus.refetch();
-      if (refreshed.data?.isAuthenticated) {
-        toast.success("GitHub connected");
-      } else {
-        toast.error("GitHub sign-in finished, but Deus could not verify it yet");
-      }
-    },
-  });
+  const signInMutation = useGhSignIn();
 
   const signOutMutation = useMutation({
-    mutationFn: () => native.cli.logoutGhAuth(),
-    onSuccess: async (result) => {
-      if (!result.success) {
-        toast.error(result.error ?? "GitHub sign-out did not complete");
-        return;
-      }
-
-      await queryClient.invalidateQueries({ queryKey: queryKeys.github.ghStatus });
+    mutationFn: () => call(api.ghLogout),
+    onError: (error) => toast.error(getErrorMessage(error)),
+    onSuccess: async () => {
       const refreshed = await ghStatus.refetch();
       if (refreshed.data?.isAuthenticated) {
         toast.error("GitHub signed out, but Deus still sees an active account");
@@ -118,23 +77,19 @@ export function GitHubSection() {
     },
   });
 
-  const checking = ghStatus.isLoading || ghCli.isLoading;
-  const refreshing = ghStatus.isFetching || ghCli.isFetching;
-  const installed = ghCli.data?.installed ?? ghStatus.data?.isInstalled;
-  const webMode = ghCli.data?.webMode === true;
+  const checking = ghStatus.isLoading;
+  const refreshing = ghStatus.isFetching;
+  const installed = ghStatus.data?.isInstalled;
   const authenticated = ghStatus.data?.isAuthenticated === true;
   const username = ghStatus.data?.login ?? null;
   const displayName = ghStatus.data?.displayName ?? null;
   const avatarUrl = ghStatus.data?.avatarUrl ?? null;
   const profileUrl = ghStatus.data?.htmlUrl ?? (username ? `https://github.com/${username}` : null);
-  const cliLocation = getCliLocation(ghCli.data?.path);
   const authMutationPending = signInMutation.isPending || signOutMutation.isPending;
   const canSignIn = installed === true && !authenticated && !authMutationPending;
   const canSignOut = authenticated && !authMutationPending;
 
-  async function refreshStatus() {
-    await Promise.all([ghCli.refetch(), ghStatus.refetch()]);
-  }
+  const refreshStatus = () => ghStatus.refetch();
 
   // Re-check on mount so the section reflects external changes (e.g. signing
   // out via terminal) without the user clicking refresh.
@@ -152,7 +107,7 @@ export function GitHubSection() {
     );
     if (!confirmed) return;
 
-    await signOutMutation.mutateAsync();
+    signOutMutation.mutate();
   }
 
   return (
@@ -203,15 +158,23 @@ export function GitHubSection() {
                 <p className="text-sm font-medium">GitHub account</p>
               </div>
               <p className="text-muted-foreground mt-0.5 text-sm">
-                {checking
-                  ? "Checking GitHub status."
-                  : webMode
-                    ? "Use Deus desktop to connect GitHub."
-                    : installed === false
-                      ? "Bundled GitHub CLI is unavailable. Restart Deus, then check again."
-                      : signInMutation.isPending
-                        ? "Complete sign-in in your browser."
-                        : "Connect GitHub to enable pull requests and GitHub workspaces."}
+                {checking ? (
+                  "Checking GitHub status."
+                ) : installed === false ? (
+                  "Bundled GitHub CLI is unavailable. Restart Deus, then check again."
+                ) : signInMutation.page ? (
+                  <>
+                    Enter{" "}
+                    <span className="text-text-primary font-mono select-all">
+                      {signInMutation.page.code}
+                    </span>{" "}
+                    on GitHub to finish signing in.
+                  </>
+                ) : signInMutation.isPending ? (
+                  "Complete sign-in in your browser."
+                ) : (
+                  "Connect GitHub to enable pull requests and GitHub workspaces."
+                )}
               </p>
             </div>
           )}
@@ -263,14 +226,7 @@ export function GitHubSection() {
           </div>
         </div>
 
-        {cliLocation && (
-          <p className="text-muted-foreground truncate text-xs">
-            {cliLocation.label}
-            <span className="font-mono"> {cliLocation.path}</span>
-          </p>
-        )}
-
-        {installed === false && !webMode ? (
+        {installed === false ? (
           <>
             <Separator />
             <Button
@@ -288,7 +244,7 @@ export function GitHubSection() {
               Check again
             </Button>
           </>
-        ) : installed === false || authenticated ? null : (
+        ) : authenticated ? null : (
           <>
             <Separator />
             <div className="flex items-center justify-between gap-4">
@@ -299,15 +255,21 @@ export function GitHubSection() {
               <Button
                 size="sm"
                 className="gap-1.5"
-                onClick={() => void signInMutation.mutateAsync()}
-                disabled={!canSignIn}
+                onClick={() =>
+                  signInMutation.page ? signInMutation.openPage() : signInMutation.mutate()
+                }
+                disabled={!canSignIn && !signInMutation.page}
               >
-                {signInMutation.isPending ? (
+                {signInMutation.isPending && !signInMutation.page ? (
                   <Loader2 className="size-3.5 animate-spin" />
                 ) : (
                   <GitHubIcon className="size-3.5" />
                 )}
-                {signInMutation.isPending ? "Signing in" : "Sign in"}
+                {signInMutation.page
+                  ? "Open GitHub"
+                  : signInMutation.isPending
+                    ? "Signing in"
+                    : "Sign in"}
               </Button>
             </div>
           </>

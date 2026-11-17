@@ -89,14 +89,10 @@ vi.mock("../../../apps/desktop/main/deus-cloud-auth", () => ({
   getStoredDeusCloudSessionToken: vi.fn(),
   registerDeusCloudAuthHandlers: vi.fn(),
 }));
-vi.mock("../../../apps/desktop/main/deus-cloud-direct-token", () => ({
-  registerDeusCloudDirectTokenHandler: vi.fn(),
-}));
 vi.mock("../../../apps/desktop/main/deus-cloud-auth-contract", () => ({
   resolveDeusCloudUrl: vi.fn(),
 }));
 vi.mock("../../../apps/desktop/main/deus-cloud-provision", () => ({ provisionAtStartup: vi.fn() }));
-vi.mock("../../../apps/desktop/main/github-app", () => ({ registerGithubAppHandlers: vi.fn() }));
 vi.mock("../../../apps/desktop/main/startup-diagnostics", () => ({
   formatStartupFailureDetail: vi.fn(() => "detail"),
   getMainLogPath: vi.fn(),

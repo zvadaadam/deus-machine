@@ -188,8 +188,6 @@ function assertPackagedMainRuntimeContents(contents, label = "Electron main buil
     '"ELECTRON_RUN_AS_NODE"',
     '"NODE_PATH"',
     'runtime.runtimeExecutable ? ["backend"]',
-    "PACKAGED_BUNDLED_TOOLS",
-    "CLI_CHILD_ENV_DENYLIST",
   ];
 
   for (const snippet of requiredSnippets) {

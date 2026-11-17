@@ -13,26 +13,13 @@ files:
   # Renderer/main source maps are "hidden" (unreferenced); shipping them only adds size.
   - "!out/**/*.map"
   - "resources/**/*"
-  - "!apps/**/*"
-  - "!node_modules/device-use/native/.build/**"
-  - "!node_modules/device-use/native/.swiftpm/**"
-  # The packaged runtime owns native agent/browser CLIs in Resources/bin.
-  # Keep SDK libraries, but do not also ship their npm native executable payloads.
-  - "!node_modules/@anthropic-ai/claude-agent-sdk-darwin-*/**"
-  - "!node_modules/@anthropic-ai/claude-agent-sdk-linux-*/**"
-  - "!node_modules/@anthropic-ai/claude-agent-sdk-win32-*/**"
-  - "!node_modules/@openai/codex/bin/**"
-  - "!node_modules/@openai/codex/vendor/**"
-  - "!node_modules/@openai/codex-darwin-*/**"
-  - "!node_modules/@openai/codex-linux-*/**"
-  - "!node_modules/@openai/codex-win32-*/**"
-  - "!node_modules/agent-browser/**"
-  - "!node_modules/@sentry/cli/**"
-  - "!node_modules/@sentry/cli-*/**"
+  # Main and preload bundle what they import, and deus-runtime is compiled with
+  # everything but the canvas, which it loads from app.asar.unpacked
+  # (DEUS_NATIVE_MODULES). electron-builder applies only the exclusions here
+  # to node_modules, so the allowlist is one.
+  - "!node_modules/!(@napi-rs)/**"
 asarUnpack:
   - "resources/**"
-  - "node_modules/better-sqlite3/**"
-  - "node_modules/node-pty/**"
   - "node_modules/@napi-rs/canvas/**"
   - "node_modules/@napi-rs/canvas-*/**"
 mac:

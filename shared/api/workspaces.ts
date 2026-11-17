@@ -67,6 +67,18 @@ export const prStatus = read({
 /** Whether GitHub is installed and signed in on this computer, and as whom. */
 export const ghStatus = read({ name: "ghStatus", output: out<GhCliStatus>() });
 
+/**
+ * Sign this computer's GitHub CLI in. Answers with GitHub's one-time code and
+ * the page to enter it on; `ghLoginDone` answers when the sign-in ends.
+ */
+export const ghLogin = write({ name: "ghLogin", output: out<{ code: string; url: string }>() });
+
+/** The end of the sign-in `ghLogin` began: within ten minutes, or its failure. */
+export const ghLoginDone = read({ name: "ghLoginDone", output: out<void>() });
+
+/** Sign the active github.com account out of this computer's GitHub CLI. */
+export const ghLogout = write({ name: "ghLogout", output: out<void>() });
+
 export const createWorkspace = write({
   name: "createWorkspace",
   input: z.object({

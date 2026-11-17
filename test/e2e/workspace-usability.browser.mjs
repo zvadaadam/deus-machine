@@ -714,12 +714,7 @@ try {
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.addInitScript(() => {
     window.electronAPI = {
-      invoke: async (command) =>
-        command === "check_cli_tool"
-          ? { installed: true, path: "/bundled/cli" }
-          : command === "native:pickFolder"
-            ? "/fixture/not-git"
-            : undefined,
+      invoke: async (command) => (command === "native:pickFolder" ? "/fixture/not-git" : undefined),
     };
   });
   await page.goto(server.resolvedUrls.local[0] + "?onboarding");

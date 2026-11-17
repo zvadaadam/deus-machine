@@ -64,10 +64,11 @@ agent CLI discovery. It is based on the source paths below, not on generated
   Electron app contents and native runtime payloads.
 
 Frontend libraries belong in `devDependencies`: Vite bundles them into
-`out/renderer` or device-use's `dist/frontend` during the build. Keep packages
-loaded by the desktop, backend, or agent runtime in `dependencies`, which
-electron-builder copies into the app. This avoids shipping a second, unused
-copy of each frontend library and its dependencies.
+`out/renderer` or device-use's `dist/frontend` during the build. The app ships
+no other `node_modules` than `@napi-rs/canvas`, unpacked (`electron-builder.yml`
+`files`), which `deus-runtime` loads from `DEUS_NATIVE_MODULES`: Vite bundles
+main and preload, the runtime compiles in everything else, and its terminals
+are Bun's own.
 
 ## Cleanup Boundaries
 

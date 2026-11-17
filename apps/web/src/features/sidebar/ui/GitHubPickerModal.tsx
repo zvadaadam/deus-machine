@@ -1,7 +1,5 @@
 import { useState, useCallback } from "react";
-import { useMutation } from "@tanstack/react-query";
 import { GitPullRequest, GitBranch, Loader2 } from "lucide-react";
-import { toast } from "sonner";
 import {
   CommandDialog,
   CommandInput,
@@ -13,8 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { useRepoPrs, useRepoBranches, useGhStatus } from "@/features/workspace/api";
-import { native } from "@/platform";
+import { useRepoPrs, useRepoBranches, useGhStatus, useGhSignIn } from "@/features/workspace/api";
 import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 import type { PRSummary, BranchSummary } from "@shared/types";
 
@@ -48,23 +45,7 @@ export function GitHubPickerModal({
   const branchesQuery = useRepoBranches(open ? repoId : null);
   const ghStatus = useGhStatus();
 
-  const signInMutation = useMutation({
-    mutationFn: () => native.cli.startGhAuthLogin(),
-    onSuccess: async (result) => {
-      if (!result.success) {
-        toast.error(result.error ?? "GitHub sign-in did not complete");
-        return;
-      }
-
-      const refreshed = await ghStatus.refetch();
-      if (refreshed.data?.isAuthenticated) {
-        toast.success("GitHub connected");
-        await prsQuery.refetch();
-      } else {
-        toast.error("GitHub sign-in finished, but Deus could not verify it yet");
-      }
-    },
-  });
+  const signInMutation = useGhSignIn(() => prsQuery.refetch());
 
   const handlePrSelect = useCallback(
     (pr: PRSummary) => {
@@ -144,19 +125,37 @@ export function GitHubPickerModal({
             </div>
           ) : activeTab === "prs" && !ghAuthenticated ? (
             <div className="flex flex-col items-center gap-3 px-3 py-6 text-center">
-              <p className="text-muted-foreground text-sm">Connect GitHub to load pull requests.</p>
+              <p className="text-muted-foreground text-sm">
+                {signInMutation.page ? (
+                  <>
+                    Enter{" "}
+                    <span className="text-text-primary font-mono select-all">
+                      {signInMutation.page.code}
+                    </span>{" "}
+                    on GitHub to finish signing in.
+                  </>
+                ) : (
+                  "Connect GitHub to load pull requests."
+                )}
+              </p>
               <Button
                 size="sm"
                 className="gap-1.5"
-                onClick={() => void signInMutation.mutateAsync()}
-                disabled={signInMutation.isPending}
+                onClick={() =>
+                  signInMutation.page ? signInMutation.openPage() : signInMutation.mutate()
+                }
+                disabled={signInMutation.isPending && !signInMutation.page}
               >
-                {signInMutation.isPending ? (
+                {signInMutation.isPending && !signInMutation.page ? (
                   <Loader2 className="size-3.5 animate-spin" />
                 ) : (
                   <GitHubIcon className="size-3.5" />
                 )}
-                {signInMutation.isPending ? "Signing in" : "Sign in"}
+                {signInMutation.page
+                  ? "Open GitHub"
+                  : signInMutation.isPending
+                    ? "Signing in"
+                    : "Sign in"}
               </Button>
             </div>
           ) : (

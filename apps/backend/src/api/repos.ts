@@ -30,10 +30,15 @@ import {
 } from "../db";
 import { resolveCloudRepoAccess } from "../services/cloud-workspace-init.service";
 import { defaultCloudOrgId } from "../services/agent/cloud/config";
-import { listAccessibleRepos } from "../services/cloud-settings.service";
+import {
+  getGithubApp,
+  listAccessibleRepos,
+  requestCloudSettings,
+} from "../services/cloud-settings.service";
 import * as githubRemote from "../services/github-remote";
 import { detectDefaultBranch } from "../services/git.service";
 import { parseGitHubRepo, runGh } from "../services/gh.service";
+import { githubInstallUrl } from "@shared/lib/github";
 import { readProjectFile, writeProjectFile } from "../services/project-environment.service";
 import { invalidate } from "../services/query-engine";
 import { listRecentProjects } from "../services/recent-projects.service";
@@ -575,6 +580,17 @@ export default [
     listRemoteBranches(repoId, organizationId)
   ),
   handle(api.cloudRepositories, ({ organizationId }) => listCloudRepositories(organizationId)),
+  handle(api.githubApp, ({ organizationId }) => getGithubApp(organizationFor(organizationId))),
+  handle(api.githubAppInstallUrl, async ({ organizationId }) => {
+    const orgId = organizationFor(organizationId);
+    if (!orgId) throw new ConflictError("Sign in to Deus Cloud first");
+    const { url } = (await requestCloudSettings(
+      `/orgs/${encodeURIComponent(orgId)}/github/install-url`,
+      {},
+      "product"
+    )) as { url?: string };
+    return { url: githubInstallUrl(url) };
+  }),
   // An unknown repository or one without an origin is a status the composer
   // ignores, never a 404: it only acts on "needs_grant".
   handle(api.cloudRepoAccess, ({ repoId, organizationId, fresh }) =>

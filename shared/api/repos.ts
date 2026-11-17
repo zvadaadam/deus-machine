@@ -7,7 +7,7 @@
 import { ProjectEnvironmentSchema, type ProjectEnvironment } from "@deus-hq/api";
 import { z } from "zod";
 import type { CloudRepoAccess } from "../types/cloud-access";
-import type { BranchSummary, PRSummary } from "../types/github";
+import type { BranchSummary, GithubAppState, PRSummary } from "../types/github";
 import type { RecentProject } from "../types/onboarding";
 import type { InspectedRepository, Repository } from "../types/repository";
 import { out, read, write } from "./op";
@@ -16,6 +16,7 @@ import { stream } from "./stream";
 const repoId = z.object({ repoId: z.string().min(1) });
 const rootPath = z.object({ root_path: z.string().min(1) });
 const HTTPS_URL = /^https:\/\/[^\s;|&`$()]+$/;
+const organization = z.object({ organizationId: z.string().min(1).nullish() });
 
 /** Every project added to this computer, with a folder here or not. */
 export const repos = read({ name: "repos", output: out<Repository[]>() });
@@ -49,8 +50,22 @@ export const repoBranches = read({
  */
 export const cloudRepositories = read({
   name: "cloudRepositories",
-  input: z.object({ organizationId: z.string().min(1).nullish() }),
+  input: organization,
   output: out<{ repositories: { slug: string; repoId: string | null }[] }>(),
+});
+
+/** A cloud organization's Deus GitHub App (the default organization when omitted). */
+export const githubApp = read({
+  name: "githubApp",
+  input: organization,
+  output: out<GithubAppState>(),
+});
+
+/** The github.com page that installs the organization's GitHub App, signed by Deus Cloud. */
+export const githubAppInstallUrl = read({
+  name: "githubAppInstallUrl",
+  input: organization,
+  output: out<{ url: string }>(),
 });
 
 /**

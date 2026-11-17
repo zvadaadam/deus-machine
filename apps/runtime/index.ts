@@ -2,7 +2,6 @@
 
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
-import { Module as NodeModule } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, resolve } from "node:path";
 import packageJson from "../../package.json";
@@ -13,26 +12,6 @@ const RUNTIME_NAME = "deus-runtime";
 const STAGED_RUNTIME_KEYS = new Set(["darwin-arm64", "darwin-x64", "linux-x64"]);
 const REQUIRED_BINARIES = ["deus-runtime", "codex", "claude", "gh", "rg", "agent-browser"] as const;
 const REQUIRED_SIMULATOR_HELPERS = ["simbridge", "siminspector.dylib"] as const;
-const REQUIRED_RUNTIME_IMPORTS = [
-  {
-    name: "@anthropic-ai/claude-agent-sdk",
-    load: async () => {
-      const module = await import("@anthropic-ai/claude-agent-sdk");
-      if (typeof module.query !== "function") {
-        throw new Error("missing query export");
-      }
-    },
-  },
-  {
-    name: "@hono/node-server",
-    load: async () => {
-      const module = await import("@hono/node-server");
-      if (typeof module.serve !== "function") {
-        throw new Error("missing serve export");
-      }
-    },
-  },
-] as const;
 
 type RuntimeCommand = "backend" | "self-test";
 
@@ -190,13 +169,6 @@ function deterministicPackagedPath(bundledBinDir: string): string {
   return unique([bundledBinDir, ...PACKAGED_SYSTEM_PATHS]).join(delimiter);
 }
 
-function refreshNodePathResolution(): void {
-  const moduleWithInitPaths = NodeModule as typeof NodeModule & {
-    _initPaths?: () => void;
-  };
-  moduleWithInitPaths._initPaths?.();
-}
-
 function inspectBundledBinary(binDir: string, name: (typeof REQUIRED_BINARIES)[number]) {
   const filePath = join(binDir, name);
   const exists = existsSync(filePath);
@@ -214,21 +186,52 @@ function inspectSimulatorHelper(
   return { path: filePath, exists, executable };
 }
 
-async function inspectRuntimeImports() {
-  const results: Record<string, { ok: boolean; error?: string }> = {};
+/** What the runtime loads from outside itself, each as the backend does: a
+ * terminal (Bun's own, through the PTY service) and the canvas (from disk). */
+const RUNTIME_CHECKS = {
+  terminal: async () => {
+    const { openTerminal } = await import("../backend/src/services/pty.service");
+    let output = "";
+    const exitCode = await new Promise<number | null>((resolveExit, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error(`no exit; output ${JSON.stringify(output)}`)),
+        10_000
+      );
+      openTerminal({
+        // Not a bare /bin/echo: see openTerminal on output Bun drops at exit.
+        command: "/bin/sh",
+        args: ["-c", "echo deus-runtime-terminal; sleep 0.1"],
+        cols: 80,
+        rows: 24,
+        cwd: tmpdir(),
+        env: { PATH: process.env.PATH ?? "" },
+        onData: (bytes) => (output += Buffer.from(bytes).toString()),
+        onExit: (code) => (clearTimeout(timer), resolveExit(code)),
+      });
+    });
+    if (exitCode !== 0 || !output.includes("deus-runtime-terminal")) {
+      throw new Error(`exit ${exitCode}, output ${JSON.stringify(output)}`);
+    }
+  },
+  canvas: async () => {
+    const { loadCanvas } = await import("../../packages/screen-studio/src/render/painter");
+    const canvas = await loadCanvas();
+    if (!canvas) throw new Error("@napi-rs/canvas did not load");
+    const png = await canvas.createCanvas(8, 8).encode("png");
+    if (png.length === 0) throw new Error("empty PNG");
+  },
+};
 
-  for (const item of REQUIRED_RUNTIME_IMPORTS) {
+async function inspectRuntimeChecks() {
+  const results: Record<string, { ok: boolean; error?: string }> = {};
+  for (const [name, check] of Object.entries(RUNTIME_CHECKS)) {
     try {
-      await item.load();
-      results[item.name] = { ok: true };
+      await check();
+      results[name] = { ok: true };
     } catch (error) {
-      results[item.name] = {
-        ok: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
+      results[name] = { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
   }
-
   return results;
 }
 
@@ -283,22 +286,6 @@ async function inspectSqliteContract() {
 function configureRuntimeEnv(command: RuntimeCommand, dataDir?: string): void {
   const layout = resolveRuntimeLayout();
   const isNativeRuntimeExecutable = basename(layout.executablePath) === RUNTIME_NAME;
-  const runtimeNodePathCandidates = [
-    join(layout.resourcesPath, "app.asar.unpacked", "node_modules"),
-    isNativeRuntimeExecutable && layout.projectRoot
-      ? join(layout.projectRoot, "node_modules")
-      : undefined,
-  ];
-  const nodePathCandidates = unique(
-    isNativeRuntimeExecutable
-      ? runtimeNodePathCandidates
-      : [
-          process.env.NODE_PATH,
-          ...runtimeNodePathCandidates,
-          layout.projectRoot ? join(layout.projectRoot, "node_modules") : undefined,
-        ]
-  );
-
   process.env.DEUS_RUNTIME = "1";
   process.env.DEUS_RUNTIME_COMMAND = command;
   if (isNativeRuntimeExecutable) {
@@ -307,6 +294,10 @@ function configureRuntimeEnv(command: RuntimeCommand, dataDir?: string): void {
   if (isNativeRuntimeExecutable) {
     process.env.DEUS_BUNDLED_BIN_DIR = layout.bundledBinDir;
     process.env.DEUS_RESOURCES_PATH = layout.resourcesPath;
+    // A compiled Bun finds no package by name: where its native ones are.
+    process.env.DEUS_NATIVE_MODULES = layout.projectRoot
+      ? join(layout.projectRoot, "node_modules")
+      : join(layout.resourcesPath, "app.asar.unpacked", "node_modules");
   } else {
     process.env.DEUS_BUNDLED_BIN_DIR ??= layout.bundledBinDir;
     process.env.DEUS_RESOURCES_PATH ??= layout.resourcesPath;
@@ -316,8 +307,6 @@ function configureRuntimeEnv(command: RuntimeCommand, dataDir?: string): void {
   } else {
     process.env.NODE_ENV ??= "production";
   }
-  process.env.NODE_PATH = nodePathCandidates.join(delimiter);
-  refreshNodePathResolution();
   process.env.PATH = isNativeRuntimeExecutable
     ? deterministicPackagedPath(layout.bundledBinDir)
     : prependPath(process.env.PATH, [layout.bundledBinDir]);
@@ -356,7 +345,7 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
       ])
     );
     const requireSimulatorHelpers = isMacAppBundle(layout.resourcesPath);
-    const imports = await inspectRuntimeImports();
+    const checks = await inspectRuntimeChecks();
     const sqlite = await inspectSqliteContract();
     const missing = Object.entries(binaries)
       .filter(([, result]) => !result.exists || !result.executable)
@@ -364,7 +353,7 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
     const missingSimulatorHelpers = Object.entries(simulatorHelpers)
       .filter(([, result]) => requireSimulatorHelpers && (!result.exists || !result.executable))
       .map(([name]) => name);
-    const failedImports = Object.entries(imports)
+    const failedChecks = Object.entries(checks)
       .filter(([, result]) => !result.ok)
       .map(([name]) => name);
     console.log(
@@ -372,7 +361,7 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
         ok:
           missing.length === 0 &&
           missingSimulatorHelpers.length === 0 &&
-          failedImports.length === 0 &&
+          failedChecks.length === 0 &&
           sqlite.ok,
         version: VERSION,
         executable: layout.executablePath,
@@ -382,24 +371,22 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
         binDir: layout.bundledBinDir,
         resourcesPath: layout.resourcesPath,
         nodeEnv: process.env["NODE_ENV"] ?? "",
-        nodePath: process.env.NODE_PATH ?? "",
         pathEnv: process.env.PATH ?? "",
-        nodeGlobalPaths: NodeModule.globalPaths,
         runtimeKey: getRuntimeKey(),
         binaries,
         simulatorHelpers,
-        imports,
+        checks,
         sqlite,
         requireSimulatorHelpers,
         missing,
         missingSimulatorHelpers,
-        failedImports,
+        failedChecks,
       })
     );
     if (
       missing.length > 0 ||
       missingSimulatorHelpers.length > 0 ||
-      failedImports.length > 0 ||
+      failedChecks.length > 0 ||
       !sqlite.ok
     ) {
       process.exit(1);
