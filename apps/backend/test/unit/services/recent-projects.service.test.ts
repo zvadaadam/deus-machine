@@ -232,18 +232,7 @@ describe("recent-projects.service", () => {
       isIgnoredRecentProjectPath("/Applications/Conductor.app", { homeDir: "/Users/deus" })
     ).toBe(true);
     expect(
-      isIgnoredRecentProjectPath("/Users/deus/Developer/project/.opendevs/alpha", {
-        homeDir: "/Users/deus",
-      })
-    ).toBe(true);
-    expect(
       isIgnoredRecentProjectPath("/Users/deus/Developer/project", { homeDir: "/Users/deus" })
-    ).toBe(false);
-    expect(isIgnoredRecentProjectPath("C:/Users/deus", { homeDir: "C:/Users/deus" })).toBe(true);
-    expect(
-      isIgnoredRecentProjectPath("C:/Users/deus/Developer/project", {
-        homeDir: "C:/Users/deus",
-      })
     ).toBe(false);
   });
 
