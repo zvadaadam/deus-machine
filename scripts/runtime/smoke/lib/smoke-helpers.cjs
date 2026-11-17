@@ -1,6 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { execFileSync, spawn, spawnSync } = require("node:child_process");
+const { execFileSync, spawn } = require("node:child_process");
 const WebSocket = require("ws");
 
 const PROJECT_ROOT = path.resolve(__dirname, "../../../..");
@@ -24,8 +24,6 @@ const RUNTIME_ENV_DENYLIST = [
   "NODE_PATH",
   "PORT",
 ];
-const RUNTIME_BINARIES = ["deus-runtime", "codex", "claude", "gh", "rg", "agent-browser"];
-const RUNTIME_MANIFESTS = ["deus-runtime.json", "agent-clis.json", "gh-cli.json"];
 const OBSOLETE_RUNTIME_PATTERNS = [
   /spawn (codex|claude).*ENOENT/,
   /ELECTRON_RUN_AS_NODE/,
@@ -37,21 +35,11 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-function assertDirectory(dirPath, label) {
-  assert(fs.existsSync(dirPath), `Missing ${label}: ${dirPath}`);
-  assert(fs.statSync(dirPath).isDirectory(), `${label} is not a directory: ${dirPath}`);
-}
-
 function assertExecutable(filePath, label) {
   assert(fs.existsSync(filePath), `Missing ${label}: ${filePath}`);
   const stat = fs.statSync(filePath);
   assert(stat.isFile(), `${label} is not a regular file: ${filePath}`);
   assert((stat.mode & 0o111) !== 0, `${label} is not executable: ${filePath}`);
-}
-
-function assertRegularFile(filePath, label) {
-  assert(fs.existsSync(filePath), `Missing ${label}: ${filePath}`);
-  assert(fs.statSync(filePath).isFile(), `${label} is not a regular file: ${filePath}`);
 }
 
 function resolveDefaultAppPath() {
@@ -118,78 +106,10 @@ function bundledAgentCliPatterns(binDir) {
   ];
 }
 
-function runDiagnostic(command, args) {
-  const result = spawnSync(command, args, {
-    cwd: PROJECT_ROOT,
-    encoding: "utf8",
-    timeout: 20_000,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
-  if (result.error) {
-    return [result.error.code || result.error.message, output].filter(Boolean).join("\n");
-  }
-  if (result.status !== 0) {
-    return output || `${command} exited with status ${result.status}`;
-  }
-  return output;
-}
-
-function runtimeDiagnostics(runtimeBin) {
-  if (process.platform !== "darwin") return "";
-  return [
-    `file: ${runDiagnostic("file", [runtimeBin])}`,
-    `codesign: ${runDiagnostic("codesign", ["-dv", "--verbose=4", runtimeBin])}`,
-    `spctl: ${runDiagnostic("spctl", [
-      "--assess",
-      "--type",
-      "execute",
-      "--verbose=4",
-      runtimeBin,
-    ])}`,
-    `xattr: ${runDiagnostic("xattr", ["-l", runtimeBin]) || "none"}`,
-  ].join("\n");
-}
-
-function appDiagnostics(appPath, appBinary) {
-  if (process.platform !== "darwin") return "";
-  return [
-    `file: ${runDiagnostic("file", [appBinary])}`,
-    `codesign: ${runDiagnostic("codesign", ["-dv", "--verbose=4", appBinary])}`,
-    `spctl: ${runDiagnostic("spctl", ["--assess", "--type", "execute", "--verbose=4", appPath])}`,
-    `xattr: ${runDiagnostic("xattr", ["-lr", appBinary]) || "none"}`,
-  ].join("\n");
-}
-
-function macExecutionPolicyHint(diagnostics, kind = "runtime") {
-  if (process.platform !== "darwin") return "";
-  if (!/spctl:[\s\S]*rejected/.test(diagnostics)) return "";
-  if (!/com\.apple\.(provenance|quarantine)/.test(diagnostics)) return "";
-
-  if (kind === "app") {
-    return [
-      "",
-      "macOS rejected this app before packaged Electron reached main-process startup.",
-      "This is a host execution-policy failure, not evidence that bundled backend startup failed.",
-      "If the app is already installed in /Applications, rerun this smoke with --launch-in-place to avoid copying the Mach-O payload.",
-      "Verify packaged desktop readiness on a notarized artifact or a macOS host that allows generated/copied Mach-O app bundles to launch.",
-    ].join("\n");
-  }
-
-  return [
-    "",
-    "macOS rejected this executable before user code reached readiness.",
-    "If the process times out with no stdout/stderr, verify on a notarized artifact or a macOS host that allows generated Mach-O binaries to launch.",
-  ].join("\n");
-}
-
-function formatRuntimeFailure(runtimeBin, args, reason, stdout, stderr, diagnostics) {
-  const hint = macExecutionPolicyHint(diagnostics);
+function formatRuntimeFailure(runtimeBin, args, reason, stdout, stderr) {
   return `${path.basename(runtimeBin)} ${args.join(" ")} ${reason} stdout=${stdout
     .trim()
-    .slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
-    diagnostics ? `\n${diagnostics}` : ""
-  }${hint}`;
+    .slice(-4000)} stderr=${stderr.trim().slice(-4000)}`;
 }
 
 async function runRuntimeCommand(runtimeBin, args, binDir, options = {}) {
@@ -214,17 +134,9 @@ async function runRuntimeCommand(runtimeBin, args, binDir, options = {}) {
         reject(error);
       };
       const timeout = setTimeout(() => {
-        const diagnostics = runtimeDiagnostics(runtimeBin);
         fail(
           new Error(
-            formatRuntimeFailure(
-              runtimeBin,
-              args,
-              `timed out after ${timeoutMs}ms`,
-              stdout,
-              stderr,
-              diagnostics
-            )
+            formatRuntimeFailure(runtimeBin, args, `timed out after ${timeoutMs}ms`, stdout, stderr)
           )
         );
       }, timeoutMs);
@@ -236,7 +148,6 @@ async function runRuntimeCommand(runtimeBin, args, binDir, options = {}) {
         stderr += data.toString();
       });
       child.on("error", (error) => {
-        const diagnostics = runtimeDiagnostics(runtimeBin);
         fail(
           new Error(
             formatRuntimeFailure(
@@ -244,8 +155,7 @@ async function runRuntimeCommand(runtimeBin, args, binDir, options = {}) {
               args,
               `failed to spawn: error=${error.code || error.message}`,
               stdout,
-              stderr,
-              diagnostics
+              stderr
             )
           )
         );
@@ -258,8 +168,6 @@ async function runRuntimeCommand(runtimeBin, args, binDir, options = {}) {
           resolve(stdout.trim());
           return;
         }
-
-        const diagnostics = runtimeDiagnostics(runtimeBin);
         fail(
           new Error(
             formatRuntimeFailure(
@@ -267,8 +175,7 @@ async function runRuntimeCommand(runtimeBin, args, binDir, options = {}) {
               args,
               `failed: status=${code} signal=${signal ?? "none"}`,
               stdout,
-              stderr,
-              diagnostics
+              stderr
             )
           )
         );
@@ -309,7 +216,6 @@ async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns, option
         const missing = patterns
           .filter((_, index) => !matched.has(index))
           .map((pattern) => pattern.toString());
-        const diagnostics = runtimeDiagnostics(runtimeBin);
         reject(
           new Error(
             formatRuntimeFailure(
@@ -317,8 +223,7 @@ async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns, option
               args,
               `did not reach readiness. missing=${missing.join(", ") || "none"}`,
               stdout,
-              stderr,
-              diagnostics
+              stderr
             )
           )
         );
@@ -359,7 +264,6 @@ async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns, option
       child.on("error", fail);
       child.on("exit", (code, signal) => {
         if (settled || matched.size === patterns.length) return;
-        const diagnostics = runtimeDiagnostics(runtimeBin);
         fail(
           new Error(
             formatRuntimeFailure(
@@ -367,8 +271,7 @@ async function waitForRuntimePatterns(runtimeBin, args, binDir, patterns, option
               args,
               `exited before readiness: code=${code} signal=${signal}`,
               stdout,
-              stderr,
-              diagnostics
+              stderr
             )
           )
         );
@@ -552,7 +455,7 @@ function assertHostRunnableArch(filePath, label) {
     process.arch === "arm64" ? "arm64" : process.arch === "x64" ? "x86_64" : null;
   if (!expectedArch) return;
 
-  const output = execFileSync("file", [filePath], {
+  const output = execFileSync("file", ["-b", filePath], {
     encoding: "utf8",
     timeout: 20_000,
     stdio: ["ignore", "pipe", "pipe"],
@@ -573,36 +476,19 @@ function verifyGatekeeperAssessment(appPath) {
 }
 
 module.exports = {
-  DEFAULT_RUNTIME_TIMEOUT_MS,
-  DEFAULT_STOP_TIMEOUT_MS,
-  OBSOLETE_RUNTIME_PATTERNS,
-  PACKAGED_SYSTEM_PATHS,
   PROJECT_ROOT,
-  RUNTIME_BINARIES,
-  RUNTIME_ENV_DENYLIST,
-  RUNTIME_MANIFESTS,
-  appDiagnostics,
   assert,
   assertBackendReadsDatabase,
   assertBackendReadsDatabaseFromOutput,
-  assertDirectory,
   assertExecutable,
   assertHostRunnableArch,
-  assertRegularFile,
   assertRuntimeSelfTest,
   bundledAgentCliPatterns,
-  deterministicRuntimePath,
-  escapeRegExp,
-  readFromBackend,
-  macExecutionPolicyHint,
   packagedDesktopEnv,
   pathPattern,
+  readFromBackend,
   resolveDefaultAppPath,
-  runDiagnostic,
   runRuntimeCommand,
-  runtimeDiagnostics,
-  runtimeEnv,
-  scrubRuntimeEnv,
   stopChild,
   verifyGatekeeperAssessment,
   waitForRuntimePatterns,

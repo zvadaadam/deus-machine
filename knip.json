@@ -17,10 +17,19 @@
         "shared/lib/*.ts",
         "apps/cli/src/cli.ts",
         "scripts/generate-integration-icons.ts",
+        "scripts/dev/*.ts",
+        "scripts/runtime/electron-builder-before-pack.cjs",
+        "scripts/runtime/electron-builder-after-sign.cjs",
         "apps/**/test/**/*.ts",
         "test/**/*.ts"
       ],
-      "project": ["apps/**/*.{ts,tsx}", "shared/**/*.ts", "test/**/*.ts", "!**/*.d.ts"],
+      "project": [
+        "apps/**/*.{ts,tsx}",
+        "shared/**/*.ts",
+        "scripts/**/*.{ts,cjs,mjs}",
+        "test/**/*.ts",
+        "!**/*.d.ts"
+      ],
       "paths": {
         "@/*": ["apps/web/src/*"],
         "@/app/*": ["apps/web/src/app/*"],

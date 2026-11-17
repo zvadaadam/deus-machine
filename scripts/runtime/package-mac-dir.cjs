@@ -146,6 +146,8 @@ function prepareDeviceUsePayloads() {
 
 async function main() {
   assertHostPlatform();
+  // A local or PR dir build is ad hoc: never sign with a keychain's Developer ID.
+  process.env.CSC_IDENTITY_AUTO_DISCOVERY ??= "false";
   const options = parseArgs(process.argv.slice(2));
   installElectronDist();
   assertElectronDistArch(options.arch);

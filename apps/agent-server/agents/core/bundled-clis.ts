@@ -14,10 +14,10 @@ import { resolveBundledCliPath } from "@shared/lib/cli-path";
 const TOOL_ENV = { claude: "CLAUDE_CLI_PATH", codex: "CODEX_CLI_PATH" } as const;
 
 export function adoptBundledClis(): void {
-  // Only in explicit runtime contexts (packaged app, staged-runtime smoke,
-  // dev.ts with a staged dir). A plain dev launch must NOT pick up whatever
-  // stale artifact happens to sit in dist/ — the engine's pinned provisioning
-  // is the dev source of truth.
+  // Only in explicit runtime contexts (packaged app, dev.ts with a staged
+  // dir). A plain dev launch must NOT pick up whatever stale artifact happens
+  // to sit in dist/ — the engine's pinned provisioning is the dev source of
+  // truth.
   const explicitRuntime =
     Boolean(process.env.DEUS_BUNDLED_BIN_DIR) ||
     process.env.DEUS_PACKAGED === "1" ||

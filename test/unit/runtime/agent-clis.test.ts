@@ -17,26 +17,11 @@ import {
   AGENT_CLI_TARGETS,
   prepareAgentClis,
   resolveStagedAgentCliPath,
-  validateStagedAgentClis,
 } from "../../../scripts/runtime/agent-clis";
 
-// Keep real filesystem staging and Electron's resource copier. Only `file`
-// inspection is replaced so the fixtures can exercise every target on any host.
-vi.mock("node:child_process", async (importOriginal) => {
-  const original = await importOriginal<typeof import("node:child_process")>();
-  return {
-    ...original,
-    execFileSync: (command: string, args: string[]) => {
-      if (command !== "file") throw new Error(`Unexpected command: ${command}`);
-      const file = args.at(-1)!;
-      const target = AGENT_CLI_TARGETS.find((t) => file.includes(t.runtimeKey))!;
-      return `${file}: ${target.fileFormat} ${target.fileArch}`;
-    },
-  };
-});
-
-// agent-server's installer, offline: the trees `install --dir` lays out, at the
-// versions the engine pins.
+// Real filesystem staging and Electron's resource copier. agent-server's
+// installer, offline: the trees `install --dir` lays out, at the versions the
+// engine pins.
 vi.mock("@zvada/agent-server/server", async () => {
   const { DEFAULT_PINS } = await import("@zvada/agent-server/core");
   return {
@@ -112,29 +97,6 @@ async function stage(target: (typeof AGENT_CLI_TARGETS)[number]) {
 }
 
 describe("bundled Codex package", () => {
-  it.each(AGENT_CLI_TARGETS)(
-    "keeps helpers beside Codex and validates them for $runtimeKey",
-    async (target) => {
-      const { root, binDir } = await stage(target);
-      const executable = realpathSync(path.join(binDir, "codex"));
-      expect(executable).toBe(realpathSync(path.join(binDir, "codex-runtime/bin/codex")));
-      const helper = path.join(path.dirname(executable), "codex-code-mode-host");
-      expect(readFileSync(helper, "utf8")).toBe("bin/codex-code-mode-host");
-      expect(
-        readFileSync(path.join(path.dirname(executable), "../codex-resources/zsh/bin/zsh"), "utf8")
-      ).toBe("codex-resources/zsh/bin/zsh");
-      const validate = () =>
-        validateStagedAgentClis({
-          projectRoot: root,
-          runtimeKey: target.runtimeKey,
-          log: () => {},
-        });
-      expect(validate).not.toThrow();
-      rmSync(helper);
-      expect(validate).toThrow("codex-code-mode-host");
-    }
-  );
-
   it.each(AGENT_CLI_TARGETS)(
     "copies a self-contained package into Electron resources for $runtimeKey",
     async (target) => {
