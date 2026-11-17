@@ -42,6 +42,19 @@ export interface PRStatus {
  * (login, display name, avatar). Cached on the frontend with a long
  * staleTime since this rarely changes during a session.
  */
+/** An organization's Deus GitHub App, as Deus Cloud reports it. */
+export interface GithubAppState {
+  /** Deus Cloud has the App registered (503 until then). */
+  configured: boolean;
+  signedIn: boolean;
+  installations: Array<{ installationId: number; accountLogin: string }>;
+  /** The App's slug, for install links; null until registered. */
+  appSlug: string | null;
+  /** `owner/name` the installations reach; null when the lookup failed (unknown is not "none"). */
+  accessibleRepos: string[] | null;
+  error?: string;
+}
+
 export interface GhCliStatus {
   isInstalled: boolean;
   isAuthenticated: boolean;

@@ -34,10 +34,8 @@ import { setupTray, destroyTray, setTrayStatus } from "./tray";
 import { ensureInstalledInApplications } from "./install-preflight";
 import { configurePackagedMainRuntimeEnv } from "./runtime-env";
 import { getStoredDeusCloudSessionToken, registerDeusCloudAuthHandlers } from "./deus-cloud-auth";
-import { registerDeusCloudDirectTokenHandler } from "./deus-cloud-direct-token";
 import { resolveDeusCloudUrl } from "./deus-cloud-auth-contract";
 import { provisionAtStartup } from "./deus-cloud-provision";
-import { registerGithubAppHandlers } from "./github-app";
 import {
   formatStartupFailureDetail,
   getMainLogPath,
@@ -359,8 +357,6 @@ app.whenReady().then(async () => {
   // Register IPC handlers before window creation so they're ready immediately
   registerNativeHandlers();
   registerDeusCloudAuthHandlers();
-  registerDeusCloudDirectTokenHandler();
-  registerGithubAppHandlers();
   registerBrowserEmulationHandlers();
   registerBrowserCookieHandlers();
   registerUpdateHandlers(quitAfterStopping);

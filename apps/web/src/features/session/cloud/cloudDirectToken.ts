@@ -8,18 +8,14 @@
 //   - backend seam — the Mac backend mints it from the signed-in Deus session
 //     (`cloudDirectToken` q: → GET /sessions/:id/cloud-direct-token). The default
 //     whenever a Mac backend is reachable (electron, web-dev, relay).
-//   - WorkOS desktop mint — Electron main mints it from the stored
-//     `deus_cloud_session` bearer (bearer stays in main; only the token crosses
-//     to the renderer). The Mac-closed source ON the desktop.
 //   - WorkOS web exchange — the browser mints it from its OWN WorkOS session
 //     (cookie), directly against agnt's `/dashboard` exchange. The fully
 //     Mac-closed WEB source, where there is no Mac backend at all.
 //
-// All three return the SAME shape, so `useCloudDirect` is source-agnostic.
+// Both return the SAME shape, so `useCloudDirect` is source-agnostic.
 
 import { api } from "@shared/api";
 import { call } from "@/platform/ws";
-import { capabilities } from "@/platform/capabilities";
 import { exchangeCloudSessionToken, SessionTokenExchangeError } from "./exchangeSessionToken";
 import {
   resolveAgntBaseUrl,
@@ -37,7 +33,7 @@ export interface CloudDirectTokenResponse {
   expires_in: number;
 }
 
-export type CloudDirectTokenSource = "backend" | "workos-desktop" | "workos-web";
+export type CloudDirectTokenSource = "backend" | "workos-web";
 
 /** A dev/test override — force a specific source regardless of deployment mode. */
 const SOURCE_OVERRIDE_KEY = "deus.cloudDirectTokenSource";
@@ -45,7 +41,7 @@ const SOURCE_OVERRIDE_KEY = "deus.cloudDirectTokenSource";
 function readSourceOverride(): CloudDirectTokenSource | null {
   try {
     const v = localStorage.getItem(SOURCE_OVERRIDE_KEY);
-    return v === "backend" || v === "workos-desktop" || v === "workos-web" ? v : null;
+    return v === "backend" || v === "workos-web" ? v : null;
   } catch {
     return null;
   }
@@ -71,32 +67,12 @@ export async function resolveCloudDirectToken(
   providerSessionId: string | null | undefined
 ): Promise<CloudDirectTokenResponse> {
   switch (pickCloudDirectTokenSource()) {
-    case "workos-desktop":
-      return mintViaDesktop(providerSessionId);
     case "workos-web":
       return mintViaWebExchange(providerSessionId);
     default:
       // The backend maps deus sessionId → provider session id + base URL itself.
       return call(api.cloudDirectToken, { sessionId });
   }
-}
-
-/** Desktop: mint in main from the stored bearer (see deus-cloud-direct-token.ts). */
-async function mintViaDesktop(
-  providerSessionId: string | null | undefined
-): Promise<CloudDirectTokenResponse> {
-  if (!providerSessionId) throw new Error("This session has no cloud provider to mint a token for");
-  if (!capabilities.ipcInvoke || !window.electronAPI?.mintDeusCloudDirectToken) {
-    throw new Error("The desktop WorkOS token mint is unavailable");
-  }
-  const result = await window.electronAPI.mintDeusCloudDirectToken(providerSessionId);
-  if (!result.ok) throw new Error(result.error);
-  return {
-    token: result.token,
-    base_url: result.base_url,
-    provider_session_id: result.provider_session_id,
-    expires_in: result.expires_in,
-  };
 }
 
 /** Web (fully Mac-closed): mint from the browser's own WorkOS session bearer. */

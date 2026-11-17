@@ -7,7 +7,8 @@ export async function pickFolder(): Promise<string | null> {
 }
 
 export async function confirm(message: string, detail?: string): Promise<boolean> {
-  if (!capabilities.ipcInvoke || !window.electronAPI?.confirm) return false;
+  if (!capabilities.ipcInvoke || !window.electronAPI?.confirm)
+    return window.confirm(detail ? `${message}\n\n${detail}` : message);
   try {
     return await window.electronAPI.confirm(message, detail);
   } catch {

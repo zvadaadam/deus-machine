@@ -3,6 +3,7 @@ import type {
   CloudOrganizations,
   CloudSettingsOrganizations,
 } from "@shared/types/environment-secrets";
+import type { GithubAppState } from "@shared/types/github";
 import { getDatabase } from "../lib/database";
 import { AppError } from "../lib/errors";
 import { invalidate } from "./query-engine";
@@ -81,6 +82,53 @@ export async function listAccessibleRepos(
     ? data.repos.filter((name): name is string => typeof name === "string")
     : [];
   return { repos };
+}
+
+/**
+ * The organization's Deus GitHub App, asked of Deus Cloud with the person's
+ * session. A 503 (the App is not registered) or a 404 (the routes are not
+ * deployed) is "not configured": nothing the person can act on yet.
+ */
+export async function getGithubApp(orgId: string | null): Promise<GithubAppState> {
+  const none = { installations: [], appSlug: null, accessibleRepos: null };
+  if (!cloudAccount()?.sessionToken || !orgId)
+    return { ...none, configured: false, signedIn: false };
+  let body: {
+    installations?: Array<{ githubInstallationIdentifier: number; accountLogin: string }>;
+    appSlug?: string | null;
+  };
+  try {
+    body = await requestCloudSettings(
+      `/orgs/${encodeURIComponent(orgId)}/github/installation`,
+      {},
+      "product"
+    );
+  } catch (error) {
+    const status = error instanceof AppError ? error.statusCode : null;
+    if (status === 503 || status === 404) return { ...none, configured: false, signedIn: true };
+    return {
+      ...none,
+      configured: !!status,
+      signedIn: true,
+      error: status ? `status ${status}` : "offline",
+    };
+  }
+  const installations = (body.installations ?? []).map((item) => ({
+    installationId: item.githubInstallationIdentifier,
+    accountLogin: item.accountLogin,
+  }));
+  return {
+    configured: !!body.appSlug,
+    signedIn: true,
+    installations,
+    appSlug: body.appSlug ?? null,
+    accessibleRepos: installations.length
+      ? await listAccessibleRepos(orgId).then(
+          ({ repos }) => repos,
+          () => null
+        )
+      : [],
+  };
 }
 
 /** The settings pages' list: the platform's answer, passed through. */
