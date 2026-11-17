@@ -51,8 +51,7 @@ export function TextBlock({ block: text, role = "assistant", weight = "normal" }
       role === "user" &&
       (text?.includes("<inspect") ||
         text?.includes("&lt;inspect") ||
-        text?.includes("<diff-comment") ||
-        text?.includes("Diff comment"))
+        text?.includes("<diff-comment"))
         ? parseUserMessageReferences(text)
         : [],
     [role, text]
