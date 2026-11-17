@@ -155,7 +155,8 @@ function verifyPackagedLayout(context) {
     ...executables,
     path.join(resourcesDir, "app.asar.unpacked", "node_modules", "@napi-rs", canvas),
   ]) {
-    const description = execFileSync("file", ["-L", file], { encoding: "utf8" }).trim();
+    // -b: without the file's name, which holds the architecture too (dist-electron/mac-arm64).
+    const description = execFileSync("file", ["-b", "-L", file], { encoding: "utf8" }).trim();
     if (!fileType.every((token) => description.includes(token))) {
       throw new Error(`Packaged ${file} is not ${fileType.join(" ")}: ${description}`);
     }
