@@ -105,6 +105,7 @@ async function startAndStop(deus, work) {
 
     process.kill(child.pid, "SIGTERM");
     const code = await waitFor(15_000, () => child.exitCode);
+    if (code !== 0) throw new Error(`deus start exited with code ${code} after SIGTERM`);
     if (await healthy(port)) throw new Error(`the backend still answers on port ${port}`);
     console.log(`✓ deus start brought the backend up and stopped it (exit ${code})`);
   } catch (error) {
