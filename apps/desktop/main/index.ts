@@ -312,7 +312,8 @@ app.whenReady().then(async () => {
   // Set up the native app menu (File, Edit, View, Window, Help)
   setupAppMenu();
   // Dev-only: mirror terminal PATH when Electron is launched outside a shell.
-  // Packaged runtime uses bundled binaries and a deterministic system PATH.
+  // Packaged, main keeps the bundled bin folder and the system folders; the
+  // backend's engine adds the login shell's PATH after them for agents and terminals.
   if (process.platform === "darwin" && !app.isPackaged) {
     try {
       await syncShellEnvironment();

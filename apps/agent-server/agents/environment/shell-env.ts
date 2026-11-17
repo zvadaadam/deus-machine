@@ -29,14 +29,21 @@ function parseEnv(output: string): Record<string, string> {
 
 /**
  * Keys stripped from the shell environment to prevent auth interference.
- * These are provider-specific keys that the user may have set globally
- * but that should not leak into the Deus-managed Claude session.
+ * These are sign-ins and endpoints the user may have set globally, which
+ * would silently replace the accounts Deus manages: the Claude or Codex
+ * login a turn runs on, and the GitHub CLI's saved account (a token in the
+ * environment also makes `gh auth login` refuse to run).
  */
 const STRIPPED_ENV_KEYS = [
   "ANTHROPIC_API_KEY",
+  "ANTHROPIC_AUTH_TOKEN",
+  "ANTHROPIC_BASE_URL",
+  "CLAUDE_CODE_OAUTH_TOKEN",
   "OPENAI_API_KEY",
   "CLAUDE_CODE_USE_BEDROCK",
   "CLAUDE_CODE_USE_VERTEX",
+  "GH_TOKEN",
+  "GITHUB_TOKEN",
 ];
 
 /**
@@ -54,6 +61,11 @@ export function getShellEnvironment(): Record<string, string> {
   const output = execFileSync(shell, ["-ilc", command], {
     encoding: "utf8",
     timeout: 5_000,
+    // An interactive shell ignores SIGTERM, so a profile that hangs would hold
+    // the backend's start for as long as it hangs: kill it outright.
+    killSignal: "SIGKILL",
+    // What a profile prints to stderr stays out of the backend's log.
+    stdio: ["pipe", "pipe", "ignore"],
     env: {
       // Prevent Oh My Zsh from blocking with auto-update prompts
       DISABLE_AUTO_UPDATE: "true",
