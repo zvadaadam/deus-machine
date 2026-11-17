@@ -19,6 +19,7 @@ import Database from "better-sqlite3";
 import { createServer } from "vite";
 import { chromium } from "playwright";
 import { SCHEMA_SQL } from "../../../shared/schema.ts";
+import { LOOPBACK_WEB_ORIGINS } from "../../../shared/web-origins.ts";
 import { pause, startPlatform, textPart, until } from "./platform.mjs";
 
 const root = path.resolve(import.meta.dirname, "../../..");
@@ -160,6 +161,8 @@ const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/serv
     ...env,
     PORT: "0",
     DATABASE_PATH: path.join(directory, "deus.db"),
+    // The web app this runner serves, at whatever port Vite takes.
+    DEUS_WEB_ORIGINS: LOOPBACK_WEB_ORIGINS,
     TSX_TSCONFIG_PATH: path.join(root, "apps/backend/tsconfig.json"),
     AGNT_BASE_URL: platform.url,
     DEUS_CLOUD_AGNT_URL: platform.url,

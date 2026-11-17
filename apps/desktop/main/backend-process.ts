@@ -9,8 +9,8 @@ import { extendCliPath, getDevStagedCliDirectory } from "../../../shared/lib/cli
 import { PACKAGED_RUNTIME_ENV_DENYLIST } from "./runtime-env";
 import { handleKeepAwakeLine, setKeepAwakeWanted } from "./keep-awake";
 import { getLaunchPath } from "./shell-env";
-
-export const CDP_PORT = "19222";
+import { rendererOrigin } from "./app-protocol";
+import { WEB_ORIGINS_ENV } from "../../../shared/web-origins";
 
 let backendProcess: ChildProcess | null = null;
 let isQuitting = false;
@@ -231,7 +231,11 @@ export async function spawnBackend(
     Object.assign(childEnv, sharedEnv, {
       AUTH_TOKEN: authToken,
       PORT: "0",
-      CDP_PORT,
+      // The one page that may use the backend from this computer: the window's.
+      [WEB_ORIGINS_ENV]: rendererOrigin({
+        isDev: !app.isPackaged,
+        rendererUrl: process.env.ELECTRON_RENDERER_URL,
+      }),
       // With stdin a pipe this process holds, the backend stops when this
       // process ends, even by a crash or SIGKILL (apps/backend/src/lib/parent-stdin.ts).
       DEUS_STOP_ON_STDIN_END: "1",

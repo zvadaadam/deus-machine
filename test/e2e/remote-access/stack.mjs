@@ -12,6 +12,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { SCHEMA_SQL } from "../../../shared/schema.ts";
+import { LOOPBACK_WEB_ORIGINS } from "../../../shared/web-origins.ts";
 
 export const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -279,6 +280,8 @@ export function createStack({ root, agnt, directory }) {
         // As the desktop app spawns it: credentials must carry this token.
         AUTH_TOKEN: authToken ?? "",
         DEUS_SKILLS_HOME: path.join(dir, "skills-home"),
+        // The Mac's own web app (browser.mjs serves it from Vite on loopback).
+        DEUS_WEB_ORIGINS: LOOPBACK_WEB_ORIGINS,
         ...env,
       },
     });

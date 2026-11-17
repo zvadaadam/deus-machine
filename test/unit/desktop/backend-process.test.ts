@@ -37,7 +37,7 @@ vi.mock("../../../apps/desktop/main/deus-cloud-provision", () => ({
   pushCloudCredentialsToBackend: mockPushCredentials,
 }));
 
-import { CDP_PORT, spawnBackend, stopBackend } from "../../../apps/desktop/main/backend-process";
+import { spawnBackend, stopBackend } from "../../../apps/desktop/main/backend-process";
 
 const originalEnv = { ...process.env };
 const originalPlatform = process.platform;
@@ -278,6 +278,9 @@ describe("desktop backend process", () => {
     process.env.NODE_PATH = "/tmp/stale-node-modules";
     process.env.NODE_ENV = "development";
     process.env.PORT = "45678";
+    // A packaged app trusts only its own window, whatever the shell says.
+    process.env.ELECTRON_RENDERER_URL = "http://localhost:1420";
+    process.env.DEUS_WEB_ORIGINS = "https://evil.example";
 
     const child = createFakeChild();
     mockSpawn.mockReturnValue(child);
@@ -311,7 +314,7 @@ describe("desktop backend process", () => {
       `${path.join(resourcesPath, "bin")}:/usr/bin:/bin:/usr/sbin:/sbin`
     );
     expect(options.env.PORT).toBe("0");
-    expect(options.env.CDP_PORT).toBe(CDP_PORT);
+    expect(options.env.DEUS_WEB_ORIGINS).toBe("app://deus");
   });
 
   it("starts the dev backend on the system Node, not Electron", async () => {
@@ -327,6 +330,7 @@ describe("desktop backend process", () => {
     chmodSync(nodePath, 0o755);
     process.env.DEUS_BUNDLED_BIN_DIR = emptyDir;
     process.env.PATH = [emptyDir, nodeDir].join(path.delimiter);
+    process.env.ELECTRON_RENDERER_URL = "http://localhost:1421/";
     delete process.env.ELECTRON_RUN_AS_NODE;
     const child = createFakeChild();
     mockSpawn.mockReturnValue(child);
@@ -340,6 +344,8 @@ describe("desktop backend process", () => {
     expect(args).toHaveLength(1);
     expect(args[0]).toMatch(/apps[\\/]backend[\\/]server\.cjs$/);
     expect(options.env.ELECTRON_RUN_AS_NODE).toBeUndefined();
+    // Vite's origin, the one the dev window loads from.
+    expect(options.env.DEUS_WEB_ORIGINS).toBe("http://localhost:1421");
   });
 
   it("says what to install when the dev backend finds no node", async () => {

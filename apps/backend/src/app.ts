@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { createNodeWebSocket } from "@hono/node-ws";
 import { errorHandler } from "./middleware/error-handler";
+import { loopbackOriginGate } from "./middleware/loopback-origin-gate";
 import { remoteGateMiddleware } from "./middleware/remote-gate";
 import { authMiddleware } from "./middleware/remote-auth";
 import { validateDirectDeviceToken } from "./services/remote-auth.service";
@@ -27,9 +28,13 @@ export function createApp() {
   const { upgradeWebSocket, injectWebSocket } = createNodeWebSocket({ app });
 
   // Middleware — order matters:
-  // 1. Remote gate rejects non-localhost when remote access is disabled
-  // 2. CORS headers for browser requests
-  // 3. Auth validates Bearer tokens for remote clients (localhost exempt)
+  // 1. Loopback origin gate: a localhost request is trusted only when it is
+  //    addressed to localhost and comes from no page or a listed one
+  //    (DEUS_WEB_ORIGINS); this covers the /ws upgrade too
+  // 2. Remote gate rejects non-localhost when remote access is disabled
+  // 3. CORS headers for browser requests (on localhost, only origins 1 admitted)
+  // 4. Auth validates Bearer tokens for remote clients (localhost exempt)
+  app.use("*", loopbackOriginGate);
   app.use("*", remoteGateMiddleware);
   app.use("*", cors());
   app.use("/api/*", authMiddleware);
@@ -52,8 +57,8 @@ export function createApp() {
   app.get("/api/relay/status", (c) => c.json(getRelayStatus()));
 
   // WebSocket route for remote access.
-  // Localhost connections are auto-authenticated. Remote clients must send
-  // { type: "initialize", token: "..." } as their first message.
+  // Localhost connections the origin gate admitted are auto-authenticated.
+  // Remote clients must send { type: "initialize", token: "..." } first.
   app.get(
     "/ws",
     upgradeWebSocket((c) => {

@@ -46,8 +46,8 @@ function backendPortPlugin(): Plugin {
           try {
             if (existsSync(portFile)) {
               const port = readFileSync(portFile, "utf-8").trim();
+              // Same-origin only: no CORS header, so another site cannot read the port.
               res.setHeader("Content-Type", "application/json");
-              res.setHeader("Access-Control-Allow-Origin", "*");
               res.end(JSON.stringify({ port: parseInt(port, 10) }));
               return;
             }

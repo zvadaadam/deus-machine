@@ -65,7 +65,8 @@ import { saveSetting, PREFS_PATH } from "../../src/services/settings.service";
 
 // Headers that simulate a remote client (non-localhost IP)
 const REMOTE_HEADERS = { "x-forwarded-for": "203.0.113.50" };
-const LOCAL_HEADERS = { "x-forwarded-for": "127.0.0.1" };
+// A request from this computer is addressed to it (the loopback origin gate).
+const LOCAL_HEADERS = { "x-forwarded-for": "127.0.0.1", host: "127.0.0.1:3000" };
 
 let app: ReturnType<typeof createApp>["app"];
 
