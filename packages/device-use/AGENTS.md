@@ -1,87 +1,53 @@
 # AGENTS.md
 
-Notes for Claude / agents working on this codebase.
+Notes for agents working on this package.
 
 ## What this package is
 
-**device-use v2** — a standalone iOS Simulator workbench. Ships:
+Deus's iOS Simulator engine. Nothing here runs on its own: the backend and the
+agents' simulator tools import the engine, and the backend starts the helpers.
 
-- A Bun server (`src/server/`) hosting a React viewer at `/`, an MCP HTTP endpoint at `/mcp`, a WebSocket event bus at `/ws`, a REST API under `/api/`, and an MJPEG passthrough at `/stream.mjpeg`.
-- A React SPA (`src/frontend/`) — phone frame + sim picker + project/scheme + ▶ Run + inspector + logs drawer.
-- A stateless CLI (`src/cli/`) — per-command, imports engine directly, works without the server.
-- A Swift engine (`native/simbridge`) — HID + accessibility + MJPEG via private CoreSimulator frameworks.
+- `src/engine/` — TypeScript the backend imports as `device-use/engine`
+  (bundled to `dist/engine.js`, which `bun build --compile` folds into
+  deus-runtime). It exports only what Deus calls: `simulatorEnv`,
+  `findBridgePath`, `findInspectorPath`, `callSimBridge` (the backend,
+  `apps/backend/src/services/simulator-context.ts`) and `createExecutor`,
+  `listSimulators`, `takeScreenshot`, `installApp`, `launchApp`, `listApps`,
+  `fetchAccessibilityTree`, `buildSnapshot`, `formatTree` (the agents' tools,
+  `apps/agent-server/agents/deus-tools/sim-ops.ts`, typed by
+  `apps/agent-server/types/device-use-engine.d.ts`). Remove an export when its
+  last caller goes.
+- `native/` — two helpers built against Apple's private CoreSimulator and
+  SimulatorKit frameworks:
+  - `simbridge`: one-shot commands (`describe-ui`, `tap`, `type`, `swipe`,
+    `key`, `button`) as a JSON argument, and `--stream --udid <udid> --port 0`,
+    the long-lived helper the backend starts for the Simulator tab. It captures
+    the screen as MJPEG (`/stream.mjpeg`) and takes input on a WebSocket
+    (`/ws`, binary frames: `0x03` touch, `0x04` button, `0x05` key), on
+    127.0.0.1 only, every request carrying the token from
+    `SIMBRIDGE_STREAM_TOKEN` as `?t=`. It prints `{"port": …}` when ready and
+    exits when its stdin closes.
+  - `siminspector.dylib`: injected into an app on the simulator to answer the
+    inspector's questions over a socket.
+- `test/` — unit tests of the engine (`bun test`, run in CI). They need no
+  simulator.
 
-**CLI and server are peers**: both import `src/engine/` directly. Neither depends on the other.
+## Build
 
-## Layout
+`bun run prepare:device-use` (at the repository root, run by `postinstall`)
+builds `dist/engine.js` (`scripts/build-ts.ts`) and both helpers
+(`scripts/build-native.ts`, universal arm64 + x86_64, so full Xcode is needed),
+and copies the helpers to `bin/`. `--force` rebuilds everything. The packaging
+scripts take the engine bundle and `bin/` (`scripts/runtime/lib/device-use-payloads.cjs`).
 
-```
-packages/device-use/
-├── native/              Swift simbridge — don't rewrite without good reason
-├── src/
-│   ├── engine/          Pure primitives (tests injectable executors/spawners)
-│   ├── cli/             Stateless CLI: commands + registry + args parser
-│   ├── server/          Bun.serve + Hono: tools, state, stream, mcp, ws
-│   └── frontend/        Vite + React SPA served at /
-├── scripts/             Build + compile + smoke tests
-├── test/                Unit + integration tests (outside src/)
-└── skills/              Claude skill gets copied via `device-use install`
-```
+## Helper path resolution
 
-## Adding a tool
-
-Tools are the one surface the agent sees. Every tool is defined once in `src/server/tools.ts` and routed through `invokeTool` (`src/server/invoker.ts`) which emits `tool-event` frames to anyone listening on `/ws`.
-
-1. Define a tool in `src/server/tools.ts` using the `tool({ name, description, schema, handler })` factory. Schema is Zod; handler takes `(ctx: Context, params: z.infer<schema>)`.
-2. Append it to the `TOOLS` array.
-3. Add an integration test in `test/server.test.ts` — exercise via `invokeTool(ctx, "your_tool", params)` against a mock `CommandExecutor`.
-
-The same tool is automatically visible via REST (`POST /api/tools/<name>`), MCP (`tools/call`), and the WS invoke frame. No separate wiring.
-
-## Adding a CLI command
-
-CLI is independent — doesn't route through the server.
-
-1. Create `src/cli/commands/foo.ts` exporting `fooCommand: CommandDefinition<Params>`.
-2. Import + register in `src/cli/index.ts`.
-3. Document in `skills/device-use/SKILL.md` (copied to `~/.claude/skills/` by `device-use install`).
-
-## Event shape (`/ws`)
-
-Every tool invocation emits:
-
-```ts
-{ type: "tool-event", id, at, tool, params, status: "started"|"completed"|"failed", result?, error? }
-```
-
-Long-running tools (`build`, `stream_logs`) additionally emit:
-
-```ts
-{ type: "tool-log", id, stream: "stdout"|"stderr", text }
-```
-
-The `id` correlates across lifecycle events. We reuse this exact shape for MCP tool calls — no parallel schema.
-
-## Build pipeline
-
-- `bun run build:native` → `native/.build/release/simbridge`
-- `bun run build:ts` → `dist/cli.js` + `dist/engine.js`
-- `bun run build:frontend` → `dist/frontend/` (static SPA)
-- `bun run build` → all of the above
-- `bun run compile` → single compiled `bin/device-use` + copied `bin/simbridge`
-
-## simbridge path resolution
-
-`src/engine/simbridge.ts → findBridgePath()` looks up in order:
-
-1. `$DEVICE_USE_SIMBRIDGE` override
-2. Sibling of `process.execPath` (compiled binary case)
-3. Relative to `import.meta.url` (source / bundled case)
+`findBridgePath()` / `findInspectorPath()` (`src/engine/simbridge.ts`) look in
+order at `$DEVICE_USE_SIMBRIDGE` / `$DEVICE_USE_SIMINSPECTOR`, the packaged
+app's `Resources/simulator`, this package's `bin/`, next to `process.execPath`,
+then `native/.build/release/`.
 
 ## Hard rules
 
-- **Never bypass `invokeTool`.** If you're adding a code path that touches the engine from MCP/REST/WS, it goes through the invoker so events fire.
-- **Never persist state outside `state.json`.** If you need a new persisted field, add it to `PersistedState` in `src/server/state.ts`.
-- **`src/frontend/` must only talk HTTP/WS.** No engine imports from the browser.
-- **Tests live in `test/`** — never colocate inside `src/`.
-- **Stateless CLI stays stateless.** Per-command, no long-lived subprocess (except `serve`, which IS the long-lived subprocess and spawns the server).
+- Tests live in `test/`, never inside `src/`.
+- Input to the simulator goes through `ObjCBridge.m`; keep the Swift side thin.

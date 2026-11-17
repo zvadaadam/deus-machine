@@ -69,7 +69,7 @@
     "@napi-rs/canvas",
     "@iconify-json/logos"
   ],
-  "ignoreBinaries": ["wrangler", "swift", "scripts/e2e-server.ts", "typescript/bin/tsc"],
+  "ignoreBinaries": ["wrangler", "swift", "typescript/bin/tsc"],
   "ignoreExportsUsedInFile": true,
   "ignoreFiles": ["apps/web/src/components/ui/button-group.tsx"],
   "ignoreUnresolved": ["./test/setup.ts"],

@@ -64,7 +64,7 @@ agent CLI discovery. It is based on the source paths below, not on generated
   Electron app contents and native runtime payloads.
 
 Frontend libraries belong in `devDependencies`: Vite bundles them into
-`out/renderer` or device-use's `dist/frontend` during the build. The app ships
+`out/renderer` during the build. The app ships
 no other `node_modules` than `@napi-rs/canvas`, unpacked (`electron-builder.yml`
 `files`), which `deus-runtime` loads from `DEUS_NATIVE_MODULES`: Vite bundles
 main and preload, the runtime compiles in everything else, and its terminals
@@ -112,7 +112,7 @@ are Bun's own.
 | `scripts/runtime/smoke/lib/smoke-helpers.cjs`       | smoke helper          | Smoke-only process, runtime env, readiness, and packaged resource assertions.                                                             |
 | `scripts/runtime/smoke/runtime-rpc.cjs`             | smoke helper          | Agent-server JSON-RPC assertions used by source/native/packaged smokes.                                                                   |
 | `scripts/runtime/smoke/run-version-check.cjs`       | smoke helper          | Isolated executable version probe used by native runtime validation and packaged app smoke.                                               |
-| `scripts/prepare-device-use.mjs`                    | build/stage           | Builds and stages `packages/device-use` bundles, frontend payload, skill, and native helpers.                                             |
+| `scripts/prepare-device-use.mjs`                    | build/stage           | Builds and stages the `packages/device-use` engine bundle and native helpers.                                                             |
 | `scripts/prepare-gh-cli.mjs`                        | stage                 | Stages GitHub CLI binaries and manifest for packaged runtime bins.                                                                        |
 | `scripts/runtime/electron-builder-after-pack.cjs`   | package/validate      | Prunes duplicate package payloads and verifies packaged app/native runtime contents after pack.                                           |
 
