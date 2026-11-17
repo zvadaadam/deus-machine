@@ -181,7 +181,7 @@ export default {
     if (url.pathname === "/sim-input") {
       const info = stream.getInfo();
       if (!info) return new Response("no active simulator stream", { status: 503 });
-      const wsUrl = `ws://127.0.0.1:${info.port}/ws`;
+      const wsUrl = `ws://127.0.0.1:${info.port}/ws?t=${stream.token}`;
       if (server.upgrade(req, { data: { kind: "sim-input", wsUrl } }))
         return new Response(null, { status: 101 });
       return new Response("upgrade failed", { status: 400 });

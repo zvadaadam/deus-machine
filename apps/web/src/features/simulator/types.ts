@@ -2,7 +2,6 @@ export type { InspectorNode, InspectorSnapshot, SimulatorInfo } from "@shared/ty
 
 export interface StreamInfo {
   url: string;
-  port: number;
   /** Whether HID client is available for touch/scroll/key injection */
   hid_available: boolean;
 }

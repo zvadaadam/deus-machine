@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createBackendChildEnv } from "../runtime/child-env";
+import { createBackendChildEnv } from "@shared/lib/child-env";
 import { processGroupsStopped, trackProcessGroup } from "./process-groups";
 
 /** How long a stopped command gets to tidy up after itself before it is killed. */

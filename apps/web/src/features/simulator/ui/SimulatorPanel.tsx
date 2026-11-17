@@ -37,7 +37,6 @@ import { SimulatorLaunchPreview } from "./SimulatorLaunchPreview";
 
 interface SimulatorPanelProps {
   workspaceId: string;
-  workspacePath: string;
   toolbarAction?: ReactNode;
 }
 
@@ -108,7 +107,7 @@ const IDLE_PHASE: SimPhase = { phase: "idle" };
 // Component
 // ---------------------------------------------------------------------------
 
-export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: SimulatorPanelProps) {
+export function SimulatorPanel({ workspaceId, toolbarAction }: SimulatorPanelProps) {
   const [simulators, setSimulators] = useState<SimulatorInfo[] | null>(null);
   const [selectedUdid, setSelectedUdid] = useState<string | null>(null);
 
@@ -160,9 +159,6 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
   // Normal workspace switch: the store already holds the correct phase from the
   // previous visit. The MJPEG effect reacts to the non-null streamUrl from the
   // store and reconnects immediately — no IPC round-trip.
-  //
-  // Stream recovery on app-restart now flows through the `streamReady` event
-  // pushed by the backend on reconnect, not a polled probe.
   useEffect(() => {
     workspaceGenerationRef.current += 1;
 
@@ -191,7 +187,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
     let cancelled = false;
 
     setHasProject(null);
-    call(api.simHasXcodeProject, { workspacePath }).then(
+    call(api.simHasXcodeProject, { workspaceId }).then(
       ({ hasProject }) => {
         if (!cancelled) setHasProject(hasProject);
       },
@@ -202,7 +198,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
     return () => {
       cancelled = true;
     };
-  }, [workspacePath]);
+  }, [workspaceId]);
 
   // Build log accumulator — stores last N lines for the build drawer
   const [buildLogs, setBuildLogs] = useState<string[]>([]);
@@ -231,6 +227,14 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
     if (!building) setBuildLogs([]);
   }, [building]);
   useStream(api.simulatorEvents, { workspaceId }, (event) => {
+    // The stream's helper stopped after it started (a start that fails is startStreaming's to report).
+    if (event.type === "streamFailed" && hasStream(state)) {
+      simulatorStoreActions.dispatch(workspaceId, {
+        type: "ERROR",
+        message: event.error,
+        canRetry: true,
+      });
+    }
     if (event.type !== "buildLog") return;
     setBuildLogs((prev) => {
       const next = [...prev, event.line];
@@ -344,12 +348,9 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
   // -------------------------------------------------------------------------
   // Auto-reconnect to an already-booted simulator (app-restart recovery).
   //
-  // The fast path is the store itself: when the backend is alive it pushes
-  // a `streamReady` event, and the MJPEG effect reconnects from the store's stream URL.
-  //
-  // This effect handles the slower path: backend was restarted (no sessions in
-  // memory), but simctl still shows the simulator as "Booted". We re-establish
-  // the MJPEG capture by calling startStreaming.
+  // The backend was restarted (no sessions in memory), but simctl still shows
+  // the simulator as "Booted". We re-establish the MJPEG capture by calling
+  // startStreaming.
   //
   // Fires only when:
   //   - Phase is idle (mount effect found no backend session, or user never started)
@@ -467,7 +468,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
     )
       return;
     try {
-      const app = await simulatorService.buildAndRun(workspaceId, workspacePath);
+      const app = await simulatorService.buildAndRun(workspaceId);
       // No gen guard: dispatch targets the originating workspace by workspaceId.
       simulatorStoreActions.dispatch(workspaceId, { type: "BUILD_SUCCESS", app });
     } catch (e) {
@@ -481,8 +482,8 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
 
   // Stop everything — destroys the native session and returns display plane to idle.
   //
-  // This is the ONLY place in the frontend that should destroy a native session
-  // (besides app close, handled in Electron main).  Component unmount does NOT call
+  // This is the ONLY place in the frontend that should destroy a native session.
+  // Component unmount does NOT call
   // stopStreaming — that would destroy live sessions on workspace switch.
   const handleStop = async () => {
     // dispatch STOP transitions any active state → idle (auto-deleted from map).
@@ -546,7 +547,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
   };
 
   // -------------------------------------------------------------------------
-  // Screenshot — capture PNG and insert into chat input
+  // Screenshot — capture a JPEG and insert into chat input
   // -------------------------------------------------------------------------
 
   const handleScreenshot = useCallback(async () => {
@@ -554,9 +555,8 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
       const sid = workspaceLayoutActions.getLayout(workspaceId).activeChatTabSessionId;
       if (!sid) return;
       const { bytes } = await call(api.simScreenshot, { workspaceId });
-      const blob = new Blob([new Uint8Array(bytes)], { type: "image/png" });
-      const file = new File([blob], `simulator-screenshot-${Date.now()}.png`, {
-        type: "image/png",
+      const file = new File([new Uint8Array(bytes)], `simulator-screenshot-${Date.now()}.jpg`, {
+        type: "image/jpeg",
       });
       const processed = await processImageFiles([file]);
       if (processed.length) sessionComposerActions.addImageAttachments(sid, processed);

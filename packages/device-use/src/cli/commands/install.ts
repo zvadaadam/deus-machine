@@ -85,8 +85,7 @@ export const installCommand: CommandDefinition<Params> = {
     }
 
     log(heading("Checking simbridge binary..."));
-    const bridgePath = findBridgePath();
-    if (!existsSync(bridgePath)) {
+    if (!findBridgePath()) {
       const nativeDir = findNativeDir();
       if (nativeDir && commandExists("swift")) {
         log(`  ${DIM}Building simbridge from source...${RESET}`);

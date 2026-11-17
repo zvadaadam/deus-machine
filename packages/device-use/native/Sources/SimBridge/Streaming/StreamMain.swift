@@ -12,18 +12,17 @@ enum StreamMain {
         setbuf(stdout, nil)
         setbuf(stderr, nil)
 
-        // Ignore SIGPIPE — when spawned detached from the CLI, the parent closes
-        // our stdout/stderr pipes on exit. Without this, any write to a closed pipe
-        // would kill the process.
+        // Ignore SIGPIPE: the parent may close our stdout/stderr pipes, and a
+        // write to a closed pipe would otherwise kill the process.
         signal(SIGPIPE, SIG_IGN)
 
         // Initialize AppKit (needed for HID touch events)
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
 
-        // Parse arguments: --stream --udid <UDID> [--port <PORT>]
+        // Parse arguments: --stream --udid <UDID> [--port <PORT>] (0, the default: any free port)
         var udid: String?
-        var port: UInt16 = 3100
+        var port: UInt16 = 0
 
         var i = 0
         while i < args.count {
@@ -42,10 +41,15 @@ enum StreamMain {
             FileHandle.standardError.write(Data("Error: --udid is required for streaming mode\n".utf8))
             exit(1)
         }
+        // The token every request must carry. From the environment, not argv,
+        // which other users of this computer can read.
+        guard let token = ProcessInfo.processInfo.environment["SIMBRIDGE_STREAM_TOKEN"], token.count >= 32 else {
+            FileHandle.standardError.write(Data("Error: SIMBRIDGE_STREAM_TOKEN (at least 32 characters) is required for streaming mode\n".utf8))
+            exit(1)
+        }
 
         log("[stream] Starting simulator screen streaming")
         log("[stream] Device UDID: \(deviceUDID)")
-        log("[stream] Port: \(port)")
 
         // Load frameworks
         do {
@@ -65,7 +69,7 @@ enum StreamMain {
         }
 
         // Create components
-        let streamServer = StreamServer(port: port)
+        let streamServer = StreamServer(token: token)
         let frameCapture = FrameCapture()
         let videoEncoder = VideoEncoder(quality: 0.7)
         let encodeQueue = DispatchQueue(label: "encode", qos: .userInteractive)
@@ -101,9 +105,19 @@ enum StreamMain {
             }
         }
 
+        // Wire key input: WebSocket → HID bridge, one direction per message
+        streamServer.clientManager.onKey = { key in
+            do {
+                try SimAccessibilityBridge.sendKey(toDevice: device, keyCode: key.keyCode, isDown: key.direction == "down")
+            } catch {
+                log("[key] Error: \(error.localizedDescription)")
+            }
+        }
+
         // Start HTTP + WebSocket server
+        let boundPort: Int
         do {
-            try streamServer.start()
+            boundPort = try streamServer.start(port: port)
         } catch {
             FileHandle.standardError.write(Data("Error starting server: \(error)\n".utf8))
             exit(1)
@@ -144,19 +158,11 @@ enum StreamMain {
             log("[stream] Capture started")
 
             // Print connection info to stdout (JSON for the CLI to parse)
-            let info: [String: Any] = [
-                "status": "streaming",
-                "port": port,
-                "udid": deviceUDID,
-                "url": "http://localhost:\(port)",
-            ]
+            let info: [String: Any] = ["status": "streaming", "port": boundPort, "udid": deviceUDID]
             if let data = try? JSONSerialization.data(withJSONObject: info),
                let json = String(data: data, encoding: .utf8) {
                 print(json)
                 fflush(stdout)
-                // Redirect stdout to /dev/null — the parent process reads our status line
-                // then exits, closing the pipe. Any future stdout write would cause SIGPIPE.
-                freopen("/dev/null", "w", stdout)
             }
 
         } catch {
@@ -164,24 +170,32 @@ enum StreamMain {
             exit(1)
         }
 
+        func shutdown() {
+            log("[stream] Shutting down...")
+            frameCapture.stop()
+            videoEncoder.stop()
+            streamServer.stop()
+            exit(0)
+        }
+
         // Shutdown handlers via DispatchSource (supports capturing context)
         func setupShutdown(sig: Int32) -> DispatchSourceSignal {
             // Ignore the default signal handler
             signal(sig, SIG_IGN)
             let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
-            source.setEventHandler {
-                log("\n[stream] Shutting down...")
-                frameCapture.stop()
-                videoEncoder.stop()
-                streamServer.stop()
-                exit(0)
-            }
+            source.setEventHandler(handler: shutdown)
             source.resume()
             return source
         }
 
         let _sigint = setupShutdown(sig: SIGINT)
         let _sigterm = setupShutdown(sig: SIGTERM)
+        // The parent holds our stdin open and never writes to it: when it ends
+        // (the parent exited, however it ended), so do we.
+        Thread.detachNewThread {
+            _ = FileHandle.standardInput.readDataToEndOfFile()
+            DispatchQueue.main.async(execute: shutdown)
+        }
         // Prevent sources from being deallocated
         withExtendedLifetime((_sigint, _sigterm)) {
             RunLoop.main.run()

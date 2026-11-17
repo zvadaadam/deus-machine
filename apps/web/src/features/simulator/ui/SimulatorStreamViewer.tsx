@@ -273,7 +273,6 @@ export function SimulatorStreamViewer({
     if (!streamUrl) return;
 
     const img = new Image();
-    img.crossOrigin = "anonymous"; // Allow cross-origin MJPEG loading
     img.src = streamUrl;
 
     const canvas = canvasRef.current;
@@ -458,6 +457,9 @@ export function SimulatorStreamViewer({
   // Cmd/Ctrl combos are NOT forwarded (stay with IDE). Escape blurs viewport.
   // -------------------------------------------------------------------------
 
+  /** The keys this view sent down and not yet up. */
+  const keysDown = useRef(new Set<number>());
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (!isLive || !hidAvailable) return;
@@ -475,6 +477,7 @@ export function SimulatorStreamViewer({
       const keycode = HID_KEYCODES[e.code];
       if (keycode !== undefined) {
         e.preventDefault();
+        keysDown.current.add(keycode);
         call(api.simKey, { workspaceId, keycode, direction: "down" }).catch(() => {});
       }
     },
@@ -487,11 +490,22 @@ export function SimulatorStreamViewer({
       const keycode = HID_KEYCODES[e.code];
       if (keycode !== undefined) {
         e.preventDefault();
+        keysDown.current.delete(keycode);
         call(api.simKey, { workspaceId, keycode, direction: "up" }).catch(() => {});
       }
     },
     [isLive, workspaceId, hidAvailable]
   );
+
+  // A key still down when the view loses focus would never see its key-up:
+  // release it there, on unmount and on a workspace switch.
+  const releaseKeys = useCallback(() => {
+    for (const keycode of keysDown.current) {
+      call(api.simKey, { workspaceId, keycode, direction: "up" }).catch(() => {});
+    }
+    keysDown.current.clear();
+  }, [workspaceId]);
+  useEffect(() => releaseKeys, [releaseKeys]);
 
   // -------------------------------------------------------------------------
   // Render
@@ -517,6 +531,7 @@ export function SimulatorStreamViewer({
       onWheel={handleWheel}
       onKeyDown={handleKeyDown}
       onKeyUp={handleKeyUp}
+      onBlur={releaseKeys}
     >
       {streamUrl && (
         <DeviceFrame deviceType={deviceType} screenSize={screenSize} header={deviceHeader}>
