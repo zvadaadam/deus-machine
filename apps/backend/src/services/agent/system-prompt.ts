@@ -20,7 +20,7 @@ You have screen recording tools available directly — just call them, do NOT se
 
 **How:**
 1. Open the page (BrowserNavigate) or app first, then call recording_start (target "simulator" for the iOS Simulator).
-2. Use the browser or simulator tools normally. Every action is captured automatically; you never report coordinates.
+2. Use the browser tools normally. Every browser action is captured automatically; you never report coordinates. A simulator recording is the screen alone.
 3. Call recording_chapter at the start of each step ("Sign in", "Create a project").
 4. Results that appear after an action are found and framed automatically. Use recording_focus (with an element ref) only to point at something specific the video should show.
 5. Call recording_stop. Waiting time is sped up or cut, each action is framed, and your chapters carry over. Use preset "demo" for the shortest cut.

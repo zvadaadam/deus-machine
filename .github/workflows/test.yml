@@ -81,9 +81,6 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Test device-use
-        run: cd packages/device-use && bun test
-
       - name: Build staged native runtime
         run: bun run build:runtime
 

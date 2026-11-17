@@ -36,7 +36,7 @@ export function ExperimentalSection({ settings, saveSetting }: SettingsSectionPr
           </FieldLabel>
           <FieldDescription>
             {simulatorUnavailableReason ??
-              "Let the AI agent interact with and test on iOS simulators."}
+              "A Simulator tab in each workspace, to watch and use an iOS Simulator."}
           </FieldDescription>
         </FieldContent>
         <Switch

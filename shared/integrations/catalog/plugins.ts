@@ -174,13 +174,14 @@ export const CATALOG_PLUGINS: CatalogPlugin[] = [
     title: "Mobile App (Expo)",
     tagline: "Build a native iOS and Android app and ship it to the stores",
     description:
-      "Build native-feeling Expo screens, keep React Native fast, and build, sign and submit to TestFlight, the App Store and Google Play.",
+      "Build native-feeling Expo screens, keep React Native fast, try them on an iOS Simulator, and build, sign and submit to TestFlight, the App Store and Google Play.",
     categories: ["developer", "design"],
     publisher: "Deus",
     apps: ["github", "sentry", "figma"],
     skills: [
       "expo-skills/expo-native-ui",
       "vercel-labs-agent-skills/vercel-react-native-skills",
+      "callstack-agent-device/ios-simulator",
       "expo-skills/eas-app-stores",
     ],
   },

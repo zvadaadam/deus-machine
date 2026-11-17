@@ -1,8 +1,7 @@
 // backend/src/services/simulator-context.ts
 //
-// Simulator service — owns ALL simulator operations. Both the agent-server
-// (via RPC) and the Simulator Panel (through the operations in
-// api/simulator.ts) talk to this service.
+// Simulator service — the Simulator tab's operations (api/simulator.ts).
+// Agents drive simulators themselves, with the agent-device CLI.
 //
 // Requests answer at once; what happens later is published on `simulatorEvents`.
 // Works identically in desktop (WS to localhost) and relay/web mode.
@@ -19,9 +18,7 @@ import { join } from "path";
 import { createHash, randomBytes } from "crypto";
 import WebSocket from "ws";
 import { createBackendChildEnv } from "@shared/lib/child-env";
-import { getDatabase } from "../lib/database";
 import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
-import { getSessionRaw } from "../db/queries";
 import { simulatorEvents, type SimulatorEvent } from "@shared/api/simulator";
 import { publish } from "./streams";
 import type {
@@ -407,7 +404,7 @@ function hidSocket(workspaceId: string): WebSocket {
 }
 
 // ---------------------------------------------------------------------------
-// Public API — context queries (used by agent-server RPC)
+// Public API — context queries
 // ---------------------------------------------------------------------------
 
 export function getContextForWorkspace(workspaceId: string): SimulatorContext | null {
@@ -417,13 +414,6 @@ export function getContextForWorkspace(workspaceId: string): SimulatorContext | 
     udid: session.udid,
     streaming: session.streaming,
   };
-}
-
-export function getContextForSession(sessionId: string): SimulatorContext | null {
-  const db = getDatabase();
-  const session = getSessionRaw(db, sessionId);
-  if (!session?.workspace_id) return null;
-  return getContextForWorkspace(session.workspace_id);
 }
 
 // ---------------------------------------------------------------------------

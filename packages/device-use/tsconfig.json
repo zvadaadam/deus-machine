@@ -22,6 +22,6 @@
     "exactOptionalPropertyTypes": false,
     "verbatimModuleSyntax": false
   },
-  "include": ["src", "scripts", "test"],
+  "include": ["src", "scripts"],
   "exclude": ["node_modules", "dist"]
 }

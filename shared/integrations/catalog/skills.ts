@@ -363,6 +363,25 @@ export const CATALOG_SKILLS: CatalogSkill[] = [
       "https://github.com/vercel-labs/agent-browser/tree/4b0e9f01fa8d214d39bbfe5391257640634fb9a0/skills/agent-browser",
   },
   {
+    id: "callstack-agent-device/ios-simulator",
+    name: "ios-simulator",
+    title: "iOS Simulator",
+    description:
+      "Open an app on an iOS Simulator, tap, type, scroll and check what is on screen. Needs the agent-device CLI (npm install -g agent-device).",
+    categories: ["developer"],
+    publisher: "Callstack",
+    official: true,
+    license: "MIT",
+    source: {
+      repo: "callstack/agent-device",
+      ref: "4b692e53014a86a52f453a8f45e319721ef29e34",
+      path: "skills/ios-simulator",
+    },
+    requiresApps: [],
+    homepage:
+      "https://github.com/callstack/agent-device/tree/4b692e53014a86a52f453a8f45e319721ef29e34/skills/ios-simulator",
+  },
+  {
     id: "obra-superpowers/brainstorming",
     name: "brainstorming",
     title: "Brainstorming",

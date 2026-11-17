@@ -1,24 +1,17 @@
 {
   "name": "device-use",
   "version": "0.1.0",
-  "description": "Deus's iOS Simulator engine: simctl, the simbridge helper (screen stream, input, accessibility) and the siminspector dylib.",
+  "description": "The Simulator tab's engine: the simbridge helper (screen stream, input, accessibility) and the siminspector dylib.",
   "type": "module",
   "exports": {
-    ".": {
-      "import": "./dist/engine.js",
-      "types": "./dist/engine.d.ts"
-    },
     "./engine": {
-      "import": "./dist/engine.js",
-      "types": "./dist/engine.d.ts"
+      "types": "./src/engine/index.ts",
+      "import": "./dist/engine.js"
     }
   },
-  "main": "./dist/engine.js",
-  "types": "./dist/engine.d.ts",
   "scripts": {
     "build:native": "bun run scripts/build-native.ts",
     "build:ts": "bun run scripts/build-ts.ts",
-    "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "license": "MIT",

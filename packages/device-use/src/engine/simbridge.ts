@@ -2,11 +2,24 @@ import { execFile, execFileSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { SimBridgeRequest, SimBridgeResponse } from "./types.js";
-import { DependencyError, SimBridgeError } from "./errors.js";
-import { DEFAULT_MAX_BUFFER } from "./utils/exec.js";
 
 const BRIDGE_TIMEOUT_MS = 30_000;
+const MAX_BUFFER = 10 * 1024 * 1024;
+
+/** One simbridge command: `{ command, udid, ... }` in, a JSON response out. */
+interface SimBridgeRequest {
+  command: string;
+  udid?: string;
+  [key: string]: unknown;
+}
+
+interface SimBridgeResponse {
+  success: boolean;
+  command: string;
+  data?: unknown;
+  error?: { code: string; message: string; details?: string };
+  timing?: { durationMs: number };
+}
 
 let xcodeDeveloperDir: string | null | undefined;
 
@@ -35,7 +48,7 @@ export function simulatorEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.Proc
   return xcodeDeveloperDir ? { ...base, DEVELOPER_DIR: xcodeDeveloperDir } : { ...base };
 }
 
-export interface SimBridgeCallOptions {
+interface SimBridgeCallOptions {
   timeout?: number;
   /** When false (default), drop framework-load diagnostics from stderr. */
   verbose?: boolean;
@@ -96,9 +109,7 @@ export async function callSimBridge(
 ): Promise<SimBridgeResponse> {
   const bridgePath = findBridgePath();
   if (!bridgePath) {
-    throw new DependencyError(
-      "simbridge binary not found. Run: cd native && swift build -c release"
-    );
+    throw new Error("simbridge binary not found. Run: cd native && swift build -c release");
   }
 
   const input = JSON.stringify(request);
@@ -109,7 +120,7 @@ export async function callSimBridge(
       [input],
       {
         timeout: options?.timeout ?? BRIDGE_TIMEOUT_MS,
-        maxBuffer: DEFAULT_MAX_BUFFER,
+        maxBuffer: MAX_BUFFER,
         env: simulatorEnv(options?.env),
       },
       (error, stdout, stderr) => {
@@ -120,34 +131,26 @@ export async function callSimBridge(
 
         if (error && !stdout) {
           if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-            reject(new DependencyError("simbridge binary not found"));
+            reject(new Error("simbridge binary not found"));
             return;
           }
           if (error.killed) {
-            reject(new SimBridgeError("simbridge timed out", "TIMEOUT"));
+            reject(new Error("simbridge timed out"));
             return;
           }
-          reject(new SimBridgeError(`simbridge crashed: ${error.message}`, "CRASH"));
+          reject(new Error(`simbridge crashed: ${error.message}`));
           return;
         }
 
         try {
           const response = JSON.parse(stdout) as SimBridgeResponse;
           if (!response.success && response.error) {
-            reject(
-              new SimBridgeError(
-                response.error.message,
-                response.error.code,
-                response.error.details
-              )
-            );
+            reject(new Error(response.error.message));
             return;
           }
           resolve(response);
         } catch {
-          reject(
-            new SimBridgeError(`Invalid simbridge output: ${stdout.slice(0, 200)}`, "PARSE_ERROR")
-          );
+          reject(new Error(`Invalid simbridge output: ${stdout.slice(0, 200)}`));
         }
       }
     );

@@ -49,7 +49,6 @@ import {
 } from "./persistence";
 import { invalidate } from "../query-engine";
 import { openWith } from "../streams";
-import { getContextForSession } from "../simulator-context";
 import { handleAutomationToolRequest } from "../automations";
 import { requireParam } from "../../lib/query-params";
 
@@ -353,12 +352,6 @@ async function handleToolRequest(
   // SAME service the q:mutate arms use — one service, two callers.
   if (method === "automation/update") {
     return handleAutomationToolRequest(params);
-  }
-
-  // Simulator context is backend state — no frontend relay.
-  if (method === "getSimulatorContext") {
-    const sessionId = requireParam(params, "sessionId", method);
-    return getContextForSession(sessionId);
   }
 
   const sessionId = requireParam(params, "sessionId", method);
