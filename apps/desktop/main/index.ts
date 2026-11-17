@@ -149,6 +149,9 @@ async function createWindow(): Promise<void> {
   const ALLOWED_WEBVIEW_PARAM_KEYS = new Set(["src", "partition", "useragent"]);
   mainWindow.webContents.on("will-attach-webview", (_event, webPreferences, params) => {
     webPreferences.preload = join(__dirname, "../preload/browser-preload.cjs");
+    // One session for every guest, the one whose permissions are limited
+    // (permissions.ts), whatever partition the page asked for.
+    webPreferences.partition = WEBVIEW_PARTITION;
     webPreferences.contextIsolation = true;
     webPreferences.nodeIntegration = false;
 

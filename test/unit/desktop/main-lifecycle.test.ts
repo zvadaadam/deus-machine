@@ -241,6 +241,15 @@ it("loads the packaged window from app://deus and opens no debugging port", asyn
   ).toBe(false);
   expect(navigate("https://example.com/")).toBe(false);
   expect(mocks.openExternal).toHaveBeenCalledWith("https://example.com/");
+
+  // A guest joins the Browser tab's session, whatever partition the page names:
+  // that session is the one whose permissions are limited.
+  const attach = win.webContents.on.mock.calls.find(
+    ([event]) => event === "will-attach-webview"
+  )![1] as (event: object, preferences: { partition?: string }, params: object) => void;
+  const guest = { partition: "persist:other" };
+  attach({}, guest, { src: "https://example.com/", partition: "persist:other" });
+  expect(guest.partition).toBe("persist:browser");
 });
 
 it("sandboxes every renderer and answers IPC from the window's own page only", async () => {
