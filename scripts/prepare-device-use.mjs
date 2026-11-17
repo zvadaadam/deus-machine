@@ -1,5 +1,5 @@
 // Builds the device-use workspace package on install:
-//   1. TypeScript → dist/ (via device-use's own build script)
+//   1. The engine → dist/engine.js (via device-use's own build script)
 //   2. Swift → native/.build/release/simbridge (via device-use's build-native)
 //   3. Copies simbridge + siminspector into packages/device-use/bin/ (where
 //      runtime code looks for it)
@@ -30,37 +30,19 @@ if (!existsSync(pkgDir)) {
   process.exit(0);
 }
 
-// 1. TypeScript/server build
-const distDir = join(pkgDir, "dist");
-const distOutputs = [
-  join(distDir, "cli.js"),
-  join(distDir, "cli-runtime.js"),
-  join(distDir, "engine.js"),
-  join(distDir, "server", "index.js"),
-];
-if (force || distOutputs.some((output) => !existsSync(output))) {
-  log(force ? "rebuilding TypeScript (dist/)..." : "building TypeScript (dist/)...");
+// 1. The engine bundle
+if (force || !existsSync(join(pkgDir, "dist", "engine.js"))) {
+  log(
+    force ? "rebuilding the engine (dist/engine.js)..." : "building the engine (dist/engine.js)..."
+  );
   try {
     run("bun", ["run", "build:ts"], pkgDir);
   } catch (err) {
-    log(`TypeScript build failed: ${err.message}`);
+    log(`engine build failed: ${err.message}`);
     process.exit(1);
   }
 } else {
-  log("dist/ already built, skipping");
-}
-
-const frontendIndex = join(distDir, "frontend", "index.html");
-if (force || !existsSync(frontendIndex)) {
-  log(force ? "rebuilding frontend (dist/frontend/)..." : "building frontend (dist/frontend/)...");
-  try {
-    run("bun", ["run", "build:frontend"], pkgDir);
-  } catch (err) {
-    log(`frontend build failed: ${err.message}`);
-    process.exit(1);
-  }
-} else {
-  log("dist/frontend/ already built, skipping");
+  log("dist/engine.js already built, skipping");
 }
 
 // 2. Native helpers (macOS only, Xcode CLT required)

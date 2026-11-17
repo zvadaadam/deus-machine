@@ -29,16 +29,6 @@ export class SimBridgeError extends DeviceUseError {
   }
 }
 
-export class ValidationError extends DeviceUseError {
-  paramName?: string;
-
-  constructor(message: string, paramName?: string) {
-    super(message);
-    this.name = "ValidationError";
-    this.paramName = paramName;
-  }
-}
-
 export class DependencyError extends DeviceUseError {
   constructor(message: string) {
     super(message);

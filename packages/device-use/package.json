@@ -1,11 +1,8 @@
 {
   "name": "device-use",
   "version": "0.1.0",
-  "description": "iOS Simulator workbench — standalone viewer + MCP server + CLI. Agent-drivable via /mcp; human-usable at localhost.",
+  "description": "Deus's iOS Simulator engine: simctl, the simbridge helper (screen stream, input, accessibility) and the siminspector dylib.",
   "type": "module",
-  "bin": {
-    "device-use": "./dist/cli.js"
-  },
   "exports": {
     ".": {
       "import": "./dist/engine.js",
@@ -18,50 +15,15 @@
   },
   "main": "./dist/engine.js",
   "types": "./dist/engine.d.ts",
-  "files": [
-    "dist",
-    "bin",
-    "native/.build/release/simbridge",
-    "native/.build/release/siminspector.dylib",
-    "skills",
-    "LICENSE"
-  ],
   "scripts": {
-    "cli": "bun run src/cli/index.ts",
-    "dev": "bun run --hot src/server/index.ts",
-    "dev:frontend": "vite",
     "build:native": "bun run scripts/build-native.ts",
     "build:ts": "bun run scripts/build-ts.ts",
-    "build:frontend": "vite build",
-    "build": "bun run build:native && bun run build:ts && bun run build:frontend",
-    "start": "NODE_ENV=production bun run src/server/index.ts",
-    "compile": "bun run scripts/compile-bin.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit",
-    "lint": "echo 'no linter configured'"
-  },
-  "engines": {
-    "bun": ">=1.1"
+    "typecheck": "tsc --noEmit"
   },
   "license": "MIT",
   "devDependencies": {
-    "@radix-ui/react-select": "^2.2.6",
     "@types/bun": "^1.1.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^4.3.0",
-    "lucide-react": "^1.8.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "typescript": "^5.8.0",
-    "vite": "^7.0.0",
-    "zustand": "^5.0.12"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "hono": "^4.6.0",
-    "jimp": "^1.6.1",
-    "zod": "^3.24.0",
-    "zod-to-json-schema": "^3.25.2"
+    "typescript": "^5.8.0"
   }
 }
