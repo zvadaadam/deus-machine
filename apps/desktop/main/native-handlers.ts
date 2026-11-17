@@ -15,8 +15,6 @@ import { promisify } from "util";
 import { homedir } from "os";
 import path from "path";
 import { existsSync, realpathSync } from "fs";
-import { checkCliTool } from "./cli-tools";
-import { logoutGhAuth, startGhAuthLogin } from "./github-cli-auth";
 
 const execFileAsync = promisify(execFile);
 const WORKSPACE_LOOKUP_TIMEOUT_MS = 2_000;
@@ -222,22 +220,6 @@ export function registerNativeHandlers(): void {
   ipcMain.handle("native:isFullscreen", () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     return win?.isFullScreen() ?? false;
-  });
-
-  // -------------------------------------------------------------------------
-  // CLI tool checks
-  // -------------------------------------------------------------------------
-
-  ipcMain.handle("check_cli_tool", async (_e, args: { name?: string }) => {
-    return checkCliTool(args?.name || "");
-  });
-
-  ipcMain.handle("start_gh_auth_login", async () => {
-    return startGhAuthLogin();
-  });
-
-  ipcMain.handle("logout_gh_auth", async () => {
-    return logoutGhAuth();
   });
 
   // -------------------------------------------------------------------------

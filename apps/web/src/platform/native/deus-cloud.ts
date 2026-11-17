@@ -1,5 +1,10 @@
 import { capabilities } from "../capabilities";
+import { api } from "@shared/api";
+import { getErrorMessage } from "@shared/lib/errors";
 import type { DeusCloudAuthResult, DeusCloudSessionStatus } from "@shared/types";
+import type { GithubAppState } from "@shared/types/github";
+import { call } from "@/platform/ws";
+import { openExternalPending } from "./window";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { isRelayMode } from "@/shared/config/backend.config";
 import { queryClient } from "@/shared/api/queryClient";
@@ -146,41 +151,23 @@ export function onAuthChanged(callback: (session: DeusCloudSessionStatus) => voi
   return window.electronAPI.onDeusCloudAuthChanged(callback);
 }
 
-export interface GithubAppState {
-  configured: boolean;
-  signedIn: boolean;
-  installations: Array<{ installationId: number; accountLogin: string }>;
-  appSlug: string | null;
-  /** null = lookup failed; unknown is not "none". */
-  accessibleRepos: string[] | null;
-  error?: string;
-}
-
 /** The Deus GitHub App for an organization (the default one when none is named). */
-export async function getGithubAppStatus(orgId?: string | null): Promise<GithubAppState> {
-  if (!capabilities.ipcInvoke || !window.electronAPI?.getGithubAppStatus) {
-    return {
-      configured: false,
-      signedIn: false,
-      installations: [],
-      appSlug: null,
-      accessibleRepos: [],
-    };
-  }
-  return window.electronAPI.getGithubAppStatus(orgId ?? undefined);
-}
+export const getGithubAppStatus = (organizationId?: string | null): Promise<GithubAppState> =>
+  call(api.githubApp, { organizationId });
 
-/** Whether this client can open the GitHub App install (the desktop app can; a browser cannot). */
-export function canInstallGithubApp(): boolean {
-  return capabilities.ipcInvoke && !!window.electronAPI?.installGithubApp;
-}
+/** Whether this client can install the GitHub App: any client with a computer behind it. */
+export const canInstallGithubApp = (): boolean => !isCloudDirectWebMode();
 
-/** Install the Deus GitHub App for an organization (the default one when none is named). */
+/** Open GitHub's page to install the Deus GitHub App for an organization (the default one when none is named). */
 export async function installGithubApp(
-  orgId?: string | null
+  organizationId?: string | null
 ): Promise<{ ok: boolean; error?: string }> {
-  if (!capabilities.ipcInvoke || !window.electronAPI?.installGithubApp) {
-    return { ok: false, error: "Installing the GitHub App requires the desktop app" };
+  const tab = openExternalPending();
+  try {
+    await tab.open((await call(api.githubAppInstallUrl, { organizationId })).url);
+    return { ok: true };
+  } catch (error) {
+    tab.cancel();
+    return { ok: false, error: getErrorMessage(error) };
   }
-  return window.electronAPI.installGithubApp(orgId ?? undefined);
 }

@@ -45,11 +45,10 @@ describe("pickCloudDirectTokenSource", () => {
   });
 
   it("honors the localStorage override over the deployment default", () => {
-    localStorage.setItem("deus.cloudDirectTokenSource", "workos-desktop");
-    expect(pickCloudDirectTokenSource()).toBe("workos-desktop");
+    localStorage.setItem("deus.cloudDirectTokenSource", "backend");
     // The override wins even when the build would otherwise pick web.
     vi.stubEnv("VITE_CLOUD_DIRECT", "1");
-    expect(pickCloudDirectTokenSource()).toBe("workos-desktop");
+    expect(pickCloudDirectTokenSource()).toBe("backend");
   });
 
   it("ignores a garbage override value", () => {

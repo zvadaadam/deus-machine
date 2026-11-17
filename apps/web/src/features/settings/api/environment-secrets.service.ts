@@ -5,6 +5,7 @@ import type {
   CloudSecretScope,
   CloudSettingsOrganizations,
 } from "@shared/types/environment-secrets";
+import { githubInstallUrl } from "@shared/lib/github";
 import { requestCloudSettings } from "./cloud-settings.service";
 
 function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -34,10 +35,7 @@ export async function getEnvironmentInstallUrl(orgId: string, signal: AbortSigna
     `/orgs/${encodeURIComponent(orgId)}/github/install-url`,
     { signal }
   );
-  const url = new URL(result.url);
-  if (url.protocol !== "https:" || url.hostname !== "github.com")
-    throw new Error("GitHub connection returned an invalid installation link.");
-  return result;
+  return { url: githubInstallUrl(result.url) };
 }
 export const saveCloudEnvironmentSetup = (
   orgId: string,

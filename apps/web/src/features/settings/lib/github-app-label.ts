@@ -1,4 +1,4 @@
-import type { GithubAppState } from "@/platform/native/deus-cloud";
+import type { GithubAppState } from "@shared/types/github";
 
 /**
  * Why the GitHub App card shows no install affordance. "Not configured" has

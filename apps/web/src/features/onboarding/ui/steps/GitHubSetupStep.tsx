@@ -1,6 +1,4 @@
-import { toast } from "sonner";
-import { useStartGhAuthLogin } from "../../api";
-import { useGhStatus } from "@/features/workspace/api";
+import { useGhSignIn, useGhStatus } from "@/features/workspace/api";
 import { CliStatusRow } from "../components/CliStatusRow";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
@@ -22,7 +20,7 @@ function getInitials(displayName: string | null, login: string | null): string {
 
 export function GitHubSetupStep({ onNext, onBack }: GitHubSetupStepProps) {
   const ghStatus = useGhStatus();
-  const ghAuthLogin = useStartGhAuthLogin();
+  const ghAuthLogin = useGhSignIn();
 
   const installed = ghStatus.data?.isInstalled;
   const authenticated = ghStatus.data?.isAuthenticated === true;
@@ -44,25 +42,6 @@ export function GitHubSetupStep({ onNext, onBack }: GitHubSetupStepProps) {
 
   async function retryGitHubChecks(): Promise<void> {
     await ghStatus.refetch();
-  }
-
-  async function signInWithGitHubCli(): Promise<void> {
-    try {
-      const result = await ghAuthLogin.mutateAsync();
-      if (!result.success) {
-        toast.error(result.error ?? "GitHub sign-in did not complete");
-        return;
-      }
-
-      const refreshed = await ghStatus.refetch();
-      if (refreshed.data?.isAuthenticated) {
-        toast.success("GitHub connected");
-      } else {
-        toast.error("GitHub sign-in finished, but Deus could not verify it yet");
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "GitHub sign-in failed");
-    }
   }
 
   function getDetail(): string {
@@ -124,7 +103,7 @@ export function GitHubSetupStep({ onNext, onBack }: GitHubSetupStepProps) {
           actionIcon={<GitHubIcon className="h-3 w-3" />}
           actionBusy={ghAuthLogin.isPending}
           actionDisabled={!canSignIn}
-          onAction={canSignIn ? () => void signInWithGitHubCli() : undefined}
+          onAction={canSignIn ? () => ghAuthLogin.mutate() : undefined}
           onRetry={() => void retryGitHubChecks()}
           retryLabel="Check again"
           showRetry={cliAvailable === false}
