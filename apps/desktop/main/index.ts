@@ -12,7 +12,7 @@
  * process is purely a desktop shell that spawns it and bridges native OS features.
  */
 
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, session, shell } from "electron";
 import { join } from "path";
 import { homedir } from "os";
 import { is } from "@electron-toolkit/utils";
@@ -25,6 +25,8 @@ import {
   serveRenderer,
 } from "./app-protocol";
 import { registerNativeHandlers } from "./native-handlers";
+import { limitPermissions } from "./permissions";
+import { WEBVIEW_PARTITION } from "../../../shared/browser";
 import { registerBrowserEmulationHandlers } from "./browser-emulation";
 import { registerBrowserCookieHandlers } from "./browser-cookies";
 import { registerUpdateHandlers, setupAutoUpdater } from "./auto-updater";
@@ -77,6 +79,13 @@ registerAppScheme();
 app.enableSandbox();
 
 let mainWindow: BrowserWindow | null = null;
+
+// The window's origin: Vite's in dev, app://deus otherwise (the one the
+// backend was told to trust, backend-process.ts).
+const windowOrigin = rendererOrigin({
+  isDev: is.dev,
+  rendererUrl: process.env.ELECTRON_RENDERER_URL,
+});
 let quitState: "running" | "stopping" | "stopped" = "running";
 
 // ---------------------------------------------------------------------------
@@ -225,13 +234,6 @@ async function createWindow(): Promise<void> {
     return { action: "deny" };
   });
 
-  // The window's origin: Vite's in dev, app://deus otherwise (the one the
-  // backend was told to trust, backend-process.ts).
-  const windowOrigin = rendererOrigin({
-    isDev: is.dev,
-    rendererUrl: process.env.ELECTRON_RENDERER_URL,
-  });
-
   // Block top-level navigation to external URLs (security: prevent redirect hijacks)
   mainWindow.webContents.on("will-navigate", (event, url) => {
     if (originOf(url) === windowOrigin) return; // allow app navigation
@@ -363,6 +365,10 @@ app.whenReady().then(async () => {
   registerBrowserEmulationHandlers();
   registerBrowserCookieHandlers();
   registerUpdateHandlers(quitAfterStopping);
+
+  for (const ses of [session.defaultSession, session.fromPartition(WEBVIEW_PARTITION)]) {
+    limitPermissions(ses, windowOrigin);
+  }
 
   logMainProcess("[main] Creating window...");
   await createWindow();

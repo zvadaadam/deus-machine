@@ -41,6 +41,13 @@ vi.mock("electron", () => ({
     handle: (channel: string, handler: () => unknown) => mocks.handlers.set(channel, handler),
     on: vi.fn(),
   },
+  session: {
+    defaultSession: { setPermissionRequestHandler: vi.fn(), setPermissionCheckHandler: vi.fn() },
+    fromPartition: () => ({
+      setPermissionRequestHandler: vi.fn(),
+      setPermissionCheckHandler: vi.fn(),
+    }),
+  },
   shell: {},
   protocol: { registerSchemesAsPrivileged: vi.fn(), handle: vi.fn() },
   net: { fetch: vi.fn() },

@@ -52,6 +52,13 @@ vi.mock("electron", () => ({
   },
   dialog: { showMessageBox: mocks.showMessageBox },
   ipcMain: { handle: vi.fn(), on: vi.fn() },
+  session: {
+    defaultSession: { setPermissionRequestHandler: vi.fn(), setPermissionCheckHandler: vi.fn() },
+    fromPartition: () => ({
+      setPermissionRequestHandler: vi.fn(),
+      setPermissionCheckHandler: vi.fn(),
+    }),
+  },
   shell: { showItemInFolder: vi.fn(), openExternal: mocks.openExternal },
   protocol: { registerSchemesAsPrivileged: mocks.registerSchemes, handle: mocks.handleProtocol },
   net: { fetch: vi.fn() },
