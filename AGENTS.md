@@ -672,6 +672,15 @@ bun run test:e2e:cloud        # test/e2e/cloud/ (a cloud workspace in the real a
 
 Vitest with `vi.mock()` and `vi.hoisted()`. Tests live outside `src/` — never colocate.
 
+What ships is not what those run on, so two checks run the shipped thing. The
+packaged app's backend is Bun with `bun:sqlite` behind `apps/backend/src/lib/sqlite.ts`:
+`bun run test:sqlite-bun` runs `sqlite-parity.test.ts` on it (the same file runs
+on Node inside `test:backend`); add a case there when the backend starts using
+another SQLite call. `bun run smoke:cli-package` packs the npm CLI, installs the
+tarball into an empty folder and runs `deus --version` and `deus start`. It
+installs with npm, the one place npm is used, because that is how a person
+installs it.
+
 `bun run typecheck` covers the web app and `shared/` only. A backend change is
 checked by `bun run typecheck:backend` (its tests included), and
 `bun run typecheck:all` runs every program.
