@@ -247,7 +247,12 @@ try {
   await page.getByRole("link", { name: "the preview" }).click();
   const frame = page.locator('iframe[title="Cloud computer preview"]');
   await frame.waitFor();
-  assert.equal(await frame.getAttribute("src"), "https://5173-reach.sandbox.test/dashboard?tab=1");
+  // The panel opens on its stored port and takes the link's a moment later.
+  await until(
+    "the preview to show the link's port and path",
+    async () =>
+      (await frame.getAttribute("src")) === "https://5173-reach.sandbox.test/dashboard?tab=1"
+  );
   assert.ok(
     !(await opened()).some((url) => url.includes("localhost")),
     "this computer's localhost was never opened"
