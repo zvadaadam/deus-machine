@@ -5,10 +5,9 @@ vi.mock("electron", () => ({ net: {}, protocol: {} }));
 import { allowsPermission } from "../../../apps/desktop/main/permissions";
 
 const windowOrigin = "app://deus";
-const guest = (permission: string) =>
-  allowsPermission(permission, { guest: true, origin: "https://example.com", windowOrigin });
-const window = (permission: string, origin: string | null = windowOrigin) =>
-  allowsPermission(permission, { guest: false, origin, windowOrigin });
+const guest = (permission: string) => allowsPermission(permission, "https://example.com");
+const window = (permission: string, topOrigin: string | null = windowOrigin) =>
+  allowsPermission(permission, topOrigin, windowOrigin);
 
 describe("allowsPermission", () => {
   it("lets a Browser-tab page go fullscreen, lock the pointer and copy", () => {
@@ -36,16 +35,17 @@ describe("allowsPermission", () => {
     }
   });
 
-  it("lets the window copy and notify, and nothing else", () => {
-    expect(window("clipboard-sanitized-write")).toBe(true);
-    expect(window("notifications")).toBe(true);
-    for (const permission of ["media", "clipboard-read", "geolocation", "openExternal"]) {
+  it("lets the window copy, paste and notify, and nothing else", () => {
+    for (const permission of ["clipboard-sanitized-write", "clipboard-read", "notifications"]) {
+      expect(window(permission)).toBe(true);
+    }
+    for (const permission of ["media", "geolocation", "openExternal", "fullscreen"]) {
       expect(window(permission)).toBe(false);
     }
   });
 
-  it("refuses a frame of another origin inside the window", () => {
-    expect(window("notifications", "https://stream.example.com")).toBe(false);
+  it("refuses everything when the window's page on top is not the app's", () => {
+    expect(window("notifications", "https://example.com")).toBe(false);
     expect(window("clipboard-sanitized-write", null)).toBe(false);
   });
 });

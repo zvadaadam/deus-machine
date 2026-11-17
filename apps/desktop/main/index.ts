@@ -385,9 +385,8 @@ app.whenReady().then(async () => {
   registerBrowserCookieHandlers();
   registerUpdateHandlers(quitAfterStopping);
 
-  for (const ses of [session.defaultSession, session.fromPartition(WEBVIEW_PARTITION)]) {
-    limitPermissions(ses, windowOrigin);
-  }
+  limitPermissions(session.defaultSession, windowOrigin);
+  limitPermissions(session.fromPartition(WEBVIEW_PARTITION));
 
   logMainProcess("[main] Creating window...");
   await createWindow();
