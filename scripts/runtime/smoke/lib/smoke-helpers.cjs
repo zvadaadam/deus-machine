@@ -544,18 +544,6 @@ function assertRuntimeSelfTest(selfTest, options) {
       `${label} self-test resolved unexpected resourcesPath: ${selfTest.resourcesPath}; expected ${options.resourcesPath}`
     );
   }
-
-  const nodePathEntries = String(selfTest.nodePath || "")
-    .split(path.delimiter)
-    .filter(Boolean)
-    .map((entry) => path.resolve(entry));
-  for (const expectedNodePath of options.expectedNodePaths) {
-    if (!nodePathEntries.includes(path.resolve(expectedNodePath))) {
-      throw new Error(
-        `${label} self-test NODE_PATH is missing ${expectedNodePath}: ${selfTest.nodePath}`
-      );
-    }
-  }
 }
 
 function assertHostRunnableArch(filePath, label) {

@@ -14,13 +14,12 @@ files:
   - "!out/**/*.map"
   - "resources/**/*"
   # Main and preload bundle what they import, and deus-runtime is compiled with
-  # everything but its native externals, which it loads from app.asar.unpacked
-  # (scripts/runtime/native-runtime.ts). electron-builder applies only the
-  # exclusions here to node_modules, so the allowlist is one.
-  - "!node_modules/!(node-pty|@napi-rs)/**"
+  # everything but the canvas, which it loads from app.asar.unpacked
+  # (DEUS_NATIVE_MODULES). electron-builder applies only the exclusions here
+  # to node_modules, so the allowlist is one.
+  - "!node_modules/!(@napi-rs)/**"
 asarUnpack:
   - "resources/**"
-  - "node_modules/node-pty/**"
   - "node_modules/@napi-rs/canvas/**"
   - "node_modules/@napi-rs/canvas-*/**"
 mac:

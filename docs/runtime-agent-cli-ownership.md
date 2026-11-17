@@ -65,9 +65,10 @@ agent CLI discovery. It is based on the source paths below, not on generated
 
 Frontend libraries belong in `devDependencies`: Vite bundles them into
 `out/renderer` or device-use's `dist/frontend` during the build. The app ships
-no other `node_modules` than the runtime's native externals, `node-pty` and
-`@napi-rs/canvas`, unpacked (`electron-builder.yml` `files`): Vite bundles main
-and preload, and `deus-runtime` compiles in everything else.
+no other `node_modules` than `@napi-rs/canvas`, unpacked (`electron-builder.yml`
+`files`), which `deus-runtime` loads from `DEUS_NATIVE_MODULES`: Vite bundles
+main and preload, the runtime compiles in everything else, and its terminals
+are Bun's own.
 
 ## Cleanup Boundaries
 

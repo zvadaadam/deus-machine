@@ -50,40 +50,6 @@ function copyRuntimeBin(resourcesDir, arch) {
   }
 }
 
-function copyNodePtyPayload(resourcesDir, arch) {
-  const nodePtyRoot = path.join(resourcesDir, "app.asar.unpacked", "node_modules", "node-pty");
-  copyFile(
-    path.join(PROJECT_ROOT, "node_modules", "node-pty", "package.json"),
-    path.join(nodePtyRoot, "package.json")
-  );
-
-  for (const candidateArch of DARWIN_ARCHES) {
-    const sourcePrebuildDir = path.join(
-      PROJECT_ROOT,
-      "node_modules",
-      "node-pty",
-      "prebuilds",
-      `darwin-${candidateArch}`
-    );
-    copyFile(
-      path.join(sourcePrebuildDir, "pty.node"),
-      path.join(nodePtyRoot, "prebuilds", `darwin-${candidateArch}`, "pty.node")
-    );
-    copyFile(
-      path.join(sourcePrebuildDir, "spawn-helper"),
-      path.join(nodePtyRoot, "prebuilds", `darwin-${candidateArch}`, "spawn-helper")
-    );
-  }
-
-  // Prove the real afterPack hook prunes build/Release before verification.
-  writeFile(path.join(nodePtyRoot, "build", "Release", "pty.node"), "stale build output");
-  writeFile(path.join(nodePtyRoot, "build", "Release", "spawn-helper"), "stale build output");
-
-  if (!fs.existsSync(path.join(nodePtyRoot, "prebuilds", `darwin-${arch}`, "pty.node"))) {
-    throw new Error(`Failed to stage node-pty prebuild for darwin-${arch}`);
-  }
-}
-
 function copyCanvasPayload(resourcesDir, arch) {
   const unpackedNodeModules = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
   copyFile(
@@ -144,8 +110,6 @@ function signPackagedPayloads(resourcesDir, arch) {
     path.join(resourcesDir, "bin", "gh"),
     path.join(resourcesDir, "bin", "rg"),
     path.join(resourcesDir, "bin", "agent-browser"),
-    path.join(unpackedNodeModules, "node-pty", "prebuilds", `darwin-${arch}`, "pty.node"),
-    path.join(unpackedNodeModules, "node-pty", "prebuilds", `darwin-${arch}`, "spawn-helper"),
     path.join(unpackedNodeModules, "@napi-rs", `canvas-darwin-${arch}`, `skia.darwin-${arch}.node`),
   ];
 
@@ -160,7 +124,6 @@ async function smokeArch(arch) {
   const resourcesDir = fs.mkdtempSync(path.join(os.tmpdir(), `deus-resources-${arch}-`));
   try {
     copyRuntimeBin(resourcesDir, arch);
-    copyNodePtyPayload(resourcesDir, arch);
     copyCanvasPayload(resourcesDir, arch);
 
     const context = {
@@ -170,13 +133,6 @@ async function smokeArch(arch) {
     };
 
     await afterPack(context);
-
-    const nodePtyPrebuilds = fs.readdirSync(
-      path.join(resourcesDir, "app.asar.unpacked", "node_modules", "node-pty", "prebuilds")
-    );
-    if (nodePtyPrebuilds.length !== 1 || nodePtyPrebuilds[0] !== `darwin-${arch}`) {
-      throw new Error(`Unexpected packaged node-pty prebuilds: ${nodePtyPrebuilds.join(", ")}`);
-    }
 
     signPackagedPayloads(resourcesDir, arch);
     // Re-signing mutates Mach-O bytes. The real afterPack hook verifies
