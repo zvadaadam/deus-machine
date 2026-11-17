@@ -1,7 +1,5 @@
 /** Answers the operations in `shared/api/simulator.ts`. */
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import * as api from "@shared/api/simulator";
 import {
   execCloudSimulator,
@@ -13,8 +11,7 @@ import * as simulator from "../services/simulator-context";
 import { publish } from "../services/streams";
 import { handle } from "./registry";
 import { ConflictError, ValidationError } from "../lib/errors";
-
-const execFileAsync = promisify(execFile);
+import { loadWorkspace } from "../middleware/workspace-loader";
 
 /**
  * A stream start or a build that failed after its request was answered. The
@@ -39,7 +36,15 @@ async function simctlApp(
 ): Promise<void> {
   const session = simulator.getContextForWorkspace(workspaceId);
   if (!session) throw new ConflictError("No active simulator session");
-  await execFileAsync("xcrun", ["simctl", verb, session.udid, bundleId]);
+  await simulator.simctl([verb, session.udid, bundleId]);
+}
+
+/** Refuse a caller that cannot use the iOS Simulator here, saying why. */
+async function assertAvailable(relayed: boolean): Promise<void> {
+  const capabilities = await simulator.getSimulatorCapabilities({ relayClient: relayed });
+  if (!capabilities.available) {
+    throw new ValidationError(capabilities.unavailableReason ?? "Simulator is unavailable");
+  }
 }
 
 export default [
@@ -48,15 +53,12 @@ export default [
     simulator.getSimulatorCapabilities({ relayClient: caller.relayed })
   ),
   handle(api.simListDevices, async () => ({ devices: await simulator.listDevices() })),
-  handle(api.simHasXcodeProject, async ({ workspacePath }) => ({
-    hasProject: await simulator.hasXcodeProject(workspacePath),
+  handle(api.simHasXcodeProject, async ({ workspaceId }) => ({
+    hasProject: await simulator.hasXcodeProject(loadWorkspace(workspaceId).workspacePath),
   })),
 
-  handle(api.simStart, ({ workspaceId, udid, skipBootCheck }, { caller }) => {
-    const capabilities = simulator.getSimulatorCapabilities({ relayClient: caller.relayed });
-    if (!capabilities.available) {
-      throw new ValidationError(capabilities.unavailableReason ?? "Simulator is unavailable");
-    }
+  handle(api.simStart, async ({ workspaceId, udid, skipBootCheck }, { caller }) => {
+    await assertAvailable(caller.relayed);
     // Not awaited: booting takes seconds. a `streamReady` event says it worked.
     simulator.startStream(workspaceId, udid, skipBootCheck).catch((err) => {
       console.error("[Simulator] startStream failed:", err);
@@ -85,7 +87,9 @@ export default [
   handle(api.simInspectSnapshot, async ({ workspaceId }) => ({
     snapshot: await simulator.inspectorSnapshot(workspaceId),
   })),
-  handle(api.simBuildAndRun, ({ workspaceId, workspacePath, scheme }) => {
+  handle(api.simBuildAndRun, async ({ workspaceId, scheme }, { caller }) => {
+    await assertAvailable(caller.relayed);
+    const { workspacePath } = loadWorkspace(workspaceId);
     // Not awaited: a build takes minutes. `buildLog` events carry its output,
     // `buildComplete` its result.
     simulator.buildAndRun(workspaceId, workspacePath, scheme).catch((err) => {

@@ -67,7 +67,7 @@ export {
   isBridgeAvailable,
   findBridgePath,
   findInspectorPath,
-  SIMBRIDGE_ENV,
+  simulatorEnv,
 } from "./simbridge.js";
 
 export { RefMap } from "./snapshot/refs.js";

@@ -273,7 +273,6 @@ export function SimulatorStreamViewer({
     if (!streamUrl) return;
 
     const img = new Image();
-    img.crossOrigin = "anonymous"; // Allow cross-origin MJPEG loading
     img.src = streamUrl;
 
     const canvas = canvasRef.current;

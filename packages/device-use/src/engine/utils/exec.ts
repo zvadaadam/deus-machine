@@ -13,8 +13,7 @@ export function createExecutor(defaults: ExecOptions = {}): CommandExecutor {
 
     const timeout = opts?.timeout ?? defaults.timeout ?? DEFAULT_TIMEOUT;
     const cwd = opts?.cwd ?? defaults.cwd;
-    const env =
-      defaults.env || opts?.env ? { ...process.env, ...defaults.env, ...opts?.env } : process.env;
+    const env = { ...(defaults.env ?? process.env), ...opts?.env };
 
     return new Promise<ExecResult>((resolve) => {
       execFile(

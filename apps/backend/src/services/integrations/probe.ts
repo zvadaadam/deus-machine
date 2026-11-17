@@ -11,7 +11,7 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { McpServerConfig } from "@zvada/agent-server/protocol";
 import { getErrorMessage } from "@shared/lib/errors";
 import { extendCliPath } from "@shared/lib/cli-path";
-import { createBackendChildEnv } from "../../runtime/child-env";
+import { createBackendChildEnv } from "@shared/lib/child-env";
 import type { AppTool } from "@shared/integrations/types";
 
 const REMOTE_TIMEOUT_MS = 20_000;

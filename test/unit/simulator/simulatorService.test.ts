@@ -49,22 +49,16 @@ describe("simulatorService.startStreaming", () => {
       follow,
       api.simulatorEvents,
       { workspaceId: "ws-2" },
-      { type: "streamReady", url: "http://localhost:9/s", port: 9, hidAvailable: false }
+      { type: "streamReady", url: "http://127.0.0.1:9/stream.mjpeg?t=other", hidAvailable: false }
     );
     emit(
       follow,
       api.simulatorEvents,
       { workspaceId: "ws-1" },
-      {
-        type: "streamReady",
-        url: "http://localhost:3100/stream.mjpeg",
-        port: 3100,
-        hidAvailable: true,
-      }
+      { type: "streamReady", url: "http://127.0.0.1:3100/stream.mjpeg?t=k", hidAvailable: true }
     );
     await expect(stream).resolves.toEqual({
-      url: "http://localhost:3100/stream.mjpeg",
-      port: 3100,
+      url: "http://127.0.0.1:3100/stream.mjpeg?t=k",
       hid_available: true,
     });
     expect(following(follow)).toEqual([]);
@@ -93,11 +87,8 @@ describe("simulatorService.startStreaming", () => {
 
 describe("simulatorService.buildAndRun", () => {
   it("resolves with the installed app once the build completes", async () => {
-    const build = simulatorService.buildAndRun("ws-1", "/repo/ws");
-    expect(call).toHaveBeenCalledExactlyOnceWith(api.simBuildAndRun, {
-      workspaceId: "ws-1",
-      workspacePath: "/repo/ws",
-    });
+    const build = simulatorService.buildAndRun("ws-1");
+    expect(call).toHaveBeenCalledExactlyOnceWith(api.simBuildAndRun, { workspaceId: "ws-1" });
     expect(following(follow)).toEqual([
       { stream: "simulatorEvents", filter: { workspaceId: "ws-1" } },
     ]);
@@ -129,7 +120,7 @@ describe("simulatorService.buildAndRun", () => {
   });
 
   it("rejects with the build's error when the build fails", async () => {
-    const build = simulatorService.buildAndRun("ws-1", "/repo/ws");
+    const build = simulatorService.buildAndRun("ws-1");
     emit(
       follow,
       api.simulatorEvents,

@@ -1,5 +1,5 @@
-import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { execFile, execFileSync } from "node:child_process";
+import { existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SimBridgeRequest, SimBridgeResponse } from "./types.js";
@@ -8,16 +8,39 @@ import { DEFAULT_MAX_BUFFER } from "./utils/exec.js";
 
 const BRIDGE_TIMEOUT_MS = 30_000;
 
-/** Env passed to simbridge child processes — keeps Xcode tools discoverable. */
-export const SIMBRIDGE_ENV = {
-  ...process.env,
-  DEVELOPER_DIR: process.env["DEVELOPER_DIR"] ?? "/Applications/Xcode.app/Contents/Developer",
-} as const;
+let xcodeDeveloperDir: string | null | undefined;
+
+/**
+ * The environment for Xcode's tools and the helpers: `base` with a developer
+ * directory that has the simulator. `DEVELOPER_DIR` when `base` sets it;
+ * otherwise `xcode-select`'s choice, unless that is the Command Line Tools,
+ * which have no simulator: then the first Xcode in /Applications.
+ */
+export function simulatorEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  if (base["DEVELOPER_DIR"]) return { ...base };
+  if (xcodeDeveloperDir === undefined) {
+    let selected = "";
+    let apps: string[] = [];
+    try {
+      selected = execFileSync("xcode-select", ["-p"], { encoding: "utf8", stdio: "pipe" });
+      apps = readdirSync("/Applications").filter((name) => /^Xcode.*\.app$/.test(name));
+    } catch {
+      // No developer tools, or no /Applications: nothing to choose.
+    }
+    const xcode = ["Xcode.app", ...apps]
+      .map((app) => `/Applications/${app}/Contents/Developer`)
+      .find((dir) => existsSync(dir));
+    xcodeDeveloperDir = selected.includes("CommandLineTools") ? (xcode ?? null) : null;
+  }
+  return xcodeDeveloperDir ? { ...base, DEVELOPER_DIR: xcodeDeveloperDir } : { ...base };
+}
 
 export interface SimBridgeCallOptions {
   timeout?: number;
   /** When false (default), drop framework-load diagnostics from stderr. */
   verbose?: boolean;
+  /** The environment to start from (see `simulatorEnv`); this process's by default. */
+  env?: NodeJS.ProcessEnv;
 }
 
 // Patterns for harmless framework-load noise emitted every time simbridge starts.
@@ -41,81 +64,37 @@ function filterSimBridgeStderr(raw: string, verbose: boolean): string {
 }
 
 /**
- * Locate the simbridge binary. Search order:
- *   1. `$DEVICE_USE_SIMBRIDGE` env override
- *   2. Sibling of the current executable (compiled / brew install case)
- *   3. Relative to source/bundle location (dev + npm install case)
+ * Where a helper is, or null: the override when it exists, then Deus's
+ * packaged `Resources/simulator`, then this package's `bin/` (from
+ * `src/engine/` or a bundle in `dist/`), then next to a compiled CLI.
  */
-export function findBridgePath(): string {
-  const override = process.env["DEVICE_USE_SIMBRIDGE"];
-  if (override && existsSync(override)) return override;
-
-  // When running as a compiled Bun binary, process.execPath is the device-use binary itself.
-  // Ship simbridge as a sibling.
-  try {
-    const execDir = dirname(process.execPath);
-    const sibling = join(execDir, "simbridge");
-    if (existsSync(sibling)) return sibling;
-  } catch {
-    // ignore
-  }
-
-  // Relative to this module's file location (dev or bundled dist/)
-  try {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const candidates = [
-      join(here, "../../native/.build/release/simbridge"), // from dist/
-      join(here, "../native/.build/release/simbridge"), // from src/engine/
-    ];
-    for (const candidate of candidates) {
-      if (existsSync(candidate)) return candidate;
-    }
-    return candidates[0]!;
-  } catch {
-    // import.meta.url may be unreachable in compiled builds — fall back
-    return "simbridge";
-  }
+function findHelper(name: string, override: string | undefined): string | null {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const resources = process.env["DEUS_RESOURCES_PATH"];
+  const candidates = [
+    override,
+    resources && join(resources, "simulator", name),
+    join(here, "../../bin", name),
+    join(here, "../bin", name),
+    join(dirname(process.execPath), name),
+  ];
+  return candidates.find((path): path is string => !!path && existsSync(path)) ?? null;
 }
 
-/** Locate the siminspector dylib shipped next to simbridge. */
-export function findInspectorPath(): string {
-  const override = process.env["DEVICE_USE_SIMINSPECTOR"];
-  if (override && existsSync(override)) return override;
+export const findBridgePath = (): string | null =>
+  findHelper("simbridge", process.env["DEVICE_USE_SIMBRIDGE"]);
 
-  try {
-    const execDir = dirname(process.execPath);
-    const sibling = join(execDir, "siminspector.dylib");
-    if (existsSync(sibling)) return sibling;
-  } catch {
-    // ignore
-  }
-
-  try {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const candidates = [
-      join(here, "../../native/.build/release/siminspector.dylib"),
-      join(here, "../native/.build/release/siminspector.dylib"),
-      join(here, "../../bin/siminspector.dylib"),
-      join(here, "../bin/siminspector.dylib"),
-    ];
-    for (const candidate of candidates) {
-      if (existsSync(candidate)) return candidate;
-    }
-    return candidates[0]!;
-  } catch {
-    return "siminspector.dylib";
-  }
-}
-
-const BRIDGE_PATH = findBridgePath();
+export const findInspectorPath = (): string | null =>
+  findHelper("siminspector.dylib", process.env["DEVICE_USE_SIMINSPECTOR"]);
 
 export async function callSimBridge(
   request: SimBridgeRequest,
   options?: SimBridgeCallOptions
 ): Promise<SimBridgeResponse> {
-  if (!existsSync(BRIDGE_PATH)) {
+  const bridgePath = findBridgePath();
+  if (!bridgePath) {
     throw new DependencyError(
-      `simbridge binary not found at ${BRIDGE_PATH}. Run: cd native && swift build -c release`
+      "simbridge binary not found. Run: cd native && swift build -c release"
     );
   }
 
@@ -123,12 +102,12 @@ export async function callSimBridge(
 
   return new Promise<SimBridgeResponse>((resolve, reject) => {
     execFile(
-      BRIDGE_PATH,
+      bridgePath,
       [input],
       {
         timeout: options?.timeout ?? BRIDGE_TIMEOUT_MS,
         maxBuffer: DEFAULT_MAX_BUFFER,
-        env: SIMBRIDGE_ENV,
+        env: simulatorEnv(options?.env),
       },
       (error, stdout, stderr) => {
         const filtered = stderr ? filterSimBridgeStderr(stderr, options?.verbose ?? false) : "";
@@ -175,7 +154,7 @@ export async function callSimBridge(
 export async function isBridgeAvailable(
   options?: SimBridgeCallOptions
 ): Promise<{ available: boolean; reason?: string }> {
-  if (!existsSync(BRIDGE_PATH)) {
+  if (!findBridgePath()) {
     return {
       available: false,
       reason: "Binary not built. Run: cd native && swift build -c release",

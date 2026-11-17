@@ -24,13 +24,11 @@ const UDID_B = "BBBB-2222-BBBB-2222";
 
 const STREAM: StreamInfo = {
   url: "http://localhost:9000/stream",
-  port: 9000,
   hid_available: true,
 };
 
 const STREAM_NO_HID: StreamInfo = {
   url: "http://localhost:9001/stream",
-  port: 9001,
   hid_available: false,
 };
 

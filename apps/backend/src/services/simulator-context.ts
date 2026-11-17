@@ -9,15 +9,16 @@
 //
 // TODO(relay-streaming): Add MJPEG frame proxy for web/relay mode.
 
-import { execFile, execFileSync, spawn } from "child_process";
+import { execFile, spawn, type ChildProcess } from "child_process";
 import { promisify } from "util";
 import { existsSync, unlinkSync } from "fs";
 import { readdir } from "fs/promises";
-import { createConnection, createServer } from "net";
+import { createConnection } from "net";
 import { tmpdir } from "os";
-import { dirname, join } from "path";
-import { createHash } from "crypto";
+import { join } from "path";
+import { createHash, randomBytes } from "crypto";
 import WebSocket from "ws";
+import { createBackendChildEnv } from "@shared/lib/child-env";
 import { getDatabase } from "../lib/database";
 import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 import { getSessionRaw } from "../db/queries";
@@ -33,10 +34,24 @@ import type {
 
 const execFileAsync = promisify(execFile);
 
-const SIM_ENV: Record<string, string> = {
-  ...(process.env as Record<string, string>),
-  DEVELOPER_DIR: process.env["DEVELOPER_DIR"] ?? "/Applications/Xcode.app/Contents/Developer",
-};
+/** The simulator engine: the helpers' paths and the environment Xcode's tools need. ESM, so loaded lazily. */
+const engine = () => import("device-use/engine");
+
+/** What Xcode's tools and the helpers run with: the backend's environment without its internals. */
+async function simEnv(): Promise<NodeJS.ProcessEnv> {
+  return (await engine()).simulatorEnv(createBackendChildEnv());
+}
+
+/** `xcrun simctl <args>`. */
+export async function simctl(
+  args: string[],
+  options: { timeout?: number; env?: NodeJS.ProcessEnv } = {}
+): Promise<{ stdout: string }> {
+  return execFileAsync("xcrun", ["simctl", ...args], {
+    timeout: options.timeout,
+    env: { ...(await simEnv()), ...options.env },
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -44,7 +59,6 @@ const SIM_ENV: Record<string, string> = {
 
 export interface SimulatorContext {
   udid: string;
-  port?: number;
   streaming: boolean;
 }
 
@@ -75,8 +89,6 @@ interface SimulatorSession {
   deviceName: string;
   runtime: string;
   streaming: boolean;
-  streamPid: number | null;
-  streamPort: number | null;
   hidWs: WebSocket | null;
   hidConnected: boolean;
   appBundleId: string | null;
@@ -145,17 +157,15 @@ export function resolveSimulatorCapabilities({
 const TOOLCHAIN_TTL_MS = 60_000;
 let toolchain: { available: boolean; checkedAt: number } | null = null;
 
-function hasSimulatorToolchain(): boolean {
+async function hasSimulatorToolchain(): Promise<boolean> {
   if (toolchain && Date.now() - toolchain.checkedAt < TOOLCHAIN_TTL_MS) return toolchain.available;
   let available = false;
   try {
-    const resolved = execFileSync("xcrun", ["--find", "simctl"], {
-      env: SIM_ENV,
-      stdio: ["ignore", "pipe", "ignore"],
-      encoding: "utf8",
+    const { stdout } = await execFileAsync("xcrun", ["--find", "simctl"], {
+      env: await simEnv(),
       timeout: 5000,
-    }).trim();
-    available = resolved.length > 0;
+    });
+    available = stdout.trim().length > 0;
   } catch {
     // No Xcode command-line tools.
   }
@@ -163,16 +173,16 @@ function hasSimulatorToolchain(): boolean {
   return available;
 }
 
-export function getSimulatorCapabilities(
+export async function getSimulatorCapabilities(
   options: {
     relayClient?: boolean;
   } = {}
-): SimulatorCapabilities {
+): Promise<SimulatorCapabilities> {
   return resolveSimulatorCapabilities({
     backendPlatform: process.platform,
     relayClient: options.relayClient === true,
-    simctlAvailable: hasSimulatorToolchain(),
-    simbridgeAvailable: findSimBridgePath() !== null,
+    simctlAvailable: await hasSimulatorToolchain(),
+    simbridgeAvailable: (await engine()).findBridgePath() !== null,
   });
 }
 
@@ -234,159 +244,18 @@ function releaseStartingUdid(workspaceId: string, udid: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// simbridge binary resolution (from device-use workspace package)
-// ---------------------------------------------------------------------------
-
-let cachedBridgePath: string | null | undefined;
-let cachedInspectorPath: string | null | undefined;
-
-/**
- * Walk up from startDir looking for a relative file. Returns the first match
- * or null. Used to find workspace files regardless of cwd.
- */
-function findUpwards(startDir: string, rel: string): string | null {
-  let dir = startDir;
-  while (true) {
-    const candidate = join(dir, rel);
-    if (existsSync(candidate)) return candidate;
-    const parent = dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
-}
-
-function findSimBridgePath(): string | null {
-  if (cachedBridgePath !== undefined) return cachedBridgePath;
-
-  // 1. Explicit override (set by the Electron main process when packaged,
-  //    or by developers for ad-hoc testing).
-  const envOverride = process.env["DEVICE_USE_SIMBRIDGE"];
-  if (envOverride && existsSync(envOverride)) {
-    cachedBridgePath = envOverride;
-    return envOverride;
-  }
-
-  // 2. Packaged Electron app — extraResources copies simbridge here.
-  //    resourcesPath is Electron-only, not in NodeJS.Process types.
-  const resourcesPath =
-    process.env["DEUS_RESOURCES_PATH"] ?? (process as { resourcesPath?: string }).resourcesPath;
-  if (resourcesPath) {
-    const packaged = join(resourcesPath, "simulator", "simbridge");
-    if (existsSync(packaged)) {
-      cachedBridgePath = packaged;
-      return packaged;
-    }
-  }
-
-  // 3. Dev mode — walk up from cwd to find the workspace copy. Backend runs
-  //    with cwd=apps/backend, so a plain join(process.cwd(), ...) misses it.
-  const devCandidates = [
-    "packages/device-use/bin/simbridge",
-    "node_modules/device-use/bin/simbridge",
-    "packages/device-use/native/.build/release/simbridge",
-    "packages/device-use/native/.build/arm64-apple-macosx/release/simbridge",
-  ];
-
-  for (const rel of devCandidates) {
-    const found = findUpwards(process.cwd(), rel);
-    if (found) {
-      cachedBridgePath = found;
-      return found;
-    }
-  }
-
-  cachedBridgePath = null;
-  return null;
-}
-
-function findSimInspectorPath(): string | null {
-  if (cachedInspectorPath !== undefined) return cachedInspectorPath;
-
-  const envOverride = process.env["DEVICE_USE_SIMINSPECTOR"];
-  if (envOverride && existsSync(envOverride)) {
-    cachedInspectorPath = envOverride;
-    return envOverride;
-  }
-
-  const resourcesPath =
-    process.env["DEUS_RESOURCES_PATH"] ?? (process as { resourcesPath?: string }).resourcesPath;
-  if (resourcesPath) {
-    const packaged = join(resourcesPath, "simulator", "siminspector.dylib");
-    if (existsSync(packaged)) {
-      cachedInspectorPath = packaged;
-      return packaged;
-    }
-  }
-
-  const devCandidates = [
-    "packages/device-use/bin/siminspector.dylib",
-    "node_modules/device-use/bin/siminspector.dylib",
-    "packages/device-use/native/.build/release/siminspector.dylib",
-  ];
-
-  for (const rel of devCandidates) {
-    const found = findUpwards(process.cwd(), rel);
-    if (found) {
-      cachedInspectorPath = found;
-      return found;
-    }
-  }
-
-  cachedInspectorPath = null;
-  return null;
-}
-
-// ---------------------------------------------------------------------------
-// Port reservation
-// ---------------------------------------------------------------------------
-
-const reservedPorts = new Set<number>();
-
-async function canBindPort(port: number): Promise<boolean> {
-  return new Promise<boolean>((resolve) => {
-    const server = createServer();
-    server.unref();
-    server.once("error", () => resolve(false));
-    server.listen(port, () => {
-      server.close(() => resolve(true));
-    });
-  });
-}
-
-async function reservePort(preferred: number): Promise<number> {
-  for (let port = preferred; port < preferred + 100; port++) {
-    if (reservedPorts.has(port)) continue;
-    if (await canBindPort(port)) {
-      reservedPorts.add(port);
-      return port;
-    }
-  }
-
-  const fallbackPort = await new Promise<number>((resolve, reject) => {
-    const server = createServer();
-    server.unref();
-    server.once("error", reject);
-    server.listen(0, () => {
-      const addr = server.address();
-      const port = typeof addr === "object" && addr ? addr.port : 0;
-      server.close((err) => (err ? reject(err) : resolve(port)));
-    });
-  });
-
-  reservedPorts.add(fallbackPort);
-  return fallbackPort;
-}
-
-function releasePortReservation(port: number): void {
-  reservedPorts.delete(port);
-}
-
-// ---------------------------------------------------------------------------
 // Stream lifecycle — spawn simbridge for MJPEG + HID
 // ---------------------------------------------------------------------------
 
-/** Active stream processes keyed by UDID (multiple sims can stream simultaneously). */
-const activeStreams = new Map<string, { pid: number; port: number; udid: string }>();
+/** A running stream helper: its server listens on 127.0.0.1:`port` and requires `token`. */
+interface StreamHelper {
+  child: ChildProcess;
+  port: number;
+  token: string;
+}
+
+/** Active stream helpers keyed by UDID (multiple sims can stream simultaneously). */
+const activeStreams = new Map<string, StreamHelper>();
 
 interface XcodeProjectRef {
   path: string;
@@ -416,92 +285,76 @@ async function findXcodeProject(workspacePath: string): Promise<XcodeProjectRef 
   return null;
 }
 
-async function spawnStream(
-  udid: string,
-  port: number
-): Promise<{ port: number; url: string; pid: number }> {
-  // Check if this UDID already has a stream
+async function spawnStream(udid: string): Promise<StreamHelper> {
   const existing = activeStreams.get(udid);
-  if (existing) {
-    try {
-      process.kill(existing.pid, 0);
-      return { port: existing.port, url: `http://localhost:${existing.port}`, pid: existing.pid };
-    } catch {
-      activeStreams.delete(udid);
-    }
-  }
+  if (existing) return existing;
 
-  const helperPath = findSimBridgePath();
+  const helperPath = (await engine()).findBridgePath();
   if (!helperPath) {
     throw new Error("simbridge binary not found. Run `bun install` in repo root to build it.");
   }
 
-  return new Promise((resolve, reject) => {
-    const child = spawn(helperPath, ["--stream", "--udid", udid, "--port", String(port)], {
-      stdio: ["ignore", "pipe", "pipe"],
-      detached: true,
-      env: SIM_ENV,
-    });
+  const token = randomBytes(32).toString("base64url");
+  // stdin is a pipe this process holds and never writes to: the helper exits
+  // when it ends, so it never outlives the backend, however the backend ends.
+  const child = spawn(helperPath, ["--stream", "--udid", udid, "--port", "0"], {
+    stdio: ["pipe", "pipe", "pipe"],
+    env: { ...(await simEnv()), SIMBRIDGE_STREAM_TOKEN: token },
+  });
 
+  return new Promise((resolve, reject) => {
     let stdout = "";
     let stderr = "";
-    let resolved = false;
-
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        try {
-          child.kill("SIGTERM");
-        } catch {
-          /* */
-        }
-        reject(
+    let started = false;
+    const fail = (err: Error) => {
+      if (started) return;
+      started = true;
+      clearTimeout(timeout);
+      child.kill("SIGTERM");
+      reject(err);
+    };
+    const timeout = setTimeout(
+      () =>
+        fail(
           new Error(
             `Stream server failed to start within 10s${stderr ? `: ${stderr.slice(-200)}` : ""}`
           )
-        );
-      }
-    }, 10_000);
+        ),
+      10_000
+    );
 
     child.stdout?.on("data", (data: Buffer) => {
       stdout += data.toString();
-      if (!resolved && stdout.includes('"status"')) {
-        try {
-          const lines = stdout.trim().split("\n");
-          const info = JSON.parse(lines[lines.length - 1]!) as { port: number; url: string };
-          resolved = true;
-          clearTimeout(timeout);
-
-          activeStreams.set(udid, { pid: child.pid!, port: info.port, udid });
-
-          child.stdout?.destroy();
-          child.unref();
-
-          resolve({ port: info.port, url: info.url, pid: child.pid! });
-        } catch {
-          resolved = true;
-          clearTimeout(timeout);
-          reject(new Error(`Failed to parse stream info: ${stdout}`));
-        }
+      if (started || !stdout.includes("\n")) return;
+      try {
+        const { port } = JSON.parse(stdout.trim().split("\n").pop()!) as { port: number };
+        started = true;
+        clearTimeout(timeout);
+        const stream = { child, port, token };
+        activeStreams.set(udid, stream);
+        resolve(stream);
+      } catch {
+        fail(new Error(`Failed to parse stream info: ${stdout}`));
       }
     });
 
     child.stderr?.on("data", (data: Buffer) => {
-      if (!resolved) stderr = `${stderr}${data.toString()}`.slice(-4000);
+      if (!started) stderr = `${stderr}${data.toString()}`.slice(-4000);
     });
 
-    child.on("error", (err) => {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timeout);
-        reject(err);
-      }
-    });
+    child.on("error", fail);
     child.on("exit", (code) => {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timeout);
-        reject(new Error(`Stream exited with code ${code}`));
+      fail(new Error(`Stream exited with code ${code}${stderr ? `: ${stderr.slice(-200)}` : ""}`));
+      // Stopped on purpose (killStream forgets it first), or a later stream's.
+      if (activeStreams.get(udid)?.child !== child) return;
+      activeStreams.delete(udid);
+      for (const session of [...sessions.values()]) {
+        if (session.udid !== udid) continue;
+        releaseWorkspaceSession(session.workspaceId);
+        pushEvent(session.workspaceId, {
+          type: "streamFailed",
+          error: `The simulator stream stopped (exit code ${code}).`,
+        });
       }
     });
   });
@@ -509,23 +362,17 @@ async function spawnStream(
 
 function killStream(udid: string): void {
   const stream = activeStreams.get(udid);
-  if (stream) {
-    try {
-      process.kill(stream.pid, "SIGTERM");
-    } catch {
-      /* */
-    }
-    activeStreams.delete(udid);
-  }
+  activeStreams.delete(udid);
+  stream?.child.kill("SIGTERM");
 }
 
 // ---------------------------------------------------------------------------
 // HID WebSocket connection to simbridge
 // ---------------------------------------------------------------------------
 
-function connectHidWs(port: number): Promise<WebSocket> {
+function connectHidWs({ port, token }: StreamHelper): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(`ws://localhost:${port}/ws`);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws?t=${token}`);
     const timeout = setTimeout(() => {
       ws.close();
       reject(new Error("HID WS timeout"));
@@ -552,6 +399,13 @@ function sendButtonWs(ws: WebSocket, button: string): void {
   ws.send(Buffer.concat([Buffer.from([0x04]), Buffer.from(payload)]));
 }
 
+/** The workspace's HID socket, open; refuses when there is none. */
+function hidSocket(workspaceId: string): WebSocket {
+  const ws = sessions.get(workspaceId)?.hidWs;
+  if (!ws || ws.readyState !== WebSocket.OPEN) throw new Error("No HID connection available");
+  return ws;
+}
+
 // ---------------------------------------------------------------------------
 // Public API — context queries (used by agent-server RPC)
 // ---------------------------------------------------------------------------
@@ -561,7 +415,6 @@ export function getContextForWorkspace(workspaceId: string): SimulatorContext | 
   if (!session) return null;
   return {
     udid: session.udid,
-    port: session.streamPort ?? undefined,
     streaming: session.streaming,
   };
 }
@@ -579,11 +432,7 @@ export function getContextForSession(sessionId: string): SimulatorContext | null
 
 export async function listDevices(): Promise<SimulatorInfo[]> {
   // CoreSimulator initialization can exceed 10 seconds on a fresh macOS install.
-  const { stdout } = await execFileAsync(
-    "xcrun",
-    ["simctl", "list", "devices", "available", "-j"],
-    { env: SIM_ENV, timeout: 30_000 }
-  );
+  const { stdout } = await simctl(["list", "devices", "available", "-j"], { timeout: 30_000 });
   const parsed = JSON.parse(stdout) as {
     devices: Record<
       string,
@@ -633,14 +482,13 @@ export async function startStream(
   claimStartingUdid(workspaceId, udid);
 
   const previousSession = sessions.get(workspaceId);
-  let reservedPort: number | null = null;
   let hidWs: WebSocket | null = null;
 
   try {
     // Boot if needed
     if (!skipBootCheck) {
       try {
-        await execFileAsync("xcrun", ["simctl", "boot", udid], { env: SIM_ENV });
+        await simctl(["boot", udid]);
       } catch (err: any) {
         if (!err?.stderr?.includes("Booted") && !err?.message?.includes("Booted")) {
           throw new Error(`Failed to boot simulator: ${err?.message ?? err}`);
@@ -654,7 +502,7 @@ export async function startStream(
       await execFileAsync(
         "open",
         ["-j", "-g", "-a", "Simulator", "--args", "-CurrentDeviceUDID", udid],
-        { env: SIM_ENV }
+        { env: await simEnv() }
       );
       await new Promise((r) => setTimeout(r, 1500));
     } catch {
@@ -662,15 +510,12 @@ export async function startStream(
     }
 
     // Start MJPEG stream
-    reservedPort = await reservePort(3100 + sessions.size + startingUdids.size);
-    const streamInfo = await spawnStream(udid, reservedPort);
-    releasePortReservation(reservedPort);
-    reservedPort = null;
+    const stream = await spawnStream(udid);
 
     // Connect HID WebSocket
     let hidConnected = false;
     try {
-      hidWs = await connectHidWs(streamInfo.port);
+      hidWs = await connectHidWs(stream);
       hidConnected = true;
     } catch {
       console.warn("[Simulator] HID WebSocket unavailable for", udid);
@@ -691,8 +536,6 @@ export async function startStream(
       deviceName: deviceInfo?.name ?? udid,
       runtime: deviceInfo?.runtime ?? "",
       streaming: true,
-      streamPid: streamInfo.pid,
-      streamPort: streamInfo.port,
       hidWs,
       hidConnected,
       appBundleId: null,
@@ -705,8 +548,7 @@ export async function startStream(
 
     pushEvent(workspaceId, {
       type: "streamReady",
-      url: `http://localhost:${streamInfo.port}/stream.mjpeg`,
-      port: streamInfo.port,
+      url: `http://127.0.0.1:${stream.port}/stream.mjpeg?t=${stream.token}`,
       hidAvailable: hidConnected,
     });
   } catch (err) {
@@ -719,7 +561,6 @@ export async function startStream(
     }
     throw err;
   } finally {
-    if (reservedPort !== null) releasePortReservation(reservedPort);
     releaseStartingUdid(workspaceId, udid);
   }
 }
@@ -736,35 +577,13 @@ export function stopStream(workspaceId: string): void {
 // ---------------------------------------------------------------------------
 
 export function sendTouch(workspaceId: string, x: number, y: number, touchType: string): void {
-  const session = sessions.get(workspaceId);
-  if (!session?.hidWs || session.hidWs.readyState !== WebSocket.OPEN) {
-    throw new Error("No HID connection available");
-  }
-  sendTouchWs(session.hidWs, x, y, touchType);
+  sendTouchWs(hidSocket(workspaceId), x, y, touchType);
 }
 
-export function sendKey(workspaceId: string, keycode: number, direction: string): void {
-  const session = sessions.get(workspaceId);
-  if (!session) throw new ConflictError("No active simulator session");
-
-  const helperPath = findSimBridgePath();
-  if (!helperPath) throw new Error("simbridge not found");
-
-  execFile(
-    helperPath,
-    [
-      JSON.stringify({
-        command: "key",
-        udid: session.udid,
-        keyCode: keycode,
-        direction,
-      }),
-    ],
-    { timeout: 5_000, env: SIM_ENV },
-    () => {
-      /* fire-and-forget */
-    }
-  );
+/** A key going down or up, as the client's keyboard reports it. */
+export function sendKey(workspaceId: string, keyCode: number, direction: "down" | "up"): void {
+  const payload = JSON.stringify({ keyCode, direction });
+  hidSocket(workspaceId).send(Buffer.concat([Buffer.from([0x05]), Buffer.from(payload)]));
 }
 
 export function sendScroll(
@@ -774,26 +593,16 @@ export function sendScroll(
   dx: number,
   dy: number
 ): void {
-  const session = sessions.get(workspaceId);
-  if (!session?.hidWs || session.hidWs.readyState !== WebSocket.OPEN) {
-    throw new Error("No HID connection available");
-  }
+  const ws = hidSocket(workspaceId);
   const endX = Math.max(0, Math.min(1, x + dx * 0.002));
   const endY = Math.max(0, Math.min(1, y + dy * 0.002));
-  sendTouchWs(session.hidWs, x, y, "began");
-  sendTouchWs(session.hidWs, endX, endY, "moved");
-  sendTouchWs(session.hidWs, endX, endY, "ended");
+  sendTouchWs(ws, x, y, "began");
+  sendTouchWs(ws, endX, endY, "moved");
+  sendTouchWs(ws, endX, endY, "ended");
 }
 
 export function sendButton(workspaceId: string, buttonType: string): void {
-  const session = sessions.get(workspaceId);
-  if (session?.hidWs && session.hidWs.readyState === WebSocket.OPEN) {
-    sendButtonWs(session.hidWs, buttonType);
-  } else if (session?.udid) {
-    execFileAsync("xcrun", ["simctl", "io", session.udid, "send", "home"], { env: SIM_ENV }).catch(
-      () => {}
-    );
-  }
+  sendButtonWs(hidSocket(workspaceId), buttonType);
 }
 
 // ---------------------------------------------------------------------------
@@ -869,19 +678,6 @@ async function waitForInspector(socketPath: string): Promise<void> {
   );
 }
 
-async function callSimBridgeJson<T>(request: Record<string, unknown>): Promise<T> {
-  const bridgePath = findSimBridgePath();
-  if (!bridgePath) throw new Error("simbridge binary not found. Run `bun install`.");
-  const { stdout } = await execFileAsync(bridgePath, [JSON.stringify(request)], {
-    timeout: 30_000,
-    env: SIM_ENV,
-    maxBuffer: 20 * 1024 * 1024,
-  });
-  const parsed = JSON.parse(stdout) as { success: boolean; data?: T; error?: { message?: string } };
-  if (!parsed.success) throw new Error(parsed.error?.message ?? "simbridge request failed");
-  return parsed.data as T;
-}
-
 function accessibilityNodeToInspectorNode(
   node: AccessibilityNodeLike,
   indexPath: string,
@@ -919,16 +715,17 @@ function accessibilityNodeToInspectorNode(
 async function accessibilitySnapshot(workspaceId: string): Promise<InspectorSnapshot> {
   const session = sessions.get(workspaceId);
   if (!session) throw new ConflictError("No active simulator session");
-  const data = await callSimBridgeJson<{ elements?: AccessibilityNodeLike[] }>({
-    command: "describe-ui",
-    udid: session.udid,
-  });
+  const { callSimBridge } = await engine();
+  const { data } = (await callSimBridge(
+    { command: "describe-ui", udid: session.udid },
+    { env: createBackendChildEnv() }
+  )) as { data?: { elements?: AccessibilityNodeLike[] } };
   return {
     bundleId: "accessibility-current-ui",
     pid: 0,
     timestamp: Date.now(),
     source: "accessibility",
-    roots: (data.elements ?? []).map((node, index) =>
+    roots: (data?.elements ?? []).map((node, index) =>
       accessibilityNodeToInspectorNode(node, String(index))
     ),
   };
@@ -947,7 +744,7 @@ export async function startInspector(
     return accessibilitySnapshot(workspaceId);
   }
 
-  const inspectorPath = findSimInspectorPath();
+  const inspectorPath = (await engine()).findInspectorPath();
   if (!inspectorPath) {
     throw new Error("siminspector dylib not found. Run `bun run prepare:device-use`.");
   }
@@ -959,15 +756,15 @@ export async function startInspector(
     /* ignore */
   }
 
-  const env = {
-    ...SIM_ENV,
-    SIMCTL_CHILD_DYLD_INSERT_LIBRARIES: inspectorPath,
-    SIMCTL_CHILD_DEUS_SIMINSPECTOR_SOCKET: socketPath,
-  };
-  const { stdout } = await execFileAsync(
-    "xcrun",
-    ["simctl", "launch", "--terminate-running-process", session.udid, bundleId],
-    { env, timeout: 30_000 }
+  const { stdout } = await simctl(
+    ["launch", "--terminate-running-process", session.udid, bundleId],
+    {
+      timeout: 30_000,
+      env: {
+        SIMCTL_CHILD_DYLD_INSERT_LIBRARIES: inspectorPath,
+        SIMCTL_CHILD_DEUS_SIMINSPECTOR_SOCKET: socketPath,
+      },
+    }
   );
 
   session.appBundleId = bundleId;
@@ -995,11 +792,7 @@ export async function takeScreenshot(workspaceId: string): Promise<number[]> {
   if (!session) throw new ConflictError("No active simulator session");
 
   const outputPath = join(tmpdir(), `deus-sim-screenshot-${Date.now()}.jpeg`);
-  await execFileAsync(
-    "xcrun",
-    ["simctl", "io", session.udid, "screenshot", "--type", "jpeg", outputPath],
-    { env: SIM_ENV }
-  );
+  await simctl(["io", session.udid, "screenshot", "--type", "jpeg", outputPath]);
 
   const { readFile, unlink } = await import("fs/promises");
   const buf = await readFile(outputPath);
@@ -1038,7 +831,7 @@ export async function buildAndRun(
     const { stdout: listOut } = await execFileAsync(
       "xcodebuild",
       [...projectArg, "-list", "-json"],
-      { cwd: workspacePath, timeout: 30_000, env: SIM_ENV }
+      { cwd: workspacePath, timeout: 30_000, env: await simEnv() }
     );
     const parsed = JSON.parse(listOut) as {
       workspace?: { schemes?: string[] };
@@ -1072,11 +865,9 @@ export async function buildAndRun(
   // Stream build logs line by line. Chunk boundaries are arbitrary, so we
   // keep a carry buffer per stream and only emit completed lines — avoids
   // truncated or merged log lines in the frontend.
+  const env = await simEnv();
   await new Promise<void>((resolve, reject) => {
-    const child = spawn("xcodebuild", buildArgs, {
-      cwd: workspacePath,
-      env: SIM_ENV,
-    });
+    const child = spawn("xcodebuild", buildArgs, { cwd: workspacePath, env });
 
     const makeLineBuffer = () => {
       let buffer = "";
@@ -1115,7 +906,7 @@ export async function buildAndRun(
       "-showBuildSettings",
       "-json",
     ],
-    { cwd: workspacePath, timeout: 60_000, env: SIM_ENV, maxBuffer: 20 * 1024 * 1024 }
+    { cwd: workspacePath, timeout: 60_000, env, maxBuffer: 20 * 1024 * 1024 }
   );
   const settings = JSON.parse(settingsOut) as Array<{ buildSettings?: Record<string, string> }>;
   const s = settings[0]?.buildSettings ?? {};
@@ -1141,11 +932,8 @@ export async function buildAndRun(
   if (!bundleId) throw new Error(`Empty CFBundleIdentifier in ${appPath}/Info.plist`);
 
   // Install and launch
-  await execFileAsync("xcrun", ["simctl", "install", session.udid, appPath], {
-    env: SIM_ENV,
-    timeout: 60_000,
-  });
-  await execFileAsync("xcrun", ["simctl", "launch", session.udid, bundleId], { env: SIM_ENV });
+  await simctl(["install", session.udid, appPath], { timeout: 60_000 });
+  await simctl(["launch", session.udid, bundleId]);
 
   const appName = appPath.split("/").pop()?.replace(".app", "") ?? "App";
 
@@ -1164,11 +952,7 @@ export async function buildAndRun(
 
 export async function reconcile(): Promise<void> {
   try {
-    const { stdout } = await execFileAsync(
-      "xcrun",
-      ["simctl", "list", "devices", "available", "-j"],
-      { env: SIM_ENV, timeout: 10_000 }
-    );
+    const { stdout } = await simctl(["list", "devices", "available", "-j"], { timeout: 10_000 });
     const parsed = JSON.parse(stdout) as {
       devices: Record<string, Array<{ udid: string; state: string }>>;
     };
@@ -1195,15 +979,7 @@ export function destroyAll(): void {
         /* */
       }
   }
-  for (const stream of activeStreams.values()) {
-    try {
-      process.kill(stream.pid, "SIGTERM");
-    } catch {
-      /* */
-    }
-  }
+  for (const udid of [...activeStreams.keys()]) killStream(udid);
   sessions.clear();
-  activeStreams.clear();
   startingUdids.clear();
-  reservedPorts.clear();
 }

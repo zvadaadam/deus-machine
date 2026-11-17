@@ -22,6 +22,7 @@ const sim = vi.hoisted(() => ({
   inspectorSnapshot: vi.fn(),
   buildAndRun: vi.fn(),
   getContextForWorkspace: vi.fn(),
+  simctl: vi.fn(),
 }));
 vi.mock("../../../src/services/simulator-context", () => sim);
 
@@ -36,8 +37,9 @@ vi.mock("../../../src/services/agent/cloud/driver", () => cloud);
 const mockPublish = vi.hoisted(() => vi.fn());
 vi.mock("../../../src/services/streams", () => ({ publish: mockPublish }));
 
-const execFile = vi.hoisted(() => vi.fn());
-vi.mock("node:child_process", () => ({ execFile }));
+vi.mock("../../../src/middleware/workspace-loader", () => ({
+  loadWorkspace: (id: string) => ({ workspacePath: `/repo/${id}` }),
+}));
 
 import handlers from "../../../src/api/simulator";
 
@@ -70,10 +72,7 @@ beforeEach(() => {
   sim.startStream.mockResolvedValue(undefined);
   sim.buildAndRun.mockResolvedValue({ bundle_id: "b", name: "n", app_path: "/p" });
   sim.getContextForWorkspace.mockReturnValue({ udid: "UDID-1", streaming: true });
-  execFile.mockImplementation(
-    (_file: string, _args: string[], done: (err: Error | null, out: unknown) => void) =>
-      done(null, { stdout: "", stderr: "" })
-  );
+  sim.simctl.mockResolvedValue({ stdout: "" });
 });
 
 describe("which simulator operations are reads", () => {
@@ -141,15 +140,13 @@ describe("the local simulator's reads", () => {
     await expect(run(api.simListDevices)).resolves.toEqual({ devices });
   });
 
-  it("says whether a folder holds an Xcode project", async () => {
+  it("says whether the workspace's folder holds an Xcode project", async () => {
     sim.hasXcodeProject.mockResolvedValue(true);
-    await expect(run(api.simHasXcodeProject, { workspacePath: "/repo/ws" })).resolves.toEqual({
-      hasProject: true,
-    });
-    expect(sim.hasXcodeProject).toHaveBeenCalledWith("/repo/ws");
+    await expect(run(api.simHasXcodeProject, WS)).resolves.toEqual({ hasProject: true });
+    expect(sim.hasXcodeProject).toHaveBeenCalledWith("/repo/ws-1");
     await expect(run(api.simHasXcodeProject, {} as never)).rejects.toMatchObject({
       statusCode: 400,
-      message: "simHasXcodeProject requires workspacePath",
+      message: "simHasXcodeProject requires workspaceId",
     });
   });
 
@@ -291,17 +288,20 @@ describe("inspecting", () => {
 describe("build and run", () => {
   it("answers before the build ends and names the scheme when one is given", async () => {
     sim.buildAndRun.mockReturnValue(new Promise(() => {}));
-    await expect(
-      run(api.simBuildAndRun, { ...WS, workspacePath: "/repo/ws", scheme: "App" })
-    ).resolves.toBeUndefined();
-    expect(sim.buildAndRun).toHaveBeenCalledWith("ws-1", "/repo/ws", "App");
+    await expect(run(api.simBuildAndRun, { ...WS, scheme: "App" })).resolves.toBeUndefined();
+    expect(sim.buildAndRun).toHaveBeenCalledWith("ws-1", "/repo/ws-1", "App");
     expect(mockPublish).not.toHaveBeenCalled();
+  });
+
+  it("refuses a relayed caller before anything is built", async () => {
+    await expect(overRelay(api.simBuildAndRun, WS)).rejects.toThrow("remote relay");
+    expect(sim.buildAndRun).not.toHaveBeenCalled();
   });
 
   it("tells the clients following that workspace's simulator of a failed build", async () => {
     sim.buildAndRun.mockRejectedValue(new Error("xcodebuild exited with code 65"));
-    await run(api.simBuildAndRun, { ...WS, workspacePath: "/repo/ws" });
-    expect(sim.buildAndRun).toHaveBeenCalledWith("ws-1", "/repo/ws", undefined);
+    await run(api.simBuildAndRun, WS);
+    expect(sim.buildAndRun).toHaveBeenCalledWith("ws-1", "/repo/ws-1", undefined);
     await settle();
     expect(events()).toEqual([
       {
@@ -315,8 +315,8 @@ describe("build and run", () => {
     sim.buildAndRun.mockImplementation(async (workspaceId: string) => {
       throw new Error(`build failed in ${workspaceId}`);
     });
-    await run(api.simBuildAndRun, { workspaceId: "ws-1", workspacePath: "/repo/ws" });
-    await run(api.simBuildAndRun, { workspaceId: "ws-2", workspacePath: "/repo/other" });
+    await run(api.simBuildAndRun, { workspaceId: "ws-1" });
+    await run(api.simBuildAndRun, { workspaceId: "ws-2" });
     await settle();
     expect(events()).toEqual([
       {
@@ -341,11 +341,7 @@ describe("apps on the streaming simulator", () => {
   ] as const)("runs simctl %s on the workspace's device", async (verb, op) => {
     await expect(run(op, APP)).resolves.toBeUndefined();
     expect(sim.getContextForWorkspace).toHaveBeenCalledWith("ws-1");
-    expect(execFile).toHaveBeenCalledExactlyOnceWith(
-      "xcrun",
-      ["simctl", verb, "UDID-1", "com.example.app"],
-      expect.any(Function)
-    );
+    expect(sim.simctl).toHaveBeenCalledExactlyOnceWith([verb, "UDID-1", "com.example.app"]);
   });
 
   it("refuses when the workspace is not streaming a simulator", async () => {
@@ -353,13 +349,11 @@ describe("apps on the streaming simulator", () => {
     for (const op of [api.simLaunchApp, api.simTerminateApp, api.simUninstallApp]) {
       await expect(run(op, APP)).rejects.toThrow("No active simulator session");
     }
-    expect(execFile).not.toHaveBeenCalled();
+    expect(sim.simctl).not.toHaveBeenCalled();
   });
 
   it("reports simctl's own failure", async () => {
-    execFile.mockImplementation((_file: string, _args: string[], done: (err: Error) => void) =>
-      done(new Error("found nothing to terminate"))
-    );
+    sim.simctl.mockRejectedValue(new Error("found nothing to terminate"));
     await expect(run(api.simTerminateApp, APP)).rejects.toThrow("found nothing to terminate");
   });
 });
