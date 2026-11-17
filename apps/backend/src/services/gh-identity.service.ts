@@ -4,6 +4,7 @@ import type { GhCliStatus } from "@shared/types/github";
 import { spawn } from "node:child_process";
 import os from "node:os";
 import { AppError } from "../lib/errors";
+import { trackProcessGroup } from "../lib/process-groups";
 import { ghChildEnv, runGh } from "./gh.service";
 
 interface GhApiUser {
@@ -98,8 +99,11 @@ export function startGhLogin(): Promise<{ code: string; url: string }> {
       env: ghChildEnv(),
       timeout: 10 * 60_000,
       stdio: ["ignore", "pipe", "pipe"],
+      // Its own group, so the backend's shutdown stops it (stopProcessGroups).
+      detached: true,
     }
   );
+  const untrack = trackProcessGroup(child.pid);
   let output = "";
   let showCode!: (value: { code: string; url: string }) => void;
   let failCode!: (error: Error) => void;
@@ -116,6 +120,7 @@ export function startGhLogin(): Promise<{ code: string; url: string }> {
       );
       child.on("close", (status) => {
         entry.finished = true;
+        untrack();
         const last = output.trim().split("\n").pop();
         if (status !== 0) {
           return fail(
@@ -130,10 +135,15 @@ export function startGhLogin(): Promise<{ code: string; url: string }> {
     }),
     finished: false,
   };
+  // Only whole lines: gh's own code line, and its line naming the device page on github.com.
   const read = (chunk: Buffer) => {
     output += chunk.toString();
-    const code = /\b[A-Z0-9]{4}-[A-Z0-9]{4}\b/.exec(output)?.[0];
-    const url = /https:\/\/\S+/.exec(output)?.[0];
+    const lines = output.split("\n").slice(0, -1);
+    const find = (line: RegExp) => lines.map((text) => line.exec(text.trim())?.[1]).find(Boolean);
+    const code = find(/one-time code\W+([A-Z0-9]{4}-[A-Z0-9]{4})\b/i);
+    const url = find(
+      /^Open this URL to continue in your web browser: (https:\/\/github\.com\/\S+)$/
+    );
     if (code && url) showCode({ code, url });
   };
   child.stdout.on("data", read);

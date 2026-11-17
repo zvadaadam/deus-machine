@@ -4,6 +4,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { stopProcessGroups } from "../../../src/lib/process-groups";
 import { ghLoginDone, logoutGh, startGhLogin } from "../../../src/services/gh-identity.service";
 
 let dir: string;
@@ -35,9 +36,13 @@ afterEach(() => {
 });
 
 describe("GitHub CLI sign-in", () => {
-  it("answers with gh's one-time code and page, then waits for gh to finish", async () => {
-    stubGh(`echo "! One-time code (AB12-CD34) copied to clipboard" >&2
-echo "Open this URL to continue in your web browser: https://github.com/login/device" >&2
+  it("answers with gh's one-time code and page, from whole lines, then waits for gh", async () => {
+    // Another address first, and the page's line arriving in two pieces.
+    stubGh(`echo "! See https://example.com/notice" >&2
+echo "! One-time code (AB12-CD34) copied to clipboard" >&2
+printf "Open this URL to continue in your web browser: https://git" >&2
+sleep 0.2
+echo "hub.com/login/device" >&2
 sleep 0.2`);
     await expect(startGhLogin()).resolves.toEqual({
       code: "AB12-CD34",
@@ -61,5 +66,15 @@ sleep 0.2`);
     stubGh("true");
     await logoutGh();
     expect(calls().at(-1)).toBe("auth logout --hostname github.com --user octo");
+  });
+
+  // Last: the backend's shutdown starts no group after it.
+  it("stops with the backend", async () => {
+    stubGh(`echo "! First copy your one-time code: AB12-CD34" >&2
+echo "Open this URL to continue in your web browser: https://github.com/login/device" >&2
+exec sleep 30`);
+    await startGhLogin();
+    stopProcessGroups();
+    await expect(ghLoginDone()).rejects.toThrow("did not complete");
   });
 });
