@@ -17,8 +17,4 @@ if (!runtimeKey) {
   process.exit(0);
 }
 
-await prepareAgentClis({
-  runtimeKeys: [runtimeKey],
-  verifyRunnable: process.env.DEUS_VERIFY_AGENT_CLI_RUNNABLE === "1",
-  writeManifest: false,
-});
+await prepareAgentClis({ runtimeKeys: [runtimeKey] });

@@ -1,7 +1,12 @@
 const fs = require("node:fs");
 const crypto = require("node:crypto");
 const path = require("node:path");
-const { execFileSync, spawn, spawnSync } = require("node:child_process");
+const { execFileSync } = require("node:child_process");
+const {
+  DEVICE_USE_HELPER_NAMES,
+  assertNoBuildLocalInstallName,
+  packagedSimulatorDir,
+} = require("./lib/device-use-payloads.cjs");
 
 const ARCH_BY_BUILDER_VALUE = new Map([
   [1, "x64"],
@@ -9,33 +14,25 @@ const ARCH_BY_BUILDER_VALUE = new Map([
   ["x64", "x64"],
   ["arm64", "arm64"],
 ]);
-const FILE_ARCH_BY_RUNTIME_KEY = new Map([
-  ["darwin-x64", "x86_64"],
-  ["darwin-arm64", "arm64"],
-  ["linux-x64", "x86-64"],
+// What `file` says of a target's executables: the targets Deus packages.
+const FILE_TYPE_BY_RUNTIME_KEY = new Map([
+  ["darwin-x64", ["Mach-O 64-bit", "x86_64"]],
+  ["darwin-arm64", ["Mach-O 64-bit", "arm64"]],
+  ["linux-x64", ["ELF 64-bit", "x86-64"]],
 ]);
-const FILE_FORMAT_BY_RUNTIME_KEY = new Map([
-  ["darwin-x64", "Mach-O 64-bit"],
-  ["darwin-arm64", "Mach-O 64-bit"],
-  ["linux-x64", "ELF 64-bit"],
-]);
-const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
-const REQUIRED_RUNTIME_ENTITLEMENTS = [
-  "com.apple.security.cs.allow-jit",
-  "com.apple.security.cs.allow-unsigned-executable-memory",
-  "com.apple.security.cs.disable-library-validation",
-];
-const MAC_CODESIGN_PAGE_SIZE = "4096";
-const PACKAGED_VERSION_TIMEOUT_MS = 20_000;
-const PACKAGED_VERSION_STOP_TIMEOUT_MS = 5_000;
 const PACKAGE_RECOVERY_TIMEOUT_MS = 60_000;
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
-const PACKAGED_VERSION_ENV_ALLOWLIST = ["LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "TZ"];
 
-function runtimeKeyForContext(context) {
-  const arch = ARCH_BY_BUILDER_VALUE.get(context.arch);
-  if (!context.electronPlatformName || !arch) return null;
-  return `${context.electronPlatformName}-${arch}`;
+// The executables Resources/bin ships. The packaged runtime smoke runs each of
+// them; electron-builder.yml's filters, which cannot read this, copy them.
+const BUNDLED_BINARIES = ["deus-runtime", "gh", "codex", "claude", "rg", "agent-browser"];
+
+function codexHelpers(runtimeKey) {
+  return [
+    "codex-runtime/bin/codex-code-mode-host",
+    "codex-runtime/codex-resources/zsh/bin/zsh",
+    ...(runtimeKey.startsWith("linux-") ? ["codex-runtime/codex-resources/bwrap"] : []),
+  ];
 }
 
 function resourcesDirForContext(context) {
@@ -83,147 +80,6 @@ function pruneCanvasRuntimeBinaries(context) {
   return { removed, kept };
 }
 
-function assertExecutable(filePath, label) {
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Missing packaged ${label}: ${filePath}`);
-  }
-  const stat = fs.statSync(filePath);
-  if (!stat.isFile()) {
-    throw new Error(`Packaged ${label} is not a regular file: ${filePath}`);
-  }
-  if ((stat.mode & 0o111) === 0) {
-    throw new Error(`Packaged ${label} is not executable: ${filePath}`);
-  }
-}
-
-function verifyExecutableFileFormat(filePath, label, expectedFileFormat, expectedFileArch) {
-  const fileOutput = require("node:child_process")
-    .execFileSync("file", ["-L", filePath], {
-      encoding: "utf8",
-      timeout: 20_000,
-      stdio: ["ignore", "pipe", "pipe"],
-    })
-    .trim();
-  if (
-    !fileOutput.includes(expectedFileFormat) ||
-    (expectedFileArch && !fileOutput.includes(expectedFileArch))
-  ) {
-    throw new Error(`Packaged ${label} has unexpected file type: ${fileOutput}`);
-  }
-  console.log(`[runtime] packaged ${label}: ${fileOutput}`);
-}
-
-function verifyCodeSignature(filePath, label) {
-  require("node:child_process").execFileSync("codesign", ["--verify", "--verbose=2", filePath], {
-    encoding: "utf8",
-    timeout: 20_000,
-    stdio: ["ignore", "ignore", "pipe"],
-  });
-  console.log(`[runtime] packaged ${label} code signature verified`);
-}
-
-function verifyCodeSignaturePageSize(filePath, label, expectedPageSize = MAC_CODESIGN_PAGE_SIZE) {
-  const result = require("node:child_process").spawnSync(
-    "codesign",
-    ["-dv", "--verbose=4", filePath],
-    {
-      encoding: "utf8",
-      timeout: 20_000,
-      stdio: ["ignore", "pipe", "pipe"],
-    }
-  );
-  if (result.error) {
-    throw new Error(
-      `Unable to inspect packaged ${label} code signature: ${
-        result.error.code || result.error.message
-      }`
-    );
-  }
-  if (result.status !== 0) {
-    throw new Error(
-      `Unable to inspect packaged ${label} code signature: ${result.stderr || result.stdout}`
-    );
-  }
-  const output = `${result.stdout}\n${result.stderr}`;
-  if (!output.includes(`Page size=${expectedPageSize}`)) {
-    throw new Error(
-      `Packaged ${label} code signature page size mismatch; expected ${expectedPageSize}`
-    );
-  }
-  console.log(`[runtime] packaged ${label} code signature page size verified`);
-}
-
-function verifyRuntimeEntitlements(filePath) {
-  const result = require("node:child_process").spawnSync(
-    "codesign",
-    ["-d", "--entitlements", ":-", filePath],
-    {
-      encoding: "utf8",
-      timeout: 20_000,
-      stdio: ["ignore", "pipe", "pipe"],
-    }
-  );
-  if (result.error) {
-    throw new Error(
-      `Unable to read packaged Deus runtime entitlements: ${
-        result.error.code || result.error.message
-      }`
-    );
-  }
-  if (result.status !== 0) {
-    throw new Error(
-      `Unable to read packaged Deus runtime entitlements: ${result.stderr || result.stdout}`
-    );
-  }
-  const entitlements = `${result.stdout}\n${result.stderr}`;
-  for (const entitlement of REQUIRED_RUNTIME_ENTITLEMENTS) {
-    if (!entitlements.includes(entitlement)) {
-      throw new Error(`Packaged Deus runtime is missing ${entitlement} entitlement`);
-    }
-  }
-  console.log("[runtime] packaged Deus runtime entitlements verified");
-}
-
-function verifyRuntimeSystemDylibs(filePath) {
-  const output = require("node:child_process").execFileSync("otool", ["-L", filePath], {
-    encoding: "utf8",
-    timeout: 20_000,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  const unexpected = output
-    .split(/\r?\n/)
-    .slice(1)
-    .map((line) => line.trim().split(/\s+/)[0])
-    .filter(Boolean)
-    .filter(
-      (dependency) =>
-        !dependency.startsWith("/usr/lib/") && !dependency.startsWith("/System/Library/")
-    );
-  if (unexpected.length > 0) {
-    throw new Error(
-      `Packaged Deus runtime has non-system dylib dependencies: ${unexpected.join(", ")}`
-    );
-  }
-  console.log("[runtime] packaged Deus runtime dylib dependencies verified");
-}
-
-function readJsonFile(filePath, label) {
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Missing packaged ${label}: ${filePath}`);
-  }
-  try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
-  } catch (error) {
-    throw new Error(
-      `Unable to read packaged ${label}: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-}
-
-function hashFile(filePath) {
-  return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
-}
-
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -260,7 +116,8 @@ function packageTarballUrl(packageName, version) {
 
 function verifyIntegrity(filePath, integrity, url) {
   const [algorithm, expected] = integrity.split("-");
-  if (!algorithm || !expected) throw new Error(`Unsupported integrity string for ${url}: ${integrity}`);
+  if (!algorithm || !expected)
+    throw new Error(`Unsupported integrity string for ${url}: ${integrity}`);
   const actual = crypto.createHash(algorithm).update(fs.readFileSync(filePath)).digest("base64");
   if (actual !== expected) throw new Error(`Integrity mismatch for ${url}: expected ${integrity}`);
 }
@@ -308,436 +165,102 @@ function ensureCanvasRuntimePackage(context) {
   }
 }
 
-function verifyManifestFileEntry(entry, filePath, label, options = {}) {
-  assertExecutable(filePath, label);
-  if (!entry || typeof entry !== "object") {
-    throw new Error(`Packaged manifest is missing ${label}`);
-  }
-  if (options.verifyFileHashes === false) return;
-  if (entry.sha256 !== hashFile(filePath)) {
-    throw new Error(`Packaged ${label} hash does not match its manifest entry`);
-  }
-  if (entry.size !== fs.statSync(filePath).size) {
-    throw new Error(`Packaged ${label} size does not match its manifest entry`);
-  }
-}
-
-function codexHelpers(runtimeKey) {
-  return [
-    "codex-runtime/bin/codex-code-mode-host",
-    "codex-runtime/codex-resources/zsh/bin/zsh",
-    ...(runtimeKey?.startsWith("linux-") ? ["codex-runtime/codex-resources/bwrap"] : []),
-  ];
-}
-
-function verifyPackagedRuntimeManifests(binDir, targetArchOrRuntimeKey, options = {}) {
-  const runtimeKey = targetArchOrRuntimeKey
-    ? String(targetArchOrRuntimeKey).includes("-")
-      ? String(targetArchOrRuntimeKey)
-      : `darwin-${targetArchOrRuntimeKey}`
-    : null;
-  const runtimeManifest = readJsonFile(
-    path.join(binDir, "deus-runtime.json"),
-    "Deus runtime manifest"
-  );
-  const agentCliManifest = readJsonFile(path.join(binDir, "agent-clis.json"), "agent CLI manifest");
-  const ghCliManifest = readJsonFile(path.join(binDir, "gh-cli.json"), "GitHub CLI manifest");
-
-  if (runtimeManifest.version !== 1 || !Array.isArray(runtimeManifest.entries)) {
-    throw new Error("Packaged Deus runtime manifest has an unexpected shape");
-  }
-  if (agentCliManifest.version !== 1 || !Array.isArray(agentCliManifest.targets)) {
-    throw new Error("Packaged agent CLI manifest has an unexpected shape");
-  }
-  if (ghCliManifest.version !== 1 || !Array.isArray(ghCliManifest.targets)) {
-    throw new Error("Packaged GitHub CLI manifest has an unexpected shape");
-  }
-  if (runtimeKey && !runtimeManifest.entries.some((entry) => entry.runtimeKey === runtimeKey)) {
-    throw new Error(`Packaged Deus runtime manifest is missing ${runtimeKey}`);
-  }
-  if (runtimeKey) {
-    const runtimeEntry = runtimeManifest.entries.find((entry) => entry.runtimeKey === runtimeKey);
-    verifyManifestFileEntry(runtimeEntry, path.join(binDir, "deus-runtime"), "Deus runtime", {
-      verifyFileHashes: options.verifyFileHashes,
-    });
-
-    for (const tool of ["codex", "claude", "rg", "agent-browser", ...codexHelpers(runtimeKey)]) {
-      const entry = agentCliManifest.targets.find(
-        (candidate) => candidate.runtimeKey === runtimeKey && candidate.tool === tool
-      );
-      if (!entry) {
-        throw new Error(`Packaged agent CLI manifest is missing ${runtimeKey}/${tool}`);
-      }
-      verifyManifestFileEntry(entry, path.join(binDir, tool), `${tool} CLI`, {
-        verifyFileHashes: options.verifyFileHashes,
-      });
-    }
-    if (!fs.existsSync(path.join(binDir, "codex-runtime", "codex-package.json"))) {
-      throw new Error("Packaged Codex runtime is missing its package metadata");
-    }
-    for (const [alias, entry] of [["codex", "bin/codex"], ["rg", "codex-path/rg"]]) {
-      if (fs.realpathSync(path.join(binDir, alias)) !==
-          fs.realpathSync(path.join(binDir, "codex-runtime", entry))) {
-        throw new Error(`Packaged ${alias} must resolve inside the Codex package`);
-      }
-    }
-    const ghEntry = ghCliManifest.targets.find(
-      (entry) => entry.runtimeKey === runtimeKey && entry.tool === "gh"
-    );
-    if (!ghEntry) {
-      throw new Error(`Packaged GitHub CLI manifest is missing ${runtimeKey}/gh`);
-    }
-    verifyManifestFileEntry(ghEntry, path.join(binDir, "gh"), "GitHub CLI", {
-      verifyFileHashes: options.verifyFileHashes,
-    });
-  }
-
-  console.log("[runtime] packaged runtime manifests verified");
-}
-
-function verifyPackagedRuntimeExternalModules(resourcesDir, targetArchOrRuntimeKey, options = {}) {
-  const unpackedNodeModules = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
-  const requiredFiles = [
-    [
-      "@napi-rs/canvas package",
-      path.join(unpackedNodeModules, "@napi-rs", "canvas", "package.json"),
-    ],
-  ];
-  const nativePayloads = [];
-  const runtimeKey = targetArchOrRuntimeKey
-    ? String(targetArchOrRuntimeKey).includes("-")
-      ? String(targetArchOrRuntimeKey)
-      : `darwin-${targetArchOrRuntimeKey}`
-    : null;
-  const [targetPlatform, targetArch] = runtimeKey ? runtimeKey.split("-") : [];
-  const expectedFileArch = runtimeKey ? FILE_ARCH_BY_RUNTIME_KEY.get(runtimeKey) : undefined;
-  const expectedFileFormat = runtimeKey ? FILE_FORMAT_BY_RUNTIME_KEY.get(runtimeKey) : undefined;
-
-  if (runtimeKey && targetPlatform && targetArch) {
-    const canvasNativePackage =
-      targetPlatform === "linux" ? `canvas-linux-${targetArch}-gnu` : `canvas-darwin-${targetArch}`;
-    const canvasNativeFile =
-      targetPlatform === "linux"
-        ? `skia.linux-${targetArch}-gnu.node`
-        : `skia.darwin-${targetArch}.node`;
-    requiredFiles.push([
-      `@napi-rs/canvas native package for ${runtimeKey}`,
-      path.join(unpackedNodeModules, "@napi-rs", canvasNativePackage, "package.json"),
-    ]);
-    requiredFiles.push([
-      `@napi-rs/canvas native binding for ${runtimeKey}`,
-      path.join(unpackedNodeModules, "@napi-rs", canvasNativePackage, canvasNativeFile),
-    ]);
-    nativePayloads.push([
-      `@napi-rs/canvas native binding for ${runtimeKey}`,
-      path.join(unpackedNodeModules, "@napi-rs", canvasNativePackage, canvasNativeFile),
-    ]);
-
-    const napiRsRoot = path.join(unpackedNodeModules, "@napi-rs");
-    const expectedCanvasPackage = canvasNativePackage;
-    const staleCanvasPackages = fs.existsSync(napiRsRoot)
-      ? fs
-          .readdirSync(napiRsRoot, { withFileTypes: true })
-          .filter((entry) => entry.isDirectory())
-          .map((entry) => entry.name)
-          .filter((name) => name.startsWith("canvas-") && name !== expectedCanvasPackage)
-      : [];
-    if (staleCanvasPackages.length > 0) {
-      throw new Error(
-        `Packaged runtime still contains non-target @napi-rs/canvas native packages: ${staleCanvasPackages.join(
-          ", "
-        )}. Keep only @napi-rs/${expectedCanvasPackage} for ${runtimeKey}.`
-      );
-    }
-  }
-
-  for (const [label, filePath] of requiredFiles) {
-    if (!fs.existsSync(filePath)) {
-      throw new Error(
-        `Missing unpacked runtime external module ${label}: ${filePath}. ` +
-          "Bun-compiled deus-runtime cannot rely on Electron app.asar module resolution."
-      );
-    }
-  }
-
-  if (options.verifyNativePayloads !== false) {
-    for (const [label, filePath] of nativePayloads) {
-      verifyExecutableFileFormat(filePath, label, expectedFileFormat || "Mach-O 64-bit", expectedFileArch);
-      if (options.verifyNativePayloadSignatures !== false) {
-        if (runtimeKey?.startsWith("darwin-")) verifyCodeSignature(filePath, label);
-      }
-    }
-  }
-
-  console.log("[runtime] packaged runtime external modules verified");
-}
-
-function validateVersionOutput(label, output) {
-  if (!output) throw new Error(`Packaged ${label} --version produced no output`);
-  if (label === "Deus runtime" && !/^deus-runtime \d+\.\d+\.\d+ /.test(output)) {
-    throw new Error(`Packaged ${label} --version produced unexpected output: ${output}`);
-  }
-  if (label === "GitHub CLI" && !/^gh version \d+\.\d+\.\d+/m.test(output)) {
-    throw new Error(`Packaged ${label} --version produced unexpected output: ${output}`);
-  }
-  if (label === "Codex CLI" && !/\b\d+\.\d+\.\d+\b/.test(output)) {
-    throw new Error(`Packaged ${label} --version produced unexpected output: ${output}`);
-  }
-  if (label === "Claude CLI" && !/(Claude Code|\b\d+\.\d+\.\d+\b)/.test(output)) {
-    throw new Error(`Packaged ${label} --version produced unexpected output: ${output}`);
-  }
-  if (label === "Codex ripgrep helper" && !/^ripgrep \d+\.\d+\.\d+/m.test(output)) {
-    throw new Error(`Packaged ${label} --version produced unexpected output: ${output}`);
-  }
-}
-
-function runDiagnostic(command, args) {
-  const result = spawnSync(command, args, {
-    encoding: "utf8",
-    timeout: 20_000,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
-  if (result.error) {
-    return [result.error.code || result.error.message, output].filter(Boolean).join("\n");
-  }
-  if (result.status !== 0) {
-    return output || `${command} exited with status ${result.status}`;
-  }
-  return output;
-}
-
-function packagedExecutableDiagnostics(executablePath) {
-  if (process.platform !== "darwin") return "";
-  return [
-    `file: ${runDiagnostic("file", [executablePath])}`,
-    `codesign: ${runDiagnostic("codesign", ["-dv", "--verbose=4", executablePath])}`,
-    `spctl: ${runDiagnostic("spctl", ["--assess", "--type", "execute", "--verbose=4", executablePath])}`,
-    `xattr: ${runDiagnostic("xattr", ["-l", executablePath]) || "none"}`,
-  ].join("\n");
-}
-
-function macExecutionPolicyHint(diagnostics) {
-  if (process.platform !== "darwin") return "";
-  if (!/spctl:[\s\S]*rejected/.test(diagnostics)) return "";
-  if (!/com\.apple\.(provenance|quarantine)/.test(diagnostics)) return "";
-
-  return [
-    "",
-    "macOS rejected this executable before its --version command produced output.",
-    "Verify runnable packaged binaries on a notarized artifact or a macOS host that allows generated/copied Mach-O binaries to launch.",
-  ].join("\n");
-}
-
-function killChildTree(child, signal) {
-  if (process.platform !== "win32" && child.pid) {
-    try {
-      process.kill(-child.pid, signal);
-      return;
-    } catch {
-      // Fall back to the direct child if process-group termination is unavailable.
-    }
-  }
-  child.kill(signal);
-}
-
-function stopVersionChild(child) {
-  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
-
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(forceTimer);
-      resolve();
-    };
-    const forceTimer = setTimeout(() => {
-      if (child.exitCode === null && child.signalCode === null) killChildTree(child, "SIGKILL");
-      child.stdout?.destroy();
-      child.stderr?.destroy();
-      child.unref?.();
-      finish();
-    }, PACKAGED_VERSION_STOP_TIMEOUT_MS);
-    child.once("exit", finish);
-    killChildTree(child, "SIGTERM");
-  });
-}
-
-async function runPackagedVersionCheck(label, executablePath, binDir) {
-  const env = {
-    DEUS_BUNDLED_BIN_DIR: binDir,
-    PATH: [binDir, ...PACKAGED_SYSTEM_PATHS].join(path.delimiter),
-  };
-  for (const key of PACKAGED_VERSION_ENV_ALLOWLIST) {
-    if (process.env[key]) env[key] = process.env[key];
-  }
-
-  const child = spawn(executablePath, ["--version"], {
-    detached: process.platform !== "win32",
-    env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
-  let stdout = "";
-  let stderr = "";
-
-  try {
-    await new Promise((resolve, reject) => {
-      let settled = false;
-      let exitCode = null;
-      let exitSignal = null;
-      const timeout = setTimeout(() => {
-        const diagnostics = packagedExecutableDiagnostics(executablePath);
-        const hint = macExecutionPolicyHint(diagnostics);
-        fail(
-          new Error(
-            `Packaged ${label} --version timed out after ${PACKAGED_VERSION_TIMEOUT_MS}ms stdout=${stdout
-              .trim()
-              .slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
-              diagnostics ? `\n${diagnostics}` : ""
-            }${hint}`
-          )
-        );
-      }, PACKAGED_VERSION_TIMEOUT_MS);
-
-      const fail = (error) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        reject(error);
-      };
-
-      child.stdout.on("data", (data) => {
-        stdout += data.toString();
-      });
-      child.stderr.on("data", (data) => {
-        stderr += data.toString();
-      });
-      child.on("error", (error) => {
-        const diagnostics = packagedExecutableDiagnostics(executablePath);
-        const hint = macExecutionPolicyHint(diagnostics);
-        fail(
-          new Error(
-            `Packaged ${label} --version failed to spawn: error=${
-              error.code || error.message
-            } stdout=${stdout.trim().slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
-              diagnostics ? `\n${diagnostics}` : ""
-            }${hint}`
-          )
-        );
-      });
-      child.on("exit", (code, signal) => {
-        exitCode = code;
-        exitSignal = signal;
-      });
-      child.on("close", (code, signal) => {
-        if (settled) return;
-        const finalCode = exitCode ?? code;
-        const finalSignal = exitSignal ?? signal;
-        if (finalCode === 0) {
-          settled = true;
-          clearTimeout(timeout);
-          resolve();
-          return;
-        }
-
-        const diagnostics = packagedExecutableDiagnostics(executablePath);
-        const hint = macExecutionPolicyHint(diagnostics);
-        fail(
-          new Error(
-            `Packaged ${label} --version failed: status=${finalCode} signal=${
-              finalSignal ?? "none"
-            } stdout=${stdout.trim().slice(-4000)} stderr=${stderr.trim().slice(-4000)}${
-              diagnostics ? `\n${diagnostics}` : ""
-            }${hint}`
-          )
-        );
-      });
-    });
-  } finally {
-    await stopVersionChild(child);
-  }
-
-  const output = stdout.trim();
-  validateVersionOutput(label, output);
-  console.log(`[runtime] packaged ${label}: ${output}`);
-}
-
-async function verifyPackagedAgentClis(context, options = {}) {
-  if (context.electronPlatformName !== "darwin" && context.electronPlatformName !== "linux") return;
-
+/**
+ * What no launch on the build machine shows, read from the packaged layout:
+ * every executable is there and built for its target (the x64 app is packaged
+ * on an arm64 runner), Codex is the version the engine runs (the engine runs
+ * whatever it is handed) with its aliases inside its package, deus-runtime
+ * links only system libraries, and the simulator helpers carry both
+ * architectures.
+ */
+function verifyPackagedLayout(context) {
+  const runtimeKey = `${context.electronPlatformName}-${ARCH_BY_BUILDER_VALUE.get(context.arch)}`;
+  const fileType = FILE_TYPE_BY_RUNTIME_KEY.get(runtimeKey);
+  if (!fileType) throw new Error(`Deus packages no runtime for ${runtimeKey}`);
+  const [platform, arch] = runtimeKey.split("-");
   const resourcesDir = context.resourcesDir ?? resourcesDirForContext(context);
   const binDir = path.join(resourcesDir, "bin");
-  const runtimeKey = runtimeKeyForContext(context);
-  const expectedFileArch = runtimeKey ? FILE_ARCH_BY_RUNTIME_KEY.get(runtimeKey) : undefined;
-  const expectedFileFormat = runtimeKey ? FILE_FORMAT_BY_RUNTIME_KEY.get(runtimeKey) : undefined;
-  verifyPackagedRuntimeManifests(binDir, runtimeKey, {
-    verifyFileHashes: options.verifyManifestHashes,
-  });
-  verifyPackagedRuntimeExternalModules(resourcesDir, runtimeKey, {
-    verifyNativePayloadSignatures: options.verifyNativePayloadSignatures,
-  });
-  const packagedExecutables = [
-    ["Deus runtime", path.join(binDir, "deus-runtime")],
-    ["GitHub CLI", path.join(binDir, "gh")],
-    ["Codex CLI", path.join(binDir, "codex")],
-    ["Claude CLI", path.join(binDir, "claude")],
-    ["Codex ripgrep helper", path.join(binDir, "rg")],
-    ["agent-browser CLI", path.join(binDir, "agent-browser")],
-    ...codexHelpers(runtimeKey).map((helper) => [helper, path.join(binDir, helper)]),
-  ];
+  const canvas =
+    platform === "linux"
+      ? `canvas-linux-${arch}-gnu/skia.linux-${arch}-gnu.node`
+      : `canvas-darwin-${arch}/skia.darwin-${arch}.node`;
+  const executables = [...BUNDLED_BINARIES, ...codexHelpers(runtimeKey)].map((name) =>
+    path.join(binDir, name)
+  );
+  for (const file of [
+    ...executables,
+    path.join(resourcesDir, "app.asar.unpacked", "node_modules", "@napi-rs", canvas),
+  ]) {
+    const description = execFileSync("file", ["-L", file], { encoding: "utf8" }).trim();
+    if (!fileType.every((token) => description.includes(token))) {
+      throw new Error(`Packaged ${file} is not ${fileType.join(" ")}: ${description}`);
+    }
+    if (executables.includes(file) && (fs.statSync(file).mode & 0o111) === 0) {
+      throw new Error(`Packaged ${file} is not executable`);
+    }
+  }
 
-  for (const [label, executablePath] of packagedExecutables) {
-    assertExecutable(executablePath, label);
-    verifyExecutableFileFormat(executablePath, label, expectedFileFormat || "Mach-O 64-bit", expectedFileArch);
-    if (context.electronPlatformName === "darwin" && options.verifyExecutableSignatures !== false) {
-      verifyCodeSignature(executablePath, label);
-      if (label === "Deus runtime") {
-        verifyCodeSignaturePageSize(executablePath, label);
+  const codex = JSON.parse(
+    fs.readFileSync(path.join(binDir, "codex-runtime", "codex-package.json"), "utf8")
+  );
+  const pinned = execFileSync(
+    "bun",
+    ["-e", 'console.log((await import("@zvada/agent-server/core")).DEFAULT_PINS.codex)'],
+    { cwd: PROJECT_ROOT, encoding: "utf8" }
+  ).trim();
+  if (codex.version !== pinned) {
+    throw new Error(
+      `Packaged Codex is ${codex.version}, but agent-server runs ${pinned}: run \`bun run build:runtime\``
+    );
+  }
+  // Codex finds its helpers and resources beside the executable an alias resolves to.
+  for (const [alias, entry] of [
+    ["codex", "bin/codex"],
+    ["rg", "codex-path/rg"],
+  ]) {
+    if (
+      fs.realpathSync(path.join(binDir, alias)) !==
+      fs.realpathSync(path.join(binDir, "codex-runtime", entry))
+    ) {
+      throw new Error(`Packaged ${alias} must resolve inside the Codex package`);
+    }
+  }
+
+  if (platform === "darwin") {
+    const foreignLibraries = execFileSync("otool", ["-L", path.join(binDir, "deus-runtime")], {
+      encoding: "utf8",
+    })
+      .split("\n")
+      .slice(1)
+      .map((line) => line.trim().split(/\s+/)[0])
+      .filter((library) => library && !/^\/(usr\/lib|System\/Library)\//.test(library));
+    if (foreignLibraries.length > 0) {
+      throw new Error(`Packaged deus-runtime links outside macOS: ${foreignLibraries.join(", ")}`);
+    }
+    const simulatorDir = packagedSimulatorDir(resourcesDir);
+    for (const name of Object.values(DEVICE_USE_HELPER_NAMES)) {
+      // One architecture a call: the lipo of macOS 27 reads a second one as a file.
+      for (const lipoArch of ["arm64", "x86_64"]) {
+        execFileSync("lipo", [path.join(simulatorDir, name), "-verify_arch", lipoArch], {
+          stdio: ["ignore", "ignore", "pipe"],
+        });
       }
     }
-    if (label === "Deus runtime" && context.electronPlatformName === "darwin") {
-      verifyRuntimeEntitlements(executablePath);
-      verifyRuntimeSystemDylibs(executablePath);
-    }
+    assertNoBuildLocalInstallName(
+      path.join(simulatorDir, DEVICE_USE_HELPER_NAMES.siminspector),
+      PROJECT_ROOT,
+      "Packaged siminspector"
+    );
   }
-
-  const targetArch = ARCH_BY_BUILDER_VALUE.get(context.arch);
-  if (
-    options.runVersionChecks === false ||
-    context.electronPlatformName !== process.platform ||
-    (targetArch && targetArch !== process.arch)
-  ) {
-    return;
-  }
-
-  for (const [label, executablePath] of [
-    ["Deus runtime", path.join(binDir, "deus-runtime")],
-    ["GitHub CLI", path.join(binDir, "gh")],
-    ["Codex CLI", path.join(binDir, "codex")],
-    ["Claude CLI", path.join(binDir, "claude")],
-    ["Codex ripgrep helper", path.join(binDir, "rg")],
-  ]) {
-    await runPackagedVersionCheck(label, executablePath, binDir);
-  }
+  console.log(`[runtime] packaged ${runtimeKey} layout verified`);
 }
 
 module.exports = async function afterPack(context) {
   ensureCanvasRuntimePackage(context);
   pruneCanvasRuntimeBinaries(context);
-  await verifyPackagedAgentClis(context, {
-    runVersionChecks: false,
-    verifyManifestHashes: true,
-    verifyExecutableSignatures: false,
-    verifyNativePayloadSignatures: false,
-  });
+  verifyPackagedLayout(context);
 };
 
-module.exports.ensureCanvasRuntimePackage = ensureCanvasRuntimePackage;
+module.exports.BUNDLED_BINARIES = BUNDLED_BINARIES;
 module.exports.pruneCanvasRuntimeBinaries = pruneCanvasRuntimeBinaries;
-module.exports.verifyPackagedRuntimeManifests = verifyPackagedRuntimeManifests;
-module.exports.verifyPackagedRuntimeExternalModules = verifyPackagedRuntimeExternalModules;
-module.exports.verifyPackagedAgentClis = verifyPackagedAgentClis;
-module.exports.verifyCodeSignaturePageSize = verifyCodeSignaturePageSize;
-module.exports.validateVersionOutput = validateVersionOutput;
+module.exports.verifyPackagedLayout = verifyPackagedLayout;

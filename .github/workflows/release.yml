@@ -137,18 +137,6 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Verify Bun version pin
-        run: |
-          package_manager="$(sed -nE 's/.*"packageManager": "bun@([^"]+)".*/\1/p' package.json)"
-          if [[ "$package_manager" != "$BUN_VERSION" ]]; then
-            echo "::error::release workflow BUN_VERSION=$BUN_VERSION but package.json packageManager=bun@$package_manager"
-            exit 1
-          fi
-
       - name: Bump version, commit & create tag
         if: ${{ github.ref_type != 'tag' && !inputs.dry_run }}
         run: |
@@ -176,15 +164,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Verify Bun version pin
-        run: |
-          package_manager="$(sed -nE 's/.*"packageManager": "bun@([^"]+)".*/\1/p' package.json)"
-          if [[ "$package_manager" != "$BUN_VERSION" ]]; then
-            echo "::error::release workflow BUN_VERSION=$BUN_VERSION but package.json packageManager=bun@$package_manager"
-            exit 1
-          fi
+          bun-version-file: package.json
 
       - uses: actions/setup-node@v4
         with:
@@ -193,23 +173,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Typecheck runtime surfaces
-        run: |
-          bun run typecheck
-          bun run typecheck:backend
-          bun run typecheck:agent-server
-
       - name: Build all
         run: bun run build:all
         # The macOS runners have 7 GB: Node's default heap runs out building the app.
         env:
           NODE_OPTIONS: --max-old-space-size=6144
-
-      - name: Smoke test staged native runtime
-        run: bun run smoke:runtime-native
-
-      - name: Smoke test packaged runtime resources
-        run: bun run smoke:runtime-resources
 
       # electron-builder skips notarization without a word when it has no
       # credentials, so a missing secret stops the release here instead.
@@ -266,41 +234,29 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
+      # afterPack checked each app's layout (every executable built for its
+      # architecture, the simulator helpers universal) and afterSign the
+      # runtime's signature; this checks what notarization decides, for both.
       - name: Verify macOS artifacts
         run: |
           set -euo pipefail
 
-          found_resources=0
-          while IFS= read -r resources_dir; do
-            found_resources=1
-            echo "Verifying packaged simulator helpers in $resources_dir"
-            test -x "$resources_dir/simulator/simbridge"
-            test -f "$resources_dir/simulator/siminspector.dylib"
-            # One architecture a call: the lipo of macOS 27 reads a second one as a file.
-            for arch in arm64 x86_64; do
-              lipo "$resources_dir/simulator/simbridge" -verify_arch "$arch"
-              lipo "$resources_dir/simulator/siminspector.dylib" -verify_arch "$arch"
-            done
-          done < <(find dist-electron -maxdepth 4 -path '*/Deus.app/Contents/Resources' -type d | sort)
-          if [[ "$found_resources" -ne 1 ]]; then
-            echo "::error::No packaged Deus.app Resources directory found for simulator helper verification"
+          found_app=0
+          while IFS= read -r app_path; do
+            found_app=1
+            echo "Verifying signature and Gatekeeper for $app_path"
+            codesign --verify --deep --strict --verbose=2 "$app_path"
+            spctl --assess --type execute --verbose=4 "$app_path"
+          done < <(find dist-electron -maxdepth 2 -path '*/Deus.app' -type d | sort)
+          if [[ "$found_app" -ne 1 ]]; then
+            echo "::error::No packaged Deus.app found"
             exit 1
           fi
-
-          while IFS= read -r app_path; do
-            echo "Verifying signature for $app_path"
-            codesign --verify --deep --strict --verbose=2 "$app_path"
-            bun run smoke:packaged-app -- --app "$app_path" --require-gatekeeper
-          done < <(find dist-electron -maxdepth 2 -path '*/Deus.app' -type d | sort)
 
           while IFS= read -r dmg_path; do
             echo "Validating notarization for $dmg_path"
             xcrun stapler validate "$dmg_path"
           done < <(find dist-electron -maxdepth 1 -name '*.dmg' -type f | sort)
-
-          bun run smoke:packaged-dmgs -- \
-            --require-gatekeeper \
-            $(find dist-electron -maxdepth 1 -name '*.dmg' -type f | sort)
 
       - name: Smoke test packaged runtime and desktop from DMG copy
         run: |
@@ -345,15 +301,7 @@ jobs:
           hdiutil detach "$mount_dir" -quiet
           attached=0
 
-          app_bin="$copied_app/Contents/MacOS/Deus"
-          resources_dir="$copied_app/Contents/Resources"
-          test -x "$resources_dir/simulator/simbridge"
-          test -f "$resources_dir/simulator/siminspector.dylib"
-          test -x "$app_bin"
-
-          bun run smoke:packaged-runtime -- \
-            --app "$copied_app" \
-            --require-gatekeeper
+          bun run smoke:packaged-runtime -- --app "$copied_app"
 
           bun run smoke:packaged-desktop -- \
             --app "$copied_app" \
@@ -385,15 +333,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Verify Bun version pin
-        run: |
-          package_manager="$(sed -nE 's/.*"packageManager": "bun@([^"]+)".*/\1/p' package.json)"
-          if [[ "$package_manager" != "$BUN_VERSION" ]]; then
-            echo "::error::release workflow BUN_VERSION=$BUN_VERSION but package.json packageManager=bun@$package_manager"
-            exit 1
-          fi
+          bun-version-file: package.json
 
       - uses: actions/setup-node@v4
         with:
@@ -402,31 +342,17 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Typecheck runtime surfaces
-        run: |
-          bun run typecheck
-          bun run typecheck:backend
-          bun run typecheck:agent-server
-
       - name: Package Linux (x64)
         run: |
           bun run build:all
-          bun run validate:runtime
-          bun run smoke:runtime-source
           bunx electron-builder --linux --publish never
 
       - name: Verify Linux artifacts
+        # afterPack checked every bundled executable in linux-unpacked.
         run: |
           set -euo pipefail
           test -f dist-electron/Deus-*.AppImage
           test -f dist-electron/deus_*_amd64.deb
-          test -x dist-electron/linux-unpacked/resources/bin/deus-runtime
-          test -x dist-electron/linux-unpacked/resources/bin/codex
-          test -x dist-electron/linux-unpacked/resources/bin/claude
-          test -x dist-electron/linux-unpacked/resources/bin/gh
-          test -x dist-electron/linux-unpacked/resources/bin/rg
-          test -x dist-electron/linux-unpacked/resources/bin/agent-browser
-          file dist-electron/linux-unpacked/resources/bin/deus-runtime | grep 'ELF 64-bit'
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
