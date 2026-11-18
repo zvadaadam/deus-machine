@@ -34,10 +34,14 @@ export interface StartStep {
 /** The setup script's two states, worded once for every place that shows them. */
 export const SETUP_RUNNING = "Running setup…";
 export const SETUP_FAILED = "Setup failed";
+/** A cloud workspace before its computer is up: the start page and the chat's provisioning line alike. */
+export const CLOUD_STARTING = "Starting a cloud computer…";
 
 export interface WorkspaceStart {
   phase: "starting" | "ready" | "failed";
-  /** The one line that says where things stand. */
+  /** It runs on a cloud computer, not this one. */
+  cloud: boolean;
+  /** The one line that says where things stand; the steps are listed under it. */
   summary: string;
   /**
    * A few words for a narrow place (the sidebar row): what it is doing, or
@@ -114,8 +118,9 @@ export function workspaceStart(workspace: StartFields): WorkspaceStart {
   if (workspace.kind === "cloud") {
     return {
       phase,
+      cloud: true,
       summary: match(phase)
-        .with("starting", () => "Starting a cloud computer…")
+        .with("starting", () => CLOUD_STARTING)
         .with("ready", () => "Computer ready")
         .with("failed", () => "Workspace didn't start")
         .exhaustive(),
@@ -181,8 +186,9 @@ export function workspaceStart(workspace: StartFields): WorkspaceStart {
   const active = steps.find((step) => step.state === "active");
   return {
     phase,
+    cloud: false,
     summary: match(phase)
-      .with("starting", () => active?.label ?? "Setting up workspace…")
+      .with("starting", () => "Setting up workspace…")
       .with("ready", () => "Workspace ready")
       .with("failed", () => "Workspace didn't start")
       .exhaustive(),

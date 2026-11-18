@@ -239,7 +239,13 @@ describe("buildChatTimeline", () => {
   const reply = withText({ id: "a-1", turn_id: "turn-1", sent_at: "2026-08-14T10:00:05.000Z" });
 
   it("tells how the workspace started under the message that asked for it", () => {
-    const start = { phase: "ready" as const, summary: "Workspace ready", steps: [], warnings: [] };
+    const start = {
+      phase: "ready" as const,
+      cloud: false,
+      summary: "Workspace ready",
+      steps: [],
+      warnings: [],
+    };
 
     const { items, spacings } = buildChatTimeline([prompt, reply], [], false, [], [], start);
 

@@ -339,10 +339,9 @@ try {
     .locator(`[data-workspace-id="${failing.id}"]`)
     .getByText("Failed", { exact: true })
     .waitFor();
-  // The message that was typed is kept, as the bubble it will be, and said to be.
+  // The message that was typed is kept, as the bubble it will be.
   const waiting = panel(a).locator('[data-slot="waiting-message"]');
   await waiting.getByText("Add a dark mode toggle to the settings page").waitFor();
-  await waiting.getByText("Kept. It sends after a retry.").waitFor();
   // A start that can be retried keeps the chat's composer, where the chat will have it.
   await startComposer(a).waitFor();
   await panel(a).getByRole("button", { name: "Details" }).click();
@@ -380,7 +379,7 @@ try {
     panel(a).getByText("Running setup…").waitFor(),
     panel(b).getByText("Running setup…").waitFor(),
   ]);
-  await waiting.getByText("Sends when the workspace is ready.").waitFor();
+  await waiting.getByText("Add a dark mode toggle to the settings page").waitFor();
   // One message waits per workspace: a second is refused in words and stays in the box.
   const draft = "Then make it follow the system theme";
   await startComposer(a).locator("textarea").fill(draft);
@@ -500,7 +499,6 @@ try {
   await watchBottom(a);
   const askedWaiting = panel(a).locator('[data-slot="waiting-message"]');
   await askedWaiting.getByText(asked).waitFor();
-  await askedWaiting.getByText("Sends when the workspace is ready.").waitFor();
   assert.equal(await startComposer(a).locator("textarea").inputValue(), "");
   await shot(a, "asked-while-starting", 0);
   await until(
