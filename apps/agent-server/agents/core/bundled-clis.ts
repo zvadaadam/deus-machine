@@ -19,16 +19,14 @@ export function adoptBundledClis(): void {
   // to sit in dist/ — the engine's pinned provisioning is the dev source of
   // truth.
   const explicitRuntime =
-    Boolean(process.env.DEUS_BUNDLED_BIN_DIR) ||
-    process.env.DEUS_PACKAGED === "1" ||
-    process.env.DEUS_RUNTIME === "1";
+    Boolean(process.env.DEUS_BUNDLED_BIN_DIR) || process.env.DEUS_PACKAGED === "1";
   if (!explicitRuntime) return;
   for (const tool of ["claude", "codex"] as const) {
     const bundled = resolveBundledCliPath(tool);
     if (!bundled) continue;
     // An explicit operator override still wins over the bundled binary.
     process.env[TOOL_ENV[tool]] ??= bundled;
-    if (process.env.DEUS_RUNTIME === "1" || process.env.DEUS_PACKAGED === "1") {
+    if (process.env.DEUS_PACKAGED === "1") {
       process.stdout.write(`BUNDLED_CLI_PATH ${tool}=${bundled}\n`);
     }
   }

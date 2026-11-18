@@ -12,7 +12,6 @@ import {
 const originalBundledBinDir = process.env.DEUS_BUNDLED_BIN_DIR;
 const originalResourcesPathEnv = process.env.DEUS_RESOURCES_PATH;
 const originalDeusPackaged = process.env.DEUS_PACKAGED;
-const originalDeusRuntime = process.env.DEUS_RUNTIME;
 const originalCwd = process.cwd();
 const originalPlatform = process.platform;
 const originalArch = process.arch;
@@ -24,8 +23,6 @@ afterEach(() => {
   else process.env.DEUS_RESOURCES_PATH = originalResourcesPathEnv;
   if (originalDeusPackaged === undefined) delete process.env.DEUS_PACKAGED;
   else process.env.DEUS_PACKAGED = originalDeusPackaged;
-  if (originalDeusRuntime === undefined) delete process.env.DEUS_RUNTIME;
-  else process.env.DEUS_RUNTIME = originalDeusRuntime;
   process.chdir(originalCwd);
   Object.defineProperty(process, "platform", {
     configurable: true,

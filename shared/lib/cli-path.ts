@@ -22,7 +22,7 @@ function getRuntimeKey(): string | null {
 }
 
 function isPackagedRuntime(): boolean {
-  return process.env.DEUS_PACKAGED === "1" || process.env.DEUS_RUNTIME === "1";
+  return process.env.DEUS_PACKAGED === "1";
 }
 
 export function getDevStagedCliDirectory(projectRoot = process.cwd()): string | null {

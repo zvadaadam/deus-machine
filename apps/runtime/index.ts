@@ -183,7 +183,7 @@ async function inspectSqliteContract() {
 
 function configureRuntimeEnv(command: RuntimeCommand, dataDir?: string): void {
   const layout = resolveRuntimeLayout();
-  process.env.DEUS_RUNTIME = "1";
+  process.env.DEUS_PACKAGED = "1";
   process.env.DEUS_RUNTIME_EXECUTABLE = layout.executablePath;
   process.env.DEUS_BUNDLED_BIN_DIR = layout.bundledBinDir;
   process.env.DEUS_RESOURCES_PATH = layout.resourcesPath;
