@@ -17,138 +17,24 @@
  */
 
 /**
- * Pre-launch schema policy.
- *
- * Deus has not launched yet, so SCHEMA_SQL is the source of truth. Breaking
- * schema changes should update SCHEMA_SQL directly. If a local dev database was
- * created by an older shape, reset it instead of preserving compatibility
- * baggage through replayed migrations.
- *
- * After launch, replace this with versioned, audited migrations before changing
- * persisted user data.
+ * Schema policy. SCHEMA_SQL is the whole schema, never a migration replay. To
+ * add a column, put it in SCHEMA_SQL and, if existing databases should keep
+ * working, in ADDITIVE_COLUMNS (nullable or defaulted). Any other difference
+ * is a reset: at startup the backend compares the database with SCHEMA_SQL and
+ * stops with PRELAUNCH_SCHEMA_RESET_HINT, naming the table and column.
  */
 export const PRELAUNCH_SCHEMA_RESET_HINT =
   "This local database was created with an older pre-launch schema. Reset it by deleting deus.db (or point DATABASE_PATH at a fresh file), then restart Deus.";
 
-export const PRELAUNCH_REQUIRED_COLUMNS = {
-  // pr_* columns are additive (see ADDITIVE_COLUMNS) and asserted here only
-  // AFTER applyAdditiveColumns has run, so a failed ALTER surfaces at boot
-  // with the reset hint instead of as a "no such column" error at first query.
-  workspaces: [
-    "status",
-    "pr_state",
-    "pr_is_draft",
-    "pr_review_status",
-    "pr_has_conflicts",
-    "pr_ci_status",
-    "pr_checked_at",
-    "organization_id",
-  ],
-  sessions: ["agent_harness", "error_category"],
-  // Automations went cloud-only (agnt is the scheduler + source of truth;
-  // these tables are its cache). A database with the locally-scheduled shape
-  // predates that and must be reset.
-  automations: ["environment", "synced_at", "organization_id"],
-  automation_runs: ["provider_session_id"],
-  // The parent column identifies the canonical protocol schema. Older
-  // pre-parts databases require a reset; current history is moved to turns.
-  messages: ["parent_tool_call_id"],
-  turns: [
-    "turn_id",
-    "session_id",
-    "started_at",
-    "ended_at",
-    "execution",
-    "provider_credential_source",
-    "outcome",
-    "tokens",
-    "cost",
-  ],
-  parts: ["parent_tool_call_id"],
-  compactions: ["compaction_id"],
-  paired_devices: ["account_id", "machine_id"],
-} as const satisfies Record<string, readonly string[]>;
+/** Columns ALTERed into an existing database that lacks them (each is in SCHEMA_SQL too). */
+export const ADDITIVE_COLUMNS: Record<string, Record<string, string>> = {};
 
-/**
- * Columns a current database must NOT have. The mirror image of
- * PRELAUNCH_REQUIRED_COLUMNS: that catches a database too OLD to have gained a
- * column, this catches one too old to have SHED one. The one-time turn
- * accounting move runs before this check so current history is preserved.
- *
- * `messages.content` was the pre-parts render path, retired when messages moved
- * to engine `parts`. Any database that still has it also predates the engine
- * harness ids (`claude-code`/`codex-app-server` replacing `claude`/`codex`/
- * `codex-server`), so this one marker forces the reset that clears both.
- */
-export const PRELAUNCH_RETIRED_COLUMNS = {
-  messages: ["content", "cancelled_at", "tokens", "cost", "turn_stop_reason", "turn_attribution"],
-  // `workspaces.cloud_preview_template` mirrored the cloud computer's public
-  // host template — a capability URL the platform replays on every connect.
-  // It moved to the driver's memory (services/agent/cloud/preview.ts); a
-  // database that still carries the column also carries a stale capability
-  // URL on disk, so it takes the reset rather than a silent leftover.
-  workspaces: ["cloud_preview_template"],
-} as const satisfies Record<string, readonly string[]>;
-
-/**
- * Additive columns applied to existing databases via ALTER TABLE at startup.
- * Purely additive (nullable or defaulted) — no reset required, unlike
- * PRELAUNCH_REQUIRED_COLUMNS breaks. Keep in sync with SCHEMA_SQL.
- */
-export const ADDITIVE_COLUMNS = {
-  workspaces: {
-    pr_state: "TEXT",
-    pr_is_draft: "INTEGER NOT NULL DEFAULT 0",
-    pr_review_status: "TEXT",
-    pr_has_conflicts: "INTEGER NOT NULL DEFAULT 0",
-    pr_ci_status: "TEXT",
-    pr_checked_at: "TEXT",
-    // Cloud workspaces: where the files live + the agnt workspace backing them.
-    kind: "TEXT NOT NULL DEFAULT 'worktree'",
-    provider_workspace_id: "TEXT",
-    // Epoch-ms of the last SUCCESSFUL inline App-token mint pushed into the
-    // agnt DO's secret map. Lets the refresh path age-gate an UNKNOWN mint
-    // outcome: a stored inline token past its 1-hour life only shadows the
-    // org PAT, so it may be stripped even when the remint result is unknown.
-    last_inline_mint_at: "INTEGER",
-    // How a workspace started: the tool's own words for a failure, the branch
-    // it started from (a retry starts there again), and why origin's latest
-    // was skipped.
-    error_detail: "TEXT",
-    git_source_branch: "TEXT",
-    init_fetch_issue: "TEXT",
-    // The cloud organization a cloud workspace runs in (null for local ones, and
-    // for cloud rows from before organizations were recorded: the default one).
-    organization_id: "TEXT",
-  },
-  sessions: {
-    // agnt session id for cloud-workspace sessions (null for local).
-    provider_session_id: "TEXT",
-  },
-  automations: {
-    // The spec's thinking level; AGNT runs no automation that names none.
-    thinking_level: "TEXT",
-    // The cloud organization the automation was listed under.
-    organization_id: "TEXT",
-  },
-  paired_devices: {
-    // A relay pairing's Deus account and this computer's machine id in it.
-    // Null for a direct (local network) pairing, which works only there.
-    account_id: "TEXT",
-    machine_id: "TEXT",
-  },
-} as const satisfies Record<string, Record<string, string>>;
-
-/**
- * The repositories table, by name. A project's folder on this computer
- * (`root_path`) is optional: a row without one is a project that is not on this
- * computer, known by its GitHub `git_origin_url`, and runs only in the cloud.
- * SQLite allows several NULLs under UNIQUE. Databases from before this was
- * optional are rebuilt once at startup (backend `db/migrate-project-folder.ts`),
- * which creates the table from this same definition.
- */
-export function repositoriesTableSql(table: string): string {
-  return `CREATE TABLE IF NOT EXISTS ${table} (
+export const SCHEMA_SQL = `
+  -- Repositories tracked by the app (id = UUID7, embeds created_at). root_path is
+  -- optional: a row without one is a project not on this computer, known by its
+  -- GitHub git_origin_url, that runs only in the cloud (SQLite allows several NULLs
+  -- under UNIQUE).
+  CREATE TABLE IF NOT EXISTS repositories (
     id TEXT PRIMARY KEY NOT NULL,
     name TEXT NOT NULL,
     root_path TEXT UNIQUE,
@@ -156,30 +42,7 @@ export function repositoriesTableSql(table: string): string {
     sort_order INTEGER NOT NULL DEFAULT 0,
     git_origin_url TEXT,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );`;
-}
-
-/** The columns `repositoriesTableSql` defines, in order. */
-export const REPOSITORIES_COLUMNS = [
-  "id",
-  "name",
-  "root_path",
-  "git_default_branch",
-  "sort_order",
-  "git_origin_url",
-  "updated_at",
-] as const;
-
-/** What `shared/schema.ts` defines on the repositories table besides the table itself. */
-export const REPOSITORIES_TRIGGERS_SQL = `
-  CREATE TRIGGER IF NOT EXISTS update_repositories_updated_at
-    AFTER UPDATE ON repositories
-    BEGIN UPDATE repositories SET updated_at = datetime('now') WHERE id = NEW.id; END;
-`;
-
-export const SCHEMA_SQL = `
-  -- Repositories tracked by the app (id = UUID7, embeds created_at)
-  ${repositoriesTableSql("repositories")}
+  );
 
   -- Git worktrees tied to repositories (id = UUID7, embeds created_at)
   CREATE TABLE IF NOT EXISTS workspaces (
@@ -223,7 +86,7 @@ export const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY NOT NULL,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    -- Engine harness id (@zvada/agent-server): claude-code | codex-sdk | codex-app-server
+    -- Engine harness id (@zvada/agent-server): claude-code | codex-app-server
     agent_harness TEXT NOT NULL DEFAULT 'claude-code',
     agent_session_id TEXT,
     provider_session_id TEXT,
@@ -474,7 +337,9 @@ export const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_integration_connections_app ON integration_connections(app_id);
 
   -- Triggers: auto-update updated_at (4)
-  ${REPOSITORIES_TRIGGERS_SQL}
+  CREATE TRIGGER IF NOT EXISTS update_repositories_updated_at
+    AFTER UPDATE ON repositories
+    BEGIN UPDATE repositories SET updated_at = datetime('now') WHERE id = NEW.id; END;
 
   CREATE TRIGGER IF NOT EXISTS update_workspaces_updated_at
     AFTER UPDATE ON workspaces

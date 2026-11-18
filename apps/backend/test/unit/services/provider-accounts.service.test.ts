@@ -41,7 +41,7 @@ describe("personal provider account preflight", () => {
   });
 
   it("does not substitute an organization key for a signed-out account", async () => {
-    setCloudRuntimeCredentials({ apiKey: "org-key", deusCloudSessionToken: null });
+    setCloudRuntimeCredentials({ orgKeys: { org: "org-key" }, deusCloudSessionToken: null });
     await expect(getProviderAccounts()).rejects.toThrow("Sign in to Deus Cloud");
     expect(fetchMock).not.toHaveBeenCalled();
   });

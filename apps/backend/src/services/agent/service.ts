@@ -37,10 +37,10 @@ import { AgentLink } from "./client";
 import { LocalAgents } from "./local-agents";
 import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
 import { createAgentEventHandler, type AgentEventHandler } from "./event-handler";
-import { buildTurnStartParams, engineHarness, type DeusTurnOptions } from "./run-config";
+import { buildTurnStartParams, type DeusTurnOptions } from "./run-config";
 import { toolRequests } from "@shared/api/sessions";
 import { isPrompt, pendingFor, relay } from "./tool-relay";
-import { codexTurnHome, resolveTurnApps } from "../integrations";
+import { resolveTurnApps } from "../integrations";
 import {
   persistSessionNeedsPlanResponse,
   persistSessionNeedsResponse,
@@ -158,14 +158,13 @@ export async function startTurn(
   options: DeusTurnOptions
 ): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
-  const apps = await turnApps(sessionId, agentHarness, options.resume);
+  const apps = await turnApps();
   const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, {
     ...options,
     ...apps,
     // Negotiated at the handshake, not guessed from a harness list.
     supportsImages:
-      link.getAgents().find((a) => a.type === engineHarness(agentHarness))?.capabilities.images ??
-      false,
+      link.getAgents().find((a) => a.type === agentHarness)?.capabilities.images ?? false,
   });
   // Mirror the admission BEFORE the quick-ack round-trip: the server can push
   // the first envelopes in the same tick the ack line is processed, and the
@@ -187,33 +186,17 @@ export async function startTurn(
 
 /**
  * The installed apps' MCP servers for a local turn: every project inherits
- * them. A Codex turn carries them only in a CODEX_HOME of its session's own
- * (`codexTurnHome` says which chats get one).
+ * them. Codex gets them in its thread's own config (the engine's, for a turn
+ * that names no CODEX_HOME).
  */
-async function turnApps(
-  sessionId: string,
-  agentHarness: AgentHarness,
-  resume: string | undefined
-): Promise<Pick<DeusTurnOptions, "mcpServers" | "env">> {
-  const codex = engineHarness(agentHarness) === "codex-app-server";
-  const { servers, skipped, installed } = await resolveTurnApps();
+async function turnApps(): Promise<Pick<DeusTurnOptions, "mcpServers" | "env">> {
+  const { servers, skipped } = await resolveTurnApps();
   if (skipped.length) {
     console.log(
       `[AgentService] Apps not in this turn: ${skipped.map((s) => `${s.appId} (${s.reason})`).join(", ")}`
     );
   }
-  if (!codex) return { mcpServers: servers, env: loopbackPastProxy() };
-  try {
-    const home = codexTurnHome(sessionId, {
-      resumes: resume !== undefined,
-      appsInstalled: installed,
-    });
-    if (!home) return {};
-    return { mcpServers: servers, env: { ...loopbackPastProxy(), CODEX_HOME: home } };
-  } catch (error) {
-    console.warn("[AgentService] Codex session home unavailable; turn runs without apps:", error);
-    return {};
-  }
+  return { mcpServers: servers, env: loopbackPastProxy() };
 }
 
 /**

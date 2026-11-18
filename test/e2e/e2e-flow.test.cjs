@@ -36,7 +36,6 @@ const DB_PATH =
 // it); this script is plain CommonJS and cannot import it.
 const DEFAULT_MODEL_BY_HARNESS = {
   "claude-code": "opus",
-  "codex-sdk": "gpt-6.1-sol",
   "codex-app-server": "gpt-6.1-sol",
 };
 

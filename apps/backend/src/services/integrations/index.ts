@@ -16,14 +16,12 @@
 //   credentials.ts  an account → the headers or env of one request
 //   gateway.ts      the one door agents use to reach an app with an account
 //   runtime.ts      a local turn's MCP servers
-//   codex-homes.ts  the session-owned CODEX_HOME Codex needs for them
 //   cloud-turns.ts  what a cloud turn carries: apps that reach the cloud, skills
 //   probe.ts        an MCP client that connects and lists tools
 
 import { getErrorMessage } from "@shared/lib/errors";
 import { setSignInReturnBase } from "./auth/callback";
 import { reconcileCloudAccounts } from "./cloud-apps";
-import { pruneCodexSessionHomes } from "./codex-homes";
 import { setGatewayPort } from "./gateway";
 import { resumeSkillInstalls } from "./skills";
 import { initVault } from "./vault";
@@ -32,7 +30,6 @@ export { completeOAuthCallback } from "./apps";
 export { SIGN_IN_CALLBACK_PATH } from "./auth/callback";
 export { completeCloudCallback, reconcileCloudAccounts } from "./cloud-apps";
 export { resolveCloudTurnExtensions } from "./cloud-turns";
-export { codexTurnHome } from "./codex-homes";
 export { GATEWAY_PATH, isGatewayKey, proxyMcp } from "./gateway";
 export { resolveTurnApps } from "./runtime";
 export { getState } from "./state";
@@ -46,8 +43,6 @@ export async function startIntegrations(port: number): Promise<void> {
     // The vault's key, found once here so no request waits on the Keychain.
     await initVault();
     resumeSkillInstalls();
-    const pruned = pruneCodexSessionHomes();
-    if (pruned) console.log(`[Integrations] Trimmed ${pruned} Codex session home(s)`);
   } catch (error) {
     console.warn("[Integrations] Startup failed:", getErrorMessage(error));
   }

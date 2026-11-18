@@ -510,8 +510,7 @@ connection identity (a key changing closes nothing), `cloudOrg(orgId?)` one orga
 key (a developer key stands in only when no organization keys were pushed), and
 `cloudOrgOf(row)` the key for a cloud workspace or automation, which records its
 organization (`organization_id`, chosen at creation or learned from the platform's
-snapshot). A row with none is given the default organization once, when the desktop names
-it (`stampDefaultOrganization`), so a later change in the platform's order moves nothing.
+snapshot). A row with none (made with a developer key) is the default organization's.
 Every platform call for a row uses its organization's key, and the GitHub installation
 token is always minted for the workspace's own organization.
 
@@ -626,14 +625,6 @@ the catalog can move to a package the day Deus Cloud reads it too.
   it resolves provider accounts, so a turn started without this computer
   gets them as well. Do not ship account tokens to a sandbox through turn
   options.
-- **Codex** takes per-turn servers only in a session-owned `CODEX_HOME`
-  (`codex-homes.ts`: the user's login, instructions and skills linked in, not
-  their history; pruned when its session is deleted). `codexTurnHome` says
-  which chats get one: a chat that begins once an app is installed, ready or
-  not, and keeps it; with no app installed a chat stays in the user's own
-  home and gets no apps later. Codex itself accepts
-  them in a thread's `config` with no home; when the engine delivers them that
-  way, the session homes go.
 - **Skills on disk** (`skill-files.ts`) use the Skills CLI layout: files in
   `~/.agents/skills/<name>` (Codex), a symlink in `~/.claude/skills/<name>`
   (Claude), a `.deus-skill.json` marker. Nothing without the marker is replaced
@@ -658,13 +649,13 @@ the catalog can move to a package the day Deus Cloud reads it too.
 
 Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 13 tables: `repositories`, `workspaces`, `sessions`, `messages`, `turns`, `parts`, `compactions`, `paired_devices`, `assistants`, `automations`, `automation_runs`, `extension_installations`, `integration_connections`.
 
-- `repositories.root_path` is nullable (a project not on this computer). A database from before is rebuilt once at startup (`db/migrate-project-folder.ts`): it runs only while the column is still `NOT NULL`, first writes a copy next to the database (`<db>.before-optional-project-folder.bak`; no copy, no rebuild), then rebuilds the table in one transaction with foreign keys off and checked, and rolls back on any failure without the reset hint.
+- `repositories.root_path` is nullable (a project not on this computer).
 - Turn accounting, execution, provider account snapshots and outcomes belong to `turns`, keyed by `(session_id, turn_id)`. Messages contain transcript content only.
 - Only the backend writes to DB
 - All indexes/triggers defined in `shared/schema.ts`
 - Use `sessions.last_user_message_at` instead of correlated subqueries
 - No N+1 queries — batch or denormalize
-- Column changes, pre-launch (now): destructive resets are sanctioned. There are no users to migrate, and `shared/schema.ts` is the fresh schema rather than a migration replay — a stale local DB is detected via the `PRELAUNCH_REQUIRED_COLUMNS` / `PRELAUNCH_RETIRED_COLUMNS` markers and reset with the `PRELAUNCH_SCHEMA_RESET_HINT`. Drop the column and add it to the markers.
+- Column changes, pre-launch (now): `shared/schema.ts` is the whole schema, not a migration replay. To add a column, put it in `SCHEMA_SQL` and, if existing databases should keep working, in `ADDITIVE_COLUMNS` (nullable or defaulted); anything else is a reset. At startup the backend compares the database with a fresh copy of `SCHEMA_SQL` (a missing column, a NOT NULL that differs, a leftover column an insert would fail on) and stops with `PRELAUNCH_SCHEMA_RESET_HINT`, naming the table and column.
 - Column changes, post-launch: the above stops applying. Deprecate by renaming with a `DEPRECATED_` prefix, never drop.
 
 ## Testing

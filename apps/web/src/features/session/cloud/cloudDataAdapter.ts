@@ -50,7 +50,7 @@ interface AgntSession {
   organization_id?: string;
 }
 
-const KNOWN_HARNESSES = new Set(["claude-code", "codex-sdk", "codex-app-server"]);
+const KNOWN_HARNESSES = new Set(["claude-code", "codex-app-server"]);
 
 /** Discovery's harness, defended to the enum — legacy rows default to claude. */
 function mapHarness(harness: string | null | undefined): import("@/shared/agents").AgentHarness {

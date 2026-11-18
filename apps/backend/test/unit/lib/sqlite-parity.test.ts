@@ -166,6 +166,21 @@ describe(`SQLite through openSqliteDatabase (${engine})`, () => {
     expect(columns.map((column) => column.name)).toContain("workspace_id");
   });
 
+  it("reads a table's columns through pragma_table_info, in a second database in memory too", () => {
+    const fresh = openSqliteDatabase(":memory:");
+    fresh.exec(SCHEMA_SQL);
+    const columns =
+      "SELECT name, \"notnull\", dflt_value FROM pragma_table_info(?) WHERE name IN ('id', 'title', 'status')";
+    for (const database of [db, fresh]) {
+      expect(database.prepare(columns).all("sessions")).toEqual([
+        { name: "id", notnull: 1, dflt_value: null },
+        { name: "title", notnull: 0, dflt_value: null },
+        { name: "status", notnull: 1, dflt_value: "'idle'" },
+      ]);
+    }
+    fresh.close();
+  });
+
   it("enforces foreign keys once they are on", () => {
     db.pragma("foreign_keys = ON");
     expect(() =>

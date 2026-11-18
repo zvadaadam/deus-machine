@@ -120,13 +120,13 @@ describe("agentService.startTurn", () => {
     expect(mockAbortTurn).not.toHaveBeenCalled();
   });
 
-  it("keeps a codex-sdk session's images: it runs on the app-server, which takes them", async () => {
+  it("keeps a Codex turn's images: the app-server takes them", async () => {
     mockBeginTurn.mockReturnValue(true);
     mockLinkStartTurn.mockResolvedValue({ sessionId: SESSION, turnId: TURN });
     const link = (await mockOpen.mock.results[0]!.value) as { getAgents: () => unknown };
     link.getAgents = () => [{ type: "codex-app-server", capabilities: { images: true } }];
     const image = { type: "image", mimeType: "image/png", data: "iVBORw0KGgo=" };
-    await agentService.startTurn(SESSION, TURN, "codex-sdk", JSON.stringify([image]), {
+    await agentService.startTurn(SESSION, TURN, "codex-app-server", JSON.stringify([image]), {
       cwd: "/tmp/nonexistent-ws",
     });
     const params = mockLinkStartTurn.mock.calls[0]![0];

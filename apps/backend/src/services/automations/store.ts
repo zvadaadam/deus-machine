@@ -68,13 +68,12 @@ export function upsertAutomation(row: Omit<AutomationRow, "synced_at">): void {
  * The deus-local columns (created_by, adopted workspace_id) survive upserts
  * by exclusion from the UPDATE set above.
  *
- * `scope` is the organization the list is of: only its rows are replaced
- * (`includeUnknown`: and the rows from before organizations were kept, which
- * belong to the default one). Without a scope, every row is (an account change).
+ * `scope` is the organization the list is of: only its rows are replaced.
+ * Without a scope, every row is (an account change).
  */
 export function replaceAutomationsCache(
   rows: Array<Omit<AutomationRow, "synced_at">>,
-  scope?: { organizationId: string | null; includeUnknown: boolean }
+  scope?: { organizationId: string | null }
 ): void {
   const db = getDatabase();
   const replace = db.transaction(() => {
@@ -82,11 +81,7 @@ export function replaceAutomationsCache(
     const conditions: string[] = [];
     const values: unknown[] = [];
     if (scope) {
-      conditions.push(
-        scope.includeUnknown
-          ? "(organization_id IS ? OR organization_id IS NULL)"
-          : "organization_id IS ?"
-      );
+      conditions.push("organization_id IS ?");
       values.push(scope.organizationId);
     }
     if (keep.length > 0) {

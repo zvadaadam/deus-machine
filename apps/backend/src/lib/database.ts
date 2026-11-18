@@ -3,15 +3,8 @@ import path from "path";
 import fs from "fs";
 import os from "os";
 import { resolveDefaultDatabasePath } from "../../../../shared/runtime";
-import {
-  ADDITIVE_COLUMNS,
-  PRELAUNCH_REQUIRED_COLUMNS,
-  PRELAUNCH_RETIRED_COLUMNS,
-  PRELAUNCH_SCHEMA_RESET_HINT,
-  SCHEMA_SQL,
-} from "@shared/schema";
+import { ADDITIVE_COLUMNS, PRELAUNCH_SCHEMA_RESET_HINT, SCHEMA_SQL } from "@shared/schema";
 import { openSqliteDatabase } from "./sqlite";
-import { makeProjectFolderOptional } from "../db/migrate-project-folder";
 
 const DEFAULT_DB_PATH = resolveDefaultDatabasePath({
   platform: process.platform,
@@ -23,71 +16,75 @@ const DB_PATH = process.env.DATABASE_PATH || DEFAULT_DB_PATH;
 
 let dbInstance: BetterSqlite3.Database | null = null;
 
-interface TableInfoRow {
+interface ColumnInfo {
   name: string;
+  type: string;
+  notnull: number;
+  dflt_value: string | null;
+  pk: number;
 }
 
-function assertPrelaunchSchemaCurrent(db: BetterSqlite3.Database): void {
-  const missing: string[] = [];
+function columnsOf(db: BetterSqlite3.Database, table: string): Map<string, ColumnInfo> {
+  const rows = db.prepare("SELECT * FROM pragma_table_info(?)").all(table) as ColumnInfo[];
+  return new Map(rows.map((row) => [row.name, row]));
+}
 
-  for (const [table, requiredColumns] of Object.entries(PRELAUNCH_REQUIRED_COLUMNS)) {
-    const rows = db.pragma(`table_info(${table})`) as TableInfoRow[];
-    if (rows.length === 0) {
-      missing.push(`${table}.*`);
-      continue;
-    }
+/** Each trigger's stored SQL (SQLite keeps the statement without its IF NOT EXISTS). */
+function triggersOf(db: BetterSqlite3.Database): Map<string, string> {
+  const rows = db
+    .prepare("SELECT name, sql FROM sqlite_schema WHERE type = 'trigger'")
+    .all() as Array<{ name: string; sql: string }>;
+  return new Map(rows.map((row) => [row.name, row.sql]));
+}
 
-    const actualColumns = new Set(rows.map((row) => row.name));
-    for (const column of requiredColumns) {
-      if (!actualColumns.has(column)) {
-        missing.push(`${table}.${column}`);
-      }
-    }
+/**
+ * What an existing database needs before SCHEMA_SQL, with no reset: a trigger
+ * whose body is not the schema's is dropped (CREATE TRIGGER IF NOT EXISTS would
+ * keep it; SCHEMA_SQL makes it again), and the ADDITIVE_COLUMNS a table lacks
+ * are added (SCHEMA_SQL's indexes may name them). A table not there yet is
+ * left to SCHEMA_SQL, which creates it whole.
+ */
+function prepareForSchema(db: BetterSqlite3.Database, fresh: BetterSqlite3.Database): void {
+  const current = triggersOf(fresh);
+  for (const [name, sql] of triggersOf(db)) {
+    if (current.get(name) !== sql) db.exec(`DROP TRIGGER "${name.replaceAll('"', '""')}"`);
   }
-
-  if (missing.length > 0) {
-    throw prelaunchSchemaError(`Missing columns/tables: ${missing.join(", ")}`);
-  }
-
-  // The other direction: a column the current schema has SHED. CREATE TABLE IF
-  // NOT EXISTS leaves an existing table alone, so a database predating the drop
-  // keeps the column (and its stale rows) unless we fail the boot here.
-  const retired: string[] = [];
-
-  for (const [table, retiredColumns] of Object.entries(PRELAUNCH_RETIRED_COLUMNS)) {
-    const rows = db.pragma(`table_info(${table})`) as TableInfoRow[];
-    if (rows.length === 0) continue;
-
-    const actualColumns = new Set(rows.map((row) => row.name));
-    for (const column of retiredColumns) {
-      if (actualColumns.has(column)) {
-        retired.push(`${table}.${column}`);
-      }
+  for (const [table, columns] of Object.entries(ADDITIVE_COLUMNS)) {
+    const existing = columnsOf(db, table);
+    if (existing.size === 0) continue;
+    for (const [column, definition] of Object.entries(columns)) {
+      if (!existing.has(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
     }
-  }
-
-  if (retired.length > 0) {
-    throw prelaunchSchemaError(`Found retired columns: ${retired.join(", ")}`);
   }
 }
 
 /**
- * Apply additive (non-breaking) columns to databases created before the
- * column existed. CREATE TABLE IF NOT EXISTS never alters existing tables,
- * so purely additive columns are ALTERed in here instead of forcing a reset.
+ * The database must match SCHEMA_SQL: every column the schema has, as SQLite
+ * reports it (type, NOT NULL, default, primary key), and no leftover column an
+ * insert would fail on (NOT NULL with no default). A leftover nullable column
+ * is harmless and ignored.
  */
-function applyAdditiveColumns(db: BetterSqlite3.Database): void {
-  for (const [table, columns] of Object.entries(ADDITIVE_COLUMNS)) {
-    const rows = db.pragma(`table_info(${table})`) as TableInfoRow[];
-    if (rows.length === 0) continue;
-
-    const existing = new Set(rows.map((row) => row.name));
-    for (const [column, definition] of Object.entries(columns)) {
-      if (!existing.has(column)) {
-        db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-      }
+function assertSchemaCurrent(db: BetterSqlite3.Database, fresh: BetterSqlite3.Database): void {
+  const shape = (c: ColumnInfo) => JSON.stringify([c.type, c.notnull, c.dflt_value, c.pk]);
+  const stale: string[] = [];
+  const tables = fresh
+    .prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+    .all() as Array<{ name: string }>;
+  for (const { name: table } of tables) {
+    const want = columnsOf(fresh, table);
+    const have = columnsOf(db, table);
+    for (const [name, column] of want) {
+      const found = have.get(name);
+      if (!found) stale.push(`${table}.${name} is missing`);
+      else if (shape(found) !== shape(column))
+        stale.push(`${table}.${name} differs from the schema`);
+    }
+    for (const [name, found] of have) {
+      if (!want.has(name) && found.notnull && found.dflt_value === null)
+        stale.push(`${table}.${name} is no longer in the schema and is required`);
     }
   }
+  if (stale.length > 0) throw prelaunchSchemaError(`${stale.join("; ")}.`);
 }
 
 function prelaunchSchemaError(detail: string): Error {
@@ -120,23 +117,27 @@ function initDatabase(): BetterSqlite3.Database {
     dbInstance.pragma("busy_timeout = 5000");
     dbInstance.pragma("optimize");
 
-    // Pre-launch policy: SCHEMA_SQL is the source of truth. We create fresh
-    // databases from it directly, then fail fast with a reset hint if an old
-    // local database still has a pre-launch schema shape.
+    // SCHEMA_SQL is the source of truth: a fresh database is created from it,
+    // and one that does not match it stops here with the reset hint. One
+    // transaction, so another process never sees a trigger missing, and a
+    // database that is refused is left exactly as it was.
+    const db = dbInstance;
+    const fresh = openSqliteDatabase(":memory:");
     try {
-      dbInstance.exec(SCHEMA_SQL);
-      applyAdditiveColumns(dbInstance);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw prelaunchSchemaError(`Schema initialization failed: ${message}`);
+      fresh.exec(SCHEMA_SQL);
+      db.transaction(() => {
+        try {
+          prepareForSchema(db, fresh);
+          db.exec(SCHEMA_SQL);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw prelaunchSchemaError(`Schema initialization failed: ${message}`);
+        }
+        assertSchemaCurrent(db, fresh);
+      })();
+    } finally {
+      fresh.close();
     }
-    // One-time rebuild so a project need not be a folder on this computer. It
-    // copies the database aside first and rolls back on failure; its error
-    // never suggests deleting the database.
-    if (makeProjectFolderOptional(dbInstance, DB_PATH)) {
-      console.log("Projects can now be added without a folder on this computer.");
-    }
-    assertPrelaunchSchemaCurrent(dbInstance);
 
     console.log("Database connected");
     return dbInstance;

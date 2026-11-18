@@ -21,7 +21,6 @@ beforeEach(() => {
     deusCloudUrl: "https://product.test",
     deusCloudSessionToken: "session-a",
     orgId: "org",
-    apiKey: null,
   });
   fetchMock.mockReset().mockImplementation(async () => Response.json(metadata));
   vi.stubGlobal("fetch", fetchMock);

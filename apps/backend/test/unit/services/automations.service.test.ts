@@ -407,46 +407,6 @@ describeWithDb("refreshAutomations", () => {
     ]);
   });
 
-  it("the default organization's refresh also replaces the rows from before organizations were kept", async () => {
-    // A fresh account: the full refresh is throttled per account and organization.
-    mockGetCloudConfig.mockReturnValue({ ...CLOUD_CONFIG, deusCloudSessionToken: "owner-legacy" });
-    await refreshAutomations("missing").catch(() => {});
-    store.upsertAutomation(
-      summaryToRow(localSummary({ id: "legacy" }) as never, new Map(), undefined, null)
-    );
-    sdk.listAutomations.mockReturnValue(gen([localSummary()]));
-
-    await refreshAutomations();
-
-    expect(listAutomations().map((a) => [a.id, a.organization_id])).toEqual([["auto-1", "org-1"]]);
-  });
-
-  it("another organization's refresh keeps the rows from before organizations were kept", async () => {
-    // The default organization (the platform's first, as the desktop says) has no key
-    // here; the one key held is another organization's, and its list is not the default's.
-    mockGetCloudConfig.mockReturnValue({
-      ...CLOUD_CONFIG,
-      deusCloudSessionToken: "owner-missing-default",
-      orgKeys: { "org-b": "key-b" },
-    });
-    await refreshAutomations("missing").catch(() => {});
-    store.upsertAutomation(
-      summaryToRow(localSummary({ id: "legacy" }) as never, new Map(), undefined, null)
-    );
-    sdk.listAutomations.mockReturnValue(gen([localSummary({ id: "b-new" })]));
-
-    await refreshAutomations(undefined, "org-b");
-
-    expect(
-      listAutomations()
-        .map((a) => [a.id, a.organization_id])
-        .sort()
-    ).toEqual([
-      ["b-new", "org-b"],
-      ["legacy", null],
-    ]);
-  });
-
   it("creates in the organization it is given, and later calls follow the row", async () => {
     mockGetCloudConfig.mockReturnValue({
       ...CLOUD_CONFIG,

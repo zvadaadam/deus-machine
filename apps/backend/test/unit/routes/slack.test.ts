@@ -16,7 +16,7 @@ beforeEach(() => {
     baseUrl: "https://platform.test",
     deusCloudUrl: "https://product.test",
     deusCloudSessionToken: "human-session",
-    apiKey: "organization-api-key",
+    orgKeys: { org: "organization-api-key" },
     orgId: "org",
   });
   fetchMock.mockReset().mockImplementation(async () => Response.json({ ok: true }));

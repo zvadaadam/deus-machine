@@ -31,7 +31,7 @@ export function getLaunchPath(): string {
 
 export async function syncShellEnvironment(): Promise<void> {
   if (process.platform !== "darwin") return;
-  if (process.env.DEUS_PACKAGED === "1" || process.env.DEUS_RUNTIME === "1") return;
+  if (process.env.DEUS_PACKAGED === "1") return;
 
   try {
     // Detect user's actual login shell via dscl (macOS directory service),

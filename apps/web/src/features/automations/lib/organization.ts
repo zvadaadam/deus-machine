@@ -1,6 +1,6 @@
 /**
  * Which automations the page shows: the window's organization's. A row with no
- * organization (kept from before organizations were recorded) is the default
+ * organization (one made with a developer key) is the default
  * organization's, and one in an organization the list does not name is shown in
  * the default one, as the sidebar does with workspaces. With no list (one
  * nameless cloud), every automation.

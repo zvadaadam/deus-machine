@@ -30,7 +30,7 @@ type BunSqliteDatabaseConstructor = new (
  * backend code directly (the verification CLI). better-sqlite3 is a V8-API
  * native addon — under Bun it does not fail to load, it HARD-CRASHES the
  * process on construction, so "am I on Bun" is the whole question. Gating this
- * on DEUS_RUNTIME as well meant every other Bun entry point took the branch
+ * on DEUS_PACKAGED as well meant every other Bun entry point took the branch
  * that crashes.
  */
 function isBunRuntime(): boolean {
