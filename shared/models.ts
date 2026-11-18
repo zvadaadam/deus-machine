@@ -193,8 +193,9 @@ export function parseModelValue(
 /** The picker value a new chat on `harness` starts on, from the engine's own catalog. */
 export function defaultModelValue(harness: AgentHarness): string {
   const model = defaultModelId(CATALOG_MODEL_LISTS, harness);
-  if (!model) throw new Error(`The engine's catalog lists no ${harness} model`);
-  return modelValue(harness, model);
+  // A harness this build does not know (a chat another build wrote): the
+  // chat still opens, on the default model, and a send says it cannot switch.
+  return model ? modelValue(harness, model) : DEFAULT_MODEL;
 }
 
 /** The model a new chat starts on. */

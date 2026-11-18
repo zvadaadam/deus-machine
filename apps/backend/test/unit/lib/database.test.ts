@@ -122,6 +122,22 @@ describe("database schema check at startup", () => {
     closeDatabase();
   });
 
+  it("leaves a database it refuses as it was: the trigger it would replace is still the old one", async () => {
+    const old = "CREATE TRIGGER assign_message_seq AFTER INSERT ON messages BEGIN SELECT 1; END";
+    databaseFile(`
+      DROP TRIGGER assign_message_seq;
+      ${old};
+      ALTER TABLE workspaces DROP COLUMN organization_id;
+    `);
+    const { initDatabase } = await open();
+    expectReset(initDatabase, "workspaces.organization_id is missing");
+    const db = new Database(process.env.DATABASE_PATH!);
+    expect(
+      db.prepare("SELECT sql FROM sqlite_schema WHERE name = 'assign_message_seq'").get()
+    ).toEqual({ sql: old });
+    db.close();
+  });
+
   it("changes nothing in a database that matches the schema: no trigger is dropped", async () => {
     databaseFile("");
     const before = schemaVersion();

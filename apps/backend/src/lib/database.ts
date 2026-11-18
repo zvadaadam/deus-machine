@@ -47,7 +47,7 @@ function triggersOf(db: BetterSqlite3.Database): Map<string, string> {
 function prepareForSchema(db: BetterSqlite3.Database, fresh: BetterSqlite3.Database): void {
   const current = triggersOf(fresh);
   for (const [name, sql] of triggersOf(db)) {
-    if (current.get(name) !== sql) db.exec(`DROP TRIGGER "${name}"`);
+    if (current.get(name) !== sql) db.exec(`DROP TRIGGER "${name.replaceAll('"', '""')}"`);
   }
   for (const [table, columns] of Object.entries(ADDITIVE_COLUMNS)) {
     const existing = columnsOf(db, table);
@@ -119,21 +119,22 @@ function initDatabase(): BetterSqlite3.Database {
 
     // SCHEMA_SQL is the source of truth: a fresh database is created from it,
     // and one that does not match it stops here with the reset hint. One
-    // transaction, so another process never sees a trigger missing.
+    // transaction, so another process never sees a trigger missing, and a
+    // database that is refused is left exactly as it was.
     const db = dbInstance;
     const fresh = openSqliteDatabase(":memory:");
     try {
       fresh.exec(SCHEMA_SQL);
-      try {
-        db.transaction(() => {
+      db.transaction(() => {
+        try {
           prepareForSchema(db, fresh);
           db.exec(SCHEMA_SQL);
-        })();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw prelaunchSchemaError(`Schema initialization failed: ${message}`);
-      }
-      assertSchemaCurrent(db, fresh);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw prelaunchSchemaError(`Schema initialization failed: ${message}`);
+        }
+        assertSchemaCurrent(db, fresh);
+      })();
     } finally {
       fresh.close();
     }
