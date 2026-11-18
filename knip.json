@@ -76,7 +76,8 @@
     "tailwindcss",
     "esbuild",
     "@napi-rs/canvas",
-    "@iconify-json/logos"
+    "@iconify-json/logos",
+    "agent-device"
   ],
   "ignoreBinaries": ["wrangler", "swift", "typescript/bin/tsc"],
   "ignoreExportsUsedInFile": true,
