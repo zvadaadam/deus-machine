@@ -42,17 +42,7 @@ export function getStoredToken(serverId?: string, accountId?: string | null): st
   const key = scopeKey(TOKEN_KEY, serverId, accountId);
   if (!key) return null;
   try {
-    const scoped = localStorage.getItem(key);
-    if (scoped || key !== `${TOKEN_KEY}:${STANDALONE}`) return scoped;
-    // Older builds stored a single direct grant. Claim it once for this host.
-    const legacy = localStorage.getItem(TOKEN_KEY);
-    if (!legacy) return null;
-    localStorage.setItem(key, legacy);
-    const name = localStorage.getItem(NAME_KEY);
-    if (name) localStorage.setItem(`${NAME_KEY}:${STANDALONE}`, name);
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(NAME_KEY);
-    return legacy;
+    return localStorage.getItem(key);
   } catch {
     return null;
   }
@@ -77,8 +67,6 @@ export function clearToken(serverId?: string, accountId?: string | null): void {
   const nameKey = scopeKey(NAME_KEY, serverId, accountId);
   if (key) localStorage.removeItem(key);
   if (nameKey) localStorage.removeItem(nameKey);
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(NAME_KEY);
   notifyAuthChange();
 }
 

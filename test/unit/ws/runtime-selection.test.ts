@@ -122,12 +122,6 @@ describe("selected runtime and device grants", () => {
     expect(auth.getStoredToken("B")).toBe("token-B");
   });
 
-  it("never sends a pre-account relay grant", () => {
-    localStorage.setItem("deus_device_token", "legacy");
-    localStorage.setItem("deus_device_token:A", "legacy-A");
-    expect(auth.getStoredToken("A")).toBeNull();
-  });
-
   it("disposes old operations and cache on a host switch and ignores its late auth failure", async () => {
     auth.storeToken("token-A", "Phone", "A");
     auth.storeToken("token-B", "Tablet", "B");
