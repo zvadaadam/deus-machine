@@ -12,7 +12,6 @@ import { syncShellEnvironment } from "../../../apps/desktop/main/shell-env";
 
 const originalPlatform = Object.getOwnPropertyDescriptor(process, "platform");
 const originalDeusPackaged = process.env.DEUS_PACKAGED;
-const originalDeusRuntime = process.env.DEUS_RUNTIME;
 
 function setPlatform(platform: NodeJS.Platform): void {
   Object.defineProperty(process, "platform", {
@@ -28,23 +27,12 @@ afterEach(() => {
   }
   if (originalDeusPackaged === undefined) delete process.env.DEUS_PACKAGED;
   else process.env.DEUS_PACKAGED = originalDeusPackaged;
-  if (originalDeusRuntime === undefined) delete process.env.DEUS_RUNTIME;
-  else process.env.DEUS_RUNTIME = originalDeusRuntime;
 });
 
 describe("desktop shell environment sync", () => {
-  it("does not read login shell PATH in packaged Electron main", async () => {
+  it("does not read login shell PATH when packaged (Electron main or deus-runtime)", async () => {
     setPlatform("darwin");
     process.env.DEUS_PACKAGED = "1";
-
-    await syncShellEnvironment();
-
-    expect(mockExecFile).not.toHaveBeenCalled();
-  });
-
-  it("does not read login shell PATH inside deus-runtime", async () => {
-    setPlatform("darwin");
-    process.env.DEUS_RUNTIME = "1";
 
     await syncShellEnvironment();
 

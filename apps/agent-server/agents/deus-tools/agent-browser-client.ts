@@ -35,7 +35,7 @@ export interface ElementBox {
 const BINARY = (() => {
   const bundled = resolveBundledCliPath("agent-browser");
   if (bundled) return bundled;
-  if (process.env.DEUS_RUNTIME === "1" || process.env.DEUS_PACKAGED === "1") {
+  if (process.env.DEUS_PACKAGED === "1") {
     return resolveCliExecutable("agent-browser");
   }
 

@@ -4,7 +4,6 @@ import type {
   CloudSettingsOrganizations,
 } from "@shared/types/environment-secrets";
 import type { GithubAppState } from "@shared/types/github";
-import { getDatabase } from "../lib/database";
 import { AppError } from "../lib/errors";
 import { invalidate } from "./query-engine";
 import {
@@ -257,28 +256,6 @@ export function refreshCloudOrganizations(): void {
   if (!cloudAccount()?.sessionToken) return;
   fetching = null;
   fetchOrganizations().catch(() => {});
-}
-
-/**
- * Give every cloud workspace and automation with no organization the default one,
- * once. Until then such a row is "the default organization's", whichever that is
- * now; after, a change in the platform's order moves nothing. A workspace whose
- * stamp is wrong is corrected by its session's snapshot (the cloud driver).
- */
-export function stampDefaultOrganization(): void {
-  const orgId = defaultCloudOrgId();
-  if (!orgId) return;
-  const db = getDatabase();
-  const workspaces = db
-    .prepare(
-      "UPDATE workspaces SET organization_id = ? WHERE kind = 'cloud' AND organization_id IS NULL"
-    )
-    .run(orgId);
-  const automations = db
-    .prepare("UPDATE automations SET organization_id = ? WHERE organization_id IS NULL")
-    .run(orgId);
-  if (workspaces.changes > 0) invalidate(["workspaces"]);
-  if (automations.changes > 0) invalidate(["automations"]);
 }
 
 /** Test seam: forget the list. */

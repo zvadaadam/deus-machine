@@ -146,7 +146,11 @@ try {
     });
     assert.equal(handed.status, 200, await handed.text());
   };
-  const SIGNED_IN = { apiKey: "agnt_sk_smoke", deusCloudSessionToken: "bearer-smoke" };
+  const SIGNED_IN = {
+    orgKeys: { [ORG]: "agnt_sk_smoke" },
+    orgId: ORG,
+    deusCloudSessionToken: "bearer-smoke",
+  };
   await handCredentials(SIGNED_IN);
 
   vite = await createServer({
@@ -334,7 +338,7 @@ try {
   await header.waitFor();
   await page.keyboard.press("Control+2");
   await showing("cloud");
-  await handCredentials({ apiKey: null, deusCloudSessionToken: null });
+  await handCredentials({ orgKeys: null, orgId: null, deusCloudSessionToken: null });
   await page.reload();
   await header.waitFor();
   await showing("local");

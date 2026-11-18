@@ -86,21 +86,10 @@ export async function sendMessage(
     cwd = computeWorkspacePath(workspace) ?? undefined;
   }
 
-  // The cloud sidecar runs claude-code and codex-app-server (the template
-  // bakes both CLIs). Anything else — codex-sdk, acp — is rejected up front
-  // with a real explanation instead of a provider-session error
-  // mid-connect. This MUST precede every write below: after the harness
-  // persist it would leave a rejected harness on the row; after the working
-  // flip it would strand the session in "working" with no turn to end it.
-  if (isCloud && agentHarness !== "claude-code" && agentHarness !== "codex-app-server") {
-    throw new ValidationError(
-      "This agent isn't available in cloud workspaces — pick a Claude or Codex model, or use a local workspace."
-    );
-  }
   // AGNT chooses no harness, model or thinking level and refuses a turn that
   // leaves one out. Read all three in the platform's vocabulary here, before
-  // the same writes, so a send without them is refused like the one above
-  // instead of failing on the socket after the session flipped to working.
+  // every write below, so a send without them is refused in words instead of
+  // failing on the socket after the session flipped to working.
   let cloudSelection: CloudTurnSelection | undefined;
   if (isCloud) {
     const read = readCloudTurnSelection({

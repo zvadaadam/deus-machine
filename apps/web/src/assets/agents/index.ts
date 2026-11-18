@@ -15,7 +15,6 @@ export type AgentLogoComponent = FC<SVGProps<SVGSVGElement>>;
 /** Agent harness → its logo. */
 const agentLogos: Record<string, AgentLogoComponent> = {
   "claude-code": ClaudeCode,
-  "codex-sdk": Codex,
   "codex-app-server": Codex,
 };
 

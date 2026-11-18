@@ -72,10 +72,6 @@ describe("a harness's rows", () => {
       "haiku",
     ]);
   });
-
-  it("answers a legacy harness with its successor's rows", () => {
-    expect(pickerModels(lists, "codex-sdk")).toEqual(pickerModels(lists, "codex-app-server"));
-  });
 });
 
 describe("the model a new chat starts on", () => {
@@ -154,13 +150,11 @@ describe("a picker value", () => {
   });
 
   it("reads a retired Codex harness as Codex's default", () => {
-    // The retired Codex harnesses named models the engine no longer lists.
-    for (const value of ["codex:gpt-5.3-codex", "codex-sdk:gpt-5.2-codex"]) {
-      expect(parseModelValue(value)).toEqual({
-        harness: "codex-app-server",
-        model: defaultModelId(CATALOG_MODEL_LISTS, "codex-app-server"),
-      });
-    }
+    // The retired Codex harness named models the engine no longer lists.
+    expect(parseModelValue("codex:gpt-5.3-codex")).toEqual({
+      harness: "codex-app-server",
+      model: defaultModelId(CATALOG_MODEL_LISTS, "codex-app-server"),
+    });
   });
 
   it("is refused when it names no harness Deus runs", () => {

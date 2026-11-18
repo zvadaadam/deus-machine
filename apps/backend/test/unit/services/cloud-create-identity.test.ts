@@ -60,7 +60,7 @@ beforeEach(() => {
   clearGithubTokenRefreshFlights();
   setCloudRuntimeCredentials({
     baseUrl: "https://platform.test",
-    apiKey: "alice-key",
+    orgKeys: { org: "alice-key" },
     orgId: "org",
     deusCloudSessionToken: "alice-session",
   });
@@ -101,7 +101,7 @@ it("stops creation when the human switches accounts during preparation", async (
   vi.spyOn(console, "error").mockImplementation(() => {});
   createCloudWorkspace({ repositoryId: "repo" });
   await vi.waitFor(() => expect(mocks.environment).toHaveBeenCalledOnce());
-  setCloudRuntimeCredentials({ apiKey: "bob-key", deusCloudSessionToken: "bob-session" });
+  setCloudRuntimeCredentials({ orgKeys: { org: "bob-key" }, deusCloudSessionToken: "bob-session" });
   finish(environment);
   await vi.waitFor(() =>
     expect(mocks.run).toHaveBeenCalledWith(
@@ -149,7 +149,6 @@ it("asks for sign-in instead of retrying while signed out", () => {
 
 it("creates in the organization it is given: that organization's key, membership and row", async () => {
   setCloudRuntimeCredentials({
-    apiKey: null,
     orgId: null,
     orgKeys: { org_a: "key_a", org_b: "key_b" },
   });
@@ -178,7 +177,7 @@ it("creates in the organization it is given: that organization's key, membership
 });
 
 it("creates in the default organization when none is named, and refuses one not set up here", () => {
-  setCloudRuntimeCredentials({ apiKey: null, orgId: null, orgKeys: { org_a: "key_a" } });
+  setCloudRuntimeCredentials({ orgId: null, orgKeys: { org_a: "key_a" } });
   createCloudWorkspace({ repositoryId: "repo" });
   expect(mocks.run).toHaveBeenCalledWith(
     expect.any(String),

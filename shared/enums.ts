@@ -91,7 +91,7 @@ export const STATUS_RANK: Record<WorkspaceStatus, number> = {
  *
  * Display names ("Claude", "Codex") are a frontend concern, never wire values.
  */
-export const AgentHarnessSchema = z.enum(["claude-code", "codex-sdk", "codex-app-server"]);
+export const AgentHarnessSchema = z.enum(["claude-code", "codex-app-server"]);
 export type AgentHarness = z.infer<typeof AgentHarnessSchema>;
 
 // ── Automations ──────────────────────────────────────────────────────────

@@ -280,7 +280,7 @@ describeWithDb("sendMessage", () => {
   // status is already "working" while `message_count` is still 0, because the
   // user row is written by the engine's echo and not by this command.
   describe("the harness binding", () => {
-    const sendWith = (harness: "claude-code" | "codex-sdk" | "codex-app-server", turnId: string) =>
+    const sendWith = (harness: "claude-code" | "codex-app-server", turnId: string) =>
       sendMessage({
         sessionId: SESSION,
         content: "hello",
@@ -300,10 +300,10 @@ describeWithDb("sendMessage", () => {
       vi.spyOn(agentService, "isConnected").mockReturnValue(true);
       const startTurn = vi.spyOn(agentService, "startTurn").mockResolvedValue(undefined as never);
 
-      await expect(sendWith("codex-sdk", "turn-1")).resolves.toEqual({ turnId: "turn-1" });
+      await expect(sendWith("codex-app-server", "turn-1")).resolves.toEqual({ turnId: "turn-1" });
 
-      expect(harness()).toBe("codex-sdk");
-      expect(startTurn.mock.calls[0][2]).toBe("codex-sdk");
+      expect(harness()).toBe("codex-app-server");
+      expect(startTurn.mock.calls[0][2]).toBe("codex-app-server");
     });
 
     it("does NOT move for a second client's send inside the echo-only window", async () => {
@@ -321,7 +321,7 @@ describeWithDb("sendMessage", () => {
 
       // Client B sends a different harness. The harness lock cannot stop it
       // (0 messages, nothing locked); the active-turn guard has to.
-      await expect(sendWith("codex-sdk", "turn-b")).rejects.toThrow(/still working/i);
+      await expect(sendWith("codex-app-server", "turn-b")).rejects.toThrow(/still working/i);
 
       // The row still describes the turn that is actually running. Rebinding
       // here would strand the session on a harness that never ran, and the
@@ -361,7 +361,7 @@ describeWithDb("sendMessage", () => {
       const startTurn = vi.spyOn(agentService, "startTurn").mockResolvedValue(undefined as never);
       db.prepare(`UPDATE sessions SET message_count = 2 WHERE id = ?`).run(SESSION);
 
-      await expect(sendWith("codex-sdk", "turn-1")).rejects.toThrow(/Cannot switch agent/i);
+      await expect(sendWith("codex-app-server", "turn-1")).rejects.toThrow(/Cannot switch agent/i);
 
       expect(harness()).toBe("claude-code");
       expect(startTurn).not.toHaveBeenCalled();

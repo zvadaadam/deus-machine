@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { PermissionModeSchema } from "@zvada/agent-server/protocol";
 import { buildTurnStartParams } from "../../../src/services/agent/run-config";
 
-const harnesses = ["claude-code", "codex-sdk", "codex-app-server"] as const;
+const harnesses = ["claude-code", "codex-app-server"] as const;
 
 describe.each(harnesses)("%s local permission policy", (harness) => {
   it.each([undefined, "native-session"])(

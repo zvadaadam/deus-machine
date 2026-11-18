@@ -77,7 +77,6 @@ describe("buildMessageSendFrame", () => {
     [{ agentHarness: "claude-code", model: "", thinkingLevel: "high" }, /model/],
     // Claude's alias for the account's own default: AGNT runs no turn on it.
     [{ agentHarness: "claude-code", model: "default", thinkingLevel: "high" }, /model/],
-    [{ agentHarness: "codex-sdk", model: "gpt-5", thinkingLevel: "low" }, /cloud workspaces/],
   ])("refuses a turn AGNT would refuse (%j) before anything is sent", (options, message) => {
     expect(() => buildMessageSendFrame("hi", "turn-5", options)).toThrow(message);
   });

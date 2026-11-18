@@ -14,11 +14,6 @@ describe("getDefaultModelForHarness (the composer seed for a reopened session)",
       expect(model.startsWith(`${harness}:`)).toBe(true);
       expect(getAgentHarnessForModel(model)).toBe(harness);
     }
-    // `codex-sdk` is a retired harness: its value becomes one on
-    // codex-app-server, which is what a cloud send must carry.
-    expect(getAgentHarnessForModel(getDefaultModelForHarness("codex-sdk"))).toBe(
-      "codex-app-server"
-    );
   });
 
   it("agrees with the global default for the default harness", () => {

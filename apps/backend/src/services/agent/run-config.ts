@@ -5,12 +5,7 @@
 // system-prompt append, resume plumbing.
 
 import { parseAgentInput } from "@zvada/agent-server/protocol";
-import type {
-  AgentHarness as EngineHarness,
-  AgentInput,
-  McpServerConfig,
-  TurnStartParams,
-} from "@zvada/agent-server/protocol";
+import type { AgentInput, McpServerConfig, TurnStartParams } from "@zvada/agent-server/protocol";
 import type { AgentHarness } from "@shared/enums";
 import type { ThinkingLevel, PermissionMode } from "@shared/protocol";
 import { buildSystemPromptAppend } from "./system-prompt";
@@ -80,21 +75,12 @@ export interface DeusTurnOptions {
   supportsImages?: boolean;
   /** The installed apps' MCP servers (services/integrations/runtime.ts). */
   mcpServers?: Record<string, McpServerConfig>;
-  /** Extra env for the agent process (a Codex session's own CODEX_HOME). */
+  /** Extra env for the agent process (NO_PROXY past a proxy, for the loopback gateway). */
   env?: Record<string, string>;
   /** The device the workspace's Simulator tab shows, named to the agent. */
   simulator?: { udid: string } | null;
   /** The workspace's agent-device session (`agentDeviceFor`); the chat's id without one. */
   agentDeviceSession?: string;
-}
-
-/**
- * The engine's harness for a deus one. The engine retired `codex-sdk`
- * (0.3.19), so a session begun on it continues on the app-server, the
- * engine's one Codex harness.
- */
-export function engineHarness(agentHarness: AgentHarness): EngineHarness {
-  return agentHarness === "codex-sdk" ? "codex-app-server" : agentHarness;
 }
 
 /** Assemble the wire params for one turn (ids are minted by the caller). */
@@ -111,7 +97,7 @@ export function buildTurnStartParams(
     turnId,
     input: options.supportsImages ? input : withoutImageParts(input),
     config: {
-      harness: engineHarness(agentHarness),
+      harness: agentHarness,
       cwd: options.cwd,
       model: options.model,
       thinkingLevel: options.thinkingLevel,
