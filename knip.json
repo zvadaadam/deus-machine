@@ -58,8 +58,8 @@
       }
     },
     "packages/device-use": {
-      "entry": ["src/engine/index.ts", "scripts/*.ts", "test/**/*.ts"],
-      "project": ["src/**/*.{ts,tsx}", "scripts/**/*.ts", "test/**/*.ts"]
+      "entry": ["scripts/*.ts"],
+      "project": ["src/**/*.ts", "scripts/**/*.ts"]
     },
     "packages/screen-studio": {
       "entry": ["test/**/*.ts"],

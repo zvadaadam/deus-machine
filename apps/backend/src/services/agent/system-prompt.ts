@@ -6,7 +6,7 @@
 // got workspace context only (they run without the deus tool suite).
 
 import type { AgentHarness } from "@shared/enums";
-import { buildWorkspaceContext } from "./workspace-context";
+import { buildWorkspaceContext, type Simulator } from "./workspace-context";
 
 const FALLBACK_CONTEXT =
   "You are working inside Deus, a desktop app that orchestrates multiple AI coding agents in parallel.";
@@ -20,7 +20,7 @@ You have screen recording tools available directly — just call them, do NOT se
 
 **How:**
 1. Open the page (BrowserNavigate) or app first, then call recording_start (target "simulator" for the iOS Simulator).
-2. Use the browser or simulator tools normally. Every action is captured automatically; you never report coordinates.
+2. Use the browser tools normally. Every browser action is captured automatically; you never report coordinates. A simulator recording is the screen alone.
 3. Call recording_chapter at the start of each step ("Sign in", "Create a project").
 4. Results that appear after an action are found and framed automatically. Use recording_focus (with an element ref) only to point at something specific the video should show.
 5. Call recording_stop. Waiting time is sped up or cut, each action is framed, and your chapters carry over. Use preset "demo" for the shortest cut.
@@ -29,8 +29,16 @@ The recording stops itself after maxDurationSeconds (default 300). If recording_
 `;
 
 /** The per-harness append: claude gets the recording briefing, codex does not. */
-export function buildSystemPromptAppend(harness: AgentHarness, cwd?: string): string {
-  const workspaceContext = buildWorkspaceContext(cwd) || FALLBACK_CONTEXT;
+export function buildSystemPromptAppend(
+  harness: AgentHarness,
+  cwd?: string,
+  simulator?: Simulator | null
+): string {
+  const workspaceContext = buildWorkspaceContext(cwd, simulator) || FALLBACK_CONTEXT;
   if (harness !== "claude-code") return workspaceContext;
-  return `${workspaceContext}\n${SCREEN_RECORDING}`.trim();
+  // Claude alone has the recording tools: it records the simulator its tab shows.
+  const recordingDevice = simulator
+    ? `To record this workspace's simulator, call recording_start with target "simulator" and destination "${simulator.udid}".\n`
+    : "";
+  return `${workspaceContext}\n${SCREEN_RECORDING}${recordingDevice}`.trim();
 }

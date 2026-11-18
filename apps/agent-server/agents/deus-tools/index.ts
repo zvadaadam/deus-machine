@@ -1,15 +1,13 @@
 // agent-server/agents/deus-tools/index.ts
-// Composes workspace + browser + simulator + recording + automation tools into the
-// Deus MCP server. A browser recording watches the page's own input, so the
-// browser tools report nothing; simulator tools report their touches.
+// Composes workspace + browser + recording + automation tools into the Deus MCP
+// server. Agents drive a simulator with the agent-device CLI (a skill in
+// Customize), not with tools of Deus's own.
 
 import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { createWorkspaceTools } from "./workspace";
 import { createBrowserTools } from "./browser";
 import { createAutomationTools } from "./automations";
-
-import { createSimulatorTools } from "./simulator";
-import { createRecordingTools, recordSimulatorAction } from "./recording";
+import { createRecordingTools } from "./recording";
 
 /**
  * Creates and returns the Deus MCP server for a given session.
@@ -28,7 +26,6 @@ export function createDeusMCPServer(sessionId: string) {
     tools: [
       ...createWorkspaceTools(sessionId),
       ...createBrowserTools(sessionId),
-      ...createSimulatorTools(sessionId, (action) => recordSimulatorAction(sessionId, action)),
       ...createAutomationTools(sessionId),
       ...createRecordingTools(sessionId),
     ],

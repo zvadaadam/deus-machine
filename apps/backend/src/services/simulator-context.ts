@@ -1,8 +1,8 @@
 // backend/src/services/simulator-context.ts
 //
-// Simulator service — owns ALL simulator operations. Both the agent-server
-// (via RPC) and the Simulator Panel (through the operations in
-// api/simulator.ts) talk to this service.
+// Simulator service — the Simulator tab's operations (api/simulator.ts).
+// Agents drive simulators themselves, with the agent-device CLI; a turn names
+// the tab's device to its agent (getContextForSession).
 //
 // Requests answer at once; what happens later is published on `simulatorEvents`.
 // Works identically in desktop (WS to localhost) and relay/web mode.
@@ -407,7 +407,7 @@ function hidSocket(workspaceId: string): WebSocket {
 }
 
 // ---------------------------------------------------------------------------
-// Public API — context queries (used by agent-server RPC)
+// Public API — context queries
 // ---------------------------------------------------------------------------
 
 export function getContextForWorkspace(workspaceId: string): SimulatorContext | null {
@@ -419,11 +419,10 @@ export function getContextForWorkspace(workspaceId: string): SimulatorContext | 
   };
 }
 
+/** The device a chat's workspace shows in its Simulator tab, which its turns name to the agent. */
 export function getContextForSession(sessionId: string): SimulatorContext | null {
-  const db = getDatabase();
-  const session = getSessionRaw(db, sessionId);
-  if (!session?.workspace_id) return null;
-  return getContextForWorkspace(session.workspace_id);
+  const session = getSessionRaw(getDatabase(), sessionId);
+  return session?.workspace_id ? getContextForWorkspace(session.workspace_id) : null;
 }
 
 // ---------------------------------------------------------------------------

@@ -162,6 +162,7 @@ export async function startTurn(
   const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, {
     ...options,
     ...apps,
+    simulator: getContextForSession(sessionId),
     // Negotiated at the handshake, not guessed from a harness list.
     supportsImages:
       link.getAgents().find((a) => a.type === engineHarness(agentHarness))?.capabilities.images ??
@@ -353,12 +354,6 @@ async function handleToolRequest(
   // SAME service the q:mutate arms use — one service, two callers.
   if (method === "automation/update") {
     return handleAutomationToolRequest(params);
-  }
-
-  // Simulator context is backend state — no frontend relay.
-  if (method === "getSimulatorContext") {
-    const sessionId = requireParam(params, "sessionId", method);
-    return getContextForSession(sessionId);
   }
 
   const sessionId = requireParam(params, "sessionId", method);

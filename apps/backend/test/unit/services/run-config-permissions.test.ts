@@ -29,3 +29,22 @@ describe.each(harnesses)("%s local permission policy", (harness) => {
     expect(params.config.permissionMode).toBe(permissionMode);
   });
 });
+
+describe.each(harnesses)("%s and the Simulator tab", (harness) => {
+  it("names the tab's device to the agent, and nothing without one", () => {
+    const simulator = { udid: "5E4E0C2F-7025-4AAE-86D4-75A9BCD7AF06" };
+    const shown = buildTurnStartParams("session", "turn", harness, "Check it", {
+      cwd: "/workspace",
+      simulator,
+    });
+    expect(shown.config.systemPromptAppend).toContain(`--udid ${simulator.udid}`);
+    // Only Claude has the recording tools, so only Claude is told how to record that device.
+    expect(shown.config.systemPromptAppend?.includes(`destination "${simulator.udid}"`)).toBe(
+      harness === "claude-code"
+    );
+    const none = buildTurnStartParams("session", "turn", harness, "Check it", {
+      cwd: "/workspace",
+    });
+    expect(none.config.systemPromptAppend).not.toContain("--udid");
+  });
+});

@@ -82,11 +82,6 @@ export const HostRpc = {
   requestGetTerminalOutput(r: GetTerminalOutputRequest): Promise<GetTerminalOutputResponse> {
     return requestHost("getTerminalOutput", r, DATA_QUERY_TIMEOUT_MS);
   },
-  requestSimulatorContext(r: {
-    sessionId: string;
-  }): Promise<{ udid: string; port?: number; streaming: boolean } | null> {
-    return requestHost("getSimulatorContext", r, DATA_QUERY_TIMEOUT_MS);
-  },
   requestAutomationUpdate(r: AutomationUpdateRequest): Promise<AutomationUpdateResponse> {
     // Cloud round-trips: a create may lazily provision the repo's platform
     // environment before the automation itself — give it real headroom.

@@ -147,9 +147,9 @@ export function createMcpServer(options: { recordingsDir?: string } = {}): {
   // agent name any source, and adds tools for re-rendering and inspecting.
   const agent = createAgentTools(
     {
-      async resolveSource({ target, source }) {
+      async resolveSource({ target, source, destination }) {
         if (source) return source;
-        if (target === "simulator") return "ios-simulator:booted";
+        if (target === "simulator") return `ios-simulator:${destination ?? "booted"}`;
         return process.env.SCREEN_STUDIO_BROWSER ?? "browser:http://127.0.0.1:9222";
       },
       bundleDir: () => join(recordingsDir, newId("rec")),

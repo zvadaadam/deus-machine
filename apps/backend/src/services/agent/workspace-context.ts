@@ -17,11 +17,16 @@ export function getProjectName(cwd: string): string {
   return path.basename(cwd.substring(0, idx));
 }
 
+/** The device a workspace's Simulator tab shows: its UDID only, since a device's name is text a person or an agent chose. */
+export interface Simulator {
+  udid: string;
+}
+
 /**
  * Builds concise workspace context for any agent.
  * Includes project name, worktree path, and orchestrator info.
  */
-export function buildWorkspaceContext(cwd?: string): string {
+export function buildWorkspaceContext(cwd?: string, simulator?: Simulator | null): string {
   if (!cwd) return "";
 
   const projectName = getProjectName(cwd);
@@ -30,7 +35,10 @@ export function buildWorkspaceContext(cwd?: string): string {
     `Project: **${projectName}**. ` +
     `Your working directory is a git worktree at \`${cwd}\` — the directory name is the workspace name, not the project name. ` +
     `You can only edit files within this worktree. Each workspace has a .context directory (gitignored) for cross-agent collaboration.\n` +
-    `A built-in browser and iOS Simulator are available for testing UI changes. Simulator tools (SimulatorListDevices, SimulatorScreenshot, SimulatorTap, SimulatorTypeText, SimulatorSwipe, SimulatorPressKey, SimulatorBuild, SimulatorLaunch, SimulatorReadScreen, SimulatorWaitFor, SimulatorGetProjectInfo) are built-in. If you don't see these tools, ask the user to enable them in Settings > Experimental Features.\n` +
+    `A built-in browser is available for testing UI changes.\n` +
+    (simulator
+      ? `This workspace's Simulator tab shows the simulator ${simulator.udid}: pass \`--udid ${simulator.udid}\` to agent-device so the person sees what you do.\n`
+      : "") +
     `You can render live HTML+CSS previews inline in chat using the \`html-preview\` code fence — it renders in an isolated Shadow DOM instead of showing code. Use this naturally whenever showing is clearer than describing (design options, component variations, layout ideas).`
   );
 }

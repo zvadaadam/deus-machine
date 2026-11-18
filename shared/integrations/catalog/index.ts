@@ -15,7 +15,7 @@ import { CATALOG_PLUGINS } from "./plugins";
 import { CATALOG_SKILLS } from "./skills";
 
 export const CATALOG: Catalog = {
-  version: "2026-11-09",
+  version: "2026-11-17",
   apps: CATALOG_APPS,
   skills: CATALOG_SKILLS,
   plugins: CATALOG_PLUGINS,
