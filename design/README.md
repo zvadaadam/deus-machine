@@ -242,14 +242,18 @@ Grant repository access to `67`, and the web-direct mobile chat to `75`.
 - A workspace's start is told in its transcript (`15`, "Chat start — starting / failed /
   ready, with a warning"), message first: the message that asked for the workspace (before
   the chat exists, as the bubble it will be, `WorkspaceStartState.tsx`), then one environment
-  line (`EnvGroup.tsx`, shared with cloud provisioning) with a warning or failure box under
-  it (`WorkspaceStartGroup.tsx`). A workspace that never started is the chat column alone:
+  line (`EnvGroup.tsx`, shared with cloud provisioning; `WorkspaceStartGroup.tsx`). While it
+  runs the line is a shimmering title over a bordered card of its steps; ready, it is one
+  quiet line (the steps open on a click) with any warning box under it; failed, the card
+  stays open with the reason and, in its footer, Details, Delete and Retry. A workspace that
+  never started is the chat column alone:
   no tools pane, no Create PR, no new-chat "+". Its sidebar row (`30`, "starting") names the
   step in the words the chat uses ("Updating…", "Copying…", "Running setup…") and opens it.
   **Not drawn yet:** the start states now end with the chat's composer
   (`WorkspaceStartComposer.tsx`, a `DS/Composer` at the foot of the column) while the
   workspace is starting or can be retried; `15`'s three "Chat start" samples still show them
-  without it.
+  without it, and still show the environment line as it was before the steps card (mono,
+  one line, a red failure box).
 - `70`…`73` Mobile: Chat · Code · sidebar drawer · PR-bar states
 - `80` Your computers — the `/connect` web route (the account's computers, from Deus Cloud).
   The relay gates in front of a computer's workspace, mobile size: `81` sign in

@@ -26,19 +26,21 @@ const labels = (start: ReturnType<typeof workspaceStart>) =>
   start.steps.map((step) => `${step.state}: ${step.label}`);
 
 describe("a starting workspace", () => {
-  it("is the step in progress, with the ones before it done", () => {
+  it("lists the step in progress under one line, with the ones before it done", () => {
     expect(workspaceStart(local)).toMatchObject({
       phase: "starting",
-      summary: "Getting the latest changes…",
+      cloud: false,
+      summary: "Setting up workspace…",
     });
+    expect(labels(workspaceStart(local))).toEqual(["active: Getting the latest changes…"]);
     const copying = workspaceStart({ ...local, init_stage: "worktree" });
-    expect(copying.summary).toBe("Making a safe copy…");
+    expect(copying.summary).toBe("Setting up workspace…");
     expect(labels(copying)).toEqual([
       "done: Checked for the latest changes",
       "active: Making a safe copy…",
     ]);
     const settingUp = workspaceStart({ ...local, init_stage: "setup", setup_status: "running" });
-    expect(settingUp.summary).toBe("Running setup…");
+    expect(settingUp.summary).toBe("Setting up workspace…");
     expect(labels(settingUp)).toEqual([
       "done: Checked for the latest changes",
       "done: Made a safe copy",
@@ -50,7 +52,7 @@ describe("a starting workspace", () => {
     expect(workspaceStart({ ...local, init_stage: null }).summary).toBe("Setting up workspace…");
     expect(
       workspaceStart({ ...local, kind: "cloud", init_stage: "provisioning sandbox" })
-    ).toMatchObject({ summary: "Starting a cloud computer…", steps: [] });
+    ).toMatchObject({ cloud: true, summary: "Starting a cloud computer…", steps: [] });
   });
 });
 
