@@ -10,8 +10,8 @@
 //  - cloudAccount(): the signed-in person (base URLs and the session). Null =
 //    the cloud lane is off, with honest errors at the create/send boundaries.
 //  - cloudOrg(orgId?): the credentials for one organization: its own key (or,
-//    when no organization keys were pushed at all, the fallback key). No id =
-//    the default organization.
+//    when no organization keys were pushed at all, the developer key from the
+//    environment). No id = the default organization.
 //  - defaultCloudOrgId(): the organization a caller that names none means: the
 //    platform's first, as the desktop says.
 // The connection identity is the account only: keys come and go per
@@ -46,8 +46,6 @@ export interface CloudOrg {
 export interface CloudRuntimeCredentials {
   /** One device key per organization, in the platform's order. Replaces the whole map. */
   orgKeys?: Record<string, string> | null;
-  /** Legacy single key: the fallback key, used only when no organization keys were pushed. */
-  apiKey?: string | null;
   baseUrl?: string | null;
   deusCloudUrl?: string | null;
   deusCloudSessionToken?: string | null;
@@ -60,7 +58,6 @@ export interface CloudRuntimeCredentials {
 
 type ScalarCredential = Exclude<keyof CloudRuntimeCredentials, "orgKeys">;
 const SCALARS: readonly ScalarCredential[] = [
-  "apiKey",
   "baseUrl",
   "deusCloudUrl",
   "deusCloudSessionToken",
@@ -115,12 +112,13 @@ function agntBaseUrl(): string {
 }
 
 /**
- * The key for development, tests and a legacy push. It stands in for an organization
- * only while no organization keys were pushed: it is one organization's key, and
- * acting in another with it would record work under the wrong organization.
+ * The developer key (the environment's, for development and the cloud e2e). It stands
+ * in for an organization only while no organization keys were pushed: it is one
+ * organization's key, and acting in another with it would record work under the
+ * wrong organization.
  */
 function fallbackKey(): string | null {
-  return runtime.apiKey ?? process.env.DEUS_CLOUD_AGNT_API_KEY ?? process.env.AGNT_API_KEY ?? null;
+  return process.env.DEUS_CLOUD_AGNT_API_KEY ?? process.env.AGNT_API_KEY ?? null;
 }
 
 function sessionSubject(token: string | null): string | null {

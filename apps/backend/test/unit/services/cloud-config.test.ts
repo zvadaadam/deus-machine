@@ -82,8 +82,8 @@ describe("cloud config runtime credentials", () => {
     setCloudRuntimeCredentials({ orgKeys: { org_a: "key_a", org_b: "key_b" } });
     setCloudRuntimeCredentials({ orgKeys: { org_a: "key_a2", org_b: "key_b" } });
     setCloudRuntimeCredentials({ orgKeys: { org_b: "key_b" } });
-    setCloudRuntimeCredentials({ apiKey: "legacy", orgId: "org_c" });
-    setCloudRuntimeCredentials({ orgKeys: null, apiKey: null, orgId: null });
+    setCloudRuntimeCredentials({ orgId: "org_c" });
+    setCloudRuntimeCredentials({ orgKeys: null, orgId: null });
 
     expect(changed).not.toHaveBeenCalled();
     expect(signal.aborted).toBe(false);
@@ -157,24 +157,6 @@ describe("cloud config runtime credentials", () => {
     expect(cloudOrg("org_b")).toMatchObject({ orgId: "org_b", apiKey: "key_b" });
   });
 
-  it("still takes the legacy single key: it is the fallback, its organization the default", () => {
-    setCloudRuntimeCredentials({ apiKey: "agnt_sk_legacy", orgId: "org_legacy" });
-    expect(defaultCloudOrgId()).toBe("org_legacy");
-    expect(cloudOrg()).toMatchObject({ orgId: "org_legacy", apiKey: "agnt_sk_legacy" });
-    expect(cloudOrg("org_other")?.apiKey).toBe("agnt_sk_legacy");
-  });
-
-  it("runtime values win over env; null clears back to env", () => {
-    process.env.DEUS_CLOUD_AGNT_API_KEY = "agnt_sk_from_env";
-    expect(cloudOrg()?.apiKey).toBe("agnt_sk_from_env");
-
-    setCloudRuntimeCredentials({ apiKey: "agnt_sk_runtime" });
-    expect(cloudOrg()?.apiKey).toBe("agnt_sk_runtime");
-
-    setCloudRuntimeCredentials({ apiKey: null });
-    expect(cloudOrg()?.apiKey).toBe("agnt_sk_from_env");
-  });
-
   it("clearing the only key disables the organization calls again (sign-out on a keyless env)", () => {
     setCloudRuntimeCredentials({ orgKeys: { org_1: "agnt_sk_device" } });
     expect(cloudOrg()).not.toBeNull();
@@ -185,7 +167,7 @@ describe("cloud config runtime credentials", () => {
   });
 
   it("strips trailing slash on runtime baseUrl", () => {
-    setCloudRuntimeCredentials({ apiKey: "agnt_sk_x", baseUrl: "https://agnt.example/" });
+    setCloudRuntimeCredentials({ orgKeys: { org: "agnt_sk_x" }, baseUrl: "https://agnt.example/" });
     expect(cloudOrg()?.baseUrl).toBe("https://agnt.example");
   });
 
@@ -205,7 +187,10 @@ describe("cloud config runtime credentials", () => {
   it.each(["baseUrl", "deusCloudUrl"] as const)(
     "rejects an insecure runtime %s before changing the current credentials",
     (field) => {
-      setCloudRuntimeCredentials({ apiKey: "agnt_sk_device", deusCloudUrl: "https://cloud.test" });
+      setCloudRuntimeCredentials({
+        orgKeys: { org: "agnt_sk_device" },
+        deusCloudUrl: "https://cloud.test",
+      });
       const account = cloudAccount();
       const signal = getCloudIdentitySignal();
       expect(() => setCloudRuntimeCredentials({ [field]: "http://cloud.test" })).toThrow(/HTTPS/);
@@ -228,7 +213,7 @@ describe("DEUS_CLOUD_ENV=local", () => {
     // local script a half-switch — main hit localhost, the backend (which
     // makes the actual workspace calls) still hit production.
     process.env.DEUS_CLOUD_ENV = "local";
-    setCloudRuntimeCredentials({ apiKey: "agnt_sk_test" });
+    setCloudRuntimeCredentials({ orgKeys: { org: "agnt_sk_test" } });
 
     expect(cloudOrg()?.baseUrl).toBe("http://127.0.0.1:8788");
     expect(cloudAccount()?.deusCloudUrl).toBe("http://127.0.0.1:5788");
@@ -237,13 +222,13 @@ describe("DEUS_CLOUD_ENV=local", () => {
   it("yields to an explicit URL override", () => {
     process.env.DEUS_CLOUD_ENV = "local";
     process.env.DEUS_CLOUD_AGNT_URL = "https://staging.example";
-    setCloudRuntimeCredentials({ apiKey: "agnt_sk_test" });
+    setCloudRuntimeCredentials({ orgKeys: { org: "agnt_sk_test" } });
 
     expect(cloudOrg()?.baseUrl).toBe("https://staging.example");
   });
 
   it("leaves production alone when unset", () => {
-    setCloudRuntimeCredentials({ apiKey: "agnt_sk_test" });
+    setCloudRuntimeCredentials({ orgKeys: { org: "agnt_sk_test" } });
 
     expect(cloudOrg()?.baseUrl).toBe("https://api.deusmachine.ai");
     expect(cloudAccount()?.deusCloudUrl).toBeNull();

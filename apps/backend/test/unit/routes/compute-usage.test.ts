@@ -26,7 +26,7 @@ beforeEach(() => {
     baseUrl: "https://platform.test",
     deusCloudUrl: "https://product.test",
     deusCloudSessionToken: "human-session",
-    apiKey: "organization-api-key",
+    orgKeys: { "org-a": "organization-api-key" },
     orgId: "org-a",
   });
   fetchMock

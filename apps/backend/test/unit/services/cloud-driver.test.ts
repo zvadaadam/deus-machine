@@ -239,7 +239,7 @@ beforeEach(async () => {
   resetCloudConfigForTests();
   setCloudRuntimeCredentials({
     baseUrl: "https://agnt.test",
-    apiKey: "agnt_sk_test_x",
+    orgKeys: { org: "agnt_sk_test_x" },
     deusCloudSessionToken: "workos-default",
   });
   vi.clearAllMocks();
@@ -1447,7 +1447,7 @@ describe("cloud driver session lifecycle", () => {
   });
 
   it("still connects a workspace whose organization has no key here: the socket is the person's", async () => {
-    setCloudRuntimeCredentials({ apiKey: null, orgKeys: { org_a: "key_a" } });
+    setCloudRuntimeCredentials({ orgId: null, orgKeys: { org_a: "key_a" } });
     shutdownCloudDriver();
     initCloudDriver(handler);
     connectCount = 0;

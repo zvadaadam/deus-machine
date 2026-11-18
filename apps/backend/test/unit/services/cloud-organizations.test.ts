@@ -41,12 +41,13 @@ beforeEach(() => {
   invalidate.mockReset();
   fetchMock.mockReset().mockImplementation(async () => Response.json(LIST));
   vi.stubGlobal("fetch", fetchMock);
-  setCloudRuntimeCredentials({ baseUrl: "https://platform.test", apiKey: null });
+  setCloudRuntimeCredentials({ baseUrl: "https://platform.test" });
 });
 afterEach(() => {
   vi.useRealTimers();
   resetCloudConfigForTests();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 /** What the desktop pushes, and what the credentials route does with it. */
@@ -68,7 +69,8 @@ describe("cloudOrganizations, the live value", () => {
   });
 
   it("is available with no items on a developer key and no session", async () => {
-    await push({ apiKey: "agnt_sk_dev" });
+    vi.stubEnv("DEUS_CLOUD_AGNT_API_KEY", "agnt_sk_dev");
+    await push({});
     expect(getCloudOrganizations()).toEqual({
       available: true,
       accountId: null,
@@ -118,8 +120,8 @@ describe("cloudOrganizations, the live value", () => {
   });
 
   it("does not make every organization ready on a developer key once keys are pushed", async () => {
+    vi.stubEnv("DEUS_CLOUD_AGNT_API_KEY", "agnt_sk_dev");
     await push({
-      apiKey: "agnt_sk_dev",
       deusCloudSessionToken: session("alice"),
       orgKeys: { org_b: "key_b" },
     });
