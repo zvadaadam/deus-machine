@@ -366,7 +366,7 @@ export function persistSessionUsage(
   const db = getDatabase();
   try {
     // Claude reports `used` on every model message but `size` only on the
-    // final result, and codex-sdk never reports size at all. The FOLD is the
+    // final result. The FOLD is the
     // sticky merge now — `usage.size` is the last size it saw this process.
     //
     // The COALESCE stays, for a case the fold cannot cover: after a backend

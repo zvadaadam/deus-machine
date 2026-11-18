@@ -44,7 +44,6 @@ export const PICKER_HARNESSES: readonly LocalHarness[] = LOCAL_HARNESSES;
 /** The name each harness is shown under. */
 export const HARNESS_LABELS: Record<AgentHarness, string> = {
   "claude-code": "Claude Code",
-  "codex-sdk": "Codex SDK",
   "codex-app-server": "Codex",
 };
 
@@ -72,13 +71,8 @@ export const CATALOG_MODEL_LISTS: readonly HarnessModels[] = LOCAL_HARNESSES.map
   models: CATALOG_MODELS.filter((model) => model.harness === harness),
 }));
 
-/** A legacy harness's models are the ones its successor lists. */
-function listedHarness(harness: string): string {
-  return harness === "codex-sdk" ? "codex-app-server" : harness;
-}
-
 function allModels(lists: readonly HarnessModels[], harness: string): readonly ModelDescriptor[] {
-  return lists.find((list) => list.harness === listedHarness(harness))?.models ?? [];
+  return lists.find((list) => list.harness === harness)?.models ?? [];
 }
 
 /** The rows a picker offers for `harness`, in the list's order. */
@@ -160,7 +154,7 @@ export function defaultModelId(
   harness: string
 ): string | undefined {
   const rows = pickerModels(lists, harness);
-  const preferred = PREFERRED_MODELS[listedHarness(harness) as LocalHarness] ?? [];
+  const preferred = PREFERRED_MODELS[harness as LocalHarness] ?? [];
   for (const id of preferred) if (rows.some((row) => row.id === id)) return id;
   // Claude marks its account-default alias; the row that runs the same model is the pick.
   const marked = allModels(lists, harness).find((row) => row.isDefault);
@@ -176,9 +170,8 @@ export function modelValue(harness: AgentHarness, model: string): string {
 }
 
 /**
- * Read a picker value, as stored or typed. A value from the Codex harnesses the engine no
- * longer runs (`codex:`, `codex-sdk:`) named models it no longer lists, so it
- * reads as Codex's default. `undefined` when it names no harness Deus knows.
+ * Read a picker value, as stored or typed. A value from the Codex harness the engine no
+ * longer runs (`codex:`) named models it no longer lists, so it reads as Codex's default. `undefined` when it names no harness Deus knows.
  */
 export function parseModelValue(
   value: string
@@ -188,7 +181,7 @@ export function parseModelValue(
   if (colon <= 0 || colon === text.length - 1) return undefined;
   const prefix = text.slice(0, colon).toLowerCase();
   const model = text.slice(colon + 1);
-  if (prefix === "codex" || prefix === "codex-sdk") {
+  if (prefix === "codex") {
     const fallback = defaultModelId(CATALOG_MODEL_LISTS, "codex-app-server");
     return fallback ? { harness: "codex-app-server", model: fallback } : undefined;
   }
@@ -198,10 +191,9 @@ export function parseModelValue(
 
 /** The picker value a new chat on `harness` starts on, from the engine's own catalog. */
 export function defaultModelValue(harness: AgentHarness): string {
-  const listed = listedHarness(harness) as AgentHarness;
-  const model = defaultModelId(CATALOG_MODEL_LISTS, listed);
+  const model = defaultModelId(CATALOG_MODEL_LISTS, harness);
   if (!model) throw new Error(`The engine's catalog lists no ${harness} model`);
-  return modelValue(listed, model);
+  return modelValue(harness, model);
 }
 
 /** The model a new chat starts on. */

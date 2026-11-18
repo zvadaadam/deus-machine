@@ -37,7 +37,7 @@ import { AgentLink } from "./client";
 import { LocalAgents } from "./local-agents";
 import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
 import { createAgentEventHandler, type AgentEventHandler } from "./event-handler";
-import { buildTurnStartParams, engineHarness, type DeusTurnOptions } from "./run-config";
+import { buildTurnStartParams, type DeusTurnOptions } from "./run-config";
 import { toolRequests } from "@shared/api/sessions";
 import { isPrompt, pendingFor, relay } from "./tool-relay";
 import { resolveTurnApps } from "../integrations";
@@ -164,7 +164,7 @@ export async function startTurn(
     ...apps,
     // Negotiated at the handshake, not guessed from a harness list.
     supportsImages:
-      link.getAgents().find((a) => a.type === engineHarness(agentHarness))?.capabilities.images ??
+      link.getAgents().find((a) => a.type === agentHarness)?.capabilities.images ??
       false,
   });
   // Mirror the admission BEFORE the quick-ack round-trip: the server can push

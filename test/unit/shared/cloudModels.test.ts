@@ -67,7 +67,6 @@ describe("cloud model lists", () => {
       "claude-sonnet-4-6",
       "haiku",
     ]);
-    expect(cloudModelsFor(LISTS, "codex-sdk")).toEqual([]);
     expect(findCloudModel(LISTS, "codex-app-server", "gpt-6.1-sol")?.label).toBe("GPT-6.1-Sol");
     expect(findCloudModel(LISTS, "claude-code", "gpt-6.1-sol")).toBeUndefined();
   });
