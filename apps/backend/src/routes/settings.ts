@@ -9,10 +9,7 @@ import {
   saveCloudGithubToken,
 } from "../services/cloud-workspace-init.service";
 import { initAutomations } from "../services/automations";
-import {
-  refreshCloudOrganizations,
-  stampDefaultOrganization,
-} from "../services/cloud-settings.service";
+import { refreshCloudOrganizations } from "../services/cloud-settings.service";
 import { reconcileCloudAccounts } from "../services/integrations";
 import { AppError, ValidationError } from "../lib/errors";
 
@@ -67,8 +64,6 @@ app.post("/settings/cloud/credentials", async (c) => {
   }
   const body = parseBody(CloudCredentialsBody, await c.req.json());
   setCloudRuntimeCredentials(body);
-  // Rows with no organization are given the default one now, while it is known.
-  stampDefaultOrganization();
   // Remote access belongs to the signed-in account: follow sign-in, sign-out and switches.
   reconcileRelay();
   // So do the apps the account connected through Deus Cloud.

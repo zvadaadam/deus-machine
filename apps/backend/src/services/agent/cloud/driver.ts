@@ -421,8 +421,8 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
   switch (type) {
     case "session.snapshot": {
       const state = (frame.state ?? {}) as Record<string, unknown>;
-      // Every snapshot names the session's organization: how a row created
-      // before organizations were recorded (or adopted without one) learns it.
+      // Every snapshot names the session's organization: how a row made
+      // without one (a developer key, an adoption) learns it.
       recordWorkspaceOrganization(session.deusWorkspaceId, state.organizationId);
 
       if (frame.messages !== undefined) {

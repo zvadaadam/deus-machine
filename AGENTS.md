@@ -510,8 +510,7 @@ connection identity (a key changing closes nothing), `cloudOrg(orgId?)` one orga
 key (a developer key stands in only when no organization keys were pushed), and
 `cloudOrgOf(row)` the key for a cloud workspace or automation, which records its
 organization (`organization_id`, chosen at creation or learned from the platform's
-snapshot). A row with none is given the default organization once, when the desktop names
-it (`stampDefaultOrganization`), so a later change in the platform's order moves nothing.
+snapshot). A row with none (made with a developer key) is the default organization's.
 Every platform call for a row uses its organization's key, and the GitHub installation
 token is always minted for the workspace's own organization.
 

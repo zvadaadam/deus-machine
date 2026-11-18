@@ -24,10 +24,7 @@ import {
   stopBackgroundRefresh as stopLocalServerDiscovery,
 } from "./services/local-servers.service";
 import { initAutomations } from "./services/automations";
-import {
-  refreshCloudOrganizations,
-  stampDefaultOrganization,
-} from "./services/cloud-settings.service";
+import { refreshCloudOrganizations } from "./services/cloud-settings.service";
 import { forgetUnusedAssistants } from "./services/assistants";
 import { startIntegrations } from "./services/integrations";
 import { failInterruptedWorkspaces } from "./services/workspace-init.service";
@@ -154,10 +151,6 @@ async function onListening(port: number): Promise<void> {
   setLocalServerRefreshListener(() => invalidate(["localServers"]));
   startLocalServerDiscovery();
 
-  // Rows with no organization are given the default one when it is known already.
-  // Today it never is at startup (the desktop pushes it later, and the credentials
-  // route stamps then); this keeps a start that has it from waiting for a push.
-  stampDefaultOrganization();
   // Automations are cloud-only (agnt schedules + executes) — just mirror the
   // platform into the local cache when credentials are already present.
   initAutomations();

@@ -191,8 +191,7 @@ export async function refreshAutomations(
     return;
   }
 
-  const defaultOrgId = defaultCloudOrgId();
-  const orgId = organizationId ?? defaultOrgId;
+  const orgId = organizationId ?? defaultCloudOrgId();
   const inFlight = refreshInFlight.get(orgId);
   if (inFlight) return inFlight;
   if (Date.now() - (lastFullRefreshAt.get(orgId) ?? 0) < FULL_REFRESH_MIN_INTERVAL_MS) return;
@@ -216,8 +215,7 @@ export async function refreshAutomations(
       summaries.map((summary) =>
         platform.summaryToRow(summary, envMap, locals.get(summary.id), orgId)
       ),
-      // Rows from before organizations were kept are the default organization's.
-      { organizationId: orgId, includeUnknown: orgId === defaultOrgId }
+      { organizationId: orgId }
     );
     const changed = summaries.filter((summary) => {
       const prev = prevLastRun.get(summary.id);

@@ -74,7 +74,7 @@ export function chosenOrganization(
 
 /**
  * Where a workspace runs. A cloud workspace's organization is its own, else the
- * default one (rows from before organizations were recorded); one the list does not
+ * default one (a row made with a developer key has none); one the list does not
  * name is shown in the default one, so it is never listed nowhere.
  */
 export function placeOf(workspace: CloudWorkspace, organizations: Organizations): Place {
