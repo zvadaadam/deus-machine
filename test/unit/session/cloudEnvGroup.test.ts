@@ -94,6 +94,21 @@ describe("a cloud computer's line", () => {
     });
   });
 
+  it("does not bring back an earlier start's steps when a wake is all it hears", () => {
+    // Woken with no "resuming" said.
+    expect(told([...firstStart, event("running"), event("paused"), event("running")])).toEqual({
+      title: "Computer ready",
+      state: "ready",
+      steps: [],
+    });
+    // The start's end was missed: a wake still begins its own story.
+    expect(told([...firstStart, event("resuming")])).toEqual({
+      title: "Waking computer",
+      state: "running",
+      steps: [],
+    });
+  });
+
   it("is one line when the computer rests or fails, and for a status it does not know", () => {
     expect(told([...firstStart, event("running"), event("paused")])).toMatchObject({
       state: "asleep",

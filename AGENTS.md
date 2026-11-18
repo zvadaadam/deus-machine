@@ -228,16 +228,17 @@ one that could not be created is still there to send again. From then on the
 message waits in `workspaceStartStore`, keyed by workspace,
 and `useFirstMessageDelivery` (mounted once, in `MainLayout`) sends it to the
 workspace's first chat when that workspace is ready, whichever one is on
-screen; `session/lib/firstMessage.ts` holds the rules. It is kept in
-localStorage, so neither a reload nor closing the window loses it. Quitting the
-desktop app stops the start, so the reopened app shows a failed start and the
-message sends on Retry; where the backend outlives the window (the web app), it
-sends when the window returns. A chat hears it once: one that already has a
-message, or is answering one, is never sent it again, and a send the backend
-refuses goes into that chat's composer with a toast rather than being retried.
-Two tabs of one browser share the stored message, so both may try to send it:
-the backend refuses the second, which lands in that tab's composer. Send it
-from anywhere else and two workspaces started in a row lose one.
+screen; `session/lib/firstMessage.ts` holds the rules. Where it is kept follows
+the window (`capabilities.singleWindow`): a browser tab keeps its own
+(sessionStorage), so a reload does not lose it and a tab opened beside it does
+not find it and send it too; the desktop app, which is one window, keeps it on the
+device (localStorage), so quitting does not lose it either. Quitting the
+desktop app stops the start, so the reopened app shows a failed start with the
+message still waiting, and Retry sends it. It is sent once: a chat that already
+has a message, or is answering one, is never sent it again, and a send the
+backend refuses goes into that chat's composer with a toast rather than being
+retried. Send it from anywhere else and two workspaces started in a row lose
+one.
 
 A message the cloud platform refuses after the backend took it (a channel `error`,
 `MESSAGE_SEND_FAILED`) is never lost either, first message or not: its bubble goes and
@@ -261,9 +262,9 @@ message waits per workspace: sending there when nothing waits makes it the
 waiting message, and a second is refused in words and stays in the box. What
 was typed there moves to the chat's composer when the chat opens
 (`sessionComposerActions.move`, from `useFirstMessageDelivery`), before the
-waiting message is sent. The waiting message is kept on the device it was typed
-on, so another device can speak to the chat first; this device's message is then
-never sent, and goes into that chat's composer instead (`missedFirstMessages`). A
+waiting message is sent. The waiting message is per client, so another device
+or window can speak to the chat first; this client's message is then never
+sent, and goes into that chat's composer instead (`missedFirstMessages`). A
 failure that cannot be retried has no composer: nothing typed there could be
 sent.
 

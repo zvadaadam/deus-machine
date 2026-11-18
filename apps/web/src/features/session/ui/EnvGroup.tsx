@@ -75,12 +75,15 @@ export function EnvGroup({
   footer,
   warnings = [],
 }: EnvGroupProps) {
-  // A failure and its ways out are never folded away. Otherwise the person's
-  // own click wins, and without one it is open while it runs.
-  const [pinned, setPinned] = useState<boolean | null>(null);
+  // The steps are in view while it runs, and a failure's ways out always. Only
+  // a line that settled fine folds them away, and a click opens them again:
+  // that run's steps, so the next run told on this line starts folded.
+  const [openedRun, setOpenedRun] = useState<string>();
+  const run = steps[0]?.key;
+  const opened = run !== undefined && openedRun === run;
   const hasCard = steps.length > 0 || !!footer;
-  const foldable = hasCard && state !== "failed";
-  const open = hasCard && (!foldable || (pinned ?? state === "running"));
+  const foldable = hasCard && state !== "running" && state !== "failed";
+  const open = hasCard && (!foldable || opened);
   const Icon =
     state === "failed"
       ? TriangleAlert
@@ -94,7 +97,7 @@ export function EnvGroup({
     <div className="flex w-full min-w-0 flex-col text-sm" role="status" aria-live="polite">
       <button
         type="button"
-        onClick={() => setPinned(!open)}
+        onClick={() => setOpenedRun(opened ? undefined : run)}
         disabled={!foldable}
         aria-expanded={foldable ? open : undefined}
         className={cn(
@@ -108,7 +111,7 @@ export function EnvGroup({
             className={cn(
               "absolute top-0 left-0 h-3.5 w-3.5 transition-opacity duration-150 ease-out",
               state === "failed" ? "text-destructive/80" : "text-muted-foreground",
-              foldable && (pinned ? "opacity-0" : "group-hover:opacity-0")
+              foldable && (opened ? "opacity-0" : "group-hover:opacity-0")
             )}
             aria-hidden="true"
           />
@@ -117,7 +120,7 @@ export function EnvGroup({
               className={cn(
                 "text-muted-foreground/50 absolute top-0 left-0 h-3.5 w-3.5 transition-[transform,opacity] duration-150 ease-out",
                 open && "rotate-90",
-                pinned ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                opened ? "opacity-100" : "opacity-0 group-hover:opacity-100"
               )}
               aria-hidden="true"
             />

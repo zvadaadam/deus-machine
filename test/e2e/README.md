@@ -42,9 +42,7 @@ the same workspaces. It checks, in order:
   bubble it will be; no folder and no branch are left. The chat's composer is
   there on both devices, the phone's as wide as the screen. Nothing else is offered: no new chat, no Create PR, no
   tools pane, no tab bar on the phone.
-- The kept message survives closing the window: a new page in the same browser
-  (empty sessionStorage) still shows it. Retry, from that page, starts the same
-  workspace again: same id and name, each stage reaching
+- Retry starts the same workspace again: same id and name, each stage reaching
   both devices over the WebSocket, the kept message sent to the chat it opens,
   once, and that chat opening with how the workspace started. While it starts,
   a second message typed on its page is refused with a toast and stays in the

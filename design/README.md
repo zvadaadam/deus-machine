@@ -243,7 +243,7 @@ Grant repository access to `67`, and the web-direct mobile chat to `75`.
   ready, with a warning"), message first: the message that asked for the workspace (before
   the chat exists, as the bubble it will be, `WorkspaceStartState.tsx`), then one environment
   line (`EnvGroup.tsx`, shared with cloud provisioning; `WorkspaceStartGroup.tsx`). While it
-  runs the line is a shimmering title over a bordered card of its steps; ready, it is one
+  runs the line is a shimmering title over a bordered card of its steps (always open); ready, it is one
   quiet line (the steps open on a click) with any warning box under it; failed, the card
   stays open (it cannot be folded) with the reason and, in its footer, Details when the tool
   printed something, and Delete and Retry, or a sentence to archive it when it cannot be

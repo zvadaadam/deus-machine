@@ -1,16 +1,16 @@
 /**
- * What this device knows about the workspaces it watched start.
+ * What this client knows about the workspaces it watched start.
  *
  * `pending` — the message typed before a workspace existed, waiting for its
  * first chat (delivered by session/hooks/useFirstMessageDelivery). Keyed by
  * workspace, so one workspace becoming ready cannot send another's. It stays
  * until it is delivered: a start that fails keeps it, and a retry of the same
- * workspace sends it. Kept in localStorage, so it outlives the window on this
- * device: a reload, and quitting the app. After a quit the workspace is a
- * failed start (the backend stopped with the app), so the message sends only
- * on a Retry. Where the backend outlives the window (the web app), it sends
- * when the window returns, unless the chat was spoken to first: then it goes
- * to that chat's composer instead (missedFirstMessages).
+ * workspace sends it. Where it is kept follows the window (`keptIn`). A
+ * browser tab keeps its own, so a reload does not lose it and a tab opened
+ * beside it does not find it and send it too. The desktop app is one window,
+ * so it keeps it on the device and quitting does not lose it either: the quit
+ * stopped the start, the reopened app shows it failed with the message still
+ * waiting, and a Retry sends it.
  *
  * `startedIn` — the chat a workspace started with. That chat tells the story
  * of the start (its steps, its warnings) under its first message, the way a
@@ -20,6 +20,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import type { ThinkingLevel } from "@/shared/agents";
+import { capabilities } from "@/platform/capabilities";
 
 export interface PendingFirstMessage {
   message: string;
@@ -34,24 +35,28 @@ interface WorkspaceStartStore {
   startedIn: Record<string, string>;
 }
 
-/** localStorage that never throws: a message with large images may not fit,
- *  and then it simply is not kept across a reload or a quit. */
-const deviceStorage: StateStorage = {
+/** Where the waiting messages are kept: on the device for the one window of
+ *  the desktop app, in the tab for a browser. */
+const keptIn = (): Storage => (capabilities.singleWindow ? localStorage : sessionStorage);
+
+/** That storage, never throwing: a message with large images may not fit, and
+ *  then it simply is not kept. */
+const keptStorage: StateStorage = {
   getItem: (name) => {
     try {
-      return localStorage.getItem(name);
+      return keptIn().getItem(name);
     } catch {
       return null;
     }
   },
   setItem: (name, value) => {
     try {
-      localStorage.setItem(name, value);
+      keptIn().setItem(name, value);
     } catch {
       // Over quota, or no storage (tests, private windows). Drop the older copy
       // too: restoring it would bring back a message that may have been sent.
       try {
-        localStorage.removeItem(name);
+        keptIn().removeItem(name);
       } catch {
         /* no storage */
       }
@@ -59,7 +64,7 @@ const deviceStorage: StateStorage = {
   },
   removeItem: (name) => {
     try {
-      localStorage.removeItem(name);
+      keptIn().removeItem(name);
     } catch {
       /* nothing to remove */
     }
@@ -75,7 +80,7 @@ export const useWorkspaceStartStore = create<WorkspaceStartStore>()(
     {
       name: "workspace-start",
       version: 1,
-      storage: createJSONStorage(() => deviceStorage),
+      storage: createJSONStorage(() => keptStorage),
       partialize: (state) => ({ pending: state.pending }),
     }
   )

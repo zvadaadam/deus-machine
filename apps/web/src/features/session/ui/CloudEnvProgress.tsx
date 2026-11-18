@@ -79,13 +79,17 @@ export function buildGroup(entries: CloudEnvEntry[]): EnvProps | null {
   if (latest.status === "error")
     return line(latest.reason ? `Computer error — ${latest.reason}` : "Computer error", "failed");
 
-  // The story is the run in flight, or the one that just finished: everything
-  // since the computer settled before its latest work (a second "running" that
-  // only adds a detail ends the same run). A step per provisioning event, the
-  // latest still spinning, earlier ones checked off.
-  const lastWork = entries.findLastIndex((entry) => !SETTLED.has(entry.status));
+  // The story is the run in flight, or the one that just finished. A run starts
+  // after the computer last settled, or at its wake; "running" said again (with
+  // a detail) ends the same run. A step per provisioning event, the latest
+  // still spinning, earlier ones checked off.
+  let end = entries.length - 1;
+  while (end > 0 && latest.status === "running" && entries[end - 1].status === "running") end--;
   const run = entries.slice(
-    entries.slice(0, Math.max(lastWork, 0)).findLastIndex((entry) => SETTLED.has(entry.status)) + 1
+    Math.max(
+      entries.slice(0, end).findLastIndex((entry) => SETTLED.has(entry.status)) + 1,
+      entries.findLastIndex((entry) => entry.status === "resuming")
+    )
   );
   const steps: EnvLine[] = run
     .filter((entry) => entry.status === "provisioning")
