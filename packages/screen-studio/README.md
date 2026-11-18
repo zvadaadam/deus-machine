@@ -104,9 +104,10 @@ An action is a moment and, ideally, a place:
   the manifest maps to media time. Report the start and the completion: the edit
   keeps everything from shortly before the start until the result has been on
   screen long enough to read.
-- Coordinates are in the source's viewport: CSS pixels for browsers, iOS points
-  for simulators. A tool that reports in another space adds `"space": {"width",
-"height"}` and Screen Studio scales.
+- Coordinates are in the source's viewport: CSS pixels for browsers, the
+  video's pixels for simulators (agent-device reports no size in points, and its
+  own touches carry theirs). A tool that reports in another space, such as iOS
+  points, adds `"space": {"width", "height"}` and Screen Studio scales.
 - Types: `click`, `double-click`, `right-click`, `hover`, `type`, `key`, `scroll`,
   `navigate`, `drag`, `tap`, `long-press`, `swipe`, `pinch`, `other`. Drags and
   swipes can carry a `path`.

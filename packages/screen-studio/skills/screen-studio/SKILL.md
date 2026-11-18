@@ -52,7 +52,9 @@ screen-studio stop ./captures/login --render walkthrough
   and navigation by themselves**, with the element's box. Don't report them.
 - **Other sources need actions reported**, right after each one: when it
   started (`--at`, epoch ms; default now), how long it took, and where it
-  happened in the source's own coordinates (iOS points for simulators):
+  happened in the source's own coordinates (for a simulator, the video's
+  pixels, or iOS points with `--space 402x874`, the device's size in points).
+  agent-device's own touches are read from its telemetry: don't report them:
 
   ```sh
   screen-studio action ./captures/onboarding --type tap --x 196 --y 612 \

@@ -143,9 +143,15 @@ export async function simulatorBackend(spec: SimulatorSourceSpec): Promise<Captu
                   : event
               )
             : [];
+          // What agent-device says went wrong (a recording ended early, an overlay
+          // it could not draw), in its own words.
+          const warnings = [data.warning, data.overlayWarning].filter(
+            (warning): warning is string => typeof warning === "string" && warning !== ""
+          );
+          if (!telemetry) warnings.push("agent-device wrote no telemetry");
           // The video holds frames only where the screen changed; renderers pad
           // a still ending by holding the last frame.
-          return { path, warnings: telemetry ? [] : ["agent-device wrote no telemetry"], events };
+          return { path, warnings, events };
         },
       };
     },

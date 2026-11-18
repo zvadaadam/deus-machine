@@ -37,7 +37,7 @@ describe("source IDs", () => {
 });
 
 describe("iOS Simulator", () => {
-  it("records through agent-device in the agent's session and keeps its touches", async () => {
+  it("records through agent-device in the agent's session and keeps its touches and warnings", async () => {
     const dir = tempDir();
     const log = join(dir, "calls.log");
     // agent-device as the source sees it: devices, record start, record stop.
@@ -51,7 +51,7 @@ case "$1 $2" in
   "record start") ffmpeg -v error -f lavfi -i testsrc2=size=64x128:rate=10 -t 1 -pix_fmt yuv420p -y "$3" && echo "$3" > ${JSON.stringify(join(dir, "out"))} && echo '{"success":true,"data":{}}' ;;
   "record stop") out=$(cat ${JSON.stringify(join(dir, "out"))}); t="\${out%.mp4}.gesture-telemetry.json"
     echo '{"version":1,"events":[{"kind":"tap","tMs":400,"x":20,"y":30,"referenceWidth":32,"referenceHeight":64}]}' > "$t"
-    printf '{"success":true,"data":{"outPath":"%s","telemetryPath":"%s"}}' "$out" "$t" ;;
+    printf '{"success":true,"data":{"outPath":"%s","telemetryPath":"%s","warning":"The simulator shut down"}}' "$out" "$t" ;;
   *) echo '{"success":false,"error":{"message":"unexpected"}}'; exit 1 ;;
 esac
 `
@@ -65,6 +65,8 @@ esac
     const final = await recording.stop();
     expect(final.status).toBe("complete");
     expect(final.source.backend).toBe("agent-device");
+    // agent-device's own warnings reach the recording.
+    expect(final.capture.warnings).toContain("The simulator shut down");
     expect(readFileSync(log, "utf8").trim().split("\n")).toEqual([
       "chat-1 devices --platform ios --json",
       `chat-1 record start ${join(bundle, "media", "screen.mp4")} --hide-touches --scope device --udid SIM-1 --json`,
