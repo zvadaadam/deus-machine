@@ -120,6 +120,14 @@ ships: no skill, nothing to install, no tools of Deus's own.
   outlives Deus while one is open, until 30 idle minutes end it
   (`AGENT_DEVICE_SESSION_IDLE_TIMEOUT_MS`, set in `AgentLink.open`; a
   recording counts as activity; the daemon reads it when it starts).
+- **Its own daemon.** `AgentLink.open` also sets `AGENT_DEVICE_STATE_DIR` to
+  `agent-device/` beside the database, so Deus's agent-device runs its own
+  daemon: a client refuses a daemon of any other version, newer or older ("The
+  running daemon cannot serve this client"; an older busy one "was not
+  replaced"), and a person's own agent-device is whatever version they
+  installed. Device claims, runner leases and the runner build cache stay in
+  `~/.agent-device`, shared, so two daemons refuse and hand over a simulator
+  between them.
 - **Recording.** A simulator recording (`recording_start` with target
   `simulator`) is agent-device's `record start --hide-touches --scope device`
   in the workspace's session (`packages/screen-studio/src/capture/simulator.ts`),

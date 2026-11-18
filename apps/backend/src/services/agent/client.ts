@@ -5,6 +5,7 @@
 // dedupe, gap healing via events/replay). The engine's deus MCP tools call the
 // backend back (`onToolRequest`) and name sessions (`onTitle`).
 
+import { dirname, join } from "node:path";
 import { AgentServerClient, type SessionEventGap } from "@zvada/agent-server/client";
 import type {
   InitializeResult,
@@ -21,6 +22,7 @@ import {
   stopEngine,
   type SessionTitle,
 } from "../../../../agent-server";
+import { DB_PATH } from "../../lib/database";
 
 // ============================================================================
 // Types
@@ -69,6 +71,8 @@ export class AgentLink {
     }
     // A chat that never closes its agent-device session must not hold the device, or leave agent-device's daemon running, for good.
     process.env.AGENT_DEVICE_SESSION_IDLE_TIMEOUT_MS ??= String(30 * 60_000);
+    // Deus's pinned agent-device must not meet a daemon of another version; device claims stay shared, so two daemons still hand a simulator over.
+    process.env.AGENT_DEVICE_STATE_DIR ??= join(dirname(DB_PATH), "agent-device");
     try {
       const client = await AgentServerClient.attach(transport, {
         requestTimeoutMs: 30_000,
