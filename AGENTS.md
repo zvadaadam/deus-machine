@@ -229,12 +229,15 @@ message waits in `workspaceStartStore`, keyed by workspace,
 and `useFirstMessageDelivery` (mounted once, in `MainLayout`) sends it to the
 workspace's first chat when that workspace is ready, whichever one is on
 screen; `session/lib/firstMessage.ts` holds the rules. It is kept in
-localStorage, so neither a reload nor quitting the app loses it (after a quit
-the start has failed, so it sends on Retry), and it is sent once:
-a chat that already has a message, or is answering one, is never sent it
-again, and a send the backend refuses goes into that chat's composer with a
-toast rather than being retried. Send it from anywhere else and two workspaces
-started in a row lose one.
+localStorage, so neither a reload nor closing the window loses it. Quitting the
+desktop app stops the start, so the reopened app shows a failed start and the
+message sends on Retry; where the backend outlives the window (the web app), it
+sends when the window returns. A chat hears it once: one that already has a
+message, or is answering one, is never sent it again, and a send the backend
+refuses goes into that chat's composer with a toast rather than being retried.
+Two tabs of one browser share the stored message, so both may try to send it:
+the backend refuses the second, which lands in that tab's composer. Send it
+from anywhere else and two workspaces started in a row lose one.
 
 A message the cloud platform refuses after the backend took it (a channel `error`,
 `MESSAGE_SEND_FAILED`) is never lost either, first message or not: its bubble goes and
