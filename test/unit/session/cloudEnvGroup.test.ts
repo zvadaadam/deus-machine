@@ -57,6 +57,19 @@ describe("a cloud computer's line", () => {
     });
   });
 
+  it("keeps the steps when ready is said again with a detail", () => {
+    const again = [
+      ...firstStart,
+      event("running"),
+      event("running", null, { snapshotRestored: true }),
+    ];
+    expect(told(again)).toEqual({
+      title: "Computer ready — session restored",
+      state: "ready",
+      steps: ["done: Initializing computer", "done: Cloning repository"],
+    });
+  });
+
   it("tells a wake by its title, without the start that came before it", () => {
     const asleep = [...firstStart, event("running"), event("paused")];
     expect(told([...asleep, event("resuming")])).toEqual({

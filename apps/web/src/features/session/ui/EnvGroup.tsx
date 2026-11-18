@@ -75,10 +75,12 @@ export function EnvGroup({
   footer,
   warnings = [],
 }: EnvGroupProps) {
-  // The person's own click wins; otherwise open while it runs or when it failed.
+  // A failure and its ways out are never folded away. Otherwise the person's
+  // own click wins, and without one it is open while it runs.
   const [pinned, setPinned] = useState<boolean | null>(null);
   const hasCard = steps.length > 0 || !!footer;
-  const open = hasCard && (pinned ?? (state === "running" || state === "failed"));
+  const foldable = hasCard && state !== "failed";
+  const open = hasCard && (!foldable || (pinned ?? state === "running"));
   const Icon =
     state === "failed"
       ? TriangleAlert
@@ -93,11 +95,11 @@ export function EnvGroup({
       <button
         type="button"
         onClick={() => setPinned(!open)}
-        disabled={!hasCard}
-        aria-expanded={hasCard ? open : undefined}
+        disabled={!foldable}
+        aria-expanded={foldable ? open : undefined}
         className={cn(
           "group flex w-full items-center gap-2 px-2 py-1.5 text-left opacity-80",
-          hasCard && "cursor-pointer transition-opacity duration-150 hover:opacity-100",
+          foldable && "cursor-pointer transition-opacity duration-150 hover:opacity-100",
           "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
         )}
       >
@@ -106,11 +108,11 @@ export function EnvGroup({
             className={cn(
               "absolute top-0 left-0 h-3.5 w-3.5 transition-opacity duration-150 ease-out",
               state === "failed" ? "text-destructive/80" : "text-muted-foreground",
-              hasCard && (pinned ? "opacity-0" : "group-hover:opacity-0")
+              foldable && (pinned ? "opacity-0" : "group-hover:opacity-0")
             )}
             aria-hidden="true"
           />
-          {hasCard && (
+          {foldable && (
             <ChevronRight
               className={cn(
                 "text-muted-foreground/50 absolute top-0 left-0 h-3.5 w-3.5 transition-[transform,opacity] duration-150 ease-out",

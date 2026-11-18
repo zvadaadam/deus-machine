@@ -245,7 +245,9 @@ Grant repository access to `67`, and the web-direct mobile chat to `75`.
   line (`EnvGroup.tsx`, shared with cloud provisioning; `WorkspaceStartGroup.tsx`). While it
   runs the line is a shimmering title over a bordered card of its steps; ready, it is one
   quiet line (the steps open on a click) with any warning box under it; failed, the card
-  stays open with the reason and, in its footer, Details, Delete and Retry. A workspace that
+  stays open (it cannot be folded) with the reason and, in its footer, Details when the tool
+  printed something, and Delete and Retry, or a sentence to archive it when it cannot be
+  retried. A workspace that
   never started is the chat column alone:
   no tools pane, no Create PR, no new-chat "+". Its sidebar row (`30`, "starting") names the
   step in the words the chat uses ("Updating…", "Copying…", "Running setup…") and opens it.
