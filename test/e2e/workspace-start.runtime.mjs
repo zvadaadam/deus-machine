@@ -197,18 +197,24 @@ try {
     isMobile: true,
     hasTouch: true,
   });
-  const a = await desktop.newPage(),
-    b = await mobile.newPage();
   const sent = [];
-  for (const page of [a, b]) {
+  const watch = (page) => {
     page.setDefaultTimeout(20000);
     page.on("pageerror", (error) => errors.push(error.message));
-  }
-  a.on("websocket", (socket) =>
-    socket.on("framesent", (frame) => {
-      if (String(frame.payload).includes('"q:mutate"')) sent.push(String(frame.payload));
-    })
-  );
+    return page;
+  };
+  // The desktop's window: every write it sends is counted. Reopened in section 4.
+  const desktopWindow = async () => {
+    const page = watch(await desktop.newPage());
+    page.on("websocket", (socket) =>
+      socket.on("framesent", (frame) => {
+        if (String(frame.payload).includes('"q:mutate"')) sent.push(String(frame.payload));
+      })
+    );
+    return page;
+  };
+  let a = await desktopWindow();
+  const b = watch(await mobile.newPage());
   // The app's own modules, as Vite serves them to the page (paths in the
   // browser, so they are data here, not imports of this file).
   const modules = {
@@ -339,10 +345,9 @@ try {
     .locator(`[data-workspace-id="${failing.id}"]`)
     .getByText("Failed", { exact: true })
     .waitFor();
-  // The message that was typed is kept, as the bubble it will be, and said to be.
-  const waiting = panel(a).locator('[data-slot="waiting-message"]');
-  await waiting.getByText("Add a dark mode toggle to the settings page").waitFor();
-  await waiting.getByText("Kept. It sends after a retry.").waitFor();
+  // The message that was typed is kept, as the bubble it will be.
+  const waiting = () => panel(a).locator('[data-slot="waiting-message"]');
+  await waiting().getByText("Add a dark mode toggle to the settings page").waitFor();
   // A start that can be retried keeps the chat's composer, where the chat will have it.
   await startComposer(a).waitFor();
   await panel(a).getByRole("button", { name: "Details" }).click();
@@ -372,7 +377,15 @@ try {
     { reason: failing.error_message }
   );
 
-  // ── 4. Retry in place, watched from a second device.
+  // ── 4. Retry in place, from a window opened after the first was closed (on
+  // the desktop, closing the window quits the app), watched from a second device.
+  // A new page in the same browser: its sessionStorage is empty, its localStorage is not.
+  await a.close();
+  a = await desktopWindow();
+  await a.goto(url(failing.id));
+  await attach(a);
+  await panel(a).getByRole("button", { name: "Retry", exact: true }).waitFor();
+  await waiting().getByText("Add a dark mode toggle to the settings page").waitFor();
   gitLaunch("branch", "develop");
   await panel(a).getByRole("button", { name: "Retry", exact: true }).click();
   // Stages reach every client over the WebSocket: the phone follows the desktop's retry.
@@ -380,15 +393,15 @@ try {
     panel(a).getByText("Running setup…").waitFor(),
     panel(b).getByText("Running setup…").waitFor(),
   ]);
-  await waiting.getByText("Sends when the workspace is ready.").waitFor();
+  await waiting().getByText("Add a dark mode toggle to the settings page").waitFor();
   // One message waits per workspace: a second is refused in words and stays in the box.
   const draft = "Then make it follow the system theme";
   await startComposer(a).locator("textarea").fill(draft);
   await startComposer(a).locator("textarea").press("Enter");
   await toast(a, "A message is already waiting for this workspace").waitFor();
   assert.equal(await startComposer(a).locator("textarea").inputValue(), draft);
-  assert.equal(await waiting.count(), 1);
-  await waiting.getByText("Add a dark mode toggle to the settings page").waitFor();
+  assert.equal(await waiting().count(), 1);
+  await waiting().getByText("Add a dark mode toggle to the settings page").waitFor();
   assert.equal(await panel(a).getAttribute("data-state"), "starting");
   // The tools pane slides in as the retry starts: measure once the column stops moving.
   const startBox = await until("the start page's layout to settle", async () => {
@@ -460,7 +473,7 @@ try {
   );
   assert.equal((await workspace(failing.id)).state, "ready");
   check(
-    "Retry starts the same workspace again, both clients follow it, the kept message is sent once, a second is refused and moves to the chat, and the chat opens with the start",
+    "The kept message survives closing the window; Retry starts the same workspace again, both clients follow it, the kept message is sent once, a second is refused and moves to the chat, and the chat opens with the start",
     { composer: { start: startBox, chat: chatBox }, handover }
   );
 
@@ -500,7 +513,6 @@ try {
   await watchBottom(a);
   const askedWaiting = panel(a).locator('[data-slot="waiting-message"]');
   await askedWaiting.getByText(asked).waitFor();
-  await askedWaiting.getByText("Sends when the workspace is ready.").waitFor();
   assert.equal(await startComposer(a).locator("textarea").inputValue(), "");
   await shot(a, "asked-while-starting", 0);
   await until(

@@ -1,19 +1,21 @@
 /**
- * What this client knows about the workspaces it watched start. None of it
- * outlives the window.
+ * What this device knows about the workspaces it watched start.
  *
  * `pending` — the message typed before a workspace existed, waiting for its
  * first chat (delivered by session/hooks/useFirstMessageDelivery). Keyed by
  * workspace, so one workspace becoming ready cannot send another's. It stays
  * until it is delivered: a start that fails keeps it, and a retry of the same
- * workspace sends it. Kept in sessionStorage, so reloading the window while a
- * workspace starts does not lose it; not in localStorage, where it would send
- * itself hours later, unasked, the next time the app opened.
+ * workspace sends it. Kept in localStorage, so it outlives the window on this
+ * device: a reload, and quitting the app. After a quit the workspace is a
+ * failed start (the backend stopped with the app), so the message sends only
+ * on a Retry. Where the backend outlives the window (the web app), it sends
+ * when the window returns, unless the chat was spoken to first: then it goes
+ * to that chat's composer instead (missedFirstMessages).
  *
  * `startedIn` — the chat a workspace started with. That chat tells the story
  * of the start (its steps, its warnings) under its first message, the way a
  * cloud chat keeps its computer's provisioning; later chats, and this one
- * after a reload, do not.
+ * after a reload, do not. It is kept in memory only.
  */
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
@@ -32,24 +34,24 @@ interface WorkspaceStartStore {
   startedIn: Record<string, string>;
 }
 
-/** sessionStorage that never throws: a message with large images may not fit,
- *  and then it simply is not kept across a reload. */
-const windowStorage: StateStorage = {
+/** localStorage that never throws: a message with large images may not fit,
+ *  and then it simply is not kept across a reload or a quit. */
+const deviceStorage: StateStorage = {
   getItem: (name) => {
     try {
-      return sessionStorage.getItem(name);
+      return localStorage.getItem(name);
     } catch {
       return null;
     }
   },
   setItem: (name, value) => {
     try {
-      sessionStorage.setItem(name, value);
+      localStorage.setItem(name, value);
     } catch {
       // Over quota, or no storage (tests, private windows). Drop the older copy
       // too: restoring it would bring back a message that may have been sent.
       try {
-        sessionStorage.removeItem(name);
+        localStorage.removeItem(name);
       } catch {
         /* no storage */
       }
@@ -57,7 +59,7 @@ const windowStorage: StateStorage = {
   },
   removeItem: (name) => {
     try {
-      sessionStorage.removeItem(name);
+      localStorage.removeItem(name);
     } catch {
       /* nothing to remove */
     }
@@ -73,7 +75,7 @@ export const useWorkspaceStartStore = create<WorkspaceStartStore>()(
     {
       name: "workspace-start",
       version: 1,
-      storage: createJSONStorage(() => windowStorage),
+      storage: createJSONStorage(() => deviceStorage),
       partialize: (state) => ({ pending: state.pending }),
     }
   )

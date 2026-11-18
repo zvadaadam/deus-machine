@@ -24,7 +24,7 @@ function awaitsFirstMessage(
   return (
     workspace.state === "ready" &&
     !!workspace.current_session_id &&
-    // Already said once (an earlier delivery, before a reload): never twice.
+    // Already said once (an earlier delivery, before a reload or a quit): never twice.
     workspace.latest_message_sent_at === null &&
     workspace.session_status !== "working"
   );

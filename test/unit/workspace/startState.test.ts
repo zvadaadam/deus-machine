@@ -200,9 +200,9 @@ describe("what a client remembers of a start", () => {
     pendingFirstMessages.clear("b");
   });
 
-  it("keeps no old copy in the window when the newest one does not fit", () => {
+  it("keeps no old copy on the device when the newest one does not fit", () => {
     const stored = new Map<string, string>();
-    vi.stubGlobal("sessionStorage", {
+    vi.stubGlobal("localStorage", {
       getItem: (key: string) => stored.get(key) ?? null,
       setItem: (key: string, value: string) => {
         if (value.length > 400) throw new Error("QuotaExceededError");
@@ -214,7 +214,7 @@ describe("what a client remembers of a start", () => {
       pendingFirstMessages.set("a", { message: "fix the login page", model: "opus" });
       expect(stored.get("workspace-start")).toContain("fix the login page");
       pendingFirstMessages.set("b", { message: "x".repeat(1000), model: "opus" });
-      // A reload must not bring back a copy without "b", where "a" may already be sent.
+      // A reload or a reopen must not bring back a copy without "b", where "a" may already be sent.
       expect(stored.has("workspace-start")).toBe(false);
     } finally {
       pendingFirstMessages.clear("a");
