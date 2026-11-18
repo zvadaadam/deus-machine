@@ -80,7 +80,7 @@ export interface DeusTurnOptions {
   supportsImages?: boolean;
   /** The installed apps' MCP servers (services/integrations/runtime.ts). */
   mcpServers?: Record<string, McpServerConfig>;
-  /** Extra env for the agent process (a Codex session's own CODEX_HOME). */
+  /** Extra env for the agent process (NO_PROXY past a proxy, for the loopback gateway). */
   env?: Record<string, string>;
 }
 
