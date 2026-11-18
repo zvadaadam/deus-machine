@@ -656,7 +656,7 @@ Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `s
 - All indexes/triggers defined in `shared/schema.ts`
 - Use `sessions.last_user_message_at` instead of correlated subqueries
 - No N+1 queries — batch or denormalize
-- Column changes, pre-launch (now): destructive resets are sanctioned. There are no users to migrate, and `shared/schema.ts` is the fresh schema rather than a migration replay — a stale local DB is detected via the `PRELAUNCH_REQUIRED_COLUMNS` / `PRELAUNCH_RETIRED_COLUMNS` markers and reset with the `PRELAUNCH_SCHEMA_RESET_HINT`. Drop the column and add it to the markers.
+- Column changes, pre-launch (now): `shared/schema.ts` is the whole schema, not a migration replay. To add a column, put it in `SCHEMA_SQL` and, if existing databases should keep working, in `ADDITIVE_COLUMNS` (nullable or defaulted); anything else is a reset. At startup the backend compares the database with a fresh copy of `SCHEMA_SQL` (a missing column, a NOT NULL that differs, a leftover column an insert would fail on) and stops with `PRELAUNCH_SCHEMA_RESET_HINT`, naming the table and column.
 - Column changes, post-launch: the above stops applying. Deprecate by renaming with a `DEPRECATED_` prefix, never drop.
 
 ## Testing

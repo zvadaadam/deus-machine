@@ -3,9 +3,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SCHEMA_SQL } from "@shared/schema";
+import { PRELAUNCH_SCHEMA_RESET_HINT, SCHEMA_SQL } from "@shared/schema";
 
-describe("database pre-launch schema bootstrap", () => {
+describe("database schema check at startup", () => {
   let originalDatabasePath: string | undefined;
   let tempDir: string;
 
@@ -13,6 +13,8 @@ describe("database pre-launch schema bootstrap", () => {
     originalDatabasePath = process.env.DATABASE_PATH;
     tempDir = mkdtempSync(path.join(os.tmpdir(), "deus-db-test-"));
     vi.resetModules();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -22,65 +24,88 @@ describe("database pre-launch schema bootstrap", () => {
       process.env.DATABASE_PATH = originalDatabasePath;
     }
 
+    vi.doUnmock("@shared/schema");
     vi.restoreAllMocks();
     vi.resetModules();
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it("creates a fresh database from the current schema", async () => {
+  /** A database on disk made from the current schema, then changed by `alter`. */
+  function databaseFile(alter: string): void {
+    const dbPath = path.join(tempDir, "deus.db");
+    const db = new Database(dbPath);
+    db.exec(SCHEMA_SQL);
+    if (alter) db.exec(alter);
+    db.close();
+    process.env.DATABASE_PATH = dbPath;
+  }
+
+  async function open() {
+    return import("../../../src/lib/database");
+  }
+
+  function expectReset(initDatabase: () => unknown, detail: string): void {
+    expect(() => initDatabase()).toThrow(detail);
+    // The failed handle is not kept: the next attempt checks again.
+    expect(() => initDatabase()).toThrow(PRELAUNCH_SCHEMA_RESET_HINT);
+  }
+
+  it("creates a fresh database from the schema, and opens it again", async () => {
     process.env.DATABASE_PATH = path.join(tempDir, "fresh.db");
-
-    const { closeDatabase, initDatabase } = await import("../../../src/lib/database");
-    const db = initDatabase();
-    const columns = db.pragma("table_info(sessions)") as Array<{ name: string }>;
-
+    const { closeDatabase, initDatabase } = await open();
+    const columns = initDatabase().pragma("table_info(sessions)") as Array<{ name: string }>;
     expect(columns.map((column) => column.name)).toContain("agent_harness");
-    expect(columns.map((column) => column.name)).toContain("error_category");
-
+    closeDatabase();
+    expect(() => initDatabase()).not.toThrow();
     closeDatabase();
   });
 
-  it("throws a reset hint for stale pre-launch databases and does not cache the failed handle", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.spyOn(console, "log").mockImplementation(() => {});
-    const dbPath = path.join(tempDir, "stale.db");
-    const staleDb = new Database(dbPath);
-    staleDb.exec(`
-      CREATE TABLE sessions (
-        id TEXT PRIMARY KEY NOT NULL,
-        workspace_id TEXT NOT NULL,
-        agent_type TEXT NOT NULL DEFAULT 'claude'
-      )
-    `);
-    staleDb.close();
-    process.env.DATABASE_PATH = dbPath;
-
-    const { initDatabase } = await import("../../../src/lib/database");
-
-    expect(() => initDatabase()).toThrow(
-      "Database schema is out of date for this pre-launch build."
-    );
-    expect(() => initDatabase()).toThrow("Reset it by deleting deus.db");
+  it("stops on a column the schema has and the database lacks", async () => {
+    databaseFile("ALTER TABLE workspaces DROP COLUMN organization_id");
+    const { initDatabase } = await open();
+    expectReset(initDatabase, "workspaces.organization_id is missing");
   });
 
-  // The other direction: a database old enough to still CARRY a column the
-  // current schema dropped. CREATE TABLE IF NOT EXISTS never alters an existing
-  // table, so only this check forces the reset.
-  it("throws a reset hint for a database that still has a retired column", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.spyOn(console, "log").mockImplementation(() => {});
-    const dbPath = path.join(tempDir, "retired-column.db");
-    const staleDb = new Database(dbPath);
-    staleDb.exec(SCHEMA_SQL);
-    // `messages.content` was the pre-parts render path. Re-add it to simulate a
-    // database created before it was dropped.
-    staleDb.exec("ALTER TABLE messages ADD COLUMN content TEXT");
-    staleDb.close();
-    process.env.DATABASE_PATH = dbPath;
+  /** The compactions table rebuilt with `created_at` declared as given, plus `extra`. */
+  function compactionsAs(createdAt: string, extra = ""): string {
+    return `
+      DROP TABLE compactions;
+      CREATE TABLE compactions (
+        compaction_id TEXT PRIMARY KEY NOT NULL, session_id TEXT NOT NULL, turn_id TEXT NOT NULL,
+        status TEXT NOT NULL, trigger TEXT, pre_tokens INTEGER, post_tokens INTEGER, summary TEXT,
+        created_at ${createdAt}${extra}
+      );
+    `;
+  }
 
-    const { initDatabase } = await import("../../../src/lib/database");
+  it("stops on a column whose NOT NULL differs from the schema", async () => {
+    databaseFile(compactionsAs("TEXT"));
+    const { initDatabase } = await open();
+    expectReset(initDatabase, "compactions.created_at should be NOT NULL.");
+  });
 
-    expect(() => initDatabase()).toThrow("Found retired columns: messages.content");
-    expect(() => initDatabase()).toThrow("Reset it by deleting deus.db");
+  it("stops on a leftover column an insert would fail on", async () => {
+    databaseFile(compactionsAs("TEXT NOT NULL DEFAULT (datetime('now'))", ", kind TEXT NOT NULL"));
+    const { initDatabase } = await open();
+    expectReset(initDatabase, "compactions.kind is no longer in the schema and is required.");
+  });
+
+  it("ignores a leftover nullable column", async () => {
+    databaseFile("ALTER TABLE messages ADD COLUMN content TEXT");
+    const { closeDatabase, initDatabase } = await open();
+    expect(() => initDatabase()).not.toThrow();
+    closeDatabase();
+  });
+
+  it("adds an additive column a database lacks, instead of stopping", async () => {
+    vi.doMock("@shared/schema", async (original) => ({
+      ...(await original<typeof import("@shared/schema")>()),
+      ADDITIVE_COLUMNS: { workspaces: { organization_id: "TEXT" } },
+    }));
+    databaseFile("ALTER TABLE workspaces DROP COLUMN organization_id");
+    const { closeDatabase, initDatabase } = await open();
+    const columns = initDatabase().pragma("table_info(workspaces)") as Array<{ name: string }>;
+    expect(columns.map((column) => column.name)).toContain("organization_id");
+    closeDatabase();
   });
 });
