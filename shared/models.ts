@@ -170,8 +170,9 @@ export function modelValue(harness: AgentHarness, model: string): string {
 }
 
 /**
- * Read a picker value, as stored or typed. A value from the Codex harness the engine no
- * longer runs (`codex:`) named models it no longer lists, so it reads as Codex's default. `undefined` when it names no harness Deus knows.
+ * Read a picker value, as stored or typed. A value from the Codex harness the
+ * engine no longer runs (`codex:`) named models it no longer lists, so it reads
+ * as Codex's default. `undefined` when it names no harness Deus knows.
  */
 export function parseModelValue(
   value: string
