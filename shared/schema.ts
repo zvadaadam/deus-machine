@@ -139,16 +139,12 @@ export const ADDITIVE_COLUMNS = {
   },
 } as const satisfies Record<string, Record<string, string>>;
 
-/**
- * The repositories table, by name. A project's folder on this computer
- * (`root_path`) is optional: a row without one is a project that is not on this
- * computer, known by its GitHub `git_origin_url`, and runs only in the cloud.
- * SQLite allows several NULLs under UNIQUE. Databases from before this was
- * optional are rebuilt once at startup (backend `db/migrate-project-folder.ts`),
- * which creates the table from this same definition.
- */
-export function repositoriesTableSql(table: string): string {
-  return `CREATE TABLE IF NOT EXISTS ${table} (
+export const SCHEMA_SQL = `
+  -- Repositories tracked by the app (id = UUID7, embeds created_at). root_path is
+  -- optional: a row without one is a project not on this computer, known by its
+  -- GitHub git_origin_url, that runs only in the cloud (SQLite allows several NULLs
+  -- under UNIQUE).
+  CREATE TABLE IF NOT EXISTS repositories (
     id TEXT PRIMARY KEY NOT NULL,
     name TEXT NOT NULL,
     root_path TEXT UNIQUE,
@@ -156,30 +152,7 @@ export function repositoriesTableSql(table: string): string {
     sort_order INTEGER NOT NULL DEFAULT 0,
     git_origin_url TEXT,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );`;
-}
-
-/** The columns `repositoriesTableSql` defines, in order. */
-export const REPOSITORIES_COLUMNS = [
-  "id",
-  "name",
-  "root_path",
-  "git_default_branch",
-  "sort_order",
-  "git_origin_url",
-  "updated_at",
-] as const;
-
-/** What `shared/schema.ts` defines on the repositories table besides the table itself. */
-export const REPOSITORIES_TRIGGERS_SQL = `
-  CREATE TRIGGER IF NOT EXISTS update_repositories_updated_at
-    AFTER UPDATE ON repositories
-    BEGIN UPDATE repositories SET updated_at = datetime('now') WHERE id = NEW.id; END;
-`;
-
-export const SCHEMA_SQL = `
-  -- Repositories tracked by the app (id = UUID7, embeds created_at)
-  ${repositoriesTableSql("repositories")}
+  );
 
   -- Git worktrees tied to repositories (id = UUID7, embeds created_at)
   CREATE TABLE IF NOT EXISTS workspaces (
@@ -474,7 +447,9 @@ export const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_integration_connections_app ON integration_connections(app_id);
 
   -- Triggers: auto-update updated_at (4)
-  ${REPOSITORIES_TRIGGERS_SQL}
+  CREATE TRIGGER IF NOT EXISTS update_repositories_updated_at
+    AFTER UPDATE ON repositories
+    BEGIN UPDATE repositories SET updated_at = datetime('now') WHERE id = NEW.id; END;
 
   CREATE TRIGGER IF NOT EXISTS update_workspaces_updated_at
     AFTER UPDATE ON workspaces
