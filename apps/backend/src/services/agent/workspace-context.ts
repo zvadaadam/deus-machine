@@ -24,7 +24,7 @@ export interface Simulator {
 
 /** How to drive a simulator: Deus ships agent-device (scripts/runtime/agent-clis.ts), whose own help carries the rest. */
 const AGENT_DEVICE =
-  "Drive iOS Simulators and Android emulators with the `agent-device` CLI, included with Deus. " +
+  "Drive iOS Simulators and Android emulators with the `agent-device` CLI. " +
   "Start with `agent-device open <app or bundle id> --platform ios --foreground`, which prints a snapshot with `@refs`. " +
   'Act with `press|fill|longpress <@ref> --settle`, `scroll <direction> --settle` or `back --settle`, verify with `wait text "…"`, ' +
   "and end with `agent-device close` (`close --shutdown` if you booted it) so another workspace can use the device. " +

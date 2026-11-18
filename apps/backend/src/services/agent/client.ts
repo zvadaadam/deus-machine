@@ -60,10 +60,12 @@ export class AgentLink {
       title: options.onTitle,
     });
     // Agents and terminals get the Xcode the Simulator tab uses, where none is
-    // named and xcode-select names the Command Line Tools (no simulator).
+    // named and xcode-select names the Command Line Tools (no simulator). The
+    // npm CLI ships no simulator engine: there, nothing to find.
     if (process.platform === "darwin") {
-      const { DEVELOPER_DIR } = (await import("device-use/engine")).simulatorEnv();
-      if (DEVELOPER_DIR) process.env.DEVELOPER_DIR = DEVELOPER_DIR;
+      const engine = await import("device-use/engine").catch(() => null);
+      const developerDir = engine?.simulatorEnv().DEVELOPER_DIR;
+      if (developerDir) process.env.DEVELOPER_DIR = developerDir;
     }
     // A chat that never closes its agent-device session must not hold the device, or leave agent-device's daemon running, for good.
     process.env.AGENT_DEVICE_SESSION_IDLE_TIMEOUT_MS ??= String(30 * 60_000);

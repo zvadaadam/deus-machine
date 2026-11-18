@@ -117,6 +117,11 @@ jobs:
       - name: Smoke packaged Electron desktop
         run: bun run smoke:packaged-desktop -- --app "$MAC_APP_PATH"
 
+      - name: Smoke the npm CLI package on macOS
+        # Code that runs only on macOS (the backend's engine start) is not
+        # covered by the Linux run; `build:runtime` above built the backend bundle.
+        run: bun run smoke:cli-package
+
   desktop-runtime-tests:
     name: Desktop Runtime Unit Tests
     # Playwright's Chromium does not support ubuntu-latest's 26.04 yet.

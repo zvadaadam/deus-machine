@@ -101,7 +101,7 @@ ships: no skill, nothing to install, no tools of Deus's own.
   `scripts/runtime/agent-clis.ts` stages its package as `agent-device-package/`
   beside the other CLIs and an `agent-device` launcher script that runs it with
   the `deus-runtime` beside it (`BUN_BE_BUN=1`), or `bun` in a checkout's staged
-  folder. The bundled folder is first on PATH in the installed app, and the engine
+  folder. The npm CLI ships neither it nor the Simulator tab's engine. The bundled folder is first on PATH in the installed app, and the engine
   puts it first in `dev` and `dev:web` (`agents/core/bundled-clis.ts`).
 - **Xcode.** At engine start on macOS, the backend gives the process (so every
   agent and terminal) the developer directory the Simulator tab uses
