@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -81,6 +82,61 @@ esac
       space: { width: 32, height: 64 },
       by: "agent-device",
     });
+  });
+});
+
+describe("iOS Simulator recordings that nobody stops", () => {
+  // agent-device for these cases: devices, then a record start answered by `start`.
+  function fake(start: string) {
+    const dir = tempDir();
+    const log = join(dir, "calls.log");
+    const bin = join(dir, "agent-device");
+    writeFileSync(
+      bin,
+      `#!/bin/sh
+echo "$*" >> ${JSON.stringify(log)}
+case "$1 $2" in
+  "devices --platform") echo '{"success":true,"data":{"devices":[{"id":"SIM-1","name":"iPhone","kind":"simulator","booted":true}]}}' ;;
+  "record start") ${start} ;;
+  *) echo '{"success":true,"data":{}}' ;;
+esac
+`
+    );
+    chmodSync(bin, 0o755);
+    const calls = () => readFileSync(log, "utf8").trim().split("\n");
+    return { dir, bin, calls };
+  }
+  const source = (bin: string) => ({ kind: "ios-simulator" as const, udid: "SIM-1", bin });
+
+  it("ends a start that never answered, and leaves a refused one alone", async () => {
+    const silent = fake("exit 1");
+    await expect(
+      startRecording({ source: source(silent.bin), out: join(silent.dir, "b") })
+    ).rejects.toThrow();
+    expect(silent.calls().at(-1)).toBe("record stop --json");
+    const refused = fake(`echo '{"success":false,"error":{"message":"in use"}}'; exit 1`);
+    await expect(
+      startRecording({ source: source(refused.bin), out: join(refused.dir, "b") })
+    ).rejects.toThrow(/in use/);
+    expect(refused.calls().at(-1)).toMatch(/^record start /);
+  });
+
+  it("stops the recording when its owner dies without stopping it", async () => {
+    const { dir, bin, calls } = fake(
+      `ffmpeg -v error -f lavfi -i testsrc2=size=64x128:rate=10 -t 1 -pix_fmt yuv420p -y "$3" && echo '{"success":true,"data":{}}'`
+    );
+    // An owner that starts a recording and exits without stopping it.
+    const owner = join(dir, "owner.ts");
+    writeFileSync(
+      owner,
+      `import { startRecording } from ${JSON.stringify(join(import.meta.dirname, "../src/recorder.ts"))};
+await startRecording({ source: { kind: "ios-simulator", udid: "SIM-1", bin: ${JSON.stringify(bin)} }, out: ${JSON.stringify(join(dir, "b"))} });
+process.exit(0);
+`
+    );
+    execFileSync("bun", [owner]);
+    for (let i = 0; i < 50 && calls().at(-1) !== "record stop"; i++) await sleep(200);
+    expect(calls().at(-1)).toBe("record stop");
   });
 });
 

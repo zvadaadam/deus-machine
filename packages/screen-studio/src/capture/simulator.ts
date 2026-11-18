@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { agentDeviceEvents } from "../adapters/agent-device.js";
 import { ScreenStudioError } from "../errors.js";
@@ -33,9 +34,14 @@ interface Answer {
   error?: { message?: string; hint?: string };
 }
 
-async function agentDevice(spec: Pick<SimulatorSourceSpec, "session" | "bin">, args: string[]) {
+function command(spec: Pick<SimulatorSourceSpec, "session" | "bin">) {
   const bin = spec.bin ?? process.env.AGENT_DEVICE_BIN ?? "agent-device";
   const env = { ...process.env, ...(spec.session ? { AGENT_DEVICE_SESSION: spec.session } : {}) };
+  return { bin, env };
+}
+
+async function agentDevice(spec: Pick<SimulatorSourceSpec, "session" | "bin">, args: string[]) {
+  const { bin, env } = command(spec);
   // The first use builds agent-device's runner with Xcode, which takes minutes.
   const result = await run(bin, [...args, "--json"], { env, timeoutMs: 300_000 });
   let answer: Answer = {};
@@ -45,12 +51,14 @@ async function agentDevice(spec: Pick<SimulatorSourceSpec, "session" | "bin">, a
     // Not JSON: reported below with what it printed.
   }
   if (result.code !== 0 || !answer.success) {
-    throw new ScreenStudioError(
+    const error = new ScreenStudioError(
       "capture_failed",
       `agent-device ${args[0]} ${args[1] ?? ""}`.trim() +
         `: ${answer.error?.message ?? tail(result.stderr || result.stdout)}`,
       answer.error?.hint ? { hint: answer.error.hint } : {}
     );
+    // Whether agent-device answered at all (a refusal), or died or timed out first.
+    throw Object.assign(error, { answered: answer.success !== undefined });
   }
   return answer.data ?? {};
 }
@@ -116,20 +124,41 @@ export async function simulatorBackend(spec: SimulatorSourceSpec): Promise<Captu
       const path = join(context.mediaDir, "screen.mp4");
       // Raw video: the render draws the touches itself, from the telemetry.
       const args = ["--hide-touches", "--scope", "device", "--udid", device.udid];
-      await agentDevice(spec, ["record", "start", path, ...args]);
+      try {
+        await agentDevice(spec, ["record", "start", path, ...args]);
+      } catch (err) {
+        // No answer at all: the recording may have begun, so end it. A refusal
+        // leaves the device alone (another recording may hold it).
+        if (!(err as { answered?: boolean }).answered) {
+          await agentDevice(spec, ["record", "stop"]).catch(() => {});
+        }
+        throw err;
+      }
       // agent-device times its telemetry from its recording's start, which it
       // takes ~50 ms before `record start` answers. Measured against its video,
       // a touch is off by up to ~0.8 s either way (recorded here; the edit does
       // not read it).
       const started = Date.now() - 50;
+      // agent-device records in its own daemon: should this process die before
+      // stop, a detached watcher runs `record stop` for the session, so nothing
+      // records on, holds the device or keeps the daemon alive.
+      const { bin, env } = command(spec);
+      const watch = 'while kill -0 "$1" 2>/dev/null; do sleep 2; done; exec "$2" record stop';
+      const watcher = spawn("sh", ["-c", watch, "sh", String(process.pid), bin], {
+        env,
+        detached: true,
+        stdio: "ignore",
+      });
+      watcher.unref();
       return {
         mediaStartEpochMs: started,
         uncertaintyMs: 800,
         clockMethod: "agent-device record start's answer",
         pointerInPixels: "none",
-        childPids: [],
+        childPids: watcher.pid ? [watcher.pid] : [],
         stats: () => ({ frames: null }),
         async stop() {
+          watcher.kill();
           const data = await agentDevice(spec, ["record", "stop"]);
           const telemetry = typeof data.telemetryPath === "string" ? data.telemetryPath : null;
           const events = telemetry
