@@ -118,11 +118,13 @@ export async function simulatorBackend(spec: SimulatorSourceSpec): Promise<Captu
       const args = ["--hide-touches", "--scope", "device", "--udid", device.udid];
       await agentDevice(spec, ["record", "start", path, ...args]);
       // agent-device times its telemetry from its recording's start, which it
-      // takes ~50 ms before `record start` answers.
+      // takes ~50 ms before `record start` answers. Measured against its video,
+      // a touch is off by up to ~0.8 s either way (recorded here; the edit does
+      // not read it).
       const started = Date.now() - 50;
       return {
         mediaStartEpochMs: started,
-        uncertaintyMs: 100,
+        uncertaintyMs: 800,
         clockMethod: "agent-device record start's answer",
         pointerInPixels: "none",
         childPids: [],
