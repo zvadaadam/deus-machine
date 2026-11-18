@@ -9,7 +9,8 @@
 // contract (scripts/runtime/smoke) carried over from the legacy discovery:
 // packaged CI asserts the server found the staged binaries.
 
-import { resolveBundledCliPath } from "@shared/lib/cli-path";
+import { delimiter } from "node:path";
+import { getBundledCliDirectory, resolveBundledCliPath } from "@shared/lib/cli-path";
 
 const TOOL_ENV = { claude: "CLAUDE_CLI_PATH", codex: "CODEX_CLI_PATH" } as const;
 
@@ -23,6 +24,11 @@ export function adoptBundledClis(): void {
     process.env.DEUS_PACKAGED === "1" ||
     process.env.DEUS_RUNTIME === "1";
   if (!explicitRuntime) return;
+  // Agents and terminals find the bundled CLIs (agent-device, gh, …) first,
+  // in a checkout too, where PATH does not start with the staged folder.
+  const bundledDir = getBundledCliDirectory();
+  const path = (process.env.PATH ?? "").split(delimiter).filter((entry) => entry !== bundledDir);
+  if (bundledDir) process.env.PATH = [bundledDir, ...path].join(delimiter);
   for (const tool of ["claude", "codex"] as const) {
     const bundled = resolveBundledCliPath(tool);
     if (!bundled) continue;

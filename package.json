@@ -96,6 +96,7 @@
     "@sentry/node": "^10.40.0",
     "@zvada/agent-server": "0.3.22",
     "agent-browser": "^0.21.4",
+    "agent-device": "0.21.39",
     "better-sqlite3": "^12.4.1",
     "chokidar": "^4.0.0",
     "croner": "^10.0.1",

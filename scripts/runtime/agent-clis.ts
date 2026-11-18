@@ -179,7 +179,42 @@ async function installEngineClis(
   };
 }
 
-/** Stages Codex, Claude Code and agent-browser for each target; the packaged app is checked in afterPack. */
+/**
+ * agent-device is JavaScript: its package goes in `agent-device-package/` and
+ * `agent-device` is a launcher that runs it with the runtime Deus ships beside
+ * it (`deus-runtime` behaving as Bun), or with `bun` in a checkout's staged
+ * folder, which has no runtime.
+ */
+const AGENT_DEVICE_LAUNCHER = `#!/bin/sh
+here=$(dirname "$0")
+cli="$here/agent-device-package/bin/agent-device.mjs"
+if [ -x "$here/deus-runtime" ]; then
+  BUN_BE_BUN=1 exec "$here/deus-runtime" "$cli" "$@"
+fi
+exec bun "$cli" "$@"
+`;
+
+async function stageAgentDevice(
+  projectRoot: string,
+  targetDir: string,
+  log: (line: string) => void
+) {
+  const locked = readLockedPackage(projectRoot, "agent-device");
+  const source = await resolvePackageRoot(projectRoot, locked, "bin/agent-device.mjs", log);
+  try {
+    const packageDir = path.join(targetDir, "agent-device-package");
+    rmSync(packageDir, { recursive: true, force: true });
+    cpSync(source.packageRoot, packageDir, { recursive: true });
+    const launcher = path.join(targetDir, "agent-device");
+    writeFileSync(launcher, AGENT_DEVICE_LAUNCHER);
+    chmodSync(launcher, 0o755);
+    return `${locked.version} staged from ${source.sourceDescription}`;
+  } finally {
+    source.cleanup();
+  }
+}
+
+/** Stages Codex, Claude Code, agent-browser and agent-device for each target; the packaged app is checked in afterPack. */
 export async function prepareAgentClis(options: PrepareAgentCliOptions = {}): Promise<void> {
   const log = options.log ?? console.log;
   const projectRoot = options.projectRoot ?? defaultProjectRoot;
@@ -234,5 +269,9 @@ export async function prepareAgentClis(options: PrepareAgentCliOptions = {}): Pr
     } finally {
       agentBrowserPackage.cleanup();
     }
+
+    log(
+      `✓ ${target.runtimeKey}/agent-device ${await stageAgentDevice(projectRoot, targetDir, log)}`
+    );
   }
 }

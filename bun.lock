@@ -18,6 +18,7 @@
         "@sentry/node": "^10.40.0",
         "@zvada/agent-server": "0.3.22",
         "agent-browser": "^0.21.4",
+        "agent-device": "0.21.39",
         "better-sqlite3": "^12.4.1",
         "chokidar": "^4.0.0",
         "croner": "^10.0.1",
@@ -1156,6 +1157,8 @@
     "agent-base": ["agent-base@7.1.4", "", {}, "sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ=="],
 
     "agent-browser": ["agent-browser@0.21.4", "", { "bin": { "agent-browser": "bin/agent-browser.js" } }, "sha512-m5N0rbVtJgRnjFcTkb4t4iiKEE68fUH1Ur9RKyDmjn/gaFpmOUYLtT2AKdxhmyj+utn3NpEU2sIyRnsv8RwqZQ=="],
+
+    "agent-device": ["agent-device@0.21.39", "", { "peerDependencies": { "ai": "^6.0.0 || ^7.0.0" }, "optionalPeers": ["ai"], "bin": { "agent-device": "bin/agent-device.mjs" } }, "sha512-flgrilleoUU9WNd9BlU8h5KMt8zv0nKWBkqJbzk/bb2NBRA+7H1FGja+RIAuapb7HXdsjK4EPnYFP37N9S8nMA=="],
 
     "ajv": ["ajv@6.12.6", "", { "dependencies": { "fast-deep-equal": "^3.1.1", "fast-json-stable-stringify": "^2.0.0", "json-schema-traverse": "^0.4.1", "uri-js": "^4.2.2" } }, "sha512-j3fVLgvTo527anyYyJOGTYJbG+vnnQYvE0m5mmkc1TK+nxAppkCLMIL0aZ4dblVCNoGShhm+kzE4ZUykBoMg4g=="],
 

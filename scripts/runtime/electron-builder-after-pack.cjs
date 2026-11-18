@@ -23,9 +23,12 @@ const FILE_TYPE_BY_RUNTIME_KEY = new Map([
 const PACKAGE_RECOVERY_TIMEOUT_MS = 60_000;
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 
-// The executables Resources/bin ships. The packaged runtime smoke runs each of
-// them; electron-builder.yml's filters, which cannot read this, copy them.
+// The executables Resources/bin ships, built for their target, and the CLIs:
+// those and agent-device, a script that runs its package (agent-device-package/)
+// with deus-runtime. The packaged runtime smoke runs each CLI; electron-builder.yml's
+// filters, which cannot read this, copy them.
 const BUNDLED_BINARIES = ["deus-runtime", "gh", "codex", "claude", "rg", "agent-browser"];
+const BUNDLED_CLIS = [...BUNDLED_BINARIES, "agent-device"];
 
 function codexHelpers(runtimeKey) {
   return [
@@ -226,6 +229,6 @@ module.exports = async function afterPack(context) {
   verifyPackagedLayout(context);
 };
 
-module.exports.BUNDLED_BINARIES = BUNDLED_BINARIES;
+module.exports.BUNDLED_CLIS = BUNDLED_CLIS;
 module.exports.pruneCanvasRuntimeBinaries = pruneCanvasRuntimeBinaries;
 module.exports.verifyPackagedLayout = verifyPackagedLayout;

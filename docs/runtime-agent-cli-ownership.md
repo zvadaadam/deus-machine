@@ -7,16 +7,22 @@ output, are the reference.
 ## What ships
 
 `Resources/bin` holds `deus-runtime` (the backend, compiled by Bun), `gh`,
-`codex` (with its package under `codex-runtime/`), `claude`, `rg` and
-`agent-browser`. The list is `BUNDLED_BINARIES` in
+`codex` (with its package under `codex-runtime/`), `claude`, `rg`,
+`agent-browser` and `agent-device`. The list is `BUNDLED_CLIS` in
 `scripts/runtime/electron-builder-after-pack.cjs`; `electron-builder.yml`'s
 filters copy the same names.
+
+`agent-device` (agents drive simulators with it) is JavaScript: its npm package,
+pinned exactly in `package.json`, is copied to `agent-device-package/`, and
+`agent-device` is a shell launcher that runs it with the `deus-runtime` beside it
+as Bun (`BUN_BE_BUN=1`), or with `bun` from PATH where there is none (a
+checkout's staged folder). It has no native files, so nothing in it is signed.
 
 - `scripts/runtime/build.ts` (`bun run build:runtime`) stages everything under
   `dist/runtime`: the backend bundle (`stage.ts`, which the npm CLI ships too),
   `deus-runtime` for each target (`native-runtime.ts`, ad-hoc signed with
   `resources/entitlements.runtime.plist`), Claude Code and Codex as agent-server
-  installs them at its pins, agent-browser from the lockfile
+  installs them at its pins, agent-browser and agent-device from the lockfile
   (`agent-clis.ts`), and `gh` (`scripts/prepare-gh-cli.mjs`).
 - Codex and Claude Code are version-locked: agent-server's `DEFAULT_PINS` name
   them and its installer checks each against its release table. Bump
@@ -24,7 +30,9 @@ filters copy the same names.
 - `gh` is pinned by version and archive sha256 in
   `scripts/runtime/gh-cli-contract.json`.
 - `scripts/runtime/prepare-dev-agent-clis.ts` stages the host's CLIs for
-  `bun run dev` and `dev:web`.
+  `bun run dev` and `dev:web`; the engine puts that folder first on PATH there
+  (`apps/agent-server/agents/core/bundled-clis.ts`), as the installed app's
+  PATH already has it.
 - `apps/runtime/index.ts` is `deus-runtime`: `backend`, `self-test` and
   `--version`. Its folder is the bundled bin folder, the one above it the app's
   resources. Its `PATH` is that folder, then the system folders; the engine
@@ -38,7 +46,7 @@ Each fact is proved once, by the strongest check that can prove it.
 
 | Fact                                                                                                                                                                                                                                          | Check                                                                                             |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Every bundled executable runs, from the packaged app                                                                                                                                                                                          | `smoke:packaged-runtime` runs each `--version` (macOS PR CI, the release's DMG copy, Linux PR CI) |
+| Every bundled executable runs, from the packaged app, and agent-device is its pin run by the packaged runtime                                                                                                                                 | `smoke:packaged-runtime` runs each `--version` (macOS PR CI, the release's DMG copy, Linux PR CI) |
 | The runtime opens a terminal, draws with the canvas, uses SQLite                                                                                                                                                                              | `deus-runtime self-test`, run by `smoke:packaged-runtime`                                         |
 | The runtime starts the backend, the engine and its database                                                                                                                                                                                   | `smoke:packaged-runtime`                                                                          |
 | The desktop's main process starts the backend and opens a window, from a copy with a fresh home                                                                                                                                               | `smoke:packaged-desktop`                                                                          |
