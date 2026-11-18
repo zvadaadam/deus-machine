@@ -59,6 +59,12 @@ export class AgentLink {
       request: options.onToolRequest,
       title: options.onTitle,
     });
+    // Agents and terminals get the Xcode the Simulator tab uses, where none is
+    // named and xcode-select names the Command Line Tools (no simulator).
+    if (process.platform === "darwin") {
+      const { DEVELOPER_DIR } = (await import("device-use/engine")).simulatorEnv();
+      if (DEVELOPER_DIR) process.env.DEVELOPER_DIR = DEVELOPER_DIR;
+    }
     try {
       const client = await AgentServerClient.attach(transport, {
         requestTimeoutMs: 30_000,
