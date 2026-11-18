@@ -27,7 +27,7 @@ const AGENT_DEVICE =
   "Drive iOS Simulators and Android emulators with the `agent-device` CLI, included with Deus. " +
   "Start with `agent-device open <app or bundle id> --platform ios --foreground`, which prints a snapshot with `@refs`. " +
   'Act with `press|fill|longpress <@ref> --settle`, `scroll <direction> --settle` or `back --settle`, verify with `wait text "…"`, ' +
-  "and end with `agent-device close` (`close --shutdown` if you booted it). " +
+  "and always end with `agent-device close` (`close --shutdown` if you booted it): until then no other chat can use the device. " +
   "`agent-device help <topic>` has more (`dogfood` for exploratory QA, `debugging`, `react-native`).\n";
 
 /**
