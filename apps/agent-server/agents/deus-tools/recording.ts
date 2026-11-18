@@ -5,9 +5,10 @@
 // where bundles live, and how a browser ref becomes a box.
 //
 // A browser recording watches the page's own input. A simulator recording is
-// agent-device's, in the chat's agent-device session (the agent's commands
-// carry AGENT_DEVICE_SESSION, set per turn), so its telemetry holds the
-// agent's touches.
+// agent-device's, in the workspace's agent-device session (every turn's
+// commands carry it as AGENT_DEVICE_SESSION), so its telemetry holds the
+// agent's touches; it records the workspace's Simulator tab device unless the
+// agent names another.
 
 import { randomBytes } from "crypto";
 import { tmpdir } from "os";
@@ -15,6 +16,7 @@ import { join } from "path";
 import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { createAgentTools } from "../../../../packages/screen-studio/src/index";
 import { getElementBox, getRecordingTarget } from "./agent-browser-client";
+import { HostRpc } from "../../host-link";
 import { tool } from "./sdk-tool";
 
 /** Under tmpdir: the backend's /files/stream only serves media from there. */
@@ -31,7 +33,12 @@ function toolsFor(sessionId: string): AgentTools {
     agentTools = createAgentTools({
       async resolveSource({ target, destination }) {
         if (target === "simulator") {
-          return { kind: "ios-simulator", udid: destination ?? "booted", session: sessionId };
+          const device = await HostRpc.requestAgentDevice({ sessionId });
+          return {
+            kind: "ios-simulator",
+            udid: destination ?? device.udid ?? "booted",
+            session: device.session,
+          };
         }
         const page = await getRecordingTarget(sessionId);
         if (!page) {

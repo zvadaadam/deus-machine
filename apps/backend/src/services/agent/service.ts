@@ -49,7 +49,7 @@ import {
 } from "./persistence";
 import { invalidate } from "../query-engine";
 import { openWith } from "../streams";
-import { getContextForSession } from "../simulator-context";
+import { agentDeviceFor } from "../simulator-context";
 import { handleAutomationToolRequest } from "../automations";
 import { requireParam } from "../../lib/query-params";
 
@@ -159,10 +159,12 @@ export async function startTurn(
 ): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
   const apps = await turnApps(sessionId, agentHarness, options.resume);
+  const device = agentDeviceFor(sessionId);
   const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, {
     ...options,
     ...apps,
-    simulator: getContextForSession(sessionId),
+    agentDeviceSession: device.session,
+    simulator: device.udid ? { udid: device.udid } : null,
     // Negotiated at the handshake, not guessed from a harness list.
     supportsImages:
       link.getAgents().find((a) => a.type === engineHarness(agentHarness))?.capabilities.images ??
@@ -355,6 +357,8 @@ async function handleToolRequest(
   if (method === "automation/update") {
     return handleAutomationToolRequest(params);
   }
+  // A simulator recording joins the workspace's agent-device session.
+  if (method === "agentDevice") return agentDeviceFor(requireParam(params, "sessionId", method));
 
   const sessionId = requireParam(params, "sessionId", method);
   const requestId = crypto.randomUUID();

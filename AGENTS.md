@@ -111,15 +111,21 @@ ships: no skill, nothing to install, no tools of Deus's own.
   it (`AGENT_DEVICE` in `services/agent/workspace-context.ts`) and the Simulator
   tab's device (`--udid`); `agent-device help <topic>` has the rest, versioned
   with the CLI.
-- **Sessions.** Every turn sets `AGENT_DEVICE_SESSION` to the chat's id
-  (`run-config.ts`), so a chat's commands share one agent-device session.
+- **Sessions.** Every turn sets `AGENT_DEVICE_SESSION` to the workspace's id
+  (`agentDeviceFor` in `services/simulator-context.ts`), so all chats of a
+  workspace share one agent-device session, as they share its Simulator tab. A
+  session holds its device until `close`, which leaves the app on screen and
+  the runner warm (the next `open` takes ~2 s, not the first build's ~50 s);
+  an unclosed one keeps it from other workspaces, and agent-device's daemon
+  outlives Deus while one is open.
 - **Recording.** A simulator recording (`recording_start` with target
   `simulator`) is agent-device's `record start --hide-touches --scope device`
-  in that session (`packages/screen-studio/src/capture/simulator.ts`); a
-  recording claims its device for its session, so only that chat's agent can
-  act on it meanwhile. On stop, its gesture telemetry becomes the recording's
-  actions, which the edit zooms to and cuts around. The agent's
-  `agent-device close` ends the recording early; `recording_stop` still returns it.
+  in the workspace's session (`packages/screen-studio/src/capture/simulator.ts`),
+  of the device the Simulator tab shows unless the agent names another (the
+  recording tools ask the backend, `agentDevice`). On stop, its gesture
+  telemetry becomes the recording's actions, which the edit zooms to and cuts
+  around. The agent's `agent-device close` ends the recording early;
+  `recording_stop` still returns it.
 
 ### WebSocket Query Protocol
 

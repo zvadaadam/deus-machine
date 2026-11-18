@@ -38,10 +38,6 @@ describe.each(harnesses)("%s and the Simulator tab", (harness) => {
       simulator,
     });
     expect(shown.config.systemPromptAppend).toContain(`--udid ${simulator.udid}`);
-    // Only Claude has the recording tools, so only Claude is told how to record that device.
-    expect(shown.config.systemPromptAppend?.includes(`destination "${simulator.udid}"`)).toBe(
-      harness === "claude-code"
-    );
     const none = buildTurnStartParams("session", "turn", harness, "Check it", {
       cwd: "/workspace",
     });
@@ -50,15 +46,16 @@ describe.each(harnesses)("%s and the Simulator tab", (harness) => {
 });
 
 describe.each(harnesses)("%s and agent-device", (harness) => {
-  it("briefs the agent on the bundled CLI and runs it in the chat's session", () => {
+  it("briefs the agent on the bundled CLI and runs it in the workspace's session", () => {
     const params = buildTurnStartParams("chat-1", "turn", harness, "Open Settings", {
       cwd: "/workspace",
+      agentDeviceSession: "workspace-1",
       env: { CODEX_HOME: "/homes/chat-1" },
     });
     expect(params.config.systemPromptAppend).toContain("`agent-device open <app or bundle id>");
-    // A simulator recording joins this session, so it sees the agent's touches.
+    // Every chat of the workspace shares it, and a simulator recording joins it.
     expect(params.config.env).toEqual({
-      AGENT_DEVICE_SESSION: "chat-1",
+      AGENT_DEVICE_SESSION: "workspace-1",
       CODEX_HOME: "/homes/chat-1",
     });
   });

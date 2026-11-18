@@ -419,10 +419,15 @@ export function getContextForWorkspace(workspaceId: string): SimulatorContext | 
   };
 }
 
-/** The device a chat's workspace shows in its Simulator tab, which its turns name to the agent. */
-export function getContextForSession(sessionId: string): SimulatorContext | null {
-  const session = getSessionRaw(getDatabase(), sessionId);
-  return session?.workspace_id ? getContextForWorkspace(session.workspace_id) : null;
+/**
+ * The agent-device session a chat's commands and recordings share: its
+ * workspace's, as the Simulator tab is, so every chat of a workspace holds one
+ * device claim. Its name, and the device the tab shows, if any.
+ */
+export function agentDeviceFor(sessionId: string): { session: string; udid: string | null } {
+  const workspaceId = getSessionRaw(getDatabase(), sessionId)?.workspace_id;
+  const tab = workspaceId ? getContextForWorkspace(workspaceId) : null;
+  return { session: workspaceId ?? sessionId, udid: tab?.udid ?? null };
 }
 
 // ---------------------------------------------------------------------------

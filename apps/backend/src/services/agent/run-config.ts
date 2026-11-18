@@ -84,6 +84,8 @@ export interface DeusTurnOptions {
   env?: Record<string, string>;
   /** The device the workspace's Simulator tab shows, named to the agent. */
   simulator?: { udid: string } | null;
+  /** The workspace's agent-device session (`agentDeviceFor`); the chat's id without one. */
+  agentDeviceSession?: string;
 }
 
 /**
@@ -125,9 +127,9 @@ export function buildTurnStartParams(
       ...(options.mcpServers && Object.keys(options.mcpServers).length
         ? { mcpServers: options.mcpServers }
         : {}),
-      // The chat's agent-device session: a simulator recording joins it, so
-      // it sees the agent's touches (recording.ts in apps/agent-server).
-      env: { AGENT_DEVICE_SESSION: sessionId, ...options.env },
+      // The workspace's agent-device session: every chat of it shares the
+      // device, and a simulator recording joins it to see the agent's touches.
+      env: { AGENT_DEVICE_SESSION: options.agentDeviceSession ?? sessionId, ...options.env },
     },
   };
 }
