@@ -29,3 +29,34 @@ describe.each(harnesses)("%s local permission policy", (harness) => {
     expect(params.config.permissionMode).toBe(permissionMode);
   });
 });
+
+describe.each(harnesses)("%s and the Simulator tab", (harness) => {
+  it("names the tab's device to the agent, and nothing without one", () => {
+    const simulator = { udid: "5E4E0C2F-7025-4AAE-86D4-75A9BCD7AF06" };
+    const shown = buildTurnStartParams("session", "turn", harness, "Check it", {
+      cwd: "/workspace",
+      simulator,
+    });
+    expect(shown.config.systemPromptAppend).toContain(`--udid ${simulator.udid}`);
+    const none = buildTurnStartParams("session", "turn", harness, "Check it", {
+      cwd: "/workspace",
+    });
+    expect(none.config.systemPromptAppend).not.toContain("--udid");
+  });
+});
+
+describe.each(harnesses)("%s and agent-device", (harness) => {
+  it("briefs the agent on the bundled CLI and runs it in the workspace's session", () => {
+    const params = buildTurnStartParams("chat-1", "turn", harness, "Open Settings", {
+      cwd: "/workspace",
+      agentDeviceSession: "workspace-1",
+      env: { CODEX_HOME: "/homes/chat-1" },
+    });
+    expect(params.config.systemPromptAppend).toContain("`agent-device open <app or bundle id>");
+    // Every chat of the workspace shares it, and a simulator recording joins it.
+    expect(params.config.env).toEqual({
+      AGENT_DEVICE_SESSION: "workspace-1",
+      CODEX_HOME: "/homes/chat-1",
+    });
+  });
+});

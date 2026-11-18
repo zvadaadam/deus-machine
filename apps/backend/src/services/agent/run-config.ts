@@ -77,6 +77,10 @@ export interface DeusTurnOptions {
   mcpServers?: Record<string, McpServerConfig>;
   /** Extra env for the agent process (NO_PROXY past a proxy, for the loopback gateway). */
   env?: Record<string, string>;
+  /** The device the workspace's Simulator tab shows, named to the agent. */
+  simulator?: { udid: string } | null;
+  /** The workspace's agent-device session (`agentDeviceFor`); the chat's id without one. */
+  agentDeviceSession?: string;
 }
 
 /** Assemble the wire params for one turn (ids are minted by the caller). */
@@ -97,7 +101,7 @@ export function buildTurnStartParams(
       cwd: options.cwd,
       model: options.model,
       thinkingLevel: options.thinkingLevel,
-      systemPromptAppend: buildSystemPromptAppend(agentHarness, options.cwd),
+      systemPromptAppend: buildSystemPromptAppend(agentHarness, options.cwd, options.simulator),
       // Deus runs with full access by default, like its cloud runtime.
       // Explicit modes (including the composer's plan mode) stay unchanged.
       permissionMode: options.permissionMode ?? "bypass_permissions",
@@ -109,7 +113,9 @@ export function buildTurnStartParams(
       ...(options.mcpServers && Object.keys(options.mcpServers).length
         ? { mcpServers: options.mcpServers }
         : {}),
-      ...(options.env && Object.keys(options.env).length ? { env: options.env } : {}),
+      // The workspace's agent-device session: every chat of it shares the
+      // device, and a simulator recording joins it to see the agent's touches.
+      env: { AGENT_DEVICE_SESSION: options.agentDeviceSession ?? sessionId, ...options.env },
     },
   };
 }

@@ -1,153 +1,99 @@
 import { spawn } from "node:child_process";
-import { access, readdir, stat } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { agentDeviceEvents } from "../adapters/agent-device.js";
 import { ScreenStudioError } from "../errors.js";
 import { run, tail } from "../util/process.js";
-import type { Size } from "../util/units.js";
-import type { ActiveCapture, CaptureBackend, CaptureContext } from "./backend.js";
+import type { ActiveCapture, CaptureBackend } from "./backend.js";
 
+/**
+ * An iOS Simulator, recorded by agent-device (`record start --scope device`).
+ * Its gesture telemetry becomes the recording's actions, so the edit knows
+ * where every touch landed. Only touches made in the same agent-device
+ * session reach a recording: a recording claims its device for its session.
+ */
 export interface SimulatorSourceSpec {
   kind: "ios-simulator";
   /** A device UDID, or "booted" for the only booted device. */
   udid: string;
-  /** Custom simulator device set (`simctl --set`). */
-  deviceSet?: string;
+  /** The agent-device session the device is driven in. Default: agent-device's own. */
+  session?: string;
+  /** agent-device executable. Default: $AGENT_DEVICE_BIN or `agent-device`. */
+  bin?: string;
 }
 
 export interface SimulatorDevice {
   udid: string;
   name: string;
-  state: string;
+  booted: boolean;
   runtime: string;
-  deviceType?: string;
 }
 
-async function exists(path: string): Promise<boolean> {
+interface Answer {
+  success?: boolean;
+  data?: Record<string, unknown>;
+  error?: { message?: string; hint?: string };
+}
+
+function command(spec: Pick<SimulatorSourceSpec, "session" | "bin">) {
+  const bin = spec.bin ?? process.env.AGENT_DEVICE_BIN ?? "agent-device";
+  const env = { ...process.env, ...(spec.session ? { AGENT_DEVICE_SESSION: spec.session } : {}) };
+  return { bin, env };
+}
+
+async function agentDevice(spec: Pick<SimulatorSourceSpec, "session" | "bin">, args: string[]) {
+  const { bin, env } = command(spec);
+  // The first use builds agent-device's runner with Xcode, which takes minutes.
+  const result = await run(bin, [...args, "--json"], { env, timeoutMs: 300_000 });
+  let answer: Answer = {};
   try {
-    await access(path);
-    return true;
+    answer = JSON.parse(result.stdout) as Answer;
   } catch {
-    return false;
+    // Not JSON: reported below with what it printed.
   }
+  if (result.code !== 0 || !answer.success) {
+    const error = new ScreenStudioError(
+      "capture_failed",
+      `agent-device ${args[0]} ${args[1] ?? ""}`.trim() +
+        `: ${answer.error?.message ?? tail(result.stderr || result.stdout)}`,
+      answer.error?.hint ? { hint: answer.error.hint } : {}
+    );
+    // Whether agent-device answered at all (a refusal), or died or timed out first.
+    throw Object.assign(error, { answered: answer.success !== undefined });
+  }
+  return answer.data ?? {};
 }
 
-/**
- * Find a full Xcode, including ones that were never `xcode-select`ed (an Xcode
- * unpacked in ~/Downloads is common). Command Line Tools lack simctl.
- */
-export async function findDeveloperDir(): Promise<string | null> {
-  const candidates: string[] = [];
-  if (process.env.DEVELOPER_DIR) candidates.push(process.env.DEVELOPER_DIR);
-  try {
-    const selected = await run("xcode-select", ["-p"], { timeoutMs: 5_000 });
-    if (selected.code === 0) candidates.push(selected.stdout.trim());
-  } catch {
-    // xcode-select missing: not macOS
-  }
-  for (const root of [
-    "/Applications",
-    join(homedir(), "Applications"),
-    join(homedir(), "Downloads"),
-  ]) {
-    try {
-      for (const entry of (await readdir(root)).sort()) {
-        if (/^Xcode.*\.app$/.test(entry)) candidates.push(join(root, entry, "Contents/Developer"));
-      }
-    } catch {
-      // directory absent
-    }
-  }
-  for (const dir of candidates) {
-    if (await exists(join(dir, "usr/bin/simctl"))) return dir;
-  }
-  return null;
-}
-
-let developerDirCache: Promise<string | null> | null = null;
-
-async function simctl(args: string[], deviceSet?: string, timeoutMs = 20_000) {
-  developerDirCache ??= findDeveloperDir();
-  const developerDir = await developerDirCache;
-  if (!developerDir) {
-    throw new ScreenStudioError("tool_missing", "No Xcode with simctl found", {
-      hint: "Install Xcode, or set DEVELOPER_DIR to …/Xcode.app/Contents/Developer",
-    });
-  }
-  const env = { ...process.env, DEVELOPER_DIR: developerDir };
-  const fullArgs = ["simctl", ...(deviceSet ? ["--set", deviceSet] : []), ...args];
-  return { developerDir, env, fullArgs, result: () => run("xcrun", fullArgs, { env, timeoutMs }) };
-}
-
-export async function listSimulators(deviceSet?: string): Promise<SimulatorDevice[]> {
-  const cmd = await simctl(["list", "devices", "--json"], deviceSet);
-  const result = await cmd.result();
-  if (result.code !== 0) throw new Error(`simctl list failed: ${tail(result.stderr)}`);
-  const parsed = JSON.parse(result.stdout) as {
-    devices: Record<
-      string,
-      Array<{
-        udid: string;
-        name: string;
-        state: string;
-        isAvailable?: boolean;
-        deviceTypeIdentifier?: string;
-      }>
-    >;
-  };
-  return Object.entries(parsed.devices).flatMap(([runtime, devices]) =>
-    devices
-      .filter((d) => d.isAvailable !== false)
-      .map((d) => ({
-        udid: d.udid,
+export async function listSimulators(spec: Pick<SimulatorSourceSpec, "bin"> = {}) {
+  const data = await agentDevice(spec, ["devices", "--platform", "ios"]);
+  const devices = (data.devices ?? []) as Array<{
+    id: string;
+    name: string;
+    kind?: string;
+    booted?: boolean;
+    osVersion?: string;
+  }>;
+  return devices
+    .filter((d) => d.kind === "simulator")
+    .map(
+      (d): SimulatorDevice => ({
+        udid: d.id,
         name: d.name,
-        state: d.state,
-        runtime: runtime.replace("com.apple.CoreSimulator.SimRuntime.", ""),
-        deviceType: d.deviceTypeIdentifier,
-      }))
-  );
-}
-
-/** Screen size in points and pixels, from the device type's capability profile. */
-async function screenGeometry(
-  device: SimulatorDevice
-): Promise<{ viewport: Size; media: Size } | undefined> {
-  if (!device.deviceType) return undefined;
-  try {
-    const cmd = await simctl(["list", "devicetypes", "--json"]);
-    const types = JSON.parse((await cmd.result()).stdout) as {
-      devicetypes: Array<{ identifier: string; bundlePath: string }>;
-    };
-    const type = types.devicetypes.find((t) => t.identifier === device.deviceType);
-    if (!type) return undefined;
-    const plist = await run("plutil", [
-      "-convert",
-      "json",
-      "-o",
-      "-",
-      join(type.bundlePath, "Contents/Resources/capabilities.plist"),
-    ]);
-    const dims = (
-      JSON.parse(plist.stdout) as {
-        capabilities?: { ScreenDimensionsCapability?: Record<string, number> };
-      }
-    ).capabilities?.ScreenDimensionsCapability;
-    const scale = dims?.["main-screen-scale"];
-    const width = dims?.["main-screen-width"];
-    const height = dims?.["main-screen-height"];
-    if (!scale || !width || !height) return undefined;
-    return {
-      media: { width, height },
-      viewport: { width: Math.round(width / scale), height: Math.round(height / scale) },
-    };
-  } catch {
-    return undefined;
-  }
+        booted: d.booted === true,
+        runtime: `iOS ${d.osVersion ?? ""}`.trim(),
+      })
+    );
 }
 
 export async function simulatorBackend(spec: SimulatorSourceSpec): Promise<CaptureBackend> {
-  const devices = await listSimulators(spec.deviceSet);
-  const booted = devices.filter((d) => d.state === "Booted");
+  const devices = await listSimulators(spec);
+  const booted = devices.filter((d) => d.booted);
+  // "booted" names the only booted device: with several, picking one would
+  // record a simulator other than the one being used.
+  if (spec.udid === "booted" && booted.length > 1) {
+    throw new ScreenStudioError("source_unavailable", "Several simulators are booted", {
+      hint: `Name one: ${booted.map((d) => `${d.name} (${d.udid})`).join(", ")}`,
+    });
+  }
   const device =
     spec.udid === "booted"
       ? booted[0]
@@ -159,117 +105,93 @@ export async function simulatorBackend(spec: SimulatorSourceSpec): Promise<Captu
       {
         hint: booted.length
           ? `Booted: ${booted.map((d) => `${d.name} (${d.udid})`).join(", ")}`
-          : "Boot one with `xcrun simctl boot <udid>` or open Simulator.app.",
+          : "Boot one with `agent-device boot --platform ios` or open Simulator.app.",
       }
     );
   }
-  if (device.state !== "Booted") {
-    throw new ScreenStudioError("source_unavailable", `${device.name} is ${device.state}`, {
-      hint: `Boot it first: xcrun simctl boot ${device.udid}`,
+  if (!device.booted) {
+    throw new ScreenStudioError("source_unavailable", `${device.name} is not booted`, {
+      hint: `Boot it first: agent-device boot --udid ${device.udid}`,
     });
   }
-  const geometry = await screenGeometry(device);
   return {
     id: `ios-simulator:${device.udid}`,
     kind: "ios-simulator",
-    backend: "simctl",
+    backend: "agent-device",
     label: `${device.name} (${device.runtime})`,
-    details: {
-      udid: device.udid,
-      name: device.name,
-      runtime: device.runtime,
-      deviceSet: spec.deviceSet,
-    },
-    start: (context) => startSimctl(device, spec.deviceSet, geometry, context),
-  };
-}
-
-const READY_TIMEOUT_MS = 20_000;
-
-async function startSimctl(
-  device: SimulatorDevice,
-  deviceSet: string | undefined,
-  geometry: { viewport: Size; media: Size } | undefined,
-  context: CaptureContext
-): Promise<ActiveCapture> {
-  const path = join(context.mediaDir, "screen.mp4");
-  const cmd = await simctl(
-    ["io", device.udid, "recordVideo", "--codec=h264", "--force", path],
-    deviceSet
-  );
-  const child = spawn("xcrun", cmd.fullArgs, { env: cmd.env, stdio: ["ignore", "pipe", "pipe"] });
-  let output = "";
-  let stopping = false;
-  let readyAt = 0;
-
-  const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
-    child.once("close", (code, signal) => resolve({ code, signal }));
-    child.once("error", () => resolve({ code: -1, signal: null }));
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      child.kill("SIGINT");
-      reject(
-        new ScreenStudioError("start_timeout", "simctl did not start recording", {
-          hint: tail(output),
-        })
-      );
-    }, READY_TIMEOUT_MS);
-    const onData = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-4000);
-      // simctl prints this once the first video frame has been processed.
-      if (!readyAt && output.includes("Recording started")) {
-        readyAt = Date.now();
-        clearTimeout(timer);
-        resolve();
+    details: { udid: device.udid, name: device.name, runtime: device.runtime },
+    async start(context): Promise<ActiveCapture> {
+      const path = join(context.mediaDir, "screen.mp4");
+      // Raw video: the render draws the touches itself, from the telemetry.
+      const args = ["--hide-touches", "--scope", "device", "--udid", device.udid];
+      try {
+        await agentDevice(spec, ["record", "start", path, ...args]);
+      } catch (err) {
+        // No answer at all: the recording may have begun, so end it. A refusal
+        // leaves the device alone (another recording may hold it).
+        if (!(err as { answered?: boolean }).answered) {
+          await agentDevice(spec, ["record", "stop"]).catch(() => {});
+        }
+        throw err;
       }
-    };
-    child.stdout.on("data", onData);
-    child.stderr.on("data", onData);
-    exited.then(({ code }) => {
-      if (readyAt) return;
-      clearTimeout(timer);
-      reject(
-        new ScreenStudioError("capture_failed", `simctl exited (${code}) before recording`, {
-          hint: tail(output),
-        })
-      );
-    });
-  });
-
-  exited.then(({ code, signal }) => {
-    if (!stopping)
-      context.onSourceLost(`simctl exited (${signal ?? code}); the simulator may have shut down`);
-  });
-
-  return {
-    mediaStartEpochMs: readyAt,
-    uncertaintyMs: 50,
-    clockMethod: "simctl 'Recording started' (printed after the first frame is processed)",
-    geometry,
-    pointerInPixels: "none",
-    childPids: child.pid ? [child.pid] : [],
-    stats: () => ({ frames: null }),
-    async stop() {
-      stopping = true;
-      child.kill("SIGINT");
-      const escalate = setTimeout(() => child.kill("SIGTERM"), 20_000);
-      const kill = setTimeout(() => child.kill("SIGKILL"), 30_000);
-      await exited;
-      clearTimeout(escalate);
-      clearTimeout(kill);
-      const size = await stat(path)
-        .then((s) => s.size)
-        .catch(() => 0);
-      if (size === 0) {
-        throw new ScreenStudioError("media_missing", "simctl produced no video", {
-          hint: tail(output),
-        });
-      }
-      // simctl only writes frames when the screen changes; a still ending is
-      // shorter than the capture window. Renderers pad by holding the last frame.
-      return { path, warnings: [] };
+      // agent-device times its telemetry from its recording's start, which it
+      // takes ~50 ms before `record start` answers. Measured against its video,
+      // a touch is off by up to ~0.8 s either way (recorded here; the edit does
+      // not read it).
+      const started = Date.now() - 50;
+      // agent-device records in its own daemon: should this process die before
+      // stop, a detached watcher runs `record stop` for the session, so nothing
+      // records on, holds the device or keeps the daemon alive.
+      const { bin, env } = command(spec);
+      const watch = 'while kill -0 "$1" 2>/dev/null; do sleep 2; done; exec "$2" record stop';
+      const watcher = spawn("/bin/sh", ["-c", watch, "sh", String(process.pid), bin], {
+        env,
+        detached: true,
+        stdio: "ignore",
+      });
+      // A watcher that could not start costs only this protection, never the owner.
+      watcher.on("error", () => {});
+      watcher.unref();
+      return {
+        mediaStartEpochMs: started,
+        uncertaintyMs: 800,
+        clockMethod: "agent-device record start's answer",
+        pointerInPixels: "none",
+        childPids: watcher.pid ? [watcher.pid] : [],
+        stats: () => ({ frames: null }),
+        async stop() {
+          const data = await agentDevice(spec, ["record", "stop"]);
+          // Only now: had the stop not reached agent-device, the watcher still ends the take.
+          watcher.kill();
+          const telemetry = typeof data.telemetryPath === "string" ? data.telemetryPath : null;
+          // What agent-device says went wrong (a recording ended early, an overlay
+          // it could not draw), in its own words.
+          const warnings = [data.warning, data.overlayWarning].filter(
+            (warning): warning is string => typeof warning === "string" && warning !== ""
+          );
+          if (!telemetry) warnings.push("agent-device wrote no telemetry");
+          // The video is the recording: telemetry that cannot be read costs the
+          // touches, not the take.
+          const touches = telemetry
+            ? await agentDeviceEvents(telemetry).catch((err: Error) => {
+                warnings.push(err.message);
+                return [];
+              })
+            : [];
+          const events = touches.map((event) =>
+            event.kind === "action"
+              ? {
+                  ...event,
+                  at: started + (event.at ?? 0),
+                  ...(event.endAt !== undefined ? { endAt: started + event.endAt } : {}),
+                }
+              : event
+          );
+          // The video holds frames only where the screen changed; renderers pad
+          // a still ending by holding the last frame.
+          return { path, warnings, events };
+        },
+      };
     },
   };
 }

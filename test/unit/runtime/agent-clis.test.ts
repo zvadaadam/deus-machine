@@ -79,11 +79,13 @@ function write(file: string, content: string, executable = false) {
 async function stage(target: (typeof AGENT_CLI_TARGETS)[number]) {
   const root = mkdtempSync(path.join(os.tmpdir(), "deus-codex-package-"));
   roots.push(root);
-  // agent-browser is still staged from the lockfile; Codex and Claude come from agent-server.
+  // agent-browser and agent-device are staged from the lockfile; Codex and Claude come from agent-server.
   write(
     path.join(root, "bun.lock"),
-    `  "agent-browser": ["agent-browser@0.21.4", "", {}, "sha512-fixture"],`
+    `  "agent-browser": ["agent-browser@0.21.4", "", {}, "sha512-fixture"],\n` +
+      `  "agent-device": ["agent-device@0.21.39", "", {}, "sha512-fixture"],`
   );
+  write(path.join(root, "node_modules", "agent-device", "bin", "agent-device.mjs"), "");
   write(
     path.join(root, "node_modules", "agent-browser", target.agentBrowserEntry),
     "agent-browser",

@@ -91,6 +91,52 @@ When debugging agent-server behavior (event shapes, turn admission, cancel seman
 - Engine bugs belong upstream (branch + PR there, then bump the pin here); deus consumes the engine protocol natively (no translate layer) — consumer-side behavior lives in the backend's `services/agent/` fold-and-persist path and the frontend's `agentEventFold` projection.
 - Deus keeps no list of models. A local chat's pickers read what this computer's CLIs list for its login (the engine's `models/list`, as `q:request agentModels`); a cloud chat's read the platform's (`cloudModels`, the same engine's catalog); before an answer, the catalog the embedded engine was built with. `shared/models.ts` holds only Deus's own choices: the harness names and the model and thinking level a new chat starts on. A model missing from a picker is an engine pin to bump, not a row to add.
 
+### How agents drive a simulator (agent-device)
+
+Agents drive iOS Simulators and Android emulators with the
+[`agent-device`](https://github.com/callstack/agent-device) CLI, which Deus
+ships: no skill, nothing to install, no tools of Deus's own.
+
+- **It ships.** `agent-device` is a dependency pinned exactly in `package.json`.
+  `scripts/runtime/agent-clis.ts` stages its package as `agent-device-package/`
+  beside the other CLIs and an `agent-device` launcher script that runs it with
+  the `deus-runtime` beside it (`BUN_BE_BUN=1`), or `bun` in a checkout's staged
+  folder. The npm CLI ships neither it nor the Simulator tab's engine. The bundled folder is first on PATH in the installed app, and the engine
+  puts it first in `dev` and `dev:web` (`agents/core/bundled-clis.ts`).
+- **Xcode.** At engine start on macOS, the backend gives the process (so every
+  agent and terminal) the developer directory the Simulator tab uses
+  (`simulatorEnv`), where none is named and `xcode-select` names the Command
+  Line Tools (`AgentLink.open` in `services/agent/client.ts`).
+- **The briefing.** Every harness's instructions carry a few lines on how to use
+  it (`AGENT_DEVICE` in `services/agent/workspace-context.ts`) and the Simulator
+  tab's device (`--udid`); `agent-device help <topic>` has the rest, versioned
+  with the CLI.
+- **Sessions.** Every turn sets `AGENT_DEVICE_SESSION` to the workspace's id
+  (`agentDeviceFor` in `services/simulator-context.ts`), so all chats of a
+  workspace share one agent-device session, as they share its Simulator tab. A
+  session holds its device until `close`, which leaves the app on screen and
+  the runner warm (the next `open` takes ~2 s, not the first build's ~50 s);
+  an unclosed one keeps it from other workspaces, and agent-device's daemon
+  outlives Deus while one is open, until 30 idle minutes end it
+  (`AGENT_DEVICE_SESSION_IDLE_TIMEOUT_MS`, set in `AgentLink.open`; a
+  recording counts as activity; the daemon reads it when it starts).
+- **Its own daemon.** `AgentLink.open` also sets `AGENT_DEVICE_STATE_DIR` to
+  `agent-device/` beside the database, so Deus's agent-device runs its own
+  daemon: a client refuses a daemon of any other version, newer or older ("The
+  running daemon cannot serve this client"; an older busy one "was not
+  replaced"), and a person's own agent-device is whatever version they
+  installed. Device claims, runner leases and the runner build cache stay in
+  `~/.agent-device`, shared, so two daemons refuse and hand over a simulator
+  between them.
+- **Recording.** A simulator recording (`recording_start` with target
+  `simulator`) is agent-device's `record start --hide-touches --scope device`
+  in the workspace's session (`packages/screen-studio/src/capture/simulator.ts`),
+  of the device the Simulator tab shows unless the agent names another (the
+  recording tools ask the backend, `agentDevice`). On stop, its gesture
+  telemetry becomes the recording's actions, which the edit zooms to and cuts
+  around. The agent's `agent-device close` ends the recording early;
+  `recording_stop` still returns it.
+
 ### WebSocket Query Protocol
 
 Single WS connection (`/ws`) using `q:` prefixed JSON frames:

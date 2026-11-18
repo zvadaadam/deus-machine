@@ -140,7 +140,7 @@ export function createAgentTools(host: AgentToolHost, options: AgentToolOptions 
           .enum(["browser", "simulator"])
           .optional()
           .describe("What to record. Default: browser"),
-        destination: z.string().optional().describe("Simulator name or UDID (simulator only)"),
+        destination: z.string().optional().describe("Simulator UDID (simulator only)"),
         ...(options.allowSourceIds
           ? {
               source: z
@@ -212,7 +212,7 @@ export function createAgentTools(host: AgentToolHost, options: AgentToolOptions 
     },
     {
       name: "recording_focus",
-      description: `Point the camera at something specific. Results that appear after an action (a confirmation, a generated preview) are found and framed automatically; use this when the video should show something else.${host.resolveRef ? " Give an element ref from your latest snapshot, or a rect." : " Give a rect in the page's (or iOS points') coordinates."}`,
+      description: `Point the camera at something specific. Results that appear after an action (a confirmation, a generated preview) are found and framed automatically; use this when the video should show something else.${host.resolveRef ? " Give an element ref from your latest snapshot, or a rect." : " Give a rect in the page's coordinates (for a simulator, the video's pixels)."}`,
       inputSchema: {
         ...(host.resolveRef
           ? { ref: z.string().optional().describe("Element ref, e.g. @e12") }

@@ -37,18 +37,6 @@ import {
   BrowserScreenshotToolRenderer,
   BrowserNetworkRequestsToolRenderer,
   BrowserScrollToolRenderer,
-  // xcode-mcp — iOS Simulator
-  XcodeMcpScreenshotToolRenderer,
-  XcodeMcpTapToolRenderer,
-  XcodeMcpTypeTextToolRenderer,
-  XcodeMcpSwipeToolRenderer,
-  XcodeMcpPressKeyToolRenderer,
-  XcodeMcpBuildToolRenderer,
-  XcodeMcpLaunchToolRenderer,
-  XcodeMcpReadScreenToolRenderer,
-  XcodeMcpWaitForToolRenderer,
-  XcodeMcpGetProjectInfoToolRenderer,
-  XcodeMcpRefreshDestinationsToolRenderer,
   // Tool discovery
   ToolSearchToolRenderer,
   // Plan mode lifecycle
@@ -121,21 +109,6 @@ export function registerAllTools() {
   toolRegistry.register("BrowserScreenshot", BrowserScreenshotToolRenderer);
   toolRegistry.register("BrowserNetworkRequests", BrowserNetworkRequestsToolRenderer);
   toolRegistry.register("BrowserScroll", BrowserScrollToolRenderer);
-
-  // Built-in Deus Simulator tools (agent-server MCP). The agent sees them as
-  // `mcp__deus__Simulator*`; the registry looks a tool up by its bare name.
-  toolRegistry.register("SimulatorScreenshot", XcodeMcpScreenshotToolRenderer);
-  toolRegistry.register("SimulatorTap", XcodeMcpTapToolRenderer);
-  toolRegistry.register("SimulatorTypeText", XcodeMcpTypeTextToolRenderer);
-  toolRegistry.register("SimulatorSwipe", XcodeMcpSwipeToolRenderer);
-  toolRegistry.register("SimulatorPressKey", XcodeMcpPressKeyToolRenderer);
-  toolRegistry.register("SimulatorBuild", XcodeMcpBuildToolRenderer);
-  toolRegistry.register("SimulatorLaunch", XcodeMcpLaunchToolRenderer);
-  toolRegistry.register("SimulatorListApps", XcodeMcpRefreshDestinationsToolRenderer);
-  toolRegistry.register("SimulatorReadScreen", XcodeMcpReadScreenToolRenderer);
-  toolRegistry.register("SimulatorWaitFor", XcodeMcpWaitForToolRenderer);
-  toolRegistry.register("SimulatorGetProjectInfo", XcodeMcpGetProjectInfoToolRenderer);
-  toolRegistry.register("SimulatorListDevices", XcodeMcpRefreshDestinationsToolRenderer);
 
   // Deus MCP — Workspace tools
   toolRegistry.register("AskUserQuestion", AskUserQuestionToolRenderer);

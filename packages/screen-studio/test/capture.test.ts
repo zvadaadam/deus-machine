@@ -1,6 +1,7 @@
+import { execFileSync } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { mkdirSync, rmSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { WebSocketServer, type WebSocket as WsSocket } from "ws";
@@ -9,6 +10,7 @@ import { ManifestSchema } from "../src/bundle/schema.js";
 import { resolvePageTarget } from "../src/capture/cdp.js";
 import { FramePump } from "../src/capture/frame-pump.js";
 import { parseSourceId, resolveSource } from "../src/capture/sources.js";
+import { simulatorBackend } from "../src/capture/simulator.js";
 import { startRecording } from "../src/recorder.js";
 import { probeMedia } from "../src/util/ffmpeg.js";
 import { jpegFrames, manifest, tempDir } from "./helpers.js";
@@ -33,6 +35,132 @@ describe("source IDs", () => {
       size: { width: 640, height: 360 },
     });
     expect(() => parseSourceId("webcam")).toThrow(/Unknown source/);
+  });
+});
+
+describe("iOS Simulator", () => {
+  it("records through agent-device in the agent's session and keeps its touches and warnings", async () => {
+    const dir = tempDir();
+    const log = join(dir, "calls.log");
+    // agent-device as the source sees it: devices, record start, record stop.
+    const bin = join(dir, "agent-device");
+    writeFileSync(
+      bin,
+      `#!/bin/sh
+echo "$AGENT_DEVICE_SESSION $*" >> ${JSON.stringify(log)}
+case "$1 $2" in
+  "devices --platform") echo '{"success":true,"data":{"devices":[{"id":"SIM-1","name":"iPhone","kind":"simulator","booted":true,"osVersion":"27.2"}]}}' ;;
+  "record start") ffmpeg -v error -f lavfi -i testsrc2=size=64x128:rate=10 -t 1 -pix_fmt yuv420p -y "$3" && echo "$3" > ${JSON.stringify(join(dir, "out"))} && echo '{"success":true,"data":{}}' ;;
+  "record stop") out=$(cat ${JSON.stringify(join(dir, "out"))}); t="\${out%.mp4}.gesture-telemetry.json"
+    echo '{"version":1,"events":[{"kind":"tap","tMs":400,"x":20,"y":30,"referenceWidth":32,"referenceHeight":64}]}' > "$t"
+    printf '{"success":true,"data":{"outPath":"%s","telemetryPath":"%s","warning":"The simulator shut down"}}' "$out" "$t" ;;
+  *) echo '{"success":false,"error":{"message":"unexpected"}}'; exit 1 ;;
+esac
+`
+    );
+    chmodSync(bin, 0o755);
+    const bundle = join(dir, "bundle");
+    const recording = await startRecording({
+      source: { kind: "ios-simulator", udid: "booted", session: "chat-1", bin },
+      out: bundle,
+    });
+    const final = await recording.stop();
+    expect(final.status).toBe("complete");
+    expect(final.source.backend).toBe("agent-device");
+    // agent-device's own warnings reach the recording.
+    expect(final.capture.warnings).toContain("The simulator shut down");
+    expect(readFileSync(log, "utf8").trim().split("\n")).toEqual([
+      "chat-1 devices --platform ios --json",
+      `chat-1 record start ${join(bundle, "media", "screen.mp4")} --hide-touches --scope device --udid SIM-1 --json`,
+      "chat-1 record stop --json",
+    ]);
+    const [tap] = (await readEvents(bundle)).events;
+    expect(tap).toMatchObject({
+      kind: "action",
+      type: "tap",
+      at: final.clock!.mediaStartEpochMs + 400,
+      point: { x: 20, y: 30 },
+      space: { width: 32, height: 64 },
+      by: "agent-device",
+    });
+  });
+});
+
+describe("iOS Simulator recordings that nobody stops", () => {
+  // agent-device for these cases: devices, then a record start answered by `start`.
+  function fake(start: string, stop = `echo '{"success":true,"data":{}}'`) {
+    const dir = tempDir();
+    const log = join(dir, "calls.log");
+    const bin = join(dir, "agent-device");
+    writeFileSync(
+      bin,
+      `#!/bin/sh
+echo "$*" >> ${JSON.stringify(log)}
+case "$1 $2" in
+  "devices --platform") echo '{"success":true,"data":{"devices":[{"id":"SIM-1","name":"iPhone","kind":"simulator","booted":true}]}}' ;;
+  "record start") ${start} ;;
+  "record stop") ${stop} ;;
+  *) echo '{"success":true,"data":{}}' ;;
+esac
+`
+    );
+    chmodSync(bin, 0o755);
+    const calls = () => readFileSync(log, "utf8").trim().split("\n");
+    return { dir, bin, calls };
+  }
+  const source = (bin: string) => ({ kind: "ios-simulator" as const, udid: "SIM-1", bin });
+
+  it("ends a start that never answered, and leaves a refused one alone", async () => {
+    const silent = fake("exit 1");
+    await expect(
+      startRecording({ source: source(silent.bin), out: join(silent.dir, "b") })
+    ).rejects.toThrow();
+    expect(silent.calls().at(-1)).toBe("record stop --json");
+    const refused = fake(`echo '{"success":false,"error":{"message":"in use"}}'; exit 1`);
+    await expect(
+      startRecording({ source: source(refused.bin), out: join(refused.dir, "b") })
+    ).rejects.toThrow(/in use/);
+    expect(refused.calls().at(-1)).toMatch(/^record start /);
+  });
+
+  it("keeps the take when agent-device's telemetry cannot be read", async () => {
+    const dir = tempDir();
+    const telemetry = join(dir, "broken.json");
+    writeFileSync(telemetry, "not json");
+    const { bin } = fake(
+      `echo '{"success":true,"data":{}}'`,
+      `echo '{"success":true,"data":{"telemetryPath":${JSON.stringify(telemetry)}}}'`
+    );
+    const backend = await simulatorBackend(source(bin));
+    const capture = await backend.start({
+      mediaDir: dir,
+      fps: 30,
+      log: () => {},
+      onSourceLost: () => {},
+      onGeometry: () => {},
+      onFailure: () => {},
+    });
+    const finalized = await capture.stop();
+    expect(finalized.events).toEqual([]);
+    expect(finalized.warnings.join(" ")).toMatch(/Unreadable agent-device telemetry/);
+  });
+
+  it("stops the recording when its owner dies without stopping it", async () => {
+    const { dir, bin, calls } = fake(
+      `ffmpeg -v error -f lavfi -i testsrc2=size=64x128:rate=10 -t 1 -pix_fmt yuv420p -y "$3" && echo '{"success":true,"data":{}}'`
+    );
+    // An owner that starts a recording and exits without stopping it.
+    const owner = join(dir, "owner.ts");
+    writeFileSync(
+      owner,
+      `import { startRecording } from ${JSON.stringify(join(import.meta.dirname, "../src/recorder.ts"))};
+await startRecording({ source: { kind: "ios-simulator", udid: "SIM-1", bin: ${JSON.stringify(bin)} }, out: ${JSON.stringify(join(dir, "b"))} });
+process.exit(0);
+`
+    );
+    execFileSync("bun", [owner]);
+    for (let i = 0; i < 50 && calls().at(-1) !== "record stop"; i++) await sleep(200);
+    expect(calls().at(-1)).toBe("record stop");
   });
 });
 

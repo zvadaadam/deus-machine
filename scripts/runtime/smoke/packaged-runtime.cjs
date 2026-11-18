@@ -3,7 +3,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { execFile, spawnSync } = require("node:child_process");
 const { promisify } = require("node:util");
-const { BUNDLED_BINARIES } = require("../electron-builder-after-pack.cjs");
+const { BUNDLED_CLIS } = require("../electron-builder-after-pack.cjs");
 const { ENGINE_STARTED, assertEngineStarted } = require("./engine-ready.cjs");
 const {
   PROJECT_ROOT,
@@ -135,11 +135,17 @@ async function smokePackagedRuntime(options) {
   assertExecutable(runtimeBin, "packaged Deus runtime");
   assertHostRunnableArch(runtimeBin, "Packaged runtime");
 
-  const { version } = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, "package.json"), "utf8"));
-  for (const name of BUNDLED_BINARIES) {
+  const { version, dependencies } = JSON.parse(
+    fs.readFileSync(path.join(PROJECT_ROOT, "package.json"), "utf8")
+  );
+  for (const name of BUNDLED_CLIS) {
     const output = await runRuntimeCommand(path.join(binDir, name), ["--version"], binDir);
     if (name === "deus-runtime" && !output.startsWith(`deus-runtime ${version} `)) {
       throw new Error(`Packaged runtime is not version ${version}: ${output}`);
+    }
+    // Run by deus-runtime as Bun, so this is the runtime running the package too.
+    if (name === "agent-device" && output.trim() !== dependencies["agent-device"]) {
+      throw new Error(`Packaged agent-device is not ${dependencies["agent-device"]}: ${output}`);
     }
     console.log(`[runtime-smoke] packaged ${name} --version: ${output.split("\n")[0]}`);
   }

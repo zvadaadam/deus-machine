@@ -121,7 +121,7 @@ export const ManifestSchema = z.object({
     .optional(),
   geometry: z
     .object({
-      /** Coordinate space actions use by default: CSS px, iOS points, display points. */
+      /** Coordinate space actions use by default: CSS px, display points; a simulator's video pixels. */
       viewport: SizeSchema,
       /** Pixel size of the media. */
       media: SizeSchema,

@@ -49,7 +49,16 @@ mac:
   extraResources:
     - from: "dist/runtime/electron/bin/darwin-${arch}"
       to: "bin"
-      filter: ["gh", "deus-runtime", "codex", "codex-runtime/**/*", "claude", "rg", "agent-browser"]
+      filter:
+        - "gh"
+        - "deus-runtime"
+        - "codex"
+        - "codex-runtime/**/*"
+        - "claude"
+        - "rg"
+        - "agent-browser"
+        - "agent-device"
+        - "agent-device-package/**/*"
     - from: "packages/device-use/bin/simbridge"
       to: "simulator/simbridge"
     - from: "packages/device-use/bin/siminspector.dylib"
@@ -82,7 +91,16 @@ linux:
   extraResources:
     - from: "dist/runtime/electron/bin/linux-${arch}"
       to: "bin"
-      filter: ["gh", "deus-runtime", "codex", "codex-runtime/**/*", "claude", "rg", "agent-browser"]
+      filter:
+        - "gh"
+        - "deus-runtime"
+        - "codex"
+        - "codex-runtime/**/*"
+        - "claude"
+        - "rg"
+        - "agent-browser"
+        - "agent-device"
+        - "agent-device-package/**/*"
 publish:
   provider: github
   releaseType: release

@@ -176,7 +176,7 @@ export interface SourceInfo {
 }
 
 export async function listSources(
-  options: { cdp?: string[]; deviceSet?: string } = {}
+  options: { cdp?: string[] } = {}
 ): Promise<{ sources: SourceInfo[]; problems: string[] }> {
   const sources: SourceInfo[] = [];
   const problems: string[] = [];
@@ -201,8 +201,8 @@ export async function listSources(
     }),
     (async () => {
       try {
-        for (const device of await listSimulators(options.deviceSet)) {
-          if (device.state !== "Booted") continue;
+        for (const device of await listSimulators()) {
+          if (!device.booted) continue;
           sources.push({
             id: `ios-simulator:${device.udid}`,
             kind: "ios-simulator",

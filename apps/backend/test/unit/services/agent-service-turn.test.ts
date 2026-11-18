@@ -40,6 +40,9 @@ vi.mock("../../../src/lib/database", () => ({
   DB_PATH: "/tmp/deus-service-turn-test.db",
 }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
+vi.mock("../../../src/services/simulator-context", () => ({
+  agentDeviceFor: (sessionId: string) => ({ session: sessionId, udid: null }),
+}));
 vi.mock("../../../src/services/agent/client", () => ({
   AgentLink: { open: mockOpen },
 }));

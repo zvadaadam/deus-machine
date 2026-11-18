@@ -34,21 +34,6 @@ export {
   BrowserScrollToolRenderer,
 } from "./BrowserToolRenderers";
 
-// xcode-mcp tools — iOS Simulator
-export {
-  XcodeMcpScreenshotToolRenderer,
-  XcodeMcpTapToolRenderer,
-  XcodeMcpTypeTextToolRenderer,
-  XcodeMcpSwipeToolRenderer,
-  XcodeMcpPressKeyToolRenderer,
-  XcodeMcpBuildToolRenderer,
-  XcodeMcpLaunchToolRenderer,
-  XcodeMcpReadScreenToolRenderer,
-  XcodeMcpWaitForToolRenderer,
-  XcodeMcpGetProjectInfoToolRenderer,
-  XcodeMcpRefreshDestinationsToolRenderer,
-} from "./XcodeMcpToolRenderers";
-
 // Deus MCP tools — Workspace
 export {
   AskUserQuestionToolRenderer,
