@@ -144,11 +144,13 @@ export async function simulatorBackend(spec: SimulatorSourceSpec): Promise<Captu
       // records on, holds the device or keeps the daemon alive.
       const { bin, env } = command(spec);
       const watch = 'while kill -0 "$1" 2>/dev/null; do sleep 2; done; exec "$2" record stop';
-      const watcher = spawn("sh", ["-c", watch, "sh", String(process.pid), bin], {
+      const watcher = spawn("/bin/sh", ["-c", watch, "sh", String(process.pid), bin], {
         env,
         detached: true,
         stdio: "ignore",
       });
+      // A watcher that could not start costs only this protection, never the owner.
+      watcher.on("error", () => {});
       watcher.unref();
       return {
         mediaStartEpochMs: started,
@@ -158,26 +160,33 @@ export async function simulatorBackend(spec: SimulatorSourceSpec): Promise<Captu
         childPids: watcher.pid ? [watcher.pid] : [],
         stats: () => ({ frames: null }),
         async stop() {
-          watcher.kill();
           const data = await agentDevice(spec, ["record", "stop"]);
+          // Only now: had the stop not reached agent-device, the watcher still ends the take.
+          watcher.kill();
           const telemetry = typeof data.telemetryPath === "string" ? data.telemetryPath : null;
-          const events = telemetry
-            ? (await agentDeviceEvents(telemetry)).map((event) =>
-                event.kind === "action"
-                  ? {
-                      ...event,
-                      at: started + (event.at ?? 0),
-                      ...(event.endAt !== undefined ? { endAt: started + event.endAt } : {}),
-                    }
-                  : event
-              )
-            : [];
           // What agent-device says went wrong (a recording ended early, an overlay
           // it could not draw), in its own words.
           const warnings = [data.warning, data.overlayWarning].filter(
             (warning): warning is string => typeof warning === "string" && warning !== ""
           );
           if (!telemetry) warnings.push("agent-device wrote no telemetry");
+          // The video is the recording: telemetry that cannot be read costs the
+          // touches, not the take.
+          const touches = telemetry
+            ? await agentDeviceEvents(telemetry).catch((err: Error) => {
+                warnings.push(err.message);
+                return [];
+              })
+            : [];
+          const events = touches.map((event) =>
+            event.kind === "action"
+              ? {
+                  ...event,
+                  at: started + (event.at ?? 0),
+                  ...(event.endAt !== undefined ? { endAt: started + event.endAt } : {}),
+                }
+              : event
+          );
           // The video holds frames only where the screen changed; renderers pad
           // a still ending by holding the last frame.
           return { path, warnings, events };

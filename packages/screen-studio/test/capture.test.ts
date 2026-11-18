@@ -10,6 +10,7 @@ import { ManifestSchema } from "../src/bundle/schema.js";
 import { resolvePageTarget } from "../src/capture/cdp.js";
 import { FramePump } from "../src/capture/frame-pump.js";
 import { parseSourceId, resolveSource } from "../src/capture/sources.js";
+import { simulatorBackend } from "../src/capture/simulator.js";
 import { startRecording } from "../src/recorder.js";
 import { probeMedia } from "../src/util/ffmpeg.js";
 import { jpegFrames, manifest, tempDir } from "./helpers.js";
@@ -87,7 +88,7 @@ esac
 
 describe("iOS Simulator recordings that nobody stops", () => {
   // agent-device for these cases: devices, then a record start answered by `start`.
-  function fake(start: string) {
+  function fake(start: string, stop = `echo '{"success":true,"data":{}}'`) {
     const dir = tempDir();
     const log = join(dir, "calls.log");
     const bin = join(dir, "agent-device");
@@ -98,6 +99,7 @@ echo "$*" >> ${JSON.stringify(log)}
 case "$1 $2" in
   "devices --platform") echo '{"success":true,"data":{"devices":[{"id":"SIM-1","name":"iPhone","kind":"simulator","booted":true}]}}' ;;
   "record start") ${start} ;;
+  "record stop") ${stop} ;;
   *) echo '{"success":true,"data":{}}' ;;
 esac
 `
@@ -119,6 +121,28 @@ esac
       startRecording({ source: source(refused.bin), out: join(refused.dir, "b") })
     ).rejects.toThrow(/in use/);
     expect(refused.calls().at(-1)).toMatch(/^record start /);
+  });
+
+  it("keeps the take when agent-device's telemetry cannot be read", async () => {
+    const dir = tempDir();
+    const telemetry = join(dir, "broken.json");
+    writeFileSync(telemetry, "not json");
+    const { bin } = fake(
+      `echo '{"success":true,"data":{}}'`,
+      `echo '{"success":true,"data":{"telemetryPath":${JSON.stringify(telemetry)}}}'`
+    );
+    const backend = await simulatorBackend(source(bin));
+    const capture = await backend.start({
+      mediaDir: dir,
+      fps: 30,
+      log: () => {},
+      onSourceLost: () => {},
+      onGeometry: () => {},
+      onFailure: () => {},
+    });
+    const finalized = await capture.stop();
+    expect(finalized.events).toEqual([]);
+    expect(finalized.warnings.join(" ")).toMatch(/Unreadable agent-device telemetry/);
   });
 
   it("stops the recording when its owner dies without stopping it", async () => {

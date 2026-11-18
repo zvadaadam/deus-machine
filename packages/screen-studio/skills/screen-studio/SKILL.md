@@ -54,7 +54,8 @@ screen-studio stop ./captures/login --render walkthrough
   started (`--at`, epoch ms; default now), how long it took, and where it
   happened in the source's own coordinates (for a simulator, the video's
   pixels, or iOS points with `--space 402x874`, the device's size in points).
-  agent-device's own touches are read from its telemetry: don't report them:
+  agent-device's own touches are read from its telemetry when they are made in
+  the recording's agent-device session (`AGENT_DEVICE_SESSION`): don't report them:
 
   ```sh
   screen-studio action ./captures/onboarding --type tap --x 196 --y 612 \

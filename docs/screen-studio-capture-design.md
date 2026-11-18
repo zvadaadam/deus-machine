@@ -76,7 +76,7 @@ flowchart LR
 
 - `apps/agent-server/agents/deus-tools/recording.ts` imports the package's public entry (`packages/screen-studio/src/index`), the same API other hosts use.
 - `recording_start` records the session's browser tab, the one agent-browser drives for that session, found through `agent-browser get cdp-url` — or, with `target: "simulator"`, the session's simulator. The global `AGENT_BROWSER_STREAM_PORT=9223`, which every session shared, is gone.
-- Browser actions come from the page observer, so browser tools report nothing. A simulator recording (`recording_start` with target `simulator`) is agent-device's own `record`, in the chat's agent-device session (each turn sets `AGENT_DEVICE_SESSION` to the chat's id): a recording claims its device for its session, so the agent's commands must share it, and its gesture telemetry becomes the recording's actions.
+- Browser actions come from the page observer, so browser tools report nothing. A simulator recording (`recording_start` with target `simulator`) is agent-device's own `record`, in the workspace's agent-device session (each turn sets `AGENT_DEVICE_SESSION` to the workspace's id, so every chat of a workspace shares it): a recording claims its device for its session, so the agent's commands must share it, and its gesture telemetry becomes the recording's actions.
 - The tools themselves come from the package's `createAgentTools`; Deus supplies the source, the bundle directory and element-ref lookup. New: `recording_focus` (by element ref) and `recording_hold`. `recording_stop` renders a preset and returns the shape the chat's recording card already renders, plus the render's warnings.
 
 ## Hosting it elsewhere (AGNT)
