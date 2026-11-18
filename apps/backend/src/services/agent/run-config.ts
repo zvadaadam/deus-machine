@@ -125,7 +125,9 @@ export function buildTurnStartParams(
       ...(options.mcpServers && Object.keys(options.mcpServers).length
         ? { mcpServers: options.mcpServers }
         : {}),
-      ...(options.env && Object.keys(options.env).length ? { env: options.env } : {}),
+      // The chat's agent-device session: a simulator recording joins it, so
+      // it sees the agent's touches (recording.ts in apps/agent-server).
+      env: { AGENT_DEVICE_SESSION: sessionId, ...options.env },
     },
   };
 }

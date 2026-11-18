@@ -22,6 +22,14 @@ export interface Simulator {
   udid: string;
 }
 
+/** How to drive a simulator: Deus ships agent-device (scripts/runtime/agent-clis.ts), whose own help carries the rest. */
+const AGENT_DEVICE =
+  "Drive iOS Simulators and Android emulators with the `agent-device` CLI, included with Deus. " +
+  "Start with `agent-device open <app or bundle id> --platform ios --foreground`, which prints a snapshot with `@refs`. " +
+  'Act with `press|fill|longpress <@ref> --settle`, `scroll <direction> --settle` or `back --settle`, verify with `wait text "…"`, ' +
+  "and end with `agent-device close` (`close --shutdown` if you booted it). " +
+  "`agent-device help <topic>` has more (`dogfood` for exploratory QA, `debugging`, `react-native`).\n";
+
 /**
  * Builds concise workspace context for any agent.
  * Includes project name, worktree path, and orchestrator info.
@@ -36,6 +44,7 @@ export function buildWorkspaceContext(cwd?: string, simulator?: Simulator | null
     `Your working directory is a git worktree at \`${cwd}\` — the directory name is the workspace name, not the project name. ` +
     `You can only edit files within this worktree. Each workspace has a .context directory (gitignored) for cross-agent collaboration.\n` +
     `A built-in browser is available for testing UI changes.\n` +
+    AGENT_DEVICE +
     (simulator
       ? `This workspace's Simulator tab shows the simulator ${simulator.udid}: pass \`--udid ${simulator.udid}\` to agent-device so the person sees what you do.\n`
       : "") +

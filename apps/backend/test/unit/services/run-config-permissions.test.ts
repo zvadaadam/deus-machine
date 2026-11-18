@@ -48,3 +48,18 @@ describe.each(harnesses)("%s and the Simulator tab", (harness) => {
     expect(none.config.systemPromptAppend).not.toContain("--udid");
   });
 });
+
+describe.each(harnesses)("%s and agent-device", (harness) => {
+  it("briefs the agent on the bundled CLI and runs it in the chat's session", () => {
+    const params = buildTurnStartParams("chat-1", "turn", harness, "Open Settings", {
+      cwd: "/workspace",
+      env: { CODEX_HOME: "/homes/chat-1" },
+    });
+    expect(params.config.systemPromptAppend).toContain("`agent-device open <app or bundle id>");
+    // A simulator recording joins this session, so it sees the agent's touches.
+    expect(params.config.env).toEqual({
+      AGENT_DEVICE_SESSION: "chat-1",
+      CODEX_HOME: "/homes/chat-1",
+    });
+  });
+});

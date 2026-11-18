@@ -1,7 +1,7 @@
 // agent-server/agents/deus-tools/index.ts
 // Composes workspace + browser + recording + automation tools into the Deus MCP
-// server. Agents drive a simulator with the agent-device CLI (a skill in
-// Customize), not with tools of Deus's own.
+// server. Agents drive a simulator with the agent-device CLI, which Deus ships
+// and the turn's instructions brief them on, not with tools of Deus's own.
 
 import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { createWorkspaceTools } from "./workspace";
