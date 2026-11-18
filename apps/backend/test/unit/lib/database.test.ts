@@ -66,28 +66,69 @@ describe("database schema check at startup", () => {
     expectReset(initDatabase, "workspaces.organization_id is missing");
   });
 
-  /** The compactions table rebuilt with `created_at` declared as given, plus `extra`. */
-  function compactionsAs(createdAt: string, extra = ""): string {
+  /** The compactions table rebuilt with its id and `created_at` declared as given, plus `extra`. */
+  function compactionsAs({
+    id = "TEXT PRIMARY KEY NOT NULL",
+    createdAt = "TEXT NOT NULL DEFAULT (datetime('now'))",
+    extra = "",
+  }): string {
     return `
       DROP TABLE compactions;
       CREATE TABLE compactions (
-        compaction_id TEXT PRIMARY KEY NOT NULL, session_id TEXT NOT NULL, turn_id TEXT NOT NULL,
+        compaction_id ${id}, session_id TEXT NOT NULL, turn_id TEXT NOT NULL,
         status TEXT NOT NULL, trigger TEXT, pre_tokens INTEGER, post_tokens INTEGER, summary TEXT,
         created_at ${createdAt}${extra}
       );
     `;
   }
 
-  it("stops on a column whose NOT NULL differs from the schema", async () => {
-    databaseFile(compactionsAs("TEXT"));
+  it.each([
+    ["a NOT NULL", { createdAt: "TEXT DEFAULT (datetime('now'))" }, "created_at"],
+    ["a default", { createdAt: "TEXT NOT NULL" }, "created_at"],
+    ["a type", { createdAt: "INTEGER NOT NULL DEFAULT (datetime('now'))" }, "created_at"],
+    ["a primary key", { id: "TEXT NOT NULL" }, "compaction_id"],
+  ])("stops on a column whose %s differs from the schema", async (_, table, column) => {
+    databaseFile(compactionsAs(table));
     const { initDatabase } = await open();
-    expectReset(initDatabase, "compactions.created_at should be NOT NULL.");
+    expectReset(initDatabase, `compactions.${column} differs from the schema.`);
   });
 
   it("stops on a leftover column an insert would fail on", async () => {
-    databaseFile(compactionsAs("TEXT NOT NULL DEFAULT (datetime('now'))", ", kind TEXT NOT NULL"));
+    databaseFile(compactionsAs({ extra: ", kind TEXT NOT NULL" }));
     const { initDatabase } = await open();
     expectReset(initDatabase, "compactions.kind is no longer in the schema and is required.");
+  });
+
+  /** The database's schema version: SQLite moves it on every change to the schema. */
+  function schemaVersion(): number {
+    const db = new Database(process.env.DATABASE_PATH!);
+    const version = db.pragma("schema_version", { simple: true }) as number;
+    db.close();
+    return version;
+  }
+
+  it("replaces a trigger whose body is older than the schema's, and starts", async () => {
+    databaseFile(`
+      DROP TRIGGER assign_message_seq;
+      CREATE TRIGGER assign_message_seq AFTER INSERT ON messages BEGIN SELECT 1; END;
+    `);
+    const { closeDatabase, initDatabase } = await open();
+    const sql = (db: Database.Database) =>
+      db.prepare("SELECT sql FROM sqlite_schema WHERE name = 'assign_message_seq'").get();
+    const fresh = new Database(":memory:");
+    fresh.exec(SCHEMA_SQL);
+    expect(sql(initDatabase())).toEqual(sql(fresh));
+    fresh.close();
+    closeDatabase();
+  });
+
+  it("changes nothing in a database that matches the schema: no trigger is dropped", async () => {
+    databaseFile("");
+    const before = schemaVersion();
+    const { closeDatabase, initDatabase } = await open();
+    initDatabase();
+    closeDatabase();
+    expect(schemaVersion()).toBe(before);
   });
 
   it("ignores a leftover nullable column", async () => {
@@ -106,6 +147,23 @@ describe("database schema check at startup", () => {
     const { closeDatabase, initDatabase } = await open();
     const columns = initDatabase().pragma("table_info(workspaces)") as Array<{ name: string }>;
     expect(columns.map((column) => column.name)).toContain("organization_id");
+    closeDatabase();
+  });
+
+  it("adds an additive column before the schema's index on it is created", async () => {
+    vi.doMock("@shared/schema", async (original) => ({
+      ...(await original<typeof import("@shared/schema")>()),
+      ADDITIVE_COLUMNS: { automations: { repository_id: "TEXT" }, not_yet_a_table: { x: "TEXT" } },
+    }));
+    databaseFile(`
+      DROP INDEX idx_automations_repository_id;
+      ALTER TABLE automations DROP COLUMN repository_id;
+    `);
+    const { closeDatabase, initDatabase } = await open();
+    const index = initDatabase()
+      .prepare("SELECT name FROM sqlite_schema WHERE name = 'idx_automations_repository_id'")
+      .get();
+    expect(index).toEqual({ name: "idx_automations_repository_id" });
     closeDatabase();
   });
 });
