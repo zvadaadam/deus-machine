@@ -3,15 +3,16 @@
  *
  * Renders the ephemeral `cloudEnvironment` stream (agnt workspace.state
  * passthrough) as an environment line in the transcript (EnvGroup, the line a
- * local workspace's start uses too): the summary is the live truth (active
- * step spinning while in flight, "Computer ready" when done, "Sandbox paused"
- * when asleep), and the chevron expands the full step list. Groups are
- * spliced into the timeline chronologically (chatTimeline.insertCloudEnv),
- * so a wake reads: your message → setup lines → the reply. Nothing is
- * persisted — a refresh clears the story.
+ * local workspace's start uses too): while in flight its steps are listed
+ * under "Starting a cloud computer…" (or "Waking computer"); once running
+ * they fold behind "Computer ready"; paused, stopped or failed it is one
+ * line. Groups are spliced into the timeline chronologically
+ * (chatTimeline.insertCloudEnv), so a wake reads: your message → setup lines →
+ * the reply. Nothing is persisted — a refresh clears the story.
  */
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, type ComponentProps } from "react";
+import { CLOUD_STARTING } from "@/features/workspace/lib/startState";
 import { EnvGroup, type EnvLine } from "./EnvGroup";
 import {
   useCloudEnvStore,
@@ -52,75 +53,64 @@ function stepLabel(step: string | null): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-function buildLines(entries: CloudEnvEntry[]): EnvLine[] {
+type EnvProps = ComponentProps<typeof EnvGroup>;
+
+/** The statuses a computer rests in; every other one is on its way to one of them. */
+const SETTLED = new Set(["running", "paused", "stopped", "error"]);
+
+export function buildGroup(entries: CloudEnvEntry[]): EnvProps | null {
   const latest = entries[entries.length - 1];
-  if (!latest) return [];
+  if (!latest) return null;
+  const line = (title: string, state: EnvProps["state"]): EnvProps => ({
+    title,
+    where: "cloud",
+    state,
+  });
 
-  // Settled-bad states replace the stack — old provisioning steps are stale
-  // noise next to "the sandbox is paused".
-  if (latest.status === "paused") {
-    return [
-      {
-        key: `paused-${latest.id}`,
-        label: "Computer paused — it wakes on your next message",
-        icon: "asleep",
-        tone: "muted",
-      },
-    ];
-  }
-  if (latest.status === "stopped") {
-    return [
-      {
-        key: `stopped-${latest.id}`,
-        label: latest.reason ? `Computer stopped — ${latest.reason}` : "Computer stopped",
-        icon: "asleep",
-        tone: "muted",
-      },
-    ];
-  }
-  if (latest.status === "error") {
-    return [
-      {
-        key: `error-${latest.id}`,
-        label: latest.reason ? `Computer error — ${latest.reason}` : "Computer error",
-        icon: "error",
-        tone: "error",
-      },
-    ];
-  }
+  // Settled-bad states replace the story: old provisioning steps are stale
+  // noise next to "the computer is paused".
+  if (latest.status === "paused")
+    return line("Computer paused — it wakes on your next message", "asleep");
+  if (latest.status === "stopped")
+    return line(
+      latest.reason ? `Computer stopped — ${latest.reason}` : "Computer stopped",
+      "asleep"
+    );
+  if (latest.status === "error")
+    return line(latest.reason ? `Computer error — ${latest.reason}` : "Computer error", "failed");
 
-  // In-flight (or finished) provisioning: one line per step, the latest
+  // The story is the run in flight, or the one that just finished. A run starts
+  // after the computer last settled, or at its wake; "running" said again (with
+  // a detail) ends the same run. A step per provisioning event, the latest
   // still spinning, earlier ones checked off.
-  const lines: EnvLine[] = [];
-  for (const entry of entries) {
-    if (entry.status === "provisioning") {
-      lines.push({ key: `step-${entry.id}`, label: stepLabel(entry.step), icon: "done" });
-    } else if (entry.status === "resuming") {
-      lines.push({ key: `resume-${entry.id}`, label: "Waking computer", icon: "done" });
-    }
-  }
+  let end = entries.length - 1;
+  while (end > 0 && latest.status === "running" && entries[end - 1].status === "running") end--;
+  const run = entries.slice(
+    Math.max(
+      entries.slice(0, end).findLastIndex((entry) => SETTLED.has(entry.status)) + 1,
+      entries.findLastIndex((entry) => entry.status === "resuming")
+    )
+  );
+  const steps: EnvLine[] = run
+    .filter((entry) => entry.status === "provisioning")
+    .map((entry) => ({ key: `step-${entry.id}`, label: stepLabel(entry.step), icon: "done" }));
   if (latest.status === "running") {
-    lines.push({
-      key: `ready-${latest.id}`,
-      label: latest.snapshotRestored ? "Computer ready — session restored" : "Computer ready",
-      icon: "done",
-      tone: "ready",
-    });
-  } else if (lines.length > 0) {
-    lines[lines.length - 1].icon = "active";
-  } else {
-    // Unknown status from a newer platform — the schema is an open set by
-    // contract ("treat unknown statuses as in-flight"), so show it spinning
-    // with a humanized label rather than vanishing the marker.
-    lines.push({ key: `status-${latest.id}`, label: stepLabel(latest.status), icon: "active" });
+    const title = latest.snapshotRestored ? "Computer ready — session restored" : "Computer ready";
+    return { ...line(title, "ready"), steps };
   }
-  return lines;
+  if (steps.length > 0) steps[steps.length - 1].icon = "active";
+  // A wake is its title. An unknown status from a newer platform is in flight
+  // by contract (the set is open), so it spins under its own humanized words.
+  const title = run.some((entry) => entry.status === "resuming")
+    ? "Waking computer"
+    : steps.length > 0
+      ? CLOUD_STARTING
+      : stepLabel(latest.status);
+  return { ...line(title, "running"), steps };
 }
 
-/** One environment group — a run of events at one point in the transcript.
- *  Collapsed by default to its latest/live line. */
+/** One environment group: a run of events at one point in the transcript. */
 export function CloudEnvGroup({ entries }: { entries: CloudEnvEntry[] }) {
-  const lines = useMemo(() => buildLines(entries), [entries]);
-  if (lines.length === 0) return null;
-  return <EnvGroup summary={lines[lines.length - 1]} detail={lines.slice(0, -1)} />;
+  const group = useMemo(() => buildGroup(entries), [entries]);
+  return group && <EnvGroup {...group} />;
 }

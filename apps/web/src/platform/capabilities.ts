@@ -73,6 +73,12 @@ export const capabilities = {
    *  native:homeDir, etc.) */
   ipcInvoke: isElectron,
 
+  /** The app is one window, and quitting it stops everything it started: the
+   *  desktop app. What a window holds for itself can then be kept on the
+   *  device and found again when the app reopens. A browser has tabs, which
+   *  share what is kept on the device, so there each tab keeps its own. */
+  singleWindow: isElectron,
+
   /** Whether we're running inside the Electron desktop app (as opposed to a browser).
    *  Prefer this for high-level desktop vs web branching over implementation-detail
    *  capabilities like `ipcInvoke`. */
