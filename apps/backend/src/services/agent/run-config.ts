@@ -5,11 +5,7 @@
 // system-prompt append, resume plumbing.
 
 import { parseAgentInput } from "@zvada/agent-server/protocol";
-import type {
-  AgentInput,
-  McpServerConfig,
-  TurnStartParams,
-} from "@zvada/agent-server/protocol";
+import type { AgentInput, McpServerConfig, TurnStartParams } from "@zvada/agent-server/protocol";
 import type { AgentHarness } from "@shared/enums";
 import type { ThinkingLevel, PermissionMode } from "@shared/protocol";
 import { buildSystemPromptAppend } from "./system-prompt";

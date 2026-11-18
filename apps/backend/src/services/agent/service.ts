@@ -164,8 +164,7 @@ export async function startTurn(
     ...apps,
     // Negotiated at the handshake, not guessed from a harness list.
     supportsImages:
-      link.getAgents().find((a) => a.type === agentHarness)?.capabilities.images ??
-      false,
+      link.getAgents().find((a) => a.type === agentHarness)?.capabilities.images ?? false,
   });
   // Mirror the admission BEFORE the quick-ack round-trip: the server can push
   // the first envelopes in the same tick the ack line is processed, and the
