@@ -65,6 +65,8 @@ export class AgentLink {
       const { DEVELOPER_DIR } = (await import("device-use/engine")).simulatorEnv();
       if (DEVELOPER_DIR) process.env.DEVELOPER_DIR = DEVELOPER_DIR;
     }
+    // A chat that never closes its agent-device session must not hold the device, or leave agent-device's daemon running, for good.
+    process.env.AGENT_DEVICE_SESSION_IDLE_TIMEOUT_MS ??= String(30 * 60_000);
     try {
       const client = await AgentServerClient.attach(transport, {
         requestTimeoutMs: 30_000,

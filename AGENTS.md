@@ -117,7 +117,9 @@ ships: no skill, nothing to install, no tools of Deus's own.
   session holds its device until `close`, which leaves the app on screen and
   the runner warm (the next `open` takes ~2 s, not the first build's ~50 s);
   an unclosed one keeps it from other workspaces, and agent-device's daemon
-  outlives Deus while one is open.
+  outlives Deus while one is open, until 30 idle minutes end it
+  (`AGENT_DEVICE_SESSION_IDLE_TIMEOUT_MS`, set in `AgentLink.open`; a
+  recording counts as activity; the daemon reads it when it starts).
 - **Recording.** A simulator recording (`recording_start` with target
   `simulator`) is agent-device's `record start --hide-touches --scope device`
   in the workspace's session (`packages/screen-studio/src/capture/simulator.ts`),
