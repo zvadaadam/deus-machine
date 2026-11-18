@@ -56,14 +56,14 @@ screen-studio record --source ios-simulator:booted --out ./captures/onboarding -
 
 ## Sources
 
-| Source ID                         | Captures                        | Backend                 | Notes                                                                                                                               |
-| --------------------------------- | ------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `agent-browser:<session>`         | The tab that session is driving | DevTools screencast     | Resolves `get cdp-url` + current URL. `agent-browser:<namespace>/<session>` works too.                                              |
-| `browser:<endpoint>`              | One Chromium tab                | DevTools screencast     | `http://127.0.0.1:9222`, a port, a browser or page `ws://…/devtools/…` URL. `--url-contains` picks the tab. Electron webviews work. |
-| `ios-simulator:<udid>` / `booted` | The simulated screen, no chrome | `simctl io recordVideo` | Finds Xcode outside `/Applications` (e.g. `~/Downloads`). Viewport in iOS points from the device profile.                           |
-| `display:<n>`                     | A macOS display                 | FFmpeg AVFoundation     | Needs Screen Recording permission for the app running the command.                                                                  |
-| `test-pattern:<WxH>`              | A synthetic moving pattern      | FFmpeg lavfi            | For tests and demos.                                                                                                                |
-| `screen-studio import <video>`    | An existing video (+ events)    | Copy                    | Bring footage from any tool into the same editor: agent-device telemetry and Cua driver trajectories are read directly.             |
+| Source ID                         | Captures                        | Backend               | Notes                                                                                                                               |
+| --------------------------------- | ------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `agent-browser:<session>`         | The tab that session is driving | DevTools screencast   | Resolves `get cdp-url` + current URL. `agent-browser:<namespace>/<session>` works too.                                              |
+| `browser:<endpoint>`              | One Chromium tab                | DevTools screencast   | `http://127.0.0.1:9222`, a port, a browser or page `ws://…/devtools/…` URL. `--url-contains` picks the tab. Electron webviews work. |
+| `ios-simulator:<udid>` / `booted` | The simulated screen, no chrome | agent-device `record` | Its touch telemetry becomes actions. Only touches made in the same agent-device session (`AGENT_DEVICE_SESSION`) are seen.          |
+| `display:<n>`                     | A macOS display                 | FFmpeg AVFoundation   | Needs Screen Recording permission for the app running the command.                                                                  |
+| `test-pattern:<WxH>`              | A synthetic moving pattern      | FFmpeg lavfi          | For tests and demos.                                                                                                                |
+| `screen-studio import <video>`    | An existing video (+ events)    | Copy                  | Bring footage from any tool into the same editor: agent-device telemetry and Cua driver trajectories are read directly.             |
 
 **Sharing a tab is fine.** Two screencasts on one tab each kept 60 fps, and
 agent-browser's own viewer stream kept 60 fps while a recording ran. When an

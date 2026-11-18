@@ -5,7 +5,9 @@
 // where bundles live, and how a browser ref becomes a box.
 //
 // A browser recording watches the page's own input. A simulator recording is
-// the device's video alone: nothing reports the agent's touches.
+// agent-device's, in the chat's agent-device session (the agent's commands
+// carry AGENT_DEVICE_SESSION, set per turn), so its telemetry holds the
+// agent's touches.
 
 import { randomBytes } from "crypto";
 import { tmpdir } from "os";
@@ -29,7 +31,7 @@ function toolsFor(sessionId: string): AgentTools {
     agentTools = createAgentTools({
       async resolveSource({ target, destination }) {
         if (target === "simulator") {
-          return { kind: "ios-simulator", udid: destination ?? "booted" };
+          return { kind: "ios-simulator", udid: destination ?? "booted", session: sessionId };
         }
         const page = await getRecordingTarget(sessionId);
         if (!page) {

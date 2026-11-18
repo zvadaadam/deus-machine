@@ -1,4 +1,3 @@
-import { findDeveloperDir } from "./capture/simulator.js";
 import { loadCanvas } from "./render/painter.js";
 import { ffmpegBin, ffmpegVersion, hasEncoder } from "./util/ffmpeg.js";
 import { run } from "./util/process.js";
@@ -66,15 +65,17 @@ export async function doctor(): Promise<{ ok: boolean; platform: string; checks:
     needed: "browser",
   });
   if (process.platform === "darwin") {
-    const developerDir = await findDeveloperDir();
+    const agentDevice = await run(process.env.AGENT_DEVICE_BIN ?? "agent-device", ["--version"], {
+      timeoutMs: 10_000,
+    }).catch(() => null);
     checks.push({
-      name: "Xcode simctl",
-      ok: developerDir !== null,
-      detail: developerDir ?? "no Xcode with simctl found",
+      name: "agent-device",
+      ok: agentDevice?.code === 0,
+      detail:
+        agentDevice?.code === 0
+          ? agentDevice.stdout.trim()
+          : "not found (only needed for ios-simulator sources)",
       needed: "ios-simulator",
-      ...(developerDir
-        ? {}
-        : { hint: "Install Xcode, or set DEVELOPER_DIR to …/Xcode.app/Contents/Developer" }),
     });
     checks.push({
       name: "Screen Recording permission",

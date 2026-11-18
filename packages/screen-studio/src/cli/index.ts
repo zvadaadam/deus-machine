@@ -141,12 +141,6 @@ function sourceSpec(args: Args): SourceSpec {
   const spec = parseSourceId(id);
   const urlContains = flag(args, "url-contains");
   if (spec.kind === "browser" && urlContains) spec.urlContains = urlContains;
-  if (
-    spec.kind === "ios-simulator" &&
-    (flag(args, "simulator-set") ?? process.env.SCREEN_STUDIO_SIMULATOR_SET)
-  ) {
-    spec.deviceSet = flag(args, "simulator-set") ?? process.env.SCREEN_STUDIO_SIMULATOR_SET;
-  }
   if (spec.kind === "display" && has(args, "system-cursor")) spec.systemCursor = true;
   return spec;
 }
@@ -532,10 +526,7 @@ async function cmdImport(args: Args): Promise<void> {
 }
 
 async function cmdSources(args: Args): Promise<void> {
-  const { sources, problems } = await listSources({
-    cdp: args.flags.get("cdp"),
-    deviceSet: flag(args, "simulator-set") ?? process.env.SCREEN_STUDIO_SIMULATOR_SET,
-  });
+  const { sources, problems } = await listSources({ cdp: args.flags.get("cdp") });
   print({ ok: true, sources, ...(problems.length ? { problems } : {}) });
 }
 
@@ -549,7 +540,7 @@ never modified.
   sources [--cdp URL]            List recordable sources and their IDs
   start --source ID --out DIR    Start recording in the background
         [--max-duration 10m] [--max-size 4GiB] [--fps 30]
-        [--url-contains TEXT] [--simulator-set PATH]
+        [--url-contains TEXT]
   record --source ID --out DIR [--max-duration 30s] [-- COMMAND ...]
                                  Record in the foreground until the duration,
                                  Ctrl-C, or COMMAND exits ($SCREEN_STUDIO_BUNDLE)

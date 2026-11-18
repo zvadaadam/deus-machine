@@ -339,6 +339,12 @@ export class Recording {
       if (!capture) throw new ScreenStudioError("aborted", "Stopped before capture started");
       const finalized = await capture.stop();
       for (const warning of finalized.warnings) this.warn(warning);
+      if (finalized.events?.length) {
+        await appendEvents(
+          this.dir,
+          finalized.events.map((event) => makeEvent(event))
+        );
+      }
       if (this.failure) this.warn(`Capture ended early: ${this.failure.message}`);
       final = await completeManifest(this.dir, this.manifestState, finalized.path, {
         stoppedAt,

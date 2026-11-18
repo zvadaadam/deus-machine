@@ -20,6 +20,8 @@ export interface FinalizedCapture {
   /** Absolute path of the finalized media file. */
   path: string;
   warnings: string[];
+  /** Input the source reported when it stopped (agent-device's touches), in epoch ms. */
+  events?: EventInput[];
 }
 
 export interface ActiveCapture {
