@@ -202,19 +202,31 @@ export function defaultModelValue(harness: AgentHarness): string {
 export const DEFAULT_MODEL = defaultModelValue(DEFAULT_AGENT_HARNESS);
 
 /**
- * The model a chat continues on: the one its latest turn on `harness` ran
- * (latest by start, else by end), as that turn recorded it. Undefined when no
- * turn on that harness recorded a model: the chat starts on the default.
+ * The model and thinking level a chat continues on: those its latest turn on
+ * `harness` ran (latest by start, else by end), as that turn recorded them.
+ * Undefined when no turn on that harness recorded a model: the chat starts on
+ * the defaults.
  */
-export function latestTurnModel(
+export function latestTurnExecution(
   harness: AgentHarness,
   turns: readonly Pick<SessionTurn, "execution" | "startedAt" | "endedAt">[]
-): string | undefined {
+): SessionTurn["execution"] {
   let latest: (typeof turns)[number] | undefined;
   const at = (turn: (typeof turns)[number]) => turn.startedAt ?? turn.endedAt ?? 0;
   for (const turn of turns) {
     if (turn.execution?.harness !== harness || !turn.execution.model) continue;
     if (!latest || at(turn) > at(latest)) latest = turn;
   }
-  return latest?.execution?.model;
+  return latest?.execution;
+}
+
+/**
+ * The thinking level a chat continues on after that turn: the one it asked
+ * for (what the composer showed), else, for a turn sent without one, the
+ * level the harness ran it at.
+ */
+export function continuedThinkingLevel(
+  execution: SessionTurn["execution"]
+): ThinkingLevel | undefined {
+  return execution?.thinkingLevel ?? execution?.appliedThinkingLevel;
 }

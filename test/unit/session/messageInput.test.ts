@@ -96,3 +96,39 @@ describe("the composer's placeholder", () => {
     expect(placeholder("worktree")).toBe("Ask a follow-up… (@ files, / skills)");
   });
 });
+
+describe("the plan mode toggle", () => {
+  const hasToggle = (initialModel: string, workspaceKind: "worktree" | "cloud") => {
+    const client = new QueryClient();
+    try {
+      const html = renderToStaticMarkup(
+        createElement(
+          QueryClientProvider,
+          { client },
+          createElement(
+            TooltipProvider,
+            null,
+            createElement(MessageInput, {
+              sessionId: `plan-${initialModel}-${workspaceKind}`,
+              initialModel,
+              workspaceKind,
+              sending: false,
+              sessionStatus: "idle",
+              onStop: vi.fn(),
+              onSend: vi.fn(),
+            })
+          )
+        )
+      );
+      return html.includes('aria-label="Plan mode"');
+    } finally {
+      client.clear();
+    }
+  };
+
+  it("is offered in a local chat on either agent, and not in the cloud", () => {
+    expect(hasToggle("claude-code:opus", "worktree")).toBe(true);
+    expect(hasToggle("codex-app-server:gpt-6.1-sol", "worktree")).toBe(true);
+    expect(hasToggle("codex-app-server:gpt-6.1-sol", "cloud")).toBe(false);
+  });
+});

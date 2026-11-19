@@ -208,6 +208,16 @@ export const sessionComposerActions = {
       "togglePlanMode"
     ),
 
+  /** An approved plan is carried out in default mode, and so is the next message. */
+  leavePlanMode: (sid: string) =>
+    mutate(
+      sid,
+      (c) => {
+        c.planModeEnabled = false;
+      },
+      "leavePlanMode"
+    ),
+
   addPastedText: (sid: string, content: string) =>
     mutateContent(
       sid,

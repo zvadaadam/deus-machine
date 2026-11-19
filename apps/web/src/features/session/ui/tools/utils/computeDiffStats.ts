@@ -11,8 +11,8 @@ export function computeDiffStats(
 ): { added: number; removed: number } {
   if (oldStr === newStr) return { added: 0, removed: 0 };
 
-  const oldLines = oldStr.split("\n");
-  const newLines = newStr.split("\n");
+  const oldLines = linesOf(oldStr);
+  const newLines = linesOf(newStr);
 
   // Count occurrences of each line in old
   const oldCounts = new Map<string, number>();
@@ -34,4 +34,10 @@ export function computeDiffStats(
     added: newLines.length - matched,
     removed: oldLines.length - matched,
   };
+}
+
+/** A text's lines: none for an empty text, and a final newline ends the last line, it does not start another. */
+function linesOf(text: string): string[] {
+  if (text === "") return [];
+  return (text.endsWith("\n") ? text.slice(0, -1) : text).split("\n");
 }

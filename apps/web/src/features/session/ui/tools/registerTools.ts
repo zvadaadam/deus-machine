@@ -80,6 +80,7 @@ export function registerAllTools() {
   toolRegistry.register("MultiEdit", MultiEditToolRenderer);
   toolRegistry.register("WebFetch", WebFetchToolRenderer);
   toolRegistry.register("WebSearch", WebSearchToolRenderer);
+  toolRegistry.register("web_search", WebSearchToolRenderer); // Codex's, `{ query }` as Claude's
   toolRegistry.register("KillShell", KillShellToolRenderer);
   toolRegistry.register("Task", TaskToolRenderer);
   toolRegistry.register("Agent", TaskToolRenderer); // Claude SDK "Agent" = same as "Task"

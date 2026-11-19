@@ -1,14 +1,15 @@
 // backend/src/services/assistants/turn-settings.ts
 // The agent, model, thinking level and permission mode an assistant's message
 // runs with: the ones the app's own composer would send to continue that chat
-// (apps/web: SessionComposer seeds `getModelForSession`, the composer store
-// starts on the default thinking level with plan mode off).
+// (apps/web: SessionComposer seeds the latest turn's model and thinking level,
+// with plan mode off).
 
 import type { AgentHarness } from "@shared/enums";
 import {
   DEFAULT_THINKING_LEVEL,
+  continuedThinkingLevel,
   defaultModelValue,
-  latestTurnModel,
+  latestTurnExecution,
   modelValue,
   parseModelValue,
 } from "@shared/models";
@@ -23,11 +24,10 @@ export interface TurnSettings {
 
 /**
  * - Agent: the chat's own (a chat keeps its agent once it has messages).
- * - Model: the one its latest turn on that agent ran (`latestTurnModel`); a
- *   chat with none starts on the agent's default (Deus's preference,
- *   `defaultModelValue`).
- * - Thinking: the person's default (Settings, AI), else Deus's; the engine
- *   runs the nearest level the model has.
+ * - Model and thinking: the ones its latest turn on that agent ran
+ *   (`latestTurnExecution`); a chat with none starts on the agent's default
+ *   model (`defaultModelValue`) and the person's default level (Settings, AI),
+ *   else Deus's. The engine runs the nearest level the model has.
  * - Permission mode: none, the composer's own (plan mode off), so the agent
  *   runs with the full access Deus gives every chat.
  */
@@ -36,13 +36,16 @@ export function turnSettings(
   turns: readonly SessionTurn[],
   defaultThinking: unknown
 ): TurnSettings {
-  const chosen = latestTurnModel(harness, turns);
+  const latest = latestTurnExecution(harness, turns);
   const selection =
-    (chosen && parseModelValue(modelValue(harness, chosen))) ||
+    (latest?.model && parseModelValue(modelValue(harness, latest.model))) ||
     parseModelValue(defaultModelValue(harness))!;
   return {
     agentHarness: selection.harness,
     model: selection.model,
-    thinkingLevel: readThinkingLevel(defaultThinking) ?? DEFAULT_THINKING_LEVEL,
+    thinkingLevel:
+      continuedThinkingLevel(latest) ??
+      readThinkingLevel(defaultThinking) ??
+      DEFAULT_THINKING_LEVEL,
   };
 }
