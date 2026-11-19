@@ -12,10 +12,10 @@ import {
 } from "../services/integrations";
 import { isLocalhost, getClientIp } from "../lib/network";
 
-// The things about Customize that are plain HTTP: the page a sign-in returns
-// to, and the gateway agents' MCP clients call (and Codex's Deus tools). Everything the app's
-// own UI reads or changes goes over the WebSocket (q:subscribe / q:request /
-// q:mutate), not through here.
+// What agents and sign-ins reach over plain HTTP: the page a sign-in returns
+// to, the gateway agents' MCP clients call, and a Codex chat's Deus tools.
+// Everything the app's own UI reads or changes goes over the WebSocket
+// (q:subscribe / q:request / q:mutate), not through here.
 
 const app = new Hono();
 /** This router is mounted at `/api`. */
