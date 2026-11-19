@@ -8,6 +8,7 @@
  *   const Renderer = toolRegistry.getRenderer('Edit');
  */
 
+import { bareToolName } from "@shared/mcp-servers";
 import type { ToolRenderer } from "../chat-types";
 
 class ToolRendererRegistry {
@@ -29,22 +30,9 @@ class ToolRendererRegistry {
   }
 
   /**
-   * Normalize a tool name by stripping MCP server prefixes.
-   * "mcp__deus__BrowserSnapshot" → "BrowserSnapshot"
-   */
-  private normalizeName(toolName: string): string {
-    if (toolName.startsWith("mcp__")) {
-      const parts = toolName.split("__");
-      if (parts.length >= 3) {
-        return parts.slice(2).join("__");
-      }
-    }
-    return toolName;
-  }
-
-  /**
    * Get renderer for a tool (returns default if not found).
-   * Handles MCP server prefixes: "mcp__deus__BrowserSnapshot" → "BrowserSnapshot"
+   * Handles MCP server prefixes: "mcp__deus__BrowserSnapshot" (Claude) and
+   * "deus_chat_tools.BrowserSnapshot" (Codex) → "BrowserSnapshot"
    */
   getRenderer(toolName: string): ToolRenderer {
     // Direct match first (built-in tools like Edit, Bash, Read)
@@ -52,7 +40,7 @@ class ToolRendererRegistry {
     if (renderer) return renderer;
 
     // Try with MCP prefix stripped
-    const bareName = this.normalizeName(toolName);
+    const bareName = bareToolName(toolName);
     if (bareName !== toolName) {
       const mcpRenderer = this.renderers.get(bareName);
       if (mcpRenderer) return mcpRenderer;

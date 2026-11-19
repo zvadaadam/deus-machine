@@ -53,6 +53,8 @@ describe.each(harnesses)("%s and agent-device", (harness) => {
       env: { CODEX_HOME: "/homes/chat-1" },
     });
     expect(params.config.systemPromptAppend).toContain("`agent-device open <app or bundle id>");
+    // Every harness has the Deus tools, so every one is briefed on them.
+    expect(params.config.systemPromptAppend).toContain("# Screen Recording");
     // Every chat of the workspace shares it, and a simulator recording joins it.
     expect(params.config.env).toEqual({
       AGENT_DEVICE_SESSION: "workspace-1",

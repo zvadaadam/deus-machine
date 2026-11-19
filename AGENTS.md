@@ -76,7 +76,7 @@ Backend ⊃ Agent engine (apps/agent-server/) — in process, the standard wire 
 
 **Backend (Hono)** — All business logic. DB reads/writes, config, agent event persistence, tool relay, PTY, file watching. Operations in `src/api/`, answered over the socket; the few HTTP routes under `/api`. Runs the agent engine in its own process. A request from this computer needs no token, so it must be addressed to `localhost`, `127.0.0.1` or `[::1]` and come from no page or a page whose origin is in `DEUS_WEB_ORIGINS`, which the launcher sets (`shared/web-origins.ts`; `middleware/loopback-origin-gate.ts`): the desktop passes its window's origin (`app://deus` packaged, served by `apps/desktop/main/app-protocol.ts`; Vite's in dev), `dev:web` and the e2e runners `LOOPBACK_WEB_ORIGINS`. A backend started without it trusts no page. The app opens no remote-debugging port; agents' browser tools run their own browser.
 
-**Agent engine** (`apps/agent-server/`) — Stateless. `@zvada/agent-server` with deus's seams: the in-process deus MCP tools, the tool policy, checkpoint hooks and titles. No DB access, no direct frontend communication; the tools reach the backend through `host-link.ts`, which the backend registers (`startEngine`). Keep blocking work off it: it shares the backend's event loop. A turn does not survive the process (the engine keeps turns in memory), so at engine start every local chat the database still shows working or waiting is settled as an error saying Deus quit mid-turn (`settleInterruptedSessions` in `services/agent/persistence.ts`; cloud chats are the platform's to settle).
+**Agent engine** (`apps/agent-server/`) — Stateless. `@zvada/agent-server` with deus's seams: the deus MCP tools (in process for Claude; Codex reaches them as the server `deus_chat_tools` at the backend's loopback `/api/deus-tools/<session>`, with the gateway's key), the tool policy, checkpoint hooks and titles. No DB access, no direct frontend communication; the tools reach the backend through `host-link.ts`, which the backend registers (`startEngine`). Keep blocking work off it: it shares the backend's event loop. A turn does not survive the process (the engine keeps turns in memory), so at engine start every local chat the database still shows working or waiting is settled as an error saying Deus quit mid-turn (`settleInterruptedSessions` in `services/agent/persistence.ts`; cloud chats are the platform's to settle).
 
 **Rule of thumb:** Needs native Electron API? → Main process. Everything else → Backend (or the engine's seams, for what a turn runs).
 
@@ -158,7 +158,7 @@ lists equal. Clients use the declaration itself: `call(api.x, input)`,
 `useQuerySubscription(api.x, …)`, `useStream(api.x, filter, onEvent, onReset)` or
 `follow(…)`. There is no second list of names and no HTTP route per operation.
 The HTTP routes left are the ones a socket cannot serve: pairing, OAuth
-callbacks, the MCP gateway, file streaming, and what the CLI and the desktop
+callbacks, the MCP gateway (and Codex's Deus tools), file streaming, and what the CLI and the desktop
 shell ask before a socket exists.
 
 **Streams** (`apps/backend/src/services/streams.ts`). Nothing is broadcast. A

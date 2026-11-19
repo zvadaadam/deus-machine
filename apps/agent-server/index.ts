@@ -19,6 +19,7 @@ import { observeLifecycleEvent, observeTurnStart, trackedSessions } from "./sess
 import { maybeFetchTitle } from "./title-watch";
 
 export type { DeusHost, SessionTitle } from "./host-link";
+export { serveDeusTools } from "./agents/deus-tools";
 
 let server: AgentServer | null = null;
 

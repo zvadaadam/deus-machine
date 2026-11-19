@@ -13,7 +13,8 @@ vi.mock("../host-link", () => ({
   notifyTitle: vi.fn(),
 }));
 
-import { createDeusMCPServer } from "../agents/deus-tools";
+import { createDeusMCPServer, serveDeusTools } from "../agents/deus-tools";
+import { trackedSessions } from "../session-tracker";
 
 // Helpers to access McpServer internals (the real McpServer class uses private fields)
 function getRegisteredTools(instance: any): Record<string, any> {
@@ -281,5 +282,51 @@ describe("createDeusMCPServer", () => {
 
       expect(result.content[0].text).toContain("No output available yet");
     });
+  });
+});
+
+describe("serveDeusTools", () => {
+  const post = (sessionId: string, body: unknown) =>
+    serveDeusTools(
+      sessionId,
+      new Request("http://127.0.0.1/api/deus-tools/x", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+        },
+        body: JSON.stringify(body),
+      })
+    );
+
+  it("serves a chat's tools over Streamable HTTP, calls included", async () => {
+    trackedSessions.set("codex-chat", { harness: "codex-app-server", cwd: "/tmp" });
+    mockFrontendAPI.requestGetDiff.mockResolvedValue({ diff: "README.md: +2 -0" });
+
+    const list = await (
+      await post("codex-chat", { jsonrpc: "2.0", id: 1, method: "tools/list" })
+    ).json();
+    expect(list.result.tools.map((tool: { name: string }) => tool.name)).toContain(
+      "GetWorkspaceDiff"
+    );
+
+    const call = await post("codex-chat", {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/call",
+      params: { name: "GetWorkspaceDiff", arguments: { stat: true } },
+    });
+    expect((await call.json()).result.content).toEqual([
+      { type: "text", text: "README.md: +2 -0" },
+    ]);
+    expect(mockFrontendAPI.requestGetDiff).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "codex-chat", stat: true })
+    );
+    trackedSessions.delete("codex-chat");
+  });
+
+  it("serves no chat the engine has no turn for", async () => {
+    const response = await post("unknown", { jsonrpc: "2.0", id: 1, method: "tools/list" });
+    expect(response.status).toBe(404);
   });
 });

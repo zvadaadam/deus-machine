@@ -18,3 +18,24 @@ export function appServerName(appId: string, harness: AgentHarness): string {
   if (harness === "codex-app-server") return `deus_${name}`;
   return RESERVED.has(name) ? `app_${name}` : name;
 }
+
+/**
+ * Deus's own tools on Codex, which reaches them over this computer's
+ * loopback (Claude runs them in process, as `deus`). Not `deus`, which a
+ * person may have named Deus's remote-access server in their own config, and
+ * no `deus_<id>` an app can have: an app id has no underscore.
+ */
+export const DEUS_TOOLS_SERVER = "deus_chat_tools";
+
+/**
+ * A tool's name as a card knows it, whichever harness called it: Claude
+ * names an MCP tool `mcp__<server>__<tool>`, Codex names Deus's own
+ * `deus_chat_tools.<tool>`.
+ */
+export function bareToolName(toolName: string): string {
+  if (toolName.startsWith(`${DEUS_TOOLS_SERVER}.`)) {
+    return toolName.slice(DEUS_TOOLS_SERVER.length + 1);
+  }
+  const parts = toolName.split("__");
+  return toolName.startsWith("mcp__") && parts.length >= 3 ? parts.slice(2).join("__") : toolName;
+}

@@ -1,8 +1,10 @@
 import { Hono } from "hono";
 import { getErrorMessage } from "@shared/lib/errors";
+import { serveDeusTools } from "../../../agent-server";
 import {
   completeCloudCallback,
   completeOAuthCallback,
+  DEUS_TOOLS_PATH,
   GATEWAY_PATH,
   isGatewayKey,
   proxyMcp,
@@ -10,8 +12,8 @@ import {
 } from "../services/integrations";
 import { isLocalhost, getClientIp } from "../lib/network";
 
-// The two things about Customize that are plain HTTP: the page a sign-in
-// returns to, and the gateway agents' MCP clients call. Everything the app's
+// The things about Customize that are plain HTTP: the page a sign-in returns
+// to, and the gateway agents' MCP clients call (and Codex's Deus tools). Everything the app's
 // own UI reads or changes goes over the WebSocket (q:subscribe / q:request /
 // q:mutate), not through here.
 
@@ -63,6 +65,14 @@ app.all(`${GATEWAY_PATH.replace(/^\/api/, "")}/:appId`, async (c) => {
     return c.text("Forbidden", 403);
   }
   return proxyMcp(c.req.param("appId"), c.req.raw);
+});
+
+/** A Codex chat's Deus tools, behind the same door and key as the gateway. */
+app.all(`${DEUS_TOOLS_PATH.replace(/^\/api/, "")}/:sessionId`, async (c) => {
+  if (!isLocalhost(getClientIp(c)) || !isGatewayKey(c.req.header("authorization"))) {
+    return c.text("Forbidden", 403);
+  }
+  return serveDeusTools(c.req.param("sessionId"), c.req.raw);
 });
 
 function escapeHtml(value: string): string {
