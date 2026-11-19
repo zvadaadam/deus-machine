@@ -12,7 +12,7 @@ import { initAutomations } from "../services/automations";
 import { refreshCloudOrganizations } from "../services/cloud-settings.service";
 import { reconcileCloudAccounts } from "../services/integrations";
 import { AppError, ValidationError } from "../lib/errors";
-import { spawnToken } from "../lib/spawn-token";
+import { spawnToken } from "../lib/parent-stdin";
 
 const app = new Hono();
 
@@ -42,13 +42,14 @@ app.post("/settings/cloud/github-token", async (c) => {
 });
 
 /**
- * Only the process that spawned this backend may hand it an account. It passes
- * AUTH_TOKEN at spawn; without the check, any page that found the local port
- * could sign this computer in to another account and host it there. A backend
- * started without one (web dev, the CLI) has no such process and takes no account.
+ * Only the process that spawned this backend may hand it an account. It writes
+ * the spawn token on stdin (lib/parent-stdin.ts); without the check, any page
+ * that found the local port could sign this computer in to another account and
+ * host it there. A backend started otherwise (web dev, the CLI) has no token
+ * and takes no account. A request that comes before the token waits for it.
  */
-function fromDesktopMain(authorization: string | undefined): boolean {
-  const expected = spawnToken();
+async function fromDesktopMain(authorization: string | undefined): Promise<boolean> {
+  const expected = await spawnToken;
   if (!expected) return false;
   const given = Buffer.from(authorization?.replace(/^Bearer /, "") ?? "");
   const wanted = Buffer.from(expected);
@@ -60,7 +61,7 @@ function fromDesktopMain(authorization: string | undefined): boolean {
 // in Settings. Values live in memory only — durable storage is main's
 // safeStorage, never this process or the DB.
 app.post("/settings/cloud/credentials", async (c) => {
-  if (!fromDesktopMain(c.req.header("authorization"))) {
+  if (!(await fromDesktopMain(c.req.header("authorization")))) {
     throw new AppError(401, "Only the Deus desktop app can set cloud credentials");
   }
   const body = parseBody(CloudCredentialsBody, await c.req.json());

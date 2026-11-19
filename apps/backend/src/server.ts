@@ -1,5 +1,3 @@
-// First: it takes the spawn token out of the environment before anything is started.
-import "./lib/spawn-token";
 import * as Sentry from "@sentry/node";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";

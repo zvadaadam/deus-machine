@@ -71,7 +71,10 @@ import {
   startDeusCloudLogin,
 } from "../../../apps/desktop/main/deus-cloud-auth";
 import { listOrgKeys } from "../../../apps/desktop/main/cloud-credentials";
-import { provisionAtStartup } from "../../../apps/desktop/main/deus-cloud-provision";
+import {
+  provisionAtStartup,
+  setBackendAuthToken,
+} from "../../../apps/desktop/main/deus-cloud-provision";
 
 const originalFetch = global.fetch;
 const originalEnv = { ...process.env };
@@ -454,7 +457,7 @@ describe("device keys of a session that ended", () => {
       pushes: [] as Array<{ orgKeys: Record<string, string> }>,
     };
     process.env.DEUS_BACKEND_PORT = "51999";
-    process.env.DEUS_AUTH_TOKEN = "local-token";
+    setBackendAuthToken("local-token");
     global.fetch = vi.fn(async (input, init) => {
       const url = new URL(String(input));
       const bearer = String(

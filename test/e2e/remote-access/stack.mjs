@@ -42,13 +42,15 @@ export function createStack({ root, agnt, directory }) {
   const processes = new Set();
   const cleanups = [];
 
-  function run(command, args, name, { cwd = root, env = {} } = {}) {
+  /** `stdin`, when given, is written to the child's stdin, which stays open. */
+  function run(command, args, name, { cwd = root, env = {}, stdin } = {}) {
     const log = createWriteStream(path.join(directory, `${name}.log`), { flags: "a" });
     const child = spawn(command, args, {
       cwd,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"],
       env: { ...process.env, ...env },
     });
+    if (stdin !== undefined) child.stdin.write(stdin);
     child.stdout.pipe(log);
     child.stderr.pipe(log);
     const owned = { child, log, name };
@@ -278,13 +280,15 @@ export function createStack({ root, agnt, directory }) {
         AGNT_API_KEY: "",
         DEUS_CLOUD_AGNT_API_KEY: "",
         DEUS_CLOUD_URL: "",
-        // As the desktop app spawns it: credentials must carry this token.
-        AUTH_TOKEN: authToken ?? "",
+        // As the desktop app spawns it: the token credentials must carry is
+        // the first line on its stdin.
+        ...(authToken ? { DEUS_STOP_ON_STDIN_END: "1" } : {}),
         DEUS_SKILLS_HOME: path.join(dir, "skills-home"),
         // The Mac's own web app (browser.mjs serves it from Vite on loopback).
         DEUS_WEB_ORIGINS: LOOPBACK_WEB_ORIGINS,
         ...env,
       },
+      ...(authToken ? { stdin: `${authToken}\n` } : {}),
     });
     const port = await new Promise((resolve, reject) => {
       let output = "";

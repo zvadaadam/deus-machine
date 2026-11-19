@@ -1,4 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
+import { PassThrough } from "node:stream";
 import { Hono } from "hono";
 import { errorHandler } from "../../../src/middleware/error-handler";
 
@@ -64,11 +65,11 @@ describe("POST /settings/cloud/credentials", () => {
       body: JSON.stringify({ deusCloudSessionToken: null }),
     });
 
-  // The token is read once, when the backend loads: load the routes afresh with it.
-  async function routesSpawnedWith(token: string | undefined) {
+  // The spawn token arrives once, on stdin (lib/parent-stdin.ts): load the routes afresh.
+  async function routesSpawned(stdin: PassThrough | null) {
     vi.resetModules();
-    if (token === undefined) delete process.env.AUTH_TOKEN;
-    else process.env.AUTH_TOKEN = token;
+    const { stopWhenStdinEnds } = await import("../../../src/lib/parent-stdin");
+    stopWhenStdinEnds(() => {}, stdin ? { DEUS_STOP_ON_STDIN_END: "1" } : {}, stdin ?? undefined);
     const routes = new Hono();
     routes.route("/", (await import("../../../src/routes/settings")).default);
     // A fresh errorHandler too, so it knows the freshly loaded AppError.
@@ -76,21 +77,31 @@ describe("POST /settings/cloud/credentials", () => {
     return routes;
   }
 
-  it("accepts only the desktop process that spawned the backend", async () => {
-    const routes = await routesSpawnedWith("spawn-secret");
+  it("accepts only the token the desktop wrote on stdin, even when asked before it arrived", async () => {
+    const stdin = new PassThrough();
+    const routes = await routesSpawned(stdin);
+    const early = push(routes, "Bearer spawn-secret");
+    stdin.write("spawn-");
+    stdin.write("secret\nanything after the first line is not a token\n");
+    expect((await early).status).toBe(200);
     expect((await push(routes)).status).toBe(401);
     expect((await push(routes, "Bearer wrong-secret")).status).toBe(401);
-    expect((await push(routes, "Bearer spawn-secret")).status).toBe(200);
-  });
-
-  it("keeps the token from everything the backend starts", async () => {
-    await routesSpawnedWith("spawn-secret");
-    expect(process.env.AUTH_TOKEN).toBeUndefined();
+    expect((await push(routes, "Bearer anything after the first line is not a token")).status).toBe(
+      401
+    );
   });
 
   it("takes no account when no desktop process spawned the backend", async () => {
-    const routes = await routesSpawnedWith(undefined);
+    const routes = await routesSpawned(null);
     expect((await push(routes)).status).toBe(401);
     expect((await push(routes, "Bearer anything")).status).toBe(401);
+  });
+
+  it("takes no account when stdin ends before a token", async () => {
+    const stdin = new PassThrough();
+    const routes = await routesSpawned(stdin);
+    const early = push(routes, "Bearer anything");
+    stdin.end();
+    expect((await early).status).toBe(401);
   });
 });

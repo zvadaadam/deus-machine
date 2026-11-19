@@ -1,8 +1,7 @@
-/** What a Deus process keeps from the processes it starts: its token, port, database and runtime paths. */
+/** What a Deus process keeps from the processes it starts: its port, database and runtime paths. */
 export const BACKEND_CHILD_ENV_DENYLIST = [
   "BUN_OPTIONS",
   "DATABASE_PATH",
-  "DEUS_AUTH_TOKEN",
   "DEUS_BACKEND_PORT",
   "DEUS_BUNDLED_BIN_DIR",
   "DEUS_DATA_DIR",

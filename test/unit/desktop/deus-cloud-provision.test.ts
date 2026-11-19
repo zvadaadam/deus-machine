@@ -33,6 +33,7 @@ import {
   pushCloudCredentialsToBackend,
   resolveAgntBaseUrl,
   revokeDeviceKeys,
+  setBackendAuthToken,
 } from "../../../apps/desktop/main/deus-cloud-provision";
 import {
   currentLoginGeneration,
@@ -287,7 +288,7 @@ describe("pushCloudCredentialsToBackend", () => {
 
   it("posts every organization's key to the local credentials route with the backend auth token", async () => {
     vi.stubEnv("DEUS_BACKEND_PORT", "51999");
-    vi.stubEnv("DEUS_AUTH_TOKEN", "local-token");
+    setBackendAuthToken("local-token");
     await setOrgKey("org_a", "agnt_sk_live_a");
     await setOrgKey("org_b", "agnt_sk_live_b");
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
@@ -315,7 +316,7 @@ describe("pushCloudCredentialsToBackend", () => {
 
   it("names the platform's first organization the default, also when its key is missing", async () => {
     vi.stubEnv("DEUS_BACKEND_PORT", "51999");
-    vi.stubEnv("DEUS_AUTH_TOKEN", "local-token");
+    setBackendAuthToken("local-token");
     platformMock({
       orgs: () => jsonResponse({ items: [{ id: "org_a" }, { id: "org_b" }] }),
       mint: (orgId) =>
@@ -332,7 +333,7 @@ describe("pushCloudCredentialsToBackend", () => {
 
   it("names the first stored key's organization when the list cannot be read", async () => {
     vi.stubEnv("DEUS_BACKEND_PORT", "51999");
-    vi.stubEnv("DEUS_AUTH_TOKEN", "local-token");
+    setBackendAuthToken("local-token");
     await setOrgKey("org_b", "agnt_sk_b", { keyId: "key_b" });
     await setOrgKey("org_a", "agnt_sk_a", { keyId: "key_a" });
     platformMock({ orgs: () => Promise.reject(new Error("ENOTFOUND")) });
@@ -344,7 +345,7 @@ describe("pushCloudCredentialsToBackend", () => {
 
   it("revokes, never stores or pushes, a key whose mint finishes after a sign-out", async () => {
     vi.stubEnv("DEUS_BACKEND_PORT", "51999");
-    vi.stubEnv("DEUS_AUTH_TOKEN", "local-token");
+    setBackendAuthToken("local-token");
     let finishMint: (response: Response) => void = () => {};
     let mintStarted: () => void = () => {};
     const started = new Promise<void>((resolve) => (mintStarted = resolve));
@@ -378,7 +379,7 @@ describe("pushCloudCredentialsToBackend", () => {
 describe("revokeDeviceKeys", () => {
   it("revokes every organization's key server-side when possible, deletes locally, and clears the backend", async () => {
     vi.stubEnv("DEUS_BACKEND_PORT", "51999");
-    vi.stubEnv("DEUS_AUTH_TOKEN", "local-token");
+    setBackendAuthToken("local-token");
     await setOrgKey("org_1", "agnt_sk_live_x", { keyId: "key_9" });
     await setOrgKey("org_2", "agnt_sk_live_y", { keyId: "key_8" });
     fetchMock.mockResolvedValue(jsonResponse({ ok: true }));

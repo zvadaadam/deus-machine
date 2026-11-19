@@ -5,8 +5,8 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { mockApp, mockBrowserWindow, mockSpawn, mockExecFile, mockPushCredentials } = vi.hoisted(
-  () => ({
+const { mockApp, mockBrowserWindow, mockSpawn, mockExecFile, mockPushCredentials, mockSetToken } =
+  vi.hoisted(() => ({
     mockApp: {
       isPackaged: true,
       getPath: vi.fn((name: string) =>
@@ -20,8 +20,8 @@ const { mockApp, mockBrowserWindow, mockSpawn, mockExecFile, mockPushCredentials
     // The login shell that shell sync asks for its PATH (shell-env.ts).
     mockExecFile: vi.fn(),
     mockPushCredentials: vi.fn(async () => true),
-  })
-);
+    mockSetToken: vi.fn(),
+  }));
 
 vi.mock("electron", () => ({
   app: mockApp,
@@ -35,6 +35,7 @@ vi.mock("child_process", () => ({
 
 vi.mock("../../../apps/desktop/main/deus-cloud-provision", () => ({
   pushCloudCredentialsToBackend: mockPushCredentials,
+  setBackendAuthToken: mockSetToken,
 }));
 
 import { spawnBackend, stopBackend } from "../../../apps/desktop/main/backend-process";
@@ -61,12 +62,18 @@ function createRuntimeExecutable(resourcesPath: string): string {
 
 function createFakeChild() {
   const child = new EventEmitter() as EventEmitter & {
+    stdin: PassThrough;
+    written: () => string;
     stdout: PassThrough;
     stderr: PassThrough;
     exitCode: number | null;
     signalCode: NodeJS.Signals | null;
     kill: ReturnType<typeof vi.fn>;
   };
+  child.stdin = new PassThrough();
+  let written = "";
+  child.stdin.on("data", (chunk) => (written += chunk));
+  child.written = () => written;
   child.stdout = new PassThrough();
   child.stderr = new PassThrough();
   child.exitCode = null;
@@ -140,11 +147,11 @@ describe("desktop backend process", () => {
       mockSpawn.mockReturnValueOnce(first).mockReturnValueOnce(second);
       const starting = backend.spawnBackend();
       first.stdout.write("[BACKEND_PORT]45678\n");
-      process.env.DEUS_AUTH_TOKEN = (await starting).authToken; // as main/index.ts does
+      await starting;
 
       let tokenAtPush: string | undefined;
       mockPushCredentials.mockImplementationOnce(async () => {
-        tokenAtPush = process.env.DEUS_AUTH_TOKEN;
+        tokenAtPush = mockSetToken.mock.lastCall?.[0];
         return true;
       });
       first.exitCode = 1;
@@ -154,7 +161,9 @@ describe("desktop backend process", () => {
       await vi.waitFor(() => expect(mockPushCredentials).toHaveBeenCalled());
 
       // The route refuses any other token, so the push must carry the new one.
-      expect(tokenAtPush).toBe(mockSpawn.mock.calls[1][2].env.AUTH_TOKEN);
+      expect(tokenAtPush).toBeTruthy();
+      expect(`${tokenAtPush}\n`).toBe(second.written());
+      expect(second.written()).not.toBe(first.written());
       expect(process.env.DEUS_BACKEND_PORT).toBe("45679");
     } finally {
       vi.useRealTimers();
@@ -264,9 +273,7 @@ describe("desktop backend process", () => {
     (process as { resourcesPath?: string }).resourcesPath = resourcesPath;
     process.env.PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin";
     process.env.ELECTRON_RUN_AS_NODE = "1";
-    process.env.AUTH_TOKEN = "stale-auth-token";
     process.env.DATABASE_PATH = "/tmp/stale.db";
-    process.env.DEUS_AUTH_TOKEN = "stale-main-auth-token";
     process.env.DEUS_BUNDLED_BIN_DIR = "/tmp/stale-bin";
     process.env.DEUS_BACKEND_PORT = "45678";
     process.env.DEUS_DATA_DIR = "/tmp/stale-data";
@@ -294,7 +301,6 @@ describe("desktop backend process", () => {
     expect(args).toEqual(["backend"]);
     expect(options.cwd).toBe("/Users/test/Library/Application Support/Deus");
     expect(options.env.ELECTRON_RUN_AS_NODE).toBeUndefined();
-    expect(options.env.DEUS_AUTH_TOKEN).toBeUndefined();
     expect(options.env.DEUS_BACKEND_PORT).toBeUndefined();
     expect(options.env.DEUS_DATA_DIR).toBeUndefined();
     expect(options.env.NODE_PATH).toBeUndefined();
@@ -304,8 +310,11 @@ describe("desktop backend process", () => {
     expect(options.env.DEUS_RUNTIME_EXECUTABLE).toBe(runtimePath);
     expect(options.env.DEUS_BUNDLED_BIN_DIR).toBe(path.join(resourcesPath, "bin"));
     expect(options.env.DATABASE_PATH).toBe("/Users/test/Library/Application Support/Deus/deus.db");
-    expect(options.env.AUTH_TOKEN).toBe(result.authToken);
-    expect(options.env.AUTH_TOKEN).not.toBe("stale-auth-token");
+    // The spawn token is the first line on its stdin, and in no environment.
+    const token = child.written().trim();
+    expect(child.written()).toMatch(/^[0-9a-f]{48}\n$/);
+    expect(Object.values(options.env)).not.toContain(token);
+    expect(mockSetToken).toHaveBeenLastCalledWith(token);
     expect(options.env.PATH).toBe(
       `${path.join(resourcesPath, "bin")}:/usr/bin:/bin:/usr/sbin:/sbin`
     );

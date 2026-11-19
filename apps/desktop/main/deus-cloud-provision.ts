@@ -153,6 +153,12 @@ async function mintDeviceKey(
   return { id: body.id, key: body.key, label: body.label ?? label };
 }
 
+/** The running backend's spawn token, written on its stdin: never in this process's environment. */
+let backendAuthToken: string | null = null;
+export function setBackendAuthToken(token: string): void {
+  backendAuthToken = token;
+}
+
 /**
  * Push the current credentials into the backend child at runtime — the seam
  * that makes a key minted mid-session work without an app restart. Quiet
@@ -160,7 +166,7 @@ async function mintDeviceKey(
  */
 export async function pushCloudCredentialsToBackend(): Promise<boolean> {
   const port = process.env.DEUS_BACKEND_PORT;
-  const authToken = process.env.DEUS_AUTH_TOKEN;
+  const authToken = backendAuthToken;
   if (!port || !authToken) return false;
   if ((await hasStoredCredentials()) && !isSafeStorageAvailable()) {
     // Every credential would read as null and the push would CLEAR the
