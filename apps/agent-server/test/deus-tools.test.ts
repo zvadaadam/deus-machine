@@ -336,8 +336,12 @@ describe("serveDeusTools", () => {
     }
   });
 
-  it("serves no chat the engine has no turn for", async () => {
-    const response = await post("unknown", { jsonrpc: "2.0", id: 1, method: "tools/list" });
-    expect(response.status).toBe(404);
+  it("serves only a Codex chat that has run a turn", async () => {
+    trackedSessions.set("claude-chat", { harness: "claude-code", cwd: "/tmp" });
+    for (const chat of ["unknown", "claude-chat"]) {
+      const response = await post(chat, { jsonrpc: "2.0", id: 1, method: "tools/list" });
+      expect(response.status).toBe(404);
+    }
+    trackedSessions.delete("claude-chat");
   });
 });
