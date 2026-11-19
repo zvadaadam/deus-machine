@@ -47,20 +47,26 @@ export function toToolUseBlocks(part: ToolPart): ToolUseBlock[] {
       ? (part.state.content ?? []).flatMap((item) => (item.type === "diff" ? [item] : []))
       : [];
   if (diffs.length > 0) {
+    // A hunk is whole lines: its last ends with a newline, which the entry drops.
+    const lines = (text = "") => (text && !text.endsWith("\n") ? `${text}\n` : text);
     const files = Map.groupBy(diffs, (diff) => diff.path);
     return [...files].map(([file_path, [first, ...rest]], index) => {
       const id = `${part.toolCallId}:${index}`;
       if (rest.length > 0) {
         const edits = [first, ...rest].map((diff) => ({
-          old_string: diff.oldText ?? "",
-          new_string: diff.newText,
+          old_string: lines(diff.oldText),
+          new_string: lines(diff.newText),
         }));
         return card("MultiEdit", { file_path, edits }, id);
       }
       if (first.oldText === undefined) {
         return card("Write", { file_path, content: first.newText }, id);
       }
-      return card("Edit", { file_path, old_string: first.oldText, new_string: first.newText }, id);
+      return card(
+        "Edit",
+        { file_path, old_string: lines(first.oldText), new_string: lines(first.newText) },
+        id
+      );
     });
   }
   return [toToolUseBlock(part)];

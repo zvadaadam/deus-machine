@@ -53,19 +53,19 @@ describe("a Codex tool drawn as Claude's card", () => {
       ])
     );
     expect(cards.map(({ name, input }) => [name, input])).toEqual([
-      ["Edit", { file_path: "/w/a.py", old_string: "x", new_string: "x\ny" }],
+      ["Edit", { file_path: "/w/a.py", old_string: "x\n", new_string: "x\ny\n" }],
       [
         "MultiEdit",
         {
           file_path: "/w/b.py",
           edits: [
-            { old_string: "1", new_string: "2" },
-            { old_string: "9", new_string: "8" },
+            { old_string: "1\n", new_string: "2\n" },
+            { old_string: "9\n", new_string: "8\n" },
           ],
         },
       ],
       ["Write", { file_path: "/w/new.py", content: "print(1)" }],
-      ["Edit", { file_path: "/w/gone.py", old_string: "old\nfile", new_string: "" }],
+      ["Edit", { file_path: "/w/gone.py", old_string: "old\nfile\n", new_string: "" }],
     ]);
     expect(new Set(cards.map(({ id }) => id)).size).toBe(4);
   });
