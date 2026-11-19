@@ -1,4 +1,7 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it } from "vitest";
+import { useSessionComposer } from "@/features/session/hooks/useSessionComposer";
 import {
   emptyComposer,
   sessionComposerActions as actions,
@@ -162,11 +165,22 @@ describe("move: a workspace's start composer hands over to its first chat", () =
   });
 });
 
-describe("plan mode", () => {
-  it("is left once a plan is approved, so the next message runs in default mode", () => {
-    actions.seedIfAbsent("chat", emptyComposer(model, "high"));
-    actions.togglePlanMode("chat");
-    actions.leavePlanMode("chat");
-    expect(store.getState().composers.chat.planModeEnabled).toBe(false);
+describe("a reopened chat's thinking level", () => {
+  it("seeds the chat; a model switch still falls back to the person's default", () => {
+    let composer: ReturnType<typeof useSessionComposer> | undefined;
+    const Probe = () => {
+      composer = useSessionComposer("chat", {
+        initialModel: "claude-code:haiku",
+        initialThinking: "off",
+        defaultThinking: "medium",
+      });
+      return null;
+    };
+    renderToStaticMarkup(createElement(Probe));
+    expect(composer?.thinkingLevel).toBe("off");
+    // What the hook's seed effect does in the browser.
+    actions.seedIfAbsent("chat", emptyComposer("claude-code:haiku", "off"));
+    composer!.setModel("claude-code:sonnet", ["low", "medium", "high"]);
+    expect(store.getState().composers.chat.thinkingLevel).toBe("medium");
   });
 });

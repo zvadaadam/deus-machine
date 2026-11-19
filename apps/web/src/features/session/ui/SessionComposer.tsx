@@ -107,7 +107,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     },
     ref
   ) {
-    const userThinking = useDefaultThinkingLevel();
+    const defaultThinking = useDefaultThinkingLevel();
 
     // Session-derived props — everything that needs React Query context.
     // Composer state itself (draft/model/etc.) lives in the store;
@@ -120,10 +120,11 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     const seedModel =
       initialModel ??
       (session ? getModelForSession(session.agent_harness, turns ?? []) : DEFAULT_MODEL);
-    // The level the chat's latest turn ran, as its model is; else the user's.
-    const defaultThinking = session
-      ? getThinkingForSession(session.agent_harness, turns ?? [], userThinking)
-      : userThinking;
+    // The chat reopens on the level its latest turn ran, as on its model. The
+    // user's setting stays the level a model switch falls back to.
+    const seedThinking = session
+      ? getThinkingForSession(session.agent_harness, turns ?? [], defaultThinking)
+      : defaultThinking;
 
     // Notify parent when the selected model's agent harness changes.
     // We subscribe to just `model` (a string) to avoid re-renders on
@@ -196,6 +197,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
         workspaceId={workspaceId}
         workspacePath={workspacePath}
         initialModel={seedModel}
+        initialThinking={seedThinking}
         defaultThinking={defaultThinking}
         sending={sending}
         sessionStatus={sessionStatus}

@@ -6,8 +6,9 @@
  * a bag of sessionId-bound setters. The bag is memoised so children that
  * take setters as deps don't see a new reference every render.
  *
- * `defaultThinking` comes from user settings (Settings → AI) — used as
- * both the seed value and as the clamp target when switching models.
+ * `defaultThinking` comes from user settings (Settings → AI): the clamp
+ * target when switching models, and the seed when `initialThinking` (the
+ * level a reopened chat ran last) is absent.
  */
 
 import { useEffect, useMemo } from "react";
@@ -25,6 +26,7 @@ import {
 
 interface UseSessionComposerOptions {
   initialModel: string;
+  initialThinking?: ThinkingLevel;
   defaultThinking: ThinkingLevel;
 }
 
@@ -53,16 +55,17 @@ export type UseSessionComposerReturn = ComposerState & SessionComposerActions;
 
 export function useSessionComposer(
   sessionId: string,
-  { initialModel, defaultThinking }: UseSessionComposerOptions
+  { initialModel, initialThinking, defaultThinking }: UseSessionComposerOptions
 ): UseSessionComposerReturn {
+  const seedThinking = initialThinking ?? defaultThinking;
   const fallbackComposer = useMemo(
-    () => emptyComposer(initialModel, defaultThinking),
-    [initialModel, defaultThinking]
+    () => emptyComposer(initialModel, seedThinking),
+    [initialModel, seedThinking]
   );
 
   useEffect(() => {
-    sessionComposerActions.seedIfAbsent(sessionId, emptyComposer(initialModel, defaultThinking));
-  }, [sessionId, initialModel, defaultThinking]);
+    sessionComposerActions.seedIfAbsent(sessionId, emptyComposer(initialModel, seedThinking));
+  }, [sessionId, initialModel, seedThinking]);
 
   const state = useSessionComposerStore((s) => s.composers[sessionId] ?? fallbackComposer);
 

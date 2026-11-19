@@ -105,6 +105,9 @@ interface MessageInputProps {
    *  to list yet (a workspace that is still starting). */
   fileMentionsEnabled?: boolean;
 
+  /** The level the chat starts on (its latest turn's); `defaultThinking` without one. */
+  initialThinking?: ThinkingLevel;
+
   /** User setting — default thinking level for new sessions / clamp target
    *  when switching to a model that doesn't support the current level. */
   defaultThinking?: ThinkingLevel;
@@ -228,6 +231,7 @@ export function MessageInput({
   onCompact,
   onStop,
   onOpenNewTab,
+  initialThinking,
   defaultThinking = DEFAULT_THINKING_LEVEL,
   placeholder,
   fileMentionsEnabled = true,
@@ -238,6 +242,7 @@ export function MessageInput({
   // Composer content — subscribed from the store, mutated via bound setters.
   const composer = useSessionComposer(sessionId, {
     initialModel: initialModel ?? DEFAULT_MODEL,
+    initialThinking,
     defaultThinking,
   });
 
