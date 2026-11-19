@@ -94,3 +94,14 @@ describe("a Codex tool drawn as Claude's card", () => {
     expect(toToolUseBlocks(patch([]))).toMatchObject([{ name: "apply_patch" }]);
   });
 });
+
+describe("a card's line counts", () => {
+  it("counts no line for an empty side and none after a final newline", async () => {
+    const { computeDiffStats } = await import("@/features/session/ui/tools/utils/computeDiffStats");
+    // A deleted two-line file with no final newline.
+    expect(computeDiffStats("a\nb", "")).toEqual({ added: 0, removed: 2 });
+    // The same lines with and without the final newline.
+    expect(computeDiffStats("a\nb\n", "a\nb\nc\n")).toEqual({ added: 1, removed: 0 });
+    expect(computeDiffStats("a\n", "a\n\n")).toEqual({ added: 1, removed: 0 });
+  });
+});
