@@ -387,8 +387,8 @@ export function MessageInput({
     if (setupLocation) onSend(setupEnvironmentPrompt(setupLocation));
   };
 
-  // Only local Claude sessions support plan mode; cloud sidecars run bypass.
-  const showPlanMode = isClaudeAgent && workspaceKind !== "cloud";
+  // Local chats plan, on either agent; cloud sidecars run bypass.
+  const showPlanMode = workspaceKind !== "cloud";
   return (
     <div className={cn("relative z-20 shrink-0 px-2 pb-2", className)}>
       <AnimatePresence initial={false}>
