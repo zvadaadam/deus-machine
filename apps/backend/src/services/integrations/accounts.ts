@@ -73,6 +73,11 @@ export function forgetConnection(connection: ConnectionRow, replacedBy?: Connect
 /** Removals under way, by row: a second request for one shares it. */
 const removals = new Map<string, Promise<void>>();
 
+/** @internal Wait for the removals under way (tests). */
+export async function settleRemovals(): Promise<void> {
+  await Promise.allSettled(removals.values());
+}
+
 /**
  * Disconnect a `removing` row's account in Deus Cloud; the row goes once
  * that is confirmed. One request per row at a time, so whoever needs the
