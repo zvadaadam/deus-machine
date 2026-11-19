@@ -119,7 +119,6 @@ async function deusAccount(accountId: string | null): Promise<void> {
 async function settle(): Promise<void> {
   await settleCloudAccounts();
   await settleChecks();
-  await new Promise((resolve) => setTimeout(resolve, 25));
 }
 
 const view = (id: string) =>

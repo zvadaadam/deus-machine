@@ -8,7 +8,7 @@
 import { getErrorMessage } from "@shared/lib/errors";
 import { ConflictError, ValidationError } from "../../lib/errors";
 import type { CatalogApp, ConnectAppResult } from "@shared/integrations/types";
-import { attachConnection, finishRemoval } from "./accounts";
+import { attachConnection, finishRemoval, settleRemovals } from "./accounts";
 import { signInReturnUrl } from "./auth/callback";
 import {
   cloudAccountConnected,
@@ -249,9 +249,10 @@ async function runReconcile(): Promise<void> {
   }
 }
 
-/** @internal Wait for the pass under way (tests). */
+/** @internal Wait for the pass and the disconnects under way (tests). */
 export async function settleCloudAccounts(): Promise<void> {
   await reconciling;
+  await settleRemovals();
 }
 
 /** @internal */
