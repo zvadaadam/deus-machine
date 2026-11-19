@@ -28,6 +28,44 @@ function parsePartialInput(partialInput: string): Record<string, unknown> {
   }
 }
 
+/**
+ * The cards a part draws. Codex's own tools are drawn as Claude's: a command
+ * as Bash, a patch as an Edit, MultiEdit (several hunks) or Write (a new
+ * file) per file. Parts saved before the engine said `command` and `diff`
+ * keep the generic card.
+ */
+export function toToolUseBlocks(part: ToolPart): ToolUseBlock[] {
+  const card = (name: string, input: Record<string, unknown>, id = part.toolCallId) => ({
+    type: "tool_use" as const,
+    id,
+    name,
+    input,
+  });
+  if (part.toolName === "shell" && part.command) return [card("Bash", { command: part.command })];
+  const diffs =
+    part.toolName === "apply_patch" && part.state.status === "completed"
+      ? (part.state.content ?? []).flatMap((item) => (item.type === "diff" ? [item] : []))
+      : [];
+  if (diffs.length > 0) {
+    const files = Map.groupBy(diffs, (diff) => diff.path);
+    return [...files].map(([file_path, [first, ...rest]], index) => {
+      const id = `${part.toolCallId}:${index}`;
+      if (rest.length > 0) {
+        const edits = [first, ...rest].map((diff) => ({
+          old_string: diff.oldText ?? "",
+          new_string: diff.newText,
+        }));
+        return card("MultiEdit", { file_path, edits }, id);
+      }
+      if (first.oldText === undefined) {
+        return card("Write", { file_path, content: first.newText }, id);
+      }
+      return card("Edit", { file_path, old_string: first.oldText, new_string: first.newText }, id);
+    });
+  }
+  return [toToolUseBlock(part)];
+}
+
 function toToolUseBlock(part: ToolPart): ToolUseBlock {
   const input = match(part.state)
     .with({ status: "pending" }, (state) => parsePartialInput(state.partialInput))
@@ -129,7 +167,8 @@ function ToolRendererBridge({
 export const ToolPartBlock = memo(function ToolPartBlock({ part }: ToolPartBlockProps) {
   const { subagentMessages, insideSubagent } = useSession();
 
-  const toolUse = useMemo(() => toToolUseBlock(part), [part]);
+  const toolUses = useMemo(() => toToolUseBlocks(part), [part]);
+  const toolUse = toolUses[0]!;
   const toolResult = useMemo(() => toToolResultBlock(part), [part]);
   const isLoading = part.state.status === "pending" || part.state.status === "in_progress";
 
@@ -147,14 +186,21 @@ export const ToolPartBlock = memo(function ToolPartBlock({ part }: ToolPartBlock
     );
   }
 
-  const relaxLayoutContain = part.toolName === "Edit" || part.toolName === "MultiEdit";
+  const relaxLayoutContain = toolUses.some(({ name }) => name === "Edit" || name === "MultiEdit");
 
   return (
     <div
       className="w-full min-w-0"
       style={{ contain: relaxLayoutContain ? "style paint" : "layout style paint" }}
     >
-      <ToolRendererBridge toolUse={toolUse} toolResult={toolResult} isLoading={isLoading} />
+      {toolUses.map((card) => (
+        <ToolRendererBridge
+          key={card.id}
+          toolUse={card}
+          toolResult={toolResult}
+          isLoading={isLoading}
+        />
+      ))}
     </div>
   );
 });
