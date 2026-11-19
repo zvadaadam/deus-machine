@@ -325,6 +325,17 @@ describe("serveDeusTools", () => {
     trackedSessions.delete("codex-chat");
   });
 
+  it("offers no stream: anything but a POST is 405", async () => {
+    for (const method of ["GET", "DELETE"]) {
+      const response = await serveDeusTools(
+        "codex-chat",
+        new Request("http://127.0.0.1/x", { method })
+      );
+      expect(response.status).toBe(405);
+      expect(response.headers.get("allow")).toBe("POST");
+    }
+  });
+
   it("serves no chat the engine has no turn for", async () => {
     const response = await post("unknown", { jsonrpc: "2.0", id: 1, method: "tools/list" });
     expect(response.status).toBe(404);

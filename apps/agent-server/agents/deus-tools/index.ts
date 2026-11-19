@@ -30,10 +30,15 @@ export function createDeusMCPServer(sessionId: string) {
 
 /**
  * Answer one MCP request for a chat's Deus tools, over Streamable HTTP. Each
- * request gets its own server and stateless transport (tools hold no state of
- * their own), and only a chat the engine has a turn for is served.
+ * POST gets its own server and stateless transport (tools hold no state of
+ * their own), which nothing references once it has answered. With no session
+ * there is no stream to GET and nothing to DELETE: 405, as MCP asks of such a
+ * server. Only a chat the engine has a turn for is served.
  */
 export async function serveDeusTools(sessionId: string, request: Request): Promise<Response> {
+  if (request.method !== "POST") {
+    return new Response(null, { status: 405, headers: { Allow: "POST" } });
+  }
   if (!trackedSessions.has(sessionId)) return new Response("Unknown chat", { status: 404 });
   const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true });
   await createDeusMCPServer(sessionId).instance.connect(transport);
