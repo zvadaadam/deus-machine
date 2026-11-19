@@ -53,8 +53,8 @@ export async function probeMedia(path: string): Promise<MediaProbe> {
 
 /**
  * Read the video stream to the end of the file and count its packets (one per
- * frame), without decoding them: a truncated or unreadable file still fails,
- * and the render that follows decodes every frame anyway.
+ * frame), without decoding them: a file that is not a video, or has no frames,
+ * still fails, and the render that follows decodes every frame anyway.
  */
 export async function verifyDecodable(
   path: string
