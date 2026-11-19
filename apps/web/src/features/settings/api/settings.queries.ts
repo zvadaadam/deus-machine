@@ -88,6 +88,11 @@ export function useAgentAuthEvents(): void {
         answer ? withProgress(answer, progress) : answer
       );
       if (progress.phase === "ready" || progress.phase === "failed") readAgain();
+      // A CLI not installed lists no models (the engine answers its catalog):
+      // once it is, its own list is read.
+      if (progress.phase === "ready") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentModels });
+      }
     },
     readAgain
   );
