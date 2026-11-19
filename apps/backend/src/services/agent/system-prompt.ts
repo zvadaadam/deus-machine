@@ -1,11 +1,9 @@
 // backend/src/services/agent/system-prompt.ts
 // The deus system-prompt append, fed to the embedded engine as
-// RunConfig.systemPromptAppend. Ported verbatim from the legacy handlers:
-// claude got workspace context + the screen-recording tool briefing (the
-// recording tools live in the in-process deus MCP suite); the codex harnesses
-// got workspace context only (they run without the deus tool suite).
+// RunConfig.systemPromptAppend: workspace context and the screen-recording
+// tool briefing. Every harness has the deus tools (Claude in process, Codex
+// over loopback HTTP), so every harness gets the same append.
 
-import type { AgentHarness } from "@shared/enums";
 import { buildWorkspaceContext, type Simulator } from "./workspace-context";
 
 const FALLBACK_CONTEXT =
@@ -28,13 +26,7 @@ You have screen recording tools available directly — just call them, do NOT se
 The recording stops itself after maxDurationSeconds (default 300). If recording_stop reports a failure, its hint says what to fix.
 `;
 
-/** The per-harness append: claude gets the recording briefing, codex does not. */
-export function buildSystemPromptAppend(
-  harness: AgentHarness,
-  cwd?: string,
-  simulator?: Simulator | null
-): string {
+export function buildSystemPromptAppend(cwd?: string, simulator?: Simulator | null): string {
   const workspaceContext = buildWorkspaceContext(cwd, simulator) || FALLBACK_CONTEXT;
-  if (harness !== "claude-code") return workspaceContext;
   return `${workspaceContext}\n${SCREEN_RECORDING}`.trim();
 }

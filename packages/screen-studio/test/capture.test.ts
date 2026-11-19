@@ -12,7 +12,7 @@ import { FramePump } from "../src/capture/frame-pump.js";
 import { parseSourceId, resolveSource } from "../src/capture/sources.js";
 import { simulatorBackend } from "../src/capture/simulator.js";
 import { startRecording } from "../src/recorder.js";
-import { probeMedia } from "../src/util/ffmpeg.js";
+import { probeMedia, verifyDecodable } from "../src/util/ffmpeg.js";
 import { jpegFrames, manifest, tempDir } from "./helpers.js";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -179,6 +179,12 @@ describe("frame pump", () => {
     expect(frames).toBe(61);
     const probe = await probeMedia(join(dir, "out.mp4"));
     expect(Math.abs(probe.durationMs - 2033)).toBeLessThan(80);
+    // The check reads every packet without decoding: one per frame.
+    expect((await verifyDecodable(join(dir, "out.mp4"))).frames).toBe(61);
+    writeFileSync(join(dir, "broken.mp4"), "not a video");
+    await expect(verifyDecodable(join(dir, "broken.mp4"))).rejects.toThrow(
+      "Media is not decodable"
+    );
   });
 });
 

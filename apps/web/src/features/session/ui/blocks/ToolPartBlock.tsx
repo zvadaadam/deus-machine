@@ -1,5 +1,6 @@
 import { createElement, memo, useMemo } from "react";
 import { match, P } from "ts-pattern";
+import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
 import type { ToolPart, ToolResultContent, ToolStateCompleted } from "@shared/protocol-types";
 import type { ToolUseBlock, ToolResultBlock } from "../tools/types";
 import { toolRegistry } from "../tools/ToolRegistry";
@@ -39,7 +40,11 @@ function toToolUseBlock(part: ToolPart): ToolUseBlock {
     type: "tool_use",
     id: part.toolCallId,
     name: getToolRendererName(part),
-    input,
+    // Codex hands an MCP tool its input as `{ arguments }`: a Deus tool's
+    // card reads the arguments themselves, as it does for Claude.
+    input: part.toolName.startsWith(`${DEUS_TOOLS_SERVER}.`)
+      ? coerceToolInput(input.arguments)
+      : input,
   };
 }
 

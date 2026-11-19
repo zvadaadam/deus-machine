@@ -51,10 +51,22 @@ export function usesGateway(app: CatalogApp): boolean {
 
 /** The server a turn names for a gateway app, or null before the backend listens. */
 export function gatewayServer(appId: string): McpServerConfig | null {
+  return loopbackServer(`${GATEWAY_PATH}/${encodeURIComponent(appId)}`);
+}
+
+/** Where a Codex chat reaches its Deus tools (Claude runs them in process). */
+export const DEUS_TOOLS_PATH = "/api/deus-tools";
+
+/** The server a Codex turn names for its chat's Deus tools, or null before the backend listens. */
+export function deusToolsServer(sessionId: string): McpServerConfig | null {
+  return loopbackServer(`${DEUS_TOOLS_PATH}/${encodeURIComponent(sessionId)}`);
+}
+
+function loopbackServer(path: string): McpServerConfig | null {
   if (!origin) return null;
   return {
     type: "http",
-    url: `${origin}${GATEWAY_PATH}/${encodeURIComponent(appId)}`,
+    url: `${origin}${path}`,
     headers: { Authorization: `Bearer ${gatewayKey}` },
     required: false,
   };

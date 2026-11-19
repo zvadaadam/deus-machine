@@ -1,4 +1,5 @@
 import type { Message } from "@/shared/types";
+import { bareToolName } from "@shared/mcp-servers";
 import type { Part } from "@shared/protocol-types";
 
 // These renderers expose an answer/action or media that must stay visible.
@@ -13,10 +14,7 @@ function isActivity(part: Part): boolean {
   if (part.type === "reasoning") return true;
   if (part.type !== "tool") return false;
   if (part.state.status === "failed" || part.kind === "switch_mode") return false;
-  const name = part.toolName.startsWith("mcp__")
-    ? part.toolName.split("__").slice(2).join("__")
-    : part.toolName;
-  if (VISIBLE_TOOLS.has(name)) return false;
+  if (VISIBLE_TOOLS.has(bareToolName(part.toolName))) return false;
   return !(
     part.state.status === "completed" && part.state.content?.some((item) => item.type === "image")
   );

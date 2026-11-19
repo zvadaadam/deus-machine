@@ -52,37 +52,43 @@ export async function probeMedia(path: string): Promise<MediaProbe> {
 }
 
 /**
- * Decode every frame and count them. Slower than a probe, but it is the only
- * proof that a capture finalized into playable media.
+ * Read the video stream to the end of the file and count its packets (one per
+ * frame), without decoding them: a file that is not a video, or has no frames,
+ * still fails, and the render that follows decodes every frame anyway.
  */
 export async function verifyDecodable(
   path: string
 ): Promise<{ frames: number; durationMs: number }> {
+  const timeoutMs = 120_000;
   const result = await run(
     ffprobeBin(),
     [
       "-v",
       "error",
-      "-count_frames",
+      "-count_packets",
       "-select_streams",
       "v:0",
       "-show_entries",
-      "stream=nb_read_frames:format=duration",
+      "stream=nb_read_packets:format=duration",
       "-of",
       "json",
       path,
     ],
-    { timeoutMs: 120_000 }
+    { timeoutMs }
   );
   if (result.code !== 0) {
-    throw new ScreenStudioError("media_invalid", `Media is not decodable: ${tail(result.stderr)}`);
+    const why =
+      result.signal === "SIGKILL"
+        ? `ffprobe did not finish reading it within ${timeoutMs / 1000} s`
+        : tail(result.stderr);
+    throw new ScreenStudioError("media_invalid", `Media is not decodable: ${why}`);
   }
   const info = JSON.parse(result.stdout) as {
-    streams?: Array<{ nb_read_frames?: string }>;
+    streams?: Array<{ nb_read_packets?: string }>;
     format?: { duration?: string };
   };
-  const frames = Number(info.streams?.[0]?.nb_read_frames ?? 0);
-  if (!(frames > 0)) throw new ScreenStudioError("media_invalid", "Media decoded to zero frames");
+  const frames = Number(info.streams?.[0]?.nb_read_packets ?? 0);
+  if (!(frames > 0)) throw new ScreenStudioError("media_invalid", "Media has no video frames");
   return { frames, durationMs: Math.round(Number(info.format?.duration ?? 0) * 1000) };
 }
 

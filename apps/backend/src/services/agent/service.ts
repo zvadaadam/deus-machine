@@ -40,7 +40,8 @@ import { createAgentEventHandler, type AgentEventHandler } from "./event-handler
 import { buildTurnStartParams, type DeusTurnOptions } from "./run-config";
 import { toolRequests } from "@shared/api/sessions";
 import { isPrompt, pendingFor, relay } from "./tool-relay";
-import { resolveTurnApps } from "../integrations";
+import { deusToolsServer, resolveTurnApps } from "../integrations";
+import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
 import {
   persistSessionNeedsPlanResponse,
   persistSessionNeedsResponse,
@@ -158,7 +159,7 @@ export async function startTurn(
   options: DeusTurnOptions
 ): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
-  const apps = await turnApps();
+  const apps = await turnApps(agentHarness, sessionId);
   const device = agentDeviceFor(sessionId);
   const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, {
     ...options,
@@ -189,16 +190,22 @@ export async function startTurn(
 
 /**
  * The installed apps' MCP servers for a local turn: every project inherits
- * them. Codex gets them in its thread's own config (the engine's, for a turn
- * that names no CODEX_HOME).
+ * them. Codex gets them in its thread's own config, under names its user's
+ * own configuration does not have (`appServerName`), and with them the chat's
+ * Deus tools, which Claude runs in process.
  */
-async function turnApps(): Promise<Pick<DeusTurnOptions, "mcpServers" | "env">> {
-  const { servers, skipped } = await resolveTurnApps();
+async function turnApps(
+  harness: AgentHarness,
+  sessionId: string
+): Promise<Pick<DeusTurnOptions, "mcpServers" | "env">> {
+  const { servers, skipped } = await resolveTurnApps(harness);
   if (skipped.length) {
     console.log(
       `[AgentService] Apps not in this turn: ${skipped.map((s) => `${s.appId} (${s.reason})`).join(", ")}`
     );
   }
+  const deusTools = harness === "codex-app-server" ? deusToolsServer(sessionId) : null;
+  if (deusTools) servers[DEUS_TOOLS_SERVER] = deusTools;
   return { mcpServers: servers, env: loopbackPastProxy() };
 }
 

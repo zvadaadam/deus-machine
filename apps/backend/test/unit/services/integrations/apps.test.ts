@@ -159,6 +159,18 @@ describe("apps", () => {
     });
   });
 
+  it("a Codex turn names an app's server deus_<id>, where its user's own config has none", async () => {
+    installApp("context7");
+    await connectApp({ appId: "sentry", values: { token: "t1" } });
+    const { servers } = await resolveTurnApps("codex-app-server");
+    expect(Object.keys(servers).sort()).toEqual(["deus_context7", "deus_sentry"]);
+    expect(servers.deus_sentry).toEqual(gateway("sentry"));
+    expect(Object.keys((await resolveTurnApps("claude-code")).servers).sort()).toEqual([
+      "context7",
+      "sentry",
+    ]);
+  });
+
   it("installing is not authorizing: an OAuth app waits for its account and stays out of turns", async () => {
     installApp("linear");
     expect(app("linear").readiness).toBe("needs_connection");

@@ -13,7 +13,8 @@ vi.mock("../host-link", () => ({
   notifyTitle: vi.fn(),
 }));
 
-import { createDeusMCPServer } from "../agents/deus-tools";
+import { createDeusMCPServer, serveDeusTools } from "../agents/deus-tools";
+import { trackedSessions } from "../session-tracker";
 
 // Helpers to access McpServer internals (the real McpServer class uses private fields)
 function getRegisteredTools(instance: any): Record<string, any> {
@@ -281,5 +282,66 @@ describe("createDeusMCPServer", () => {
 
       expect(result.content[0].text).toContain("No output available yet");
     });
+  });
+});
+
+describe("serveDeusTools", () => {
+  const post = (sessionId: string, body: unknown) =>
+    serveDeusTools(
+      sessionId,
+      new Request("http://127.0.0.1/api/deus-tools/x", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+        },
+        body: JSON.stringify(body),
+      })
+    );
+
+  it("serves a chat's tools over Streamable HTTP, calls included", async () => {
+    trackedSessions.set("codex-chat", { harness: "codex-app-server", cwd: "/tmp" });
+    mockFrontendAPI.requestGetDiff.mockResolvedValue({ diff: "README.md: +2 -0" });
+
+    const list = await (
+      await post("codex-chat", { jsonrpc: "2.0", id: 1, method: "tools/list" })
+    ).json();
+    expect(list.result.tools.map((tool: { name: string }) => tool.name)).toContain(
+      "GetWorkspaceDiff"
+    );
+
+    const call = await post("codex-chat", {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/call",
+      params: { name: "GetWorkspaceDiff", arguments: { stat: true } },
+    });
+    expect((await call.json()).result.content).toEqual([
+      { type: "text", text: "README.md: +2 -0" },
+    ]);
+    expect(mockFrontendAPI.requestGetDiff).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "codex-chat", stat: true })
+    );
+    trackedSessions.delete("codex-chat");
+  });
+
+  it("offers no stream: anything but a POST is 405", async () => {
+    for (const method of ["GET", "DELETE"]) {
+      const response = await serveDeusTools(
+        "codex-chat",
+        new Request("http://127.0.0.1/x", { method })
+      );
+      expect(response.status).toBe(405);
+      expect(response.headers.get("allow")).toBe("POST");
+    }
+  });
+
+  it("serves only a Codex chat that has run a turn", async () => {
+    trackedSessions.set("claude-chat", { harness: "claude-code", cwd: "/tmp" });
+    for (const chat of ["unknown", "claude-chat"]) {
+      const response = await post(chat, { jsonrpc: "2.0", id: 1, method: "tools/list" });
+      expect(response.status).toBe(404);
+    }
+    trackedSessions.delete("claude-chat");
   });
 });

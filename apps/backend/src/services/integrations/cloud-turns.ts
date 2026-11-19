@@ -12,9 +12,9 @@
 import type { McpServerConfig } from "@zvada/agent-server/protocol";
 import { appReachesCloud } from "@shared/integrations/compose";
 import { getErrorMessage } from "@shared/lib/errors";
+import { appServerName } from "@shared/mcp-servers";
 import { cloudHolds, cloudTurnServers } from "./auth/cloud-accounts";
 import { findApp, findSkill } from "./catalog";
-import { serverName } from "./runtime";
 import { getConnection, listInstallations } from "./store";
 
 /** A skill as a cloud turn carries it: the sandbox fetches the pinned folder itself. */
@@ -56,7 +56,11 @@ export function cloudExtensionsEnabled(): boolean {
   return process.env.DEUS_CLOUD_EXTENSIONS === "1";
 }
 
-/** The MCP servers a cloud turn carries: every one optional. Never throws. */
+/**
+ * The MCP servers a cloud turn carries: every one optional. Never throws.
+ * Named by the app's id whatever the harness: a sandbox has no Codex
+ * configuration of the person's for a name to clash with.
+ */
 async function resolveCloudTurnApps(): Promise<Record<string, McpServerConfig>> {
   const servers: Record<string, McpServerConfig> = {};
   const held: string[] = [];
@@ -69,12 +73,16 @@ async function resolveCloudTurnApps(): Promise<Record<string, McpServerConfig>> 
       if (connection?.kind === "managed") {
         if (cloudHolds(connection)) held.push(app.id);
       } else if (app.transport.type === "http") {
-        servers[serverName(app.id)] = { type: "http", url: app.transport.url, required: false };
+        servers[appServerName(app.id, "claude-code")] = {
+          type: "http",
+          url: app.transport.url,
+          required: false,
+        };
       }
     }
     // The agent in the sandbox gets a capability for these, never the Deus session.
     for (const [appId, server] of Object.entries(await cloudTurnServers(held))) {
-      servers[serverName(appId)] = { ...server, required: false };
+      servers[appServerName(appId, "claude-code")] = { ...server, required: false };
     }
   } catch (error) {
     // The turn goes on with what could be resolved.
