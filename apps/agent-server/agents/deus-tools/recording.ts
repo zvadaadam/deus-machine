@@ -13,11 +13,10 @@
 import { randomBytes } from "crypto";
 import { tmpdir } from "os";
 import { join } from "path";
-import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { createAgentTools } from "../../../../packages/screen-studio/src/index";
 import { getElementBox, getRecordingTarget } from "./agent-browser-client";
 import { HostRpc } from "../../host-link";
-import { tool } from "./sdk-tool";
+import { type DeusTool, tool } from "./tool";
 
 /** Under tmpdir: the backend's /files/stream only serves media from there. */
 const RECORDINGS_DIR = join(tmpdir(), "deus-recordings");
@@ -61,7 +60,7 @@ function toolsFor(sessionId: string): AgentTools {
 }
 
 /** The recording tools for a Deus session, registered with the Claude SDK. */
-export function createRecordingTools(sessionId: string): SdkMcpToolDefinition<any>[] {
+export function createRecordingTools(sessionId: string): DeusTool[] {
   return toolsFor(sessionId).tools.map((definition) =>
     tool(definition.name, definition.description, definition.inputSchema, (args) =>
       definition.handler(args as Record<string, unknown>)

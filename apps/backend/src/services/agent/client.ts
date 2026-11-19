@@ -36,7 +36,7 @@ export interface AgentLinkOptions {
    */
   onEnvelope: (envelope: DecodedWireEventEnvelope) => void;
   onEventGap?: (gap: SessionEventGap) => void;
-  /** Tool round-trips from the agent's in-process deus MCP suite (getDiff,
+  /** Tool round-trips from the Deus tools the engine gives every harness (getDiff,
    *  getTerminalOutput, …). */
   onToolRequest: (method: string, params: Record<string, unknown>) => Promise<unknown>;
   /** Session title from Claude's own summary. */

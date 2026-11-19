@@ -75,7 +75,7 @@ export const ManifestSchema = z.object({
     /** The capture implementation: cdp-screencast, simctl, avfoundation, lavfi, import. */
     backend: z.string(),
     label: z.string(),
-    details: z.record(z.unknown()).default({}),
+    details: z.record(z.string(), z.unknown()).default({}),
   }),
   capture: z.object({
     fps: z.number().positive(),

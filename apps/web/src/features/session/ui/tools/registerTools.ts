@@ -121,7 +121,7 @@ export function registerAllTools() {
   toolRegistry.register("recording_start", RecordingStartToolRenderer);
   toolRegistry.register("recording_stop", RecordingStopToolRenderer);
 
-  // Deus MCP — Automations (mcp__deus__automation_update normalizes to this)
+  // Deus MCP — Automations (a card reads the tool's own name from its part)
   toolRegistry.register("automation_update", AutomationToolRenderer);
 }
 

@@ -1,16 +1,15 @@
 // agent-server/agents/deus-tools/workspace.ts
 // Workspace-aware tools: diff, comments, terminal output.
 
-import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { HostRpc } from "../../host-link";
-import { tool } from "./sdk-tool";
+import { type DeusTool, tool } from "./tool";
 
 /**
  * Creates the workspace tool definitions for a given session.
  * These tools handle user interaction and workspace state inspection.
  */
-export function createWorkspaceTools(sessionId: string): SdkMcpToolDefinition<any>[] {
+export function createWorkspaceTools(sessionId: string): DeusTool[] {
   return [
     // ====================================================================
     // GetWorkspaceDiff

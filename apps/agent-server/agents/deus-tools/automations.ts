@@ -7,11 +7,10 @@
 // updates live when the agent writes. Automations are cloud-only: the agnt
 // platform schedules and runs them in sandboxes, Mac open or closed.
 
-import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { getErrorMessage } from "@shared/lib/errors";
 import { HostRpc } from "../../host-link";
-import { tool } from "./sdk-tool";
+import { type DeusTool, tool } from "./tool";
 
 function textResult(text: string) {
   return { content: [{ type: "text" as const, text }] };
@@ -28,7 +27,7 @@ Rules:
 - sessionPolicy: fresh_session (default) starts a new sandbox chat per run; same_session keeps continuing one chat (follow-ups/monitors).
 - Pause/resume via mode=update with status.`;
 
-export function createAutomationTools(sessionId: string): SdkMcpToolDefinition<any>[] {
+export function createAutomationTools(sessionId: string): DeusTool[] {
   return [
     tool(
       "automation_update",

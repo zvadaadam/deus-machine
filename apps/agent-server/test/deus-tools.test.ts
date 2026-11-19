@@ -13,38 +13,57 @@ vi.mock("../host-link", () => ({
   notifyTitle: vi.fn(),
 }));
 
-import { createDeusMCPServer, serveDeusTools } from "../agents/deus-tools";
-import { trackedSessions } from "../session-tracker";
+import type { HostToolSource } from "@zvada/agent-server/core";
+import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
+import { deusTools } from "../agents/deus-tools";
 
-// Helpers to access McpServer internals (the real McpServer class uses private fields)
-function getRegisteredTools(instance: any): Record<string, any> {
-  return instance._registeredTools;
+const CALLER = {
+  sessionId: "test-session-123",
+  harness: "codex-app-server" as const,
+  turnId: "turn",
+  permissionMode: "default" as const,
+};
+
+/** Each tool of the source by name, called as the engine calls it. */
+function getRegisteredTools(source: HostToolSource): Record<string, any> {
+  return Object.fromEntries(
+    source.tools.map((tool) => [
+      tool.name,
+      {
+        ...tool,
+        handler: (args: Record<string, unknown>) =>
+          source.call(tool.name, args, CALLER, new AbortController().signal),
+      },
+    ])
+  );
 }
 
-function getServerInfo(instance: any): { name: string; version: string } {
-  return instance.server._serverInfo;
-}
-
-describe("createDeusMCPServer", () => {
+describe("deusTools", () => {
   const SESSION_ID = "test-session-123";
-  let server: ReturnType<typeof createDeusMCPServer>;
+  let server: HostToolSource;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    server = createDeusMCPServer(SESSION_ID);
+    server = deusTools(SESSION_ID);
   });
 
-  it("returns an SDK-compatible server descriptor", () => {
-    expect(server.type).toBe("sdk");
-    expect(server.name).toBe("deus");
-    expect(server.instance).toBeDefined();
-    const info = getServerInfo(server.instance);
-    expect(info.name).toBe("deus");
-    expect(info.version).toBe("1.0.0");
+  it("is one source the engine gives every harness, its arguments described in JSON Schema", async () => {
+    expect(server.name).toBe(DEUS_TOOLS_SERVER);
+    const diff = server.tools.find((tool) => tool.name === "GetWorkspaceDiff")!;
+    expect(diff.inputSchema).toMatchObject({
+      type: "object",
+      properties: { file: { type: "string" }, stat: { type: "boolean" } },
+    });
+    expect(diff.inputSchema).not.toHaveProperty("$schema");
+    // A call's arguments are checked before the tool runs.
+    await expect(
+      getRegisteredTools(server).GetWorkspaceDiff.handler({ stat: "yes" })
+    ).rejects.toThrow();
+    expect(mockFrontendAPI.requestGetDiff).not.toHaveBeenCalled();
   });
 
   it("registers all workspace + browser + recording tools", () => {
-    const tools = getRegisteredTools(server.instance);
+    const tools = getRegisteredTools(server);
     const toolNames = Object.keys(tools);
     expect(toolNames).toHaveLength(28);
     // Workspace tools (questions are Claude's own AskUserQuestion, through the engine)
@@ -89,7 +108,7 @@ describe("createDeusMCPServer", () => {
         diff: "--- a/file.ts\n+++ b/file.ts\n@@ -1 +1 @@\n-old\n+new",
       });
 
-      const tool = getRegisteredTools(server.instance)["GetWorkspaceDiff"];
+      const tool = getRegisteredTools(server)["GetWorkspaceDiff"];
       const result = await tool.handler({});
 
       expect(mockFrontendAPI.requestGetDiff).toHaveBeenCalledWith({
@@ -103,7 +122,7 @@ describe("createDeusMCPServer", () => {
     it("passes file parameter for single-file diff", async () => {
       mockFrontendAPI.requestGetDiff.mockResolvedValue({ diff: "file diff" });
 
-      const tool = getRegisteredTools(server.instance)["GetWorkspaceDiff"];
+      const tool = getRegisteredTools(server)["GetWorkspaceDiff"];
       await tool.handler({ file: "/path/to/file.ts" });
 
       expect(mockFrontendAPI.requestGetDiff).toHaveBeenCalledWith({
@@ -118,7 +137,7 @@ describe("createDeusMCPServer", () => {
         diff: " file.ts | 2 +-\n 1 file changed",
       });
 
-      const tool = getRegisteredTools(server.instance)["GetWorkspaceDiff"];
+      const tool = getRegisteredTools(server)["GetWorkspaceDiff"];
       await tool.handler({ stat: true });
 
       expect(mockFrontendAPI.requestGetDiff).toHaveBeenCalledWith({
@@ -133,7 +152,7 @@ describe("createDeusMCPServer", () => {
         error: "Git repository not found",
       });
 
-      const tool = getRegisteredTools(server.instance)["GetWorkspaceDiff"];
+      const tool = getRegisteredTools(server)["GetWorkspaceDiff"];
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain("Error getting diff");
@@ -143,7 +162,7 @@ describe("createDeusMCPServer", () => {
     it("returns 'No changes found' when diff is empty", async () => {
       mockFrontendAPI.requestGetDiff.mockResolvedValue({ diff: "" });
 
-      const tool = getRegisteredTools(server.instance)["GetWorkspaceDiff"];
+      const tool = getRegisteredTools(server)["GetWorkspaceDiff"];
       const result = await tool.handler({});
 
       expect(result.content[0].text).toBe("No changes found.");
@@ -163,7 +182,7 @@ describe("createDeusMCPServer", () => {
         { file: "src/utils.ts", lineNumber: 25, body: "Consider refactoring" },
       ];
 
-      const tool = getRegisteredTools(server.instance)["DiffComment"];
+      const tool = getRegisteredTools(server)["DiffComment"];
       const result = await tool.handler({ comments });
 
       expect(mockFrontendAPI.requestDiffComment).toHaveBeenCalledWith({
@@ -176,7 +195,7 @@ describe("createDeusMCPServer", () => {
     it("returns failure message when posting fails", async () => {
       mockFrontendAPI.requestDiffComment.mockResolvedValue({ success: false });
 
-      const tool = getRegisteredTools(server.instance)["DiffComment"];
+      const tool = getRegisteredTools(server)["DiffComment"];
       const result = await tool.handler({
         comments: [{ file: "test.ts", lineNumber: 1, body: "test" }],
       });
@@ -197,7 +216,7 @@ describe("createDeusMCPServer", () => {
         isRunning: true,
       });
 
-      const tool = getRegisteredTools(server.instance)["GetTerminalOutput"];
+      const tool = getRegisteredTools(server)["GetTerminalOutput"];
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain("[Terminal - running]");
@@ -211,7 +230,7 @@ describe("createDeusMCPServer", () => {
         isRunning: false,
       });
 
-      const tool = getRegisteredTools(server.instance)["GetTerminalOutput"];
+      const tool = getRegisteredTools(server)["GetTerminalOutput"];
       const result = await tool.handler({ source: "spotlight" });
 
       expect(result.content[0].text).toContain("[Spotlight - stopped]");
@@ -224,7 +243,7 @@ describe("createDeusMCPServer", () => {
         isRunning: true,
       });
 
-      const tool = getRegisteredTools(server.instance)["GetTerminalOutput"];
+      const tool = getRegisteredTools(server)["GetTerminalOutput"];
       const result = await tool.handler({ source: "run_script" });
 
       expect(result.content[0].text).toContain("[Run script - running]");
@@ -235,7 +254,7 @@ describe("createDeusMCPServer", () => {
         source: "none",
       });
 
-      const tool = getRegisteredTools(server.instance)["GetTerminalOutput"];
+      const tool = getRegisteredTools(server)["GetTerminalOutput"];
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain("No terminal output available");
@@ -247,7 +266,7 @@ describe("createDeusMCPServer", () => {
         source: "none",
       });
 
-      const tool = getRegisteredTools(server.instance)["GetTerminalOutput"];
+      const tool = getRegisteredTools(server)["GetTerminalOutput"];
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain("Error getting terminal output");
@@ -260,7 +279,7 @@ describe("createDeusMCPServer", () => {
         isRunning: false,
       });
 
-      const tool = getRegisteredTools(server.instance)["GetTerminalOutput"];
+      const tool = getRegisteredTools(server)["GetTerminalOutput"];
       await tool.handler({ maxLines: 50 });
 
       expect(mockFrontendAPI.requestGetTerminalOutput).toHaveBeenCalledWith({
@@ -277,71 +296,10 @@ describe("createDeusMCPServer", () => {
         isRunning: true,
       });
 
-      const tool = getRegisteredTools(server.instance)["GetTerminalOutput"];
+      const tool = getRegisteredTools(server)["GetTerminalOutput"];
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain("No output available yet");
     });
-  });
-});
-
-describe("serveDeusTools", () => {
-  const post = (sessionId: string, body: unknown) =>
-    serveDeusTools(
-      sessionId,
-      new Request("http://127.0.0.1/api/deus-tools/x", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          accept: "application/json, text/event-stream",
-        },
-        body: JSON.stringify(body),
-      })
-    );
-
-  it("serves a chat's tools over Streamable HTTP, calls included", async () => {
-    trackedSessions.set("codex-chat", { harness: "codex-app-server", cwd: "/tmp" });
-    mockFrontendAPI.requestGetDiff.mockResolvedValue({ diff: "README.md: +2 -0" });
-
-    const list = await (
-      await post("codex-chat", { jsonrpc: "2.0", id: 1, method: "tools/list" })
-    ).json();
-    expect(list.result.tools.map((tool: { name: string }) => tool.name)).toContain(
-      "GetWorkspaceDiff"
-    );
-
-    const call = await post("codex-chat", {
-      jsonrpc: "2.0",
-      id: 2,
-      method: "tools/call",
-      params: { name: "GetWorkspaceDiff", arguments: { stat: true } },
-    });
-    expect((await call.json()).result.content).toEqual([
-      { type: "text", text: "README.md: +2 -0" },
-    ]);
-    expect(mockFrontendAPI.requestGetDiff).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionId: "codex-chat", stat: true })
-    );
-    trackedSessions.delete("codex-chat");
-  });
-
-  it("offers no stream: anything but a POST is 405", async () => {
-    for (const method of ["GET", "DELETE"]) {
-      const response = await serveDeusTools(
-        "codex-chat",
-        new Request("http://127.0.0.1/x", { method })
-      );
-      expect(response.status).toBe(405);
-      expect(response.headers.get("allow")).toBe("POST");
-    }
-  });
-
-  it("serves only a Codex chat that has run a turn", async () => {
-    trackedSessions.set("claude-chat", { harness: "claude-code", cwd: "/tmp" });
-    for (const chat of ["unknown", "claude-chat"]) {
-      const response = await post(chat, { jsonrpc: "2.0", id: 1, method: "tools/list" });
-      expect(response.status).toBe(404);
-    }
-    trackedSessions.delete("claude-chat");
   });
 });
