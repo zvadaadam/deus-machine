@@ -166,6 +166,8 @@ try {
 
   // 3. Beta's workspace and the one that names no organization connect beside it.
   await connect(inB);
+  assert.equal(legacyOrganization(), null, "the credentials stamped the row");
+  check("the row that names no organization is not stamped: it is read as the default's");
   await connect(legacy);
   await until("all three sockets at once", () => rows.every((row) => live(row)?.open));
   await until("every session's metadata", () => rows.every((row) => metadataFor(row).length > 0));
@@ -190,7 +192,7 @@ try {
 
   // 4. The row that named no organization learned its real one from its snapshot.
   await until("the legacy row's organization", () => legacyOrganization() === ORG_B.id);
-  const read = await backend.read("workspace", { workspaceId: inB.id });
+  const read = await backend.read("workspace", { workspaceId: legacy.id });
   assert.equal(read.organization_id, ORG_B.id, "clients read a workspace's organization");
   check("a row that named no organization took the one its snapshot names; clients read it");
 

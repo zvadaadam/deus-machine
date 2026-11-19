@@ -257,6 +257,11 @@ try {
     .locator("button:has(span.truncate)")
     .evaluateAll((es) => es.map((e) => e.innerText.trim().replace(/\s+/g, " ")));
   assert.deepEqual(rows, ["acme/rocket", "acme/local Added", "acme/docs"], JSON.stringify(rows));
+  assert.equal(
+    await dialog.getByText("Manage GitHub access").count(),
+    1,
+    "any client with a computer behind it can manage GitHub access"
+  );
   await pause(300);
   await dialog.screenshot({ path: path.join(shots, "list.png") });
   const accessible = platform.authorized.filter(
