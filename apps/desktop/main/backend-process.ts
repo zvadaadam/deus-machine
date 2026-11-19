@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "child_process";
-import { pushCloudCredentialsToBackend } from "./deus-cloud-provision";
+import { pushCloudCredentialsToBackend, setBackendAuthToken } from "./deus-cloud-provision";
 import { existsSync, statSync, writeFileSync } from "fs";
 import { delimiter, join } from "path";
 import { app, BrowserWindow } from "electron";
@@ -151,10 +151,8 @@ function scheduleRestart(hooks: BackendSpawnHooks): void {
     void (async () => {
       try {
         await terminateBackend();
-        const { port, authToken } = await spawnBackend(hooks);
+        const { port } = await spawnBackend(hooks);
         process.env.DEUS_BACKEND_PORT = String(port);
-        // The new backend accepts credentials only with its own spawn token.
-        process.env.DEUS_AUTH_TOKEN = authToken;
 
         for (const win of BrowserWindow.getAllWindows()) {
           win.webContents.send("backend:port-changed", { port });
@@ -173,9 +171,7 @@ function scheduleRestart(hooks: BackendSpawnHooks): void {
   }, delay);
 }
 
-export async function spawnBackend(
-  hooks: BackendSpawnHooks = {}
-): Promise<{ port: number; authToken: string }> {
+export async function spawnBackend(hooks: BackendSpawnHooks = {}): Promise<{ port: number }> {
   const authToken = crypto.randomBytes(24).toString("hex");
   const runtime = resolveRuntimeEntries();
   if (runtime.runtimeExecutable && !isExecutableFile(runtime.runtimeExecutable)) {
@@ -225,15 +221,15 @@ export async function spawnBackend(
       }
     }
     Object.assign(childEnv, sharedEnv, {
-      AUTH_TOKEN: authToken,
       PORT: "0",
       // The one page that may use the backend from this computer: the window's.
       [WEB_ORIGINS_ENV]: rendererOrigin({
         isDev: !app.isPackaged,
         rendererUrl: process.env.ELECTRON_RENDERER_URL,
       }),
-      // With stdin a pipe this process holds, the backend stops when this
-      // process ends, even by a crash or SIGKILL (apps/backend/src/lib/parent-stdin.ts).
+      // Its stdin is a pipe this process holds: the spawn token is its first
+      // line, and the backend stops when this process ends, even by a crash or
+      // SIGKILL (apps/backend/src/lib/parent-stdin.ts).
       DEUS_STOP_ON_STDIN_END: "1",
     });
 
@@ -243,6 +239,10 @@ export async function spawnBackend(
       stdio: ["pipe", "pipe", "pipe"],
     });
     backendProcess = child;
+    // Never in an environment: every process would inherit it, and `ps eww` shows it.
+    // A backend that died at once breaks the pipe; its exit is reported below.
+    child.stdin?.on("error", () => {});
+    child.stdin?.write(`${authToken}\n`);
 
     const timeout = setTimeout(() => {
       child.kill("SIGTERM");
@@ -267,8 +267,10 @@ export async function spawnBackend(
         restartAttempt = 0;
       }, STABLE_UPTIME_MS);
       writeBackendPortFile(port);
+      // The new backend accepts credentials only with its own spawn token.
+      setBackendAuthToken(authToken);
       hooks.onReady?.(port);
-      resolve({ port, authToken });
+      resolve({ port });
     };
 
     child.stdout?.on("data", (data: Buffer) => {

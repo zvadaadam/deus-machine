@@ -122,7 +122,6 @@ beforeEach(async () => {
   vi.clearAllMocks();
   vi.stubEnv("DEUS_USER_DATA_DIR", "/fixture/deus-user-data");
   vi.stubEnv("DEUS_BACKEND_PORT", "");
-  vi.stubEnv("DEUS_AUTH_TOKEN", "");
   mocks.events.clear();
   mocks.windows.length = 0;
   mocks.showMessageBox.mockResolvedValue({ response: 1 });
@@ -175,7 +174,7 @@ it("still reports a backend that fails to start on its own", async () => {
 });
 
 it("forgets a closed window, so a second launch does not act on it", async () => {
-  mocks.spawn.mockResolvedValue({ port: 12345, authToken: "fixture" });
+  mocks.spawn.mockResolvedValue({ port: 12345 });
   await import("../../../apps/desktop/main/index");
   await vi.waitFor(() => expect(mocks.windows).toHaveLength(1));
   const win = mocks.windows[0];
@@ -190,7 +189,7 @@ it("forgets a closed window, so a second launch does not act on it", async () =>
 });
 
 it("tells the tray when a backend starts and when it exits", async () => {
-  mocks.spawn.mockResolvedValue({ port: 12345, authToken: "fixture" });
+  mocks.spawn.mockResolvedValue({ port: 12345 });
   await import("../../../apps/desktop/main/index");
   await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalled());
   const hooks = mocks.spawn.mock.calls[0][0];
@@ -202,7 +201,7 @@ it("tells the tray when a backend starts and when it exits", async () => {
 });
 
 it("loads the packaged window from app://deus and opens no debugging port", async () => {
-  mocks.spawn.mockResolvedValue({ port: 12345, authToken: "fixture" });
+  mocks.spawn.mockResolvedValue({ port: 12345 });
   await import("../../../apps/desktop/main/index");
   await vi.waitFor(() => expect(mocks.windows).toHaveLength(1));
   const win = mocks.windows[0] as unknown as {
@@ -253,7 +252,7 @@ it("loads the packaged window from app://deus and opens no debugging port", asyn
 });
 
 it("sandboxes every renderer and answers IPC from the window's own page only", async () => {
-  mocks.spawn.mockResolvedValue({ port: 12345, authToken: "fixture" });
+  mocks.spawn.mockResolvedValue({ port: 12345 });
   const { ipcMain } = await import("electron");
   await import("../../../apps/desktop/main/index");
   await vi.waitFor(() => expect(mocks.windows).toHaveLength(1));

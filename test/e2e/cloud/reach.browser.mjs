@@ -156,7 +156,7 @@ delete env.DEUS_CLOUD_ENV;
 const log = createWriteStream(path.join(directory, "backend.log"));
 const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/server.ts"], {
   cwd: root,
-  stdio: ["ignore", "pipe", "pipe"],
+  stdio: ["pipe", "pipe", "pipe"],
   env: {
     ...env,
     PORT: "0",
@@ -168,9 +168,11 @@ const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/serv
     DEUS_CLOUD_AGNT_URL: platform.url,
     AGNT_API_KEY: "agnt_sk_reach",
     DEUS_CLOUD_AGNT_API_KEY: "agnt_sk_reach",
-    AUTH_TOKEN: "desktop-reach-token",
+    // As the desktop starts it: the spawn token is the first line on its stdin.
+    DEUS_STOP_ON_STDIN_END: "1",
   },
 });
+child.stdin.write("desktop-reach-token\n");
 child.stdout.pipe(log);
 child.stderr.pipe(log);
 let vite, browser;

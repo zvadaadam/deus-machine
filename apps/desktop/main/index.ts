@@ -334,7 +334,7 @@ app.whenReady().then(async () => {
     // restart — and every backend descendant (setup scripts, agent CLIs)
     // inherited it. provisionAtStartup pushes credentials over
     // the runtime route immediately below, which is retractable by design.
-    const { port: backendPort, authToken } = await spawnBackend({
+    const { port: backendPort } = await spawnBackend({
       // The tray follows whichever backend is current (each restart has a new port).
       onReady: () => setTrayStatus("running"),
       onStdoutLine: (source, line) => {
@@ -352,7 +352,6 @@ app.whenReady().then(async () => {
 
     // Expose backend connection info so IPC handlers can return it to renderer
     process.env.DEUS_BACKEND_PORT = String(backendPort);
-    process.env.DEUS_AUTH_TOKEN = authToken;
 
     provisionAtStartup(getStoredDeusCloudSessionToken, resolveDeusCloudUrl());
 

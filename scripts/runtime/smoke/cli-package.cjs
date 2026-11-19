@@ -71,7 +71,7 @@ async function startAndStop(deus, work) {
   );
   const env = Object.fromEntries(
     Object.entries(process.env).filter(
-      ([key]) => !key.startsWith("DEUS_") && key !== "AUTH_TOKEN" && key !== "DATABASE_PATH"
+      ([key]) => !key.startsWith("DEUS_") && key !== "DATABASE_PATH"
     )
   );
   Object.assign(env, {

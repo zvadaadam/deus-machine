@@ -104,7 +104,7 @@ delete env.DEUS_CLOUD_AGNT_API_KEY;
 const log = createWriteStream(path.join(directory, "backend.log"));
 const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/server.ts"], {
   cwd: root,
-  stdio: ["ignore", "pipe", "pipe"],
+  stdio: ["pipe", "pipe", "pipe"],
   env: {
     ...env,
     PORT: "0",
@@ -114,9 +114,11 @@ const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/serv
     TSX_TSCONFIG_PATH: path.join(root, "apps/backend/tsconfig.json"),
     AGNT_BASE_URL: platform.url,
     DEUS_CLOUD_AGNT_URL: platform.url,
-    AUTH_TOKEN: "desktop-smoke-token",
+    // As the desktop starts it: the spawn token is the first line on its stdin.
+    DEUS_STOP_ON_STDIN_END: "1",
   },
 });
+child.stdin.write("desktop-smoke-token\n");
 child.stdout.pipe(log);
 child.stderr.pipe(log);
 let vite, browser, page;

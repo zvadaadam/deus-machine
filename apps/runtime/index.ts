@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 
-import { randomBytes } from "node:crypto";
 import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, resolve } from "node:path";
@@ -193,7 +192,6 @@ function configureRuntimeEnv(command: RuntimeCommand, dataDir?: string): void {
   process.env.PATH = [layout.bundledBinDir, ...PACKAGED_SYSTEM_PATHS].join(delimiter);
 
   if (command === "backend") {
-    process.env.AUTH_TOKEN ??= randomBytes(24).toString("hex");
     process.env.PORT ??= "0";
     if (dataDir) {
       process.env.DEUS_DATA_DIR = resolve(dataDir);

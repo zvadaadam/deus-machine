@@ -64,7 +64,7 @@ vi.mock("electron-updater", () => ({
 }));
 vi.mock("@electron-toolkit/utils", () => ({ is: { dev: false } }));
 vi.mock("../../../apps/desktop/main/backend-process", () => ({
-  spawnBackend: vi.fn().mockResolvedValue({ port: 12345, authToken: "fixture" }),
+  spawnBackend: vi.fn().mockResolvedValue({ port: 12345 }),
   stopBackend: mocks.stop,
 }));
 vi.mock("../../../apps/desktop/main/native-handlers", () => ({ registerNativeHandlers: vi.fn() }));
@@ -110,7 +110,6 @@ beforeEach(async () => {
   vi.stubEnv("APPIMAGE", "/fixture/Deus.AppImage");
   vi.stubEnv("DEUS_USER_DATA_DIR", "/fixture/deus-user-data");
   vi.stubEnv("DEUS_BACKEND_PORT", "");
-  vi.stubEnv("DEUS_AUTH_TOKEN", "");
   mocks.events.clear();
   mocks.handlers.clear();
   mocks.stop.mockReturnValue(

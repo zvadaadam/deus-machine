@@ -159,7 +159,7 @@ for (const name of ["DEUS_CLOUD_URL", "DEUS_CLOUD_ENV", "AGNT_API_KEY", "DEUS_CL
 const log = createWriteStream(path.join(directory, "backend.log"));
 const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/server.ts"], {
   cwd: root,
-  stdio: ["ignore", "pipe", "pipe"],
+  stdio: ["pipe", "pipe", "pipe"],
   env: {
     ...env,
     PORT: "0",
@@ -170,9 +170,11 @@ const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/serv
     AGNT_BASE_URL: platform.url,
     DEUS_CLOUD_AGNT_URL: platform.url,
     DEUS_CLOUD_URL: platform.url,
-    AUTH_TOKEN: "desktop-orgs-browser",
+    // As the desktop starts it: the spawn token is the first line on its stdin.
+    DEUS_STOP_ON_STDIN_END: "1",
   },
 });
+child.stdin.write("desktop-orgs-browser\n");
 child.stdout.pipe(log);
 child.stderr.pipe(log);
 let vite, browser, page;
