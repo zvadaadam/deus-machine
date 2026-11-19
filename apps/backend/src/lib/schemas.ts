@@ -48,7 +48,7 @@ export const PreferencesFile = z
     diff_view_mode: z.string().optional(),
     onboarding_completed: z.boolean().optional(),
     anthropic_api_key: z.string().optional(),
-    // Engine vocabulary (lowercase); anything else reads as the default, see readThinkingLevel.
+    // A level the model lists (an open vocabulary); a blank reads as the default, see readThinkingLevel.
     default_thinking_level: z.string().optional(),
     experimental_simulator: z.boolean().optional(),
     experimental_browser: z.boolean().optional(),

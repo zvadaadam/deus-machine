@@ -31,7 +31,12 @@ export function readPermissionMode(value: unknown): PermissionMode | undefined {
   return parsed.success ? parsed.data : undefined;
 }
 
-/** Validate a stored/incoming thinking level; undefined when unrecognized. */
+/**
+ * Validate a stored/incoming thinking level; undefined when it is no level.
+ * Levels are an open vocabulary (whatever a model lists): one this build does
+ * not know passes, and the engine fits it to the model's or says it was not
+ * applied. A blank or a non-string is none.
+ */
 export function readThinkingLevel(value: unknown): ThinkingLevel | undefined {
   const parsed = ThinkingLevelSchema.safeParse(value);
   return parsed.success ? parsed.data : undefined;
