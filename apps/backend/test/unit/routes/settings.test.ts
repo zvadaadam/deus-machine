@@ -54,8 +54,8 @@ describe("GET /settings/agent-auth", () => {
 });
 
 describe("POST /settings/cloud/credentials", () => {
-  const push = (authorization?: string) =>
-    app.request("/settings/cloud/credentials", {
+  const push = (routes: Hono, authorization?: string) =>
+    routes.request("/settings/cloud/credentials", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -64,24 +64,33 @@ describe("POST /settings/cloud/credentials", () => {
       body: JSON.stringify({ deusCloudSessionToken: null }),
     });
 
+  // The token is read once, when the backend loads: load the routes afresh with it.
+  async function routesSpawnedWith(token: string | undefined) {
+    vi.resetModules();
+    if (token === undefined) delete process.env.AUTH_TOKEN;
+    else process.env.AUTH_TOKEN = token;
+    const routes = new Hono();
+    routes.route("/", (await import("../../../src/routes/settings")).default);
+    // A fresh errorHandler too, so it knows the freshly loaded AppError.
+    routes.onError((await import("../../../src/middleware/error-handler")).errorHandler);
+    return routes;
+  }
+
   it("accepts only the desktop process that spawned the backend", async () => {
-    vi.stubEnv("AUTH_TOKEN", "spawn-secret");
-    try {
-      expect((await push()).status).toBe(401);
-      expect((await push("Bearer wrong-secret")).status).toBe(401);
-      expect((await push("Bearer spawn-secret")).status).toBe(200);
-    } finally {
-      vi.unstubAllEnvs();
-    }
+    const routes = await routesSpawnedWith("spawn-secret");
+    expect((await push(routes)).status).toBe(401);
+    expect((await push(routes, "Bearer wrong-secret")).status).toBe(401);
+    expect((await push(routes, "Bearer spawn-secret")).status).toBe(200);
+  });
+
+  it("keeps the token from everything the backend starts", async () => {
+    await routesSpawnedWith("spawn-secret");
+    expect(process.env.AUTH_TOKEN).toBeUndefined();
   });
 
   it("takes no account when no desktop process spawned the backend", async () => {
-    vi.stubEnv("AUTH_TOKEN", "");
-    try {
-      expect((await push()).status).toBe(401);
-      expect((await push("Bearer anything")).status).toBe(401);
-    } finally {
-      vi.unstubAllEnvs();
-    }
+    const routes = await routesSpawnedWith(undefined);
+    expect((await push(routes)).status).toBe(401);
+    expect((await push(routes, "Bearer anything")).status).toBe(401);
   });
 });

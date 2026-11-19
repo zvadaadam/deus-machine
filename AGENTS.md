@@ -339,7 +339,9 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   desktop's account: sign-out closes it, switching accounts replaces it. A
   computer removed from the account stays off (and its relay grants are retired)
   until remote access is turned on again. Only the desktop process that spawned
-  the backend (its `AUTH_TOKEN`) may hand it account credentials.
+  the backend (its `AUTH_TOKEN`) may hand it account credentials; the backend
+  takes the token out of its environment at start (`lib/spawn-token.ts`), so
+  nothing it starts (agents, terminals, scripts) can read it.
 - **The browser** signs in with its own `deus-web` session, lists computers at
   `/connect`, and stores grants per account and computer, so signing out keeps
   them and signing back in reconnects without a code. Every dial fetches a fresh

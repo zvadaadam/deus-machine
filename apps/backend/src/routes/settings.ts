@@ -12,6 +12,7 @@ import { initAutomations } from "../services/automations";
 import { refreshCloudOrganizations } from "../services/cloud-settings.service";
 import { reconcileCloudAccounts } from "../services/integrations";
 import { AppError, ValidationError } from "../lib/errors";
+import { spawnToken } from "../lib/spawn-token";
 
 const app = new Hono();
 
@@ -47,7 +48,7 @@ app.post("/settings/cloud/github-token", async (c) => {
  * started without one (web dev, the CLI) has no such process and takes no account.
  */
 function fromDesktopMain(authorization: string | undefined): boolean {
-  const expected = process.env.AUTH_TOKEN;
+  const expected = spawnToken();
   if (!expected) return false;
   const given = Buffer.from(authorization?.replace(/^Bearer /, "") ?? "");
   const wanted = Buffer.from(expected);
