@@ -622,6 +622,9 @@ the catalog can move to a package the day Deus Cloud reads it too.
   process or config file (Codex writes its MCP servers to disk) holds a
   provider's token. Never put an account's token in a turn's `mcpServers`.
   Local (stdio) servers and servers with no account are named directly.
+  A Claude turn names an app's server by its id; a Codex turn names it
+  `deus_<id>` (`shared/mcp-servers.ts`), since the engine refuses a Codex turn
+  whose server shares a name with one in the person's own Codex config.
 - **OAuth** (`auth/mcp-oauth.ts`): signing in runs the MCP SDK's `auth()`
   (discovery, dynamic client registration, PKCE; the callback at
   `/api/integrations/oauth/callback`; one in-memory attempt per connection,

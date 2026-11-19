@@ -10,7 +10,9 @@
 // directly.
 
 import type { McpServerConfig } from "@zvada/agent-server/protocol";
+import type { AgentHarness } from "@shared/enums";
 import type { CatalogApp } from "@shared/integrations/types";
+import { appServerName } from "@shared/mcp-servers";
 import { getErrorMessage } from "@shared/lib/errors";
 import { cloudHolds } from "./auth/cloud-accounts";
 import { findApp } from "./catalog";
@@ -22,14 +24,6 @@ export interface TurnApps {
   servers: Record<string, McpServerConfig>;
   /** Installed apps left out of this turn, and why (logged, not fatal). */
   skipped: Array<{ appId: string; reason: string }>;
-}
-
-/** Names the engine and harnesses reserve for their own servers. */
-const RESERVED = new Set(["deus", "codex_apps", "computer"]);
-
-export function serverName(appId: string): string {
-  const name = appId.replace(/[^a-zA-Z0-9_-]/g, "_");
-  return RESERVED.has(name) ? `app_${name}` : name;
 }
 
 /** The server a local turn names for one installed app, or why it has none. */
@@ -99,8 +93,8 @@ export function directServer(
   };
 }
 
-/** The MCP servers a local turn carries. Never throws. */
-export async function resolveTurnApps(): Promise<TurnApps> {
+/** The MCP servers a local turn on `harness` carries. Never throws. */
+export async function resolveTurnApps(harness: AgentHarness = "claude-code"): Promise<TurnApps> {
   const result: TurnApps = { servers: {}, skipped: [] };
   let rows: InstallationRow[];
   try {
@@ -118,7 +112,7 @@ export async function resolveTurnApps(): Promise<TurnApps> {
       }
       try {
         const answer = await serverFor(app, row);
-        if ("server" in answer) result.servers[serverName(app.id)] = answer.server;
+        if ("server" in answer) result.servers[appServerName(app.id, harness)] = answer.server;
         else result.skipped.push({ appId: app.id, reason: answer.reason });
       } catch (error) {
         result.skipped.push({ appId: app.id, reason: getErrorMessage(error) });
