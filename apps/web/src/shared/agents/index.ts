@@ -8,13 +8,14 @@
 
 import {
   HARNESS_LABELS,
+  continuedThinkingLevel,
   defaultModelValue,
   latestTurnExecution,
   modelValue,
   parseModelValue,
 } from "@shared/models";
 import type { AgentHarness } from "@shared/enums";
-import { readThinkingLevel, type ThinkingLevel } from "@shared/protocol";
+import type { ThinkingLevel } from "@shared/protocol";
 import type { SessionTurn } from "@shared/types/session";
 
 export {
@@ -75,5 +76,5 @@ export function getThinkingForSession(
   turns: readonly SessionTurn[],
   fallback: ThinkingLevel
 ): ThinkingLevel {
-  return readThinkingLevel(latestTurnExecution(agentHarness, turns)?.thinkingLevel) ?? fallback;
+  return continuedThinkingLevel(latestTurnExecution(agentHarness, turns)) ?? fallback;
 }

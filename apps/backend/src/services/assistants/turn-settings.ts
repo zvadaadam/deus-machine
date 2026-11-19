@@ -7,6 +7,7 @@
 import type { AgentHarness } from "@shared/enums";
 import {
   DEFAULT_THINKING_LEVEL,
+  continuedThinkingLevel,
   defaultModelValue,
   latestTurnExecution,
   modelValue,
@@ -43,7 +44,7 @@ export function turnSettings(
     agentHarness: selection.harness,
     model: selection.model,
     thinkingLevel:
-      readThinkingLevel(latest?.thinkingLevel) ??
+      continuedThinkingLevel(latest) ??
       readThinkingLevel(defaultThinking) ??
       DEFAULT_THINKING_LEVEL,
   };

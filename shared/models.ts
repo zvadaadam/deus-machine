@@ -219,3 +219,14 @@ export function latestTurnExecution(
   }
   return latest?.execution;
 }
+
+/**
+ * The thinking level a chat continues on after that turn: the one it asked
+ * for (what the composer showed), else, for a turn sent without one, the
+ * level the harness ran it at.
+ */
+export function continuedThinkingLevel(
+  execution: SessionTurn["execution"]
+): ThinkingLevel | undefined {
+  return execution?.thinkingLevel ?? execution?.appliedThinkingLevel;
+}

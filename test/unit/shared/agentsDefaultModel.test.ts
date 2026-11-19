@@ -50,11 +50,16 @@ describe("reopened conversation model", () => {
 });
 
 describe("reopened conversation thinking level", () => {
-  const turn = (startedAt: number, thinkingLevel?: string): SessionTurn =>
+  const turn = (startedAt: number, thinkingLevel?: string, appliedThinkingLevel?: string) =>
     ({
       turnId: String(startedAt),
       startedAt,
-      execution: { harness: "codex-app-server", model: "gpt-6.1-sol", thinkingLevel },
+      execution: {
+        harness: "codex-app-server",
+        model: "gpt-6.1-sol",
+        thinkingLevel,
+        appliedThinkingLevel,
+      },
     }) as SessionTurn;
 
   it("is the level the latest turn ran, else the user's default", () => {
@@ -62,6 +67,13 @@ describe("reopened conversation thinking level", () => {
       getThinkingForSession("codex-app-server", [turn(2, "low"), turn(1, "max")], "high")
     ).toBe("low");
     expect(getThinkingForSession("codex-app-server", [turn(1)], "high")).toBe("high");
+    // The level asked for is what the composer showed; one sent without a level ran at the applied one.
+    expect(getThinkingForSession("codex-app-server", [turn(1, "ultra", "max")], "high")).toBe(
+      "ultra"
+    );
+    expect(getThinkingForSession("codex-app-server", [turn(1, undefined, "low")], "high")).toBe(
+      "low"
+    );
     expect(getThinkingForSession("codex-app-server", [], "medium")).toBe("medium");
   });
 });
