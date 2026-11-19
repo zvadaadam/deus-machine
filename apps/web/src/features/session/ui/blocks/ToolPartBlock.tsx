@@ -42,31 +42,39 @@ export function toToolUseBlocks(part: ToolPart): ToolUseBlock[] {
     input,
   });
   if (part.toolName === "shell" && part.command) return [card("Bash", { command: part.command })];
-  const diffs =
-    part.toolName === "apply_patch" && part.state.status === "completed"
-      ? (part.state.content ?? []).flatMap((item) => (item.type === "diff" ? [item] : []))
-      : [];
-  if (diffs.length > 0) {
-    // A hunk is whole lines: its last ends with a newline, which the entry drops.
-    const lines = (text = "") => (text && !text.endsWith("\n") ? `${text}\n` : text);
-    const files = Map.groupBy(diffs, (diff) => diff.path);
+  const patch = part.toolName === "apply_patch" && part.state.status === "completed" && part.state;
+  const diffs = patch
+    ? (patch.content ?? []).flatMap((item) => (item.type === "diff" ? [item] : []))
+    : [];
+  if (patch && diffs.length > 0) {
+    // An update hunk's sides are its lines joined with the last one's newline
+    // dropped (the engine's `hunkDiff`), so each gets it back. A new file's
+    // `newText` and a deleted file's `oldText` are the file as it is.
+    const lines = (text?: string) => (text ? `${text}\n` : "");
+    const deleted = new Set(
+      [coerceToolInput(patch.input).changes].flat().flatMap((change: unknown) => {
+        const { path, kind } = coerceToolInput(change);
+        const type = typeof kind === "string" ? kind : coerceToolInput(kind).type;
+        return type === "delete" ? [path] : [];
+      })
+    );
+    const files = new Map<string, typeof diffs>();
+    for (const diff of diffs) files.set(diff.path, [...(files.get(diff.path) ?? []), diff]);
     return [...files].map(([file_path, [first, ...rest]], index) => {
       const id = `${part.toolCallId}:${index}`;
-      if (rest.length > 0) {
-        const edits = [first, ...rest].map((diff) => ({
-          old_string: lines(diff.oldText),
-          new_string: lines(diff.newText),
-        }));
-        return card("MultiEdit", { file_path, edits }, id);
-      }
       if (first.oldText === undefined) {
         return card("Write", { file_path, content: first.newText }, id);
       }
-      return card(
-        "Edit",
-        { file_path, old_string: lines(first.oldText), new_string: lines(first.newText) },
-        id
-      );
+      if (deleted.has(file_path)) {
+        return card("Edit", { file_path, old_string: first.oldText, new_string: "" }, id);
+      }
+      const edits = [first, ...rest].map((diff) => ({
+        old_string: lines(diff.oldText),
+        new_string: lines(diff.newText),
+      }));
+      return rest.length > 0
+        ? card("MultiEdit", { file_path, edits }, id)
+        : card("Edit", { file_path, ...edits[0] }, id);
     });
   }
   return [toToolUseBlock(part)];
