@@ -23,9 +23,9 @@ const check = (name, details) => console.log(`PASS: ${name}`, details ?? "");
 const BEARER = "bearer-orgs";
 const ORG_A = { id: "org_acme", name: "Acme", key: "agnt_sk_acme", sessions: ["ses_a"] };
 const ORG_B = { id: "org_beta", name: "Beta", key: "agnt_sk_beta", sessions: ["ses_b", "ses_old"] };
-// Three cloud workspaces: one in each organization, and one from before organizations
-// were recorded. Its row names none, so the first credentials stamp it with the default
-// (Acme, the only key then); the platform says it is Beta's, and its snapshot corrects it.
+// Three cloud workspaces: one in each organization, and one whose row names none (made
+// with a developer key, or adopted). It is read as the default's (Acme); the platform
+// says it is Beta's, and its snapshot corrects it.
 const rows = [
   { id: crypto.randomUUID(), session: crypto.randomUUID(), provider: "ses_a", org: ORG_A.id },
   { id: crypto.randomUUID(), session: crypto.randomUUID(), provider: "ses_b", org: ORG_B.id },
@@ -146,14 +146,11 @@ try {
   const live = (row) => platform.live(row.provider);
   const metadataFor = (row) => platform.keyed.filter((request) => request.session === row.provider);
 
-  // 1. Only Acme is set up yet: its workspace connects. The row that names no
-  // organization is stamped with the default at once, before anything connects it.
+  // 1. Only Acme is set up yet: its workspace connects.
   const legacyOrganization = () =>
     db.prepare("SELECT organization_id FROM workspaces WHERE id = ?").get(legacy.id)
       .organization_id;
   await handCredentials({ [ORG_A.id]: ORG_A.key });
-  assert.equal(legacyOrganization(), ORG_A.id, "the legacy row was stamped with the default");
-  check("the first credentials stamped the row that named no organization with the default");
   await connect(inA);
   await until("Acme's socket", () => live(inA));
   await until("Acme's metadata", () => metadataFor(inA).length > 0);
@@ -172,7 +169,7 @@ try {
   await connect(legacy);
   await until("all three sockets at once", () => rows.every((row) => live(row)?.open));
   await until("every session's metadata", () => rows.every((row) => metadataFor(row).length > 0));
-  // The legacy row's connect sent its metadata with the stamp's key (Acme's), which
+  // The legacy row's connect sent its metadata with the default's key (Acme's), which
   // the platform refuses for a Beta session; the snapshot then corrects the row.
   for (const row of rows) {
     const expected = row.org === ORG_B.id ? ORG_B.key : ORG_A.key;
@@ -191,11 +188,11 @@ try {
     metadata: platform.keyed.map((request) => `${request.session}<-${request.key}`).join(" "),
   });
 
-  // 4. The row stamped with the default learned its real organization from its snapshot.
+  // 4. The row that named no organization learned its real one from its snapshot.
   await until("the legacy row's organization", () => legacyOrganization() === ORG_B.id);
   const read = await backend.read("workspace", { workspaceId: inB.id });
   assert.equal(read.organization_id, ORG_B.id, "clients read a workspace's organization");
-  check("a row stamped with the default took the organization its snapshot names; clients read it");
+  check("a row that named no organization took the one its snapshot names; clients read it");
 
   // 5. Every client can read the account's organizations, and which are ready here.
   const organizations = await until("the organization list", async () => {

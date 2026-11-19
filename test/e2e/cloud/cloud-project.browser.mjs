@@ -257,11 +257,6 @@ try {
     .locator("button:has(span.truncate)")
     .evaluateAll((es) => es.map((e) => e.innerText.trim().replace(/\s+/g, " ")));
   assert.deepEqual(rows, ["acme/rocket", "acme/local Added", "acme/docs"], JSON.stringify(rows));
-  assert.equal(
-    await dialog.getByText("Manage GitHub access").count(),
-    0,
-    "a browser cannot install"
-  );
   await pause(300);
   await dialog.screenshot({ path: path.join(shots, "list.png") });
   const accessible = platform.authorized.filter(
@@ -436,7 +431,7 @@ try {
   await until("Beta", async () => (await headerLabel()) === BETA.name);
   await openAddDialog();
   await dialog.getByText("Beta's GitHub access reaches no repositories yet.").waitFor();
-  await dialog.getByText(/Connect GitHub from the Deus app on your Mac/).waitFor();
+  await dialog.getByRole("button", { name: "Connect GitHub", exact: true }).waitFor();
   await pause(300);
   await dialog.screenshot({ path: path.join(shots, "empty.png") });
   await page.keyboard.press("Escape");
