@@ -28,10 +28,15 @@ export function appServerName(appId: string, harness: AgentHarness): string {
 export const DEUS_TOOLS_SERVER = "deus_chat_tools";
 
 /**
- * A tool's name as a card knows it, whichever harness called it: an MCP
- * tool's own name, from the part (Claude spells the call `mcp__<server>__<tool>`,
- * Codex `<server>.<tool>`), else the harness's tool name.
+ * A tool's name as a card knows it, whichever harness called it: a Deus
+ * tool's own name, from the part (Claude spells the call
+ * `mcp__<server>__<tool>`, Codex `<server>.<tool>`), else the harness's name.
+ * Another server's tool keeps its qualified name, so one named like a
+ * built-in (a docs server's `Edit`) gets the default card, not the built-in's.
  */
-export function toolCardName(part: { toolName: string; mcp?: { tool: string } }): string {
-  return part.mcp?.tool ?? part.toolName;
+export function toolCardName(part: {
+  toolName: string;
+  mcp?: { server: string; tool: string };
+}): string {
+  return part.mcp?.server === DEUS_TOOLS_SERVER ? part.mcp.tool : part.toolName;
 }

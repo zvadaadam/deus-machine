@@ -26,6 +26,12 @@ describe("toolCardName", () => {
     );
   });
 
+  it("is the qualified name for another server's tool", () => {
+    expect(toolCardName({ toolName: "docs.Edit", mcp: { server: "docs", tool: "Edit" } })).toBe(
+      "docs.Edit"
+    );
+  });
+
   it("is the harness's name for a tool that is no MCP tool", () => {
     expect(toolCardName({ toolName: "Edit" })).toBe("Edit");
   });

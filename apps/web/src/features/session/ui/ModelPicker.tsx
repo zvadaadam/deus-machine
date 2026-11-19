@@ -10,18 +10,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/shared/lib/utils";
 import { getAgentLogo } from "@/assets/agents";
-import type { AgentHarness, HarnessModels, ThinkingLevel } from "@/shared/agents";
+import {
+  thinkingLevelLabel,
+  type AgentHarness,
+  type HarnessModels,
+  type ThinkingLevel,
+} from "@/shared/agents";
 import { modelPickerView } from "@/shared/agents/picker";
-
-const LEVEL_LABELS: Record<ThinkingLevel, string> = {
-  off: "Off",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  xhigh: "Extra high",
-  max: "Max",
-  ultra: "Ultra",
-};
 
 interface ModelPickerProps {
   model: string;
@@ -88,14 +83,16 @@ export function ModelPicker({
           title="Model and thinking effort"
           aria-label={
             hasThinking
-              ? `Select model, currently ${modelLabel}, thinking ${LEVEL_LABELS[thinkingLevel]}`
+              ? `Select model, currently ${modelLabel}, thinking ${thinkingLevelLabel(thinkingLevel)}`
               : `Select model, currently ${modelLabel}`
           }
           className="text-text-secondary data-[state=open]:bg-accent gap-1.5 px-2 text-sm focus-visible:ring-1 has-[>svg]:px-2"
         >
           <AgentLogo type={currentAgent} className="size-3.5" />
           <span>{modelLabel}</span>
-          {hasThinking && <span className="text-text-muted">{LEVEL_LABELS[thinkingLevel]}</span>}
+          {hasThinking && (
+            <span className="text-text-muted">{thinkingLevelLabel(thinkingLevel)}</span>
+          )}
           <ChevronDown className="text-text-muted size-3" />
         </Button>
       </DropdownMenuTrigger>
@@ -178,7 +175,7 @@ export function ModelPicker({
                       onSelect={() => onThinkingLevelChange(level)}
                       className={isSelected ? "text-text-primary" : "text-text-secondary"}
                     >
-                      <span className="font-normal">{LEVEL_LABELS[level]}</span>
+                      <span className="font-normal">{thinkingLevelLabel(level)}</span>
                       {isSelected && <Check className="text-text-primary ml-auto size-3" />}
                     </DropdownMenuItem>
                   );

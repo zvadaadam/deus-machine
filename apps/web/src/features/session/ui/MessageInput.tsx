@@ -19,6 +19,7 @@
  * into the session mutation + clears store content on success.
  */
 
+import { useEffect } from "react";
 import type { SessionStatus } from "@/shared/types";
 import { agentConfigOf } from "@/features/workspace/lib/reach";
 import { locationOf } from "@/features/sidebar/lib/location";
@@ -379,6 +380,13 @@ export function MessageInput({
   };
 
   const modelThinkingLevels = levelsFor(model);
+  // A level the model lacks runs as the nearest it has: that is the one shown,
+  // and the chat keeps it, so what the picker shows is what a send carries.
+  const shownThinking = fitThinkingLevel(thinkingLevel, modelThinkingLevels, defaultThinking);
+  const { setThinkingLevel } = composer;
+  useEffect(() => {
+    if (shownThinking !== thinkingLevel) setThinkingLevel(shownThinking);
+  }, [shownThinking, thinkingLevel, setThinkingLevel]);
 
   // Suggest setup only in an empty, idle chat with a known missing recipe.
   const setupLocation = workspaceKind ? locationOf({ kind: workspaceKind }) : null;
@@ -516,8 +524,7 @@ export function MessageInput({
             <ModelPicker
               model={model}
               lists={modelLists}
-              // A level the model lacks runs as the nearest one below: show that one.
-              thinkingLevel={fitThinkingLevel(thinkingLevel, modelThinkingLevels, defaultThinking)}
+              thinkingLevel={shownThinking}
               thinkingLevels={modelThinkingLevels}
               hasMessages={hasMessages}
               onModelChange={(value) => composer.setModel(value, levelsFor(value))}

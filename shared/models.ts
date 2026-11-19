@@ -135,15 +135,33 @@ export function modelThinkingLevels(
  * The level a chat runs after its model changes: its own if the model offers
  * it, else the nearest one below. `off` is what a model with no thinking
  * control leaves behind, not a choice, so a model that has one starts from
- * `fallback`, the user's default.
+ * `fallback`, the user's default; so does a level the model has no match for
+ * (one only another model lists), fitted in turn to the model's own levels.
+ * `off` only for a model with no thinking control.
  */
 export function fitThinkingLevel(
   current: ThinkingLevel,
   levels: readonly ThinkingLevel[],
   fallback: ThinkingLevel
 ): ThinkingLevel {
-  return clampThinkingLevel(current === "off" ? fallback : current, levels) ?? "off";
+  const own = current === "off" ? undefined : clampThinkingLevel(current, levels);
+  return own ?? clampThinkingLevel(fallback, levels) ?? levels[0] ?? "off";
 }
+
+/** How a level is shown: Deus's word for one it knows, else the level's own name, capitalised. */
+export function thinkingLevelLabel(level: ThinkingLevel): string {
+  return LEVEL_LABELS[level] ?? level.charAt(0).toUpperCase() + level.slice(1);
+}
+
+const LEVEL_LABELS: Record<string, string> = {
+  off: "Off",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "Extra high",
+  max: "Max",
+  ultra: "Ultra",
+};
 
 /**
  * The model a new chat on `harness` starts on: the first of Deus's preferences

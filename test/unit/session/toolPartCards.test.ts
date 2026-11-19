@@ -105,3 +105,25 @@ describe("a card's line counts", () => {
     expect(computeDiffStats("a\n", "a\n\n")).toEqual({ added: 1, removed: 0 });
   });
 });
+
+describe("an MCP tool's card", () => {
+  const mcp = (server: string, tool: string, toolName: string) =>
+    part({ toolName, kind: "other", mcp: { server, tool } } as Partial<ToolPart>);
+
+  it("is Deus's own card for a Deus tool, on both harnesses' spelling", () => {
+    for (const toolName of [
+      "mcp__deus_chat_tools__BrowserScreenshot",
+      "deus_chat_tools.BrowserScreenshot",
+    ]) {
+      const [card] = toToolUseBlocks(mcp("deus_chat_tools", "BrowserScreenshot", toolName));
+      expect(card).toMatchObject({ name: "BrowserScreenshot" });
+    }
+  });
+
+  it("keeps another server's tool named like a built-in off the built-in's card", () => {
+    for (const toolName of ["mcp__docs__Edit", "docs.Edit"]) {
+      const [card] = toToolUseBlocks(mcp("docs", "Edit", toolName));
+      expect(card).toMatchObject({ name: toolName });
+    }
+  });
+});

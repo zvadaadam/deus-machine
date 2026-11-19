@@ -36,7 +36,9 @@ export function assistantTurnContent(messages: Message[]) {
       (part.state.status === "pending" || part.state.status === "in_progress")
     ) {
       currentActivity =
-        part.title || (part.state.status === "in_progress" && part.state.title) || part.toolName;
+        part.title ||
+        (part.state.status === "in_progress" && part.state.title) ||
+        toolCardName(part);
     }
   }
   // All prose stays visible: a turn can end with a tool-only message, and

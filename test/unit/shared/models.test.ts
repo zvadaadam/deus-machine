@@ -6,6 +6,7 @@ import {
   findModel,
   fitThinkingLevel,
   modelLabel,
+  thinkingLevelLabel,
   modelThinkingLevels,
   parseModelValue,
   pickerModels,
@@ -134,6 +135,21 @@ describe("the thinking level after a model change", () => {
   it("is off for a model with no thinking control, and the user's default after one", () => {
     expect(fitThinkingLevel("high", [], "medium")).toBe("off");
     expect(fitThinkingLevel("off", ["low", "medium", "high"], "medium")).toBe("medium");
+  });
+
+  it("starts from the user's default when the model has no match for a level only another model lists", () => {
+    // A model's own level (`turbo`) leaves for one without it: never `off`.
+    expect(fitThinkingLevel("turbo", ["low", "medium", "high"], "high")).toBe("high");
+    expect(fitThinkingLevel("turbo", ["low", "medium"], "high")).toBe("medium");
+    expect(fitThinkingLevel("turbo", ["turbo", "low"], "high")).toBe("turbo");
+    expect(fitThinkingLevel("turbo", ["fast", "deep"], "high")).toBe("fast");
+  });
+});
+
+describe("a thinking level's label", () => {
+  it("is Deus's word for a level it knows, else the level's own name", () => {
+    expect(thinkingLevelLabel("xhigh")).toBe("Extra high");
+    expect(thinkingLevelLabel("turbo")).toBe("Turbo");
   });
 });
 
