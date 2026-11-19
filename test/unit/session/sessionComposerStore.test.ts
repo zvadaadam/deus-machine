@@ -161,3 +161,12 @@ describe("move: a workspace's start composer hands over to its first chat", () =
     expect(store.getState().composers.chat).toMatchObject({ model, draft: "Also add tests" });
   });
 });
+
+describe("plan mode", () => {
+  it("is left once a plan is approved, so the next message runs in default mode", () => {
+    actions.seedIfAbsent("chat", emptyComposer(model, "high"));
+    actions.togglePlanMode("chat");
+    actions.leavePlanMode("chat");
+    expect(store.getState().composers.chat.planModeEnabled).toBe(false);
+  });
+});

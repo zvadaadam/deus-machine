@@ -285,6 +285,7 @@ export function SessionPanel({
 
   const handlePlanApprove = useCallback(() => {
     resolvePlanMode(sessionId, true);
+    sessionComposerActions.leavePlanMode(sessionId);
   }, [resolvePlanMode, sessionId]);
 
   const handlePlanReject = useCallback(() => {
