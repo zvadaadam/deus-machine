@@ -561,6 +561,16 @@ describe("continuing a chat: the model, thinking and permissions", () => {
     });
   });
 
+  it("thinks at the level its latest turn ran, as the composer reopens it", () => {
+    const low = {
+      ...turn("haiku", 3),
+      execution: { harness: "claude-code", model: "haiku", thinkingLevel: "low" },
+    };
+    expect(
+      turnSettings("claude-code", [turn("opus", 1), low as SessionTurn], "max").thinkingLevel
+    ).toBe("low");
+  });
+
   it("thinks at the person's default level, read as the settings store it", () => {
     expect(turnSettings("claude-code", [], "low").thinkingLevel).toBe("low");
     expect(turnSettings("claude-code", [], "nonsense").thinkingLevel).toBe("high");

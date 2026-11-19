@@ -9,11 +9,12 @@
 import {
   HARNESS_LABELS,
   defaultModelValue,
-  latestTurnModel,
+  latestTurnExecution,
   modelValue,
   parseModelValue,
 } from "@shared/models";
 import type { AgentHarness } from "@shared/enums";
+import { readThinkingLevel, type ThinkingLevel } from "@shared/protocol";
 import type { SessionTurn } from "@shared/types/session";
 
 export {
@@ -61,9 +62,18 @@ export function getModelForSession(
   agentHarness: AgentHarness,
   turns: readonly SessionTurn[]
 ): string {
-  const model = latestTurnModel(agentHarness, turns);
+  const model = latestTurnExecution(agentHarness, turns)?.model;
   return (
     (model && resolveModelSelection(modelValue(agentHarness, model))) ||
     getDefaultModelForHarness(agentHarness)
   );
+}
+
+/** Reopen on the last recorded thinking level; a chat with none uses `fallback`. */
+export function getThinkingForSession(
+  agentHarness: AgentHarness,
+  turns: readonly SessionTurn[],
+  fallback: ThinkingLevel
+): ThinkingLevel {
+  return readThinkingLevel(latestTurnExecution(agentHarness, turns)?.thinkingLevel) ?? fallback;
 }
