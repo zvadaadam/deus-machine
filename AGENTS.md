@@ -436,9 +436,10 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   longer than 30 minutes sends nothing, and the chat says so in its error; a stop
   drops it. At its commit, in one synchronous step, the host refuses
   (`Refused`): a start by an archived chat or into an archived workspace; a
-  fourth workspace agents started while three are set up; an archive whose
-  members are being set up, still working (a stop must be confirmed first) or
-  started chats not archived. Archiving one chat: only a chat an agent or an
+  fourth agent-started local workspace while three are starting or running setup.
+  It also refuses an archive whose members are still starting, still working
+  (a stop must be confirmed first) or started chats not archived.
+  Archiving one chat: only a chat an agent or an
   assistant started, never a workspace's last; it is hidden (`sessions.is_hidden`: the `sessions`
   read leaves it out, the current chat moves to the newest visible one, it
   takes no message and stops counting against its starter). A chat the person

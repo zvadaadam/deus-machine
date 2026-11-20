@@ -12,7 +12,7 @@
 //
 // What stays the host's: the first task. `start` takes the first message;
 // a new workspace's is held here and sent as the turn the package minted
-// once setup ends (30 minutes at most), and a stop while it waits drops it.
+// once its first chat is ready (30 minutes at most), and a stop while it waits drops it.
 // The checks the package makes are preflight: this host refuses again at its
 // commit, in one synchronous step (`Refused`), a start into an archived
 // workspace or by an archived starter, a fourth workspace agents started
@@ -82,7 +82,7 @@ import { assertMayWrite, refusalFor, storedAccess } from "./access";
 import { turnSettings } from "./turn-settings";
 import { replyFor, waitingOf } from "./waiting";
 
-/** A first task waits this long for its workspace's setup; then it is not sent. */
+/** How long a first task waits for its workspace to be ready. */
 const SETUP_LIMIT_MS = 30 * 60_000;
 /** Workspaces agents started that may be set up at once, on this computer. */
 const AGENT_SETUPS = 3;
@@ -359,7 +359,8 @@ export function createDeusHost(): DeusHost {
     (
       getDatabase()
         .prepare(
-          `SELECT COUNT(*) AS n FROM workspaces WHERE state = 'initializing' AND kind != 'cloud'
+          `SELECT COUNT(*) AS n FROM workspaces WHERE kind != 'cloud'
+           AND (state = 'initializing' OR setup_status = 'running')
            AND json_extract(started_by, '$.kind') = 'session'`
         )
         .get() as { n: number }
@@ -500,11 +501,8 @@ export function createDeusHost(): DeusHost {
   }
 
   /**
-   * Hold a new workspace's first task, and send it when setup ends: dropped
-   * if setup fails or the workspace is archived; one whose setup took longer
-   * than 30 minutes is not sent, and its chat says so. While it is handed to the
-   * engine it stays held, so a stop then waits for its admission and stops it
-   * by its minted id.
+   * Hold the first task until its chat is ready. A failed, archived or over-age
+   * start drops it. During engine admission a stop waits and uses the minted id.
    */
   function hold(sessionId: string, held: Omit<Held, "unwatch" | "since">) {
     const stop = onInvalidate((resources) => {
