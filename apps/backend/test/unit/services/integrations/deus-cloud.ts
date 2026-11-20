@@ -32,8 +32,8 @@ export interface FakeDeusCloud {
   failing: Set<string>;
   /** How long a disconnect takes to be heard. */
   deleteDelayMs: number;
-  /** How long starting a sign-in takes to be answered. */
-  startDelayMs: number;
+  /** Run after the next sign-in request arrives, before sending its reply. */
+  beforeSignInReply?: () => void | Promise<void>;
   /** account id → app id → connection. */
   accounts: Map<string, Map<string, Connection>>;
   /** Every request to `/me/connections*`: method, path, headers. */
@@ -80,7 +80,6 @@ export async function startFakeDeusCloud(): Promise<FakeDeusCloud> {
     revokedSessions: new Set(),
     failing: new Set(),
     deleteDelayMs: 0,
-    startDelayMs: 0,
     accounts: new Map(),
     requests: [],
     calls: [],
@@ -99,7 +98,7 @@ export async function startFakeDeusCloud(): Promise<FakeDeusCloud> {
       cloud.revokedSessions.clear();
       cloud.failing.clear();
       cloud.deleteDelayMs = 0;
-      cloud.startDelayMs = 0;
+      delete cloud.beforeSignInReply;
       cloud.accounts.clear();
       cloud.requests = [];
       cloud.calls = [];
@@ -219,7 +218,9 @@ export async function startFakeDeusCloud(): Promise<FakeDeusCloud> {
     }
     if (req.method === "POST") {
       const body = JSON.parse((await readBody(req)) || "null");
-      if (cloud.startDelayMs) await new Promise((next) => setTimeout(next, cloud.startDelayMs));
+      const beforeReply = cloud.beforeSignInReply;
+      delete cloud.beforeSignInReply;
+      await beforeReply?.();
       if (!cloud.toolkits.includes(body?.toolkit) || typeof body.callback_url !== "string") {
         return json(res, 400, {
           error: "INVALID_REQUEST",

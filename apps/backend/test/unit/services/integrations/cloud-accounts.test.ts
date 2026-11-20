@@ -402,13 +402,11 @@ describe("an app that connects through the Deus account", () => {
     await deusAccount("alice");
     // Connected on another computer, so starting a sign-in answers "connected".
     cloud.connected("alice", "instagram", "instagram");
-    cloud.startDelayMs = 60;
     cloud.failing.add("DELETE");
-    const connecting = connectApp({ appId: "instagram" });
-    connecting.catch(() => {});
-    await new Promise((next) => setTimeout(next, 20));
-    uninstallApp("instagram");
-    await expect(connecting).rejects.toThrow(/cancelled/);
+    cloud.beforeSignInReply = () => {
+      uninstallApp("instagram");
+    };
+    await expect(connectApp({ appId: "instagram" })).rejects.toThrow(/cancelled/);
     await settle();
     expect(view("instagram").installed).toBe(false);
     // The disconnect that did not go through is still owed.
@@ -432,12 +430,9 @@ describe("an app that connects through the Deus account", () => {
   it("a sign-in that a pass lands first still answers connected", async () => {
     await deusAccount("alice");
     cloud.connected("alice", "instagram", "instagram");
-    cloud.startDelayMs = 60;
-    const connecting = connectApp({ appId: "instagram" });
-    await new Promise((next) => setTimeout(next, 20));
     // The pass finds the account connected on another computer and lands it.
-    await reconcileCloudAccounts();
-    expect(await connecting).toEqual({ status: "connected" });
+    cloud.beforeSignInReply = () => reconcileCloudAccounts();
+    expect(await connectApp({ appId: "instagram" })).toEqual({ status: "connected" });
     await settle();
     expect(view("instagram").readiness).toBe("ready");
     expect(listConnections("instagram").map((c) => c.status)).toEqual(["active"]);
