@@ -22,13 +22,18 @@ function log(msg) {
 }
 
 function run(cmd, args, cwd) {
-  execFileSync(cmd, args, { cwd, stdio: "inherit", env: process.env });
+  execFileSync(cmd, args, { cwd, stdio: "inherit", env });
 }
 
 if (!existsSync(pkgDir)) {
   log(`package not found at ${pkgDir}, skipping`);
   process.exit(0);
 }
+
+const env =
+  process.platform === "darwin"
+    ? (await import("../packages/device-use/src/engine/simbridge.ts")).simulatorEnv()
+    : process.env;
 
 // 1. The engine bundle
 if (force || !existsSync(join(pkgDir, "dist", "engine.js"))) {
@@ -45,7 +50,7 @@ if (force || !existsSync(join(pkgDir, "dist", "engine.js"))) {
   log("dist/engine.js already built, skipping");
 }
 
-// 2. Native helpers (macOS only, Xcode CLT required)
+// 2. Native helpers (macOS only, full Xcode required)
 const nativeDir = join(pkgDir, "native");
 const releaseBinary = join(nativeDir, ".build", "release", "simbridge");
 const universalBinary = join(nativeDir, ".build", "apple", "Products", "Release", "simbridge");
@@ -57,7 +62,7 @@ const binSiminspector = join(binDir, "siminspector.dylib");
 function hasRequiredMacArchitectures(binary) {
   if (process.platform !== "darwin") return true;
   try {
-    const archs = execFileSync("lipo", ["-archs", binary], { encoding: "utf8" });
+    const archs = execFileSync("lipo", ["-archs", binary], { encoding: "utf8", env });
     return archs.includes("arm64") && archs.includes("x86_64");
   } catch {
     return false;
@@ -84,7 +89,7 @@ function findSwiftBuildOutput() {
 
 function swiftAvailable() {
   try {
-    execFileSync("swift", ["--version"], { stdio: "ignore" });
+    execFileSync("swift", ["--version"], { stdio: "ignore", env });
     return true;
   } catch {
     return false;
@@ -95,7 +100,7 @@ function swiftAvailable() {
 // Swift compatibility libraries, so the x86_64 link only succeeds with full Xcode.
 function fullXcodeSelected() {
   try {
-    const developerDir = execFileSync("xcode-select", ["-p"], { encoding: "utf8" }).trim();
+    const developerDir = execFileSync("xcode-select", ["-p"], { encoding: "utf8", env });
     return developerDir.includes(".app/");
   } catch {
     return false;
@@ -103,8 +108,8 @@ function fullXcodeSelected() {
 }
 
 const XCODE_HINT =
-  "full Xcode is required to build the simulator helpers (Command Line Tools cannot link the x86_64 slice). " +
-  "Install Xcode, then: sudo xcode-select -s /Applications/Xcode.app";
+  "Full Xcode is required to build the simulator helpers (Command Line Tools cannot link the x86_64 slice). " +
+  "Install Xcode in /Applications or set DEVELOPER_DIR to its Contents/Developer directory";
 
 function helperReady(filePath) {
   return existsSync(filePath) && hasRequiredMacArchitectures(filePath);
@@ -114,9 +119,7 @@ const stagedHelpersReady = !force && helperReady(binSimbridge) && helperReady(bi
 
 if (force && process.platform === "darwin") {
   if (!swiftAvailable()) {
-    log(
-      "Swift not found (install Xcode CLT: xcode-select --install). Cannot force-refresh native helpers."
-    );
+    log(`Swift not found. ${XCODE_HINT}. Cannot force-refresh native helpers.`);
     process.exit(1);
   }
   if (!fullXcodeSelected()) {
@@ -138,9 +141,7 @@ if (force && process.platform === "darwin") {
       "not on macOS and staged simulator helpers are missing; packaged macOS builds must stage them on macOS"
     );
   } else if (!swiftAvailable()) {
-    log(
-      "Swift not found (install Xcode CLT: xcode-select --install). Using any existing staged helpers."
-    );
+    log(`Swift not found. ${XCODE_HINT}. Using any existing staged helpers.`);
   } else if (!fullXcodeSelected()) {
     log(
       `skipping native simulator helpers: ${XCODE_HINT}. The iOS simulator is unavailable until then.`
@@ -198,6 +199,7 @@ if (process.platform === "darwin" && existsSync(binSiminspector)) {
   try {
     execFileSync("install_name_tool", ["-id", "@rpath/siminspector.dylib", binSiminspector], {
       stdio: "ignore",
+      env,
     });
   } catch {
     log("could not normalize siminspector install name; packaged smoke will verify it");

@@ -40,7 +40,7 @@
     "postinstall": "bun run prepare:device-use",
     "native:node": "node scripts/runtime/rebuild-node-native.cjs",
     "electron:install": "node node_modules/electron/install.js",
-    "prepare:device-use": "node scripts/prepare-device-use.mjs",
+    "prepare:device-use": "bun scripts/prepare-device-use.mjs",
     "prepare:gh-cli": "node scripts/prepare-gh-cli.mjs",
     "prepare:agent-clis": "bun scripts/runtime/prepare-agent-clis.ts",
     "smoke:packaged-runtime": "node scripts/runtime/smoke/packaged-runtime.cjs",
