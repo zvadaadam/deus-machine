@@ -8,6 +8,7 @@ let handlersRegistered = false;
 let updaterStarted = false;
 let installRequested = false;
 let macArchive: UpdateInfo | undefined;
+let failedDownloadVersion: string | undefined;
 
 function isAutoUpdateSupported(): boolean {
   return !(process.platform === "linux" && !process.env.APPIMAGE);
@@ -33,6 +34,9 @@ function sendState(state: UpdateState): void {
 }
 
 function reportError(err: unknown): void {
+  if (currentState.stage !== "error") {
+    failedDownloadVersion = currentState.stage === "downloading" ? currentState.version : undefined;
+  }
   // An archive that failed to stage or install can be installed by hand.
   const version =
     macArchive?.version ??
@@ -134,7 +138,16 @@ export function setupAutoUpdater(mainWindow: BrowserWindow): void {
     // electron-updater has the ZIP first. Only the native updater knows when
     // macOS has verified its signature and staged it for restart.
     autoUpdater.on("update-downloaded", (info) => {
-      macArchive = info;
+      if (currentState.stage === "downloading" && currentState.version === info.version) {
+        macArchive = info;
+      } else if (
+        currentState.stage === "error" &&
+        !currentState.version &&
+        failedDownloadVersion === info.version
+      ) {
+        // setFeedURL can fail synchronously before the library announces this ZIP.
+        sendState({ ...currentState, version: info.version });
+      }
     });
     nativeAutoUpdater.on("update-downloaded", () => {
       if (macArchive) reportReady(macArchive);

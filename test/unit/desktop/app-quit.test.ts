@@ -124,7 +124,7 @@ beforeEach(async () => {
   });
 });
 
-async function startApp(platform: "linux" | "darwin" = "linux") {
+async function startApp(platform: "linux" | "darwin" = "linux", { archiveDownloaded = true } = {}) {
   Object.defineProperty(process, "platform", { value: platform });
   const { autoUpdater: nativeAutoUpdater } = await import("electron");
   nativeAutoUpdater.removeAllListeners();
@@ -138,7 +138,7 @@ async function startApp(platform: "linux" | "darwin" = "linux") {
   await import("../../../apps/desktop/main/index");
   await vi.waitFor(() => expect(mocks.handlers.has("update:install")).toBe(true));
   autoUpdater.emit("update-available", { version: "0.4.0" });
-  autoUpdater.emit("update-downloaded", { version: "0.4.0" });
+  if (archiveDownloaded) autoUpdater.emit("update-downloaded", { version: "0.4.0" });
   return { autoUpdater, nativeAutoUpdater };
 }
 
@@ -260,4 +260,28 @@ it("discards a Mac archive that failed verification and offers Restart after a s
   expect(mocks.handlers.get("update:getState")!()).toMatchObject({ stage: "downloading" });
   nativeAutoUpdater.emit("update-downloaded");
   expect(mocks.handlers.get("update:getState")!()).toEqual({ stage: "ready", ...info });
+});
+
+it("adds the archived version when setFeedURL fails before the Mac library announces the ZIP", async () => {
+  const { autoUpdater, nativeAutoUpdater } = await startApp("darwin", { archiveDownloaded: false });
+  const state = mocks.handlers.get("update:getState")!;
+  const failure = { stage: "error", error: "Cannot get the signing requirement" };
+  // MacUpdater forwards the native error synchronously.
+  autoUpdater.emit("error", new Error(failure.error));
+  expect(state()).toEqual(failure);
+  autoUpdater.emit("update-downloaded", { version: "0.4.0" });
+  expect(state()).toEqual({ ...failure, version: "0.4.0" });
+  nativeAutoUpdater.emit("update-downloaded");
+  mocks.handlers.get("update:install")!();
+  expect(mocks.install).not.toHaveBeenCalled();
+
+  autoUpdater.emit("checking-for-update");
+  autoUpdater.emit("error", new Error("Feed unreachable"));
+  autoUpdater.emit("update-downloaded", { version: "0.4.0" });
+  expect(state()).toEqual({ stage: "error", error: "Feed unreachable" });
+
+  autoUpdater.emit("update-available", { version: "0.5.0" });
+  autoUpdater.emit("error", new Error("Download interrupted"));
+  autoUpdater.emit("update-downloaded", { version: "0.4.0" });
+  expect(state()).toEqual({ stage: "error", error: "Download interrupted" });
 });
