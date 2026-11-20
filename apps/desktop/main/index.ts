@@ -20,8 +20,8 @@ import { spawnBackend, stopBackend } from "./backend-process";
 import {
   databaseRecoveryMessage,
   datedBackupPath,
-  moveDatabaseAside,
   OutdatedDatabaseError,
+  startFresh,
 } from "./database-recovery";
 import {
   APP_URL,
@@ -87,9 +87,10 @@ let mainWindow: BrowserWindow | null = null;
 
 // The window's origin: Vite's in dev, app://deus otherwise (the one the
 // backend was told to trust, backend-process.ts).
+const devRendererUrl = is.dev ? process.env.ELECTRON_RENDERER_URL : undefined;
 const windowOrigin = rendererOrigin({
   isDev: is.dev,
-  rendererUrl: process.env.ELECTRON_RENDERER_URL,
+  rendererUrl: devRendererUrl,
 });
 
 /** The window's own page: not a Browser-tab guest, nor a frame inside the window. */
@@ -289,8 +290,8 @@ async function createWindow(): Promise<void> {
   });
 
   // Dev: load Vite dev server. Prod: the built files, at app://deus.
-  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
-    mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
+  if (devRendererUrl) {
+    mainWindow.loadURL(devRendererUrl);
   } else {
     serveRenderer(join(__dirname, "../renderer"));
     mainWindow.loadURL(APP_URL);
@@ -378,7 +379,7 @@ app.whenReady().then(async () => {
       cancelId: 1,
       noLink: true,
       ...(backup
-        ? databaseRecoveryMessage(backup)
+        ? databaseRecoveryMessage(backup, devRendererUrl)
         : {
             message: "Failed to Start",
             detail: formatStartupFailureDetail(err),
@@ -389,9 +390,7 @@ app.whenReady().then(async () => {
       shell.showItemInFolder(getMainLogPath());
     } else if (response === 2 && database && backup) {
       try {
-        moveDatabaseAside(database, backup);
-        const image = process.platform === "linux" && process.env.APPIMAGE;
-        app.relaunch(image ? { execPath: image } : {});
+        startFresh(database, backup, devRendererUrl);
       } catch (error) {
         dialog.showErrorBox(
           "Couldn't start fresh",

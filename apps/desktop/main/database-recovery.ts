@@ -1,6 +1,8 @@
 import { linkSync, lstatSync, unlinkSync } from "node:fs";
 import { basename, join, parse } from "node:path";
+import { app } from "electron";
 import { PRELAUNCH_SCHEMA_MISMATCH } from "../../../shared/schema";
+import { logMainProcess } from "./startup-diagnostics";
 
 // Release the live database name last, after all its side files are out of the way.
 const suffixes = ["-wal", "-shm", "-journal", ""];
@@ -12,12 +14,29 @@ export class OutdatedDatabaseError extends Error {
   }
 }
 
-export function databaseRecoveryMessage(backup: string) {
+const devRestartHint =
+  "Run 'bun run dev' again to open Deus with no projects, workspaces, or chats.";
+
+export function databaseRecoveryMessage(backup: string, devRendererUrl?: string) {
+  const next = devRendererUrl
+    ? `and quits Deus. ${devRestartHint}`
+    : "and reopens Deus with no projects, workspaces, or chats.";
   return {
     message: "Deus can't read your saved data",
-    detail: `An older version saved this data. Start Fresh keeps it in ${basename(backup)} and reopens Deus with no projects, workspaces, or chats.`,
+    detail: `An older version saved this data. Start Fresh keeps it in ${basename(backup)} ${next}`,
     buttons: ["Show Logs", "Quit", "Start Fresh"],
   };
+}
+
+export function startFresh(database: string, backup: string, devRendererUrl?: string): void {
+  moveDatabaseAside(database, backup);
+  if (devRendererUrl) {
+    // electron-vite stops its renderer server when Electron quits.
+    logMainProcess(`[main] Saved the database to ${backup}. ${devRestartHint}`);
+    return;
+  }
+  const image = process.platform === "linux" && process.env.APPIMAGE;
+  app.relaunch(image ? { execPath: image } : {});
 }
 
 export function datedBackupPath(databasePath: string): string {

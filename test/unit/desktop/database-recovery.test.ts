@@ -1,8 +1,18 @@
 import { EventEmitter, once } from "node:events";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, relative } from "node:path";
 import { PassThrough } from "node:stream";
+import { app } from "electron";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { PRELAUNCH_SCHEMA_MISMATCH } from "../../../shared/schema";
 import {
@@ -10,8 +20,10 @@ import {
   datedBackupPath,
   moveDatabaseAside,
   OutdatedDatabaseError,
+  startFresh,
 } from "../../../apps/desktop/main/database-recovery";
 import { spawnBackend } from "../../../apps/desktop/main/backend-process";
+import { logMainProcess } from "../../../apps/desktop/main/startup-diagnostics";
 
 const { spawn } = vi.hoisted(() => ({ spawn: vi.fn() }));
 vi.mock("node:fs", async (original) => {
@@ -23,13 +35,15 @@ vi.mock("child_process", async (original) => ({
   spawn,
 }));
 vi.mock("electron", () => ({
-  app: { isPackaged: false, getPath: () => process.env.DEUS_USER_DATA_DIR },
+  app: { isPackaged: false, getPath: () => process.env.DEUS_USER_DATA_DIR, relaunch: vi.fn() },
 }));
 vi.mock("../../../apps/desktop/main/deus-cloud-provision", () => ({}));
+vi.mock("../../../apps/desktop/main/startup-diagnostics", () => ({ logMainProcess: vi.fn() }));
 
 let directory: string;
 let database: string;
 beforeEach(() => {
+  vi.clearAllMocks();
   directory = mkdtempSync(join(tmpdir(), "deus-recovery-"));
   database = join(directory, "chats.db");
   vi.stubEnv("DEUS_USER_DATA_DIR", directory);
@@ -69,12 +83,6 @@ it("offers recovery only for the failed child's own whole stderr line and uses i
       "An older version saved this data. Start Fresh keeps it in chats-2026-11-20.db and reopens Deus with no projects, workspaces, or chats.",
     buttons: ["Show Logs", "Quit", "Start Fresh"],
   });
-  const options = spawn.mock.lastCall![2];
-  vi.stubEnv("DATABASE_PATH", relative(options.cwd, database));
-  expect(await failedChild("", PRELAUNCH_SCHEMA_MISMATCH, 1)).toHaveProperty(
-    "databasePath",
-    database
-  );
   expect(await failedChild(PRELAUNCH_SCHEMA_MISMATCH + "\n", "database is locked", 1)).toEqual(
     new Error(ordinary)
   );
@@ -85,6 +93,85 @@ it("offers recovery only for the failed child's own whole stderr line and uses i
     OutdatedDatabaseError
   );
 });
+
+it.each(["", " "])(
+  "resolves a relative database path from the child's working directory (padding %j)",
+  async (padding) => {
+    await failedChild("", "", 1);
+    const path = relative(spawn.mock.lastCall![2].cwd, database);
+    vi.stubEnv("DATABASE_PATH", padding + path + padding);
+    const mismatch = await failedChild("", PRELAUNCH_SCHEMA_MISMATCH, 1);
+    const childDatabase = spawn.mock.lastCall![2].env.DATABASE_PATH;
+    expect(childDatabase).toBe(database);
+    expect(mismatch).toHaveProperty("databasePath", childDatabase);
+  }
+);
+
+it("opens and sets aside the same file when the configured path has a symlink followed by '..'", async () => {
+  const other = join(directory, "other");
+  mkdirSync(join(other, "state"), { recursive: true });
+  symlinkSync(join(other, "state"), join(directory, "link"), "dir");
+  writeFileSync(join(other, "chats.db"), "other chats");
+  writeFileSync(database, "my chats");
+  const configured = `${directory}/link/../chats.db`; // join would remove link/..
+  expect(readFileSync(configured, "utf8")).toBe("other chats");
+  vi.stubEnv("DATABASE_PATH", configured);
+  const mismatch = await failedChild("", PRELAUNCH_SCHEMA_MISMATCH, 1);
+  if (!(mismatch instanceof OutdatedDatabaseError)) throw mismatch;
+  const childDatabase = spawn.mock.lastCall![2].env.DATABASE_PATH;
+  expect(childDatabase).toBe(database);
+  expect(mismatch.databasePath).toBe(childDatabase);
+  const backup = datedBackupPath(mismatch.databasePath);
+  moveDatabaseAside(mismatch.databasePath, backup);
+  expect(readFileSync(backup, "utf8")).toBe("my chats");
+  expect(readFileSync(configured, "utf8")).toBe("other chats");
+});
+
+it.each([":memory:", "   "])(
+  "keeps SQLite's temporary database %j off disk and offers no file recovery",
+  async (name) => {
+    vi.stubEnv("DATABASE_PATH", name);
+    const failure = await failedChild("", PRELAUNCH_SCHEMA_MISMATCH, 1);
+    expect(spawn.mock.lastCall![2].env.DATABASE_PATH).toBe(":memory:");
+    expect(failure).not.toBeInstanceOf(OutdatedDatabaseError);
+  }
+);
+
+it("sets the database aside and tells the developer how to restart the Vite server", () => {
+  const url = "http://localhost:5173";
+  const backup = datedBackupPath(database);
+  writeFileSync(database, "old chats");
+  const hint = "Run 'bun run dev' again to open Deus with no projects, workspaces, or chats.";
+  expect(databaseRecoveryMessage(backup, url).detail).toContain(
+    `${basename(backup)} and quits Deus. ${hint}`
+  );
+  startFresh(database, backup, url);
+  expect(readdirSync(directory)).toEqual([basename(backup)]);
+  expect(readFileSync(backup, "utf8")).toBe("old chats");
+  expect(logMainProcess).toHaveBeenCalledWith(expect.stringContaining(hint));
+  expect(app.relaunch).not.toHaveBeenCalled();
+});
+
+it.each([
+  { platform: "darwin", options: {} },
+  { platform: "linux", options: { execPath: "/fixture/Deus.AppImage" } },
+])(
+  "relaunches the built renderer on $platform after setting the database aside",
+  ({ platform, options }) => {
+    const original = Object.getOwnPropertyDescriptor(process, "platform")!;
+    try {
+      Object.defineProperty(process, "platform", { value: platform });
+      vi.stubEnv("APPIMAGE", "/fixture/Deus.AppImage");
+      writeFileSync(database, "old chats");
+      const backup = datedBackupPath(database);
+      startFresh(database, backup);
+      expect(readFileSync(backup, "utf8")).toBe("old chats");
+      expect(app.relaunch).toHaveBeenCalledExactlyOnceWith(options);
+    } finally {
+      Object.defineProperty(process, "platform", original);
+    }
+  }
+);
 
 it.each([
   { sideFiles: ["-wal", "-shm", "-journal"] },

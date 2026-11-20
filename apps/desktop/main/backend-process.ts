@@ -187,12 +187,14 @@ export async function spawnBackend(hooks: BackendSpawnHooks = {}): Promise<{ por
   // instead of the real userData one (whose schema may not match the branch).
   // A PACKAGED app never honors it: stray shell env must not redirect the
   // real database (same doctrine as BACKEND_CHILD_ENV_DENYLIST).
+  const override = !app.isPackaged && process.env.DATABASE_PATH;
+  // The dev SQLite driver trims filenames. A blank or :memory: filename has no file to recover.
+  const filename = override ? override.trim() : join(app.getPath("userData"), DEUS_DB_FILENAME);
   const dbPath =
-    (!app.isPackaged && process.env.DATABASE_PATH) ||
-    join(app.getPath("userData"), DEUS_DB_FILENAME);
+    filename && filename !== ":memory:" ? resolvePath(runtime.backendCwd, filename) : undefined;
 
   const sharedEnv: NodeJS.ProcessEnv = {
-    DATABASE_PATH: dbPath,
+    DATABASE_PATH: dbPath ?? ":memory:",
     PATH: buildRuntimePath(runtime),
     ...(runtime.resourcesPath
       ? { DEUS_PACKAGED: "1", DEUS_RESOURCES_PATH: runtime.resourcesPath }
@@ -317,11 +319,7 @@ export async function spawnBackend(hooks: BackendSpawnHooks = {}): Promise<{ por
         exitedBeforeStart = error;
         // exit can precede the last stderr lines. An inherited pipe still has the startup deadline.
         child.once("close", () =>
-          fail(
-            outdatedDatabase && code
-              ? new OutdatedDatabaseError(resolvePath(runtime.backendCwd, dbPath))
-              : error
-          )
+          fail(outdatedDatabase && code && dbPath ? new OutdatedDatabaseError(dbPath) : error)
         );
         return;
       }
