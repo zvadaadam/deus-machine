@@ -1,8 +1,7 @@
 import { useEffect } from "react";
 import { toast } from "sonner";
+import { releaseUrl } from "../releaseUrl";
 import type { UseAutoUpdateReturn } from "./useAutoUpdate";
-
-const RELEASES_URL = "https://github.com/zvadaadam/deus-machine/releases";
 
 export function useUpdateToast({ state, install }: UseAutoUpdateReturn) {
   const version = state.stage === "ready" ? state.version : undefined;
@@ -20,7 +19,7 @@ export function useUpdateToast({ state, install }: UseAutoUpdateReturn) {
       },
       cancel: {
         label: "See changes",
-        onClick: () => window.open(RELEASES_URL, "_blank"),
+        onClick: () => window.open(releaseUrl(), "_blank"),
       },
     });
     return () => {
@@ -36,8 +35,7 @@ export function useUpdateToast({ state, install }: UseAutoUpdateReturn) {
       closeButton: true,
       action: {
         label: "Download",
-        onClick: () =>
-          window.open(`${RELEASES_URL}/tag/v${encodeURIComponent(failedVersion)}`, "_blank"),
+        onClick: () => window.open(releaseUrl(failedVersion), "_blank"),
       },
     });
     return () => {

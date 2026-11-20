@@ -23,6 +23,7 @@ import { useUIStore } from "@/shared/stores/uiStore";
 import { setAnalyticsEnabled } from "@/platform/analytics";
 import { capabilities } from "@/platform";
 import { useUpdateContext } from "@/features/updates";
+import { releaseUrl } from "@/features/updates/releaseUrl";
 import type { GeneralSectionProps } from "./types";
 
 export function GeneralSection({ settings, saveSetting, theme, setTheme }: GeneralSectionProps) {
@@ -224,7 +225,24 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
               .with({ stage: "error" }, (state) => (
                 <div className="text-destructive flex items-center gap-2 text-sm">
                   <AlertCircle className="size-3.5" />
-                  <span>Update failed: {state.error}</span>
+                  <span title={state.error}>
+                    {state.version ? (
+                      <>
+                        Update v{state.version} couldn't be installed.{" "}
+                        <a
+                          className="underline"
+                          href={releaseUrl(state.version)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Download it from GitHub
+                        </a>
+                        .
+                      </>
+                    ) : (
+                      "Deus couldn't check for updates."
+                    )}
+                  </span>
                 </div>
               ))
               .with({ stage: "idle" }, { stage: "checking" }, () => null)
