@@ -13,11 +13,16 @@
  */
 
 import { app, BrowserWindow, ipcMain, session, shell, type IpcMainInvokeEvent } from "electron";
-import { basename, join } from "path";
+import { join } from "path";
 import { homedir } from "os";
 import { is } from "@electron-toolkit/utils";
 import { spawnBackend, stopBackend } from "./backend-process";
-import { datedBackupPath, moveDatabaseAside, OutdatedDatabaseError } from "./database-recovery";
+import {
+  databaseRecoveryMessage,
+  datedBackupPath,
+  moveDatabaseAside,
+  OutdatedDatabaseError,
+} from "./database-recovery";
 import {
   APP_URL,
   originOf,
@@ -369,14 +374,16 @@ app.whenReady().then(async () => {
     const backup = database && datedBackupPath(database);
     const { response } = await dialog.showMessageBox({
       type: "error",
-      buttons: backup ? ["Show Logs", "OK", "Start Fresh"] : ["Show Logs", "OK"],
       defaultId: 1,
       cancelId: 1,
       noLink: true,
-      message: "Failed to Start",
-      detail: backup
-        ? `Start Fresh keeps your old chats in ${basename(backup)} and reopens Deus with an empty chat history.`
-        : formatStartupFailureDetail(err),
+      ...(backup
+        ? databaseRecoveryMessage(backup)
+        : {
+            message: "Failed to Start",
+            detail: formatStartupFailureDetail(err),
+            buttons: ["Show Logs", "OK"],
+          }),
     });
     if (response === 0) {
       shell.showItemInFolder(getMainLogPath());
@@ -387,7 +394,7 @@ app.whenReady().then(async () => {
         app.relaunch(image ? { execPath: image } : {});
       } catch (error) {
         dialog.showErrorBox(
-          "Couldn’t start fresh",
+          "Couldn't start fresh",
           error instanceof Error ? error.message : String(error)
         );
       }

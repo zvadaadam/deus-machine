@@ -6,6 +6,7 @@ import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { PRELAUNCH_SCHEMA_MISMATCH } from "../../../shared/schema";
 import {
+  databaseRecoveryMessage,
   datedBackupPath,
   moveDatabaseAside,
   OutdatedDatabaseError,
@@ -62,6 +63,12 @@ it("offers recovery only for the failed child's own whole stderr line and uses i
   const mismatch = await failedChild("", PRELAUNCH_SCHEMA_MISMATCH, 1);
   expect(mismatch).toBeInstanceOf(OutdatedDatabaseError);
   expect(mismatch).toHaveProperty("databasePath", database);
+  expect(databaseRecoveryMessage(join(directory, "chats-2026-11-20.db"))).toEqual({
+    message: "Deus can't read your saved data",
+    detail:
+      "An older version saved this data. Start Fresh keeps it in chats-2026-11-20.db and reopens Deus with no projects, workspaces, or chats.",
+    buttons: ["Show Logs", "Quit", "Start Fresh"],
+  });
   const options = spawn.mock.lastCall![2];
   vi.stubEnv("DATABASE_PATH", relative(options.cwd, database));
   expect(await failedChild("", PRELAUNCH_SCHEMA_MISMATCH, 1)).toHaveProperty(

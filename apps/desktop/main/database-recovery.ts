@@ -1,5 +1,5 @@
 import { linkSync, lstatSync, unlinkSync } from "node:fs";
-import { join, parse } from "node:path";
+import { basename, join, parse } from "node:path";
 import { PRELAUNCH_SCHEMA_MISMATCH } from "../../../shared/schema";
 
 // Release the live database name last, after all its side files are out of the way.
@@ -10,6 +10,14 @@ export class OutdatedDatabaseError extends Error {
   constructor(readonly databasePath: string) {
     super(PRELAUNCH_SCHEMA_MISMATCH);
   }
+}
+
+export function databaseRecoveryMessage(backup: string) {
+  return {
+    message: "Deus can't read your saved data",
+    detail: `An older version saved this data. Start Fresh keeps it in ${basename(backup)} and reopens Deus with no projects, workspaces, or chats.`,
+    buttons: ["Show Logs", "Quit", "Start Fresh"],
+  };
 }
 
 export function datedBackupPath(databasePath: string): string {
