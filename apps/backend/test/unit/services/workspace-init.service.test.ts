@@ -78,7 +78,7 @@ beforeEach(() => {
   mocks.saved.mockReset();
   mocks.db = new Database(":memory:");
   mocks.db.exec(
-    "CREATE TABLE workspaces (id TEXT PRIMARY KEY, slug TEXT, git_branch TEXT, init_stage TEXT, init_fetch_issue TEXT, setup_status TEXT DEFAULT 'none', error_message TEXT, error_detail TEXT, state TEXT DEFAULT 'initializing', current_session_id TEXT); CREATE TABLE sessions (id TEXT, workspace_id TEXT, status TEXT, updated_at TEXT)"
+    "CREATE TABLE workspaces (id TEXT PRIMARY KEY, slug TEXT, git_branch TEXT, init_stage TEXT, init_fetch_issue TEXT, setup_status TEXT DEFAULT 'none', error_message TEXT, error_detail TEXT, state TEXT DEFAULT 'initializing', current_session_id TEXT, first_session_id TEXT, started_by TEXT); CREATE TABLE sessions (id TEXT, workspace_id TEXT, status TEXT, started_by TEXT, updated_at TEXT)"
   );
   mocks.db.prepare("INSERT INTO workspaces (id) VALUES (?)").run(workspaceId);
 });
@@ -106,6 +106,17 @@ describe("local project environment journey", () => {
     );
     expect(git("status", "--short")).toBe("");
     expect((await readLocalProjectEnvironment(directory)).source).toBe("repository");
+  });
+  it("opens the first chat under the id minted with the workspace, started by whoever started it", async () => {
+    const startedBy = JSON.stringify({ kind: "session", sessionId: "lead" });
+    mocks.db
+      .prepare("UPDATE workspaces SET first_session_id = 'chat-1', started_by = ? WHERE id = ?")
+      .run(startedBy, workspaceId);
+    await initialize();
+    expect(row()).toMatchObject({ state: "ready", current_session_id: "chat-1" });
+    expect(mocks.db.prepare("SELECT id, started_by FROM sessions").all()).toEqual([
+      { id: "chat-1", started_by: startedBy },
+    ]);
   });
   it("uses saved defaults only when this checkout has no file, never another branch's file", async () => {
     const directory = await initialize();

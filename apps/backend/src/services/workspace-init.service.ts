@@ -275,13 +275,17 @@ export async function removeWorktree(
   await runGit(["branch", "-D", branchName], { cwd }).catch(() => {});
 }
 
+/** The first chat, under the id minted with the workspace, started by whoever started it. */
 function openFirstSession(workspaceId: string): void {
   const db = getDatabase();
-  const sessionId = uuidv7();
+  const row = db
+    .prepare("SELECT first_session_id, started_by FROM workspaces WHERE id = ?")
+    .get(workspaceId) as { first_session_id: string | null; started_by: string | null } | undefined;
+  const sessionId = row?.first_session_id ?? uuidv7();
   db.transaction(() => {
     db.prepare(
-      "INSERT INTO sessions (id, workspace_id, status, updated_at) VALUES (?, ?, 'idle', datetime('now'))"
-    ).run(sessionId, workspaceId);
+      "INSERT INTO sessions (id, workspace_id, status, started_by, updated_at) VALUES (?, ?, 'idle', ?, datetime('now'))"
+    ).run(sessionId, workspaceId, row?.started_by ?? null);
     db.prepare("UPDATE workspaces SET state = 'ready', current_session_id = ? WHERE id = ?").run(
       sessionId,
       workspaceId
