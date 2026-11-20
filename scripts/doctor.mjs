@@ -119,7 +119,8 @@ if (process.platform === "darwin") {
     "Full Xcode (iOS simulator, local macOS packaging)",
     fullXcode,
     developerDir || "not found",
-    "Install Xcode in /Applications or set DEVELOPER_DIR to its Contents/Developer directory."
+    "Install Xcode in /Applications or set DEVELOPER_DIR to its Contents/Developer directory. " +
+      "Without it the simulator helpers are not built and `bun run build:all` / `package:mac` fail."
   );
 
   const identities = out("security", ["find-identity", "-v", "-p", "codesigning"]) ?? "";
