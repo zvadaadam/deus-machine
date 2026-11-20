@@ -26,6 +26,23 @@ describe("toolCardName", () => {
     );
   });
 
+  it("is a Deus tool's own name under the names older builds stored", () => {
+    // Claude, server `deus`, with and without `mcp`; Codex without `mcp`.
+    expect(
+      toolCardName({
+        toolName: "mcp__deus__recording_stop",
+        mcp: { server: "deus", tool: "recording_stop" },
+      })
+    ).toBe("recording_stop");
+    expect(toolCardName({ toolName: "mcp__deus__recording_stop" })).toBe("recording_stop");
+    expect(toolCardName({ toolName: "deus_chat_tools.BrowserScreenshot" })).toBe(
+      "BrowserScreenshot"
+    );
+    // Any other server's tool keeps its qualified name.
+    expect(toolCardName({ toolName: "mcp__docs__Edit" })).toBe("mcp__docs__Edit");
+    expect(toolCardName({ toolName: "mcp__deusx__Edit" })).toBe("mcp__deusx__Edit");
+  });
+
   it("is the qualified name for another server's tool", () => {
     expect(toolCardName({ toolName: "docs.Edit", mcp: { server: "docs", tool: "Edit" } })).toBe(
       "docs.Edit"

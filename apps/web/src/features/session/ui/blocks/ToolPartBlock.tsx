@@ -1,6 +1,6 @@
 import { createElement, memo, useMemo } from "react";
 import { match, P } from "ts-pattern";
-import { toolCardName } from "@shared/mcp-servers";
+import { DEUS_TOOLS_SERVER, toolCardName } from "@shared/mcp-servers";
 import type { ToolPart, ToolResultContent, ToolStateCompleted } from "@shared/protocol-types";
 import type { ToolUseBlock, ToolResultBlock } from "../tools/types";
 import { toolRegistry } from "../tools/ToolRegistry";
@@ -94,10 +94,14 @@ function toToolUseBlock(part: ToolPart): ToolUseBlock {
     name: getToolRendererName(part),
     // Codex hands an MCP tool its input as `{ arguments }` (its call is
     // `<server>.<tool>`): a card reads the arguments themselves, as for Claude.
-    input:
-      part.mcp && part.toolName === `${part.mcp.server}.${part.mcp.tool}`
-        ? coerceToolInput(input.arguments)
-        : input,
+    // An older build's Codex part of a Deus tool has no `mcp`: its name says the same.
+    input: (
+      part.mcp
+        ? part.toolName === `${part.mcp.server}.${part.mcp.tool}`
+        : part.toolName.startsWith(`${DEUS_TOOLS_SERVER}.`)
+    )
+      ? coerceToolInput(input.arguments)
+      : input,
   };
 }
 

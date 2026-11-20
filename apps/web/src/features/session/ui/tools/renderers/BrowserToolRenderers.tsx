@@ -13,6 +13,7 @@
  * - Flow: BrowserWaitFor
  */
 
+import { screenshotWords } from "@/features/session/lib/screenshotWords";
 import {
   MousePointerClick,
   Keyboard,
@@ -365,12 +366,7 @@ export function BrowserConsoleMessagesToolRenderer({ toolUse, toolResult }: Tool
 
 export function BrowserScreenshotToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const image = toolResult ? extractImage(toolResult.content) : null;
-  // Claude Code (2.1.327) adds where it saved the picture: the card shows the tool's own words.
-  const text = toolResult
-    ? extractText(toolResult.content)
-        .replace(/\[Image: source: [^\]]*\]\s*/g, "")
-        .trim()
-    : "";
+  const text = toolResult ? extractText(screenshotWords(toolResult.content, image !== null)) : "";
 
   return (
     <BaseToolRenderer

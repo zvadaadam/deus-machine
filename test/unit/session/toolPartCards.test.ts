@@ -120,6 +120,25 @@ describe("an MCP tool's card", () => {
     }
   });
 
+  it("draws a Deus tool stored under an older build's name with its Deus card", () => {
+    const [claude] = toToolUseBlocks(
+      part({
+        toolName: "mcp__deus__BrowserScreenshot",
+        kind: "other",
+        mcp: { server: "deus", tool: "BrowserScreenshot" },
+      } as Partial<ToolPart>)
+    );
+    expect(claude).toMatchObject({ name: "BrowserScreenshot" });
+    const [codex] = toToolUseBlocks(
+      part({ toolName: "deus_chat_tools.recording_stop", kind: "other" } as Partial<ToolPart>)
+    );
+    expect(codex).toMatchObject({ name: "recording_stop" });
+    const [outside] = toToolUseBlocks(
+      part({ toolName: "mcp__docs__Edit", kind: "other" } as Partial<ToolPart>)
+    );
+    expect(outside).toMatchObject({ name: "mcp__docs__Edit" });
+  });
+
   it("keeps another server's tool named like a built-in off the built-in's card", () => {
     for (const toolName of ["mcp__docs__Edit", "docs.Edit"]) {
       const [card] = toToolUseBlocks(mcp("docs", "Edit", toolName));

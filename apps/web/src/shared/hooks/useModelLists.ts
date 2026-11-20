@@ -19,6 +19,18 @@ export function useModelLists(chat: {
   cloud: boolean;
   workspaceId?: string | null;
 }): readonly HarnessModels[] {
+  return useModelListsState(chat).lists;
+}
+
+/**
+ * The lists, and whether a harness's is live: this computer's CLI answered
+ * for it (the platform's, for a cloud chat). Until then it is the catalog,
+ * which a chat's choices must not be fitted to for good.
+ */
+export function useModelListsState(chat: { cloud: boolean; workspaceId?: string | null }): {
+  lists: readonly HarnessModels[];
+  live: (harness: string) => boolean;
+} {
   const workspaceId = chat.workspaceId ?? null;
   const local = useQuery({
     queryKey: [...queryKeys.settings.agentModels, workspaceId],
@@ -32,5 +44,11 @@ export function useModelLists(chat: {
   const cloud = useCloudModels({ enabled: chat.cloud });
 
   const lists = chat.cloud ? cloud.data?.lists : local.data?.lists;
-  return lists?.length ? lists : CATALOG_MODEL_LISTS;
+  return {
+    lists: lists?.length ? lists : CATALOG_MODEL_LISTS,
+    live: (harness) =>
+      chat.cloud
+        ? Boolean(cloud.data?.lists?.length)
+        : local.data?.lists.find((list) => list.harness === harness)?.source === "live",
+  };
 }

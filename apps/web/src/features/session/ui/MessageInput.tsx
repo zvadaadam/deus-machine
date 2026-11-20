@@ -57,14 +57,14 @@ import { serializeInspectElement } from "../lib/parseInspectTags";
 import {
   DEFAULT_MODEL,
   DEFAULT_THINKING_LEVEL,
-  fitThinkingLevel,
+  composerThinking,
   getAgentHarnessForModel,
   getModelId,
   modelThinkingLevels as thinkingLevelsOf,
   type AgentHarness,
   type ThinkingLevel,
 } from "@/shared/agents";
-import { useModelLists } from "@/shared/hooks/useModelLists";
+import { useModelListsState } from "@/shared/hooks/useModelLists";
 import { ModelPicker } from "./ModelPicker";
 import { PlanModeToggle } from "./PlanModeToggle";
 import { ContextTokenIndicator } from "./ContextTokenIndicator";
@@ -264,7 +264,10 @@ export function MessageInput({
 
   // The models and levels this chat chooses from: the platform's for a cloud
   // workspace, this computer's CLIs' otherwise.
-  const modelLists = useModelLists({ cloud: workspaceKind === "cloud", workspaceId });
+  const { lists: modelLists, live: listIsLive } = useModelListsState({
+    cloud: workspaceKind === "cloud",
+    workspaceId,
+  });
   const levelsFor = (value: string) =>
     thinkingLevelsOf(modelLists, getAgentHarnessForModel(value), getModelId(value));
 
@@ -380,13 +383,15 @@ export function MessageInput({
   };
 
   const modelThinkingLevels = levelsFor(model);
-  // A level the model lacks runs as the nearest it has: that is the one shown,
-  // and the chat keeps it, so what the picker shows is what a send carries.
-  const shownThinking = fitThinkingLevel(thinkingLevel, modelThinkingLevels, defaultThinking);
+  // A level the model lacks runs as the nearest it has: once the model list is
+  // live, that is the one shown, and the chat keeps it, so what the picker shows
+  // is what a send carries. Against the catalog alone the chat keeps its own.
+  const live = listIsLive(agentHarness);
+  const shownThinking = composerThinking(thinkingLevel, modelThinkingLevels, defaultThinking, live);
   const { setThinkingLevel } = composer;
   useEffect(() => {
-    if (shownThinking !== thinkingLevel) setThinkingLevel(shownThinking);
-  }, [shownThinking, thinkingLevel, setThinkingLevel]);
+    if (live && shownThinking !== thinkingLevel) setThinkingLevel(shownThinking);
+  }, [live, shownThinking, thinkingLevel, setThinkingLevel]);
 
   // Suggest setup only in an empty, idle chat with a known missing recipe.
   const setupLocation = workspaceKind ? locationOf({ kind: workspaceKind }) : null;
