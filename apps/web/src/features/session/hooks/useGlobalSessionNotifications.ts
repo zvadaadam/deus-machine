@@ -35,11 +35,9 @@ import { track } from "@/platform/analytics";
 import { unreadActions } from "@/features/session/store/unreadStore";
 import { useWorkspaceStore } from "@/features/workspace/store";
 import { markStartedIn } from "@/features/workspace/store/workspaceStartStore";
-import {
-  useWorkspaceLayoutStore,
-  workspaceLayoutActions,
-} from "@/features/workspace/store/workspaceLayoutStore";
+import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { show as showWindow } from "@/platform/native/window";
+import { openChat } from "@/features/session/lib/openChat";
 import type { SessionStatus } from "@shared/types/session";
 import type { RepoGroup, SetupStatus, Workspace, WorkspaceState } from "@shared/types/workspace";
 
@@ -64,15 +62,7 @@ function formatBody(repoName: string, ws: Workspace): string {
 function navigateToWorkspace(workspaceId: string, sessionId: string): void {
   unreadActions.markRead(sessionId);
   showWindow();
-  useWorkspaceStore.getState().selectWorkspace(workspaceId);
-  // Only update chat tabs if workspace has existing layout state.
-  // Stale notification clicks (workspace archived) skip this to avoid orphaned entries.
-  const existing = useWorkspaceLayoutStore.getState().layouts[workspaceId];
-  if (!existing || existing.activeChatTabSessionId === sessionId) return;
-  const sessionIds = existing.chatTabSessionIds.includes(sessionId)
-    ? existing.chatTabSessionIds
-    : [...existing.chatTabSessionIds, sessionId];
-  workspaceLayoutActions.setChatTabState(workspaceId, sessionIds, sessionId);
+  openChat(workspaceId, sessionId);
 }
 
 /**

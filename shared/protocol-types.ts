@@ -91,6 +91,8 @@ export type {
   TimelineEntry,
   // ---- wire ----
   WireEventEnvelope,
+  // ---- who sent a user message ----
+  ReportedOrigin,
 } from "@zvada/agent-server/protocol";
 
 /**
