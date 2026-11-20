@@ -174,18 +174,20 @@ export const sessionComposerActions = {
     ),
 
   /** Switch model. `levels` are the ones the new model offers: the chat keeps
-   *  its level when the model has it, else takes the nearest one below. */
+   *  its level when the model has it, else takes the nearest one below. None
+   *  (the model's list is not live yet) keeps the level as it is: it is fitted
+   *  once the list is in (`composerThinking`). */
   setModel: (
     sid: string,
     model: string,
-    levels: readonly ThinkingLevel[],
+    levels: readonly ThinkingLevel[] | undefined,
     fallbackThinking: ThinkingLevel
   ) =>
     mutate(
       sid,
       (c) => {
         c.model = model;
-        c.thinkingLevel = fitThinkingLevel(c.thinkingLevel, levels, fallbackThinking);
+        if (levels) c.thinkingLevel = fitThinkingLevel(c.thinkingLevel, levels, fallbackThinking);
       },
       "setModel"
     ),

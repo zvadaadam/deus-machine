@@ -1,49 +1,32 @@
 // agent-server/agents/deus-tools/index.ts
-// Composes workspace + browser + recording + automation tools into the Deus MCP
-// server. Agents drive a simulator with the agent-device CLI, which Deus ships
-// and the turn's instructions brief them on, not with tools of Deus's own.
+// Composes workspace + browser + recording + automation tools into one source
+// the engine gives every harness (`hostTools`): Claude runs it in process,
+// Codex reaches it at the engine's loopback. Agents drive a simulator with the
+// agent-device CLI, which Deus ships and the turn's instructions brief them on,
+// not with tools of Deus's own.
 
-import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { trackedSessions } from "../../session-tracker";
+import type { HostToolSource } from "@zvada/agent-server/core";
+import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
 import { createWorkspaceTools } from "./workspace";
 import { createBrowserTools } from "./browser";
 import { createAutomationTools } from "./automations";
 import { createRecordingTools } from "./recording";
 
-/**
- * The Deus MCP server for one chat. Claude runs it in process (`deus`, the
- * registry's `sdkMcpServers`); Codex reaches it over HTTP (`serveDeusTools`).
- */
-export function createDeusMCPServer(sessionId: string) {
-  return createSdkMcpServer({
-    name: "deus",
-    version: "1.0.0",
-    tools: [
-      ...createWorkspaceTools(sessionId),
-      ...createBrowserTools(sessionId),
-      ...createAutomationTools(sessionId),
-      ...createRecordingTools(sessionId),
-    ],
-  });
-}
-
-/**
- * Answer one MCP request for a chat's Deus tools, over Streamable HTTP. Each
- * POST gets its own server and stateless transport (tools hold no state of
- * their own), which nothing references once it has answered. With no session
- * there is no stream to GET and nothing to DELETE: 405, as MCP asks of such a
- * server. Only a Codex chat is served, one that has run a turn since this
- * process started, whether or not a turn is running now.
- */
-export async function serveDeusTools(sessionId: string, request: Request): Promise<Response> {
-  if (request.method !== "POST") {
-    return new Response(null, { status: 405, headers: { Allow: "POST" } });
-  }
-  if (trackedSessions.get(sessionId)?.harness !== "codex-app-server") {
-    return new Response("Unknown chat", { status: 404 });
-  }
-  const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true });
-  await createDeusMCPServer(sessionId).instance.connect(transport);
-  return transport.handleRequest(request);
+/** The Deus tools of one chat. */
+export function deusTools(sessionId: string): HostToolSource {
+  const tools = [
+    ...createWorkspaceTools(sessionId),
+    ...createBrowserTools(sessionId),
+    ...createAutomationTools(sessionId),
+    ...createRecordingTools(sessionId),
+  ];
+  return {
+    name: DEUS_TOOLS_SERVER,
+    tools,
+    call: async (name, args) => {
+      const found = tools.find((each) => each.name === name);
+      if (!found) throw new Error(`No Deus tool ${name}`);
+      return found.run(args);
+    },
+  };
 }

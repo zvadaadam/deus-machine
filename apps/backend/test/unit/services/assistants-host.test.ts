@@ -573,7 +573,10 @@ describe("continuing a chat: the model, thinking and permissions", () => {
 
   it("thinks at the person's default level, read as the settings store it", () => {
     expect(turnSettings("claude-code", [], "low").thinkingLevel).toBe("low");
-    expect(turnSettings("claude-code", [], "nonsense").thinkingLevel).toBe("high");
+    // Levels are an open vocabulary: one this build does not know is the
+    // engine's to fit to the model's or report not applied; a blank is none.
+    expect(turnSettings("claude-code", [], "minimal").thinkingLevel).toBe("minimal");
+    expect(turnSettings("claude-code", [], " ").thinkingLevel).toBe("high");
   });
 
   it("is what a send carries, with no permission mode and no turn id of the caller's", async () => {

@@ -4,8 +4,10 @@ import {
   DEFAULT_MODEL,
   defaultModelId,
   findModel,
+  composerThinking,
   fitThinkingLevel,
   modelLabel,
+  thinkingLevelLabel,
   modelThinkingLevels,
   parseModelValue,
   pickerModels,
@@ -135,6 +137,27 @@ describe("the thinking level after a model change", () => {
     expect(fitThinkingLevel("high", [], "medium")).toBe("off");
     expect(fitThinkingLevel("off", ["low", "medium", "high"], "medium")).toBe("medium");
   });
+
+  it("starts from the user's default when the model has no match for a level only another model lists", () => {
+    // A model's own level (`turbo`) leaves for one without it: never `off`.
+    expect(fitThinkingLevel("turbo", ["low", "medium", "high"], "high")).toBe("high");
+    expect(fitThinkingLevel("turbo", ["low", "medium"], "high")).toBe("medium");
+    expect(fitThinkingLevel("turbo", ["turbo", "low"], "high")).toBe("turbo");
+    expect(fitThinkingLevel("turbo", ["fast", "deep"], "high")).toBe("fast");
+  });
+});
+
+describe("a thinking level's label", () => {
+  it("is Deus's word for a level it knows, else the level's own name", () => {
+    expect(thinkingLevelLabel("xhigh")).toBe("Extra high");
+    expect(thinkingLevelLabel("turbo")).toBe("Turbo");
+  });
+
+  it("reads an object's own names as levels like any other", () => {
+    expect(thinkingLevelLabel("constructor")).toBe("Constructor");
+    expect(thinkingLevelLabel("__proto__")).toBe("__proto__");
+    expect(thinkingLevelLabel("toString")).toBe("ToString");
+  });
 });
 
 describe("a picker value", () => {
@@ -192,5 +215,17 @@ describe("what a model picker shows", () => {
 
   it("marks nothing for a value that names no harness", () => {
     expect(modelPickerView(lists, "sonnet").selected).toBeUndefined();
+  });
+});
+
+describe("the level a chat shows and sends", () => {
+  it("keeps a seeded level against the catalog, and fits it only once the live list is in", () => {
+    const catalog = ["low", "medium", "high", "xhigh", "max"];
+    // Provisional (no live levels): the chat's own level, as seeded.
+    expect(composerThinking("ultra", undefined, "high")).toBe("ultra");
+    // The live list offers it: still the chat's own.
+    expect(composerThinking("ultra", [...catalog, "ultra"], "high")).toBe("ultra");
+    // The live list does not: the nearest the model has.
+    expect(composerThinking("ultra", catalog, "high")).toBe("max");
   });
 });

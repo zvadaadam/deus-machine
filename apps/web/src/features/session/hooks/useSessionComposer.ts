@@ -34,7 +34,8 @@ export interface SessionComposerActions {
   setDraft: (draft: string) => void;
   appendDraft: (text: string) => void;
   /** `levels`: the thinking levels the model offers (useModelLists). */
-  setModel: (model: string, levels: readonly ThinkingLevel[]) => void;
+  /** `levels`: the new model's, to fit the level to; none while its list is not live. */
+  setModel: (model: string, levels: readonly ThinkingLevel[] | undefined) => void;
   setThinkingLevel: (level: string) => void;
   togglePlanMode: () => void;
   addPastedText: (content: string) => void;

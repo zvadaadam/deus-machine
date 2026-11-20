@@ -19,6 +19,7 @@
  * into the session mutation + clears store content on success.
  */
 
+import { useEffect } from "react";
 import type { SessionStatus } from "@/shared/types";
 import { agentConfigOf } from "@/features/workspace/lib/reach";
 import { locationOf } from "@/features/sidebar/lib/location";
@@ -56,14 +57,14 @@ import { serializeInspectElement } from "../lib/parseInspectTags";
 import {
   DEFAULT_MODEL,
   DEFAULT_THINKING_LEVEL,
-  fitThinkingLevel,
+  composerThinking,
   getAgentHarnessForModel,
   getModelId,
   modelThinkingLevels as thinkingLevelsOf,
   type AgentHarness,
   type ThinkingLevel,
 } from "@/shared/agents";
-import { useModelLists } from "@/shared/hooks/useModelLists";
+import { useModelListsState } from "@/shared/hooks/useModelLists";
 import { ModelPicker } from "./ModelPicker";
 import { PlanModeToggle } from "./PlanModeToggle";
 import { ContextTokenIndicator } from "./ContextTokenIndicator";
@@ -263,9 +264,16 @@ export function MessageInput({
 
   // The models and levels this chat chooses from: the platform's for a cloud
   // workspace, this computer's CLIs' otherwise.
-  const modelLists = useModelLists({ cloud: workspaceKind === "cloud", workspaceId });
+  const { lists: modelLists, live: listIsLive } = useModelListsState({
+    cloud: workspaceKind === "cloud",
+    workspaceId,
+  });
   const levelsFor = (value: string) =>
     thinkingLevelsOf(modelLists, getAgentHarnessForModel(value), getModelId(value));
+  // The one rule for fitting a chat's level: only to a model whose list is live,
+  // never to the catalog alone, when a model is shown and when one is chosen.
+  const fittingLevels = (value: string) =>
+    listIsLive(getAgentHarnessForModel(value)) ? levelsFor(value) : undefined;
 
   // Build combined message content from all staged sources.
   // See the big block-comment in the previous revision for ordering rationale
@@ -379,6 +387,16 @@ export function MessageInput({
   };
 
   const modelThinkingLevels = levelsFor(model);
+  // A level the model lacks runs as the nearest it has: once the model list is
+  // live, that is the one shown, and the chat keeps it, so what the picker shows
+  // is what a send carries. Against the catalog alone the chat keeps its own.
+  const fitTo = fittingLevels(model);
+  const shownThinking = composerThinking(thinkingLevel, fitTo, defaultThinking);
+  const live = fitTo !== undefined;
+  const { setThinkingLevel } = composer;
+  useEffect(() => {
+    if (live && shownThinking !== thinkingLevel) setThinkingLevel(shownThinking);
+  }, [live, shownThinking, thinkingLevel, setThinkingLevel]);
 
   // Suggest setup only in an empty, idle chat with a known missing recipe.
   const setupLocation = workspaceKind ? locationOf({ kind: workspaceKind }) : null;
@@ -516,11 +534,10 @@ export function MessageInput({
             <ModelPicker
               model={model}
               lists={modelLists}
-              // A level the model lacks runs as the nearest one below: show that one.
-              thinkingLevel={fitThinkingLevel(thinkingLevel, modelThinkingLevels, defaultThinking)}
+              thinkingLevel={shownThinking}
               thinkingLevels={modelThinkingLevels}
               hasMessages={hasMessages}
-              onModelChange={(value) => composer.setModel(value, levelsFor(value))}
+              onModelChange={(value) => composer.setModel(value, fittingLevels(value))}
               onThinkingLevelChange={composer.setThinkingLevel}
               onOpenNewTab={onOpenNewTab}
             />

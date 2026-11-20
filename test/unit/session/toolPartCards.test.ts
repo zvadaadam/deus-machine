@@ -105,3 +105,52 @@ describe("a card's line counts", () => {
     expect(computeDiffStats("a\n", "a\n\n")).toEqual({ added: 1, removed: 0 });
   });
 });
+
+describe("an MCP tool's card", () => {
+  const mcp = (server: string, tool: string, toolName: string) =>
+    part({ toolName, kind: "other", mcp: { server, tool } } as Partial<ToolPart>);
+
+  it("is Deus's own card for a Deus tool, on both harnesses' spelling", () => {
+    for (const toolName of [
+      "mcp__deus_chat_tools__BrowserScreenshot",
+      "deus_chat_tools.BrowserScreenshot",
+    ]) {
+      const [card] = toToolUseBlocks(mcp("deus_chat_tools", "BrowserScreenshot", toolName));
+      expect(card).toMatchObject({ name: "BrowserScreenshot" });
+    }
+  });
+
+  it("draws a Deus tool stored under an older build's name with its Deus card", () => {
+    const [claude] = toToolUseBlocks(
+      part({
+        toolName: "mcp__deus__BrowserScreenshot",
+        kind: "other",
+        mcp: { server: "deus", tool: "BrowserScreenshot" },
+      } as Partial<ToolPart>)
+    );
+    expect(claude).toMatchObject({ name: "BrowserScreenshot" });
+    const [codex] = toToolUseBlocks(
+      part({ toolName: "deus_chat_tools.recording_stop", kind: "other" } as Partial<ToolPart>)
+    );
+    expect(codex).toMatchObject({ name: "recording_stop" });
+    const [personal] = toToolUseBlocks(
+      part({
+        toolName: "deus.Edit",
+        kind: "other",
+        mcp: { server: "deus", tool: "Edit" },
+      } as Partial<ToolPart>)
+    );
+    expect(personal).toMatchObject({ name: "deus.Edit" });
+    const [outside] = toToolUseBlocks(
+      part({ toolName: "mcp__docs__Edit", kind: "other" } as Partial<ToolPart>)
+    );
+    expect(outside).toMatchObject({ name: "mcp__docs__Edit" });
+  });
+
+  it("keeps another server's tool named like a built-in off the built-in's card", () => {
+    for (const toolName of ["mcp__docs__Edit", "docs.Edit"]) {
+      const [card] = toToolUseBlocks(mcp("docs", "Edit", toolName));
+      expect(card).toMatchObject({ name: toolName });
+    }
+  });
+});

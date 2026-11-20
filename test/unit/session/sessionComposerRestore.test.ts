@@ -27,7 +27,10 @@ vi.mock("@/features/workspace/api/workspace.queries", () => ({
 vi.mock("@/features/settings/api", () => ({ useDefaultThinkingLevel: () => "high" }));
 vi.mock("@/shared/hooks/useModelLists", async () => {
   const { CATALOG_MODEL_LISTS } = await import("@shared/models");
-  return { useModelLists: () => CATALOG_MODEL_LISTS };
+  return {
+    useModelLists: () => CATALOG_MODEL_LISTS,
+    useModelListsState: () => ({ lists: CATALOG_MODEL_LISTS, live: () => true }),
+  };
 });
 vi.mock("@/features/session/hooks", () => ({ useSessionActions: () => ({}) }));
 vi.mock("@/features/session/ui/MessageInput", () => ({

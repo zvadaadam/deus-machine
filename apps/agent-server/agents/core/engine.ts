@@ -1,11 +1,10 @@
 // agent-server/agents/core/engine.ts
 // The one construction site for the embedded @zvada/agent-server/core engine:
-// lazy registry + runtime singletons, and deus's claude embed-tier options
-// (in-process deus MCP suite, tool policy, checkpoint hooks).
+// lazy registry + runtime singletons, the Deus tools every harness gets
+// (`hostTools`), and deus's Claude embed-tier options (tool policy, checkpoint hooks).
 
 import { AgentRuntime, createAgentRegistry, type AgentRegistry } from "@zvada/agent-server/core";
-import type { SdkMcpServers } from "@zvada/agent-server/core";
-import { createDeusMCPServer } from "../deus-tools";
+import { deusTools } from "../deus-tools";
 import { trackedSessions } from "../../session-tracker";
 import { createCheckpoint } from "./checkpoint";
 import { decideToolUse } from "./tool-policy";
@@ -30,9 +29,8 @@ export function getRegistry(): AgentRegistry {
     // cached downloads), never whatever binary the host happens to have.
     // Operator escape hatches ($CLAUDE_CLI_PATH / $CODEX_CLI_PATH) still win.
     provision: { mode: "pinned" },
+    hostTools: ({ sessionId }) => deusTools(sessionId),
     claudeCode: {
-      sdkMcpServers: ({ sessionId }) =>
-        ({ deus: createDeusMCPServer(sessionId) }) as unknown as SdkMcpServers,
       // Sub-agent text must reach the wire. Claude's own Cron* tools are off by
       // agent-server (CLAUDE_CODE_DISABLE_CRON): scheduling is Automations'
       // (the deus MCP automation_update tool).

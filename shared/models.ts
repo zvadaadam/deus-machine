@@ -135,15 +135,50 @@ export function modelThinkingLevels(
  * The level a chat runs after its model changes: its own if the model offers
  * it, else the nearest one below. `off` is what a model with no thinking
  * control leaves behind, not a choice, so a model that has one starts from
- * `fallback`, the user's default.
+ * `fallback`, the user's default; so does a level the model has no match for
+ * (one only another model lists), fitted in turn to the model's own levels.
+ * `off` only for a model with no thinking control.
  */
 export function fitThinkingLevel(
   current: ThinkingLevel,
   levels: readonly ThinkingLevel[],
   fallback: ThinkingLevel
 ): ThinkingLevel {
-  return clampThinkingLevel(current === "off" ? fallback : current, levels) ?? "off";
+  const own = current === "off" ? undefined : clampThinkingLevel(current, levels);
+  return own ?? clampThinkingLevel(fallback, levels) ?? levels[0] ?? "off";
 }
+
+/**
+ * The level a chat shows and sends. `levels`: the model's, when its list is
+ * live; none while it is provisional (the catalog the engine was built with,
+ * before this computer's CLIs answered), when the chat keeps the level it
+ * asked for: the live list may well offer it. Once the list is live, the
+ * level fitted to the model's, which the chat then keeps.
+ */
+export function composerThinking(
+  requested: ThinkingLevel,
+  levels: readonly ThinkingLevel[] | undefined,
+  fallback: ThinkingLevel
+): ThinkingLevel {
+  return levels ? fitThinkingLevel(requested, levels, fallback) : requested;
+}
+
+/** How a level is shown: Deus's word for one it knows, else the level's own name, capitalised. */
+export function thinkingLevelLabel(level: ThinkingLevel): string {
+  return LEVEL_LABELS.get(level) ?? level.charAt(0).toUpperCase() + level.slice(1);
+}
+
+// A Map, not an object: the level is an open vocabulary, and `constructor` or
+// `__proto__` must read as levels like any other, not as the object's own.
+const LEVEL_LABELS = new Map<string, string>([
+  ["off", "Off"],
+  ["low", "Low"],
+  ["medium", "Medium"],
+  ["high", "High"],
+  ["xhigh", "Extra high"],
+  ["max", "Max"],
+  ["ultra", "Ultra"],
+]);
 
 /**
  * The model a new chat on `harness` starts on: the first of Deus's preferences

@@ -13,6 +13,7 @@
  * - Flow: BrowserWaitFor
  */
 
+import { screenshotWords } from "@/features/session/lib/screenshotWords";
 import {
   MousePointerClick,
   Keyboard,
@@ -365,7 +366,7 @@ export function BrowserConsoleMessagesToolRenderer({ toolUse, toolResult }: Tool
 
 export function BrowserScreenshotToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const image = toolResult ? extractImage(toolResult.content) : null;
-  const text = toolResult ? extractText(toolResult.content) : "";
+  const text = toolResult ? extractText(screenshotWords(toolResult.content, image !== null)) : "";
 
   return (
     <BaseToolRenderer

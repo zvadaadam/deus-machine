@@ -8,7 +8,6 @@
 // - Snapshot filtering: interactive-only, compact, depth-limited, CSS-scoped
 // - Wait modes: text, networkIdle, elementVisible, elementGone
 
-import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { writeFileSync, mkdirSync, existsSync, readFileSync, unlinkSync } from "fs";
 import { join } from "path";
@@ -21,7 +20,7 @@ import {
   getSnapshot,
   type ElementBox,
 } from "./agent-browser-client";
-import { tool } from "./sdk-tool";
+import { type DeusTool, tool } from "./tool";
 
 // ============================================================================
 // Snapshot file-based fallback constants
@@ -166,7 +165,7 @@ function formatSnapshotResponse(
  * Creates the browser automation tool definitions for a given session.
  * Screen recordings watch the page's own input, so these tools report nothing.
  */
-export function createBrowserTools(sessionId: string): SdkMcpToolDefinition<any>[] {
+export function createBrowserTools(sessionId: string): DeusTool[] {
   return [
     tool(
       "BrowserSnapshot",

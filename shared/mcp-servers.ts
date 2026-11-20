@@ -4,13 +4,13 @@
 // own Codex configuration, and the engine refuses such a turn ("rename one of
 // them"). So on Codex every server of Deus's is `deus_<name>`: an app's id
 // never has an underscore, and a person's own server is not named that way.
-// Claude's keep the app's id: its tool names (`mcp__<server>__<tool>`) are
-// what its transcripts and cards already carry.
+// Claude's keep the app's id. Cards read a tool's server and name from its
+// part (`mcp`), never from the harness's spelling.
 
 import type { AgentHarness } from "./enums";
 
-/** Names Claude's engine and harness keep for their own servers. */
-const RESERVED = new Set(["deus", "computer"]);
+/** Names an app's server may not take on Claude: the harness's own, and `deus`, which cards read as Deus's own tools. */
+const RESERVED = new Set(["computer", "deus"]);
 
 /** The name a turn on `harness` gives an installed app's server. */
 export function appServerName(appId: string, harness: AgentHarness): string {
@@ -20,22 +20,36 @@ export function appServerName(appId: string, harness: AgentHarness): string {
 }
 
 /**
- * Deus's own tools on Codex, which reaches them over this computer's
- * loopback (Claude runs them in process, as `deus`). Not `deus`, which a
- * person may have named Deus's remote-access server in their own config, and
- * no `deus_<id>` an app can have: an app id has no underscore.
+ * Deus's own tools, on every harness (the engine's `hostTools`). Not `deus`,
+ * which a person may have named Deus's remote-access server in their own
+ * Codex or Claude config, and no `deus_<id>` an app can have: an app id has no
+ * underscore.
  */
 export const DEUS_TOOLS_SERVER = "deus_chat_tools";
 
 /**
- * A tool's name as a card knows it, whichever harness called it: Claude
- * names an MCP tool `mcp__<server>__<tool>`, Codex names Deus's own
- * `deus_chat_tools.<tool>`.
+ * A tool's name as a card knows it, whichever harness called it: a Deus
+ * tool's own name, from the part (Claude spells the call
+ * `mcp__<server>__<tool>`, Codex `<server>.<tool>`), else the harness's name.
+ * Another server's tool keeps its qualified name, so one named like a
+ * built-in (a docs server's `Edit`) gets the default card, not the built-in's.
  */
-export function bareToolName(toolName: string): string {
-  if (toolName.startsWith(`${DEUS_TOOLS_SERVER}.`)) {
-    return toolName.slice(DEUS_TOOLS_SERVER.length + 1);
-  }
-  const parts = toolName.split("__");
-  return toolName.startsWith("mcp__") && parts.length >= 3 ? parts.slice(2).join("__") : toolName;
+export function toolCardName(part: {
+  toolName: string;
+  mcp?: { server: string; tool: string };
+}): string {
+  const prefix = DEUS_TOOL_PREFIXES.find((each) => part.toolName.startsWith(each));
+  if (part.mcp && (part.mcp.server === DEUS_TOOLS_SERVER || prefix === OLD_CLAUDE_PREFIX))
+    return part.mcp.tool;
+  if (part.mcp) return part.toolName;
+  return prefix ? part.toolName.slice(prefix.length) : part.toolName;
 }
+
+// Names older builds stored for Deus's own tools: Claude's `deus` server (its spelling
+// only, never a person's own Codex server named `deus`), and Codex parts without `mcp`.
+const OLD_CLAUDE_PREFIX = "mcp__deus__";
+const DEUS_TOOL_PREFIXES = [
+  OLD_CLAUDE_PREFIX,
+  `mcp__${DEUS_TOOLS_SERVER}__`,
+  `${DEUS_TOOLS_SERVER}.`,
+];

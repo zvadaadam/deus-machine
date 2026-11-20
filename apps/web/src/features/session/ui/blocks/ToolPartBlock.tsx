@@ -1,6 +1,6 @@
 import { createElement, memo, useMemo } from "react";
 import { match, P } from "ts-pattern";
-import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
+import { DEUS_TOOLS_SERVER, toolCardName } from "@shared/mcp-servers";
 import type { ToolPart, ToolResultContent, ToolStateCompleted } from "@shared/protocol-types";
 import type { ToolUseBlock, ToolResultBlock } from "../tools/types";
 import { toolRegistry } from "../tools/ToolRegistry";
@@ -92,16 +92,21 @@ function toToolUseBlock(part: ToolPart): ToolUseBlock {
     type: "tool_use",
     id: part.toolCallId,
     name: getToolRendererName(part),
-    // Codex hands an MCP tool its input as `{ arguments }`: a Deus tool's
-    // card reads the arguments themselves, as it does for Claude.
-    input: part.toolName.startsWith(`${DEUS_TOOLS_SERVER}.`)
+    // Codex hands an MCP tool its input as `{ arguments }` (its call is
+    // `<server>.<tool>`): a card reads the arguments themselves, as for Claude.
+    // An older build's Codex part of a Deus tool has no `mcp`: its name says the same.
+    input: (
+      part.mcp
+        ? part.toolName === `${part.mcp.server}.${part.mcp.tool}`
+        : part.toolName.startsWith(`${DEUS_TOOLS_SERVER}.`)
+    )
       ? coerceToolInput(input.arguments)
       : input,
   };
 }
 
 function getToolRendererName(part: ToolPart): string {
-  return part.kind === "task" || part.subagent ? "Agent" : part.toolName;
+  return part.kind === "task" || part.subagent ? "Agent" : toolCardName(part);
 }
 
 /**

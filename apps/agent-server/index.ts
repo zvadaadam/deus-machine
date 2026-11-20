@@ -1,8 +1,8 @@
 // agent-server/index.ts
 // The engine, in the backend's process: the standard @zvada/agent-server wire
-// on an in-process channel, with deus's seams around it — the in-process deus
-// MCP tools (answered by the backend through `host-link`), the tool policy,
-// the checkpoint hooks and session titles.
+// on an in-process channel, with deus's seams around it — the Deus tools
+// (answered by the backend through `host-link`), the tool policy, the
+// checkpoint hooks and session titles.
 
 import { AgentServer } from "@zvada/agent-server/server";
 import {
@@ -19,7 +19,6 @@ import { observeLifecycleEvent, observeTurnStart, trackedSessions } from "./sess
 import { maybeFetchTitle } from "./title-watch";
 
 export type { DeusHost, SessionTitle } from "./host-link";
-export { serveDeusTools } from "./agents/deus-tools";
 
 let server: AgentServer | null = null;
 

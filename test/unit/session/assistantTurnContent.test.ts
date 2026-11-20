@@ -35,11 +35,20 @@ it("groups activity across message boundaries without hiding any answer text", (
 it("keeps failed tools, questions, plans, screenshots and media visible when activity is collapsed", () => {
   const visible = [
     tool("failed", { state: { status: "failed", error: "Command failed" } }),
-    tool("question", { toolName: "mcp__deus__AskUserQuestion" }),
+    tool("question", { toolName: "AskUserQuestion" }),
     tool("plan", { toolName: "ExitPlanMode" }),
     tool("mode", { kind: "switch_mode" }),
     tool("screenshot", { toolName: "BrowserScreenshot" }),
-    tool("recording", { toolName: "mcp__browser__recording_stop" }),
+    tool("recording", {
+      toolName: "deus_chat_tools.recording_stop",
+      mcp: { server: "deus_chat_tools", tool: "recording_stop" },
+    }),
+    // Stored by older builds: Claude's `deus` server, and a Codex part without `mcp`.
+    tool("old-claude-recording", {
+      toolName: "mcp__deus__recording_stop",
+      mcp: { server: "deus", tool: "recording_stop" },
+    }),
+    tool("old-codex-recording", { toolName: "deus_chat_tools.recording_stop" }),
     tool("image-output", {
       state: {
         status: "completed",

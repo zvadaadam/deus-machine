@@ -114,7 +114,8 @@ try {
     [
       "Claude Code",
       "Codex",
-      ...["Opus 5.5", "Sonnet 5.5", "Fable 5.1", "Haiku 4.5", "Sonnet 5", "Opus 5", "Fable 5"],
+      ...["Opus 5.5", "Fable 5.2", "Sonnet 5.5", "Haiku 5.5", "Fable 5.1", "Haiku 4.5", "Sonnet 5"],
+      ...["Opus 5", "Fable 5"],
       ...["Opus 4.8", "Opus 4.7", "Opus 4.6", "Sonnet 4.6"],
     ]
   );
@@ -177,7 +178,7 @@ try {
   const focused = (text) =>
     chat.page.waitForFunction((want) => document.activeElement?.textContent === want, text);
   await focused("Claude Code");
-  for (const next of ["Codex", "Opus 5.5", "Sonnet 5.5"]) {
+  for (const next of ["Codex", "Opus 5.5", "Fable 5.2", "Sonnet 5.5"]) {
     await chat.page.keyboard.press("ArrowDown");
     await focused(next);
   }

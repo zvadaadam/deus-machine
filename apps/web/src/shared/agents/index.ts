@@ -22,11 +22,13 @@ export {
   DEFAULT_MODEL,
   DEFAULT_THINKING_LEVEL,
   PICKER_HARNESSES,
+  composerThinking,
   fitThinkingLevel,
   modelLabel,
   modelThinkingLevels,
   modelValue,
   pickerModels,
+  thinkingLevelLabel,
   type HarnessModels,
 } from "@shared/models";
 export type { AgentHarness } from "@shared/enums";
