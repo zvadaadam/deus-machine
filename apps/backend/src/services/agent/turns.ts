@@ -8,7 +8,7 @@
 // fail must reject, which is what tells the sender to take the bubble back.
 
 import { WireRequestError } from "@zvada/agent-server/client";
-import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
+import { WIRE_ERROR_CODES, type Origin } from "@zvada/agent-server/protocol";
 import type * as api from "@shared/api/sessions";
 import type { ParsedInputOf } from "@shared/api/op";
 import { uuidv7 } from "@shared/lib/uuid";
@@ -40,7 +40,9 @@ import { refreshWorkspaceGithubToken } from "../cloud-workspace-init.service";
 
 /** Start a turn in a session. Answers `api.sendMessage`; rejects when the turn is not admitted. */
 export async function sendMessage(
-  input: ParsedInputOf<typeof api.sendMessage>
+  input: ParsedInputOf<typeof api.sendMessage>,
+  /** Who sent it when not the person: the operator's host passes it; the operation's input never carries one. */
+  origin?: Origin
 ): Promise<{ turnId: string }> {
   const { sessionId, content, model, agentHarness } = input;
   const permissionMode = readPermissionMode(input.permissionMode);
@@ -278,6 +280,7 @@ export async function sendMessage(
         thinkingLevel: readThinkingLevel(input.thinkingLevel),
         permissionMode,
         resume: existingAgentSessionId || undefined,
+        ...(origin ? { origin } : {}),
       });
     } catch (err) {
       if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {

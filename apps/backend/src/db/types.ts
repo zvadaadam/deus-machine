@@ -169,6 +169,8 @@ export interface MessageRow {
   model: string | null;
   sent_at: string | null;
   parent_tool_call_id: string | null;
+  /** The engine's origin of a user message not the person's, as JSON. */
+  origin: string | null;
 }
 
 export interface PartRow {
@@ -197,7 +199,9 @@ export interface CompactionRow {
 }
 
 /** MessageRow enriched with the engine Part snapshots from the parts table. */
-export interface MessageRowWithParts extends MessageRow {
+export interface MessageRowWithParts extends Omit<MessageRow, "origin"> {
+  /** Who sent a user message when not the person (`ReportedOrigin`). */
+  origin: import("@zvada/agent-server/protocol").ReportedOrigin | null;
   parts: Array<
     import("@shared/protocol-types").Part | import("@shared/protocol-types").UnknownPart
   >;

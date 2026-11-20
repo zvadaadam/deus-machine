@@ -37,6 +37,8 @@ const describeWithDb = canUseDatabase ? describe : describe.skip;
 
 import { SCHEMA_SQL } from "@shared/schema";
 import { getTurn } from "../../../src/db/turns";
+import { attachParts } from "../../../src/db/queries";
+import type { MessageRow } from "../../../src/db/types";
 
 const { mockGetDatabase } = vi.hoisted(() => ({ mockGetDatabase: vi.fn() }));
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
@@ -192,6 +194,29 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
 
       const row = db.prepare(`SELECT role, turn_id FROM messages WHERE id = 'user-1'`).get();
       expect(row).toEqual({ role: "user", turn_id: TURN });
+    });
+
+    it("keeps a user message's origin as the engine echoed it, and reads it back", () => {
+      const origin = { kind: "session" as const, sessionId: "lead", name: "deus/voyager:1" };
+      writeMessage(started({ role: "user", outputIndex: 0, messageId: "from-agent", origin }));
+      writeMessage(started({ role: "user", outputIndex: 0, messageId: "from-person" }));
+      writeMessage(started({ messageId: "reply", origin }));
+      const stored = (id: string) =>
+        (
+          db.prepare(`SELECT origin FROM messages WHERE id = ?`).get(id) as {
+            origin: string | null;
+          }
+        ).origin;
+      expect(JSON.parse(stored("from-agent") as string)).toEqual(origin);
+      expect(stored("from-person")).toBeNull();
+      // Only a user message carries a sender: the reducer keeps none on the agent's.
+      expect(stored("reply")).toBeNull();
+      const rows = db
+        .prepare(`SELECT * FROM messages WHERE id IN ('from-agent', 'from-person')`)
+        .all();
+      const read = attachParts(db, rows as MessageRow[]);
+      expect(read.find((m) => m.id === "from-agent")?.origin).toEqual(origin);
+      expect(read.find((m) => m.id === "from-person")?.origin).toBeNull();
     });
 
     it("is idempotent on replay: parts, seq and turn accounting all survive", () => {

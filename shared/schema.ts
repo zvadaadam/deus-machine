@@ -27,7 +27,11 @@ export const PRELAUNCH_SCHEMA_RESET_HINT =
   "This local database was created with an older pre-launch schema. Reset it by deleting deus.db (or point DATABASE_PATH at a fresh file), then restart Deus.";
 
 /** Columns ALTERed into an existing database that lacks them (each is in SCHEMA_SQL too). */
-export const ADDITIVE_COLUMNS: Record<string, Record<string, string>> = {};
+export const ADDITIVE_COLUMNS: Record<string, Record<string, string>> = {
+  workspaces: { started_by: "TEXT", first_session_id: "TEXT" },
+  sessions: { started_by: "TEXT" },
+  messages: { origin: "TEXT" },
+};
 
 export const SCHEMA_SQL = `
   -- Repositories tracked by the app (id = UUID7, embeds created_at). root_path is
@@ -79,6 +83,10 @@ export const SCHEMA_SQL = `
     last_inline_mint_at INTEGER,
     -- The cloud organization a cloud workspace runs in (NULL for local, or not yet known).
     organization_id TEXT,
+    -- Who started it, as the engine's origin (JSON); NULL is the person.
+    started_by TEXT,
+    -- Its first chat's id, minted when the workspace is created, until that chat's row exists.
+    first_session_id TEXT,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -99,6 +107,8 @@ export const SCHEMA_SQL = `
     context_token_count INTEGER NOT NULL DEFAULT 0,
     context_used_percent REAL NOT NULL DEFAULT 0,
     is_hidden INTEGER NOT NULL DEFAULT 0,
+    -- Who started it, as the engine's origin (JSON); NULL is the person.
+    started_by TEXT,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -118,7 +128,9 @@ export const SCHEMA_SQL = `
     turn_id TEXT,
     model TEXT,
     sent_at TEXT,
-    parent_tool_call_id TEXT
+    parent_tool_call_id TEXT,
+    -- Who sent a user message when not the person, as the engine echoed it (JSON).
+    origin TEXT
   );
 
   -- One record per engine turn, including turns with no assistant output.

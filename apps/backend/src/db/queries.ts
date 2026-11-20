@@ -5,7 +5,11 @@
  * Route handlers call these functions instead of inline SQL.
  */
 import type Database from "better-sqlite3";
-import { decodePart } from "@zvada/agent-server/protocol";
+import {
+  ReportedOriginSchema,
+  decodePart,
+  type ReportedOrigin,
+} from "@zvada/agent-server/protocol";
 import type { Part, UnknownPart } from "@shared/protocol-types";
 import type {
   RepositoryRow,
@@ -318,6 +322,17 @@ function decodeStoredPart(row: PartRow): Part | UnknownPart | undefined {
  * knowledge, stored as `parts.seq`) — the array order IS the order, and the
  * query above already sorts by it.
  */
+/** A stored origin, read back; one that does not parse is none (the person). */
+function readOrigin(stored: string | null): ReportedOrigin | null {
+  if (!stored) return null;
+  try {
+    const parsed = ReportedOriginSchema.safeParse(JSON.parse(stored));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 export function attachParts(db: Database.Database, messages: MessageRow[]): MessageRowWithParts[] {
   if (messages.length === 0) return [];
 
@@ -339,6 +354,7 @@ export function attachParts(db: Database.Database, messages: MessageRow[]): Mess
 
   return messages.map((msg) => ({
     ...msg,
+    origin: readOrigin(msg.origin),
     parts: partsByMessageId.get(msg.id) ?? [],
   }));
 }
