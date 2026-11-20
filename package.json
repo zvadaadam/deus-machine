@@ -50,7 +50,7 @@
     "test:app": "node node_modules/vitest/vitest.mjs run --config test/vitest.config.ts",
     "test:desktop-runtime": "node node_modules/vitest/vitest.mjs run --config test/vitest.config.ts unit/desktop unit/runtime unit/shared/cli-path.test.ts unit/shared/runtime.test.ts",
     "test:app:watch": "node node_modules/vitest/vitest.mjs --config test/vitest.config.ts",
-    "test:e2e": "node test/e2e/e2e-flow.test.cjs",
+    "test:e2e": "bun run test:e2e:workspace-start",
     "test:backend": "bun run native:node && node node_modules/vitest/vitest.mjs run --config apps/backend/vitest.config.ts",
     "test:bun": "bun test apps/backend/test/unit/lib/sqlite-parity apps/backend/test/unit/services/pty-parity",
     "test:backend:watch": "node node_modules/vitest/vitest.mjs --config apps/backend/vitest.config.ts",
