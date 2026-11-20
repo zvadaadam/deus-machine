@@ -29,7 +29,7 @@ async function performArchive(workspaceId: string, check?: () => void): Promise<
 
   check?.();
   db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
-  const stopped = stopWorkspaceSetup(workspaceId, "archived");
+  const stopped = stopWorkspaceSetup(workspaceId);
   autoProgressStatus(workspaceId, "done", { force: true });
   await stopped;
 }
@@ -76,11 +76,8 @@ export function unarchiveWorkspace(workspaceId: string): Promise<void> {
     const db = getDatabase();
     const workspace = getWorkspaceRaw(db, workspaceId);
     if (!workspace) throw new NotFoundError("Workspace not found");
-    if (
-      workspace.state === "archived" &&
-      workspace.kind === "cloud" &&
-      workspace.provider_workspace_id
-    ) {
+    if (workspace.state !== "archived") return;
+    if (workspace.kind === "cloud" && workspace.provider_workspace_id) {
       // Open the projection before waking: a running/provisioning event may
       // arrive before Resume returns, and the driver ignores archived rows.
       db.prepare("UPDATE workspaces SET state = 'ready' WHERE id = ?").run(workspaceId);
@@ -98,13 +95,14 @@ export function unarchiveWorkspace(workspaceId: string): Promise<void> {
         invalidate(["workspaces"], {});
         throw err;
       }
-      // Wake and its session channel own the current runtime projection.
-      return;
+    } else {
+      // With no chat it was archived before it finished starting.
+      db.prepare(
+        "UPDATE workspaces SET state = CASE WHEN current_session_id IS NULL THEN 'error' ELSE 'ready' END WHERE id = ?"
+      ).run(workspaceId);
     }
-    // A workspace with no chat never finished starting: it was archived as a
-    // failure, and comes back as one (to be retried or deleted), not as ready.
-    db.prepare(
-      "UPDATE workspaces SET state = CASE WHEN current_session_id IS NULL THEN 'error' ELSE 'ready' END WHERE id = ?"
-    ).run(workspaceId);
+    if (getWorkspaceRaw(db, workspaceId)?.status === "done") {
+      autoProgressStatus(workspaceId, "in-progress", { force: true });
+    }
   });
 }

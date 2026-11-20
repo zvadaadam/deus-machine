@@ -242,7 +242,7 @@ progress channel: the desktop, the web app and a phone all follow it.
   file, or a failure's reason, last log lines and current retry command. Completed
   and unconfigured setups add nothing to the turn. `setSetupStatus` writes the
   row and its temp status file together. A failed script has its own header retry.
-  Archiving or deleting the workspace stops its setup process group. Quitting
+  Archiving the workspace stops its setup process group. Quitting
   during setup leaves the checkout and chat ready, with setup marked failed
   and a reason saying Deus stopped it.
 - A fatal failure removes what the attempt made and leaves `state = 'error'`

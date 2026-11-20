@@ -18,7 +18,7 @@ import { processGroupsStopped, trackProcessGroup } from "../lib/process-groups";
 import { cloudAccount, cloudOrg, requireCloudOrg } from "./agent/cloud/config";
 import { getCloudEnvironmentInfo } from "./cloud-environment.service";
 import { createBackendChildEnv } from "@shared/lib/child-env";
-import { SETUP_INTERRUPTED, setSetupStatus, setupFile } from "./setup-status";
+import { SETUP_INTERRUPTED, SETUP_LOG_SUFFIX, setSetupStatus, setupFile } from "./setup-status";
 import type { WorkspaceSetup } from "./agent/workspace-context";
 import type { WorkspaceWithDetailsRow } from "../db";
 
@@ -192,22 +192,23 @@ export async function setupForTurn(
       statusFile: setupFile(row.id, "status"),
     };
   }
+  const reason = row.error_message ?? "The setup did not finish.";
   return {
     state: "failed",
-    reason: row.error_message ?? "The setup did not finish.",
+    reason: reason.endsWith(SETUP_LOG_SUFFIX) ? reason.slice(0, -SETUP_LOG_SUFFIX.length) : reason,
     detail: row.error_detail,
     command,
   };
 }
 
-export function stopWorkspaceSetup(workspaceId: string, action: "archived" | "deleted") {
+export async function stopWorkspaceSetup(workspaceId: string): Promise<void> {
   const run = runs.get(workspaceId);
   if (!run) return;
-  const reason = new Error(`Setup was stopped when the workspace was ${action}.`);
+  const reason = new Error("Setup was stopped when the workspace was archived.");
   run.controller.abort(reason);
   runs.delete(workspaceId);
   setSetupStatus(workspaceId, "failed", reason);
-  return run.process?.catch(() => {});
+  await run.process?.catch(() => {});
 }
 
 /** One setup runner for initial preparation and an explicit retry. No implicit installs or Git resets. */
@@ -256,7 +257,7 @@ class SetupExitError extends Error {
     readonly exitCode: number | null,
     readonly detail: string | null
   ) {
-    super(`Setup exited with code ${exitCode}.${detail ? "" : " View the setup log for details."}`);
+    super(`Setup exited with code ${exitCode}.${detail ? "" : SETUP_LOG_SUFFIX}`);
   }
 }
 

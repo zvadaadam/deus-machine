@@ -48,7 +48,7 @@ import {
   pickWorkspaceName,
   retryWorkspaceInit,
 } from "../services/workspace-init.service";
-import { autoProgressStatus, setWorkspaceStatus } from "../services/workspace-status.service";
+import { setWorkspaceStatus } from "../services/workspace-status.service";
 import { handle } from "./registry";
 
 /** How long `connectCloudWorkspace` waits for the channel to open before answering. */
@@ -163,26 +163,6 @@ export async function createLocalWorkspace(
   return { workspaceId, firstSessionId };
 }
 
-async function updateWorkspace({
-  workspaceId,
-  state,
-  status,
-}: ParsedInputOf<typeof api.updateWorkspace>): Promise<void> {
-  const db = getDatabase();
-  if (status) setWorkspaceStatus(workspaceId, status);
-  if (state === "archived") await archiveWorkspace(workspaceId);
-  else if (state === "ready") {
-    await unarchiveWorkspace(workspaceId);
-    // A restored workspace that was done is in progress again.
-    if (getWorkspaceRaw(db, workspaceId)?.status === "done") {
-      autoProgressStatus(workspaceId, "in-progress", { force: true });
-    }
-  } else if (state) {
-    db.prepare("UPDATE workspaces SET state = ? WHERE id = ?").run(state, workspaceId);
-  }
-  invalidate(["workspaces", "sessions"]);
-}
-
 export default [
   handle(api.workspaces, ({ state }) => {
     const db = getDatabase();
@@ -228,7 +208,10 @@ export default [
   handle(api.ghLogout, logoutGh),
 
   handle(api.createWorkspace, createWorkspace),
-  handle(api.updateWorkspace, updateWorkspace),
+  handle(api.updateWorkspace, async ({ workspaceId }) => {
+    await unarchiveWorkspace(workspaceId);
+    invalidate(["workspaces", "sessions"]);
+  }),
   handle(api.archiveWorkspace, async ({ workspaceId }) => {
     await archiveWorkspace(workspaceId);
     invalidate(["workspaces"]);

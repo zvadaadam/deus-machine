@@ -30,7 +30,7 @@ import { ConflictError, NotFoundError } from "../lib/errors";
 import { GitError, runGit } from "../lib/git-process";
 import { processGroupsStopped } from "../lib/process-groups";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
-import { prepareLocalEnvironment, stopWorkspaceSetup } from "./project-environment.service";
+import { prepareLocalEnvironment } from "./project-environment.service";
 import { SETUP_INTERRUPTED, setSetupStatus } from "./setup-status";
 import { invalidate } from "./query-engine";
 import { generateUniqueName } from "./workspace.service";
@@ -465,7 +465,7 @@ export function retryWorkspaceInit(workspaceId: string): void {
  * instead: deleting it would take its chats with it. A cloud workspace whose
  * computer exists is the platform's to remove, so it is archived too.
  */
-export function deleteFailedWorkspace(workspaceId: string): void | Promise<void> {
+export function deleteFailedWorkspace(workspaceId: string): void {
   const db = getDatabase();
   const row = db.prepare(`${START_ROW} WHERE w.id = ?`).get(workspaceId) as StartRow | undefined;
   if (!row) throw new NotFoundError("Workspace not found");
@@ -479,10 +479,8 @@ export function deleteFailedWorkspace(workspaceId: string): void | Promise<void>
   if (used) throw new ConflictError("This workspace has chats. Archive it instead.");
   // Its sessions go with it (ON DELETE CASCADE). The failed attempt already
   // removed its folder and branch.
-  const stopped = stopWorkspaceSetup(workspaceId, "deleted");
   db.prepare("DELETE FROM workspaces WHERE id = ? AND state = 'error'").run(workspaceId);
   invalidate(["workspaces", "sessions"]);
-  return stopped;
 }
 
 /**

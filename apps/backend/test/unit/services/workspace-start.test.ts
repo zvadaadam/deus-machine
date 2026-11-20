@@ -200,41 +200,38 @@ describe("starting a workspace", () => {
     expect(await brief(session)).toBe(buildWorkspaceContext(cwd));
   });
 
-  it.each(["archived", "deleted"] as const)(
-    "stops the setup process group when a workspace is %s",
-    async (action) => {
-      setupScript("sleep 30 & echo $! > child-pid; wait");
-      await initializeWorkspace(add("w", "vega"));
-      const pidFile = path.join(workspacePath("vega"), "child-pid");
-      await vi.waitFor(() => expect(fs.existsSync(pidFile)).toBe(true));
-      const child = Number(fs.readFileSync(pidFile, "utf8"));
-      expect(() => deleteFailedWorkspace("w")).toThrow("failed to start");
-      expect(setupStatus("w")).toBe("running\n");
-      if (action === "archived") {
-        await archiveWorkspace("w");
-        expect(row("w")).toMatchObject({
-          state: "archived",
-          setup_status: "failed",
-          error_message: "Setup was stopped when the workspace was archived.",
-        });
-      } else {
-        // Delete is only admitted for an unused, failed start.
-        db().prepare("UPDATE workspaces SET state = 'error' WHERE id = 'w'").run();
-        let beforeDelete;
-        mocks.invalidate.mockImplementation(() => {
-          if (row("w")) beforeDelete = row("w");
-        });
-        await deleteFailedWorkspace("w");
-        expect(beforeDelete).toMatchObject({
-          setup_status: "failed",
-          error_message: "Setup was stopped when the workspace was deleted.",
-        });
-        expect(row("w")).toBeUndefined();
-      }
-      expect(setupStatus("w")).toBe("failed\n");
-      await vi.waitFor(() => expect(() => process.kill(child, 0)).toThrow());
-    }
-  );
+  it("keeps the log hint in a silent failure's UI message and briefs the turn with its exit reason", async () => {
+    setupScript("exit 3");
+    await initializeWorkspace(add("w", "vega"));
+    await vi.waitFor(() => expect(row("w").setup_status).toBe("failed"));
+    expect(row("w").error_message).toBe(
+      "Setup exited with code 3. View the setup log for details."
+    );
+    const setup = await setupForTurn(String(row("w").first_session_id), workspacePath("vega"));
+    expect(setup).toMatchObject({
+      state: "failed",
+      reason: "Setup exited with code 3.",
+      detail: null,
+    });
+  });
+
+  it("refuses deletion during setup and stops the process group on archive", async () => {
+    setupScript("sleep 30 & echo $! > child-pid; wait");
+    await initializeWorkspace(add("w", "vega"));
+    const pidFile = path.join(workspacePath("vega"), "child-pid");
+    await vi.waitFor(() => expect(fs.existsSync(pidFile)).toBe(true));
+    const child = Number(fs.readFileSync(pidFile, "utf8"));
+    expect(() => deleteFailedWorkspace("w")).toThrow("failed to start");
+    expect(setupStatus("w")).toBe("running\n");
+    await archiveWorkspace("w");
+    expect(row("w")).toMatchObject({
+      state: "archived",
+      setup_status: "failed",
+      error_message: "Setup was stopped when the workspace was archived.",
+    });
+    expect(setupStatus("w")).toBe("failed\n");
+    await vi.waitFor(() => expect(() => process.kill(child, 0)).toThrow());
+  });
 
   it("starts from origin's copy of the branch when this computer's is behind", async () => {
     const origin = path.join(scratch, "origin.git");

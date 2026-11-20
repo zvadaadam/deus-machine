@@ -159,7 +159,7 @@ describe("local project environment journey", () => {
     expect(row()).toMatchObject({ state: "ready", setup_status: "running" });
     expect(statusFile()).toBe("running\n");
     expect(mocks.saved).toHaveBeenCalledTimes(1);
-    stopWorkspaceSetup(workspaceId, "archived");
+    await stopWorkspaceSetup(workspaceId);
     answer({ configured: true, project: { version: 1, setup: "touch unexpected" } });
     await new Promise((resolve) => setImmediate(resolve));
     expect(row()).toMatchObject({

@@ -7,6 +7,7 @@ import { getDatabase } from "../lib/database";
 import { invalidate } from "./query-engine";
 
 export const SETUP_INTERRUPTED = "Setup was stopped when Deus closed. Run it again.";
+export const SETUP_LOG_SUFFIX = " View the setup log for details.";
 
 export function setupFile(workspaceId: string, extension: "log" | "status"): string {
   return path.join(os.tmpdir(), `deus-${workspaceId}-setup.${extension}`);

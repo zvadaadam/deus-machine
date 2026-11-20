@@ -43,8 +43,7 @@ function setupInstructions(setup?: WorkspaceSetup | null): string {
   const retry = setup.command
     ? `After a repair, rerun the current setup command in this checkout\n${quote(`/bin/sh -ec ${shellArg(setup.command)}`)}`
     : "After repairing the setup recipe, use Retry setup in the workspace header.";
-  const reason = setup.reason.replace(/ View the setup log for details\.$/, "");
-  return `Workspace setup failed. ${reason}\n${output}${retry}\n`;
+  return `Workspace setup failed. ${setup.reason}\n${output}${retry}\n`;
 }
 
 /** How to drive a simulator: Deus ships agent-device (scripts/runtime/agent-clis.ts), whose own help carries the rest. */
