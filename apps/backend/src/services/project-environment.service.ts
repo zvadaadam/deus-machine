@@ -2,7 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { spawn, execFileSync } from "node:child_process";
-import { StringDecoder } from "node:string_decoder";
 import { parseEnv, stripVTControlCharacters } from "node:util";
 import {
   parseProjectEnvironment,
@@ -197,20 +196,36 @@ class SetupExitError extends Error {
   }
 }
 
-const SETUP_TAIL_CHARS = 400;
+async function setupLogTail(logPath: string): Promise<string | null> {
+  const file = await fs.promises.open(logPath, "r");
+  try {
+    const { size } = await file.stat();
+    const buffer = Buffer.alloc(Math.min(size, 4096));
+    const start = size - buffer.length;
+    const { bytesRead } = await file.read(buffer, 0, buffer.length, start);
+    const lines = stripVTControlCharacters(buffer.toString("utf8", 0, bytesRead)).split(/[\r\n]/);
+    if (start > 0) lines.shift(); // The first line may start before the window.
+    const nonempty = lines.map((line) => line.trim()).filter(Boolean);
+    const tail = nonempty.slice(-2).join("\n").slice(-400);
+    return tail.replace(/^\p{Surrogate}/u, "") || null;
+  } finally {
+    await file.close();
+  }
+}
 
-export function runSetupCommand(
+export async function runSetupCommand(
   workspaceId: string,
   command: string,
   directory: string,
   env: NodeJS.ProcessEnv
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
+  const logPath = path.join(os.tmpdir(), `deus-${workspaceId}-setup.log`);
+  const exitCode = await new Promise<number | null>((resolve, reject) => {
     if (processGroupsStopped()) {
       reject(new Error("Deus is closing."));
       return;
     }
-    const log = fs.createWriteStream(path.join(os.tmpdir(), `deus-${workspaceId}-setup.log`));
+    const log = fs.createWriteStream(logPath);
     const child = spawn("/bin/sh", ["-ec", command], {
       cwd: directory,
       env,
@@ -221,32 +236,6 @@ export function runSetupCommand(
     const untrack = trackProcessGroup(child.pid);
     child.stdout.pipe(log, { end: false });
     child.stderr.pipe(log, { end: false });
-    // Follow the same bytes as the log, including a line split across writes or streams.
-    const decoder = new StringDecoder("utf8");
-    const tail: string[] = [];
-    let partial = "";
-    const clip = (text: string) => text.slice(-SETUP_TAIL_CHARS).replace(/^\p{Surrogate}/u, "");
-    const remember = (line: string) => {
-      const text = stripVTControlCharacters(line).trim();
-      if (!text) return;
-      if (tail.length === 2) tail.shift();
-      tail.push(clip(text));
-    };
-    const capture = (chunk: Buffer) => {
-      const lines = (partial + decoder.write(chunk)).split(/[\r\n]/);
-      partial = lines.pop()!;
-      lines.forEach(remember);
-      if (partial.length <= 4096) return;
-      // Compact long lines before the final escape, which may continue in the next write.
-      const escape = Math.max(partial.lastIndexOf("\x1b"), partial.lastIndexOf("\x9b"));
-      const end = escape >= partial.length - SETUP_TAIL_CHARS ? escape : partial.length;
-      const clean = stripVTControlCharacters(partial.slice(0, end));
-      const body = clean.trimEnd();
-      partial =
-        clip(body) + clean.slice(body.length, body.length + SETUP_TAIL_CHARS) + partial.slice(end);
-    };
-    child.stdout.on("data", capture);
-    child.stderr.on("data", capture);
     const killProcessGroup = () => {
       if (child.pid) {
         try {
@@ -262,15 +251,15 @@ export function runSetupCommand(
       killProcessGroup();
     }, 300_000);
     let finished = false;
-    const finish = (error?: Error) => {
+    const finish = (result: Error | number | null) => {
       if (finished) return;
       finished = true;
       untrack();
       clearTimeout(timer);
-      if (error) {
+      if (result instanceof Error) {
         log.end();
-        reject(error);
-      } else log.end(resolve);
+        reject(result);
+      } else log.end((error?: Error | null) => (error ? reject(error) : resolve(result)));
     };
     child.once("error", finish);
     log.once("error", (error) => {
@@ -278,13 +267,15 @@ export function runSetupCommand(
       finish(error);
     });
     child.once("close", (code) => {
-      if (code === 0 && !timedOut) return finish();
+      if (code === 0 && !timedOut) return finish(0);
       if (processGroupsStopped())
         return finish(new Error("Setup was stopped when Deus closed. Run it again."));
       if (timedOut) return finish(new Error("Setup timed out after five minutes."));
-      remember(partial + decoder.end());
-      const detail = code === null ? "" : clip(tail.join("\n"));
-      finish(new SetupExitError(code, detail || null));
+      finish(code);
     });
   });
+  if (exitCode !== 0) {
+    const detail = exitCode === null ? null : await setupLogTail(logPath).catch(() => null);
+    throw new SetupExitError(exitCode, detail);
+  }
 }

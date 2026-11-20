@@ -209,10 +209,10 @@ describe("local project environment journey", () => {
       });
     }
   );
-  it("bounds the excerpt even when a script ends with a long unterminated line", async () => {
+  it("clips a complete line within the window without splitting a Unicode character", async () => {
     const suffix = "x".repeat(392) + " failed";
-    const output = "x".repeat(10_000) + "🛠" + suffix;
-    project({ version: 1, setup: `printf '%s%6000s' '${output}' ''\nexit 1` });
+    const output = "x".repeat(600) + "🛠" + suffix;
+    project({ version: 1, setup: `printf '%s\\n' '${output}'\nexit 1` });
     await prepareLocalEnvironment(workspaceId, root);
     expect(row().error_detail).toBe(suffix);
     project({ version: 1, setup: "true" });
@@ -220,6 +220,28 @@ describe("local project environment journey", () => {
     expect(row()).toMatchObject({
       setup_status: "completed",
       error_message: null,
+      error_detail: null,
+    });
+  });
+  it("drops the cut first line of a log window and keeps the complete diagnostic", async () => {
+    project({ version: 1, setup: "printf '%05000d\\nMissing compiler' 0\nexit 1" });
+    await prepareLocalEnvironment(workspaceId, root);
+    expect(row().error_detail).toBe("Missing compiler");
+  });
+  it("uses the plain sentence for one 16 KB line ending in 6,000 spaces", async () => {
+    project({ version: 1, setup: "printf '%010000d failed%6000s' 0 ''\nexit 1" });
+    await prepareLocalEnvironment(workspaceId, root);
+    expect(row()).toMatchObject({
+      error_message: "Setup exited with code 1. View the setup log for details.",
+      error_detail: null,
+    });
+  });
+  it("uses the plain sentence when the finished log cannot be read", async () => {
+    project({ version: 1, setup: "echo 'Missing compiler'\nexit 1" });
+    vi.spyOn(fs.promises, "open").mockRejectedValueOnce(new Error("log was removed"));
+    await prepareLocalEnvironment(workspaceId, root);
+    expect(row()).toMatchObject({
+      error_message: "Setup exited with code 1. View the setup log for details.",
       error_detail: null,
     });
   });
