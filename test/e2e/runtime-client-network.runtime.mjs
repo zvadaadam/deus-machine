@@ -130,7 +130,9 @@ async function faultNetwork(page) {
       route.onMessage((raw) => {
         const frame = JSON.parse(String(raw));
         control.sent.push(frame);
-        if (frame.type === "q:subscribe") link.subscriptions.set(frame.id, frame.resource);
+        if (frame.type === "q:subscribe") {
+          link.subscriptions.set(frame.id, JSON.stringify([frame.resource, frame.params ?? {}]));
+        }
         if (frame.type === "q:unsubscribe") link.subscriptions.delete(frame.id);
         if (!control.blackhole) queue("up", raw);
       });
@@ -304,6 +306,11 @@ try {
     "Offline viewer retains cached data, rejects writes immediately and catches up automatically"
   );
 
+  const subscriptions = async () => ({
+    count: (await diagnostics(a)).subscriptions,
+    bindings: [...netA.current.subscriptions.values()].sort(),
+  });
+  const beforeReconnects = await subscriptions();
   for (let cycle = 0; cycle < 5; cycle++) {
     const generation = (await diagnostics(a)).generation;
     netA.current.close();
@@ -314,9 +321,9 @@ try {
     await settled(a);
   }
   assert.equal(netA.connections.filter((link) => !link.closed).length, 1);
-  const baseline = (await diagnostics(a)).subscriptions;
+  assert.deepEqual(await subscriptions(), beforeReconnects);
   check("Five repeated disconnects leave one connection and restore the same subscriptions", {
-    subscriptions: baseline,
+    subscriptions: beforeReconnects.count,
   });
 
   const countSessions = () =>
@@ -366,7 +373,9 @@ try {
   await a.reload();
   await attach(a);
   await visible(a, "After late acknowledgment");
+  await a.getByRole("tablist", { name: "Session tabs" }).getByRole("tab").nth(1).waitFor();
   await settled(a);
+  const beforeSilentFailure = await subscriptions();
   check("Full page reload rehydrates persisted state");
 
   console.log("Testing silent connection failure with the production 30s + 10s watchdog...");
@@ -391,11 +400,12 @@ try {
   ]);
   check("Silent traffic loss is detected without a close event and recovers cached state", {
     detectedMs,
+    subscriptions: beforeSilentFailure.count,
   });
 
   await Promise.all([settled(a), settled(b)]);
   assert.equal(netA.connections.filter((link) => !link.closed).length, 1);
-  assert.equal((await diagnostics(a)).subscriptions, baseline);
+  assert.deepEqual(await subscriptions(), beforeSilentFailure);
   assert.equal(
     await b.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     true
