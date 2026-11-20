@@ -239,7 +239,7 @@ export function getMessages(
       .all(sessionId, opts.before, opts.limit) as MessageRow[];
   }
 
-  if (opts.after) {
+  if (opts.after !== undefined) {
     // Load newer: fetch N messages after seq, already in ascending order
     return db
       .prepare(

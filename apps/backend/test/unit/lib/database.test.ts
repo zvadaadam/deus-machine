@@ -65,6 +65,11 @@ describe("database schema check at startup", () => {
       INSERT INTO sessions (id, workspace_id) VALUES ('01c-third', 'w1');
       INSERT INTO sessions (id, workspace_id) VALUES ('02a-only', 'w2');
     `);
+    // Rows written long ago; a direct write, so the triggers do not move it.
+    old.exec("DROP TRIGGER update_sessions_updated_at; DROP TRIGGER update_workspaces_updated_at;");
+    old.exec(
+      "UPDATE sessions SET updated_at = '2020-01-01 00:00:00'; UPDATE workspaces SET updated_at = '2020-01-01 00:00:00';"
+    );
     old.close();
     process.env.DATABASE_PATH = dbPath;
     const { closeDatabase, initDatabase } = await open();
@@ -84,6 +89,25 @@ describe("database schema check at startup", () => {
       { id: "w2", first_session_id: "02a-only" },
       { id: "w3", first_session_id: null },
     ]);
+    // The upgrade is not an update: the sidebar's recency order is kept.
+    const stamps = () =>
+      db
+        .prepare(
+          "SELECT id, updated_at FROM sessions UNION ALL SELECT id, updated_at FROM workspaces ORDER BY id"
+        )
+        .all() as { id: string; updated_at: string }[];
+    expect(new Set(stamps().map((row) => row.updated_at))).toEqual(
+      new Set(["2020-01-01 00:00:00"])
+    );
+    // Its triggers are back, and fire on a real update.
+    db.prepare("UPDATE workspaces SET title = 't' WHERE id = 'w3'").run();
+    expect(
+      (
+        db.prepare("SELECT updated_at FROM workspaces WHERE id = 'w3'").get() as {
+          updated_at: string;
+        }
+      ).updated_at
+    ).not.toBe("2020-01-01 00:00:00");
     // A new chat, whatever its id sorts as, takes the next number.
     db.prepare("INSERT INTO sessions (id, workspace_id) VALUES ('00-new', 'w1')").run();
     expect(db.prepare("SELECT chat FROM sessions WHERE id = '00-new'").get()).toEqual({ chat: 4 });

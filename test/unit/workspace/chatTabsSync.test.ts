@@ -1,6 +1,11 @@
 // How a workspace's chat tabs follow its live chat list (app/layouts/chatTabsSync).
 import { describe, expect, it } from "vitest";
-import { arrivedWhileAway, reconcileLive, sessionToTab } from "@/app/layouts/chatTabsSync";
+import {
+  arrivedWhileAway,
+  createPendingTab,
+  reconcileLive,
+  sessionToTab,
+} from "@/app/layouts/chatTabsSync";
 import type { Session } from "@/features/session/types";
 
 const chat = (id: string, message_count = 1): Session =>
@@ -52,18 +57,32 @@ describe("tabs that follow the live chat list (H9, H21)", () => {
     ).toEqual(["while-away"]);
     expect(arrivedWhileAway(sessions, new Set(["a"]), [])).toEqual([]);
   });
+
+  it("W2: the first chat arriving replaces the placeholder tab: one tab, not two", () => {
+    const next = reconcileLive({ tabs: [createPendingTab()], closed: [] }, [chat("a")], new Set());
+    expect(next.tabs.map((t) => (t as { sessionId?: string }).sessionId)).toEqual(["a"]);
+  });
+
+  it("W4: two chats that start in one snapshot get different labels", () => {
+    const tabs = [sessionToTab(chat("a", 0), 1), sessionToTab(chat("b", 0), 2)];
+    const next = reconcileLive({ tabs, closed: [] }, [chat("a"), chat("b")], new Set(["a", "b"]));
+    expect(new Set(next.tabs.map((t) => t.label)).size).toBe(2);
+  });
 });
 
 describe("an open-chat request (H22)", () => {
   it("is taken by its identity, once: a newer request for the workspace stays", async () => {
     const { openChat, openChatDone, useOpenChatStore } =
       await import("@/features/session/lib/openChat");
+    const before = Date.now();
     openChat("w", "first");
     const first = useOpenChatStore.getState().requested.w!;
+    expect(first.at).toBeGreaterThanOrEqual(before);
     openChat("w", "second");
-    openChatDone("w", first.id);
+    // W1: a view holding the older request does not navigate.
+    expect(openChatDone("w", first.id)).toBe(false);
     expect(useOpenChatStore.getState().requested.w?.sessionId).toBe("second");
-    openChatDone("w", useOpenChatStore.getState().requested.w!.id);
+    expect(openChatDone("w", useOpenChatStore.getState().requested.w!.id)).toBe(true);
     expect(useOpenChatStore.getState().requested.w).toBeUndefined();
   });
 });

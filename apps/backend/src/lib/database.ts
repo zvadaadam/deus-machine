@@ -134,7 +134,19 @@ function initDatabase(): BetterSqlite3.Database {
         try {
           prepareForSchema(db, fresh);
           db.exec(SCHEMA_SQL);
-          db.exec(BACKFILL_SQL);
+          // Only when something lacks it: a database already done is not touched.
+          const behind = db
+            .prepare(
+              `SELECT EXISTS (SELECT 1 FROM sessions WHERE chat IS NULL)
+                 OR EXISTS (SELECT 1 FROM turns WHERE ended_at IS NOT NULL AND end_seq IS NULL)
+                 OR EXISTS (SELECT 1 FROM workspaces w WHERE first_session_id IS NULL
+                   AND EXISTS (SELECT 1 FROM sessions s WHERE s.workspace_id = w.id)) AS behind`
+            )
+            .get() as { behind: number };
+          if (behind.behind) {
+            db.exec(BACKFILL_SQL);
+            db.exec(SCHEMA_SQL);
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           throw prelaunchSchemaError(`Schema initialization failed: ${message}`);

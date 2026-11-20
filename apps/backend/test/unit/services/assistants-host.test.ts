@@ -539,7 +539,9 @@ describe("each commit re-reads what it depends on, with no await before its writ
   it("H2: access withdrawn while a new workspace's name is chosen: nothing is inserted", async () => {
     const host = createDeusHost();
     const before = workspaceCount();
+    let named = false;
     state.naming = async () => {
+      named = true;
       state.stored.claude = "read";
     };
     await expect(
@@ -547,7 +549,8 @@ describe("each commit re-reads what it depends on, with no await before its writ
         assistantWho(),
         startInput({ origin: { kind: "assistant", id: "claude", name: "Claude" } })
       )
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ code: "access", message: expect.stringContaining(READ_ONLY) });
+    expect(named).toBe(true);
     expect(workspaceCount()).toBe(before);
   });
 
@@ -852,6 +855,59 @@ describe("a read's cursor (H17, the review bot's incremental read)", () => {
 
     const after = await host.view(LOCAL_CALLER as never, "s-lead", { after: first.cursor });
     expect(after.turns.map((t) => [t.turnId, t.outcome])).toEqual([["a", "done"]]);
+  });
+});
+
+describe("round 3 (B1, B4, B5)", () => {
+  it("B1: a cursor of zero reads forward from the first message, past 500, with no gap", async () => {
+    const host = createDeusHost();
+    const empty = await host.view(LOCAL_CALLER as never, "s-lead", { last: 10 });
+    expect(empty.cursor).toMatch(/^0\./);
+    for (let i = 0; i < 501; i++) message("s-lead", "t1", i % 2 ? "assistant" : "user", `m${i}`);
+    endTurn("s-lead", "t1", "end_turn");
+    const text = (view: { turns: readonly { messages: readonly { parts: unknown }[] }[] }) =>
+      view.turns.flatMap((t) => t.messages.map((m) => JSON.stringify(m.parts)));
+    const first = await host.view(LOCAL_CALLER as never, "s-lead", { after: empty.cursor });
+    const firstText = text(first);
+    expect(firstText[0]).toContain('"m0"');
+    expect(firstText).toHaveLength(500);
+    const next = await host.view(LOCAL_CALLER as never, "s-lead", { after: first.cursor });
+    expect(text(next)).toEqual([expect.stringContaining('"m500"')]);
+  });
+
+  it("B4: a first task whose setup took longer than 30 minutes is not sent, and its chat says why", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const host = createDeusHost();
+      const entry = await host.start!(LEAD as never, startInput());
+      vi.setSystemTime(Date.now() + 31 * 60_000);
+      ready(entry);
+      expect(state.sent).toEqual([]);
+      const row = state.db
+        .prepare("SELECT status, error_message FROM sessions WHERE id = ?")
+        .get(entry.id) as { status: string; error_message: string };
+      expect(row).toEqual({
+        status: "error",
+        error_message: "Its first task could not be delivered. Setup took longer than 30 minutes.",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("B5: after a refused first send, the last notification's read shows the error", async () => {
+    const host = createDeusHost();
+    const entry = await host.start!(LEAD as never, startInput());
+    state.sendRefusal = new Error("engine unavailable");
+    const seen: string[] = [];
+    state.listeners.add((resources, ctx) => {
+      if (!resources.includes("sessions") || !ctx?.sessionIds?.includes(entry.id)) return;
+      void host
+        .list(LOCAL_CALLER as never, {})
+        .then((all) => seen.push(all.find((e) => e.id === entry.id)!.status));
+    });
+    ready(entry);
+    await vi.waitFor(() => expect(seen.at(-1)).toBe("error"));
   });
 });
 

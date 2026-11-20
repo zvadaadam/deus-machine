@@ -102,15 +102,22 @@ export function reconcileLive(
   for (const session of arrived) {
     if (open.has(session.id) || closedIds.has(session.id)) continue;
     changed = true;
-    tabs = [...tabs, arrivedTab(tabs, session)];
+    // The workspace's first chat arriving takes the place of the placeholder tab.
+    const placeholder = tabs.findIndex((tab) => tab.kind === "pending");
+    tabs =
+      placeholder >= 0
+        ? tabs.map((tab, i) => (i === placeholder ? arrivedTab(tabs, session) : tab))
+        : [...tabs, arrivedTab(tabs, session)];
   }
   // A cloud snapshot can establish that an untitled chat has started after
   // discovery has already hydrated the tabs. Preserve order and draft choices.
-  tabs = tabs.map((tab) => {
+  // Labels allocated one after another, against the list as it is built.
+  tabs = [...tabs];
+  tabs.forEach((tab, i) => {
     const session = isSessionChatTab(tab) ? live.get(tab.sessionId) : undefined;
-    if (tab.hasStarted || !session || session.message_count === 0) return tab;
+    if (tab.hasStarted || !session || session.message_count === 0) return;
     changed = true;
-    return {
+    tabs[i] = {
       ...tab,
       hasStarted: true,
       initialModel: undefined,

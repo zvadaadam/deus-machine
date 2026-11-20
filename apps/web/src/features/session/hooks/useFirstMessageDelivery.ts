@@ -36,6 +36,7 @@ import {
   type FirstMessageDelivery,
 } from "../lib/firstMessage";
 import { createOptimisticUserMessage } from "../lib/optimisticMessage";
+import { openChat } from "../lib/openChat";
 import { returnMessageToComposer } from "../lib/returnToComposer";
 import { emptyComposer, sessionComposerActions } from "../store/sessionComposerStore";
 
@@ -104,7 +105,7 @@ export function useFirstMessageDelivery(repoGroups: RepoGroup[], loaded: boolean
       } catch (error) {
         pendingFirstMessages.clear(workspaceId);
         await returnToComposer(sessionId, first.message).catch(() => {});
-        const open = () => useWorkspaceStore.getState().selectWorkspace(workspaceId);
+        const open = () => openChat(workspaceId, sessionId);
         toast.error(getErrorMessage(error), {
           description: "Your message is in that chat's composer.",
           ...(useWorkspaceStore.getState().selectedWorkspaceId === workspaceId

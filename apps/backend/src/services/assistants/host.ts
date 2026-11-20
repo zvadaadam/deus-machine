@@ -183,6 +183,8 @@ interface Held {
   workspaceId: string;
   input: StartInput;
   unwatch: () => void;
+  /** When it was held: one held past SETUP_LIMIT_MS is not sent. */
+  since: number;
   sending?: Promise<void>;
 }
 
@@ -435,16 +437,24 @@ export function createDeusHost(): DeusHost {
       );
     } catch (error) {
       const said = appRefusal(error);
-      const why =
+      undelivered(
+        sessionId,
         said instanceof OperatorError
           ? said.message.split("\n")[0]!.replace(/^refused \([a-z_]+\): /, "")
-          : "";
-      db.prepare(
-        "UPDATE sessions SET status = 'error', error_message = ? WHERE id = ? AND message_count = 0"
-      ).run(`${NOT_DELIVERED}${why ? ` ${why}` : ""}`, sessionId);
-      invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
+          : ""
+      );
       throw said;
     }
+  }
+
+  /** The chat's first task was not delivered: its error says so, and why. */
+  function undelivered(sessionId: string, why: string) {
+    getDatabase()
+      .prepare(
+        "UPDATE sessions SET status = 'error', error_message = ? WHERE id = ? AND message_count = 0"
+      )
+      .run(`${NOT_DELIVERED}${why ? ` ${why}` : ""}`, sessionId);
+    invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
   }
 
   function drop(sessionId: string) {
@@ -454,19 +464,16 @@ export function createDeusHost(): DeusHost {
 
   /**
    * Hold a new workspace's first task, and send it when setup ends: dropped
-   * if it fails, is archived, or takes 30 minutes. While it is handed to the
+   * if setup fails or the workspace is archived; one whose setup took longer
+   * than 30 minutes is not sent, and its chat says so. While it is handed to the
    * engine it stays held, so a stop then waits for its admission and stops it
    * by its minted id.
    */
-  function hold(sessionId: string, held: Omit<Held, "unwatch">) {
+  function hold(sessionId: string, held: Omit<Held, "unwatch" | "since">) {
     const stop = onInvalidate((resources) => {
       if (resources.includes("workspaces")) look();
     });
-    const giveUp = setTimeout(() => {
-      if (!firsts.get(sessionId)?.sending) drop(sessionId);
-    }, SETUP_LIMIT_MS);
-    giveUp.unref?.();
-    const entry: Held = { ...held, unwatch: () => (stop(), clearTimeout(giveUp)) };
+    const entry: Held = { ...held, since: Date.now(), unwatch: stop };
     firsts.set(sessionId, entry);
     function look() {
       if (firsts.get(sessionId) !== entry || entry.sending) return;
@@ -475,10 +482,19 @@ export function createDeusHost(): DeusHost {
         .get(held.workspaceId) as { state: string; current_session_id: string | null } | undefined;
       if (!w || w.state === "archived" || w.state === "error") drop(sessionId);
       else if (w.state === "ready" && w.current_session_id === sessionId) {
+        if (Date.now() - entry.since > SETUP_LIMIT_MS) {
+          drop(sessionId);
+          undelivered(sessionId, "Setup took longer than 30 minutes.");
+          return;
+        }
         entry.unwatch();
         entry.sending = sendFirst(held.caller, sessionId, held.input)
           .catch(() => {})
-          .finally(() => firsts.delete(sessionId));
+          .finally(() => {
+            firsts.delete(sessionId);
+            // Told after the hold is gone, so a wait that reads again sees the outcome.
+            invalidate(["sessions"], { sessionIds: [sessionId] });
+          });
         invalidate(["sessions"], { sessionIds: [sessionId] });
       }
     }

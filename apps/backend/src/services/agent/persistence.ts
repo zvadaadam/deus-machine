@@ -429,7 +429,9 @@ export function settleInterruptedSessions(): WriteResult<string[]> {
         JSON.stringify(ids)
       );
     }
-    // Their turns that never ended end now, as failed: no reader takes one for running.
+    // Every local turn that never ended ends now, as failed, not only those of the
+    // chats just settled: no local turn survives the process, and an unended turn
+    // row would hold every read cursor at its first message.
     db.prepare(
       `UPDATE turns SET ended_at = ?, outcome = ?
        WHERE ended_at IS NULL AND session_id IN (SELECT s.id FROM sessions s JOIN workspaces w ON w.id = s.workspace_id WHERE w.kind != 'cloud')`

@@ -74,7 +74,8 @@ interface UseChatTabsOptions {
 
 export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions) {
   // Fetch all sessions for this workspace (for hydrating tab metadata)
-  const { data: workspaceSessions } = useWorkspaceSessions(workspaceId);
+  const { data: workspaceSessions, dataUpdatedAt: sessionsReadAt } =
+    useWorkspaceSessions(workspaceId);
 
   // Build session lookup map
   const sessionMap = useMemo(() => {
@@ -146,27 +147,25 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
   const hydrated = useRef(false);
   /** Chats the live list has shown: one gone from it since was put away (or deleted). */
   const seen = useRef(new Set<string>());
-  // The latest tabs and closed list, for a live update to reconcile against without
-  // depending on them (an effect that sets what it depends on loops).
-  const latest = useRef<{ tabs: ChatTab[]; closed: ClosedSessionTab[] }>({
-    tabs: mainTabs,
-    closed: closedTabs,
-  });
-  useEffect(() => {
-    latest.current = { tabs: mainTabs, closed: closedTabs };
-  });
   useEffect(() => {
     if (!workspaceSessions) return;
     if (hydrated.current) {
-      const next = reconcileLive(latest.current, workspaceSessions, seen.current);
+      // Functional updates over the state as it is, so they compose with any other
+      // update in the same render (the first chat replacing the placeholder).
+      const before = seen.current;
       seen.current = new Set(workspaceSessions.map((s) => s.id));
-      if (next.closed !== latest.current.closed) setClosedTabs(next.closed);
-      if (next.tabs !== latest.current.tabs) {
-        setMainTabs(next.tabs);
-        setActiveMainTabId((active) =>
-          next.tabs.some((t) => t.id === active) ? active : (next.tabs.at(-1)?.id ?? "tab-default")
-        );
-      }
+      setClosedTabs(
+        (closed) => reconcileLive({ tabs: [], closed }, workspaceSessions, before).closed
+      );
+      setMainTabs((tabs) => {
+        // No closed list needed: a closed chat was seen, so it is never among the arrivals.
+        const next = reconcileLive({ tabs, closed: [] }, workspaceSessions, before).tabs;
+        if (next !== tabs)
+          setActiveMainTabId((active) =>
+            next.some((t) => t.id === active) ? active : (next.at(-1)?.id ?? "tab-default")
+          );
+        return next;
+      });
       return;
     }
     hydrated.current = true;
@@ -179,6 +178,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
         (tab) => !isSessionChatTab(tab) || sessionMap.has(tab.sessionId)
       );
 
+      let hydratedTabs: ChatTab[];
       if (validTabs.length === 0) {
         // All persisted sessions are gone — fall back to active session
         const fallbackId = activeSessionId;
@@ -191,22 +191,22 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
               ? createPlaceholderSessionTab(fallbackId)
               : createPendingTab();
         setActiveMainTabId(tab.id);
-        return [tab];
+        hydratedTabs = [tab];
+      } else {
+        // Compute sequences across all valid sessions in tab order
+        const orderedSessions = validTabs
+          .filter(isSessionChatTab)
+          .map((tab) => sessionMap.get(tab.sessionId)!)
+          .filter(Boolean);
+        const sequences = computeSequences(orderedSessions);
+
+        // Hydrate each placeholder with real session data
+        hydratedTabs = validTabs.map((t) => {
+          if (!isSessionChatTab(t)) return t;
+          const session = sessionMap.get(t.sessionId)!;
+          return sessionToTab(session, sequences.get(session.id) ?? 1);
+        });
       }
-
-      // Compute sequences across all valid sessions in tab order
-      const orderedSessions = validTabs
-        .filter(isSessionChatTab)
-        .map((tab) => sessionMap.get(tab.sessionId)!)
-        .filter(Boolean);
-      const sequences = computeSequences(orderedSessions);
-
-      // Hydrate each placeholder with real session data
-      const hydratedTabs = validTabs.map((t) => {
-        if (!isSessionChatTab(t)) return t;
-        const session = sessionMap.get(t.sessionId)!;
-        return sessionToTab(session, sequences.get(session.id) ?? 1);
-      });
 
       // Chats that arrived while the workspace was not on screen become tabs too.
       for (const session of arrivedWhileAway(
@@ -230,11 +230,15 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
 
   const requested = useOpenChatStore((state) => state.requested[workspaceId]);
   useEffect(() => {
-    // Taken once the authoritative list is here: a target in it is shown, one not in it dropped.
     if (!requested || !hydrated.current || !workspaceSessions) return;
-    openChatDone(workspaceId, requested.id);
     const session = sessionMap.get(requested.sessionId);
-    if (!session) return;
+    // A target not in the list waits for a list read from the host since the
+    // request (a cached one can predate the chat), and is dropped only if absent then.
+    if (!session) {
+      if (sessionsReadAt > requested.at) openChatDone(workspaceId, requested.id);
+      return;
+    }
+    if (!openChatDone(workspaceId, requested.id)) return;
     const target = requested.sessionId;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- consume a navigation request
     setMainTabs((tabs) =>
@@ -244,7 +248,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     );
     setClosedTabs((closed) => closed.filter((c) => c.sessionId !== target));
     setActiveMainTabId(`tab-${target}`);
-  }, [requested, sessionMap, workspaceSessions, workspaceId]);
+  }, [requested, sessionMap, workspaceSessions, sessionsReadAt, workspaceId]);
 
   // --- Persist tab state to localStorage on every change ---
   // Debounced to avoid writing on every intermediate state update.

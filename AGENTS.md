@@ -424,7 +424,8 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   between calls: a message to a busy chat is sent within the call if its turn
   ends on its own in time, else nothing is sent and the answer says why. The
   host holds only a new workspace's first task: `start` takes it and sends it
-  as the turn the package minted once setup ends (30 minutes at most); a stop
+  as the turn the package minted once setup ends; a setup that took longer
+  than 30 minutes sends nothing, and the chat says so in its error; a stop
   drops it. At its commit, in one synchronous step, the host refuses
   (`Refused`): a start by an archived chat or into an archived workspace; a
   fourth workspace agents started while three are set up; an archive whose

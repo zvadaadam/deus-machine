@@ -412,7 +412,9 @@ export const SCHEMA_SQL = `
 `;
 
 /**
- * Run after SCHEMA_SQL, in the same transaction, before anything can insert:
+ * Run after SCHEMA_SQL, and SCHEMA_SQL again after it (its updated_at
+ * triggers are set aside meanwhile), in the same transaction, before anything
+ * can insert:
  * turns that ended before their end order was stored get one, by when they
  * ended; chats from before stored numbers are numbered in the order the app showed
  * their tabs (by id, the creation order), hidden ones included, after any
@@ -420,23 +422,29 @@ export const SCHEMA_SQL = `
  * chat's id from that same order. A database already done is left as it is.
  */
 export const BACKFILL_SQL = `
+  -- Not "updated now": the sidebar orders by updated_at. SCHEMA_SQL makes them again after.
+  DROP TRIGGER IF EXISTS update_sessions_updated_at;
+  DROP TRIGGER IF EXISTS update_workspaces_updated_at;
+
   UPDATE sessions SET chat = ranked.n FROM (
-    SELECT s.id,
-      ROW_NUMBER() OVER (PARTITION BY s.workspace_id ORDER BY s.id)
-        + COALESCE((SELECT MAX(x.chat) FROM sessions x WHERE x.workspace_id = s.workspace_id), 0) AS n
-    FROM sessions s WHERE s.chat IS NULL
+    SELECT s.id, ROW_NUMBER() OVER (PARTITION BY s.workspace_id ORDER BY s.id) + COALESCE(m.top, 0) AS n
+    FROM sessions s LEFT JOIN (SELECT workspace_id, MAX(chat) AS top FROM sessions GROUP BY workspace_id) m
+      ON m.workspace_id = s.workspace_id
+    WHERE s.chat IS NULL
   ) AS ranked WHERE sessions.id = ranked.id;
 
   UPDATE turns SET end_seq = ranked.n FROM (
     SELECT t.session_id, t.turn_id,
-      ROW_NUMBER() OVER (PARTITION BY t.session_id ORDER BY t.ended_at, t.turn_id)
-        + COALESCE((SELECT MAX(x.end_seq) FROM turns x WHERE x.session_id = t.session_id), 0) AS n
-    FROM turns t WHERE t.ended_at IS NOT NULL AND t.end_seq IS NULL
+      ROW_NUMBER() OVER (PARTITION BY t.session_id ORDER BY t.ended_at, t.turn_id) + COALESCE(m.top, 0) AS n
+    FROM turns t LEFT JOIN (SELECT session_id, MAX(end_seq) AS top FROM turns GROUP BY session_id) m
+      ON m.session_id = t.session_id
+    WHERE t.ended_at IS NOT NULL AND t.end_seq IS NULL
   ) AS ranked WHERE turns.session_id = ranked.session_id AND turns.turn_id = ranked.turn_id;
 
-  UPDATE workspaces SET first_session_id = (
-    SELECT s.id FROM sessions s WHERE s.workspace_id = workspaces.id ORDER BY s.chat, s.id LIMIT 1
-  )
-  WHERE first_session_id IS NULL
-    AND EXISTS (SELECT 1 FROM sessions s WHERE s.workspace_id = workspaces.id);
+  UPDATE workspaces SET first_session_id = f.id FROM (
+    SELECT workspace_id, id FROM (
+      SELECT workspace_id, id, ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY chat, id) AS r
+      FROM sessions
+    ) WHERE r = 1
+  ) AS f WHERE workspaces.id = f.workspace_id AND workspaces.first_session_id IS NULL;
 `;

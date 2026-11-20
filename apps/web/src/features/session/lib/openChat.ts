@@ -9,6 +9,8 @@ import { useWorkspaceStore } from "@/features/workspace/store";
 export interface OpenChatRequest {
   id: number;
   sessionId: string;
+  /** When it was made: a list read before it may not have its chat yet. */
+  at: number;
 }
 
 interface OpenChatState {
@@ -22,16 +24,16 @@ let next = 0;
 
 export function openChat(workspaceId: string, sessionId: string): void {
   useOpenChatStore.setState((state) => ({
-    requested: { ...state.requested, [workspaceId]: { id: ++next, sessionId } },
+    requested: { ...state.requested, [workspaceId]: { id: ++next, sessionId, at: Date.now() } },
   }));
   useWorkspaceStore.getState().selectWorkspace(workspaceId);
 }
 
-/** The tab view took request `id`; a newer request for the workspace stays. */
-export function openChatDone(workspaceId: string, id: number): void {
-  useOpenChatStore.setState((state) => {
-    if (state.requested[workspaceId]?.id !== id) return state;
-    const { [workspaceId]: _taken, ...rest } = state.requested;
-    return { requested: rest };
-  });
+/** The tab view takes request `id`: true only if it was still the workspace's request. */
+export function openChatDone(workspaceId: string, id: number): boolean {
+  const state = useOpenChatStore.getState();
+  if (state.requested[workspaceId]?.id !== id) return false;
+  const { [workspaceId]: _taken, ...rest } = state.requested;
+  useOpenChatStore.setState({ requested: rest });
+  return true;
 }

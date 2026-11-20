@@ -7,6 +7,7 @@
 // of the prompt is the sender's optimistic bubble, and every way a send can
 // fail must reject, which is what tells the sender to take the bubble back.
 
+import { createHash } from "node:crypto";
 import { WireRequestError } from "@zvada/agent-server/client";
 import { WIRE_ERROR_CODES, type Origin } from "@zvada/agent-server/protocol";
 import type * as api from "@shared/api/sessions";
@@ -37,6 +38,8 @@ import {
 import { refreshWorkspaceGithubToken } from "../cloud-workspace-init.service";
 
 // ---- sendMessage ----
+
+const digest = (text: string) => createHash("sha256").update(text).digest("hex");
 
 /** Who sent a request, as the echo stores it: none for the person. */
 const originKey = (origin?: Origin) =>
@@ -79,7 +82,8 @@ export async function sendMessage(
   const turnId = input.turnId;
   if (!turnId) return sendMessageOnce(input, origin);
   const key = `${input.sessionId}\0${turnId}`;
-  const request = { content: input.content, origin: originKey(origin) };
+  // Its text kept as a digest: a send with images would otherwise sit in memory for minutes.
+  const request = { content: digest(input.content), origin: originKey(origin) };
   const different = () =>
     new ConflictError("A different message was already sent as this turn. Nothing was sent.");
   const db = getDatabase();
@@ -94,7 +98,7 @@ export async function sendMessage(
   if (stored) {
     const same =
       stored.content === undefined ||
-      (stored.content.trim() === request.content.trim() && stored.origin === request.origin);
+      (stored.content.trim() === input.content.trim() && stored.origin === request.origin);
     if (!same) throw different();
     return { turnId };
   }
