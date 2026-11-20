@@ -137,6 +137,7 @@ async function startApp(platform: "linux" | "darwin" = "linux") {
   autoUpdater.autoRunAppAfterInstall = true;
   await import("../../../apps/desktop/main/index");
   await vi.waitFor(() => expect(mocks.handlers.has("update:install")).toBe(true));
+  autoUpdater.emit("update-available", { version: "0.4.0" });
   autoUpdater.emit("update-downloaded", { version: "0.4.0" });
   return { autoUpdater, nativeAutoUpdater };
 }
@@ -224,8 +225,13 @@ it("keeps the backend alive after a failed install and permits a subsequent upda
 });
 
 it("keeps macOS restart ownership with the native updater", async () => {
-  const { autoUpdater } = await startApp("darwin");
+  const { autoUpdater, nativeAutoUpdater } = await startApp("darwin");
   expect(autoUpdater.autoRunAppAfterInstall).toBe(true);
+  expect(mocks.handlers.get("update:getState")!()).toMatchObject({ stage: "downloading" });
+  mocks.handlers.get("update:install")!();
+  expect(mocks.install).not.toHaveBeenCalled();
+
+  nativeAutoUpdater.emit("update-downloaded");
   mocks.handlers.get("update:install")!();
   expect(mocks.install).toHaveBeenCalledExactlyOnceWith(false, true);
   expect(mocks.stop).toHaveBeenCalledOnce();
@@ -233,4 +239,25 @@ it("keeps macOS restart ownership with the native updater", async () => {
   finishBackend();
   await vi.waitFor(() => expect(mocks.exited).toHaveBeenCalledOnce());
   expect(mocks.relaunch).not.toHaveBeenCalled();
+});
+
+it("discards a Mac archive that failed verification and offers Restart after a successful retry", async () => {
+  const { autoUpdater, nativeAutoUpdater } = await startApp("darwin");
+  autoUpdater.emit("error", new Error("Signature verification failed"));
+  autoUpdater.emit("error", new Error("Signature verification failed"));
+  nativeAutoUpdater.emit("update-downloaded");
+  expect(mocks.handlers.get("update:getState")!()).toEqual({
+    stage: "error",
+    error: "Signature verification failed",
+    version: "0.4.0",
+  });
+  mocks.handlers.get("update:install")!();
+  expect(mocks.install).not.toHaveBeenCalled();
+
+  const info = { version: "0.4.0", releaseNotes: "Changes" };
+  autoUpdater.emit("update-available", info);
+  autoUpdater.emit("update-downloaded", info);
+  expect(mocks.handlers.get("update:getState")!()).toMatchObject({ stage: "downloading" });
+  nativeAutoUpdater.emit("update-downloaded");
+  expect(mocks.handlers.get("update:getState")!()).toEqual({ stage: "ready", ...info });
 });

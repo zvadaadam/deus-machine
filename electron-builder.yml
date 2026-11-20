@@ -35,13 +35,13 @@ asarUnpack:
   - "node_modules/@napi-rs/canvas-*/**"
 mac:
   category: public.app-category.developer-tools
+  # Ship vendor-signed CLIs as received. Keychain recognizes Codex by OpenAI's signature.
+  # Deus signs CLIs that arrive unsigned or ad hoc.
+  signIgnore:
+    - "/Contents/Resources/bin/(claude|codex|gh|rg)$"
+    - "/Contents/Resources/bin/codex-runtime/"
   binaries:
     - "Contents/Resources/bin/deus-runtime"
-    - "Contents/Resources/bin/codex-runtime/bin/codex"
-    - "Contents/Resources/bin/codex-runtime/bin/codex-code-mode-host"
-    - "Contents/Resources/bin/claude"
-    - "Contents/Resources/bin/gh"
-    - "Contents/Resources/bin/codex-runtime/codex-path/rg"
     - "Contents/Resources/bin/agent-browser"
     - "Contents/Resources/simulator/simbridge"
     - "Contents/Resources/simulator/siminspector.dylib"

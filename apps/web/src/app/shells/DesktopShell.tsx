@@ -12,7 +12,6 @@ import { ErrorBoundary } from "react-error-boundary";
 import { MainLayout } from "../layouts/MainLayout";
 import { DashboardError } from "@/shared/components";
 import { createBoundaryErrorHandler } from "@/shared/utils/errorReporting";
-import { Toaster } from "@/components/ui/sonner";
 import { OnboardingOverlay } from "@/features/onboarding";
 import { useSettings } from "@/features/settings";
 import { useAuth, PairGatePage } from "@/features/auth";
@@ -49,7 +48,7 @@ export function DesktopShell({ reset }: { reset: () => void }) {
   // Sync PostHog opt-in/out state with analytics_enabled setting
   useAnalyticsConsent();
 
-  // Auto-update: check on launch + every 5 min, show toast when ready
+  // Electron owns the update schedule. Its staged update survives renderer reloads.
   const autoUpdate = useAutoUpdate();
   useUpdateToast(autoUpdate);
 
@@ -113,7 +112,6 @@ export function DesktopShell({ reset }: { reset: () => void }) {
           <MainLayout />
         </ErrorBoundary>
       )}
-      <Toaster />
     </UpdateProvider>
   );
 }

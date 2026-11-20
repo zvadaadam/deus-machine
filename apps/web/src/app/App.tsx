@@ -5,6 +5,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import { LazyMotion, domAnimation } from "framer-motion";
 import { ErrorFallback } from "@/shared/components";
 import { createBoundaryErrorHandler } from "@/shared/utils/errorReporting";
+import { Toaster } from "@/components/ui/sonner";
 import { QueryClientProvider, ThemeProvider } from "./providers";
 import { capabilities } from "@/platform";
 import { native } from "@/platform";
@@ -56,6 +57,7 @@ function App() {
             onError={createBoundaryErrorHandler("react.error-boundary")}
           >
             <ThemeProvider>
+              <Toaster />
               <DesktopShell reset={reset} />
             </ThemeProvider>
           </ErrorBoundary>

@@ -48,7 +48,9 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
       }
       return !result.available;
     } catch (err) {
-      setState({ stage: "error", error: getErrorMessage(err) });
+      setState((previous) =>
+        previous.stage === "error" ? previous : { stage: "error", error: getErrorMessage(err) }
+      );
       return false;
     }
   }, []);
@@ -58,7 +60,15 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
     try {
       await window.electronAPI!.installUpdate();
     } catch (err) {
-      setState({ stage: "error", error: getErrorMessage(err) });
+      setState((previous) =>
+        previous.stage === "error"
+          ? previous
+          : {
+              stage: "error",
+              error: getErrorMessage(err),
+              ...(previous.stage === "ready" && { version: previous.version }),
+            }
+      );
     }
   }, []);
 

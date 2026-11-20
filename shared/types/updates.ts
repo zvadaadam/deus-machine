@@ -3,7 +3,7 @@ export type UpdateState =
   | { stage: "idle" | "checking" }
   | { stage: "downloading"; version: string; percent?: number }
   | { stage: "ready"; version: string; releaseNotes?: string }
-  | { stage: "error"; error: string };
+  | { stage: "error"; error: string; version?: string };
 
 export type UpdateCheckResult =
   | { supported: false; available: false; reason: string }
