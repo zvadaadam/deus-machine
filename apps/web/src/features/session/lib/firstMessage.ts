@@ -15,7 +15,7 @@ type FirstMessageFields = Pick<
   | "session_status"
   | "first_session_id"
   | "first_session_status"
-  | "first_session_message_count"
+  | "first_session_last_message_at"
 >;
 
 /**
@@ -34,7 +34,7 @@ export function firstChatOf(workspace: FirstMessageFields): {
     return {
       sessionId: workspace.first_session_id,
       status: workspace.first_session_status,
-      spokenTo: (workspace.first_session_message_count ?? 0) > 0,
+      spokenTo: workspace.first_session_last_message_at != null,
     };
   if (workspace.first_session_id || !workspace.current_session_id) return null;
   return {

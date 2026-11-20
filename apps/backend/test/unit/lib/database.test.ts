@@ -50,6 +50,53 @@ describe("database schema check at startup", () => {
     expect(() => initDatabase()).toThrow(PRELAUNCH_SCHEMA_RESET_HINT);
   }
 
+  it("upgrades a v0.3.18 database: chats numbered in their old order, first chats set, a new chat next, a second open changes nothing", async () => {
+    const { SCHEMA_SQL_V0_3_18 } = await import("../../fixtures/schema-v0.3.18");
+    const dbPath = path.join(tempDir, "old.db");
+    const old = new Database(dbPath);
+    old.exec(SCHEMA_SQL_V0_3_18);
+    old.exec(`
+      INSERT INTO repositories (id, name, root_path) VALUES ('r', 'shop', '/repos/shop');
+      INSERT INTO workspaces (id, repository_id, slug, state, current_session_id) VALUES ('w1', 'r', 'one', 'ready', 'b');
+      INSERT INTO workspaces (id, repository_id, slug, state, current_session_id) VALUES ('w2', 'r', 'two', 'ready', 'c');
+      INSERT INTO workspaces (id, repository_id, slug, state) VALUES ('w3', 'r', 'none', 'error');
+      INSERT INTO sessions (id, workspace_id) VALUES ('01a-first', 'w1');
+      INSERT INTO sessions (id, workspace_id, is_hidden) VALUES ('01b-hidden', 'w1', 1);
+      INSERT INTO sessions (id, workspace_id) VALUES ('01c-third', 'w1');
+      INSERT INTO sessions (id, workspace_id) VALUES ('02a-only', 'w2');
+    `);
+    old.close();
+    process.env.DATABASE_PATH = dbPath;
+    const { closeDatabase, initDatabase } = await open();
+    const db = initDatabase();
+    const chats = () =>
+      db.prepare("SELECT id, chat FROM sessions ORDER BY workspace_id, chat").all();
+    const firsts = () =>
+      db.prepare("SELECT id, first_session_id FROM workspaces ORDER BY id").all();
+    expect(chats()).toEqual([
+      { id: "01a-first", chat: 1 },
+      { id: "01b-hidden", chat: 2 },
+      { id: "01c-third", chat: 3 },
+      { id: "02a-only", chat: 1 },
+    ]);
+    expect(firsts()).toEqual([
+      { id: "w1", first_session_id: "01a-first" },
+      { id: "w2", first_session_id: "02a-only" },
+      { id: "w3", first_session_id: null },
+    ]);
+    // A new chat, whatever its id sorts as, takes the next number.
+    db.prepare("INSERT INTO sessions (id, workspace_id) VALUES ('00-new', 'w1')").run();
+    expect(db.prepare("SELECT chat FROM sessions WHERE id = '00-new'").get()).toEqual({ chat: 4 });
+    const before = [chats(), firsts()];
+    closeDatabase();
+    const again = initDatabase();
+    expect([
+      again.prepare("SELECT id, chat FROM sessions ORDER BY workspace_id, chat").all(),
+      again.prepare("SELECT id, first_session_id FROM workspaces ORDER BY id").all(),
+    ]).toEqual(before);
+    closeDatabase();
+  });
+
   it("creates a fresh database from the schema, and opens it again", async () => {
     process.env.DATABASE_PATH = path.join(tempDir, "fresh.db");
     const { closeDatabase, initDatabase } = await open();

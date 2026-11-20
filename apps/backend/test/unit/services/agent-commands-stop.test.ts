@@ -88,6 +88,20 @@ describeWithDb("stopSession", () => {
     expect(JSON.parse(row.cancelled_by)).toEqual({ kind: "session", sessionId: "lead" });
   });
 
+  it("a stop that failed before it reached the engine gives the credit to the one that stopped the turn", async () => {
+    const stop = vi
+      .spyOn(agentService, "stopSession")
+      .mockRejectedValueOnce(new Error("link down"))
+      .mockResolvedValueOnce({ outcome: "cancelled", turnId: "turn-1" });
+    await stopSession({ sessionId: SESSION }, { kind: "session", sessionId: "first" });
+    await stopSession({ sessionId: SESSION }, { kind: "session", sessionId: "second" });
+    expect(stop).toHaveBeenCalledTimes(2);
+    const row = db
+      .prepare("SELECT cancelled_by FROM turns WHERE session_id = ? AND turn_id = 'turn-1'")
+      .get(SESSION) as { cancelled_by: string };
+    expect(JSON.parse(row.cancelled_by)).toEqual({ kind: "session", sessionId: "second" });
+  });
+
   it("goes idle when the harness CONFIRMED the interrupt", async () => {
     vi.spyOn(agentService, "stopSession").mockResolvedValue({
       outcome: "cancelled",

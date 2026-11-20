@@ -120,22 +120,60 @@ describeWithDb("sendMessage", () => {
     expect(row(SESSION).status).toBe("working");
   });
 
-  it("answers success for the same turn asked again, running or ended, and leaves its state as it is", async () => {
+  it("the same turn asked again: the first's answer once it is known, its state left as it is", async () => {
     vi.spyOn(agentService, "isConnected").mockReturnValue(true);
-    const startTurn = vi.spyOn(agentService, "startTurn").mockResolvedValue(undefined as never);
-    await send(SESSION);
-    // The first attempt landed and runs: the retry is its answer, not "busy".
-    vi.spyOn(agentService, "liveTurnId").mockReturnValue("turn-1");
-    await expect(send(SESSION)).resolves.toEqual({ turnId: "turn-1" });
-    // It ended since: the retry still answers, and the chat is not flipped back to working.
-    vi.spyOn(agentService, "liveTurnId").mockReturnValue(undefined);
-    db.prepare("UPDATE sessions SET status = 'idle' WHERE id = ?").run(SESSION);
+    let admit!: () => void;
+    const startTurn = vi
+      .spyOn(agentService, "startTurn")
+      .mockImplementation(() => new Promise<never>((resolve) => (admit = resolve as () => void)));
+    const first = send(SESSION);
+    // Still pending: the retry waits for it, and is not acknowledged before it.
+    let answered = false;
+    const retry = send(SESSION).then((r) => ((answered = true), r));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(answered).toBe(false);
+    admit();
+    await expect(first).resolves.toEqual({ turnId: "turn-1" });
+    await expect(retry).resolves.toEqual({ turnId: "turn-1" });
+    // A different request under the same id is a conflict, never acknowledged.
+    await expect(
+      sendMessage({
+        sessionId: SESSION,
+        content: "other",
+        model: "claude-opus-4-6",
+        agentHarness: "claude-code",
+        turnId: "turn-1",
+      })
+    ).rejects.toThrow("A different message");
+    expect(startTurn).toHaveBeenCalledOnce();
+  });
+
+  it("an ended turn asked again answers from its stored echo, and is not flipped back to working", async () => {
     db.prepare("INSERT INTO turns (session_id, turn_id, ended_at) VALUES (?, 'turn-1', 1)").run(
       SESSION
     );
+    db.prepare(
+      "INSERT INTO messages (id, session_id, role, turn_id) VALUES ('m1', ?, 'user', 'turn-1')"
+    ).run(SESSION);
+    db.prepare(
+      "INSERT INTO parts (id, message_id, session_id, type, data) VALUES ('p1', 'm1', ?, 'text', ?)"
+    ).run(SESSION, JSON.stringify({ type: "text", text: "hello" }));
+    const startTurn = vi.spyOn(agentService, "startTurn");
     await expect(send(SESSION)).resolves.toEqual({ turnId: "turn-1" });
     expect(row(SESSION).status).toBe("idle");
-    expect(startTurn).toHaveBeenCalledOnce();
+    expect(startTurn).not.toHaveBeenCalled();
+  });
+
+  it("the same turn asked again after its admission failed is sent anew", async () => {
+    vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+    const startTurn = vi
+      .spyOn(agentService, "startTurn")
+      .mockRejectedValueOnce(new Error("spawn failed"))
+      .mockResolvedValueOnce(undefined as never);
+    await expect(send(SESSION, "turn-9")).rejects.toThrow();
+    db.prepare("UPDATE sessions SET status = 'idle' WHERE id = ?").run(SESSION);
+    await expect(send(SESSION, "turn-9")).resolves.toEqual({ turnId: "turn-9" });
+    expect(startTurn).toHaveBeenCalledTimes(2);
   });
 
   it("refuses a busy chat with a typed error", async () => {

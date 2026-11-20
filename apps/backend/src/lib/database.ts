@@ -3,7 +3,12 @@ import path from "path";
 import fs from "fs";
 import os from "os";
 import { resolveDefaultDatabasePath } from "../../../../shared/runtime";
-import { ADDITIVE_COLUMNS, PRELAUNCH_SCHEMA_RESET_HINT, SCHEMA_SQL } from "@shared/schema";
+import {
+  ADDITIVE_COLUMNS,
+  BACKFILL_SQL,
+  PRELAUNCH_SCHEMA_RESET_HINT,
+  SCHEMA_SQL,
+} from "@shared/schema";
 import { openSqliteDatabase } from "./sqlite";
 
 const DEFAULT_DB_PATH = resolveDefaultDatabasePath({
@@ -129,6 +134,7 @@ function initDatabase(): BetterSqlite3.Database {
         try {
           prepareForSchema(db, fresh);
           db.exec(SCHEMA_SQL);
+          db.exec(BACKFILL_SQL);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           throw prelaunchSchemaError(`Schema initialization failed: ${message}`);

@@ -38,8 +38,78 @@ import { refreshWorkspaceGithubToken } from "../cloud-workspace-init.service";
 
 // ---- sendMessage ----
 
-/** Start a turn in a session. Answers `api.sendMessage`; rejects when the turn is not admitted. */
+/** Who sent a request, as the echo stores it: none for the person. */
+const originKey = (origin?: Origin) =>
+  origin && origin.kind !== "person" ? JSON.stringify(origin) : null;
+
+/** The sends of a turn id this process has asked the engine for, per database, by session and turn, for a while. */
+type Admission = { content: string; origin: string | null; done: Promise<{ turnId: string }> };
+const admissionsOf = new WeakMap<object, Map<string, Admission>>();
+const ADMISSION_KEPT_MS = 10 * 60_000;
+
+/** A turn's request as its echo was stored: its text and its sender. */
+function storedRequest(sessionId: string, turnId: string) {
+  const db = getDatabase();
+  if (!getTurn(db, sessionId, turnId)) return undefined;
+  const echo = db
+    .prepare(
+      "SELECT id, origin FROM messages WHERE session_id = ? AND turn_id = ? AND role = 'user' ORDER BY seq LIMIT 1"
+    )
+    .get(sessionId, turnId) as { id: string; origin: string | null } | undefined;
+  if (!echo) return { content: undefined, origin: undefined };
+  const parts = db
+    .prepare("SELECT data FROM parts WHERE message_id = ? AND type = 'text' ORDER BY seq")
+    .all(echo.id) as { data: string }[];
+  const content = parts.map((p) => (JSON.parse(p.data) as { text?: string }).text ?? "").join("");
+  return { content, origin: echo.origin };
+}
+
+/**
+ * Start a turn in a session. Answers `api.sendMessage`; rejects when the turn
+ * is not admitted. The same turn id asked again (a caller retrying a send
+ * whose answer it lost) answers as the first did, once that one's admission
+ * is known: success only for the same request (text and sender), a pending
+ * one awaited, a failed one failed; a different request under that id is a
+ * conflict. Its state is left as it is.
+ */
 export async function sendMessage(
+  input: ParsedInputOf<typeof api.sendMessage>,
+  origin?: Origin
+): Promise<{ turnId: string }> {
+  const turnId = input.turnId;
+  if (!turnId) return sendMessageOnce(input, origin);
+  const key = `${input.sessionId}\0${turnId}`;
+  const request = { content: input.content, origin: originKey(origin) };
+  const different = () =>
+    new ConflictError("A different message was already sent as this turn. Nothing was sent.");
+  const db = getDatabase();
+  let admissions = admissionsOf.get(db);
+  if (!admissions) admissionsOf.set(db, (admissions = new Map()));
+  const known = admissions.get(key);
+  if (known) {
+    if (known.content !== request.content || known.origin !== request.origin) throw different();
+    return known.done;
+  }
+  const stored = storedRequest(input.sessionId, turnId);
+  if (stored) {
+    const same =
+      stored.content === undefined ||
+      (stored.content.trim() === request.content.trim() && stored.origin === request.origin);
+    if (!same) throw different();
+    return { turnId };
+  }
+  const done = sendMessageOnce(input, origin);
+  admissions.set(key, { ...request, done });
+  // A send that failed was not admitted: a retry runs anew.
+  const kept = admissions;
+  done.catch(() => kept.delete(key));
+  setTimeout(() => {
+    if (kept.get(key)?.done === done) kept.delete(key);
+  }, ADMISSION_KEPT_MS).unref?.();
+  return done;
+}
+
+async function sendMessageOnce(
   input: ParsedInputOf<typeof api.sendMessage>,
   /** Who sent it when not the person: the operator's host passes it; the operation's input never carries one. */
   origin?: Origin
@@ -70,13 +140,6 @@ export async function sendMessage(
   // Reject up front — the refusal surfaces in the UI. The wire guard
   // stays as the backstop for the status race.
   if (session?.is_hidden) throw new ConflictError("That chat is archived; it takes no messages.");
-  // The same turn asked again (a caller retrying a send whose answer it lost):
-  // it was admitted, so this is its answer, and its state is left as it is.
-  if (
-    input.turnId &&
-    (agentService.liveTurnId(sessionId) === input.turnId || getTurn(db, sessionId, input.turnId))
-  )
-    return { turnId: input.turnId };
   if (session && ACTIVE_TURN_STATUSES.includes(session.status)) {
     throw new ChatBusyError(
       session.status === "working"
@@ -332,6 +395,9 @@ export async function sendMessage(
 
 // ---- stopSession ----
 
+/** Per database and turn, the stop that took effect (its origin, JSON), for a moment: it keeps the credit. */
+const effectiveStops = new WeakMap<object, Map<string, string>>();
+
 /**
  * Warn if an unconfirmed cancel has not settled within this grace period.
  * Keep Stop available while the handler still owns the live turn.
@@ -361,13 +427,21 @@ export async function stopSession(
   if (!session) throw new NotFoundError("Session not found");
 
   const targetTurnId = agentService.liveTurnId(sessionId);
+  const mine = JSON.stringify(by);
+  const key = `${sessionId}\0${targetTurnId}`;
+  // Claimed before the stop is sent, so a reader seeing the cancel can say who:
+  // the first claim holds while it is pending.
   if (targetTurnId) {
     db.prepare(
-      // The first stop keeps the credit: a second one while it takes effect does not overwrite it.
       `INSERT INTO turns (session_id, turn_id, cancelled_by) VALUES (?, ?, ?)
        ON CONFLICT(session_id, turn_id) DO UPDATE SET cancelled_by = COALESCE(turns.cancelled_by, excluded.cancelled_by)`
-    ).run(sessionId, targetTurnId, JSON.stringify(by));
+    ).run(sessionId, targetTurnId, mine);
   }
+  const credit = (who: string | null) =>
+    targetTurnId &&
+    db
+      .prepare("UPDATE turns SET cancelled_by = ? WHERE session_id = ? AND turn_id = ?")
+      .run(who, sessionId, targetTurnId);
   let result: Awaited<ReturnType<typeof agentService.stopSession>> | undefined;
   if (isCloudSession(sessionId)) {
     try {
@@ -380,6 +454,27 @@ export async function stopSession(
       result = await agentService.stopSession({ sessionId, turnId: targetTurnId });
     } catch (err) {
       console.error("[CommandHandler] Failed to stop on agent-server:", err);
+    }
+  }
+
+  // The credit is the stop that took effect: the first that did keeps it; one that
+  // definitely did not (no answer, nothing running) gives up its claim.
+  if (targetTurnId) {
+    const tookEffect = result?.outcome === "cancelled" || result?.outcome === "unconfirmed";
+    let stops = effectiveStops.get(db);
+    if (!stops) effectiveStops.set(db, (stops = new Map()));
+    const winner = stops.get(key);
+    if (tookEffect && !winner) {
+      stops.set(key, mine);
+      setTimeout(() => stops.delete(key), 60_000).unref?.();
+      credit(mine);
+    } else if (!tookEffect) {
+      const held = (
+        db
+          .prepare("SELECT cancelled_by FROM turns WHERE session_id = ? AND turn_id = ?")
+          .get(sessionId, targetTurnId) as { cancelled_by: string | null } | undefined
+      )?.cancelled_by;
+      if (held === mine) credit(winner ?? null);
     }
   }
 

@@ -8,7 +8,7 @@
  *         paired_devices, assistants, automations, automation_runs,
  *         extension_installations, integration_connections
  * Indexes: 18
- * Triggers: 7 (4 auto-update updated_at, 2 denormalized message_count + auto-seq, 1 chat number)
+ * Triggers: 9 (4 auto-update updated_at, 2 denormalized message_count + auto-seq, 1 chat number, 2 turn end order)
  *
  * The agent-facing tables (messages, turns, parts, compactions) store the
  * @zvada/agent-server protocol verbatim: `parts.data` is the engine `Part`
@@ -30,7 +30,7 @@ export const PRELAUNCH_SCHEMA_RESET_HINT =
 export const ADDITIVE_COLUMNS: Record<string, Record<string, string>> = {
   workspaces: { started_by: "TEXT", first_session_id: "TEXT" },
   sessions: { started_by: "TEXT", chat: "INTEGER" },
-  turns: { cancelled_by: "TEXT" },
+  turns: { cancelled_by: "TEXT", end_seq: "INTEGER" },
   messages: { origin: "TEXT" },
 };
 
@@ -150,6 +150,8 @@ export const SCHEMA_SQL = `
     cost REAL,
     -- Who stopped it, as the engine's origin (JSON), when a stop named one.
     cancelled_by TEXT,
+    -- The order its chat's turns ended in, from 1 (triggers): a reader's cursor carries it.
+    end_seq INTEGER,
     PRIMARY KEY (session_id, turn_id)
   );
 
@@ -389,7 +391,52 @@ export const SCHEMA_SQL = `
         WHERE id = NEW.id;
     END;
 
+  -- The order a chat's turns ended in, set once when a turn's end is first written
+  CREATE TRIGGER IF NOT EXISTS assign_turn_end_seq_on_insert
+    AFTER INSERT ON turns WHEN NEW.ended_at IS NOT NULL AND NEW.end_seq IS NULL
+    BEGIN
+      UPDATE turns SET end_seq = (SELECT COALESCE(MAX(t.end_seq), 0) + 1 FROM turns t WHERE t.session_id = NEW.session_id)
+        WHERE session_id = NEW.session_id AND turn_id = NEW.turn_id;
+    END;
+
+  CREATE TRIGGER IF NOT EXISTS assign_turn_end_seq_on_end
+    AFTER UPDATE OF ended_at ON turns WHEN NEW.ended_at IS NOT NULL AND NEW.end_seq IS NULL
+    BEGIN
+      UPDATE turns SET end_seq = (SELECT COALESCE(MAX(t.end_seq), 0) + 1 FROM turns t WHERE t.session_id = NEW.session_id)
+        WHERE session_id = NEW.session_id AND turn_id = NEW.turn_id;
+    END;
+
   CREATE TRIGGER IF NOT EXISTS dec_session_message_count
     AFTER DELETE ON messages
     BEGIN UPDATE sessions SET message_count = message_count - 1 WHERE id = OLD.session_id; END;
+`;
+
+/**
+ * Run after SCHEMA_SQL, in the same transaction, before anything can insert:
+ * turns that ended before their end order was stored get one, by when they
+ * ended; chats from before stored numbers are numbered in the order the app showed
+ * their tabs (by id, the creation order), hidden ones included, after any
+ * number their workspace already has; and each workspace gets its first
+ * chat's id from that same order. A database already done is left as it is.
+ */
+export const BACKFILL_SQL = `
+  UPDATE sessions SET chat = ranked.n FROM (
+    SELECT s.id,
+      ROW_NUMBER() OVER (PARTITION BY s.workspace_id ORDER BY s.id)
+        + COALESCE((SELECT MAX(x.chat) FROM sessions x WHERE x.workspace_id = s.workspace_id), 0) AS n
+    FROM sessions s WHERE s.chat IS NULL
+  ) AS ranked WHERE sessions.id = ranked.id;
+
+  UPDATE turns SET end_seq = ranked.n FROM (
+    SELECT t.session_id, t.turn_id,
+      ROW_NUMBER() OVER (PARTITION BY t.session_id ORDER BY t.ended_at, t.turn_id)
+        + COALESCE((SELECT MAX(x.end_seq) FROM turns x WHERE x.session_id = t.session_id), 0) AS n
+    FROM turns t WHERE t.ended_at IS NOT NULL AND t.end_seq IS NULL
+  ) AS ranked WHERE turns.session_id = ranked.session_id AND turns.turn_id = ranked.turn_id;
+
+  UPDATE workspaces SET first_session_id = (
+    SELECT s.id FROM sessions s WHERE s.workspace_id = workspaces.id ORDER BY s.chat, s.id LIMIT 1
+  )
+  WHERE first_session_id IS NULL
+    AND EXISTS (SELECT 1 FROM sessions s WHERE s.workspace_id = workspaces.id);
 `;

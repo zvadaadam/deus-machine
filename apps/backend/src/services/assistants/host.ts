@@ -54,7 +54,13 @@ import { uuidv7 } from "@shared/lib/uuid";
 import * as workspaces from "@shared/api/workspaces";
 import { ACTIVE_TURN_STATUSES, AgentHarnessSchema, type AgentHarness } from "@shared/enums";
 import { githubRepoSlug } from "@shared/git-origin";
-import { DEFAULT_AGENT_HARNESS, defaultModelId, pickerModels } from "@shared/models";
+import {
+  CATALOG_MODEL_LISTS,
+  DEFAULT_AGENT_HARNESS,
+  defaultModelId,
+  findModel,
+  pickerModels,
+} from "@shared/models";
 import { LOCAL_CALLER, type Caller } from "../../api/registry";
 import { createLocalWorkspace } from "../../api/workspaces";
 import { archiveWorkspace } from "../workspace-archive.service";
@@ -508,11 +514,12 @@ export function createDeusHost(): DeusHost {
 
   /** A chat's turns: those of the page's messages, plus any that ended since `endedAfter` or have no message. */
   function turnsOf(sessionId: string, ids: readonly string[], endedAfter: number | null) {
+    // `endedAfter` is the turn end order (`end_seq`) the reader's cursor saw.
     return getDatabase()
       .prepare(
         `SELECT turn_id, started_at, ended_at, outcome, cancelled_by FROM turns t WHERE session_id = ? AND (
            turn_id IN (SELECT value FROM json_each(?))
-           OR (? IS NOT NULL AND ended_at > ?)
+           OR (? IS NOT NULL AND end_seq > ?)
            OR (? IS NULL AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.session_id = t.session_id AND m.turn_id = t.turn_id)))
          ORDER BY COALESCE(started_at, ended_at), turn_id`
       )
@@ -539,7 +546,8 @@ export function createDeusHost(): DeusHost {
       if (!entry) throw new OperatorError("not_found", "That session is gone. Nothing was read.");
       const db = getDatabase();
       if (!getSessionRaw(db, sessionId)) return { status: entry.status, turns: [], waiting: [] };
-      // The cursor is where the read ended: its last message, and the latest turn end it saw.
+      // The cursor is where the read ended: the last message of a turn that has ended (a
+      // turn still running is read again, whole, next time), and the last turn end it saw.
       const after = options.after === undefined ? undefined : /^(\d+)\.(\d+)$/.exec(options.after);
       if (options.after !== undefined && !after)
         throw new OperatorError("stale_cursor", "That cursor is not this host's.");
@@ -586,12 +594,23 @@ export function createDeusHost(): DeusHost {
         };
       });
       const last = lastEnded([sessionId]).get(sessionId);
-      const seq = rows.at(-1)?.seq ?? (after ? Number(after[1]) : 0);
+      const read = rows.at(-1)?.seq ?? (after ? Number(after[1]) : 0);
+      // Not past the first message of a turn that has not ended: its messages still change.
+      const open = (
+        db
+          .prepare(
+            `SELECT MIN(m.seq) AS seq FROM messages m
+             LEFT JOIN turns t ON t.session_id = m.session_id AND t.turn_id = m.turn_id
+             WHERE m.session_id = ? AND m.turn_id IS NOT NULL AND t.ended_at IS NULL`
+          )
+          .get(sessionId) as { seq: number | null }
+      ).seq;
+      const seq = open !== null ? Math.min(read, open - 1) : read;
       const endMark = (
-        db.prepare("SELECT MAX(ended_at) AS at FROM turns WHERE session_id = ?").get(sessionId) as {
-          at: number | null;
+        db.prepare("SELECT MAX(end_seq) AS n FROM turns WHERE session_id = ?").get(sessionId) as {
+          n: number | null;
         }
-      ).at;
+      ).n;
       return {
         status: entry.status,
         turns,
@@ -658,7 +677,18 @@ export function createDeusHost(): DeusHost {
           );
         }
         // The agent and model before anything is made.
-        settingsFor(input);
+        const { agentHarness } = settingsFor(input);
+        if (input.model) {
+          const { lists } = await run(agentModels, {});
+          const known = lists.some((l) => l.harness === agentHarness && l.models.length)
+            ? lists
+            : CATALOG_MODEL_LISTS;
+          if (!findModel(known, agentHarness, input.model))
+            throw new OperatorError(
+              "invalid_input",
+              `start_session: model: ${JSON.stringify(input.model)} is not one ${agentHarness} offers here; list_models names them. Nothing was started.`
+            );
+        }
         if (input.workspace) {
           const workspaceId = input.workspace.id;
           const sessionId = uuidv7();
@@ -770,7 +800,9 @@ export function createDeusHost(): DeusHost {
              WHERE id = ? AND current_session_id = ?`
           ).run(entry.workspace.id, entry.workspace.id, entry.id);
         })();
+        // The chat's own record too: a "Sent from" chip already drawn stops being a link.
         invalidate(["workspaces", "sessions"]);
+        invalidate(["session"], { sessionIds: [entry.id] });
         return { note: "The chat is put away; its workspace stays." };
       }),
 

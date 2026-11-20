@@ -402,7 +402,10 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   refusal reaches the model as an `isError` tool result. Access is read again
   just before every write (`assertMayWrite`, `services/assistants/access.ts`),
   since a held call can outlive the person's change of mind: run every
-  operation a tool makes through the host's `act`. A refusal is the package's
+  operation a tool makes through the host's `act`. The check is at the
+  operation that makes the write (`act`, `mayTouch`), not at every await
+  below it (a turn's app setup, a cancel's checkpoint); withdrawing an
+  assistant's access also closes its connections. A refusal is the package's
   `refused (<code>): <sentence>`; any other failure is reported by the host
   and reaches a model as the package's one generic sentence, never its text.
 - **The tools** (LLP 0019 in `@zvada/agent-server`): the package's `whoami`,

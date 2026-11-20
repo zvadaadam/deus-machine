@@ -239,8 +239,15 @@ export function useGlobalSessionNotifications() {
       if (key[0] === "sessions" && key[1] === "detail") {
         const sessionId = String(key[2]);
         const orphan = orphans.current.get(sessionId);
+        if (!orphan) return;
         const session = event.query.state.data as Session | null | undefined;
-        if (!orphan || !session) return;
+        // Gone or put away: nothing more to follow.
+        if (session === null || session?.is_hidden) {
+          orphans.current.delete(sessionId);
+          setOrphanIds([...orphans.current.keys()]);
+          return;
+        }
+        if (!session) return;
         sessionStatusChanged(
           orphan.ws,
           orphan.repoName,
@@ -258,6 +265,13 @@ export function useGlobalSessionNotifications() {
 
       const groups = event.query.state.data as RepoGroup[] | undefined;
       if (!groups) return;
+
+      // A followed chat whose workspace left the list (archived, deleted) is released.
+      const present = new Set(groups.flatMap((group) => group.workspaces.map((w) => w.id)));
+      let released = false;
+      for (const [id, { ws }] of orphans.current)
+        if (!present.has(ws.id)) released = orphans.current.delete(id) || released;
+      if (released) setOrphanIds([...orphans.current.keys()]);
 
       for (const group of groups) {
         for (const ws of group.workspaces) {

@@ -280,8 +280,9 @@ describe("chats as sessions", () => {
       ["t2", "running"],
     ]);
     expect(view.turns[0]?.messages[0]?.origin).toEqual(LEAD);
+    // The turn still running is read again, whole; the one that ended is not.
     const after = await host.view(LOCAL_CALLER as never, "s-lead", { after: view.cursor });
-    expect(after.turns).toEqual([]);
+    expect(after.turns.map((t) => t.turnId)).toEqual(["t2"]);
     await expect(
       host.view(LOCAL_CALLER as never, "s-lead", { after: "x" as never })
     ).rejects.toThrow();
@@ -739,6 +740,46 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     );
   });
 
+  it("H15: a model the agent does not offer here makes no chat", async () => {
+    const host = createDeusHost();
+    state.ops.agentModels = () => ({
+      lists: [
+        {
+          harness: "claude-code",
+          models: [
+            { id: "haiku", harness: "claude-code", label: "Haiku", thinking: { levels: [] } },
+          ],
+        },
+      ],
+    });
+    const before = (state.db.prepare("SELECT COUNT(*) AS n FROM sessions").get() as { n: number })
+      .n;
+    await expect(
+      host.start!(
+        LEAD as never,
+        startInput({ workspace: { id: "w-lead", name: "lead" }, model: "gpt-9" })
+      )
+    ).rejects.toMatchObject({ code: "invalid_input" });
+    expect((state.db.prepare("SELECT COUNT(*) AS n FROM sessions").get() as { n: number }).n).toBe(
+      before
+    );
+    await expect(
+      host.start!(
+        LEAD as never,
+        startInput({ workspace: { id: "w-lead", name: "lead" }, model: "haiku" })
+      )
+    ).resolves.toMatchObject({ workspace: { name: "lead" } });
+  });
+
+  it("H14: a chat put away tells its own record, so a drawn chip stops being a link", async () => {
+    const host = createDeusHost();
+    insertChat("s-second", "w-lead", LEAD);
+    const told: unknown[] = [];
+    state.listeners.add((resources, ctx) => told.push([resources, ctx?.sessionIds]));
+    await host.archive!(LEAD as never, { kind: "session", id: "s-second" });
+    expect(told).toContainEqual([["session"], ["s-second"]]);
+  });
+
   it("H15: a first task refused after the chat was made is that chat's error, not a refusal", async () => {
     const host = createDeusHost();
     state.sendRefusal = new Error("engine unavailable");
@@ -760,11 +801,57 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     state.live.delete("s-lead");
     endTurn("s-lead", "t1", "cancelled", { kind: "person" });
     endTurn("s-lead", "t-silent", "end_turn");
+
     const after = await host.view(LOCAL_CALLER as never, "s-lead", { after: first.cursor });
     expect(after.turns.map((t) => [t.turnId, t.outcome]).sort()).toEqual([
       ["t-silent", "done"],
       ["t1", "cancelled"],
     ]);
+  });
+});
+
+describe("a read's cursor (H17, the review bot's incremental read)", () => {
+  it("a read mid-stream, then after the turn ends: the final answer is there once, complete", async () => {
+    const host = createDeusHost();
+    message("s-lead", "t1", "user", "go");
+    message("s-lead", "t1", "assistant", "Hal");
+    state.live.set("s-lead", "t1");
+    const mid = await host.view(LOCAL_CALLER as never, "s-lead", { last: 10 });
+    // The streamed message's part grows in place, as persistChanges upserts it; then the turn ends.
+    state.db
+      .prepare(
+        "UPDATE parts SET data = json_set(data, '$.text', 'Halfway and done.') WHERE type = 'text' AND json_extract(data, '$.text') = 'Hal'"
+      )
+      .run();
+    state.live.delete("s-lead");
+    endTurn("s-lead", "t1", "end_turn");
+    const after = await host.view(LOCAL_CALLER as never, "s-lead", { after: mid.cursor });
+    const said = after.turns.flatMap((t) => t.messages.filter((m) => m.role === "assistant"));
+    expect(said).toHaveLength(1);
+    expect(JSON.stringify(said[0]!.parts)).toContain("Halfway and done.");
+    expect(after.turns[0]).toMatchObject({ turnId: "t1", outcome: "done" });
+  });
+
+  it("two turns ending in the same millisecond are both seen after a cursor", async () => {
+    const host = createDeusHost();
+    state.live.set("s-lead", "a");
+    state.db
+      .prepare("INSERT INTO turns (session_id, turn_id, started_at) VALUES ('s-lead', 'a', 1)")
+      .run();
+    state.db
+      .prepare("INSERT INTO turns (session_id, turn_id, started_at) VALUES ('s-lead', 'b', 2)")
+      .run();
+    state.db
+      .prepare("UPDATE turns SET ended_at = 500, outcome = ? WHERE turn_id = 'b'")
+      .run(JSON.stringify({ stopReason: "end_turn" }));
+    const first = await host.view(LOCAL_CALLER as never, "s-lead", { last: 10 });
+    state.db
+      .prepare("UPDATE turns SET ended_at = 500, outcome = ? WHERE turn_id = 'a'")
+      .run(JSON.stringify({ stopReason: "end_turn" }));
+    state.live.delete("s-lead");
+
+    const after = await host.view(LOCAL_CALLER as never, "s-lead", { after: first.cursor });
+    expect(after.turns.map((t) => [t.turnId, t.outcome])).toEqual([["a", "done"]]);
   });
 });
 

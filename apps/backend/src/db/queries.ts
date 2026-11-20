@@ -46,7 +46,7 @@ const WORKSPACE_ROW_COLUMNS = `
     s.last_user_message_at as latest_message_sent_at,
     w.first_session_id,
     fs.status as first_session_status,
-    fs.message_count as first_session_message_count`;
+    fs.last_user_message_at as first_session_last_message_at`;
 
 const WORKSPACE_JOINS = `
   FROM workspaces w
@@ -150,7 +150,7 @@ export function getWorkspacesBySessionIds(
       s.last_user_message_at as latest_message_sent_at,
       w.first_session_id,
       fs.status as first_session_status,
-      fs.message_count as first_session_message_count
+      fs.last_user_message_at as first_session_last_message_at
     FROM workspaces w
     LEFT JOIN repositories r ON w.repository_id = r.id
     LEFT JOIN sessions s ON w.current_session_id = s.id
