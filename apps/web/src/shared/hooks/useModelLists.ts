@@ -49,6 +49,6 @@ export function useModelListsState(chat: { cloud: boolean; workspaceId?: string 
     live: (harness) =>
       chat.cloud
         ? Boolean(cloud.data?.lists?.length)
-        : local.data?.lists.find((list) => list.harness === harness)?.source === "live",
+        : local.data?.lists?.find((list) => list.harness === harness)?.source === "live",
   };
 }
