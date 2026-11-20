@@ -4,6 +4,7 @@ type Theme = "light" | "dark" | "system";
 
 interface ThemeContextType {
   theme: Theme;
+  preference?: Theme;
   setTheme: (theme: Theme) => void;
   actualTheme: "light" | "dark";
 }
@@ -11,22 +12,18 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    // Load theme from localStorage or default to 'system'
+  const [preference, setThemeState] = useState<Theme | undefined>(() => {
     const stored = localStorage.getItem("theme");
-    // Validate stored value before casting
     if (stored === "light" || stored === "dark" || stored === "system") {
       return stored;
     }
-    return "system";
+    return undefined;
   });
+  const theme = preference ?? "system";
 
   const [actualTheme, setActualTheme] = useState<"light" | "dark">(() => {
     // Resolve initial theme synchronously to avoid flicker
-    const stored = localStorage.getItem("theme");
-    if (stored === "light" || stored === "dark") {
-      return stored;
-    }
+    if (theme !== "system") return theme;
     // For 'system' or missing, resolve synchronously
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   });
@@ -85,7 +82,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, actualTheme }}>
+    <ThemeContext.Provider value={{ theme, preference, setTheme, actualTheme }}>
       {children}
     </ThemeContext.Provider>
   );

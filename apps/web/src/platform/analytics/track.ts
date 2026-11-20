@@ -1,12 +1,11 @@
 import posthog from "posthog-js";
-import { useEffect, useRef } from "react";
 import { capabilities } from "@/platform/capabilities";
 import type { AnalyticsEventMap, AnalyticsEvent } from "./events";
 
 let client: typeof posthog | undefined;
 
 export function startAnalytics(): void {
-  if (navigator.webdriver) return;
+  if (navigator.webdriver || client) return;
   try {
     client = posthog.init("phc_2z6yzR1XS76u7iEjcYvdZonNLJfCECJYqWlRoYqXmM0", {
       api_host: "https://us.i.posthog.com",
@@ -18,6 +17,12 @@ export function startAnalytics(): void {
       disable_session_recording: true,
       persistence: "localStorage",
     });
+    if (capabilities.ipcInvoke) {
+      void window
+        .electronAPI!.getAppVersion()
+        .catch(() => "unknown")
+        .then((version) => track("app_launched", { version }));
+    }
   } catch {
     // The app can run without analytics.
   }
@@ -36,22 +41,11 @@ export function track<E extends AnalyticsEvent>(
   }
 }
 
-/** Set the theme when the shell opens and record the version on desktop. */
-export function useAppLaunch(theme = "system"): void {
-  const reported = useRef(false);
-  useEffect(() => {
-    if (reported.current || !client) return;
-    reported.current = true;
-    try {
-      client.setPersonProperties({ theme });
-      if (capabilities.ipcInvoke) {
-        void window
-          .electronAPI!.getAppVersion()
-          .catch(() => "unknown")
-          .then((version) => track("app_launched", { version }));
-      }
-    } catch {
-      // Analytics must never crash the app.
-    }
-  }, [theme]);
+export function reportTheme(theme: string | undefined): void {
+  if (theme === undefined) return;
+  try {
+    client?.setPersonProperties({ theme });
+  } catch {
+    // Analytics must never crash the app.
+  }
 }

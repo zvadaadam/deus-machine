@@ -20,7 +20,8 @@ import { useAgentEvents } from "@/features/session/hooks/useAgentEvents";
 import { useQueryProtocol } from "@/shared/hooks/useQueryProtocol";
 import { useBackendRestart } from "@/shared/hooks/useBackendRestart";
 import { useSettings } from "@/features/settings";
-import { useAppLaunch } from "@/platform/analytics";
+import { reportTheme } from "@/platform/analytics";
+import { useTheme } from "../providers/ThemeProvider";
 import {
   useAuth,
   useMachineMembership,
@@ -116,7 +117,8 @@ function ServerContent() {
   useQueryProtocol();
 
   const settingsQuery = useSettings();
-  useAppLaunch(settingsQuery.data?.theme);
+  const { preference } = useTheme();
+  useEffect(() => reportTheme(preference), [preference]);
 
   // The product shell mounted, so this browser is a user — mark it so the root
   // domain's edge router serves the app (not the landing) at `/` next time.

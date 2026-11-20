@@ -1,7 +1,12 @@
 import { afterEach, expect, it, vi } from "vitest";
 
-const capture = vi.hoisted(() => vi.fn());
-vi.mock("posthog-js", () => ({ default: { init: vi.fn(() => ({ capture })) } }));
+const { capture, setPersonProperties } = vi.hoisted(() => ({
+  capture: vi.fn(),
+  setPersonProperties: vi.fn(),
+}));
+vi.mock("posthog-js", () => ({
+  default: { init: vi.fn(() => ({ capture, setPersonProperties })) },
+}));
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -22,3 +27,21 @@ it.each([false, true])(
     expect(capture.mock.calls).toEqual(webdriver ? [] : [["setting_changed", change]]);
   }
 );
+
+it("counts the desktop launch before a theme is chosen and reports each later choice", async () => {
+  vi.stubGlobal("navigator", { webdriver: false });
+  vi.stubGlobal("window", { electronAPI: { getAppVersion: async () => "0.3.20" } });
+  const { reportTheme, startAnalytics } = await import("@/platform/analytics/track");
+  startAnalytics();
+  reportTheme(undefined);
+  startAnalytics();
+  await vi.waitFor(() =>
+    expect(capture).toHaveBeenCalledWith("app_launched", { version: "0.3.20" })
+  );
+  expect(setPersonProperties).not.toHaveBeenCalled();
+
+  reportTheme("dark");
+  reportTheme("light");
+  expect(setPersonProperties.mock.calls).toEqual([[{ theme: "dark" }], [{ theme: "light" }]]);
+  expect(capture).toHaveBeenCalledTimes(1);
+});
