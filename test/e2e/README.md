@@ -295,15 +295,19 @@ computer as one `agentMcp` frame, and the computer answers it. The sign-in
 service is the only stand-in (`assistants/issuer.mjs`: metadata, dynamic client
 registration, PKCE, tokens in AuthKit's shape with `iss`, `aud` = the resource,
 `sub`, `client_id`, `org_id`, `exp`). The assistant is the official MCP SDK
-client given only the computer's assistant address. No model or agent login is
-needed.
+client given only the computer's assistant address. The stack's backends run
+with no agent engine (`AGENT_ALLOW_AGENTLESS`), the vault's key in a file, not
+the login Keychain (`DEUS_VAULT_NO_KEYCHAIN`), and git kept from climbing out of
+the run's folder into this checkout (`GIT_CEILING_DIRECTORIES`). No model turn
+runs and no agent login is needed: a first task is never delivered, so what is
+checked of a start is what it makes and records.
 
 ```sh
 AGNT_WORKSPACE=/path/to/agnt bun run test:e2e:assistants
 ```
 
 Docker must be running, and AGNT's `packages/api` and `packages/sdk` built. It
-checks, in order:
+takes about 13 seconds with the Postgres image pulled. It checks, in order:
 
 - The computer shows its address; with no token the connector answers 401 with
   the `resource_metadata` challenge, and the metadata names the sign-in; GET is
@@ -312,23 +316,70 @@ checks, in order:
   instructions), and right after it alone (no `tools/list`) the assistant is
   listed on the computer as pending.
 - From the URL alone the SDK client meets the 401, reads the metadata,
-  registers, signs in and connects; it is offered exactly the eight session
-  tools and `read_changes`, `archive_workspace` and `send_feedback`, with read-only hints set.
-- A pending assistant's tool call is refused with the not-allowed-yet sentence
+  registers, signs in and connects; it is offered exactly the package's ten
+  tools (`whoami`, `list_sessions`, `read_session`, `wait_for_sessions`,
+  `list_models`, `start_session`, `send_message`, `answer_request`,
+  `stop_sessions`, `archive`) and Deus's `read_changes`, `add_project` and
+  `send_feedback`, with `readOnlyHint` on the six that read, `destructiveHint`
+  on `stop_sessions` and `archive`, and `openWorldHint` on `add_project` and
+  `send_feedback`.
+- Pending: every call (a read, `whoami`, `send_feedback`, a write) is refused
+  with `refused (access)` and the not-allowed-yet sentence, and nothing changes
   (the list is read over the computer's local socket, as its own window).
 - The label: Deus Cloud's lookup asks WorkOS at a fixed URL, which cannot be
   stubbed; with no WorkOS key it answers 503 (403 to a web session), and the
   computer shows the fallback (name = client id, `host` null).
-- Read only: `list_sessions` shows seeded workspaces with their phases,
-  `read_session` a seeded conversation, `read_changes` the changed file; a tool
-  that changes something is refused with the read-only sentence.
+- Read only: `whoami` names the assistant and its access; `list_sessions` shows
+  every local chat as `workspace:N` with its status, title and who started it
+  (a chat another chat started names that chat), and a project with no
+  workspace as `(no sessions)`; `read_session` shows a seeded conversation (the
+  person's words, the agent's, a tool it ran, a message an assistant sent under
+  its name, how each turn ended), the same by reference and by id;
+  `wait_for_sessions` on two settled chats answers at once; `read_changes`
+  lists the changed file. `archive`, `stop_sessions`, `send_message`,
+  `start_session` and `add_project` are refused with the read-only sentence,
+  and nothing changes.
 - `read_changes` on a file that is not on the changed list (a seeded `.env`) is
   refused, showing none of its content, for a read-only and an operate assistant.
-- Operate: `archive_workspace` archives (checked in the database), and
-  `stop_session` on an idle chat says nothing was running.
+- A chat title with a line break and a fake list line is one JSON-quoted line in
+  `list_sessions`.
+- `read_session`'s cursor: read again with it, nothing new reads as nothing
+  new; after a turn ends, only that turn's messages and a new cursor; a cursor
+  that is not this computer's is refused as stale.
+- Changing the access closes the assistant's connections: a
+  `wait_for_sessions` held on a working chat ends at once, and the model reads
+  that the computer ended the connection because the access changed.
+- Operate: `archive` archives one workspace by name and another by id (checked
+  in the database) and they leave the list (`status: ["archived"]` lists them);
+  `stop_sessions` on two idle chats says nothing was running for each; an
+  unknown session is refused with the known ones, never an archived or cloud one.
+- An archived workspace: a message to its chat and a start in it are refused as
+  archived, and archiving it again says it already is.
 - A cloud workspace seeded in the computer's database (its own window lists it)
-  is not in an assistant's list, is not found by name or id, and cannot be
-  read, sent to, stopped or archived.
+  is not in an assistant's list, is not found by name, `name:1`,
+  `project/name`, chat id or workspace id, and cannot be read, waited on, sent
+  to, started in, stopped or archived.
+- `archive` of one chat: a chat another chat started is put away (`is_hidden`,
+  the workspace's current chat moves) and then takes no message; a chat the
+  person started, and a workspace's only chat, are refused in words that say
+  what to do instead.
+- `start_session` refuses, making nothing, an agent that does not run here and
+  a project that does not exist. With an explicit agent (Codex) and a title it
+  adds a chat to an existing workspace, stored with that agent and title and
+  `started_by` naming the assistant, without renaming the workspace;
+  `list_sessions` says the assistant started it, and the assistant cannot
+  archive it (the person closes it). In a project with no workspace it makes a
+  new workspace, set up for real, with `started_by` and the title; the same call
+  made twice at once makes one workspace and the second answer is the first's
+  result. A start whose setup fails (a project folder that is not a
+  repository) leaves the workspace in error, `wait_for_sessions` gives its
+  reason, and `archive` removes it.
+- The starts-per-minute limit: the eleventh start within a minute is refused
+  (`limit_rate`) and makes no chat.
+- `wait_for_sessions` on a settled and a working chat: `until: any` answers at
+  once and offers the wait on the other; `until: all` waits out its two seconds
+  and says which still works. `send_message` to a working chat sends nothing and
+  says so.
 - A second assistant on the same account waits for its own approval.
 - The connector refuses with 401 a token for another computer's address, an
   expired, a forged and another issuer's token. Another account's token for the
@@ -349,15 +400,23 @@ checks, in order:
   on this computer." (a tool result marked as an error) and it stays listed as
   denied; allowed again, it works.
 - Remove: it leaves the list, and its next contact is pending again.
-- Read only and empty: `list_sessions` shows a project with no workspace as
-  `(no sessions)`, and with every workspace archived it answers "no sessions.
-  Projects: …" naming them, with the `start_session` hint.
+- With every workspace archived, `list_sessions` answers `0 session(s)`, names
+  the projects as `(no sessions)` and offers the `start_session` call.
 - The computer removed from the account: what Deus Cloud remembered goes with
   it, so with the computer away `initialize` and `tools/list` are refused (not
   on the account) rather than answered from memory.
 
+It prints `SKIP` for what needs the engine's model lists (`list_models`, and a
+start naming a model), and `KNOWN FAILURE` for one bug in the engine package:
+`start_session`'s own answer for a workspace whose setup failed reads "setup
+failed" rather than the reason, because it renders the entry read at the start
+(`src/operator/operator.ts`, `ownOutcome`). A message an assistant sends is not
+stored here (the engine's echo writes it), so `messages.origin` is the unit
+tests' to hold.
+
 Logs, Worker state, the run's database and `results.json` (each check's
-evidence: the tools' own words) go to `.context/assistants-e2e/`.
+evidence: the tools' own words, and what was skipped or is a known failure) go
+to `.context/assistants-e2e/`.
 
 ### `controls.browser.mjs`
 
