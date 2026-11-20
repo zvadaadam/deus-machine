@@ -11,7 +11,7 @@ import { api } from "@shared/api";
 import { call } from "@/platform/ws";
 import { useStream } from "@/shared/hooks/useStream";
 import { queryKeys } from "@/shared/api/queryKeys";
-import { applyAnalyticsSettings, track } from "@/platform/analytics";
+import { track } from "@/platform/analytics";
 import type { Settings } from "../types";
 import { DEFAULT_THINKING_LEVEL } from "@shared/models";
 import { readThinkingLevel, type ThinkingLevel } from "@shared/protocol";
@@ -22,18 +22,7 @@ import { readThinkingLevel, type ThinkingLevel } from "@shared/protocol";
 export function useSettings() {
   return useQuery({
     queryKey: queryKeys.settings.all,
-    queryFn: async ({ client, signal }) => {
-      const settings = await call(api.settings);
-      // A read racing an opt-out can still see the host's old preference.
-      const optingOut = client.isMutating({
-        predicate: (m) =>
-          (m.state.variables as Partial<Settings> | undefined)?.analytics_enabled === false,
-      });
-      if (!signal.aborted && (!optingOut || settings.analytics_enabled === false)) {
-        applyAnalyticsSettings(client, settings);
-      }
-      return settings;
-    },
+    queryFn: () => call(api.settings),
     staleTime: 30000, // Cache for 30s (settings change less frequently)
   });
 }
@@ -138,8 +127,6 @@ export function useUpdateSettings() {
     // Optimistic update: Apply settings immediately
     onMutate: async (newSettings: Partial<Settings>) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.settings.all, exact: true });
-      // Show opt-in only once the host returns it. Opt-out takes effect on the click.
-      if (newSettings.analytics_enabled === true) return;
 
       const previousSettings = queryClient.getQueryData<Settings>(queryKeys.settings.all);
 

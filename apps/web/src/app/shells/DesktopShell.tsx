@@ -14,6 +14,7 @@ import { DashboardError } from "@/shared/components";
 import { createBoundaryErrorHandler } from "@/shared/utils/errorReporting";
 import { OnboardingOverlay } from "@/features/onboarding";
 import { useSettings } from "@/features/settings";
+import { useAppLaunch } from "@/platform/analytics";
 import { useAuth, PairGatePage } from "@/features/auth";
 import { native } from "@/platform";
 import { ServerOfflinePage } from "@/features/connection";
@@ -30,6 +31,7 @@ export function DesktopShell({ reset }: { reset: () => void }) {
 
   const auth = useAuth();
   const settingsQuery = useSettings();
+  useAppLaunch(settingsQuery.data?.theme);
   const windowShownRef = useRef(false);
 
   // Request OS notification permission once on mount

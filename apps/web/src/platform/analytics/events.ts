@@ -47,7 +47,7 @@ type WithSession = { session_id: string };
 
 export type AnalyticsEventMap = {
   // ── App Lifecycle ──────────────────────────────────────────────────────
-  /** Fired once per boot after consent check passes. */
+  /** The desktop app opened. */
   app_launched: { version: string };
 
   // ── Onboarding ─────────────────────────────────────────────────────────

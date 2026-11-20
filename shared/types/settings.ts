@@ -28,9 +28,6 @@ export interface Settings {
   // AI — Codex
   openai_api_key?: string;
 
-  // Analytics (opt-out, default true when absent)
-  analytics_enabled?: boolean;
-
   // Experimental (default: false when absent — opt-in for new users)
   experimental_simulator?: boolean;
   experimental_browser?: boolean;

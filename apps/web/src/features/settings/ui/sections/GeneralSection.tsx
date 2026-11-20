@@ -17,10 +17,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
 import { RotateCcw, Loader2, RefreshCw, CheckCircle2, AlertCircle, Download } from "lucide-react";
 import { useUIStore } from "@/shared/stores/uiStore";
-import { stopAnalytics } from "@/platform/analytics";
 import { capabilities } from "@/platform";
 import { releaseUrl, useUpdateContext } from "@/features/updates";
 import type { GeneralSectionProps } from "./types";
@@ -108,11 +106,10 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
           </SelectContent>
         </Select>
       </Field>
-      <Separator />
-
       {/* Replay onboarding — desktop only (requires Electron window effects) */}
       {capabilities.nativeOnboarding && (
         <>
+          <Separator />
           <div className="flex items-center justify-between gap-4">
             <div>
               <Label className="text-sm">Onboarding</Label>
@@ -130,30 +127,8 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
               Replay
             </Button>
           </div>
-
-          <Separator />
         </>
       )}
-
-      {/* Analytics */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <Label htmlFor="analytics-toggle" className="text-sm">
-            Usage analytics
-          </Label>
-          <p className="text-muted-foreground text-sm">
-            Help improve Deus by sharing anonymous usage data.
-          </p>
-        </div>
-        <Switch
-          id="analytics-toggle"
-          checked={settings.analytics_enabled !== false}
-          onCheckedChange={async (checked) => {
-            if (!checked) stopAnalytics();
-            await saveSetting("analytics_enabled", checked);
-          }}
-        />
-      </div>
 
       {/* Updates — desktop only */}
       {capabilities.autoUpdate && (

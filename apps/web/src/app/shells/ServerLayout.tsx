@@ -20,6 +20,7 @@ import { useAgentEvents } from "@/features/session/hooks/useAgentEvents";
 import { useQueryProtocol } from "@/shared/hooks/useQueryProtocol";
 import { useBackendRestart } from "@/shared/hooks/useBackendRestart";
 import { useSettings } from "@/features/settings";
+import { useAppLaunch } from "@/platform/analytics";
 import {
   useAuth,
   useMachineMembership,
@@ -115,6 +116,7 @@ function ServerContent() {
   useQueryProtocol();
 
   const settingsQuery = useSettings();
+  useAppLaunch(settingsQuery.data?.theme);
 
   // The product shell mounted, so this browser is a user — mark it so the root
   // domain's edge router serves the app (not the landing) at `/` next time.
