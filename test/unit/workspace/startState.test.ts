@@ -102,6 +102,19 @@ describe("a workspace that started", () => {
       "The setup script failed, so this workspace started without it. Setup exited with code 1.",
     ]);
   });
+
+  it("shows the script's last words in the warning under the ready line", () => {
+    const start = workspaceStart({
+      ...ready,
+      setup_status: "failed",
+      error_message: "Setup exited with code 1.",
+      error_detail: "Installing tools\nCannot find <compiler>",
+    });
+    expect(start.warnings).toEqual([
+      "The setup script failed, so this workspace started without it. Setup exited with code 1.\nInstalling tools\nCannot find <compiler>",
+    ]);
+    expect(start.brief).toBe("Setup failed");
+  });
 });
 
 describe("a start that failed", () => {

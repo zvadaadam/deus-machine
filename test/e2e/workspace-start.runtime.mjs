@@ -104,6 +104,7 @@ const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/serv
   env: {
     ...process.env,
     PORT: "0",
+    DEUS_USER_DATA_DIR: directory,
     DATABASE_PATH: path.join(directory, "deus.db"),
     // Never the login Keychain, and git never climbs out of the run into this checkout.
     DEUS_VAULT_NO_KEYCHAIN: "1",
@@ -658,6 +659,28 @@ try {
   );
   assert.equal(sends(missed), 0, "a missed message is not sent");
   check("A waiting message whose chat was spoken to first goes to that chat's composer, unsent");
+
+  // ── 11. A failed setup still opens the chat, with the script's own words in view.
+  await writeFile(
+    path.join(repo, ".deus/environment.json"),
+    JSON.stringify({
+      version: 1,
+      setup:
+        "echo starting; sleep 1; printf 'Checking tools\\n\\033[31mMissing <b>clang</b>\\033[0m\\n' >&2; exit 1",
+    })
+  );
+  git("add", ".deus/environment.json");
+  git("commit", "-qm", "Exercise a failing setup");
+  const failedSetup = await create();
+  await a.locator(`[data-workspace-id="${failedSetup.id}"]`).click();
+  const warning = startLine(a).getByText(/The setup script failed,/);
+  await warning.waitFor();
+  assert.equal(
+    await warning.textContent(),
+    "The setup script failed, so this workspace started without it. Setup exited with code 1.\nChecking tools\nMissing <b>clang</b>"
+  );
+  await startLine(a).screenshot({ path: path.join(evidence, "setup-warning.png") });
+  check("A failed setup opens the chat with the last two log lines visible as plain text");
 
   assert.deepEqual(errors, []);
   report.errors = errors;

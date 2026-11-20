@@ -73,6 +73,8 @@ the same workspaces. It checks, in order:
   message is still in Home's composer.
 - A message waiting for a workspace whose chat was already spoken to (from
   another window) is not sent: it goes into that chat's composer.
+- A setup script exits with an error. Its chat opens with the last two log lines
+  visible as plain text in the start warning.
 
 ```sh
 bun run native:node

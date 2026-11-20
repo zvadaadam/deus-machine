@@ -178,9 +178,8 @@ export function workspaceStart(workspace: StartFields): WorkspaceStart {
   const warnings: string[] = [];
   if (workspace.init_fetch_issue) warnings.push(fetchIssueNotice(workspace.init_fetch_issue));
   if (phase !== "failed" && workspace.setup_status === "failed") {
-    warnings.push(
-      `The setup script failed, so this workspace started without it.${workspace.error_message ? ` ${workspace.error_message}` : ""}`
-    );
+    const reason = `The setup script failed, so this workspace started without it.${workspace.error_message ? ` ${workspace.error_message}` : ""}`;
+    warnings.push([reason, workspace.error_detail].filter(Boolean).join("\n"));
   }
 
   const active = steps.find((step) => step.state === "active");

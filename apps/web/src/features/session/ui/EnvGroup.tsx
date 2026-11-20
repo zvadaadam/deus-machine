@@ -163,7 +163,7 @@ export function EnvGroup({
           {warnings.map((warning) => (
             <div
               key={warning}
-              className="border-warning/20 border-l-warning bg-warning/5 text-warning max-w-xl rounded-lg border border-l-2 px-3 py-2"
+              className="border-warning/20 border-l-warning bg-warning/5 text-warning max-w-xl rounded-lg border border-l-2 px-3 py-2 wrap-anywhere whitespace-pre-line"
             >
               {warning}
             </div>

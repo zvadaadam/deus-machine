@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { spawn, execFileSync } from "node:child_process";
-import { parseEnv } from "node:util";
+import { StringDecoder } from "node:string_decoder";
+import { parseEnv, stripVTControlCharacters } from "node:util";
 import {
   parseProjectEnvironment,
   PROJECT_ENVIRONMENT_PATH,
@@ -156,7 +157,7 @@ export async function prepareLocalEnvironment(
 ): Promise<void> {
   const db = getDatabase();
   db.prepare(
-    "UPDATE workspaces SET setup_status = 'running', error_message = NULL WHERE id = ?"
+    "UPDATE workspaces SET setup_status = 'running', error_message = NULL, error_detail = NULL WHERE id = ?"
   ).run(workspaceId);
   invalidate(["workspaces"]);
   try {
@@ -175,14 +176,28 @@ export async function prepareLocalEnvironment(
       "UPDATE workspaces SET setup_status = 'completed', error_message = NULL WHERE id = ?"
     ).run(workspaceId);
   } catch (error) {
-    db.prepare("UPDATE workspaces SET setup_status = 'failed', error_message = ? WHERE id = ?").run(
+    db.prepare(
+      "UPDATE workspaces SET setup_status = 'failed', error_message = ?, error_detail = ? WHERE id = ?"
+    ).run(
       (error as Error).message,
+      error instanceof SetupExitError ? error.detail : null,
       workspaceId
     );
   } finally {
     invalidate(["workspaces"]);
   }
 }
+
+class SetupExitError extends Error {
+  constructor(
+    code: number | null,
+    readonly detail: string | null
+  ) {
+    super(`Setup exited with code ${code}.${detail ? "" : " View the setup log for details."}`);
+  }
+}
+
+const SETUP_TAIL_CHARS = 400;
 
 export function runSetupCommand(
   workspaceId: string,
@@ -206,6 +221,32 @@ export function runSetupCommand(
     const untrack = trackProcessGroup(child.pid);
     child.stdout.pipe(log, { end: false });
     child.stderr.pipe(log, { end: false });
+    // Follow the same bytes as the log, including a line split across writes or streams.
+    const decoder = new StringDecoder("utf8");
+    const tail: string[] = [];
+    let partial = "";
+    const clip = (text: string) => text.slice(-SETUP_TAIL_CHARS).replace(/^\p{Surrogate}/u, "");
+    const remember = (line: string) => {
+      const text = stripVTControlCharacters(line).trim();
+      if (!text) return;
+      if (tail.length === 2) tail.shift();
+      tail.push(clip(text));
+    };
+    const capture = (chunk: Buffer) => {
+      const lines = (partial + decoder.write(chunk)).split(/[\r\n]/);
+      partial = lines.pop()!;
+      lines.forEach(remember);
+      if (partial.length <= 4096) return;
+      // Compact long lines before the final escape, which may continue in the next write.
+      const escape = Math.max(partial.lastIndexOf("\x1b"), partial.lastIndexOf("\x9b"));
+      const end = escape >= partial.length - SETUP_TAIL_CHARS ? escape : partial.length;
+      const clean = stripVTControlCharacters(partial.slice(0, end));
+      const body = clean.trimEnd();
+      partial =
+        clip(body) + clean.slice(body.length, body.length + SETUP_TAIL_CHARS) + partial.slice(end);
+    };
+    child.stdout.on("data", capture);
+    child.stderr.on("data", capture);
     const killProcessGroup = () => {
       if (child.pid) {
         try {
@@ -236,18 +277,14 @@ export function runSetupCommand(
       killProcessGroup();
       finish(error);
     });
-    child.once("close", (code) =>
-      finish(
-        code === 0 && !timedOut
-          ? undefined
-          : new Error(
-              processGroupsStopped()
-                ? "Setup was stopped when Deus closed. Run it again."
-                : timedOut
-                  ? "Setup timed out after five minutes."
-                  : `Setup exited with code ${code}. View the setup log for details.`
-            )
-      )
-    );
+    child.once("close", (code) => {
+      if (code === 0 && !timedOut) return finish();
+      if (processGroupsStopped())
+        return finish(new Error("Setup was stopped when Deus closed. Run it again."));
+      if (timedOut) return finish(new Error("Setup timed out after five minutes."));
+      remember(partial + decoder.end());
+      const detail = code === null ? "" : clip(tail.join("\n"));
+      finish(new SetupExitError(code, detail || null));
+    });
   });
 }

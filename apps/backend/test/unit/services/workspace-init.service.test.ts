@@ -186,6 +186,60 @@ describe("local project environment journey", () => {
     expect(fs.readFileSync(path.join(directory, "nested/proof.txt"), "utf8")).toBe("done");
     expect(fs.existsSync(path.join(directory, "nested/unexpected.txt"))).toBe(false);
   });
+  it.each([1, 2])(
+    "keeps the last two non-empty setup lines from fd %i on a failed exit",
+    async (fd) => {
+      project({
+        version: 1,
+        setup: `printf 'earlier step\\n  compiling  \\r\\n\\n\\033[31mmissing <tool>\\033[0m\\n    \\n\\033[0m' >&${fd}\nexit 1`,
+      });
+      const directory = await initialize();
+      expect(row()).toMatchObject({
+        state: "ready",
+        setup_status: "failed",
+        error_message: "Setup exited with code 1.",
+        error_detail: "compiling\nmissing <tool>",
+      });
+      writeProjectFile(directory, { version: 1, setup: "exit 1" });
+      await prepareLocalEnvironment(workspaceId, directory);
+      expect(row()).toMatchObject({
+        setup_status: "failed",
+        error_message: "Setup exited with code 1. View the setup log for details.",
+        error_detail: null,
+      });
+    }
+  );
+  it("bounds the excerpt even when a script ends with a long unterminated line", async () => {
+    const suffix = "x".repeat(392) + " failed";
+    const output = "x".repeat(10_000) + "🛠" + suffix;
+    project({ version: 1, setup: `printf '%s%6000s' '${output}' ''\nexit 1` });
+    await prepareLocalEnvironment(workspaceId, root);
+    expect(row().error_detail).toBe(suffix);
+    project({ version: 1, setup: "true" });
+    await prepareLocalEnvironment(workspaceId, root);
+    expect(row()).toMatchObject({
+      setup_status: "completed",
+      error_message: null,
+      error_detail: null,
+    });
+  });
+  it("keeps the five-minute timeout's own reason even after setup printed output", async () => {
+    project({ version: 1, setup: "echo installing; touch started; sleep 30" });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const setup = prepareLocalEnvironment(workspaceId, root);
+      await vi.waitFor(() => expect(fs.existsSync(path.join(root, "started"))).toBe(true));
+      vi.advanceTimersByTime(300_000);
+      await setup;
+      expect(row()).toMatchObject({
+        setup_status: "failed",
+        error_message: "Setup timed out after five minutes.",
+        error_detail: null,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("stops the setup shell and its descendant when the log stream fails", async () => {
     let shellPid: number | undefined;
     let childPid: number | undefined;

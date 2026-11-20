@@ -54,7 +54,7 @@ export interface Workspace {
   init_stage?: string | null;
   /** The plain reason starting (state `error`) or setup (`setup_status` failed) did not work. */
   error_message: string | null;
-  /** What the tool printed when starting failed. */
+  /** What the tool printed when starting failed, or the log tail when the setup script failed. */
   error_detail?: string | null;
   /** Set when the workspace started without origin's latest. */
   init_fetch_issue?: InitFetchIssue | null;
