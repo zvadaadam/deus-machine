@@ -33,6 +33,7 @@ import {
   OperatorError,
   Refused,
   callHint,
+  refOf,
   type Answer,
   type CancelOutcome,
   type Caller as OperatorCaller,
@@ -68,6 +69,7 @@ import { attachParts, getMessages, getSessionRaw, hasOlderMessages } from "../..
 import { getDatabase } from "../../lib/database";
 import { AppError, ChatBusyError } from "../../lib/errors";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
+import { persistSessionTitle } from "../agent/persistence";
 import { liveTurnId } from "../agent/service";
 import { answer as answerToolRequest, pendingFor } from "../agent/tool-relay";
 import { sendMessage, stopSession } from "../agent/turns";
@@ -145,6 +147,7 @@ interface Row {
   chat: number | null;
   s_error: string | null;
   message_count: number | null;
+  s_updated_at: string | null;
 }
 
 const ROWS = `
@@ -153,7 +156,7 @@ const ROWS = `
     r.id AS repository_id, r.name AS repo_name, r.root_path,
     s.id AS session_id, s.status AS s_status, s.title AS s_title, s.agent_harness,
     s.started_by AS s_started_by, s.last_user_message_at, s.is_hidden, s.chat,
-    s.error_message AS s_error, s.message_count
+    s.error_message AS s_error, s.message_count, s.updated_at AS s_updated_at
   FROM workspaces w JOIN repositories r ON r.id = w.repository_id
   LEFT JOIN sessions s ON s.workspace_id = w.id
   WHERE w.kind != 'cloud'`;
@@ -289,8 +292,11 @@ export function createDeusHost(): DeusHost {
       const chat = row.chat ?? (counted.get(row.workspace_id) ?? 0) + 1;
       counted.set(row.workspace_id, chat);
       const status = statusOf(row, ended.get(id));
-      const title = row.s_title ?? (chat === 1 ? row.ws_title : null);
-      const activity = epochMs(row.last_user_message_at) ?? epochMs(row.ws_updated_at);
+      // The workspace's title and time stand in only for a first chat with no row yet.
+      const title = row.session_id ? row.s_title : row.ws_title;
+      const activity =
+        epochMs(row.last_user_message_at) ??
+        epochMs(row.session_id ? row.s_updated_at : row.ws_updated_at);
       const root = computeWorkspacePath({ root_path: row.root_path, slug: row.slug });
       // Why: a failed start, or a first task that could not be delivered (no messages yet).
       const error = !row.session_id
@@ -425,12 +431,10 @@ export function createDeusHost(): DeusHost {
    * its entry and view show.
    */
   async function sendFirst(caller: Who, sessionId: string, input: StartInput) {
-    const db = getDatabase();
     try {
       const settings = settingsFor(input);
       mayTouch(caller, sessionId);
-      if (input.title)
-        db.prepare("UPDATE sessions SET title = ? WHERE id = ?").run(input.title, sessionId);
+      if (input.title) persistSessionTitle(sessionId, input.title);
       await sendMessage(
         { sessionId, content: input.message, turnId: input.turnId, ...settings },
         input.origin
@@ -521,7 +525,14 @@ export function createDeusHost(): DeusHost {
   async function stopTurn(caller: Who, sessionId: string, turnId: string): Promise<CancelOutcome> {
     if (liveTurnId(sessionId) !== turnId) return "not_running";
     mayTouch(caller, sessionId);
-    const { unconfirmed } = await stopSession({ sessionId }, originOf(caller));
+    // Named like a send's sender, so every reader sees who stopped it, not an id.
+    let by = originOf(caller);
+    if (by.kind === "session") {
+      const all = everything();
+      const own = all.find((e) => e.id === (by as { sessionId: string }).sessionId);
+      if (own) by = { ...by, name: refOf(own, all) };
+    }
+    const { unconfirmed } = await stopSession({ sessionId }, by);
     if (unconfirmed) return "unconfirmed";
     return (await ended(sessionId, turnId)) ? "stopped" : "unconfirmed";
   }
@@ -634,7 +645,10 @@ export function createDeusHost(): DeusHost {
         cursor: `${seq}.${endMark ?? 0}` as never,
         ...(running ? { running } : {}),
         ...(last ? { lastEnded: last } : {}),
-        ...(rows.length && hasOlderMessages(db, sessionId, rows[0]!.seq) ? { older: true } : {}),
+        // A read with a cursor continues from it: what precedes the page was read already.
+        ...(!after && rows.length && hasOlderMessages(db, sessionId, rows[0]!.seq)
+          ? { older: true }
+          : {}),
       };
     },
 

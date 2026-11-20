@@ -23,7 +23,6 @@ import { getErrorMessage } from "@shared/lib/errors";
 import type { RepoGroup } from "@shared/types/workspace";
 import { getAgentHarnessForModel, getModelId } from "@/shared/agents";
 import { useDefaultThinkingLevel } from "@/features/settings/api";
-import { useWorkspaceStore } from "@/features/workspace/store";
 import {
   pendingFirstMessages,
   useWorkspaceStartStore,
@@ -108,9 +107,7 @@ export function useFirstMessageDelivery(repoGroups: RepoGroup[], loaded: boolean
         const open = () => openChat(workspaceId, sessionId);
         toast.error(getErrorMessage(error), {
           description: "Your message is in that chat's composer.",
-          ...(useWorkspaceStore.getState().selectedWorkspaceId === workspaceId
-            ? {}
-            : { action: { label: "Open", onClick: open } }),
+          action: { label: "Open", onClick: open },
         });
       } finally {
         sending.current.delete(workspaceId);

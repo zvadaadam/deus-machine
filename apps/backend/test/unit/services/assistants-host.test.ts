@@ -116,6 +116,7 @@ import { LOCAL_CALLER, type Caller } from "../../../src/api/registry";
 import handlers from "../../../src/api/assistants";
 import * as api from "@shared/api/assistants";
 import { ChatBusyError } from "../../../src/lib/errors";
+import { persistSessionTitle } from "../../../src/services/agent/persistence";
 import { createDeusHost } from "../../../src/services/assistants/host";
 import { _resetOperator, withSessionTools } from "../../../src/services/assistants/operator";
 import { READ_ONLY } from "../../../src/services/assistants/sentences";
@@ -393,7 +394,8 @@ describe("sending and starting", () => {
     state.live.set("s-lead", "t1");
     expect(await host.cancel!(LEAD as never, "s-lead", "other")).toBe("not_running");
     expect(await host.cancel!(LEAD as never, "s-lead", "t1")).toBe("stopped");
-    expect(state.stopped).toEqual([{ sessionId: "s-lead", by: LEAD }]);
+    // F6: named as a send's sender is, so another reader sees who, not an id.
+    expect(state.stopped).toEqual([{ sessionId: "s-lead", by: { ...LEAD, name: "lead:1" } }]);
   });
 });
 
@@ -691,7 +693,7 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     const stopping = host.cancel!(LEAD as never, entry.id);
     admit();
     expect(await stopping).toBe("stopped");
-    expect(state.stopped).toEqual([{ sessionId: entry.id, by: LEAD }]);
+    expect(state.stopped).toEqual([{ sessionId: entry.id, by: { ...LEAD, name: "lead:1" } }]);
   });
 
   it("H8: chats keep the number they were made with, whatever their ids sort as; the newest visible is by number", async () => {
@@ -908,6 +910,97 @@ describe("round 3 (B1, B4, B5)", () => {
     });
     ready(entry);
     await vi.waitFor(() => expect(seen.at(-1)).toBe("error"));
+  });
+});
+
+describe("the acceptance pass (F5, F7, F8, F9, F10)", () => {
+  const titles = (sessionId: string) =>
+    state.db
+      .prepare(
+        "SELECT s.title AS chat, w.title AS workspace FROM sessions s JOIN workspaces w ON w.id = s.workspace_id WHERE s.id = ?"
+      )
+      .get(sessionId);
+
+  it("F5: a title given at the start names the chat and its new workspace; the summary after it does not replace it", async () => {
+    const host = createDeusHost();
+    const entry = await host.start!(LEAD as never, startInput({ title: "Child One" }));
+    ready(entry);
+    await vi.waitFor(() => expect(state.sent).toHaveLength(1));
+    persistSessionTitle(entry.id, "Session new1:1 reply");
+    expect(titles(entry.id)).toEqual({ chat: "Child One", workspace: "Child One" });
+    // A chat started with none takes the summary.
+    const plain = await host.start!(LEAD as never, startInput({ turnId: "first-y" }));
+    ready(plain);
+    persistSessionTitle(plain.id, "Auto summary");
+    expect(titles(plain.id)).toEqual({ chat: "Auto summary", workspace: "Auto summary" });
+  });
+
+  it("F7, F8: a chat with a row borrows neither the workspace's title nor its time", async () => {
+    const host = createDeusHost();
+    insertChat("s-second", "w-lead", LEAD);
+    state.db
+      .prepare(
+        "UPDATE workspaces SET title = 'OLD-B2', updated_at = datetime('now') WHERE id = 'w-lead'"
+      )
+      .run();
+    state.db.prepare("UPDATE sessions SET title = 'OLD-B2' WHERE id = 's-second'").run();
+    state.db.prepare("DROP TRIGGER update_sessions_updated_at").run();
+    state.db
+      .prepare("UPDATE sessions SET updated_at = '2020-01-01 00:00:00' WHERE id = 's-lead'")
+      .run();
+    const first = (await host.list(LOCAL_CALLER as never, {})).find((e) => e.id === "s-lead")!;
+    expect(first.title).toBeUndefined();
+    expect(first.lastActivityAt).toBe(Date.parse("2020-01-01T00:00:00Z"));
+  });
+
+  it("F9: a read with a cursor does not point back at older messages", async () => {
+    const host = createDeusHost();
+    message("s-lead", "t1", "user", "one");
+    message("s-lead", "t1", "assistant", "two");
+    endTurn("s-lead", "t1", "end_turn");
+    const first = await host.view(LOCAL_CALLER as never, "s-lead", { last: 1 });
+    expect(first.older).toBe(true);
+    message("s-lead", "t2", "user", "three");
+    endTurn("s-lead", "t2", "end_turn");
+    const next = await host.view(LOCAL_CALLER as never, "s-lead", { after: first.cursor });
+    expect(next.turns.map((t) => t.turnId)).toEqual(["t2"]);
+    expect(next.older).toBeUndefined();
+  });
+
+  it("F10: a caller in plan mode is refused start_session and send_message, which make nothing; list_sessions answers", async () => {
+    const source = withSessionTools({ name: "deus", tools: [], call: vi.fn() } as never);
+    const caller = {
+      sessionId: "s-lead",
+      harness: "claude-code",
+      turnId: "t",
+      permissionMode: "plan",
+    } as const;
+    const signal = new AbortController().signal;
+    const count = (table: string) =>
+      (state.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
+    const before = [count("workspaces"), count("sessions"), count("messages")];
+    insertChat("s-other", "w-lead", null, false);
+    const started = await source.call(
+      "start_session",
+      { project: "demo-shop", message: "go" },
+      caller as never,
+      signal
+    );
+    const sent = await source.call(
+      "send_message",
+      { session: "lead:2", message: "x" },
+      caller as never,
+      signal
+    );
+    for (const refused of [started, sent]) {
+      expect(refused).toMatchObject({ isError: true });
+      expect(JSON.stringify(refused.content)).toContain("refused (read_only)");
+    }
+    expect([count("workspaces"), count("sessions") - 1, count("messages")]).toEqual(before);
+    expect(state.sent).toEqual([]);
+    const listed = await source.call("list_sessions", {}, caller as never, signal);
+    expect(listed.isError ?? false).toBe(false);
+    expect(JSON.stringify(listed.content)).toContain("lead");
   });
 });
 

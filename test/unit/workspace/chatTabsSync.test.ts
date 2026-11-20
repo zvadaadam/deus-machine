@@ -46,6 +46,13 @@ describe("tabs that follow the live chat list (H9, H21)", () => {
     );
     expect(next.tabs.map((t) => (t as { sessionId: string }).sessionId)).toEqual(["a", "new"]);
     expect(next.closed).toBe(state.closed);
+    // F3: a chat closed before any push listed it arrives closed, and stays closed.
+    const early = reconcileLive(
+      { tabs: [sessionToTab(chat("a"), 1)], closed: [closedTab("b")] },
+      [chat("a"), chat("b")],
+      new Set(["a"])
+    );
+    expect(early.tabs.map((t) => (t as { sessionId: string }).sessionId)).toEqual(["a"]);
     const after = reconcileLive(next, [chat("a"), chat("new")], new Set(["a", "b", "new"]));
     expect(after.closed).toEqual([]);
   });

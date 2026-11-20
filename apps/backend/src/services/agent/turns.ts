@@ -358,6 +358,13 @@ async function sendMessageOnce(
         ...(origin ? { origin } : {}),
       });
     } catch (err) {
+      // A stop that landed while this was being admitted claimed the id with a row;
+      // the engine refused it, so no turn of that id exists: the row goes too.
+      getDatabase()
+        .prepare(
+          "DELETE FROM turns WHERE session_id = ? AND turn_id = ? AND started_at IS NULL AND ended_at IS NULL"
+        )
+        .run(sessionId, turnId);
       if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
         // The session is legitimately mid-turn — another client won the race
         // between the status guard above and the wire. That RUNNING turn is

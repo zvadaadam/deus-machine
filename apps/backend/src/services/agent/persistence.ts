@@ -489,10 +489,10 @@ export function persistSessionTitle(sessionId: string, title: string): WriteResu
   const db = getDatabase();
   try {
     db.transaction(() => {
-      db.prepare(`UPDATE sessions SET title = ?, updated_at = datetime('now') WHERE id = ?`).run(
-        title,
-        sessionId
-      );
+      // Set once, like the workspace's below: a title given at the start is not replaced by the summary.
+      db.prepare(
+        `UPDATE sessions SET title = ?, updated_at = datetime('now') WHERE id = ? AND title IS NULL`
+      ).run(title, sessionId);
       // Auto-set workspace title only if not already set (preserves PR titles and user renames)
       db.prepare(
         `UPDATE workspaces SET title = ?

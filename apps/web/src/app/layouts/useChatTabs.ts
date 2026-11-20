@@ -72,6 +72,9 @@ interface UseChatTabsOptions {
   activeSessionId: string | null | undefined;
 }
 
+/** An open-chat request older than this is dropped: a click's answer, not a later surprise. */
+const OPEN_CHAT_REQUEST_MAX_AGE_MS = 10_000;
+
 export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions) {
   // Fetch all sessions for this workspace (for hydrating tab metadata)
   const { data: workspaceSessions, dataUpdatedAt: sessionsReadAt } =
@@ -145,6 +148,11 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
   // --- Hydrate tabs with real session data when sessions load ---
 
   const hydrated = useRef(false);
+  /** The closed tabs as of this render, for the live reconcile's tabs update. */
+  const closedNow = useRef(closedTabs);
+  useEffect(() => {
+    closedNow.current = closedTabs;
+  }, [closedTabs]);
   /** Chats the live list has shown: one gone from it since was put away (or deleted). */
   const seen = useRef(new Set<string>());
   useEffect(() => {
@@ -158,8 +166,12 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
         (closed) => reconcileLive({ tabs: [], closed }, workspaceSessions, before).closed
       );
       setMainTabs((tabs) => {
-        // No closed list needed: a closed chat was seen, so it is never among the arrivals.
-        const next = reconcileLive({ tabs, closed: [] }, workspaceSessions, before).tabs;
+        // The closed list matters: a chat opened with "+" and closed before a push lists it is an arrival.
+        const next = reconcileLive(
+          { tabs, closed: closedNow.current },
+          workspaceSessions,
+          before
+        ).tabs;
         if (next !== tabs)
           setActiveMainTabId((active) =>
             next.some((t) => t.id === active) ? active : (next.at(-1)?.id ?? "tab-default")
@@ -231,6 +243,11 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
   const requested = useOpenChatStore((state) => state.requested[workspaceId]);
   useEffect(() => {
     if (!requested || !hydrated.current || !workspaceSessions) return;
+    // Taken late, it would move the person's focus after they have gone on to something else.
+    if (Date.now() - requested.at > OPEN_CHAT_REQUEST_MAX_AGE_MS) {
+      openChatDone(workspaceId, requested.id);
+      return;
+    }
     const session = sessionMap.get(requested.sessionId);
     // A target not in the list waits for a list read from the host since the
     // request (a cached one can predate the chat), and is dropped only if absent then.
