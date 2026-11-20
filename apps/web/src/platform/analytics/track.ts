@@ -4,6 +4,20 @@ import type { AnalyticsEventMap, AnalyticsEvent } from "./events";
 
 let client: typeof posthog | undefined;
 
+// PostHog also attaches URLs inside session and person properties, including $set_once.
+function stripUrlFragments(record: object): void {
+  const fields = record as Record<string, unknown>;
+  for (const [key, value] of Object.entries(fields)) {
+    if (typeof value === "string" && value.includes("#")) {
+      fields[key] = /(?:url|href|referrer)$/i.test(key)
+        ? value.slice(0, value.indexOf("#"))
+        : value.replace(/((?:\b[a-z][\w+.-]*:|\/)[^\s#]*)#[^\s]*/gi, "$1");
+    } else if (value && typeof value === "object") {
+      stripUrlFragments(value);
+    }
+  }
+}
+
 export function startAnalytics(): void {
   if (navigator.webdriver || client) return;
   try {
@@ -16,6 +30,12 @@ export function startAnalytics(): void {
       capture_pageleave: false,
       disable_session_recording: true,
       persistence: "localStorage",
+      // /flags sends the initial URL outside before_send. Deus uses no PostHog flags.
+      advanced_disable_flags: true,
+      before_send: (event) => {
+        if (event) stripUrlFragments(event);
+        return event;
+      },
     });
     if (capabilities.ipcInvoke) {
       void window
