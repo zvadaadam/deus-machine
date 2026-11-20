@@ -22,8 +22,7 @@ import { RotateCcw, Loader2, RefreshCw, CheckCircle2, AlertCircle, Download } fr
 import { useUIStore } from "@/shared/stores/uiStore";
 import { setAnalyticsEnabled } from "@/platform/analytics";
 import { capabilities } from "@/platform";
-import { useUpdateContext } from "@/features/updates";
-import { releaseUrl } from "@/features/updates/releaseUrl";
+import { releaseUrl, useUpdateContext } from "@/features/updates";
 import type { GeneralSectionProps } from "./types";
 
 export function GeneralSection({ settings, saveSetting, theme, setTheme }: GeneralSectionProps) {
