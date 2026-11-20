@@ -245,7 +245,9 @@ try {
       () => window.testClient.isConnected() && window.testClient.diagnostics().pending === 0
     );
 
-  await Promise.all([a.goto(url), b.goto(url)]);
+  // The first navigation also transforms the app against this run's empty Vite cache.
+  await a.goto(url, { timeout: 90_000 });
+  await b.goto(url);
   await Promise.all([
     attach(a),
     attach(b),
