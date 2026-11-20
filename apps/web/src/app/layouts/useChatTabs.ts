@@ -293,7 +293,14 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
 
   // --- Tab handlers ---
 
-  const handleTabChange = useCallback((tabId: string) => setActiveMainTabId(tabId), []);
+  const handleTabChange = useCallback(
+    (tabId: string) => {
+      const pending = useOpenChatStore.getState().requested[workspaceId];
+      if (pending) openChatDone(workspaceId, pending.id);
+      setActiveMainTabId(tabId);
+    },
+    [workspaceId]
+  );
 
   const handleTabClose = useCallback(
     (tabId: string) => {
