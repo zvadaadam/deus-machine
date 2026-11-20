@@ -105,6 +105,9 @@ const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/serv
     ...process.env,
     PORT: "0",
     DATABASE_PATH: path.join(directory, "deus.db"),
+    // Never the login Keychain, and git never climbs out of the run into this checkout.
+    DEUS_VAULT_NO_KEYCHAIN: "1",
+    GIT_CEILING_DIRECTORIES: directory,
     // The web app this runner serves, at whatever port Vite takes.
     DEUS_WEB_ORIGINS: LOOPBACK_WEB_ORIGINS,
     TSX_TSCONFIG_PATH: path.join(root, "apps/backend/tsconfig.json"),

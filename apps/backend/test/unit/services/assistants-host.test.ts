@@ -418,14 +418,34 @@ describe("archiving one chat (the owner's ruling, 2026-11-20)", () => {
     ).rejects.toMatchObject({ refusal: { code: "archived" } });
   });
 
-  it("a chat the person started is not archived on its own", async () => {
+  it("a chat an assistant started is archived by that assistant, as an agent's is", async () => {
     const host = createDeusHost();
-    insertChat("s-mine", "w-lead");
-    await expect(
-      host.archive!(LEAD as never, { kind: "session", id: "s-mine" })
-    ).rejects.toMatchObject({
-      refusal: { code: "unsupported" },
+    state.stored.claude = "operate";
+    const by = { kind: "assistant", id: "assistant:claude", name: "Claude" };
+    insertChat("s-second", "w-lead", by);
+    expect(await host.archive!(assistantWho(), { kind: "session", id: "s-second" })).toEqual({
+      note: "The chat is put away; its workspace stays.",
     });
+    const row = state.db.prepare("SELECT is_hidden FROM sessions WHERE id = 's-second'").get() as {
+      is_hidden: number;
+    };
+    expect(row.is_hidden).toBe(1);
+  });
+
+  it("a chat the person started is not archived on its own, by an agent or an assistant", async () => {
+    const host = createDeusHost();
+    state.stored.claude = "operate";
+    insertChat("s-mine", "w-lead");
+    for (const caller of [LEAD, assistantWho()])
+      await expect(
+        host.archive!(caller as never, { kind: "session", id: "s-mine" })
+      ).rejects.toMatchObject({
+        refusal: {
+          code: "unsupported",
+          detail:
+            "A chat the person started is closed by the person in Deus; archive its workspace instead if that is what was asked.",
+        },
+      });
   });
 
   it("a workspace's last visible chat is not archived on its own", async () => {
@@ -470,13 +490,31 @@ describe("through MCP and as a chat's own tools", () => {
     return { text: reply.result.content[0].text as string, isError: reply.result.isError === true };
   };
 
+  it("an outside caller is told which computer it reaches: in the instructions and in whoami", async () => {
+    const where =
+      'These are the coding agents on the computer "Proof Mac" itself: its own workspaces and their chats. Cloud workspaces are not listed here.';
+    const init = await mcp(
+      { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } },
+      assistantCaller("read")
+    );
+    expect(init.result.instructions).toBe(
+      `${where} Start with list_sessions to see them; what you may do here is decided by the person on this computer.`
+    );
+    state.stored.claude = "read";
+    const who = await call(assistantCaller("read"), "whoami", {});
+    expect(who.text.split("\n").slice(1)).toEqual([`access: read. ${where}`]);
+  });
+
   it("an assistant allowed to read reads, is refused a write, and may send feedback's write", async () => {
     state.stored.claude = "read";
     const reader = assistantCaller("read");
     expect((await call(reader, "list_sessions", {})).text).toContain('"lead"');
     const refused = await call(reader, "send_message", { session: "lead", message: "x", wait: 0 });
     expect(refused).toMatchObject({ isError: true });
-    expect(refused.text).toContain(READ_ONLY);
+    // The package's refusal, then this computer's sentence: "Nothing was done." once.
+    expect(refused.text).toBe(
+      `refused (access): You may not do this here. Nothing was done. ${READ_ONLY}`
+    );
     expect(state.sent).toEqual([]);
   });
 
@@ -551,7 +589,11 @@ describe("each commit re-reads what it depends on, with no await before its writ
         assistantWho(),
         startInput({ origin: { kind: "assistant", id: "claude", name: "Claude" } })
       )
-    ).rejects.toMatchObject({ code: "access", message: expect.stringContaining(READ_ONLY) });
+    ).rejects.toMatchObject({
+      code: "access",
+      // Refused at the commit, in the same words as the package's own refusal.
+      message: `refused (access): You may not do this here. Nothing was done. ${READ_ONLY}`,
+    });
     expect(named).toBe(true);
     expect(workspaceCount()).toBe(before);
   });
@@ -743,6 +785,215 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     expect((state.db.prepare("SELECT COUNT(*) AS n FROM sessions").get() as { n: number }).n).toBe(
       before
     );
+  });
+
+  it("an agent named as people say it starts on that agent; one that matches none lists the agents", async () => {
+    const host = createDeusHost();
+    const harnessOf = (id: string) =>
+      (
+        state.db.prepare("SELECT agent_harness FROM sessions WHERE id = ?").get(id) as {
+          agent_harness: string;
+        }
+      ).agent_harness;
+    for (const [said, harness] of [
+      ["Claude", "claude-code"],
+      ["claude code", "claude-code"],
+      ["CODEX", "codex-app-server"],
+      ["codex-app-server", "codex-app-server"],
+    ]) {
+      const entry = await host.start!(
+        LEAD as never,
+        startInput({ workspace: { id: "w-lead", name: "lead" }, harness: said })
+      );
+      expect(harnessOf(entry.id)).toBe(harness);
+      expect(state.sent.at(-1)).toMatchObject({ input: { agentHarness: harness } });
+    }
+    await expect(
+      host.start!(
+        LEAD as never,
+        startInput({ workspace: { id: "w-lead", name: "lead" }, harness: "Gemini" })
+      )
+    ).rejects.toMatchObject({
+      code: "invalid_input",
+      message:
+        'refused (invalid_input): start_session: agent: "Gemini" does not run here; the agents are "claude-code" (Claude Code) and "codex-app-server" (Codex). Nothing was started.',
+    });
+  });
+
+  it("a thinking level the model does not offer here makes no chat; with no list of this computer's it is not judged", async () => {
+    const host = createDeusHost();
+    const count = () =>
+      (state.db.prepare("SELECT COUNT(*) AS n FROM sessions").get() as { n: number }).n;
+    const before = count();
+    // No list from this computer yet (the catalog's are provisional): passed on as today.
+    await expect(
+      host.start!(
+        LEAD as never,
+        startInput({ workspace: { id: "w-lead", name: "lead" }, thinkingLevel: "ludicrous" })
+      )
+    ).resolves.toMatchObject({ workspace: { name: "lead" } });
+    expect(count()).toBe(before + 1);
+    state.ops.agentModels = () => ({
+      lists: [
+        {
+          harness: "claude-code",
+          source: "live",
+          models: [
+            {
+              id: "opus",
+              harness: "claude-code",
+              label: "Opus",
+              thinking: { levels: ["low", "medium", "high"] },
+            },
+            { id: "haiku", harness: "claude-code", label: "Haiku", thinking: { levels: [] } },
+          ],
+        },
+      ],
+    });
+    await expect(
+      host.start!(
+        LEAD as never,
+        startInput({
+          workspace: { id: "w-lead", name: "lead" },
+          model: "opus",
+          thinkingLevel: "ludicrous",
+        })
+      )
+    ).rejects.toMatchObject({
+      code: "invalid_input",
+      message:
+        'refused (invalid_input): start_session: thinking: "ludicrous" is not a level opus offers; its levels are "low", "medium", "high". Nothing was started.',
+    });
+    await expect(
+      host.start!(
+        LEAD as never,
+        startInput({
+          workspace: { id: "w-lead", name: "lead" },
+          model: "haiku",
+          thinkingLevel: "high",
+        })
+      )
+    ).rejects.toMatchObject({
+      message:
+        'refused (invalid_input): start_session: thinking: "high" is not a level haiku offers; it has no thinking levels. Nothing was started.',
+    });
+    expect(count()).toBe(before + 1);
+    // The default model's levels judge a level given without a model.
+    await expect(
+      host.start!(
+        LEAD as never,
+        startInput({ workspace: { id: "w-lead", name: "lead" }, thinkingLevel: "max" })
+      )
+    ).rejects.toMatchObject({ code: "invalid_input" });
+    await expect(
+      host.start!(
+        LEAD as never,
+        startInput({
+          workspace: { id: "w-lead", name: "lead" },
+          model: "opus",
+          thinkingLevel: "low",
+        })
+      )
+    ).resolves.toMatchObject({ workspace: { name: "lead" } });
+    expect(state.sent.at(-1)).toMatchObject({ input: { model: "opus", thinkingLevel: "low" } });
+    // `off` is never judged: Claude takes it as no extended thinking on any model.
+    for (const model of ["opus", "haiku"])
+      await expect(
+        host.start!(
+          LEAD as never,
+          startInput({ workspace: { id: "w-lead", name: "lead" }, model, thinkingLevel: "off" })
+        )
+      ).resolves.toMatchObject({ workspace: { name: "lead" } });
+    expect(state.sent.at(-1)).toMatchObject({ input: { model: "haiku", thinkingLevel: "off" } });
+  });
+
+  it("Codex's off is judged like any level: refused where its model does not list it", async () => {
+    const host = createDeusHost();
+    state.ops.agentModels = () => ({
+      lists: [
+        {
+          harness: "codex-app-server",
+          source: "live",
+          models: [
+            {
+              id: "gpt-5",
+              harness: "codex-app-server",
+              label: "GPT-5",
+              thinking: { levels: ["low", "medium", "high"] },
+            },
+            {
+              id: "gpt-5-mini",
+              harness: "codex-app-server",
+              label: "GPT-5 mini",
+              thinking: { levels: ["off", "low", "medium", "high"] },
+            },
+          ],
+        },
+      ],
+    });
+    const start = (model: string) =>
+      host.start!(
+        LEAD as never,
+        startInput({
+          workspace: { id: "w-lead", name: "lead" },
+          harness: "codex-app-server",
+          model,
+          thinkingLevel: "off",
+        })
+      );
+    await expect(start("gpt-5")).rejects.toMatchObject({
+      code: "invalid_input",
+      message:
+        'refused (invalid_input): start_session: thinking: "off" is not a level gpt-5 offers; its levels are "low", "medium", "high". Nothing was started.',
+    });
+    await expect(start("gpt-5-mini")).resolves.toMatchObject({ workspace: { name: "lead" } });
+    expect(state.sent.at(-1)).toMatchObject({
+      input: { model: "gpt-5-mini", thinkingLevel: "off" },
+    });
+  });
+
+  it("a level is judged only by a list this computer's CLI gave: a catalog with models is not", async () => {
+    const host = createDeusHost();
+    const lists = (claude: "live" | "catalog") => ({
+      lists: [
+        {
+          harness: "claude-code",
+          source: claude,
+          models: [
+            { id: "opus", harness: "claude-code", label: "Opus", thinking: { levels: ["high"] } },
+          ],
+        },
+        {
+          harness: "codex-app-server",
+          source: claude === "live" ? "catalog" : "live",
+          models: [
+            {
+              id: "gpt-5",
+              harness: "codex-app-server",
+              label: "GPT-5",
+              thinking: { levels: ["high"] },
+            },
+          ],
+        },
+      ],
+    });
+    const start = () =>
+      host.start!(
+        LEAD as never,
+        startInput({
+          workspace: { id: "w-lead", name: "lead" },
+          model: "opus",
+          thinkingLevel: "max",
+        })
+      );
+    // Claude's CLI did not answer (its catalog, with models), Codex's did: not judged.
+    state.ops.agentModels = () => lists("catalog");
+    await expect(start()).resolves.toMatchObject({ workspace: { name: "lead" } });
+    state.ops.agentModels = () => lists("live");
+    await expect(start()).rejects.toMatchObject({
+      message:
+        'refused (invalid_input): start_session: thinking: "max" is not a level opus offers; its levels are "high". Nothing was started.',
+    });
   });
 
   it("H15: a model the agent does not offer here makes no chat", async () => {

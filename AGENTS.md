@@ -430,11 +430,11 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   (`Refused`): a start by an archived chat or into an archived workspace; a
   fourth workspace agents started while three are set up; an archive whose
   members are being set up, still working (a stop must be confirmed first) or
-  started chats not archived. Archiving one chat: only a chat an agent started,
-  never a workspace's last; it is hidden (`sessions.is_hidden`: the `sessions`
+  started chats not archived. Archiving one chat: only a chat an agent or an
+  assistant started, never a workspace's last; it is hidden (`sessions.is_hidden`: the `sessions`
   read leaves it out, the current chat moves to the newest visible one, it
-  takes no message and stops counting against its starter). A person's or an
-  assistant's chat is closed by the person; archive its workspace instead.
+  takes no message and stops counting against its starter). A chat the person
+  started is closed by the person; archive its workspace instead.
   Archiving a workspace is the app's. A stop is of one turn, and records who
   stopped it (`turns.cancelled_by`, the first stop that takes effect). Each
   host mutation re-reads what it depends on in the same synchronous step as

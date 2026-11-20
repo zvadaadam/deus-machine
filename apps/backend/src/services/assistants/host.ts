@@ -17,9 +17,9 @@
 // commit, in one synchronous step (`Refused`), a start into an archived
 // workspace or by an archived starter, a fourth workspace agents started
 // being set up at once, and an archive whose members are being set up,
-// still active, or started chats not archived. Only a chat an agent started
-// is archived on its own (hidden: `is_hidden`), never a person's, never a
-// workspace's last; archiving a workspace is the app's.
+// still active, or started chats not archived. Only a chat an agent or an
+// assistant started is archived on its own (hidden: `is_hidden`), never a
+// person's, never a workspace's last; archiving a workspace is the app's.
 //
 // Every mutation re-reads what it depends on (the caller's access, the
 // starter and target not archived, the setup count, archive eligibility and
@@ -33,6 +33,7 @@ import {
   OperatorError,
   Refused,
   callHint,
+  refuse,
   refOf,
   type Answer,
   type CancelOutcome,
@@ -53,13 +54,15 @@ import * as sessions from "@shared/api/sessions";
 import { agentModels } from "@shared/api/settings";
 import { uuidv7 } from "@shared/lib/uuid";
 import * as workspaces from "@shared/api/workspaces";
-import { ACTIVE_TURN_STATUSES, AgentHarnessSchema, type AgentHarness } from "@shared/enums";
+import { ACTIVE_TURN_STATUSES, type AgentHarness } from "@shared/enums";
 import { githubRepoSlug } from "@shared/git-origin";
 import {
   CATALOG_MODEL_LISTS,
   DEFAULT_AGENT_HARNESS,
+  HARNESS_LABELS,
   defaultModelId,
   findModel,
+  harnessNamed,
   pickerModels,
 } from "@shared/models";
 import { LOCAL_CALLER, type Caller } from "../../api/registry";
@@ -73,6 +76,7 @@ import { liveTurnId } from "../agent/service";
 import { answer as answerToolRequest, pendingFor } from "../agent/tool-relay";
 import { sendMessage, stopSession } from "../agent/turns";
 import { invalidate, onInvalidate, runAsThisComputer as run } from "../query-engine";
+import { getServerName } from "../server-name";
 import { getSetting } from "../settings.service";
 import { assertMayWrite, refusalFor, storedAccess } from "./access";
 import { turnSettings } from "./turn-settings";
@@ -204,11 +208,15 @@ export interface DeusHost extends OperatorHost<Caller> {
   act<O extends AnyOp>(caller: Who, op: O, input: InputOf<O>): Promise<OutputOf<O>>;
 }
 
-/** The app's own refusals (4xx) in the package's words; anything else as it is, for `onError`. */
+/**
+ * The app's own refusals (4xx) in the package's words; anything else as it is,
+ * for `onError`. An access refusal at a commit reads as the package's own
+ * before it (`authorize`): its sentence, then this computer's.
+ */
 function appRefusal(error: unknown): unknown {
   if (!(error instanceof AppError) || error.statusCode >= 500) return error;
   return error.statusCode === 403
-    ? new OperatorError("access", error.message)
+    ? refuse.access(error.message)
     : new OperatorError("unsupported", `${error.message} Nothing was done.`);
 }
 
@@ -220,6 +228,19 @@ export async function refusing<T>(work: () => Promise<T> | T): Promise<T> {
     throw appRefusal(error);
   }
 }
+
+/**
+ * Where the sessions an outside caller sees are: this computer's own
+ * workspaces, never the cloud's. Said in the MCP server's instructions and in
+ * `whoami`, since `list_sessions` names no computer.
+ */
+export const whereSentence = () =>
+  `These are the coding agents on the computer ${JSON.stringify(getServerName())} itself: its own workspaces and their chats. Cloud workspaces are not listed here.`;
+
+/** The agents a start may name, as a refusal lists them: `"claude-code" (Claude Code) and …`. */
+const AGENT_NAMES = Object.entries(HARNESS_LABELS)
+  .map(([id, label]) => `${JSON.stringify(id)} (${label})`)
+  .join(" and ");
 
 /** What a chat the host could not deliver its first task to says, the reason kept safe. */
 const NOT_DELIVERED = "Its first task could not be delivered.";
@@ -410,15 +431,17 @@ export function createDeusHost(): DeusHost {
 
   /** The turn settings a chat's first message runs with: what the start named, else the composer's defaults. */
   function settingsFor(input: StartInput) {
-    const harness = AgentHarnessSchema.safeParse(input.harness ?? DEFAULT_AGENT_HARNESS);
-    if (!harness.success)
+    // By its id or as people say it ("Claude", "claude code", "Codex").
+    const harness =
+      input.harness === undefined ? DEFAULT_AGENT_HARNESS : harnessNamed(input.harness);
+    if (!harness)
       throw new OperatorError(
         "invalid_input",
-        `start_session: agent: ${JSON.stringify(input.harness)} does not run here; list_models names the agents. Nothing was started.`
+        `start_session: agent: ${JSON.stringify(input.harness)} does not run here; the agents are ${AGENT_NAMES}. Nothing was started.`
       );
-    const defaults = turnSettings(harness.data, [], getSetting("default_thinking_level"));
+    const defaults = turnSettings(harness, [], getSetting("default_thinking_level"));
     return {
-      agentHarness: harness.data,
+      agentHarness: harness,
       model: input.model ?? defaults.model,
       thinkingLevel: input.thinkingLevel ?? defaults.thinkingLevel,
     };
@@ -716,17 +739,35 @@ export function createDeusHost(): DeusHost {
             repository ? { next: callHint("add_project", { repository }) } : {}
           );
         }
-        // The agent and model before anything is made.
-        const { agentHarness } = settingsFor(input);
-        if (input.model) {
-          const { lists } = await run(agentModels, {});
-          const known = lists.some((l) => l.harness === agentHarness && l.models.length)
-            ? lists
-            : CATALOG_MODEL_LISTS;
-          if (!findModel(known, agentHarness, input.model))
+        // The agent, model and thinking level before anything is made.
+        const { agentHarness, model } = settingsFor(input);
+        if (input.model || input.thinkingLevel) {
+          const lists = await run(agentModels, {}).then((answer) => answer.lists);
+          const own = lists.find((l) => l.harness === agentHarness);
+          const known = own?.models.length ? lists : CATALOG_MODEL_LISTS;
+          if (input.model && !findModel(known, agentHarness, model))
             throw new OperatorError(
               "invalid_input",
               `start_session: model: ${JSON.stringify(input.model)} is not one ${agentHarness} offers here; list_models names them. Nothing was started.`
+            );
+          // Levels are judged only by what this computer's CLI listed: a catalog's are
+          // provisional. Claude's `off` is not judged: it reads it as no extended thinking
+          // on any model, though its rows list only effort levels. Codex lists `off` where
+          // a model takes it, and runs an unlisted one as another level, so it is judged.
+          const levels =
+            own?.source === "live"
+              ? findModel(lists, agentHarness, model)?.row.thinking.levels
+              : undefined;
+          const level = input.thinkingLevel;
+          if (
+            level &&
+            levels &&
+            !levels.includes(level) &&
+            !(level === "off" && agentHarness === "claude-code")
+          )
+            throw new OperatorError(
+              "invalid_input",
+              `start_session: thinking: ${JSON.stringify(level)} is not a level ${model} offers; ${levels.length ? `its levels are ${levels.map((l) => JSON.stringify(l)).join(", ")}` : "it has no thinking levels"}. Nothing was started.`
             );
         }
         if (input.workspace) {
@@ -740,7 +781,7 @@ export function createDeusHost(): DeusHost {
             ).run(
               sessionId,
               workspaceId,
-              input.harness ?? DEFAULT_AGENT_HARNESS,
+              agentHarness,
               input.origin.kind === "person" ? null : JSON.stringify(input.origin)
             );
             db.prepare("UPDATE workspaces SET current_session_id = ? WHERE id = ?").run(
@@ -816,11 +857,12 @@ export function createDeusHost(): DeusHost {
         const all = everything();
         const entry = all.find((e) => e.id === target.id);
         if (!entry || entry.status === "archived") return {};
-        if (entry.startedBy.kind !== "session")
+        // The person's chats are the person's to close; one an agent or an assistant started may go.
+        if (entry.startedBy.kind === "person")
           throw new Refused({
             code: "unsupported",
             detail:
-              "A chat the person or an assistant started is closed by the person in Deus; archive its workspace instead if that is what was asked.",
+              "A chat the person started is closed by the person in Deus; archive its workspace instead if that is what was asked.",
           });
         const visible = all.filter(
           (e) => e.workspace.id === entry.workspace.id && e.status !== "archived"
@@ -874,9 +916,12 @@ export function createDeusHost(): DeusHost {
       return refusal ? { code: "access", detail: refusal } : undefined;
     },
 
+    // An outside caller is told which computer it reaches, which the list does not say.
     async describe(caller) {
-      const assistant = caller.kind === "external" ? caller.auth.assistant : null;
-      return assistant ? `access: ${storedAccess(assistant) ?? "none"}` : undefined;
+      if (caller.kind !== "external") return undefined;
+      const assistant = caller.auth.assistant;
+      const access = assistant ? `access: ${storedAccess(assistant) ?? "none"}. ` : "";
+      return `${access}${whereSentence()}`;
     },
 
     async outcome(caller, entry) {

@@ -284,6 +284,13 @@ export function createStack({ root, agnt, directory }) {
         // the first line on its stdin.
         ...(authToken ? { DEUS_STOP_ON_STDIN_END: "1" } : {}),
         DEUS_SKILLS_HOME: path.join(dir, "skills-home"),
+        // Never the person's login Keychain: the vault's key goes in a file beside the database.
+        DEUS_VAULT_NO_KEYCHAIN: "1",
+        // No agent engine: no harness CLI is started, so no model turn can run or be paid for.
+        AGENT_ALLOW_AGENTLESS: "1",
+        // The run's folders sit inside this repository's checkout: git must not find
+        // the checkout from a test folder that is not a repository of its own.
+        GIT_CEILING_DIRECTORIES: directory,
         // The Mac's own web app (browser.mjs serves it from Vite on loopback).
         DEUS_WEB_ORIGINS: LOOPBACK_WEB_ORIGINS,
         ...env,

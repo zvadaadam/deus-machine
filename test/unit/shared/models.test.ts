@@ -6,6 +6,7 @@ import {
   findModel,
   composerThinking,
   fitThinkingLevel,
+  harnessNamed,
   modelLabel,
   thinkingLevelLabel,
   modelThinkingLevels,
@@ -227,5 +228,23 @@ describe("the level a chat shows and sends", () => {
     expect(composerThinking("ultra", [...catalog, "ultra"], "high")).toBe("ultra");
     // The live list does not: the nearest the model has.
     expect(composerThinking("ultra", catalog, "high")).toBe("max");
+  });
+});
+
+describe("harnessNamed", () => {
+  it("reads an agent by its id or as people say it, in any case, spaces and hyphens aside", () => {
+    for (const said of [
+      "claude-code",
+      "Claude Code",
+      "claude",
+      "CLAUDE",
+      "claude_code",
+      " Claude-Code ",
+    ])
+      expect(harnessNamed(said)).toBe("claude-code");
+    for (const said of ["codex-app-server", "Codex", "codex", "codex app server"])
+      expect(harnessNamed(said)).toBe("codex-app-server");
+    for (const said of ["gemini", "", "claude-codex", "acp"])
+      expect(harnessNamed(said)).toBeUndefined();
   });
 });
