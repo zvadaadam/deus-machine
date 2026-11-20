@@ -239,9 +239,10 @@ progress channel: the desktop, the web app and a phone all follow it.
   (`init_fetch_issue`: `offline`, `auth` or `failed`).
 - Once the checkout exists, the first chat can take its message while the project's
   setup script runs. A local turn is told the running command, log and status
-  file, or a failure's reason, last log lines and current retry command. Completed
-  and unconfigured setups add nothing to the turn. `setSetupStatus` writes the
-  row and its temp status file together. A failed script has its own header retry.
+  file, or a failure's quoted reason and last log lines. After a repair the
+  person chooses "Run again" on the start line, which runs setup with the project's
+  environment. Completed and unconfigured setups add nothing to the turn.
+  `setSetupStatus` commits the row, then updates the temp status file if it can.
   Archiving the workspace stops its setup process group. Quitting
   during setup leaves the checkout and chat ready, with setup marked failed
   and a reason saying Deus stopped it.
@@ -718,7 +719,7 @@ Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `s
 - All indexes/triggers defined in `shared/schema.ts`
 - Use `sessions.last_user_message_at` instead of correlated subqueries
 - No N+1 queries — batch or denormalize
-- Column changes, pre-launch (now): `shared/schema.ts` is the whole schema, not a migration replay. To add a column, put it in `SCHEMA_SQL` and, if existing databases should keep working, in `ADDITIVE_COLUMNS` (nullable or defaulted); anything else is a reset. At startup the backend compares the database with a fresh copy of `SCHEMA_SQL` (a missing column, a NOT NULL that differs, a leftover column an insert would fail on) and stops on a mismatch. After the backend exits, the desktop offers **Start Fresh**, which moves the database and its SQLite side files to a dated name beside the original and relaunches Deus. The CLI prints `PRELAUNCH_SCHEMA_RESET_HINT` with its fresh data directory option.
+- Column changes, pre-launch (now): `shared/schema.ts` is the whole schema, not a migration replay. To add a column, put it in `SCHEMA_SQL` and, if existing databases should keep working, in `ADDITIVE_COLUMNS` (nullable or defaulted); anything else is a reset. At startup the backend compares the database with a fresh copy of `SCHEMA_SQL` (a missing column, a NOT NULL that differs, a leftover column an insert would fail on) and stops on a mismatch. After the backend exits, the desktop offers **Start Fresh**, which moves the database and its SQLite side files to a dated name beside the original. The installed app reopens. Under `bun run dev`, Deus quits and logs how to start it again. The CLI prints `PRELAUNCH_SCHEMA_RESET_HINT` with its fresh data directory option.
 - Column changes, post-launch: the above stops applying. Deprecate by renaming with a `DEPRECATED_` prefix, never drop.
 
 ## Testing

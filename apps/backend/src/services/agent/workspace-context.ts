@@ -25,7 +25,7 @@ export interface Simulator {
 
 export type WorkspaceSetup =
   | { state: "running"; command?: string; log: string; statusFile: string }
-  | { state: "failed"; reason: string; detail: string | null; command?: string };
+  | { state: "failed"; reason: string; detail: string | null };
 
 const shellArg = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
 
@@ -40,10 +40,7 @@ function setupInstructions(setup?: WorkspaceSetup | null): string {
   const output = setup.detail
     ? `The last lines the setup script printed were\n${quote(setup.detail)}\n`
     : "";
-  const retry = setup.command
-    ? `After a repair, rerun the current setup command in this checkout\n${quote(`/bin/sh -ec ${shellArg(setup.command)}`)}`
-    : "After repairing the setup recipe, use Retry setup in the workspace header.";
-  return `Workspace setup failed. ${setup.reason}\n${output}${retry}\n`;
+  return `Workspace setup failed.\n${quote(setup.reason)}\n${output}Deus runs setup with the project's environment and checks its required variables. Running it by hand skips that preparation and leaves this status unchanged.\nAfter a repair, ask the person to choose "Run again" on the workspace's start line.\n`;
 }
 
 /** How to drive a simulator: Deus ships agent-device (scripts/runtime/agent-clis.ts), whose own help carries the rest. */

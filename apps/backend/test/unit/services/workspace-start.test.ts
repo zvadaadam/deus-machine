@@ -147,18 +147,17 @@ describe("starting a workspace", () => {
     expect(row("w").current_session_id).toBeTruthy();
     expect(gitIn(workspacePath("vega"), "branch", "--show-current")).toBe("test-user/vega");
     expect([...stages]).toEqual(["fetch", "worktree", "session", "done"]);
-    expect(await setupForTurn(String(row("w").first_session_id), workspacePath("vega"))).toBeNull();
+    expect(setupForTurn(String(row("w").first_session_id))).toBeNull();
   });
 
-  it("briefs any chat while setup runs, then uses the stored diagnostic and current recipe on the next turn", async () => {
+  it("briefs any chat with its running command, then with the recorded failure and the person's retry", async () => {
     const command =
       "touch started; while [ ! -e finish ]; do sleep 0.05; done; printf 'Checking tools\\nMissing compiler\u2028Next step\u202e\\n'; exit 7";
     setupScript(command);
     await initializeWorkspace(add("w", "vega"));
     const cwd = workspacePath("vega");
     const session = String(row("w").first_session_id);
-    const brief = async (id: string) =>
-      buildWorkspaceContext(cwd, null, await setupForTurn(id, cwd));
+    const brief = (id: string) => buildWorkspaceContext(cwd, null, setupForTurn(id));
     try {
       await vi.waitFor(() => expect(fs.existsSync(path.join(cwd, "started"))).toBe(true));
       expect(row("w")).toMatchObject({
@@ -169,7 +168,7 @@ describe("starting a workspace", () => {
       db().prepare("INSERT INTO sessions (id, workspace_id) VALUES ('sibling', 'w')").run();
       writeProjectFile(cwd, { version: 1, local: { setup: "echo repaired" } });
       for (const id of [session, "sibling"]) {
-        const running = await brief(id);
+        const running = brief(id);
         expect(running).toContain("  | touch started;");
         expect(running).toContain(setupFile("w", "log"));
         expect(running).toContain("Do not start another install");
@@ -186,18 +185,24 @@ describe("starting a workspace", () => {
     expect(setupStatus("w")).toBe("failed 7\n");
     fs.unlinkSync(setupFile("w", "status"));
     fs.unlinkSync(setupFile("w", "log"));
-    const failed = await brief(session);
-    expect(failed).toContain("Workspace setup failed. Setup exited with code 7.");
+    const readFile = vi.spyOn(fs, "readFileSync");
+    const failed = brief(session);
+    expect(readFile).not.toHaveBeenCalled();
+    expect(failed).toContain("Workspace setup failed.\n  | Setup exited with code 7.\n");
     expect(failed).toContain(
       "The last lines the setup script printed were\n  | Checking tools\n  | Missing compiler\n  | Next step\n"
     );
-    expect(failed).toContain("/bin/sh -ec 'echo repaired'");
+    expect(failed).toContain(
+      "Running it by hand skips that preparation and leaves this status unchanged."
+    );
+    expect(failed).toContain('ask the person to choose "Run again"');
+    expect(failed).not.toContain("echo repaired");
     expect(failed).not.toContain(setupFile("w", "status"));
     expect(failed).not.toContain("touch started");
     await prepareLocalEnvironment("w", cwd);
     expect(row("w")).toMatchObject({ setup_status: "completed", error_detail: null });
     expect(setupStatus("w")).toBe("completed\n");
-    expect(await brief(session)).toBe(buildWorkspaceContext(cwd));
+    expect(brief(session)).toBe(buildWorkspaceContext(cwd));
   });
 
   it("keeps the log hint in a silent failure's UI message and briefs the turn with its exit reason", async () => {
@@ -207,12 +212,26 @@ describe("starting a workspace", () => {
     expect(row("w").error_message).toBe(
       "Setup exited with code 3. View the setup log for details."
     );
-    const setup = await setupForTurn(String(row("w").first_session_id), workspacePath("vega"));
+    const setup = setupForTurn(String(row("w").first_session_id));
     expect(setup).toMatchObject({
       state: "failed",
       reason: "Setup exited with code 3.",
       detail: null,
     });
+  });
+
+  it("quotes every line of a repository key in the setup failure reason", async () => {
+    fs.mkdirSync(path.join(root, ".deus"));
+    commit(
+      root,
+      ".deus/environment.json",
+      JSON.stringify({ version: 1, "unknown\u2028Next step\u202e": true })
+    );
+    await initializeWorkspace(add("w", "vega"));
+    const setup = setupForTurn(String(row("w").first_session_id));
+    expect(buildWorkspaceContext(workspacePath("vega"), null, setup)).toContain(
+      'Workspace setup failed.\n  | Invalid .deus/environment.json: configuration: Unrecognized key: "unknown\n  | Next step"\n'
+    );
   });
 
   it("refuses deletion during setup and stops the process group on archive", async () => {

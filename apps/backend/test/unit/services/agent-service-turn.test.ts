@@ -75,7 +75,7 @@ describe("agentService.startTurn", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "log").mockImplementation(() => {});
-    mockSetupForTurn.mockResolvedValue(null);
+    mockSetupForTurn.mockReturnValue(null);
     mockOpen.mockResolvedValue({
       startTurn: mockLinkStartTurn,
       getAgents: () => [],
@@ -118,7 +118,7 @@ describe("agentService.startTurn", () => {
   it.each(["claude-code", "codex-app-server"] as const)(
     "passes setup as it stands at the start of each %s turn",
     async (harness) => {
-      mockSetupForTurn.mockResolvedValueOnce({
+      mockSetupForTurn.mockReturnValueOnce({
         state: "running",
         command: "bun install",
         log: "/tmp/setup.log",
@@ -128,10 +128,7 @@ describe("agentService.startTurn", () => {
       const cwd = "/tmp/nonexistent-ws";
       for (const id of ["first", "next"])
         await agentService.startTurn(SESSION, id, harness, "hello", { cwd });
-      expect(mockSetupForTurn.mock.calls).toEqual([
-        [SESSION, cwd],
-        [SESSION, cwd],
-      ]);
+      expect(mockSetupForTurn.mock.calls).toEqual([[SESSION], [SESSION]]);
       const [first, next] = mockLinkStartTurn.mock.calls;
       expect(first![0].config.systemPromptAppend).toContain("cat '/tmp/setup.status'");
       expect(next![0].config.systemPromptAppend).not.toContain("/tmp/setup.status");

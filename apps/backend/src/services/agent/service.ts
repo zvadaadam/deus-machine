@@ -167,7 +167,7 @@ export async function startTurn(
   const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, {
     ...options,
     ...apps,
-    setup: await setupForTurn(sessionId, options.cwd),
+    setup: setupForTurn(sessionId),
     agentDeviceSession: device.session,
     simulator: device.udid ? { udid: device.udid } : null,
     // Negotiated at the handshake, not guessed from a harness list.

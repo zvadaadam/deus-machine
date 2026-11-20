@@ -155,34 +155,17 @@ interface SetupRun {
 }
 const runs = new Map<string, SetupRun>();
 
-/** A local turn's briefing. Only a failed setup needs to resolve the current retry command. */
-export async function setupForTurn(
-  sessionId: string,
-  directory: string
-): Promise<WorkspaceSetup | null> {
-  const query = getDatabase().prepare(`
-    SELECT w.id, w.setup_status, w.error_message, w.error_detail, r.git_origin_url
+export function setupForTurn(sessionId: string): WorkspaceSetup | null {
+  const row = getDatabase()
+    .prepare<
+      [string],
+      Pick<WorkspaceWithDetailsRow, "id" | "setup_status" | "error_message" | "error_detail">
+    >(
+      `SELECT w.id, w.setup_status, w.error_message, w.error_detail
     FROM sessions s JOIN workspaces w ON w.id = s.workspace_id
-    JOIN repositories r ON r.id = w.repository_id
-    WHERE s.id = ? AND w.kind = 'worktree' AND w.setup_status IN ('running', 'failed')`);
-  const read = () =>
-    query.get(sessionId) as
-      | Pick<
-          WorkspaceWithDetailsRow,
-          "id" | "setup_status" | "error_message" | "error_detail" | "git_origin_url"
-        >
-      | undefined;
-  let row = read();
-  let command: string | undefined;
-  if (row?.setup_status === "failed") {
-    const current = await readLocalProjectEnvironment(directory, row.git_origin_url).catch(
-      () => null
-    );
-    if (current?.project)
-      command = resolveProjectEnvironment(current.project, "local").setup ?? undefined;
-    // A retry may have started or finished while looking up the saved recipe.
-    row = read();
-  }
+    WHERE s.id = ? AND w.kind = 'worktree' AND w.setup_status IN ('running', 'failed')`
+    )
+    .get(sessionId);
   if (!row) return null;
   if (row.setup_status === "running") {
     return {
@@ -197,7 +180,6 @@ export async function setupForTurn(
     state: "failed",
     reason: reason.endsWith(SETUP_LOG_SUFFIX) ? reason.slice(0, -SETUP_LOG_SUFFIX.length) : reason,
     detail: row.error_detail,
-    command,
   };
 }
 
