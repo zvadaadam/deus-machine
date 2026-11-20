@@ -48,7 +48,7 @@ import {
   setupForTurn,
   writeProjectFile,
 } from "../../../src/services/project-environment.service";
-import { setupFile } from "../../../src/services/setup-status";
+import { setSetupStatus, setupFile } from "../../../src/services/setup-status";
 import { buildWorkspaceContext } from "../../../src/services/agent/workspace-context";
 import { GitError, runGit } from "../../../src/lib/git-process";
 import { CELESTIAL_NAMES } from "../../../src/services/workspace.service";
@@ -447,6 +447,37 @@ describe("a start Deus closed in the middle of", () => {
 });
 
 describe("workspaces a previous process was still starting", () => {
+  it("commits setup status and removes the stale file when publishing its replacement fails", () => {
+    add("w", "vega", { state: "ready" });
+    setSetupStatus("w", "running");
+    expect(setupStatus("w")).toBe("running\n");
+    let committed = false;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(fs, "renameSync").mockImplementationOnce(() => {
+      committed = !db().inTransaction && row("w").setup_status === "failed";
+      throw new Error("cannot publish status");
+    });
+    setSetupStatus("w", "failed", { message: "Setup failed" });
+    expect(committed).toBe(true);
+    expect(row("w").error_message).toBe("Setup failed");
+    expect(fs.readdirSync(scratch)).toEqual(["project"]);
+    expect(warn).toHaveBeenCalledOnce();
+  });
+
+  it("recovers interrupted workspaces even when the temp directory cannot hold a file", () => {
+    add("w", "vega", { state: "ready", setup_status: "running" });
+    add("early", "lyra", { init_stage: "fetch" });
+    vi.stubEnv("TMPDIR", path.join(root, "tracked.txt"));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(failInterruptedWorkspaces()).toBe(1);
+    expect(row("w")).toMatchObject({
+      state: "ready",
+      setup_status: "failed",
+      error_message: "Setup was stopped when Deus closed. Run it again.",
+    });
+    expect(row("early").state).toBe("error");
+  });
+
   it("fail at startup, with what they half made removed", async () => {
     add("made", "vega", { init_stage: "worktree" });
     git("worktree", "add", "-q", "-b", "test-user/vega", workspacePath("vega"), "main");

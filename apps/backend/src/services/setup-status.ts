@@ -19,26 +19,30 @@ export function setSetupStatus(
   status: SetupStatus,
   failure?: { message: string; detail?: string | null; exitCode?: number | null }
 ): void {
-  const db = getDatabase();
-  db.transaction(() => {
-    const update = db
-      .prepare(
-        "UPDATE workspaces SET setup_status = ?, error_message = ?, error_detail = ? WHERE id = ?"
-      )
-      .run(status, failure?.message ?? null, failure?.detail ?? null, workspaceId);
-    if (!update.changes) return;
-    const file = setupFile(workspaceId, "status");
-    const temporary = `${file}.${randomUUID()}`;
-    try {
-      const code = failure?.exitCode;
-      fs.writeFileSync(temporary, code == null ? `${status}\n` : `${status} ${code}\n`, {
-        flag: "wx",
-        mode: 0o600,
-      });
-      fs.renameSync(temporary, file);
-    } finally {
-      fs.rmSync(temporary, { force: true });
+  const update = getDatabase()
+    .prepare(
+      "UPDATE workspaces SET setup_status = ?, error_message = ?, error_detail = ? WHERE id = ?"
+    )
+    .run(status, failure?.message ?? null, failure?.detail ?? null, workspaceId);
+  if (!update.changes) return;
+  const file = setupFile(workspaceId, "status");
+  const temporary = `${file}.${randomUUID()}`;
+  try {
+    const code = failure?.exitCode;
+    fs.writeFileSync(temporary, code == null ? `${status}\n` : `${status} ${code}\n`, {
+      flag: "wx",
+      mode: 0o600,
+    });
+    fs.renameSync(temporary, file);
+  } catch (error) {
+    console.warn(`[WORKSPACE] Could not write setup status to ${file}:`, error);
+    for (const stale of [file, temporary]) {
+      try {
+        fs.rmSync(stale, { force: true });
+      } catch {
+        // The temp directory itself may be unwritable.
+      }
     }
-  })();
+  }
   invalidate(["workspaces"]);
 }
