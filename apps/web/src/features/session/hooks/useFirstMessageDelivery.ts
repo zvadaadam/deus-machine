@@ -31,6 +31,7 @@ import {
 import { newTurnId, useSendMessage } from "../api/session.queries";
 import {
   dueFirstMessages,
+  firstChatOf,
   missedFirstMessages,
   type FirstMessageDelivery,
 } from "../lib/firstMessage";
@@ -62,11 +63,12 @@ export function useFirstMessageDelivery(repoGroups: RepoGroup[], loaded: boolean
     // What was typed on the start page moves to the chat before anything is
     // sent, so a delivery below finds the chat's composer already seeded.
     for (const workspace of workspaces) {
-      if (workspace.current_session_id) {
-        sessionComposerActions.move(workspace.id, workspace.current_session_id, {
+      const chat = firstChatOf(workspace);
+      if (chat) {
+        sessionComposerActions.move(workspace.id, chat.sessionId, {
           // Spoken to already (from another device, maybe with another agent):
           // its history sets the model, and only what was typed here moves.
-          settings: workspace.latest_message_sent_at === null,
+          settings: !chat.spokenTo,
         });
       }
     }

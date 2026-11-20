@@ -55,6 +55,7 @@ import {
   persistLastUserMessageAt,
   persistSessionWorking,
   persistTurn,
+  settleInterruptedSessions,
   type TurnOutcomeWrite,
 } from "../../../src/services/agent/persistence";
 
@@ -162,6 +163,17 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
   afterEach(() => {
     db.close();
     vi.restoreAllMocks();
+  });
+
+  it("at startup, a chat a quit interrupted is settled, and its turn that never ended ends as failed", () => {
+    db.prepare("UPDATE sessions SET status = 'working' WHERE id = ?").run(SESSION);
+    db.prepare("INSERT INTO turns (session_id, turn_id, started_at) VALUES (?, 'cut', 1)").run(
+      SESSION
+    );
+    expect(settleInterruptedSessions()).toEqual({ ok: true, value: [SESSION] });
+    const turn = getTurn(db, SESSION, "cut")!;
+    expect(turn.endedAt).toBeGreaterThan(0);
+    expect(turn.stopReason).toBe("error");
   });
 
   // --------------------------------------------------------------------------

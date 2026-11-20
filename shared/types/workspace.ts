@@ -40,6 +40,10 @@ export interface Workspace {
   session_error_category: string | null;
   session_error_message: string | null;
   latest_message_sent_at: string | null;
+  /** The first chat's id, minted with the workspace, and that chat's own status and messages. */
+  first_session_id?: string | null;
+  first_session_status?: SessionStatus | null;
+  first_session_message_count?: number | null;
   updated_at: string;
   repo_name: string;
   root_path: string;

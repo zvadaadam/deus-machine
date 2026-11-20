@@ -10,8 +10,8 @@
 // A clone can outlast a call. Each folder (by its lower-cased path: the disk
 // may not tell `App` from `app`) has at most one add in flight: a
 // call for the same repository joins it, and one that sees it end answers its
-// outcome. When a call's wait ends (`waitFor`) it says it is still
-// cloning; the outcome is then kept for the next call (30 minutes), which
+// outcome. When the call's deadline (the package's `CallScope`) nears it
+// says it is still cloning; the outcome is then kept for the next call (30 minutes), which
 // reports it. A project that is already here is returned with nothing cloned.
 
 import fs from "node:fs";
@@ -31,15 +31,8 @@ import {
 import { AppError, ConflictError } from "../../lib/errors";
 import type { DeusHost, Who } from "./host";
 
-/**
- * How long a call waits for a clone, in seconds: within the call's own wait
- * (the package's caps), so it answers "still cloning" itself.
- */
-function waitFor(caller: Who, now = Date.now()): number {
-  if (caller.kind === "session") return 110;
-  const left = caller.endsAt === undefined ? Infinity : (caller.endsAt - now) / 1000 - 6;
-  return Math.max(0, Math.floor(Math.min(55, left)));
-}
+/** A call answers "still cloning" this long before its deadline, so the answer arrives. */
+const ANSWER_MARGIN_MS = 1000;
 
 /** An outcome no call has heard is kept this long for the next call. */
 const UNHEARD_KEPT_MS = 30 * 60_000;
@@ -210,7 +203,7 @@ export function addProjectTool(host: DeusHost) {
     },
     effect: "write",
     openWorld: true,
-    async run({ repository }, caller) {
+    async run({ repository }, caller, call) {
       const parsed = parseCloneAddress(repository);
       if (!parsed.ok)
         throw new OperatorError("invalid_input", `${parsed.reason} Nothing was cloned.`);
@@ -222,7 +215,8 @@ export function addProjectTool(host: DeusHost) {
       }
 
       const flight = flightFor(caller, address, folder);
-      if (!(await ended(flight, waitFor(caller)))) {
+      const seconds = Math.max(0, (call.deadline - Date.now() - ANSWER_MARGIN_MS) / 1000);
+      if (!(await ended(flight, seconds))) {
         const doing =
           flight.phase === "cloning"
             ? `still cloning ${quoted(address.url)} into ${quoted(folder)}.`

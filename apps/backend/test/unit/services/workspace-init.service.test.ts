@@ -118,6 +118,12 @@ describe("local project environment journey", () => {
       { id: "chat-1", started_by: startedBy },
     ]);
   });
+  it("opens no chat in a workspace archived while it started", async () => {
+    mocks.db!.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
+    await initialize();
+    expect(row()).toMatchObject({ state: "archived", current_session_id: null });
+    expect(mocks.db!.prepare("SELECT id FROM sessions").all()).toEqual([]);
+  });
   it("uses saved defaults only when this checkout has no file, never another branch's file", async () => {
     const directory = await initialize();
     project({ version: 1, setup: "exit 89" }); // Main checkout edited after the workspace branched.

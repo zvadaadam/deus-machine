@@ -8,8 +8,13 @@ import {
 import { invalidate } from "./query-engine";
 import { autoProgressStatus } from "./workspace-status.service";
 
-/** Every caller archives the same way. Cloud archive preserves its recovery data. */
-async function performArchive(workspaceId: string): Promise<void> {
+/**
+ * Every caller archives the same way. Cloud archive preserves its recovery
+ * data. `check`, when given, runs in the queue right before the update, with
+ * no await between, and may refuse it (the operator's host re-reads its
+ * archive eligibility there).
+ */
+async function performArchive(workspaceId: string, check?: () => void): Promise<void> {
   const db = getDatabase();
   const workspace = getWorkspaceRaw(db, workspaceId);
   if (!workspace) throw new NotFoundError("Workspace not found");
@@ -21,6 +26,7 @@ async function performArchive(workspaceId: string): Promise<void> {
     });
   }
 
+  check?.();
   db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
   autoProgressStatus(workspaceId, "done", { force: true });
 }
@@ -41,8 +47,8 @@ function changeWorkspaceState<T>(workspaceId: string, change: () => Promise<T>):
   return next;
 }
 
-export function archiveWorkspace(workspaceId: string): Promise<void> {
-  return changeWorkspaceState(workspaceId, () => performArchive(workspaceId));
+export function archiveWorkspace(workspaceId: string, check?: () => void): Promise<void> {
+  return changeWorkspaceState(workspaceId, () => performArchive(workspaceId, check));
 }
 
 export function wakeWorkspace(workspaceId: string) {

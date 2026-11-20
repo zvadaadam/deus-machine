@@ -16,6 +16,7 @@
 // neither can read as one of the tool's own lines.
 
 import { z } from "zod";
+import * as Sentry from "@sentry/node";
 import path from "node:path";
 import {
   OperatorError,
@@ -39,7 +40,7 @@ import { getServerName } from "../server-name";
 import { currentHost } from "./access";
 import { addProjectTool } from "./add-project";
 import { FEEDBACK_CATEGORIES, FeedbackNotSent, sendFeedback } from "./feedback";
-import { createDeusHost, type DeusHost } from "./host";
+import { createDeusHost, refusing, type DeusHost } from "./host";
 import * as store from "./store";
 
 /** One file's diff is cut here: enough to review a change, not a whole regenerated file. */
@@ -77,44 +78,47 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
         .describe("A file as read_changes lists it, to see its diff"),
     },
     effect: "read",
-    async run({ session, file }, caller) {
-      const entry = await operator().find(caller, session);
-      const workspaceId = entry.workspace.id;
-      const name = quoted(entry.workspace.name);
-      const { files, total_count } = await host.act(caller, workspaces.diffFiles, { workspaceId });
-      if (file) {
-        // Only a changed file: the diff of an unchanged one is the whole file,
-        // and that may be a secret git ignores (.env).
-        const listed = files.find((f) => normal(f.file) === normal(file));
-        if (!listed) {
-          throw new OperatorError(
-            "not_found",
-            `${quoted(file)} is not one of ${name}'s changed files. Nothing was shown.`,
-            { next: callHint("read_changes", { session }) }
-          );
-        }
-        const { diff } = await host.act(caller, workspaces.diffFile, {
+    run: ({ session, file }, caller) =>
+      refusing(async () => {
+        const entry = await operator().find(caller, session);
+        const workspaceId = entry.workspace.id;
+        const name = quoted(entry.workspace.name);
+        const { files, total_count } = await host.act(caller, workspaces.diffFiles, {
           workspaceId,
-          file: listed.file,
         });
-        if (!diff.trim()) return `${quoted(listed.file)}: no changes`;
-        const cut = diff.length > DIFF_LIMIT;
+        if (file) {
+          // Only a changed file: the diff of an unchanged one is the whole file,
+          // and that may be a secret git ignores (.env).
+          const listed = files.find((f) => normal(f.file) === normal(file));
+          if (!listed) {
+            throw new OperatorError(
+              "not_found",
+              `${quoted(file)} is not one of ${name}'s changed files. Nothing was shown.`,
+              { next: callHint("read_changes", { session }) }
+            );
+          }
+          const { diff } = await host.act(caller, workspaces.diffFile, {
+            workspaceId,
+            file: listed.file,
+          });
+          if (!diff.trim()) return `${quoted(listed.file)}: no changes`;
+          const cut = diff.length > DIFF_LIMIT;
+          return [
+            `diff of ${quoted(listed.file)} (+${listed.additions} -${listed.deletions}):`,
+            quote(cut ? diff.slice(0, DIFF_LIMIT) : diff),
+            ...(cut ? [`(cut at ${DIFF_LIMIT} of ${diff.length} characters)`] : []),
+          ].join("\n");
+        }
+        if (files.length === 0) return `${name}: no changes`;
+        const total = total_count ?? files.length;
+        const shown = files.slice(0, FILES_LIMIT);
         return [
-          `diff of ${quoted(listed.file)} (+${listed.additions} -${listed.deletions}):`,
-          quote(cut ? diff.slice(0, DIFF_LIMIT) : diff),
-          ...(cut ? [`(cut at ${DIFF_LIMIT} of ${diff.length} characters)`] : []),
+          `${name}: ${total} file(s) changed`,
+          ...shown.map((f) => `  ${quoted(f.file)}  +${f.additions} -${f.deletions}`),
+          ...(total > shown.length ? [`  (and ${total - shown.length} more)`] : []),
+          `  ${callHint("read_changes", { session, file: shown[0]!.file })}`,
         ].join("\n");
-      }
-      if (files.length === 0) return `${name}: no changes`;
-      const total = total_count ?? files.length;
-      const shown = files.slice(0, FILES_LIMIT);
-      return [
-        `${name}: ${total} file(s) changed`,
-        ...shown.map((f) => `  ${quoted(f.file)}  +${f.additions} -${f.deletions}`),
-        ...(total > shown.length ? [`  (and ${total - shown.length} more)`] : []),
-        `  ${callHint("read_changes", { session, file: shown[0]!.file })}`,
-      ].join("\n");
-    },
+      }),
   });
 
   const sendFeedbackTool = tool<
@@ -190,6 +194,11 @@ function theOperator(): Operator<Caller> {
     const host = createDeusHost();
     const made: Operator<Caller> = createOperator<Caller>(host, {
       extra: deusTools(host, () => made),
+      // What failed is reported here; the caller is told only the package's sentence.
+      onError: (error, tool) => {
+        Sentry.captureException(error, { tags: { operatorTool: tool } });
+        console.error(`[Assistants] ${tool} failed:`, error);
+      },
     });
     operator = made;
   }

@@ -43,12 +43,16 @@ const WORKSPACE_ROW_COLUMNS = `
     s.status as session_status,
     s.error_category as session_error_category,
     s.error_message as session_error_message,
-    s.last_user_message_at as latest_message_sent_at`;
+    s.last_user_message_at as latest_message_sent_at,
+    w.first_session_id,
+    fs.status as first_session_status,
+    fs.message_count as first_session_message_count`;
 
 const WORKSPACE_JOINS = `
   FROM workspaces w
   LEFT JOIN repositories r ON w.repository_id = r.id
   LEFT JOIN sessions s ON w.current_session_id = s.id
+  LEFT JOIN sessions fs ON w.first_session_id = fs.id
 `;
 
 const WORKSPACE_DETAILS_SELECT = `
@@ -143,10 +147,14 @@ export function getWorkspacesBySessionIds(
       s.status as session_status,
       s.error_category as session_error_category,
       s.error_message as session_error_message,
-      s.last_user_message_at as latest_message_sent_at
+      s.last_user_message_at as latest_message_sent_at,
+      w.first_session_id,
+      fs.status as first_session_status,
+      fs.message_count as first_session_message_count
     FROM workspaces w
     LEFT JOIN repositories r ON w.repository_id = r.id
     LEFT JOIN sessions s ON w.current_session_id = s.id
+    LEFT JOIN sessions fs ON w.first_session_id = fs.id
     WHERE w.current_session_id IN (${placeholders})
   `
     )

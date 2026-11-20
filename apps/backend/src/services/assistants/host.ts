@@ -21,11 +21,14 @@
 // is archived on its own (hidden: `is_hidden`), never a person's, never a
 // workspace's last; archiving a workspace is the app's.
 //
-// Every write an outside caller's call makes is checked again just before it
-// happens (`assertMayWrite`), since a held call can outlive the person's
-// decision; a session's own calls act as this computer.
+// Every mutation re-reads what it depends on (the caller's access, the
+// starter and target not archived, the setup count, archive eligibility and
+// lineage, the target's state) in the same synchronous step as its write,
+// with no await between: one helper per mutation (`mayStart`, `mayTouch`,
+// `mayArchive`). A held call can outlive the person's decision, and another
+// caller can change what the package's preflight read. A session's own calls
+// act as this computer.
 
-import * as Sentry from "@sentry/node";
 import {
   OperatorError,
   Refused,
@@ -54,9 +57,10 @@ import { githubRepoSlug } from "@shared/git-origin";
 import { DEFAULT_AGENT_HARNESS, defaultModelId, pickerModels } from "@shared/models";
 import { LOCAL_CALLER, type Caller } from "../../api/registry";
 import { createLocalWorkspace } from "../../api/workspaces";
+import { archiveWorkspace } from "../workspace-archive.service";
 import { attachParts, getMessages, getSessionRaw, hasOlderMessages } from "../../db";
 import { getDatabase } from "../../lib/database";
-import { AppError, ConflictError } from "../../lib/errors";
+import { AppError, ChatBusyError } from "../../lib/errors";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
 import { liveTurnId } from "../agent/service";
 import { answer as answerToolRequest, pendingFor } from "../agent/tool-relay";
@@ -132,6 +136,9 @@ interface Row {
   s_started_by: string | null;
   last_user_message_at: string | null;
   is_hidden: number | null;
+  chat: number | null;
+  s_error: string | null;
+  message_count: number | null;
 }
 
 const ROWS = `
@@ -139,7 +146,8 @@ const ROWS = `
     w.current_session_id, w.first_session_id, w.started_by AS ws_started_by, w.updated_at AS ws_updated_at,
     r.id AS repository_id, r.name AS repo_name, r.root_path,
     s.id AS session_id, s.status AS s_status, s.title AS s_title, s.agent_harness,
-    s.started_by AS s_started_by, s.last_user_message_at, s.is_hidden
+    s.started_by AS s_started_by, s.last_user_message_at, s.is_hidden, s.chat,
+    s.error_message AS s_error, s.message_count
   FROM workspaces w JOIN repositories r ON r.id = w.repository_id
   LEFT JOIN sessions s ON s.workspace_id = w.id
   WHERE w.kind != 'cloud'`;
@@ -163,60 +171,77 @@ function endedOf(row: { outcome: string | null; cancelled_by: string | null }) {
   };
 }
 
-/** A first task the host holds for a workspace being set up. */
+/** A first task the host holds for a workspace being set up; `sending` once it is handed to the engine. */
 interface Held {
   caller: Who;
   workspaceId: string;
   input: StartInput;
   unwatch: () => void;
+  sending?: Promise<void>;
+}
+
+/** A turn's facts, as its row has them. */
+interface TurnRow {
+  turn_id: string;
+  started_at: number | null;
+  ended_at: number | null;
+  outcome: string | null;
+  cancelled_by: string | null;
 }
 
 export interface DeusHost extends OperatorHost<Caller> {
-  /** Run one of the app's operations for the call's caller; a write checked just before it happens. */
+  /** Run one of the app's operations for the call's caller; a write's access read again just before it. */
   act<O extends AnyOp>(caller: Who, op: O, input: InputOf<O>): Promise<OutputOf<O>>;
-  /** The workspace a session is in, for the tools Deus adds. */
-  workspaceOf(sessionId: string): { id: string; slug: string } | undefined;
 }
 
-/** An app refusal in the package's words; anything else is reported, and its text kept in. */
-function translate(error: unknown): unknown {
-  if (error instanceof OperatorError || error instanceof Refused) return error;
-  // The app's refusals (4xx) in its own words; a failure (5xx) stays one, for the tool's own words or the report.
-  if (error instanceof AppError && error.statusCode < 500) {
-    return error.statusCode === 403
-      ? new OperatorError("access", error.message)
-      : new OperatorError("unsupported", `${error.message} Nothing was done.`);
-  }
-  Sentry.captureException(error);
-  console.error("[Assistants] A host call failed:", error);
-  return error;
+/** The app's own refusals (4xx) in the package's words; anything else as it is, for `onError`. */
+function appRefusal(error: unknown): unknown {
+  if (!(error instanceof AppError) || error.statusCode >= 500) return error;
+  return error.statusCode === 403
+    ? new OperatorError("access", error.message)
+    : new OperatorError("unsupported", `${error.message} Nothing was done.`);
 }
 
-async function guarded<T>(work: () => Promise<T> | T): Promise<T> {
+/** Run `work`, its app refusals said as refusals. */
+export async function refusing<T>(work: () => Promise<T> | T): Promise<T> {
   try {
     return await work();
   } catch (error) {
-    throw translate(error);
+    throw appRefusal(error);
   }
 }
+
+/** What a chat the host could not deliver its first task to says, the reason kept safe. */
+const NOT_DELIVERED = "Its first task could not be delivered.";
 
 export function createDeusHost(): DeusHost {
   /** First tasks held for workspaces being set up, by the chat's id. */
   const firsts = new Map<string, Held>();
-  /** Why a first task was not sent, said once by the outcome line. */
-  const unsent = new Map<string, string>();
 
   function act<O extends AnyOp>(caller: Who, op: O, input: InputOf<O>): Promise<OutputOf<O>> {
-    return guarded(() => {
-      if (op.kind === "write") assertMayWrite(appCaller(caller));
-      return run(op, input);
-    });
+    if (op.kind === "write") assertMayWrite(appCaller(caller));
+    return run(op, input);
   }
 
-  const rows = (where = "", ...args: unknown[]): Row[] =>
-    getDatabase()
-      .prepare(`${ROWS} ${where} ORDER BY w.id, s.id`)
-      .all(...args) as Row[];
+  /**
+   * The rows, a workspace with neither a chat nor a first chat's id given one
+   * now (stored once), so it is listed, retried and removed like any other.
+   */
+  function rows(where = "", ...args: unknown[]): Row[] {
+    const db = getDatabase();
+    const query = () =>
+      db
+        .prepare(`${ROWS} ${where} ORDER BY w.id, COALESCE(s.chat, 1e9), s.id`)
+        .all(...args) as Row[];
+    const found = query();
+    const missing = found.filter((r) => !r.session_id && !r.first_session_id);
+    if (!missing.length) return found;
+    for (const r of missing)
+      db.prepare(
+        "UPDATE workspaces SET first_session_id = ? WHERE id = ? AND first_session_id IS NULL"
+      ).run(uuidv7(), r.workspace_id);
+    return query();
+  }
 
   /** Each chat's last ended turn, in one read. */
   function lastEnded(ids: readonly string[]): Map<string, TurnEnded> {
@@ -245,19 +270,26 @@ export function createDeusHost(): DeusHost {
     return ended?.outcome === "cancelled" ? "stopped" : "idle";
   }
 
-  /** The entries the rows make: each workspace's chats in order, its first before its row exists. */
+  /** The entries the rows make: each workspace's chats by their number, its first before its row exists. */
   function entriesOf(found: readonly Row[]): Entry[] {
     const ended = lastEnded(found.flatMap((r) => (r.session_id ? [r.session_id] : [])));
-    const chats = new Map<string, number>();
+    const counted = new Map<string, number>();
     return found.flatMap((row): Entry[] => {
       const id = row.session_id ?? row.first_session_id;
       if (!id) return [];
-      const chat = (chats.get(row.workspace_id) ?? 0) + 1;
-      chats.set(row.workspace_id, chat);
+      // Its stored number (made in order, never moved); a chat from before numbers counts on.
+      const chat = row.chat ?? (counted.get(row.workspace_id) ?? 0) + 1;
+      counted.set(row.workspace_id, chat);
       const status = statusOf(row, ended.get(id));
       const title = row.s_title ?? (chat === 1 ? row.ws_title : null);
       const activity = epochMs(row.last_user_message_at) ?? epochMs(row.ws_updated_at);
       const root = computeWorkspacePath({ root_path: row.root_path, slug: row.slug });
+      // Why: a failed start, or a first task that could not be delivered (no messages yet).
+      const error = !row.session_id
+        ? row.error_message
+        : status === "error" && !row.message_count
+          ? row.s_error
+          : null;
       return [
         {
           id,
@@ -270,9 +302,7 @@ export function createDeusHost(): DeusHost {
           ...(row.agent_harness ? { harness: row.agent_harness as AgentHarness } : {}),
           ...(title ? { title } : {}),
           ...(activity ? { lastActivityAt: activity } : {}),
-          ...(status === "error" && !row.session_id && row.error_message
-            ? { error: row.error_message }
-            : {}),
+          ...(status === "error" && error ? { error } : {}),
           ...(root ? { root } : {}),
         },
       ];
@@ -290,7 +320,7 @@ export function createDeusHost(): DeusHost {
       )
     ).find((e) => e.id === id);
 
-  /** Workspaces agents started that are being set up now, counted at the commit. */
+  /** Workspaces agents started that are being set up now. */
   const agentSetups = () =>
     (
       getDatabase()
@@ -300,6 +330,70 @@ export function createDeusHost(): DeusHost {
         )
         .get() as { n: number }
     ).n;
+
+  // ---- the commit checks: each re-reads, synchronously, right before its write ----
+
+  /**
+   * A start may be made now: the caller still allowed, a starting chat not
+   * archived, an agent's new workspace under the cap, a chat's workspace ready.
+   */
+  function mayStart(caller: Who, input: StartInput) {
+    assertMayWrite(appCaller(caller));
+    if (caller.kind === "session" && entryById(caller.sessionId)?.status === "archived")
+      throw new Refused({ code: "archived", sessions: [caller.sessionId] });
+    if (input.workspace) {
+      const w = getDatabase()
+        .prepare("SELECT state, first_session_id FROM workspaces WHERE id = ?")
+        .get(input.workspace.id) as { state: string; first_session_id: string | null } | undefined;
+      const named = w?.first_session_id ? [w.first_session_id] : [];
+      if (!w || w.state === "archived") throw new Refused({ code: "archived", sessions: named });
+      if (w.state !== "ready")
+        throw new Refused({ code: "busy", sessions: named, state: "setting_up" });
+    } else if (input.origin.kind === "session" && agentSetups() >= AGENT_SETUPS) {
+      throw new Refused({ code: "limit_setting_up", retryAfter: 30 });
+    }
+  }
+
+  /** A chat may be sent to, stopped or answered now: the caller allowed, the chat and its workspace not archived. */
+  function mayTouch(caller: Who, sessionId: string) {
+    assertMayWrite(appCaller(caller));
+    const found = getDatabase()
+      .prepare(
+        "SELECT s.is_hidden, w.state, w.kind FROM sessions s JOIN workspaces w ON w.id = s.workspace_id WHERE s.id = ?"
+      )
+      .get(sessionId) as { is_hidden: number; state: string; kind: string } | undefined;
+    if (!found || found.kind === "cloud")
+      throw new OperatorError("not_found", "That session is gone. Nothing was done.");
+    if (found.is_hidden || found.state === "archived")
+      throw new Refused({ code: "archived", sessions: [sessionId] });
+  }
+
+  /**
+   * An archive may be made now: the caller allowed; no member being set up or
+   * still working or waiting (a stop must be confirmed first; `not_yours` for
+   * one the caller did not start); no member that started a session not
+   * archived, in its own workspace or another, lineage as the package reads it.
+   */
+  function mayArchive(caller: Who, members: readonly Entry[], all: readonly Entry[]) {
+    assertMayWrite(appCaller(caller));
+    for (const m of members) {
+      if (m.status === "setting_up")
+        throw new Refused({ code: "busy", sessions: [m.id], state: "setting_up" });
+      if (m.status === "working" || m.status === "needs_input") {
+        const code = sameOrigin(m.startedBy, originOf(caller)) ? "busy" : "not_yours";
+        throw new Refused({ code, sessions: [m.id], state: m.status });
+      }
+    }
+    const ids = new Set(members.map((m) => m.id));
+    const children = all.filter(
+      (e) =>
+        e.status !== "archived" && e.startedBy.kind === "session" && ids.has(e.startedBy.sessionId)
+    );
+    if (children.length)
+      throw new Refused({ code: "has_children", sessions: children.map((c) => c.id) });
+  }
+
+  // ---- the first task ---------------------------------------------------------------
 
   /** The turn settings a chat's first message runs with: what the start named, else the composer's defaults. */
   function settingsFor(input: StartInput) {
@@ -317,57 +411,69 @@ export function createDeusHost(): DeusHost {
     };
   }
 
-  /** Send a chat's first task as the turn the package minted, with its title. */
+  /**
+   * Send a chat's first task as the turn the package minted, with its title;
+   * one that cannot be delivered leaves the chat in error, with a safe reason
+   * its entry and view show.
+   */
   async function sendFirst(caller: Who, sessionId: string, input: StartInput) {
-    if (input.title)
-      getDatabase()
-        .prepare("UPDATE sessions SET title = ? WHERE id = ?")
-        .run(input.title, sessionId);
-    assertMayWrite(appCaller(caller));
-    await sendMessage(
-      { sessionId, content: input.message, turnId: input.turnId, ...settingsFor(input) },
-      input.origin
-    );
+    const db = getDatabase();
+    try {
+      const settings = settingsFor(input);
+      mayTouch(caller, sessionId);
+      if (input.title)
+        db.prepare("UPDATE sessions SET title = ? WHERE id = ?").run(input.title, sessionId);
+      await sendMessage(
+        { sessionId, content: input.message, turnId: input.turnId, ...settings },
+        input.origin
+      );
+    } catch (error) {
+      const said = appRefusal(error);
+      const why =
+        said instanceof OperatorError
+          ? said.message.split("\n")[0]!.replace(/^refused \([a-z_]+\): /, "")
+          : "";
+      db.prepare(
+        "UPDATE sessions SET status = 'error', error_message = ? WHERE id = ? AND message_count = 0"
+      ).run(`${NOT_DELIVERED}${why ? ` ${why}` : ""}`, sessionId);
+      invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
+      throw said;
+    }
   }
 
-  function drop(sessionId: string, why?: string) {
+  function drop(sessionId: string) {
     firsts.get(sessionId)?.unwatch();
     firsts.delete(sessionId);
-    if (why) unsent.set(sessionId, why);
   }
 
-  /** Hold a new workspace's first task, and send it when setup ends: dropped if it fails, is archived, or takes 30 minutes. */
+  /**
+   * Hold a new workspace's first task, and send it when setup ends: dropped
+   * if it fails, is archived, or takes 30 minutes. While it is handed to the
+   * engine it stays held, so a stop then waits for its admission and stops it
+   * by its minted id.
+   */
   function hold(sessionId: string, held: Omit<Held, "unwatch">) {
     const stop = onInvalidate((resources) => {
       if (resources.includes("workspaces")) look();
     });
-    const giveUp = setTimeout(
-      () => drop(sessionId, "Setup did not finish within 30 minutes. The first task was not sent."),
-      SETUP_LIMIT_MS
-    );
+    const giveUp = setTimeout(() => {
+      if (!firsts.get(sessionId)?.sending) drop(sessionId);
+    }, SETUP_LIMIT_MS);
     giveUp.unref?.();
-    firsts.set(sessionId, { ...held, unwatch: () => (stop(), clearTimeout(giveUp)) });
+    const entry: Held = { ...held, unwatch: () => (stop(), clearTimeout(giveUp)) };
+    firsts.set(sessionId, entry);
     function look() {
-      if (!firsts.has(sessionId)) return;
+      if (firsts.get(sessionId) !== entry || entry.sending) return;
       const w = getDatabase()
-        .prepare("SELECT state, current_session_id, error_message FROM workspaces WHERE id = ?")
-        .get(held.workspaceId) as
-        | { state: string; current_session_id: string | null; error_message: string | null }
-        | undefined;
-      if (!w || w.state === "archived") drop(sessionId);
-      else if (w.state === "error")
-        drop(
-          sessionId,
-          `Setup failed: ${w.error_message ?? "unknown error"}. The first task was not sent.`
-        );
+        .prepare("SELECT state, current_session_id FROM workspaces WHERE id = ?")
+        .get(held.workspaceId) as { state: string; current_session_id: string | null } | undefined;
+      if (!w || w.state === "archived" || w.state === "error") drop(sessionId);
       else if (w.state === "ready" && w.current_session_id === sessionId) {
-        drop(sessionId);
-        sendFirst(held.caller, sessionId, held.input).catch((error: unknown) => {
-          const said = translate(error);
-          const why = said instanceof Error ? said.message.split("\n")[0] : String(said);
-          unsent.set(sessionId, `The first task was not sent: ${why}`);
-          invalidate(["sessions"], { sessionIds: [sessionId] });
-        });
+        entry.unwatch();
+        entry.sending = sendFirst(held.caller, sessionId, held.input)
+          .catch(() => {})
+          .finally(() => firsts.delete(sessionId));
+        invalidate(["sessions"], { sessionIds: [sessionId] });
       }
     }
     look();
@@ -389,34 +495,32 @@ export function createDeusHost(): DeusHost {
     });
   }
 
-  /** Archive eligibility at the commit, in one synchronous step: members, activity, children. */
-  function commitCheck(caller: Who, members: readonly Entry[], all: readonly Entry[]) {
-    for (const m of members) {
-      if (m.status === "setting_up")
-        throw new Refused({ code: "busy", sessions: [m.id], state: "setting_up" });
-      if (m.status === "working" || m.status === "needs_input") {
-        const code = sameOrigin(m.startedBy, originOf(caller)) ? "busy" : "not_yours";
-        throw new Refused({ code, sessions: [m.id], state: m.status });
-      }
-    }
-    const ids = new Set(members.map((m) => m.id));
-    const children = all.filter(
-      (e) =>
-        e.status !== "archived" &&
-        e.startedBy.kind === "session" &&
-        ids.has(e.startedBy.sessionId) &&
-        !ids.has(e.id)
-    );
-    if (children.length)
-      throw new Refused({ code: "has_children", sessions: children.map((c) => c.id) });
+  /** Stop this turn, by whoever asks, and confirm its end. */
+  async function stopTurn(caller: Who, sessionId: string, turnId: string): Promise<CancelOutcome> {
+    if (liveTurnId(sessionId) !== turnId) return "not_running";
+    mayTouch(caller, sessionId);
+    const { unconfirmed } = await stopSession({ sessionId }, originOf(caller));
+    if (unconfirmed) return "unconfirmed";
+    return (await ended(sessionId, turnId)) ? "stopped" : "unconfirmed";
+  }
+
+  // ---- reading turns ------------------------------------------------------------------
+
+  /** A chat's turns: those of the page's messages, plus any that ended since `endedAfter` or have no message. */
+  function turnsOf(sessionId: string, ids: readonly string[], endedAfter: number | null) {
+    return getDatabase()
+      .prepare(
+        `SELECT turn_id, started_at, ended_at, outcome, cancelled_by FROM turns t WHERE session_id = ? AND (
+           turn_id IN (SELECT value FROM json_each(?))
+           OR (? IS NOT NULL AND ended_at > ?)
+           OR (? IS NULL AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.session_id = t.session_id AND m.turn_id = t.turn_id)))
+         ORDER BY COALESCE(started_at, ended_at), turn_id`
+      )
+      .all(sessionId, JSON.stringify(ids), endedAfter, endedAfter ?? 0, endedAfter) as TurnRow[];
   }
 
   const host: DeusHost = {
     act,
-    workspaceOf(sessionId) {
-      const entry = entryById(sessionId);
-      return entry && { id: entry.workspace.id, slug: entry.workspace.name };
-    },
 
     async list(_caller, filter) {
       const all = everything();
@@ -435,44 +539,44 @@ export function createDeusHost(): DeusHost {
       if (!entry) throw new OperatorError("not_found", "That session is gone. Nothing was read.");
       const db = getDatabase();
       if (!getSessionRaw(db, sessionId)) return { status: entry.status, turns: [], waiting: [] };
-      if (options.after !== undefined && !/^\d+$/.test(options.after))
+      // The cursor is where the read ended: its last message, and the latest turn end it saw.
+      const after = options.after === undefined ? undefined : /^(\d+)\.(\d+)$/.exec(options.after);
+      if (options.after !== undefined && !after)
         throw new OperatorError("stale_cursor", "That cursor is not this host's.");
-      const rows = options.after
-        ? getMessages(db, sessionId, { after: Number(options.after), limit: 500 })
+      const rows = after
+        ? getMessages(db, sessionId, { after: Number(after[1]), limit: 500 })
         : getMessages(db, sessionId, { limit: options.last ?? 20 });
       const messages = attachParts(db, rows);
       const ids = [...new Set(rows.flatMap((m) => (m.turn_id ? [m.turn_id] : [])))];
-      const facts = new Map(
-        (
-          db
-            .prepare(
-              `SELECT turn_id, ended_at, outcome, cancelled_by FROM turns
-               WHERE session_id = ? AND turn_id IN (SELECT value FROM json_each(?))`
-            )
-            .all(sessionId, JSON.stringify(ids)) as {
-            turn_id: string;
-            ended_at: number | null;
-            outcome: string | null;
-            cancelled_by: string | null;
-          }[]
-        ).map((t) => [t.turn_id, t])
-      );
+      const known = turnsOf(sessionId, ids, after ? Number(after[2]) : null);
+      // A page's turn with no row yet (its facts not written) still shows its messages.
+      const facts: TurnRow[] = [
+        ...known,
+        ...ids
+          .filter((id) => !known.some((t) => t.turn_id === id))
+          .map((turn_id) => ({
+            turn_id,
+            started_at: null,
+            ended_at: null,
+            outcome: null,
+            cancelled_by: null,
+          })),
+      ];
       const running = liveTurnId(sessionId);
-      const turns: ViewTurn[] = ids.map((turnId) => {
-        const fact = facts.get(turnId);
-        const how = turnId === running || !fact?.ended_at ? undefined : endedOf(fact);
-        const failed = fact?.outcome
+      const turns: ViewTurn[] = facts.map((fact) => {
+        const how = fact.turn_id === running || !fact.ended_at ? undefined : endedOf(fact);
+        const failed = fact.outcome
           ? (JSON.parse(fact.outcome) as { error?: { message?: string } })
           : {};
         return {
-          turnId,
+          turnId: fact.turn_id,
           outcome: how?.outcome ?? "running",
           ...(how?.cancelledBy ? { cancelledBy: how.cancelledBy } : {}),
           ...(how?.outcome === "failed" && failed.error?.message
             ? { error: failed.error.message }
             : {}),
           messages: messages
-            .filter((m) => m.turn_id === turnId)
+            .filter((m) => m.turn_id === fact.turn_id)
             .map((m) => ({
               role: m.role,
               parts: m.parts ?? [],
@@ -482,12 +586,17 @@ export function createDeusHost(): DeusHost {
         };
       });
       const last = lastEnded([sessionId]).get(sessionId);
-      const end = rows.at(-1)?.seq ?? (options.after ? Number(options.after) : 0);
+      const seq = rows.at(-1)?.seq ?? (after ? Number(after[1]) : 0);
+      const endMark = (
+        db.prepare("SELECT MAX(ended_at) AS at FROM turns WHERE session_id = ?").get(sessionId) as {
+          at: number | null;
+        }
+      ).at;
       return {
         status: entry.status,
         turns,
         waiting: pendingFor(sessionId).flatMap((request) => waitingOf(request) ?? []),
-        cursor: String(end) as never,
+        cursor: `${seq}.${endMark ?? 0}` as never,
         ...(running ? { running } : {}),
         ...(last ? { lastEnded: last } : {}),
         ...(rows.length && hasOlderMessages(db, sessionId, rows[0]!.seq) ? { older: true } : {}),
@@ -507,11 +616,10 @@ export function createDeusHost(): DeusHost {
     },
 
     send: (caller, sessionId, { turnId, message, origin }) =>
-      guarded(async () => {
+      refusing(async () => {
         const session = getSessionRaw(getDatabase(), sessionId);
         if (!session)
           throw new OperatorError("not_found", "That session is gone. Nothing was sent.");
-        if (session.is_hidden) throw new Refused({ code: "archived", sessions: [sessionId] });
         if (firsts.has(sessionId))
           throw new Refused({ code: "busy", sessions: [sessionId], state: "setting_up" });
         // As the chat's composer would continue it: its latest turn's model and thinking.
@@ -521,22 +629,19 @@ export function createDeusHost(): DeusHost {
           turns,
           getSetting("default_thinking_level")
         );
-        assertMayWrite(appCaller(caller));
+        mayTouch(caller, sessionId);
         try {
           await sendMessage({ sessionId, content: message, turnId, ...settings }, origin);
         } catch (error) {
           // Busy: the engine admits one turn per chat.
-          if (
-            error instanceof ConflictError &&
-            /still working|waiting for your response/.test(error.message)
-          )
+          if (error instanceof ChatBusyError)
             throw new Refused({ code: "busy", sessions: [sessionId] });
           throw error;
         }
       }),
 
     start: (caller, input) =>
-      guarded(async () => {
+      refusing(async () => {
         const db = getDatabase();
         const repo = db
           .prepare("SELECT root_path, git_origin_url FROM repositories WHERE id = ?")
@@ -552,111 +657,93 @@ export function createDeusHost(): DeusHost {
             repository ? { next: callHint("add_project", { repository }) } : {}
           );
         }
-        // The commit, from here to the insert with no await: the starter, the workspace, the cap.
-        if (caller.kind === "session" && entryById(caller.sessionId)?.status === "archived")
-          throw new Refused({ code: "archived", sessions: [caller.sessionId] });
+        // The agent and model before anything is made.
+        settingsFor(input);
         if (input.workspace) {
-          const w = db
-            .prepare("SELECT state, first_session_id FROM workspaces WHERE id = ?")
-            .get(input.workspace.id) as
-            | { state: string; first_session_id: string | null }
-            | undefined;
-          if (!w || w.state === "archived")
-            throw new Refused({
-              code: "archived",
-              sessions: w?.first_session_id ? [w.first_session_id] : [],
-            });
-          if (w.state !== "ready")
-            throw new Refused({
-              code: "busy",
-              sessions: w.first_session_id ? [w.first_session_id] : [],
-              state: "setting_up",
-            });
-          assertMayWrite(appCaller(caller));
+          const workspaceId = input.workspace.id;
           const sessionId = uuidv7();
+          // The commit: checked and inserted in one synchronous step.
+          mayStart(caller, input);
           db.transaction(() => {
             db.prepare(
               "INSERT INTO sessions (id, workspace_id, status, agent_harness, started_by, updated_at) VALUES (?, ?, 'idle', ?, ?, datetime('now'))"
             ).run(
               sessionId,
-              input.workspace!.id,
+              workspaceId,
               input.harness ?? DEFAULT_AGENT_HARNESS,
               input.origin.kind === "person" ? null : JSON.stringify(input.origin)
             );
             db.prepare("UPDATE workspaces SET current_session_id = ? WHERE id = ?").run(
               sessionId,
-              input.workspace!.id
+              workspaceId
             );
           })();
           invalidate(["workspaces", "sessions"]);
-          await sendFirst(caller, sessionId, input);
+          // Made: a first task that cannot be delivered is the chat's error, not a refusal.
+          await sendFirst(caller, sessionId, input).catch(() => {});
           return entryById(sessionId)!;
         }
-        assertMayWrite(appCaller(caller));
+        mayStart(caller, input);
         const { workspaceId, firstSessionId } = await createLocalWorkspace(
           { repository_id: input.project.id, location: "local" } as never,
-          {
-            startedBy: input.origin,
-            admit: () => {
-              if (input.origin.kind === "session" && agentSetups() >= AGENT_SETUPS)
-                throw new Refused({ code: "limit_setting_up", retryAfter: 30 });
-            },
-          }
+          { startedBy: input.origin, admit: () => mayStart(caller, input) }
         );
         hold(firstSessionId, { caller, workspaceId, input });
         return entryById(firstSessionId)!;
       }),
 
     cancel: (caller, sessionId, turnId): Promise<CancelOutcome> =>
-      guarded(async () => {
-        if (!turnId) {
-          if (!firsts.has(sessionId)) return "not_running";
-          assertMayWrite(appCaller(caller));
-          drop(sessionId);
-          return "first_task_dropped";
+      refusing(async () => {
+        if (turnId) return stopTurn(caller, sessionId, turnId);
+        const held = firsts.get(sessionId);
+        if (!held) return "not_running";
+        if (held.sending) {
+          // Being handed to the engine: wait for its admission, then stop it by its minted id.
+          await held.sending;
+          return stopTurn(caller, sessionId, held.input.turnId);
         }
-        if (liveTurnId(sessionId) !== turnId) return "not_running";
         assertMayWrite(appCaller(caller));
-        const { unconfirmed } = await stopSession({ sessionId }, originOf(caller));
-        if (unconfirmed) return "unconfirmed";
-        return (await ended(sessionId, turnId)) ? "stopped" : "unconfirmed";
+        drop(sessionId);
+        return "first_task_dropped";
       }),
 
     respond: (caller, sessionId, answer: Answer) =>
-      guarded(() => {
+      refusing(() => {
         const request = pendingFor(sessionId).find((r) => r.requestId === answer.requestId);
         if (!request) return { accepted: false };
         const reply = replyFor(request, answer);
-        assertMayWrite(appCaller(caller));
+        mayTouch(caller, sessionId);
         // The one answering path: the app's card for it is withdrawn, as when a person answers there.
         return { accepted: answerToolRequest(request.requestId, reply) };
       }),
 
     archive: (caller, target) =>
-      guarded(async () => {
-        const all = everything();
+      refusing(async () => {
+        const db = getDatabase();
         if (target.kind === "workspace") {
-          const members = all.filter(
-            (e) => e.workspace.id === target.id && e.status !== "archived"
-          );
-          commitCheck(caller, members, all);
-          const w = getDatabase()
+          const members = () =>
+            everything().filter((e) => e.workspace.id === target.id && e.status !== "archived");
+          const w = db
             .prepare("SELECT state, git_branch, current_session_id FROM workspaces WHERE id = ?")
-            .get(target.id) as {
-            state: string;
-            git_branch: string | null;
-            current_session_id: string | null;
-          };
+            .get(target.id) as
+            | { state: string; git_branch: string | null; current_session_id: string | null }
+            | undefined;
+          if (!w)
+            throw new OperatorError("not_found", "That workspace is gone. Nothing was archived.");
           // A start that failed has no chat, branch or changes to keep: it is removed, as the app does.
           if (w.state === "error" && !w.current_session_id) {
+            mayArchive(caller, members(), everything());
             await act(caller, workspaces.deleteWorkspace, { workspaceId: target.id });
             return { note: "Its start had failed, so it was removed." };
           }
-          await act(caller, workspaces.archiveWorkspace, { workspaceId: target.id });
+          // Eligibility read again inside the app's queue, right before the update.
+          await archiveWorkspace(target.id, () => mayArchive(caller, members(), everything()));
+          invalidate(["workspaces"]);
           return {
             note: `Its branch${w.git_branch ? ` ${JSON.stringify(w.git_branch)}` : ""} and changes are kept.`,
           };
         }
+        const all = everything();
         const entry = all.find((e) => e.id === target.id);
         if (!entry || entry.status === "archived") return {};
         if (entry.startedBy.kind !== "session")
@@ -673,15 +760,13 @@ export function createDeusHost(): DeusHost {
             code: "unsupported",
             detail: "It is its workspace's last chat; archive the workspace instead.",
           });
-        commitCheck(caller, [entry], all);
-        assertMayWrite(appCaller(caller));
-        const db = getDatabase();
+        mayArchive(caller, [entry], all);
         db.transaction(() => {
           db.prepare("UPDATE sessions SET is_hidden = 1 WHERE id = ?").run(entry.id);
-          // The workspace's current chat becomes its newest visible one.
+          // The workspace's current chat becomes its newest visible one, by its number.
           db.prepare(
             `UPDATE workspaces SET current_session_id = (
-               SELECT id FROM sessions WHERE workspace_id = ? AND is_hidden = 0 ORDER BY id DESC LIMIT 1)
+               SELECT id FROM sessions WHERE workspace_id = ? AND is_hidden = 0 ORDER BY chat DESC, id DESC LIMIT 1)
              WHERE id = ? AND current_session_id = ?`
           ).run(entry.workspace.id, entry.workspace.id, entry.id);
         })();
@@ -723,18 +808,15 @@ export function createDeusHost(): DeusHost {
     },
 
     async outcome(caller, entry) {
-      const reason = unsent.get(entry.id);
-      unsent.delete(entry.id);
-      const lead = reason ? `${reason} ` : "";
       const { files, total_count } = await act(caller, workspaces.diffFiles, {
         workspaceId: entry.workspace.id,
       });
-      if (files.length === 0) return `${lead}changes: none`;
+      if (files.length === 0) return "changes: none";
       const shown = files
         .slice(0, 10)
         .map((f) => `${JSON.stringify(f.file)} (+${f.additions} -${f.deletions})`);
       const more = (total_count ?? files.length) - shown.length;
-      return `${lead}changes: ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""}`;
+      return `changes: ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""}`;
     },
 
     onChange(listener) {

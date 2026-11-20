@@ -24,6 +24,7 @@ import type {
   SessionChatTab,
 } from "@/features/session/ui/tabs";
 import { getChatTabSessionId, isSessionChatTab } from "@/features/session/ui/tabs";
+import { openChatDone, useOpenChatStore } from "@/features/session/lib/openChat";
 
 const NEW_CHAT_LABEL = "New chat";
 const MAX_CLOSED_TABS = 20;
@@ -184,20 +185,43 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
   // --- Hydrate tabs with real session data when sessions load ---
 
   const hydrated = useRef(false);
+  /** Chats the live list has shown: one gone from it since was put away (or deleted). */
+  const seen = useRef(new Set<string>());
   useEffect(() => {
     if (!workspaceSessions) return;
     if (hydrated.current) {
+      const gone = new Set([...seen.current].filter((id) => !sessionMap.has(id)));
+      const arrived = workspaceSessions.filter((s) => !seen.current.has(s.id));
+      for (const s of workspaceSessions) seen.current.add(s.id);
+      for (const id of gone) seen.current.delete(id);
+      // A chat put away leaves its tab and the closed list; one that arrived (another
+      // chat or an agent started it) becomes a tab, unless the person closed it here.
       // A cloud snapshot can establish that an untitled chat has started after
       // discovery has already hydrated the tabs. Preserve order and draft choices.
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reconcile persisted tabs with server discovery
+      setClosedTabs((closed) => closed.filter((c) => !gone.has(c.sessionId)));
       setMainTabs((tabs) => {
-        const updated = [...tabs];
-        let changed = false;
-        tabs.forEach((tab, index) => {
-          const session = isSessionChatTab(tab) ? sessionMap.get(tab.sessionId) : undefined;
-          if (tab.hasStarted || !session || session.message_count === 0) return;
+        let updated = tabs.filter((tab) => !isSessionChatTab(tab) || !gone.has(tab.sessionId));
+        let changed = updated.length !== tabs.length;
+        const open = getOpenSessionIds(updated);
+        const closedIds = new Set(closedTabs.map((c) => c.sessionId));
+        for (const session of arrived) {
+          if (open.has(session.id) || closedIds.has(session.id)) continue;
           changed = true;
-          updated[index] = {
+          updated = [
+            ...updated,
+            {
+              ...sessionToTab(session, 1),
+              ...(session.message_count > 0
+                ? { label: nextStartedChatLabel(updated, session.agent_harness) }
+                : {}),
+            },
+          ];
+        }
+        updated = updated.map((tab) => {
+          const session = isSessionChatTab(tab) ? sessionMap.get(tab.sessionId) : undefined;
+          if (tab.hasStarted || !session || session.message_count === 0) return tab;
+          changed = true;
+          return {
             ...tab,
             hasStarted: true,
             initialModel: undefined,
@@ -205,11 +229,17 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
             label: nextStartedChatLabel(updated, session.agent_harness),
           };
         });
-        return changed ? updated : tabs;
+        if (!changed) return tabs;
+        if (updated.length === 0) updated = [createPendingTab()];
+        setActiveMainTabId((active) =>
+          updated.some((t) => t.id === active) ? active : (updated.at(-1)?.id ?? "tab-default")
+        );
+        return updated;
       });
       return;
     }
     hydrated.current = true;
+    for (const s of workspaceSessions) seen.current.add(s.id);
 
     setMainTabs((prev) => {
       // Filter out orphaned session IDs (deleted from DB)
@@ -254,7 +284,33 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
 
       return hydratedTabs;
     });
-  }, [workspaceSessions, sessionMap, activeSessionId]);
+  }, [workspaceSessions, sessionMap, activeSessionId, closedTabs]);
+
+  // --- A request to show one chat (openChat), taken when mounted or already mounted ---
+
+  const requested = useOpenChatStore((state) => state.requested[workspaceId]);
+  useEffect(() => {
+    if (!requested || !hydrated.current) return;
+    const session = sessionMap.get(requested);
+    if (!session) return;
+    openChatDone(workspaceId);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- consume a navigation request
+    setMainTabs((tabs) =>
+      tabs.some((t) => isSessionChatTab(t) && t.sessionId === requested)
+        ? tabs
+        : [
+            ...tabs,
+            {
+              ...sessionToTab(session, 1),
+              ...(session.message_count > 0
+                ? { label: nextStartedChatLabel(tabs, session.agent_harness) }
+                : {}),
+            },
+          ]
+    );
+    setClosedTabs((closed) => closed.filter((c) => c.sessionId !== requested));
+    setActiveMainTabId(`tab-${requested}`);
+  }, [requested, sessionMap, workspaceId]);
 
   // --- Persist tab state to localStorage on every change ---
   // Debounced to avoid writing on every intermediate state update.

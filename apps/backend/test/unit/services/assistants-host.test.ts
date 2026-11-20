@@ -24,6 +24,9 @@ const state = vi.hoisted(() => ({
   sent: [] as { input: Record<string, unknown>; origin?: unknown }[],
   stopped: [] as { sessionId: string; by: unknown }[],
   sendRefusal: null as Error | null,
+  naming: null as null | (() => Promise<void>),
+  feedback: [] as unknown[],
+  sending: null as null | Promise<void>,
   stored: {} as Record<string, string>,
   created: 0,
 }));
@@ -61,6 +64,7 @@ vi.mock("../../../src/services/agent/tool-relay", () => ({
 vi.mock("../../../src/services/agent/turns", () => ({
   sendMessage: async (input: Record<string, unknown>, origin?: unknown) => {
     if (state.sendRefusal) throw state.sendRefusal;
+    if (state.sending) await state.sending;
     state.sent.push({ input, origin });
     state.live.set(input.sessionId as string, input.turnId as string);
     return { turnId: input.turnId };
@@ -73,23 +77,28 @@ vi.mock("../../../src/services/agent/turns", () => ({
     return { unconfirmed: false };
   },
 }));
-vi.mock("../../../src/api/workspaces", () => ({
-  createLocalWorkspace: async (
-    input: { repository_id: string },
-    options: { startedBy?: unknown; admit?: () => void }
-  ) => {
-    options.admit?.();
+// The app's own workspace creation runs; only its name lookup (git) and its
+// background start are stood in for, the lookup awaitable so a test can act
+// while a creation waits on it.
+vi.mock("../../../src/services/workspace-init.service", () => ({
+  pickWorkspaceName: async () => {
+    await state.naming?.();
     const n = ++state.created;
-    insertWorkspace(`w-new${n}`, `new${n}`, {
-      state: "initializing",
-      first: `s-new${n}`,
-      startedBy: options.startedBy,
-      repo: input.repository_id,
-    });
-    return { workspaceId: `w-new${n}`, firstSessionId: `s-new${n}` };
+    return { slug: `new${n}`, branchName: `lab/new${n}` };
   },
+  initializeWorkspace: async () => {},
+  deleteFailedWorkspace: () => {},
+  retryWorkspaceInit: async () => {},
 }));
 vi.mock("../../../src/services/settings.service", () => ({ getSetting: () => undefined }));
+vi.mock("../../../src/services/assistants/feedback", () => ({
+  FEEDBACK_CATEGORIES: ["tool", "mcp", "ux", "docs", "model", "other"],
+  FeedbackNotSent: class extends Error {},
+  sendFeedback: async (report: unknown) => {
+    state.feedback.push(report);
+    return { threadId: "thread-1" };
+  },
+}));
 vi.mock("../../../src/services/account-session", () => ({
   currentAccountSession: () => ({ accountId: "user_a", cloudUrl: "https://cloud.test" }),
 }));
@@ -106,7 +115,7 @@ vi.mock("../../../src/services/assistants/store", () => ({
 import { LOCAL_CALLER, type Caller } from "../../../src/api/registry";
 import handlers from "../../../src/api/assistants";
 import * as api from "@shared/api/assistants";
-import { ConflictError } from "../../../src/lib/errors";
+import { ChatBusyError } from "../../../src/lib/errors";
 import { createDeusHost } from "../../../src/services/assistants/host";
 import { _resetOperator, withSessionTools } from "../../../src/services/assistants/operator";
 import { READ_ONLY } from "../../../src/services/assistants/sentences";
@@ -174,6 +183,20 @@ function message(sessionId: string, turnId: string, role: string, text: string, 
     .run(`p-${id}`, id, sessionId, JSON.stringify({ id: `p-${id}`, type: "text", text }));
 }
 
+/** Setup ends as the pipeline ends it: the first chat opened under its minted id, the workspace ready. */
+function ready(entry: { id: string; workspace: { id: string } }) {
+  const w = state.db
+    .prepare("SELECT started_by FROM workspaces WHERE id = ?")
+    .get(entry.workspace.id) as { started_by: string | null };
+  state.db
+    .prepare("INSERT INTO sessions (id, workspace_id, status, started_by) VALUES (?, ?, 'idle', ?)")
+    .run(entry.id, entry.workspace.id, w.started_by);
+  state.db
+    .prepare("UPDATE workspaces SET state = 'ready', current_session_id = ? WHERE id = ?")
+    .run(entry.id, entry.workspace.id);
+  changed();
+}
+
 const changed = (sessionIds?: string[]) => {
   for (const listener of [...state.listeners]) listener(["workspaces", "sessions"], { sessionIds });
 };
@@ -216,6 +239,9 @@ beforeEach(() => {
   state.sendRefusal = null;
   state.stored = { claude: "operate" };
   state.created = 0;
+  state.naming = null;
+  state.feedback = [];
+  state.sending = null;
   _resetOperator();
 });
 afterEach(() => state.db.close());
@@ -276,7 +302,7 @@ describe("sending and starting", () => {
       input: { sessionId: "s-lead", turnId: "t9", content: "hi" },
       origin: LEAD,
     });
-    state.sendRefusal = new ConflictError(
+    state.sendRefusal = new ChatBusyError(
       "The agent is still working — wait for the current turn to finish."
     );
     await expect(
@@ -293,17 +319,13 @@ describe("sending and starting", () => {
       origin: LEAD,
     };
     const entry = await host.start!(LEAD as never, input as never);
-    expect(entry).toMatchObject({ id: "s-new1", status: "setting_up", startedBy: LEAD });
-    insertChat("s-new1", "w-new1", LEAD);
-    state.db.prepare("UPDATE workspaces SET state = 'ready' WHERE id = 'w-new1'").run();
-    changed();
+    expect(entry).toMatchObject({ status: "setting_up", startedBy: LEAD });
+    ready(entry);
     await vi.waitFor(() => expect(state.sent.map((s) => s.input.turnId)).toEqual(["first-1"]));
 
-    await host.start!(LEAD as never, { ...input, turnId: "first-2" } as never);
-    expect(await host.cancel!(LEAD as never, "s-new2")).toBe("first_task_dropped");
-    insertChat("s-new2", "w-new2", LEAD);
-    state.db.prepare("UPDATE workspaces SET state = 'ready' WHERE id = 'w-new2'").run();
-    changed();
+    const second = await host.start!(LEAD as never, { ...input, turnId: "first-2" } as never);
+    expect(await host.cancel!(LEAD as never, second.id)).toBe("first_task_dropped");
+    ready(second);
     expect(state.sent).toHaveLength(1);
   });
 
@@ -490,5 +512,292 @@ describe("through MCP and as a chat's own tools", () => {
       signal
     );
     expect(self.content[0]).toMatchObject({ text: expect.stringContaining("refused (self)") });
+  });
+});
+
+const assistantWho = (access = "operate") =>
+  ({
+    kind: "external",
+    id: "assistant:claude",
+    speaksAs: "assistant",
+    name: "Claude",
+    auth: assistantCaller(access as never),
+  }) as never;
+const startInput = (extra: Record<string, unknown> = {}) =>
+  ({
+    turnId: "first-x",
+    project: { id: "r-shop", name: "demo-shop" },
+    message: "go",
+    origin: LEAD,
+    ...extra,
+  }) as never;
+const workspaceCount = () =>
+  (state.db.prepare("SELECT COUNT(*) AS n FROM workspaces").get() as { n: number }).n;
+
+describe("each commit re-reads what it depends on, with no await before its write (H2 to H5)", () => {
+  it("H2: access withdrawn while a new workspace's name is chosen: nothing is inserted", async () => {
+    const host = createDeusHost();
+    const before = workspaceCount();
+    state.naming = async () => {
+      state.stored.claude = "read";
+    };
+    await expect(
+      host.start!(
+        assistantWho(),
+        startInput({ origin: { kind: "assistant", id: "claude", name: "Claude" } })
+      )
+    ).rejects.toThrow();
+    expect(workspaceCount()).toBe(before);
+  });
+
+  it("H2: access withdrawn during setup: the held task writes no title and is not sent; the chat says why", async () => {
+    const host = createDeusHost();
+    const entry = await host.start!(
+      assistantWho(),
+      startInput({
+        title: "Secret plan",
+        origin: { kind: "assistant", id: "claude", name: "Claude" },
+      })
+    );
+    state.stored.claude = "read";
+    ready(entry);
+    await vi.waitFor(() => {
+      const row = state.db
+        .prepare("SELECT title, status, error_message FROM sessions WHERE id = ?")
+        .get(entry.id) as { title: string | null; status: string; error_message: string };
+      expect(row.title).toBeNull();
+      expect(row.status).toBe("error");
+      expect(row.error_message).toMatch(/^Its first task could not be delivered\./);
+    });
+    expect(state.sent).toEqual([]);
+    await vi.waitFor(async () => {
+      const listed = (await host.list(LOCAL_CALLER as never, {})).find((e) => e.id === entry.id);
+      expect(listed).toMatchObject({
+        status: "error",
+        error: expect.stringContaining("could not be delivered"),
+      });
+    });
+  });
+
+  it("H3: a starter archived while the name is chosen starts nothing", async () => {
+    const host = createDeusHost();
+    const before = workspaceCount();
+    state.naming = async () => {
+      state.db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = 'w-lead'").run();
+    };
+    await expect(host.start!(LEAD as never, startInput())).rejects.toMatchObject({
+      refusal: { code: "archived" },
+    });
+    expect(workspaceCount()).toBe(before);
+  });
+
+  it("H3: four agents' starts racing past the name lookup make three setups", async () => {
+    const host = createDeusHost();
+    for (const id of ["a", "b", "c", "d"]) {
+      insertWorkspace(`w-${id}`, `home-${id}`);
+      insertChat(`s-${id}`, `w-${id}`);
+    }
+    let open!: () => void;
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    state.naming = () => gate;
+    const starts = ["a", "b", "c", "d"].map((id) =>
+      host.start!(
+        { kind: "session", sessionId: `s-${id}` } as never,
+        startInput({ origin: { kind: "session", sessionId: `s-${id}` } })
+      ).then(
+        () => "made",
+        (e: { refusal?: { code: string } }) => e.refusal?.code
+      )
+    );
+    open();
+    expect((await Promise.all(starts)).sort()).toEqual([
+      "limit_setting_up",
+      "made",
+      "made",
+      "made",
+    ]);
+  });
+
+  it("H4: a child started after the archive was asked, before its queued update, stops it", async () => {
+    const host = createDeusHost();
+    insertWorkspace("w-p", "parent", { startedBy: LEAD });
+    insertChat("s-p", "w-p", LEAD);
+    const archiving = host.archive!(LEAD as never, { kind: "workspace", id: "w-p" });
+    // In the same tick, before the queue runs: a child of the parent appears.
+    insertWorkspace("w-c", "child", { startedBy: { kind: "session", sessionId: "s-p" } });
+    insertChat("s-c", "w-c", { kind: "session", sessionId: "s-p" });
+    await expect(archiving).rejects.toMatchObject({
+      refusal: { code: "has_children", sessions: ["s-c"] },
+    });
+    const w = state.db.prepare("SELECT state FROM workspaces WHERE id = 'w-p'").get() as {
+      state: string;
+    };
+    expect(w.state).toBe("ready");
+  });
+
+  it("H4: a workspace whose chat started another chat in it is refused, as the package's preflight does", async () => {
+    const host = createDeusHost();
+    insertChat("s-second", "w-lead", { kind: "session", sessionId: "s-lead" });
+    await expect(
+      host.archive!(LOCAL_CALLER as never, { kind: "workspace", id: "w-lead" })
+    ).rejects.toMatchObject({ refusal: { code: "has_children", sessions: ["s-second"] } });
+  });
+
+  it("H5: a workspace archived while a send reads its settings gets nothing; a stop and an answer there are refused", async () => {
+    const host = createDeusHost();
+    state.ops.messages = () => {
+      state.db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = 'w-lead'").run();
+      return { messages: [], turns: [], compactions: [], has_older: false, has_newer: false };
+    };
+    await expect(
+      host.send(LEAD as never, "s-lead", { turnId: "t1", message: "hi", origin: LEAD })
+    ).rejects.toMatchObject({ refusal: { code: "archived" } });
+    expect(state.sent).toEqual([]);
+    state.live.set("s-lead", "t0");
+    await expect(host.cancel!(LOCAL_CALLER as never, "s-lead", "t0")).rejects.toMatchObject({
+      refusal: { code: "archived" },
+    });
+    expect(state.stopped).toEqual([]);
+    state.pending = [
+      {
+        requestId: "q1",
+        sessionId: "s-lead",
+        method: "askUserQuestion",
+        params: { questions: [{ question: "Which?", options: ["a"] }] },
+      },
+    ];
+    await expect(
+      host.respond!(LOCAL_CALLER as never, "s-lead", {
+        kind: "question",
+        requestId: "q1",
+        outcome: { action: "accept", content: { "0": "a" } },
+      } as never)
+    ).rejects.toMatchObject({ refusal: { code: "archived" } });
+    expect(state.answered).toEqual([]);
+  });
+});
+
+describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12, H15, H17)", () => {
+  it("H7: a stop while the first task is handed to the engine stops it by its minted id", async () => {
+    const host = createDeusHost();
+    const entry = await host.start!(LEAD as never, startInput({ turnId: "first-7" }));
+    let admit!: () => void;
+    state.sending = new Promise<void>((resolve) => (admit = resolve));
+    ready(entry);
+    const stopping = host.cancel!(LEAD as never, entry.id);
+    admit();
+    expect(await stopping).toBe("stopped");
+    expect(state.stopped).toEqual([{ sessionId: entry.id, by: LEAD }]);
+  });
+
+  it("H8: chats keep the number they were made with, whatever their ids sort as; the newest visible is by number", async () => {
+    const host = createDeusHost();
+    insertChat("zz-second", "w-lead", LEAD);
+    insertChat("aa-third", "w-lead", LEAD);
+    const numbers = (await host.list(LOCAL_CALLER as never, {}))
+      .filter((e) => e.workspace.name === "lead")
+      .map((e) => [e.id, e.chat]);
+    expect(numbers).toEqual([
+      ["s-lead", 1],
+      ["zz-second", 2],
+      ["aa-third", 3],
+    ]);
+    await host.archive!(LEAD as never, { kind: "session", id: "aa-third" });
+    const w = state.db
+      .prepare("SELECT current_session_id FROM workspaces WHERE id = 'w-lead'")
+      .get() as {
+      current_session_id: string;
+    };
+    expect(w.current_session_id).toBe("zz-second");
+  });
+
+  it("H12: a workspace with neither a chat nor a first chat's id is given one, stored once", async () => {
+    const host = createDeusHost();
+    insertWorkspace("w-old", "old", { state: "error" });
+    const first = (await host.list(LOCAL_CALLER as never, {})).find(
+      (e) => e.workspace.id === "w-old"
+    );
+    expect(first).toMatchObject({ status: "error" });
+    const again = (await host.list(LOCAL_CALLER as never, {})).find(
+      (e) => e.workspace.id === "w-old"
+    );
+    expect(again?.id).toBe(first?.id);
+  });
+
+  it("H15: an agent the start names that does not run here makes no chat", async () => {
+    const host = createDeusHost();
+    const before = (state.db.prepare("SELECT COUNT(*) AS n FROM sessions").get() as { n: number })
+      .n;
+    await expect(
+      host.start!(
+        LEAD as never,
+        startInput({ workspace: { id: "w-lead", name: "lead" }, harness: "acp" })
+      )
+    ).rejects.toMatchObject({ code: "invalid_input" });
+    expect((state.db.prepare("SELECT COUNT(*) AS n FROM sessions").get() as { n: number }).n).toBe(
+      before
+    );
+  });
+
+  it("H15: a first task refused after the chat was made is that chat's error, not a refusal", async () => {
+    const host = createDeusHost();
+    state.sendRefusal = new Error("engine unavailable");
+    const entry = await host.start!(
+      LEAD as never,
+      startInput({ workspace: { id: "w-lead", name: "lead" } })
+    );
+    expect(entry).toMatchObject({
+      status: "error",
+      error: "Its first task could not be delivered.",
+    });
+  });
+
+  it("H17: a read after the last message sees a later cancel; a turn with no messages is shown", async () => {
+    const host = createDeusHost();
+    message("s-lead", "t1", "user", "go");
+    state.live.set("s-lead", "t1");
+    const first = await host.view(LOCAL_CALLER as never, "s-lead", { last: 10 });
+    state.live.delete("s-lead");
+    endTurn("s-lead", "t1", "cancelled", { kind: "person" });
+    endTurn("s-lead", "t-silent", "end_turn");
+    const after = await host.view(LOCAL_CALLER as never, "s-lead", { after: first.cursor });
+    expect(after.turns.map((t) => [t.turnId, t.outcome]).sort()).toEqual([
+      ["t-silent", "done"],
+      ["t1", "cancelled"],
+    ]);
+  });
+});
+
+describe("what still lives in Deus (H18, H19)", () => {
+  const mcp = (message: unknown, caller: Caller) =>
+    operations(handlers, caller)(api.agentMcp, { message }) as Promise<any>;
+  const call = async (caller: Caller, name: string, args: Record<string, unknown>) => {
+    const reply = await mcp(
+      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } },
+      caller
+    );
+    return { text: reply.result.content[0].text as string, isError: reply.result.isError === true };
+  };
+
+  it("an assistant allowed to read may send feedback, which changes nothing here", async () => {
+    state.stored.claude = "read";
+    const sent = await call(assistantCaller("read"), "send_feedback", {
+      message: "The list_sessions tool could say which chat is current in each workspace.",
+    });
+    expect(sent).toMatchObject({ isError: false });
+    expect(state.feedback).toHaveLength(1);
+  });
+
+  it("read_changes shows only a changed file: an unchanged one (a secret git ignores) is refused", async () => {
+    state.ops.diffFiles = () => ({
+      files: [{ file: "src/a.ts", additions: 1, deletions: 0 }],
+      total_count: 1,
+    });
+    state.ops.diffFile = () => ({ diff: "+x" });
+    const refused = await call(LOCAL_CALLER, "read_changes", { session: "lead", file: ".env" });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("is not one of");
+    const shown = await call(LOCAL_CALLER, "read_changes", { session: "lead", file: "./src/a.ts" });
+    expect(shown.text).toContain("diff of");
   });
 });

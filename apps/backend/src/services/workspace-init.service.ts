@@ -275,23 +275,32 @@ export async function removeWorktree(
   await runGit(["branch", "-D", branchName], { cwd }).catch(() => {});
 }
 
-/** The first chat, under the id minted with the workspace, started by whoever started it. */
-function openFirstSession(workspaceId: string): void {
+/**
+ * The first chat, under the id minted with the workspace, started by whoever
+ * started it; only while the workspace is still starting, in the same
+ * transaction: one archived meanwhile stays archived, with no chat. Returns
+ * whether it opened.
+ */
+function openFirstSession(workspaceId: string): boolean {
   const db = getDatabase();
-  const row = db
-    .prepare("SELECT first_session_id, started_by FROM workspaces WHERE id = ?")
-    .get(workspaceId) as { first_session_id: string | null; started_by: string | null } | undefined;
-  const sessionId = row?.first_session_id ?? uuidv7();
-  db.transaction(() => {
+  return db.transaction(() => {
+    const row = db
+      .prepare(
+        "SELECT first_session_id, started_by FROM workspaces WHERE id = ? AND state = 'initializing'"
+      )
+      .get(workspaceId) as
+      | { first_session_id: string | null; started_by: string | null }
+      | undefined;
+    if (!row) return false;
+    const sessionId = row.first_session_id ?? uuidv7();
     db.prepare(
       "INSERT INTO sessions (id, workspace_id, status, started_by, updated_at) VALUES (?, ?, 'idle', ?, datetime('now'))"
-    ).run(sessionId, workspaceId, row?.started_by ?? null);
-    db.prepare("UPDATE workspaces SET state = 'ready', current_session_id = ? WHERE id = ?").run(
-      sessionId,
-      workspaceId
-    );
+    ).run(sessionId, workspaceId, row.started_by);
+    db.prepare(
+      "UPDATE workspaces SET state = 'ready', current_session_id = ?, first_session_id = ? WHERE id = ?"
+    ).run(sessionId, sessionId, workspaceId);
+    return true;
   })();
-  invalidate(["workspaces", "sessions"]);
 }
 
 // ─── Failure ────────────────────────────────────────────────────
@@ -380,8 +389,8 @@ export async function initializeWorkspace(initial: InitContext): Promise<void> {
 
     stage = "session";
     setStage(ctx.workspaceId, stage);
-    openFirstSession(ctx.workspaceId);
-    setStage(ctx.workspaceId, "done");
+    if (openFirstSession(ctx.workspaceId)) setStage(ctx.workspaceId, "done");
+    invalidate(["workspaces", "sessions"]);
   } catch (err) {
     // Deus is closing and stopped what this was running: the row stays as it
     // is, and the next start fails it as interrupted (failInterruptedWorkspaces).

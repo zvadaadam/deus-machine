@@ -73,6 +73,21 @@ describeWithDb("stopSession", () => {
     vi.clearAllMocks();
   });
 
+  it("the first of two concurrent stops keeps the credit for the turn's cancel", async () => {
+    const answers: ((value: { outcome: "cancelled"; turnId: string }) => void)[] = [];
+    vi.spyOn(agentService, "stopSession").mockImplementation(
+      () => new Promise((resolve) => answers.push(resolve))
+    );
+    const first = stopSession({ sessionId: SESSION }, { kind: "session", sessionId: "lead" });
+    const second = stopSession({ sessionId: SESSION });
+    for (const answer of answers) answer({ outcome: "cancelled", turnId: "turn-1" });
+    await Promise.all([first, second]);
+    const row = db
+      .prepare("SELECT cancelled_by FROM turns WHERE session_id = ? AND turn_id = 'turn-1'")
+      .get(SESSION) as { cancelled_by: string };
+    expect(JSON.parse(row.cancelled_by)).toEqual({ kind: "session", sessionId: "lead" });
+  });
+
   it("goes idle when the harness CONFIRMED the interrupt", async () => {
     vi.spyOn(agentService, "stopSession").mockResolvedValue({
       outcome: "cancelled",

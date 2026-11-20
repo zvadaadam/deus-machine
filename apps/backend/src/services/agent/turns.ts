@@ -16,8 +16,8 @@ import { readPermissionMode, readThinkingLevel } from "@shared/protocol";
 import { readCloudTurnSelection, type CloudTurnSelection } from "@shared/cloud-models";
 import { ACTIVE_TURN_STATUSES } from "@shared/enums";
 import { getDatabase } from "../../lib/database";
-import { ConflictError, NotFoundError, ValidationError } from "../../lib/errors";
-import { getSessionRaw, getWorkspaceForMiddleware } from "../../db";
+import { ChatBusyError, ConflictError, NotFoundError, ValidationError } from "../../lib/errors";
+import { getSessionRaw, getTurn, getWorkspaceForMiddleware } from "../../db";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
 import {
   persistLastUserMessageAt,
@@ -70,8 +70,15 @@ export async function sendMessage(
   // Reject up front — the refusal surfaces in the UI. The wire guard
   // stays as the backstop for the status race.
   if (session?.is_hidden) throw new ConflictError("That chat is archived; it takes no messages.");
+  // The same turn asked again (a caller retrying a send whose answer it lost):
+  // it was admitted, so this is its answer, and its state is left as it is.
+  if (
+    input.turnId &&
+    (agentService.liveTurnId(sessionId) === input.turnId || getTurn(db, sessionId, input.turnId))
+  )
+    return { turnId: input.turnId };
   if (session && ACTIVE_TURN_STATUSES.includes(session.status)) {
-    throw new ConflictError(
+    throw new ChatBusyError(
       session.status === "working"
         ? "The agent is still working — wait for the current turn to finish."
         : "The agent is waiting for your response — answer the pending prompt first."
@@ -294,7 +301,7 @@ export async function sendMessage(
         console.warn(
           `[CommandHandler] sendMessage rejected, turn already active: session=${sessionId}`
         );
-        throw new ConflictError(
+        throw new ChatBusyError(
           "The agent is still working — wait for the current turn to finish."
         );
       }
@@ -356,8 +363,9 @@ export async function stopSession(
   const targetTurnId = agentService.liveTurnId(sessionId);
   if (targetTurnId) {
     db.prepare(
+      // The first stop keeps the credit: a second one while it takes effect does not overwrite it.
       `INSERT INTO turns (session_id, turn_id, cancelled_by) VALUES (?, ?, ?)
-       ON CONFLICT(session_id, turn_id) DO UPDATE SET cancelled_by = excluded.cancelled_by`
+       ON CONFLICT(session_id, turn_id) DO UPDATE SET cancelled_by = COALESCE(turns.cancelled_by, excluded.cancelled_by)`
     ).run(sessionId, targetTurnId, JSON.stringify(by));
   }
   let result: Awaited<ReturnType<typeof agentService.stopSession>> | undefined;

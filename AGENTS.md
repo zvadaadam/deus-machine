@@ -432,7 +432,11 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   takes no message and stops counting against its starter). A person's or an
   assistant's chat is closed by the person; archive its workspace instead.
   Archiving a workspace is the app's. A stop is of one turn, and records who
-  stopped it (`turns.cancelled_by`). A message continues the chat as its
+  stopped it (`turns.cancelled_by`, the first stop that takes effect). Each
+  host mutation re-reads what it depends on in the same synchronous step as
+  its write (`mayStart`, `mayTouch`, `mayArchive`; a workspace's archive
+  inside the app's archive queue). A chat's number is stored when it is
+  made (`sessions.chat`, a trigger) and never moves. A message continues the chat as its
   composer would (`turn-settings.ts`). A project only in the cloud is refused
   at start with the `add_project` call that puts it here.
   `add_project(repository)` (`services/assistants/add-project.ts`, a write)
@@ -461,7 +465,9 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   instructions carry the package's `OPERATOR_GUIDANCE`
   (`workspace-context.ts`). A message another chat or an assistant sent shows
   "Sent from" above its bubble (`session/ui/SentFrom.tsx`), and the chip opens
-  the sending chat.
+  the sending chat. A chat runs with full access or in plan mode, nothing
+  between: Deus approves a chat's tool requests itself. A mode between the
+  two must route these tools' writes to the person before it ships.
 
 Admission is checked when a socket opens (no leases), and the relay can still read
 `q:` frames: end-to-end encryption is separate work. `DEUS_RELAY_URL` points the

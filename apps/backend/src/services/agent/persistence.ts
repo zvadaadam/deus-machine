@@ -429,6 +429,14 @@ export function settleInterruptedSessions(): WriteResult<string[]> {
         JSON.stringify(ids)
       );
     }
+    // Their turns that never ended end now, as failed: no reader takes one for running.
+    db.prepare(
+      `UPDATE turns SET ended_at = ?, outcome = ?
+       WHERE ended_at IS NULL AND session_id IN (SELECT s.id FROM sessions s JOIN workspaces w ON w.id = s.workspace_id WHERE w.kind != 'cloud')`
+    ).run(
+      Date.now(),
+      JSON.stringify({ stopReason: "error", error: { message: "Deus quit mid-turn." } })
+    );
     return { ok: true, value: ids };
   } catch (error) {
     return failed("interrupted sessions", error);

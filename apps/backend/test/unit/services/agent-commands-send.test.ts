@@ -120,6 +120,29 @@ describeWithDb("sendMessage", () => {
     expect(row(SESSION).status).toBe("working");
   });
 
+  it("answers success for the same turn asked again, running or ended, and leaves its state as it is", async () => {
+    vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+    const startTurn = vi.spyOn(agentService, "startTurn").mockResolvedValue(undefined as never);
+    await send(SESSION);
+    // The first attempt landed and runs: the retry is its answer, not "busy".
+    vi.spyOn(agentService, "liveTurnId").mockReturnValue("turn-1");
+    await expect(send(SESSION)).resolves.toEqual({ turnId: "turn-1" });
+    // It ended since: the retry still answers, and the chat is not flipped back to working.
+    vi.spyOn(agentService, "liveTurnId").mockReturnValue(undefined);
+    db.prepare("UPDATE sessions SET status = 'idle' WHERE id = ?").run(SESSION);
+    db.prepare("INSERT INTO turns (session_id, turn_id, ended_at) VALUES (?, 'turn-1', 1)").run(
+      SESSION
+    );
+    await expect(send(SESSION)).resolves.toEqual({ turnId: "turn-1" });
+    expect(row(SESSION).status).toBe("idle");
+    expect(startTurn).toHaveBeenCalledOnce();
+  });
+
+  it("refuses a busy chat with a typed error", async () => {
+    db.prepare("UPDATE sessions SET status = 'working' WHERE id = ?").run(SESSION);
+    await expect(send(SESSION, "turn-2")).rejects.toMatchObject({ name: "ChatBusyError" });
+  });
+
   it.each([
     ["read-only", "Unsupported permission mode"],
     ["bypassPermissions", "Unsupported permission mode"],

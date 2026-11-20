@@ -33,14 +33,16 @@ function SentFromChat({ sessionId, name }: { sessionId: string; name?: string })
   const place = workspace && workspace.id !== selected ? workspace.title || workspace.slug : null;
   // A workspace named as its chat (its first, titled alike) is said once.
   const label = place && place !== title ? `${place} · ${title}` : title;
+  // A sender put away (its chat or its workspace archived) or gone is named, not linked.
+  if (!workspace || !session || session.is_hidden)
+    return <div className={CAPTION}>Sent from {label}</div>;
   return (
     <div className={CAPTION}>
       Sent from
       <button
         type="button"
-        disabled={!workspace}
-        onClick={() => workspace && openChat(workspace.id, sessionId)}
-        className="bg-muted text-foreground hover:bg-accent disabled:hover:bg-muted max-w-64 truncate rounded-md px-1.5 py-0.5 transition-colors duration-200 disabled:cursor-default"
+        onClick={() => openChat(workspace.id, sessionId)}
+        className="bg-muted text-foreground hover:bg-accent max-w-64 truncate rounded-md px-1.5 py-0.5 transition-colors duration-200"
       >
         {label}
       </button>

@@ -8,7 +8,7 @@
  *         paired_devices, assistants, automations, automation_runs,
  *         extension_installations, integration_connections
  * Indexes: 18
- * Triggers: 6 (4 auto-update updated_at, 2 denormalized message_count + auto-seq)
+ * Triggers: 7 (4 auto-update updated_at, 2 denormalized message_count + auto-seq, 1 chat number)
  *
  * The agent-facing tables (messages, turns, parts, compactions) store the
  * @zvada/agent-server protocol verbatim: `parts.data` is the engine `Part`
@@ -29,7 +29,7 @@ export const PRELAUNCH_SCHEMA_RESET_HINT =
 /** Columns ALTERed into an existing database that lacks them (each is in SCHEMA_SQL too). */
 export const ADDITIVE_COLUMNS: Record<string, Record<string, string>> = {
   workspaces: { started_by: "TEXT", first_session_id: "TEXT" },
-  sessions: { started_by: "TEXT" },
+  sessions: { started_by: "TEXT", chat: "INTEGER" },
   turns: { cancelled_by: "TEXT" },
   messages: { origin: "TEXT" },
 };
@@ -110,6 +110,8 @@ export const SCHEMA_SQL = `
     is_hidden INTEGER NOT NULL DEFAULT 0,
     -- Who started it, as the engine's origin (JSON); NULL is the person.
     started_by TEXT,
+    -- Its number in its workspace, from 1, in the order chats were made; never reused (trigger).
+    chat INTEGER,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -376,6 +378,15 @@ export const SCHEMA_SQL = `
         SET seq = (SELECT COALESCE(MAX(m.seq), 0) + 1 FROM messages m WHERE m.session_id = NEW.session_id AND m.id != NEW.id)
         WHERE id = NEW.id;
       UPDATE sessions SET message_count = message_count + 1 WHERE id = NEW.session_id;
+    END;
+
+  -- A chat's number in its workspace, in the order made, hidden ones counted
+  CREATE TRIGGER IF NOT EXISTS assign_session_chat
+    AFTER INSERT ON sessions WHEN NEW.chat IS NULL
+    BEGIN
+      UPDATE sessions
+        SET chat = (SELECT COALESCE(MAX(s.chat), 0) + 1 FROM sessions s WHERE s.workspace_id = NEW.workspace_id AND s.id != NEW.id)
+        WHERE id = NEW.id;
     END;
 
   CREATE TRIGGER IF NOT EXISTS dec_session_message_count

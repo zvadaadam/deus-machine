@@ -80,6 +80,7 @@ import { createDeusHost } from "../../../src/services/assistants/host";
 import { _resetOperator } from "../../../src/services/assistants/operator";
 import { NOT_ALLOWED_YET, READ_ONLY } from "../../../src/services/assistants/sentences";
 import { CLONE_REFUSALS } from "../../../src/lib/clone-address";
+import { ConflictError } from "../../../src/lib/errors";
 import { assistantCaller as assistant, operations } from "../../helpers";
 
 const REAL_GIT = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
@@ -421,6 +422,23 @@ describe("what is already here", () => {
         git_origin_url: "https://github.com/acme/widget",
       },
     ]);
+  });
+});
+
+describe("the same folder added meanwhile (H18)", () => {
+  it("by the person while the tool clones: the tool returns that project", async () => {
+    // The app's add answers 409 with the project the folder already is (another add won).
+    state.ops.addRepo = ({ root_path }) => {
+      insertProject("widget", root_path as string, "https://github.com/acme/widget");
+      throw new ConflictError("Repository already exists", {
+        id: "seed-widget",
+        name: "widget",
+        root_path,
+      });
+    };
+    const said = await addProject("acme/widget");
+    expect(said).toContain('"widget"');
+    expect(said).not.toContain("refused");
   });
 });
 
