@@ -42,7 +42,12 @@ export function calculateTurnStats(messages: Message[]): TurnStats {
         subagentCount++;
       }
 
-      if (FILE_MODIFYING_TOOLS.has(toolPart.toolName) && toolPart.state.status === "completed") {
+      if (toolPart.state.status !== "completed") continue;
+      if (toolPart.toolName === "apply_patch") {
+        for (const item of toolPart.state.content ?? []) {
+          if (item.type === "diff") fileSet.add(item.path);
+        }
+      } else if (FILE_MODIFYING_TOOLS.has(toolPart.toolName)) {
         const filePath = getToolInputFilePath(toolPart.state.input);
         if (filePath) {
           fileSet.add(filePath);

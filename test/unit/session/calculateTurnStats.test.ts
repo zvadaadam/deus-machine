@@ -15,6 +15,48 @@ function createMessage(overrides: Partial<Message> = {}): Message {
 }
 
 describe("calculateTurnStats", () => {
+  it("counts each file in a completed Codex patch once, including deletions", () => {
+    const patch = {
+      type: "tool" as const,
+      id: "patch",
+      toolCallId: "call-1",
+      sessionId: "session-1",
+      messageId: "message-1",
+      toolName: "apply_patch",
+      partIndex: 0,
+    };
+    const time = { start: 1, end: 2 };
+    const message = createMessage({
+      parts: [
+        {
+          ...patch,
+          state: {
+            status: "completed",
+            input: {},
+            output: "",
+            time,
+            content: [
+              { type: "diff", path: "a.ts", oldText: "a", newText: "b" },
+              { type: "diff", path: "a.ts", oldText: "c", newText: "d" },
+              { type: "diff", path: "deleted.ts", oldText: "old\n", newText: "" },
+            ],
+          },
+        },
+        {
+          ...patch,
+          id: "failed-patch",
+          toolCallId: "call-2",
+          state: { status: "failed", input: { file_path: "other.ts" }, error: "failed", time },
+        },
+      ],
+    });
+    expect(calculateTurnStats([message])).toEqual({
+      filesChanged: 2,
+      toolCount: 2,
+      subagentCount: 0,
+    });
+  });
+
   it("counts only completed file-modifying tools toward filesChanged", () => {
     const messages: Message[] = [
       createMessage({
