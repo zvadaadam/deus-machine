@@ -110,27 +110,3 @@ export interface FileChange {
   /** true = committed (in HEAD), false = uncommitted (working dir only), undefined = unknown */
   committed?: boolean;
 }
-
-/**
- * File edit details from Claude Code actions
- * Tracks Edit and Write tool usage per file
- */
-export interface FileEdit {
-  old_string?: string;
-  new_string?: string;
-  content?: string;
-  timestamp: string;
-  message_id: string;
-  tool_name: "Edit" | "Write";
-}
-
-/**
- * Grouped file changes with edit history
- * Aggregates all edits for a specific file
- */
-export interface FileChangeGroup {
-  file_path: string;
-  edits: FileEdit[];
-  first_timestamp: string;
-  last_timestamp: string;
-}

@@ -11,8 +11,6 @@ export type {
   RepoGroup,
   DiffStats,
   FileChange,
-  FileEdit,
-  FileChangeGroup,
 } from "./workspace";
 
 // Session types
