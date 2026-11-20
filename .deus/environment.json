@@ -11,7 +11,7 @@
     "test": "bun run test",
     "test:backend": "bun run test:backend",
     "test:agent-server": "bun run test:agent-server",
-    "test:e2e": "bun run test:agent-server test/e2e.test.ts",
+    "test:e2e": "bun run test:e2e",
     "typecheck": "bun run typecheck",
     "lint": "bun run lint",
     "format": "bun run format"
