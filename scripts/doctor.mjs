@@ -14,9 +14,10 @@ const pkg = JSON.parse(readFileSync(join(rootDir, "package.json"), "utf8"));
 const wantNodeMajor = readFileSync(join(rootDir, ".node-version"), "utf8").trim().split(".")[0];
 const wantBun = String(pkg.packageManager ?? "").replace(/^bun@/, "");
 
-function out(cmd, args) {
+function out(cmd, args, env = process.env) {
   try {
-    return execFileSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    const options = { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env };
+    return execFileSync(cmd, args, options).trim();
   } catch {
     return null;
   }
@@ -110,15 +111,15 @@ check(
 
 // ── Optional ────────────────────────────────────────────────────────────
 if (process.platform === "darwin") {
-  const developerDir = out("xcode-select", ["-p"]) ?? "";
-  const fullXcode = developerDir.includes(".app/") && Boolean(out("xcodebuild", ["-version"]));
+  const env = (await import("../packages/device-use/src/engine/simbridge.ts")).simulatorEnv();
+  const developerDir = out("xcode-select", ["-p"], env) ?? "";
+  const fullXcode = developerDir.includes(".app/") && Boolean(out("xcodebuild", ["-version"], env));
   check(
     "optional",
     "Full Xcode (iOS simulator, local macOS packaging)",
     fullXcode,
     developerDir || "not found",
-    "Install Xcode from the App Store, then: sudo xcode-select -s /Applications/Xcode.app && sudo xcodebuild -license accept. " +
-      "Without it the simulator helpers are not built and `bun run build:all` / `package:mac` fail."
+    "Install Xcode in /Applications or set DEVELOPER_DIR to its Contents/Developer directory."
   );
 
   const identities = out("security", ["find-identity", "-v", "-p", "codesigning"]) ?? "";
