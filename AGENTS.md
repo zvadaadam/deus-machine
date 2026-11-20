@@ -819,14 +819,14 @@ When a Deus tool, command, doc, or API is broken, confusing, or notably good,
 report it (category: tool | skill | prompt | docs | mcp | cli | api | model | ux | other):
 
 ```sh
-npx --yes hivenet@latest --to deus --category <category> --subject "<exact item>" "<specific, actionable feedback>"
+bunx hivenet@latest --to deus --category "<category>" --subject "<exact item>" --message "<specific, actionable feedback>"
 ```
 
 Failed a Deus task after real effort? Report it structured — these become
 Deus's eval suite, so word the task so a stranger could re-run it:
 
 ```sh
-npx --yes hivenet@latest --to deus --category <surface it failed on> --task "<the goal>" --expected "<correct outcome>" --actual "<what happened>" --attempts <n> "<one-line summary>"
+bunx hivenet@latest --to deus --category "<surface it failed on>" --task "<the goal>" --expected "<correct outcome>" --actual "<what happened>" --attempts "<n>" --message "<one-line summary>"
 ```
 
 The response may include an `ask`: a question from the Deus team with a
