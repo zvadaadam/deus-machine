@@ -276,26 +276,49 @@ describe("local project environment journey", () => {
       error_detail: null,
     });
   });
-  it("keeps the five-minute timeout's own reason even after setup printed output", async () => {
-    project({ version: 1, setup: "echo installing; touch started; sleep 30" });
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    try {
-      const setup = prepareLocalEnvironment(workspaceId, root);
-      await vi.waitFor(() => expect(fs.existsSync(path.join(root, "started"))).toBe(true));
-      expect(row().setup_status).toBe("running");
-      expect(statusFile()).toBe("running\n");
-      vi.advanceTimersByTime(300_000);
-      await setup;
-      expect(row()).toMatchObject({
-        setup_status: "failed",
-        error_message: "Setup timed out after five minutes.",
-        error_detail: null,
+  it.each(["timeout", "archive"])(
+    "settles a setup on %s while a detached helper holds its pipes",
+    async (end) => {
+      project({
+        version: 1,
+        setup: `printf 'earlier\\ninstalling\\n\\033[31mMissing compiler\\033[0m\\n'
+      exec node -e 'const helper = require("node:child_process").spawn("sleep", ["30"], { detached: true, stdio: "inherit" });
+        require("node:fs").writeFileSync("helper-pid", String(helper.pid));'`,
       });
-      expect(statusFile()).toBe("failed\n");
-    } finally {
-      vi.useRealTimers();
+      const pidFile = path.join(root, "helper-pid");
+      if (end === "timeout") vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const setup = prepareLocalEnvironment(workspaceId, root);
+      try {
+        await vi.waitFor(() => expect(fs.existsSync(pidFile)).toBe(true));
+        expect(row().setup_status).toBe("running");
+        expect(statusFile()).toBe("running\n");
+        const settled = vi.fn();
+        void (end === "archive" ? stopWorkspaceSetup(workspaceId) : setup).then(settled);
+        if (end === "timeout") vi.advanceTimersByTime(300_000);
+        await vi.waitFor(() => expect(settled).toHaveBeenCalledOnce(), { timeout: 2000 });
+        process.kill(Number(fs.readFileSync(pidFile, "utf8")), 0); // The helper still holds both pipes.
+        expect(row()).toMatchObject({
+          setup_status: "failed",
+          error_message:
+            end === "timeout"
+              ? "Setup timed out after five minutes."
+              : "Setup was stopped when the workspace was archived.",
+          error_detail: end === "timeout" ? "installing\nMissing compiler" : null,
+        });
+        expect(statusFile()).toBe("failed\n");
+      } finally {
+        vi.useRealTimers();
+        const stopped = stopWorkspaceSetup(workspaceId);
+        if (fs.existsSync(pidFile)) {
+          const helper = Number(fs.readFileSync(pidFile, "utf8"));
+          process.kill(helper, "SIGKILL");
+          await vi.waitFor(() => expect(() => process.kill(helper, 0)).toThrow());
+        }
+        await stopped;
+        await setup;
+      }
     }
-  });
+  );
   it("stops the setup shell and its descendant when the log stream fails", async () => {
     let shellPid: number | undefined;
     let childPid: number | undefined;

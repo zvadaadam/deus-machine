@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawn, execFileSync } from "node:child_process";
+import { finished } from "node:stream/promises";
 import { parseEnv, stripVTControlCharacters } from "node:util";
 import {
   parseProjectEnvironment,
@@ -234,15 +235,6 @@ export async function prepareLocalEnvironment(
   }
 }
 
-class SetupExitError extends Error {
-  constructor(
-    readonly exitCode: number | null,
-    readonly detail: string | null
-  ) {
-    super(`Setup exited with code ${exitCode}.${detail ? "" : SETUP_LOG_SUFFIX}`);
-  }
-}
-
 async function setupLogTail(logPath: string): Promise<string | null> {
   const file = await fs.promises.open(logPath, "r");
   try {
@@ -267,12 +259,10 @@ export async function runSetupCommand(
   env: NodeJS.ProcessEnv,
   signal?: AbortSignal
 ): Promise<void> {
+  if (processGroupsStopped()) throw new Error("Deus is closing.");
   const logPath = setupFile(workspaceId, "log");
-  const exitCode = await new Promise<number | null>((resolve, reject) => {
-    if (processGroupsStopped()) {
-      reject(new Error("Deus is closing."));
-      return;
-    }
+  type SetupExit = number | null | "timeout";
+  const result = await new Promise<SetupExit>((resolve, reject) => {
     const log = fs.createWriteStream(logPath);
     const child = spawn("/bin/sh", ["-ec", command], {
       cwd: directory,
@@ -284,6 +274,7 @@ export async function runSetupCommand(
     const untrack = trackProcessGroup(child.pid);
     child.stdout.pipe(log, { end: false });
     child.stderr.pipe(log, { end: false });
+    let drain: NodeJS.Timeout | undefined;
     const killProcessGroup = () => {
       if (child.pid) {
         try {
@@ -292,6 +283,11 @@ export async function runSetupCommand(
           // The process group may already have exited.
         }
       }
+      // A helper in another process group can keep the pipes open after the shell exits.
+      drain ??= setTimeout(() => {
+        child.stdout.destroy();
+        child.stderr.destroy();
+      }, 250);
     };
     signal?.addEventListener("abort", killProcessGroup, { once: true });
     let timedOut = false;
@@ -299,17 +295,16 @@ export async function runSetupCommand(
       timedOut = true;
       killProcessGroup();
     }, 300_000);
-    let finished = false;
-    const finish = (result: Error | number | null) => {
-      if (finished) return;
-      finished = true;
+    let settled = false;
+    const finish = (result: Error | SetupExit) => {
+      if (settled) return;
+      settled = true;
       signal?.removeEventListener("abort", killProcessGroup);
       untrack();
       clearTimeout(timer);
-      if (result instanceof Error) {
-        log.end();
-        reject(result);
-      } else log.end((error?: Error | null) => (error ? reject(error) : resolve(result)));
+      if (result instanceof Error) reject(result);
+      else resolve(finished(log).then(() => result));
+      log.end();
     };
     child.once("error", finish);
     log.once("error", (error) => {
@@ -317,14 +312,21 @@ export async function runSetupCommand(
       finish(error);
     });
     child.once("close", (code) => {
+      clearTimeout(drain);
       if (signal?.aborted) return finish(signal.reason);
       if (processGroupsStopped()) return finish(new Error(SETUP_INTERRUPTED));
-      if (timedOut) return finish(new Error("Setup timed out after five minutes."));
-      finish(code);
+      finish(timedOut ? "timeout" : code);
     });
   });
-  if (exitCode !== 0) {
-    const detail = exitCode === null ? null : await setupLogTail(logPath).catch(() => null);
-    throw new SetupExitError(exitCode, detail);
+  if (result !== 0) {
+    const detail = result === null ? null : await setupLogTail(logPath).catch(() => null);
+    const message =
+      result === "timeout"
+        ? "Setup timed out after five minutes."
+        : `Setup exited with code ${result}.${detail ? "" : SETUP_LOG_SUFFIX}`;
+    throw Object.assign(new Error(message), {
+      detail,
+      exitCode: typeof result === "number" ? result : null,
+    });
   }
 }
