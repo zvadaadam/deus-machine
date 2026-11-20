@@ -69,7 +69,6 @@ import { attachParts, getMessages, getSessionRaw, hasOlderMessages } from "../..
 import { getDatabase } from "../../lib/database";
 import { AppError, ChatBusyError } from "../../lib/errors";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
-import { persistSessionTitle } from "../agent/persistence";
 import { liveTurnId } from "../agent/service";
 import { answer as answerToolRequest, pendingFor } from "../agent/tool-relay";
 import { sendMessage, stopSession } from "../agent/turns";
@@ -434,7 +433,18 @@ export function createDeusHost(): DeusHost {
     try {
       const settings = settingsFor(input);
       mayTouch(caller, sessionId);
-      if (input.title) persistSessionTitle(sessionId, input.title);
+      if (input.title) {
+        // The chat takes it; its workspace only when this is its first chat (a side chat
+        // started in a person's workspace does not rename it).
+        const db = getDatabase();
+        db.prepare("UPDATE sessions SET title = ? WHERE id = ? AND title IS NULL").run(
+          input.title,
+          sessionId
+        );
+        db.prepare(
+          "UPDATE workspaces SET title = ? WHERE first_session_id = ? AND title IS NULL"
+        ).run(input.title, sessionId);
+      }
       await sendMessage(
         { sessionId, content: input.message, turnId: input.turnId, ...settings },
         input.origin

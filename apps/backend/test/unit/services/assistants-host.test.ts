@@ -935,6 +935,16 @@ describe("the acceptance pass (F5, F7, F8, F9, F10)", () => {
     expect(titles(plain.id)).toEqual({ chat: "Auto summary", workspace: "Auto summary" });
   });
 
+  it("F5: a titled chat started in an existing untitled workspace does not rename the workspace", async () => {
+    const host = createDeusHost();
+    const entry = await host.start!(
+      LEAD as never,
+      startInput({ workspace: { id: "w-lead", name: "lead" }, title: "Second opinion" })
+    );
+    await vi.waitFor(() => expect(state.sent).toHaveLength(1));
+    expect(titles(entry.id)).toEqual({ chat: "Second opinion", workspace: null });
+  });
+
   it("F7, F8: a chat with a row borrows neither the workspace's title nor its time", async () => {
     const host = createDeusHost();
     insertChat("s-second", "w-lead", LEAD);
