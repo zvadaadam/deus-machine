@@ -418,14 +418,34 @@ describe("archiving one chat (the owner's ruling, 2026-11-20)", () => {
     ).rejects.toMatchObject({ refusal: { code: "archived" } });
   });
 
-  it("a chat the person started is not archived on its own", async () => {
+  it("a chat an assistant started is archived by that assistant, as an agent's is", async () => {
     const host = createDeusHost();
-    insertChat("s-mine", "w-lead");
-    await expect(
-      host.archive!(LEAD as never, { kind: "session", id: "s-mine" })
-    ).rejects.toMatchObject({
-      refusal: { code: "unsupported" },
+    state.stored.claude = "operate";
+    const by = { kind: "assistant", id: "assistant:claude", name: "Claude" };
+    insertChat("s-second", "w-lead", by);
+    expect(await host.archive!(assistantWho(), { kind: "session", id: "s-second" })).toEqual({
+      note: "The chat is put away; its workspace stays.",
     });
+    const row = state.db.prepare("SELECT is_hidden FROM sessions WHERE id = 's-second'").get() as {
+      is_hidden: number;
+    };
+    expect(row.is_hidden).toBe(1);
+  });
+
+  it("a chat the person started is not archived on its own, by an agent or an assistant", async () => {
+    const host = createDeusHost();
+    state.stored.claude = "operate";
+    insertChat("s-mine", "w-lead");
+    for (const caller of [LEAD, assistantWho()])
+      await expect(
+        host.archive!(caller as never, { kind: "session", id: "s-mine" })
+      ).rejects.toMatchObject({
+        refusal: {
+          code: "unsupported",
+          detail:
+            "A chat the person started is closed by the person in Deus; archive its workspace instead if that is what was asked.",
+        },
+      });
   });
 
   it("a workspace's last visible chat is not archived on its own", async () => {
@@ -470,13 +490,31 @@ describe("through MCP and as a chat's own tools", () => {
     return { text: reply.result.content[0].text as string, isError: reply.result.isError === true };
   };
 
+  it("an outside caller is told which computer it reaches: in the instructions and in whoami", async () => {
+    const where =
+      'These are the coding agents on the computer "Proof Mac" itself: its own workspaces and their chats. Cloud workspaces are not listed here.';
+    const init = await mcp(
+      { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } },
+      assistantCaller("read")
+    );
+    expect(init.result.instructions).toBe(
+      `${where} Start with list_sessions to see them; what you may do here is decided by the person on this computer.`
+    );
+    state.stored.claude = "read";
+    const who = await call(assistantCaller("read"), "whoami", {});
+    expect(who.text.split("\n").slice(1)).toEqual([`access: read. ${where}`]);
+  });
+
   it("an assistant allowed to read reads, is refused a write, and may send feedback's write", async () => {
     state.stored.claude = "read";
     const reader = assistantCaller("read");
     expect((await call(reader, "list_sessions", {})).text).toContain('"lead"');
     const refused = await call(reader, "send_message", { session: "lead", message: "x", wait: 0 });
     expect(refused).toMatchObject({ isError: true });
-    expect(refused.text).toContain(READ_ONLY);
+    // The package's refusal, then this computer's sentence: "Nothing was done." once.
+    expect(refused.text).toBe(
+      `refused (access): You may not do this here. Nothing was done. ${READ_ONLY}`
+    );
     expect(state.sent).toEqual([]);
   });
 
@@ -551,7 +589,11 @@ describe("each commit re-reads what it depends on, with no await before its writ
         assistantWho(),
         startInput({ origin: { kind: "assistant", id: "claude", name: "Claude" } })
       )
-    ).rejects.toMatchObject({ code: "access", message: expect.stringContaining(READ_ONLY) });
+    ).rejects.toMatchObject({
+      code: "access",
+      // Refused at the commit, in the same words as the package's own refusal.
+      message: `refused (access): You may not do this here. Nothing was done. ${READ_ONLY}`,
+    });
     expect(named).toBe(true);
     expect(workspaceCount()).toBe(before);
   });
@@ -743,6 +785,39 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     expect((state.db.prepare("SELECT COUNT(*) AS n FROM sessions").get() as { n: number }).n).toBe(
       before
     );
+  });
+
+  it("an agent named as people say it starts on that agent; one that matches none lists the agents", async () => {
+    const host = createDeusHost();
+    const harnessOf = (id: string) =>
+      (
+        state.db.prepare("SELECT agent_harness FROM sessions WHERE id = ?").get(id) as {
+          agent_harness: string;
+        }
+      ).agent_harness;
+    for (const [said, harness] of [
+      ["Claude", "claude-code"],
+      ["claude code", "claude-code"],
+      ["CODEX", "codex-app-server"],
+      ["codex-app-server", "codex-app-server"],
+    ]) {
+      const entry = await host.start!(
+        LEAD as never,
+        startInput({ workspace: { id: "w-lead", name: "lead" }, harness: said })
+      );
+      expect(harnessOf(entry.id)).toBe(harness);
+      expect(state.sent.at(-1)).toMatchObject({ input: { agentHarness: harness } });
+    }
+    await expect(
+      host.start!(
+        LEAD as never,
+        startInput({ workspace: { id: "w-lead", name: "lead" }, harness: "Gemini" })
+      )
+    ).rejects.toMatchObject({
+      code: "invalid_input",
+      message:
+        'refused (invalid_input): start_session: agent: "Gemini" does not run here; the agents are "claude-code" (Claude Code) and "codex-app-server" (Codex). Nothing was started.',
+    });
   });
 
   it("H15: a model the agent does not offer here makes no chat", async () => {

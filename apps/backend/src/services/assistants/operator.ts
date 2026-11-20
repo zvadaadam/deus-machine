@@ -40,7 +40,7 @@ import { getServerName } from "../server-name";
 import { currentHost } from "./access";
 import { addProjectTool } from "./add-project";
 import { FEEDBACK_CATEGORIES, FeedbackNotSent, sendFeedback } from "./feedback";
-import { createDeusHost, refusing, type DeusHost } from "./host";
+import { createDeusHost, refusing, whereSentence, type DeusHost } from "./host";
 import * as store from "./store";
 
 /** One file's diff is cut here: enough to review a change, not a whole regenerated file. */
@@ -242,8 +242,7 @@ export function answerMcp(message: unknown, caller: Caller): Promise<unknown> {
       name: "deus",
       version: SERVER_VERSION,
       title: `Deus on ${getServerName()}`,
-      instructions:
-        "Start with list_sessions to see the coding agents on this computer; what you may do here is decided by the person on this computer.",
+      instructions: `${whereSentence()} Start with list_sessions to see them; what you may do here is decided by the person on this computer.`,
     }
   );
   return handler(message, caller);

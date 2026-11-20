@@ -58,7 +58,10 @@ const NO_ENGINE_MODELS =
 const NOT_ALLOWED_YET =
   "This assistant is signed in but not allowed on this computer yet. Ask the person to open Deus on the computer (Settings, Remote access, Assistants) and allow it, then try again.";
 const READ_ONLY =
-  "This assistant may only read on this computer. Nothing was done. The person can allow more in Deus: Settings, Remote access, Assistants.";
+  "This assistant may only read on this computer. The person can allow more in Deus: Settings, Remote access, Assistants.";
+/** Where an outside caller is: said in the server's instructions and in whoami. */
+const WHERE =
+  'These are the coding agents on the computer "Studio Mac" itself: its own workspaces and their chats. Cloud workspaces are not listed here.';
 /** The operator package's refusal of a call the host's `authorize` does not allow. */
 const refusedAccess = (detail) =>
   `refused (access): You may not do this here. Nothing was done. ${detail}`;
@@ -467,9 +470,12 @@ try {
   const serverInfo = chatgpt.client.getServerVersion();
   assert.equal(serverInfo?.name, "deus");
   assert.equal(serverInfo?.title, "Deus on Studio Mac");
-  assert(chatgpt.client.getInstructions(), "the computer's instructions");
+  assert.equal(
+    chatgpt.client.getInstructions(),
+    `${WHERE} Start with list_sessions to see them; what you may do here is decided by the person on this computer.`
+  );
   check(
-    'initialize is answered by the computer itself (server info "Deus on Studio Mac" with instructions); right after initialize alone (no tools/list yet, no announce) the assistant is already listed on the computer as pending',
+    'initialize is answered by the computer itself (server info "Deus on Studio Mac", and instructions that name the computer and say cloud workspaces are not listed); right after initialize alone (no tools/list yet, no announce) the assistant is already listed on the computer as pending',
     { trace: [...chatgpt.trace], serverInfo, assistants: afterInitialize }
   );
   const { tools } = await chatgpt.client.listTools();
@@ -556,7 +562,7 @@ try {
   const who = ok(await chatgpt.call("whoami"));
   assert.equal(
     who,
-    `you are the assistant "${chatgpt.clientId}" (id "assistant:${chatgpt.clientId}")\naccess: read`
+    `you are the assistant "${chatgpt.clientId}" (id "assistant:${chatgpt.clientId}")\naccess: read. ${WHERE}`
   );
   const list = ok(await chatgpt.call("list_sessions"));
   // Every local chat not archived; the cloud one is not among them.
@@ -726,7 +732,7 @@ try {
   );
 
   // ---- 6. Operate ----
-  assert.equal(ok(await chatgpt.call("whoami")).split("\n")[1], "access: operate");
+  assert.equal(ok(await chatgpt.call("whoami")).split("\n")[1], `access: operate. ${WHERE}`);
   const archived = ok(await chatgpt.call("archive", { workspaces: ["harbor"] }));
   assert.equal(archived, '- workspace "harbor": archived. Its branch and changes are kept.');
   await until(
@@ -876,7 +882,7 @@ try {
   }
   assert.match(
     chatRefusals["a chat the person started"],
-    /A chat the person or an assistant started is closed by the person in Deus/
+    /A chat the person started is closed by the person in Deus/
   );
   assert.match(
     chatRefusals["a workspace's only chat"],
@@ -919,7 +925,7 @@ try {
   assert.equal(badAgent.isError, true, badAgent.text);
   assert.equal(
     badAgent.text,
-    'refused (invalid_input): start_session: agent: "gpt-pilot" does not run here; list_models names the agents. Nothing was started.'
+    'refused (invalid_input): start_session: agent: "gpt-pilot" does not run here; the agents are "claude-code" (Claude Code) and "codex-app-server" (Codex). Nothing was started.'
   );
   skip(
     "start_session with a model the agent does not offer is refused in words (and with an explicit model, started)",
@@ -941,7 +947,8 @@ try {
   const sideStart = await chatgpt.call("start_session", {
     project: "Remote test",
     workspace: "quarry",
-    agent: "codex-app-server",
+    // The agent as people say it.
+    agent: "Codex",
     title: "Price audit",
     message: "Audit the prices.",
   });
@@ -967,22 +974,34 @@ try {
   assert.match(quarryList, /- quarry:2 +\S+ .*"Price audit" +started by you/);
   const mine = ok(await chatgpt.call("list_sessions", { started_by: "me" }));
   assert.match(mine, /^1 session\(s\)\n/);
-  // A chat an assistant started is the person's to close, as the host's rule says.
-  const ownChat = await chatgpt.call("archive", { sessions: ["quarry:2"] });
-  assert.equal(ownChat.isError, true, ownChat.text);
-  assert.match(
-    ownChat.text,
-    /A chat the person or an assistant started is closed by the person in Deus/
+  const claudeStart = ok(
+    await chatgpt.call("start_session", {
+      project: "Remote test",
+      workspace: "quarry",
+      agent: "claude",
+      message: "Check the totals.",
+    })
   );
-  assert.equal(readDb("SELECT is_hidden FROM sessions WHERE id = ?", sideId).is_hidden, 0);
+  startsAt.push(Date.now());
+  const claudeId = claudeStart.match(/^started "quarry:3" \(id "([0-9a-f-]{36})"\)/)?.[1];
+  assert(claudeId, claudeStart);
+  assert.equal(
+    readDb("SELECT agent_harness FROM sessions WHERE id = ?", claudeId).agent_harness,
+    "claude-code"
+  );
+  // A chat the assistant started, it may put away itself.
+  const ownChat = ok(await chatgpt.call("archive", { sessions: ["quarry:2"] }));
+  assert.equal(ownChat, '- "quarry:2": archived. The chat is put away; its workspace stays.');
+  assert.equal(readDb("SELECT is_hidden FROM sessions WHERE id = ?", sideId).is_hidden, 1);
   check(
-    "start_session refuses, in words and making nothing, an agent that does not run here and a project that does not exist; with an explicit agent (Codex, not the default) and a title it adds a chat to an existing workspace (quarry:2), stored with that title and agent and started_by naming the assistant, without renaming the workspace; list_sessions says the assistant started it (started_by: me lists it alone); the assistant cannot archive that chat on its own (the person closes it)",
+    "start_session refuses, in words and making nothing, an agent that does not run here and a project that does not exist; an agent named as people say it (Codex, claude) starts on that agent; with a title it adds a chat to an existing workspace (quarry:2), stored with that title and agent and started_by naming the assistant, without renaming the workspace; list_sessions says the assistant started it (started_by: me lists it alone); the assistant puts that chat away itself",
     {
       badAgent: badAgent.text,
       badProject: badProject.text,
       started: sideText,
       row: sideRow,
-      archiveOwn: ownChat.text,
+      claude: claudeStart,
+      archiveOwn: ownChat,
     }
   );
 
@@ -1099,8 +1118,8 @@ try {
     "SELECT COUNT(*) AS n FROM sessions WHERE workspace_id = ?",
     seeded.quarry.workspaceId
   ).n;
-  // quarry:1, the titled chat, and the burst's.
-  assert.equal(quarryChats, 2 + burst, "no chat for the refused start");
+  // quarry:1, the Codex and Claude chats, and the burst's.
+  assert.equal(quarryChats, 3 + burst, "no chat for the refused start");
   check(
     "The starts-per-minute limit: an assistant's eleventh start within a minute is refused (limit_rate, with when to try again) and makes no chat",
     { refusal: limited.text, starts: startsAt.length }

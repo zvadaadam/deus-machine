@@ -306,14 +306,16 @@ checked of a start is what it makes and records.
 AGNT_WORKSPACE=/path/to/agnt bun run test:e2e:assistants
 ```
 
-Docker must be running, and AGNT's `packages/api` and `packages/sdk` built. It
+`AGNT_WORKSPACE` is required: it names a local checkout of the AGNT repository,
+which Deus Cloud runs from. Docker must be running, and AGNT's `packages/api` and `packages/sdk` built. It
 takes about 13 seconds with the Postgres image pulled. It checks, in order:
 
 - The computer shows its address; with no token the connector answers 401 with
   the `resource_metadata` challenge, and the metadata names the sign-in; GET is
   405 and a web page's `Origin` is 403, with no origins configured.
 - `initialize` is answered by the computer itself ("Deus on <computer>", with
-  instructions), and right after it alone (no `tools/list`) the assistant is
+  instructions that name the computer and say cloud workspaces are not listed),
+  and right after it alone (no `tools/list`) the assistant is
   listed on the computer as pending.
 - From the URL alone the SDK client meets the 401, reads the metadata,
   registers, signs in and connects; it is offered exactly the package's ten
@@ -329,7 +331,7 @@ takes about 13 seconds with the Postgres image pulled. It checks, in order:
 - The label: Deus Cloud's lookup asks WorkOS at a fixed URL, which cannot be
   stubbed; with no WorkOS key it answers 503 (403 to a web session), and the
   computer shows the fallback (name = client id, `host` null).
-- Read only: `whoami` names the assistant and its access; `list_sessions` shows
+- Read only: `whoami` names the assistant, its access and the computer; `list_sessions` shows
   every local chat as `workspace:N` with its status, title and who started it
   (a chat another chat started names that chat), and a project with no
   workspace as `(no sessions)`; `read_session` shows a seeded conversation (the
@@ -364,11 +366,11 @@ takes about 13 seconds with the Postgres image pulled. It checks, in order:
   person started, and a workspace's only chat, are refused in words that say
   what to do instead.
 - `start_session` refuses, making nothing, an agent that does not run here and
-  a project that does not exist. With an explicit agent (Codex) and a title it
-  adds a chat to an existing workspace, stored with that agent and title and
-  `started_by` naming the assistant, without renaming the workspace;
-  `list_sessions` says the assistant started it, and the assistant cannot
-  archive it (the person closes it). In a project with no workspace it makes a
+  a project that does not exist. An agent named as people say it ("Codex",
+  "claude") starts on that agent; with a title it adds a chat to an existing
+  workspace, stored with that agent and title and `started_by` naming the
+  assistant, without renaming the workspace; `list_sessions` says the assistant
+  started it, and the assistant puts that chat away itself. In a project with no workspace it makes a
   new workspace, set up for real, with `started_by` and the title; the same call
   made twice at once makes one workspace and the second answer is the first's
   result. A start whose setup fails (a project folder that is not a

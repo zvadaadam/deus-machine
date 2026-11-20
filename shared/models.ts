@@ -47,6 +47,20 @@ export const HARNESS_LABELS: Record<AgentHarness, string> = {
   "codex-app-server": "Codex",
 };
 
+/**
+ * The harness `name` means: its id, its name, or its name's first word
+ * ("claude-code", "Claude Code", "Claude"; "codex-app-server", "Codex"), in
+ * any case and with spaces, hyphens and underscores aside.
+ */
+export function harnessNamed(name: string): AgentHarness | undefined {
+  const key = (text: string) => text.toLowerCase().replace(/[\s_-]+/g, "");
+  const wanted = key(name);
+  const named = Object.entries(HARNESS_LABELS) as [AgentHarness, string][];
+  return named.find(([id, label]) =>
+    [id, label, label.split(" ")[0]!].some((said) => key(said) === wanted)
+  )?.[0];
+}
+
 export const DEFAULT_AGENT_HARNESS = "claude-code" satisfies AgentHarness;
 export const DEFAULT_THINKING_LEVEL: ThinkingLevel = "high";
 
