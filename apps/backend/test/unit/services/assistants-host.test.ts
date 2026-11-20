@@ -820,6 +820,83 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     });
   });
 
+  it("a thinking level the model does not offer here makes no chat; with no list of this computer's it is not judged", async () => {
+    const host = createDeusHost();
+    const count = () =>
+      (state.db.prepare("SELECT COUNT(*) AS n FROM sessions").get() as { n: number }).n;
+    const before = count();
+    // No list from this computer yet (the catalog's are provisional): passed on as today.
+    await expect(
+      host.start!(
+        LEAD as never,
+        startInput({ workspace: { id: "w-lead", name: "lead" }, thinkingLevel: "ludicrous" })
+      )
+    ).resolves.toMatchObject({ workspace: { name: "lead" } });
+    expect(count()).toBe(before + 1);
+    state.ops.agentModels = () => ({
+      lists: [
+        {
+          harness: "claude-code",
+          models: [
+            {
+              id: "opus",
+              harness: "claude-code",
+              label: "Opus",
+              thinking: { levels: ["low", "medium", "high"] },
+            },
+            { id: "haiku", harness: "claude-code", label: "Haiku", thinking: { levels: [] } },
+          ],
+        },
+      ],
+    });
+    await expect(
+      host.start!(
+        LEAD as never,
+        startInput({
+          workspace: { id: "w-lead", name: "lead" },
+          model: "opus",
+          thinkingLevel: "ludicrous",
+        })
+      )
+    ).rejects.toMatchObject({
+      code: "invalid_input",
+      message:
+        'refused (invalid_input): start_session: thinking: "ludicrous" is not a level opus offers; its levels are "low", "medium", "high". Nothing was started.',
+    });
+    await expect(
+      host.start!(
+        LEAD as never,
+        startInput({
+          workspace: { id: "w-lead", name: "lead" },
+          model: "haiku",
+          thinkingLevel: "high",
+        })
+      )
+    ).rejects.toMatchObject({
+      message:
+        'refused (invalid_input): start_session: thinking: "high" is not a level haiku offers; it has no thinking levels. Nothing was started.',
+    });
+    expect(count()).toBe(before + 1);
+    // The default model's levels judge a level given without a model.
+    await expect(
+      host.start!(
+        LEAD as never,
+        startInput({ workspace: { id: "w-lead", name: "lead" }, thinkingLevel: "max" })
+      )
+    ).rejects.toMatchObject({ code: "invalid_input" });
+    await expect(
+      host.start!(
+        LEAD as never,
+        startInput({
+          workspace: { id: "w-lead", name: "lead" },
+          model: "opus",
+          thinkingLevel: "low",
+        })
+      )
+    ).resolves.toMatchObject({ workspace: { name: "lead" } });
+    expect(state.sent.at(-1)).toMatchObject({ input: { model: "opus", thinkingLevel: "low" } });
+  });
+
   it("H15: a model the agent does not offer here makes no chat", async () => {
     const host = createDeusHost();
     state.ops.agentModels = () => ({

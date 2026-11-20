@@ -739,17 +739,25 @@ export function createDeusHost(): DeusHost {
             repository ? { next: callHint("add_project", { repository }) } : {}
           );
         }
-        // The agent and model before anything is made.
-        const { agentHarness } = settingsFor(input);
-        if (input.model) {
-          const { lists } = await run(agentModels, {});
-          const known = lists.some((l) => l.harness === agentHarness && l.models.length)
-            ? lists
-            : CATALOG_MODEL_LISTS;
-          if (!findModel(known, agentHarness, input.model))
+        // The agent, model and thinking level before anything is made.
+        const { agentHarness, model } = settingsFor(input);
+        if (input.model || input.thinkingLevel) {
+          const lists = await run(agentModels, {}).then((answer) => answer.lists);
+          const live = lists.some((l) => l.harness === agentHarness && l.models.length);
+          if (input.model && !findModel(live ? lists : CATALOG_MODEL_LISTS, agentHarness, model))
             throw new OperatorError(
               "invalid_input",
               `start_session: model: ${JSON.stringify(input.model)} is not one ${agentHarness} offers here; list_models names them. Nothing was started.`
+            );
+          // Levels are checked against this computer's own list only: the catalog's are provisional.
+          const levels = live
+            ? findModel(lists, agentHarness, model)?.row.thinking.levels
+            : undefined;
+          const level = input.thinkingLevel;
+          if (level && levels && !levels.includes(level) && !(level === "off" && !levels.length))
+            throw new OperatorError(
+              "invalid_input",
+              `start_session: thinking: ${JSON.stringify(level)} is not a level ${model} offers; ${levels.length ? `its levels are ${levels.map((l) => JSON.stringify(l)).join(", ")}` : "it has no thinking levels"}. Nothing was started.`
             );
         }
         if (input.workspace) {
