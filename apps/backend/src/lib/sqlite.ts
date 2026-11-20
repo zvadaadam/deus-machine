@@ -37,6 +37,16 @@ function isBunRuntime(): boolean {
   return Boolean(process.versions.bun);
 }
 
+/** Both SQLite engines use the same diagnostics, but Bun can report SQLITE_ERROR only as errno 1. */
+export function isMissingSchemaObject(error: unknown): error is Error {
+  return (
+    error instanceof Error &&
+    (("code" in error && error.code === "SQLITE_ERROR") ||
+      ("errno" in error && error.errno === 1)) &&
+    /^(?:no such (?:column|table): |table \S+ has no column named )/.test(error.message)
+  );
+}
+
 function loadBetterSqlite3(): BetterSqlite3Constructor {
   const mod = requireModule("better-sqlite3") as
     | BetterSqlite3Constructor

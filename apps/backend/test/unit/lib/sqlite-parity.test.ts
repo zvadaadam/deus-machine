@@ -15,10 +15,10 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, beforeEach, afterEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import type BetterSqlite3 from "better-sqlite3";
-import { SCHEMA_SQL } from "@shared/schema";
-import { openSqliteDatabase } from "../../../src/lib/sqlite";
+import { PRELAUNCH_SCHEMA_MISMATCH, SCHEMA_SQL } from "@shared/schema";
+import { isMissingSchemaObject, openSqliteDatabase } from "../../../src/lib/sqlite";
 
 const engine = process.versions.bun ? "bun:sqlite" : "better-sqlite3";
 
@@ -201,6 +201,22 @@ describe(`SQLite through openSqliteDatabase (${engine})`, () => {
     expect((failure as { code?: string }).code).toBe("SQLITE_CONSTRAINT_PRIMARYKEY");
   });
 
+  it("recognizes missing schema objects without treating other SQL errors as a mismatch", () => {
+    for (const [sql, missing] of [
+      ["SELECT * FROM absent", true],
+      ["SELECT (", false],
+    ] as const) {
+      let failure: unknown;
+      try {
+        db.prepare(sql);
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(Error);
+      expect(isMissingSchemaObject(failure)).toBe(missing);
+    }
+  });
+
   it("opens a database read-only, refusing writes, and refuses a missing file", () => {
     seedSession(db, "session-1");
     const readonly = openSqliteDatabase(path.join(tempDir, "deus.db"), {
@@ -252,6 +268,31 @@ describe(`the backend's database (${engine})`, () => {
     expect(store.sessionExists("session-1")).toBe(true);
     expect(store.sessionExists("deleted-session")).toBe(false);
   });
+
+  it("refuses a busy database and offers a reset only after it can check the schema", async () => {
+    const database = await import("../../../src/lib/database");
+    closeDatabase();
+    const other = openSqliteDatabase(database.DB_PATH);
+    other.exec("DROP INDEX idx_messages_parent_tool_call");
+    other.exec("ALTER TABLE messages RENAME COLUMN parent_tool_call_id TO parent_tool_use_id");
+    const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      other.exec("BEGIN IMMEDIATE");
+      expect(() => database.initDatabase()).toThrow(/^database is locked$/);
+      expect(stderr).not.toHaveBeenCalledWith(PRELAUNCH_SCHEMA_MISMATCH);
+      other.exec("ROLLBACK");
+      expect(() => database.initDatabase()).toThrow(
+        /Schema initialization failed: no such column: parent_tool_call_id.*deus start --data-dir/
+      );
+      expect(stderr).toHaveBeenCalledWith(PRELAUNCH_SCHEMA_MISMATCH);
+    } finally {
+      stderr.mockRestore();
+      if (other.inTransaction) other.exec("ROLLBACK");
+      other.exec("ALTER TABLE messages RENAME COLUMN parent_tool_use_id TO parent_tool_call_id");
+      other.close();
+      database.initDatabase();
+    }
+  }, 15_000);
 
   it("writes an automation and its runs through named parameters", () => {
     store.upsertAutomation({

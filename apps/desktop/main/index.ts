@@ -13,10 +13,11 @@
  */
 
 import { app, BrowserWindow, ipcMain, session, shell, type IpcMainInvokeEvent } from "electron";
-import { join } from "path";
+import { basename, join } from "path";
 import { homedir } from "os";
 import { is } from "@electron-toolkit/utils";
 import { spawnBackend, stopBackend } from "./backend-process";
+import { datedBackupPath, moveDatabaseAside, OutdatedDatabaseError } from "./database-recovery";
 import {
   APP_URL,
   originOf,
@@ -364,17 +365,32 @@ app.whenReady().then(async () => {
     // A Quit while the backend was starting stopped it; that is not a failure.
     if (quitState !== "running") return;
     const { dialog } = await import("electron");
+    const database = err instanceof OutdatedDatabaseError ? err.databasePath : undefined;
+    const backup = database && datedBackupPath(database);
     const { response } = await dialog.showMessageBox({
       type: "error",
-      buttons: ["Show Logs", "OK"],
+      buttons: backup ? ["Show Logs", "OK", "Start Fresh"] : ["Show Logs", "OK"],
       defaultId: 1,
       cancelId: 1,
       noLink: true,
       message: "Failed to Start",
-      detail: formatStartupFailureDetail(err),
+      detail: backup
+        ? `Start Fresh keeps your old chats in ${basename(backup)} and reopens Deus with an empty chat history.`
+        : formatStartupFailureDetail(err),
     });
     if (response === 0) {
       shell.showItemInFolder(getMainLogPath());
+    } else if (response === 2 && database && backup) {
+      try {
+        moveDatabaseAside(database, backup);
+        const image = process.platform === "linux" && process.env.APPIMAGE;
+        app.relaunch(image ? { execPath: image } : {});
+      } catch (error) {
+        dialog.showErrorBox(
+          "Couldn’t start fresh",
+          error instanceof Error ? error.message : String(error)
+        );
+      }
     }
     app.quit();
     return;

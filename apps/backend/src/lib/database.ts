@@ -6,10 +6,11 @@ import { resolveDefaultDatabasePath } from "../../../../shared/runtime";
 import {
   ADDITIVE_COLUMNS,
   BACKFILL_SQL,
+  PRELAUNCH_SCHEMA_MISMATCH,
   PRELAUNCH_SCHEMA_RESET_HINT,
   SCHEMA_SQL,
 } from "@shared/schema";
-import { openSqliteDatabase } from "./sqlite";
+import { isMissingSchemaObject, openSqliteDatabase } from "./sqlite";
 
 const DEFAULT_DB_PATH = resolveDefaultDatabasePath({
   platform: process.platform,
@@ -89,17 +90,13 @@ function assertSchemaCurrent(db: BetterSqlite3.Database, fresh: BetterSqlite3.Da
         stale.push(`${table}.${name} is no longer in the schema and is required`);
     }
   }
-  if (stale.length > 0) throw prelaunchSchemaError(`${stale.join("; ")}.`);
+  if (stale.length > 0) throw new PrelaunchSchemaError(`${stale.join("; ")}.`);
 }
 
-function prelaunchSchemaError(detail: string): Error {
-  return new Error(
-    [
-      "Database schema is out of date for this pre-launch build.",
-      detail,
-      PRELAUNCH_SCHEMA_RESET_HINT,
-    ].join(" ")
-  );
+class PrelaunchSchemaError extends Error {
+  constructor(detail: string) {
+    super(`${PRELAUNCH_SCHEMA_MISMATCH} ${detail} ${PRELAUNCH_SCHEMA_RESET_HINT}`);
+  }
 }
 
 function initDatabase(): BetterSqlite3.Database {
@@ -148,11 +145,11 @@ function initDatabase(): BetterSqlite3.Database {
             db.exec(SCHEMA_SQL);
           }
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          throw prelaunchSchemaError(`Schema initialization failed: ${message}`);
+          if (!isMissingSchemaObject(error)) throw error;
+          throw new PrelaunchSchemaError(`Schema initialization failed: ${error.message}`);
         }
         assertSchemaCurrent(db, fresh);
-      })();
+      }).immediate(); // A held write lock must be reported before diagnosing an old schema.
     } finally {
       fresh.close();
     }
@@ -167,6 +164,8 @@ function initDatabase(): BetterSqlite3.Database {
         dbInstance = null;
       }
     }
+    // A whole stderr line after rollback and close, independent of how Node or Bun prints an Error.
+    if (error instanceof PrelaunchSchemaError) console.error(PRELAUNCH_SCHEMA_MISMATCH);
     console.error("Failed to open database:", error);
     throw error;
   }
