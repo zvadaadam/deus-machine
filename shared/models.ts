@@ -149,19 +149,18 @@ export function fitThinkingLevel(
 }
 
 /**
- * The level a chat shows and sends. Against a model list still provisional
- * (the catalog the engine was built with, before this computer's CLIs
- * answered) the chat keeps the level it asked for: the live list may well
- * offer it. Once the list is live, the level fitted to the model's, which
- * the chat then keeps.
+ * The level a chat shows and sends. `levels`: the model's, when its list is
+ * live; none while it is provisional (the catalog the engine was built with,
+ * before this computer's CLIs answered), when the chat keeps the level it
+ * asked for: the live list may well offer it. Once the list is live, the
+ * level fitted to the model's, which the chat then keeps.
  */
 export function composerThinking(
   requested: ThinkingLevel,
-  levels: readonly ThinkingLevel[],
-  fallback: ThinkingLevel,
-  live: boolean
+  levels: readonly ThinkingLevel[] | undefined,
+  fallback: ThinkingLevel
 ): ThinkingLevel {
-  return live ? fitThinkingLevel(requested, levels, fallback) : requested;
+  return levels ? fitThinkingLevel(requested, levels, fallback) : requested;
 }
 
 /** How a level is shown: Deus's word for one it knows, else the level's own name, capitalised. */

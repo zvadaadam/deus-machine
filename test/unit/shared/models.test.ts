@@ -221,11 +221,11 @@ describe("what a model picker shows", () => {
 describe("the level a chat shows and sends", () => {
   it("keeps a seeded level against the catalog, and fits it only once the live list is in", () => {
     const catalog = ["low", "medium", "high", "xhigh", "max"];
-    // Seeded with a level the catalog does not list for the model: kept while provisional.
-    expect(composerThinking("ultra", catalog, "high", false)).toBe("ultra");
+    // Provisional (no live levels): the chat's own level, as seeded.
+    expect(composerThinking("ultra", undefined, "high")).toBe("ultra");
     // The live list offers it: still the chat's own.
-    expect(composerThinking("ultra", [...catalog, "ultra"], "high", true)).toBe("ultra");
+    expect(composerThinking("ultra", [...catalog, "ultra"], "high")).toBe("ultra");
     // The live list does not: the nearest the model has.
-    expect(composerThinking("ultra", catalog, "high", true)).toBe("max");
+    expect(composerThinking("ultra", catalog, "high")).toBe("max");
   });
 });

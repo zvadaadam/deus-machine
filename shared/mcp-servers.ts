@@ -38,11 +38,18 @@ export function toolCardName(part: {
   toolName: string;
   mcp?: { server: string; tool: string };
 }): string {
-  if (part.mcp) return DEUS_SERVERS.has(part.mcp.server) ? part.mcp.tool : part.toolName;
   const prefix = DEUS_TOOL_PREFIXES.find((each) => part.toolName.startsWith(each));
+  if (part.mcp && (part.mcp.server === DEUS_TOOLS_SERVER || prefix === OLD_CLAUDE_PREFIX))
+    return part.mcp.tool;
+  if (part.mcp) return part.toolName;
   return prefix ? part.toolName.slice(prefix.length) : part.toolName;
 }
 
-// Names older builds stored for Deus's own tools (Claude's `deus` server; Codex parts without `mcp`).
-const DEUS_SERVERS = new Set([DEUS_TOOLS_SERVER, "deus"]);
-const DEUS_TOOL_PREFIXES = ["mcp__deus__", `mcp__${DEUS_TOOLS_SERVER}__`, `${DEUS_TOOLS_SERVER}.`];
+// Names older builds stored for Deus's own tools: Claude's `deus` server (its spelling
+// only, never a person's own Codex server named `deus`), and Codex parts without `mcp`.
+const OLD_CLAUDE_PREFIX = "mcp__deus__";
+const DEUS_TOOL_PREFIXES = [
+  OLD_CLAUDE_PREFIX,
+  `mcp__${DEUS_TOOLS_SERVER}__`,
+  `${DEUS_TOOLS_SERVER}.`,
+];

@@ -133,6 +133,14 @@ describe("an MCP tool's card", () => {
       part({ toolName: "deus_chat_tools.recording_stop", kind: "other" } as Partial<ToolPart>)
     );
     expect(codex).toMatchObject({ name: "recording_stop" });
+    const [personal] = toToolUseBlocks(
+      part({
+        toolName: "deus.Edit",
+        kind: "other",
+        mcp: { server: "deus", tool: "Edit" },
+      } as Partial<ToolPart>)
+    );
+    expect(personal).toMatchObject({ name: "deus.Edit" });
     const [outside] = toToolUseBlocks(
       part({ toolName: "mcp__docs__Edit", kind: "other" } as Partial<ToolPart>)
     );

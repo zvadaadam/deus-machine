@@ -48,7 +48,8 @@ export function useModelListsState(chat: { cloud: boolean; workspaceId?: string 
     lists: lists?.length ? lists : CATALOG_MODEL_LISTS,
     live: (harness) =>
       chat.cloud
-        ? Boolean(cloud.data?.lists?.length)
+        ? // The platform's row for this harness is authoritative, whatever its source.
+          cloud.data?.lists?.some((list) => list.harness === harness) === true
         : local.data?.lists?.find((list) => list.harness === harness)?.source === "live",
   };
 }

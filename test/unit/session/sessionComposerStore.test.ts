@@ -184,3 +184,27 @@ describe("a reopened chat's thinking level", () => {
     expect(store.getState().composers.chat.thinkingLevel).toBe("medium");
   });
 });
+
+describe("a model change before the model list is live", () => {
+  it("keeps the chat's level, which is fitted only once the destination's live list is in", async () => {
+    const { composerThinking } = await import("@shared/models");
+    actions.seedIfAbsent("chat", emptyComposer("codex-app-server:gpt-6.2-sol", "ultra"));
+    // Switched before the live list: no levels to fit to, so nothing is written.
+    actions.setModel("chat", "codex-app-server:gpt-6.2-astra", undefined, "high");
+    const composer = store.getState().composers.chat!;
+    expect(composer.model).toBe("codex-app-server:gpt-6.2-astra");
+    expect(composer.thinkingLevel).toBe("ultra");
+    // The live list arrives and offers the level: it stays.
+    expect(composerThinking(composer.thinkingLevel, ["low", "high", "max", "ultra"], "high")).toBe(
+      "ultra"
+    );
+    // Had it been fitted to a catalog lacking it, it would have been lost.
+    actions.setModel(
+      "chat",
+      "codex-app-server:gpt-5.5",
+      ["low", "medium", "high", "xhigh"],
+      "high"
+    );
+    expect(store.getState().composers.chat!.thinkingLevel).toBe("xhigh");
+  });
+});

@@ -38,6 +38,11 @@ describe("toolCardName", () => {
     expect(toolCardName({ toolName: "deus_chat_tools.BrowserScreenshot" })).toBe(
       "BrowserScreenshot"
     );
+    // `deus` is Claude's old server only: a person's own Codex server of that name is theirs.
+    expect(toolCardName({ toolName: "deus.Edit", mcp: { server: "deus", tool: "Edit" } })).toBe(
+      "deus.Edit"
+    );
+    expect(toolCardName({ toolName: "deus.Edit" })).toBe("deus.Edit");
     // Any other server's tool keeps its qualified name.
     expect(toolCardName({ toolName: "mcp__docs__Edit" })).toBe("mcp__docs__Edit");
     expect(toolCardName({ toolName: "mcp__deusx__Edit" })).toBe("mcp__deusx__Edit");
