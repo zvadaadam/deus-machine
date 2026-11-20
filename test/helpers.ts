@@ -16,7 +16,6 @@ type FollowCall = [
   stream: AnyStream,
   filter: Record<string, unknown>,
   onEvent: (event: unknown) => void,
-  options?: { onReset?: () => void },
 ];
 
 /** The calls whose stop function has not been called, in the order they were made. */
@@ -46,16 +45,5 @@ export function emit<S extends AnyStream>(
   for (const [followed, filter, onEvent] of current(follow)) {
     if (followed.name === stream.name && scopeMatches(filter, scope as Record<string, unknown>))
       onEvent(event);
-  }
-}
-
-/**
- * The connection came back and the host cannot say what the followers of
- * `stream` under `scope` missed: their `onReset` runs.
- */
-export function reset<S extends AnyStream>(follow: Mock, stream: S, scope: ScopeOf<S>): void {
-  for (const [followed, filter, , options] of current(follow)) {
-    if (followed.name === stream.name && scopeMatches(filter, scope as Record<string, unknown>))
-      options?.onReset?.();
   }
 }
