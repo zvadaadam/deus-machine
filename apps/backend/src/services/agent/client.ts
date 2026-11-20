@@ -7,6 +7,7 @@
 
 import { dirname, join, resolve } from "node:path";
 import { AgentServerClient, type SessionEventGap } from "@zvada/agent-server/client";
+import type { HostToolSource } from "@zvada/agent-server/core";
 import type {
   InitializeResult,
   TurnCancelResult,
@@ -41,6 +42,8 @@ export interface AgentLinkOptions {
   onToolRequest: (method: string, params: Record<string, unknown>) => Promise<unknown>;
   /** Session title from Claude's own summary. */
   onTitle: (payload: SessionTitle) => void;
+  /** A chat's tools: the Deus tools, with the session tools beside them. */
+  sessionTools?: (own: HostToolSource) => HostToolSource;
 }
 
 // ============================================================================
@@ -60,6 +63,7 @@ export class AgentLink {
     const transport = startEngine({
       request: options.onToolRequest,
       title: options.onTitle,
+      ...(options.sessionTools ? { sessionTools: options.sessionTools } : {}),
     });
     // Agents and terminals get the Xcode the Simulator tab uses, where none is
     // named and xcode-select names the Command Line Tools (no simulator). The

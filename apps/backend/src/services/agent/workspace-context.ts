@@ -4,6 +4,7 @@
 // Deus orchestrator, worktree location, and actual project name.
 
 import * as path from "path";
+import { OPERATOR_GUIDANCE } from "@zvada/agent-server/operator";
 
 /**
  * Derives the project (repo) name from a worktree path.
@@ -48,6 +49,8 @@ export function buildWorkspaceContext(cwd?: string, simulator?: Simulator | null
     (simulator
       ? `This workspace's Simulator tab shows the simulator ${simulator.udid}: pass \`--udid ${simulator.udid}\` to agent-device so the person sees what you do.\n`
       : "") +
+    // The session tools every chat here has (services/assistants: withSessionTools).
+    `${OPERATOR_GUIDANCE}\n` +
     `You can render live HTML+CSS previews inline in chat using the \`html-preview\` code fence — it renders in an isolated Shadow DOM instead of showing code. Use this naturally whenever showing is clearer than describing (design options, component variations, layout ideas).`
   );
 }

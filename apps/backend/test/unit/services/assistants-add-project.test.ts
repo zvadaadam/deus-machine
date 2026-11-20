@@ -35,7 +35,10 @@ vi.mock("../../../src/services/query-engine", () => ({
 }));
 vi.mock("../../../src/services/server-name", () => ({ getServerName: () => "Proof Mac" }));
 vi.mock("@sentry/node", () => ({ captureException: state.report }));
-vi.mock("../../../src/services/agent/service", () => ({ liveTurnId: () => undefined }));
+vi.mock("../../../src/services/agent/service", () => ({
+  liveTurnId: () => undefined,
+  provideSessionTools: () => {},
+}));
 vi.mock("../../../src/services/settings.service", () => ({ getSetting: () => undefined }));
 vi.mock("../../../src/services/streams", () => ({ publish: vi.fn() }));
 vi.mock("../../../src/services/account-session", () => ({
@@ -498,14 +501,13 @@ describe("then start_session", () => {
 });
 
 describe("projects with no folder on this computer", () => {
-  it("are not listed, and starting a session in one is refused with how to put it here", async () => {
+  it("starting a session in one is refused with how to put it here", async () => {
     insertProject("widget", null, "https://github.com/acme/widget");
     insertProject("gadget", path.join(home, "gadget"), null);
-    expect(await createDeusHost().groups!(LOCAL_CALLER)).toEqual(["gadget"]);
     await expect(
       callTool(assistant(), "start_session", { project: "widget", message: "go", wait: 0 })
     ).rejects.toThrow(
-      '"widget" is a cloud project: it has no folder on this computer, so no session can start here. add_project puts it on this computer.\n' +
+      'refused (unsupported): "widget" is a cloud project: it has no folder on this computer, so no session can start here. Nothing was started; add_project puts it on this computer.\n' +
         '  -> add_project(repository: "acme/widget")'
     );
   });

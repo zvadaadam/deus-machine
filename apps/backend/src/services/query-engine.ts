@@ -256,7 +256,7 @@ export function invalidate(resources: LiveName[], ctx?: InvalidateContext): void
   // Shared only within this synchronous pass and one caller's view: no cached
   // read outlives a write or serves another device's view.
   const reads = new Map<string, unknown>();
-  for (const listener of [...invalidationListeners]) listener(resources);
+  for (const listener of [...invalidationListeners]) listener(resources, ctx);
 
   for (const [connectionId, connSubs] of subs) {
     if (!getConnection(connectionId)) {
@@ -282,13 +282,17 @@ export function invalidate(resources: LiveName[], ctx?: InvalidateContext): void
   }
 }
 
-const invalidationListeners = new Set<(resources: readonly LiveName[]) => void>();
+const invalidationListeners = new Set<
+  (resources: readonly LiveName[], ctx?: InvalidateContext) => void
+>();
 
 /**
  * Hear of every invalidation, whoever subscribed to what (an operator tool
  * waiting for a chat to change). Returns the function that stops it.
  */
-export function onInvalidate(listener: (resources: readonly LiveName[]) => void): () => void {
+export function onInvalidate(
+  listener: (resources: readonly LiveName[], ctx?: InvalidateContext) => void
+): () => void {
   invalidationListeners.add(listener);
   return () => invalidationListeners.delete(listener);
 }

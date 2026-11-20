@@ -17,6 +17,7 @@
 // Initialized once at startup in server.ts via agentService.init().
 
 import type { AgentHarness } from "@shared/enums";
+import type { HostToolSource } from "@zvada/agent-server/core";
 import type {
   ElicitationOutcome,
   ElicitationRequestedEvent,
@@ -121,6 +122,8 @@ export async function init(): Promise<void> {
       })();
     },
     onToolRequest: (method, params) => handleToolRequest(method, params),
+    // Every chat here can operate the others (LLP 0019), through the engine's delivery.
+    sessionTools: (own) => sessionTools?.(own) ?? own,
     onTitle: ({ sessionId, title }) => handler.handleTitle(sessionId, title),
   });
   localAgents = new LocalAgents(link.engine);
@@ -263,6 +266,12 @@ export function isConnected(): boolean {
  * (never initialized, or shut down) — callers must treat it as absence of
  * evidence, not as evidence of absence.
  */
+/** A chat's tools beside the Deus tools: the operator's, registered by services/assistants. */
+let sessionTools: ((own: HostToolSource) => HostToolSource) | undefined;
+export function provideSessionTools(compose: (own: HostToolSource) => HostToolSource): void {
+  sessionTools = compose;
+}
+
 export function liveTurnId(sessionId: string): string | undefined {
   return events?.liveTurnId(sessionId);
 }

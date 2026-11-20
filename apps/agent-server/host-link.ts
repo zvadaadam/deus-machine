@@ -3,6 +3,7 @@
 // process: the backend registers itself once (`setHost`, from `startEngine`),
 // and each tool's request is a call into it, bounded by the tool's deadline.
 
+import type { HostToolSource } from "@zvada/agent-server/core";
 import type {
   GetDiffRequest,
   GetDiffResponse,
@@ -23,6 +24,8 @@ export interface SessionTitle {
 
 /** What the backend answers for the engine. */
 export interface DeusHost {
+  /** A chat's tools: the Deus tools `own`, with the session tools the backend adds beside them. */
+  sessionTools?(own: HostToolSource): HostToolSource;
   /** A deus MCP tool's request (getDiff, automation/update, …). */
   request(method: string, params: Record<string, unknown>): Promise<unknown>;
   /** A session's title, to name the session and an untitled workspace. */
@@ -37,6 +40,11 @@ const DATA_QUERY_TIMEOUT_MS = 10_000;
 const AUTOMATION_TIMEOUT_MS = 30_000;
 
 let host: DeusHost | null = null;
+
+/** A chat's tools, as the backend composes them; the Deus tools alone when it adds none. */
+export function chatTools(own: HostToolSource): HostToolSource {
+  return host?.sessionTools?.(own) ?? own;
+}
 
 /** The backend, or none (it stopped the engine). */
 export function setHost(next: DeusHost | null): void {

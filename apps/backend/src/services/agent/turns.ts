@@ -69,6 +69,7 @@ export async function sendMessage(
   // approval and questions park the RUNNING turn while the overlay waits.
   // Reject up front — the refusal surfaces in the UI. The wire guard
   // stays as the backstop for the status race.
+  if (session?.is_hidden) throw new ConflictError("That chat is archived; it takes no messages.");
   if (session && ACTIVE_TURN_STATUSES.includes(session.status)) {
     throw new ConflictError(
       session.status === "working"
@@ -343,14 +344,22 @@ const UNCONFIRMED_CANCEL_GRACE_MS = 15_000;
  *                                let turn.ended settle it. The watchdog
  *                                warns if confirmation never arrives.
  */
-export async function stopSession({
-  sessionId,
-}: ParsedInputOf<typeof api.stopSession>): Promise<{ unconfirmed: boolean }> {
+export async function stopSession(
+  { sessionId }: ParsedInputOf<typeof api.stopSession>,
+  /** Who stops it, kept on the turn so a reader can say who did. */
+  by: Origin = { kind: "person" }
+): Promise<{ unconfirmed: boolean }> {
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new NotFoundError("Session not found");
 
   const targetTurnId = agentService.liveTurnId(sessionId);
+  if (targetTurnId) {
+    db.prepare(
+      `INSERT INTO turns (session_id, turn_id, cancelled_by) VALUES (?, ?, ?)
+       ON CONFLICT(session_id, turn_id) DO UPDATE SET cancelled_by = excluded.cancelled_by`
+    ).run(sessionId, targetTurnId, JSON.stringify(by));
+  }
   let result: Awaited<ReturnType<typeof agentService.stopSession>> | undefined;
   if (isCloudSession(sessionId)) {
     try {

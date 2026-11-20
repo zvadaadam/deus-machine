@@ -30,6 +30,7 @@ export const PRELAUNCH_SCHEMA_RESET_HINT =
 export const ADDITIVE_COLUMNS: Record<string, Record<string, string>> = {
   workspaces: { started_by: "TEXT", first_session_id: "TEXT" },
   sessions: { started_by: "TEXT" },
+  turns: { cancelled_by: "TEXT" },
   messages: { origin: "TEXT" },
 };
 
@@ -145,6 +146,8 @@ export const SCHEMA_SQL = `
     outcome TEXT,
     tokens TEXT,
     cost REAL,
+    -- Who stopped it, as the engine's origin (JSON), when a stop named one.
+    cancelled_by TEXT,
     PRIMARY KEY (session_id, turn_id)
   );
 

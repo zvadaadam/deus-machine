@@ -70,13 +70,11 @@ export function readWorkspace(workspaceId: string) {
 async function createWorkspace(
   input: ParsedInputOf<typeof api.createWorkspace>
 ): Promise<{ workspaceId: string }> {
-  const db = getDatabase();
-  const repo = getRepositoryById(db, input.repository_id);
-  if (!repo) throw new NotFoundError("Repository not found");
-
   // Cloud: the row now, the sandbox in the background. Progress arrives as
   // workspace.state events through the cloud driver.
   if (input.location === "cloud") {
+    if (!getRepositoryById(getDatabase(), input.repository_id))
+      throw new NotFoundError("Repository not found");
     // Signed out is a state the person can fix, not a server fault.
     if (!cloudAccount()) {
       throw new ValidationError(
@@ -90,7 +88,8 @@ async function createWorkspace(
     });
   }
 
-  return createLocalWorkspace(input);
+  const { workspaceId } = await createLocalWorkspace(input);
+  return { workspaceId };
 }
 
 /**
@@ -103,7 +102,14 @@ async function createWorkspace(
  * before the insert, may refuse it (the operator's host counts its setups).
  */
 export async function createLocalWorkspace(
-  input: ParsedInputOf<typeof api.createWorkspace>,
+  input: {
+    repository_id: string;
+    source_branch?: string;
+    target_branch?: string;
+    pr_title?: string;
+    pr_url?: string;
+    pr_number?: number;
+  },
   options: { startedBy?: Origin; admit?: () => void } = {}
 ): Promise<{ workspaceId: string; firstSessionId: string }> {
   const db = getDatabase();

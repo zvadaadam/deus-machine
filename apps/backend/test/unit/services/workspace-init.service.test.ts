@@ -109,12 +109,12 @@ describe("local project environment journey", () => {
   });
   it("opens the first chat under the id minted with the workspace, started by whoever started it", async () => {
     const startedBy = JSON.stringify({ kind: "session", sessionId: "lead" });
-    mocks.db
-      .prepare("UPDATE workspaces SET first_session_id = 'chat-1', started_by = ? WHERE id = ?")
+    mocks
+      .db!.prepare("UPDATE workspaces SET first_session_id = 'chat-1', started_by = ? WHERE id = ?")
       .run(startedBy, workspaceId);
     await initialize();
     expect(row()).toMatchObject({ state: "ready", current_session_id: "chat-1" });
-    expect(mocks.db.prepare("SELECT id, started_by FROM sessions").all()).toEqual([
+    expect(mocks.db!.prepare("SELECT id, started_by FROM sessions").all()).toEqual([
       { id: "chat-1", started_by: startedBy },
     ]);
   });

@@ -195,10 +195,10 @@ export function getSessionRaw(db: Database.Database, id: string): SessionRow | u
   return row ? coerceSessionBooleans(row) : undefined;
 }
 
-/** All sessions for a workspace, ordered by creation time (UUID7 is chronological). */
+/** A workspace's chats, archived ones (`is_hidden`) left out, ordered by creation (UUID7 is chronological). */
 export function getSessionsByWorkspaceId(db: Database.Database, workspaceId: string): SessionRow[] {
   const rows = db
-    .prepare("SELECT * FROM sessions WHERE workspace_id = ? ORDER BY id ASC")
+    .prepare("SELECT * FROM sessions WHERE workspace_id = ? AND is_hidden = 0 ORDER BY id ASC")
     .all(workspaceId) as SessionRow[];
   return rows.map(coerceSessionBooleans);
 }
