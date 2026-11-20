@@ -751,14 +751,20 @@ export function createDeusHost(): DeusHost {
               `start_session: model: ${JSON.stringify(input.model)} is not one ${agentHarness} offers here; list_models names them. Nothing was started.`
             );
           // Levels are judged only by what this computer's CLI listed: a catalog's are
-          // provisional. `off` is never judged: Claude reads it as no extended thinking
-          // on any model, though its rows list only effort levels.
+          // provisional. Claude's `off` is not judged: it reads it as no extended thinking
+          // on any model, though its rows list only effort levels. Codex lists `off` where
+          // a model takes it, and runs an unlisted one as another level, so it is judged.
           const levels =
             own?.source === "live"
               ? findModel(lists, agentHarness, model)?.row.thinking.levels
               : undefined;
           const level = input.thinkingLevel;
-          if (level && level !== "off" && levels && !levels.includes(level))
+          if (
+            level &&
+            levels &&
+            !levels.includes(level) &&
+            !(level === "off" && agentHarness === "claude-code")
+          )
             throw new OperatorError(
               "invalid_input",
               `start_session: thinking: ${JSON.stringify(level)} is not a level ${model} offers; ${levels.length ? `its levels are ${levels.map((l) => JSON.stringify(l)).join(", ")}` : "it has no thinking levels"}. Nothing was started.`

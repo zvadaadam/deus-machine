@@ -907,6 +907,51 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     expect(state.sent.at(-1)).toMatchObject({ input: { model: "haiku", thinkingLevel: "off" } });
   });
 
+  it("Codex's off is judged like any level: refused where its model does not list it", async () => {
+    const host = createDeusHost();
+    state.ops.agentModels = () => ({
+      lists: [
+        {
+          harness: "codex-app-server",
+          source: "live",
+          models: [
+            {
+              id: "gpt-5",
+              harness: "codex-app-server",
+              label: "GPT-5",
+              thinking: { levels: ["low", "medium", "high"] },
+            },
+            {
+              id: "gpt-5-mini",
+              harness: "codex-app-server",
+              label: "GPT-5 mini",
+              thinking: { levels: ["off", "low", "medium", "high"] },
+            },
+          ],
+        },
+      ],
+    });
+    const start = (model: string) =>
+      host.start!(
+        LEAD as never,
+        startInput({
+          workspace: { id: "w-lead", name: "lead" },
+          harness: "codex-app-server",
+          model,
+          thinkingLevel: "off",
+        })
+      );
+    await expect(start("gpt-5")).rejects.toMatchObject({
+      code: "invalid_input",
+      message:
+        'refused (invalid_input): start_session: thinking: "off" is not a level gpt-5 offers; its levels are "low", "medium", "high". Nothing was started.',
+    });
+    await expect(start("gpt-5-mini")).resolves.toMatchObject({ workspace: { name: "lead" } });
+    expect(state.sent.at(-1)).toMatchObject({
+      input: { model: "gpt-5-mini", thinkingLevel: "off" },
+    });
+  });
+
   it("a level is judged only by a list this computer's CLI gave: a catalog with models is not", async () => {
     const host = createDeusHost();
     const lists = (claude: "live" | "catalog") => ({
