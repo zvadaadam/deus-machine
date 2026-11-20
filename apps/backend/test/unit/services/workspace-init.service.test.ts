@@ -20,6 +20,7 @@ vi.mock("../../../src/services/cloud-environment.service", () => ({
   getCloudEnvironmentInfo: mocks.saved,
 }));
 import { initializeWorkspace } from "../../../src/services/workspace-init.service";
+import { setupFile } from "../../../src/services/setup-status";
 import {
   readLocalProjectEnvironment,
   prepareLocalEnvironment,
@@ -28,12 +29,14 @@ import {
   localProjectEnv,
   projectEnvironmentResponse,
   runSetupCommand,
+  stopWorkspaceSetup,
 } from "../../../src/services/project-environment.service";
 
 let root: string;
 const git = (...args: string[]) =>
   execFileSync("git", args, { cwd: root, stdio: "pipe" }).toString().trim();
 const workspaceId = "environment-test";
+const statusFile = () => fs.readFileSync(setupFile(workspaceId, "status"), "utf8");
 function project(recipe: ProjectEnvironment) {
   writeProjectFile(root, recipe);
 }
@@ -43,7 +46,7 @@ function row() {
     unknown
   >;
 }
-async function initialize() {
+async function initialize(waitForSetup = true) {
   git("add", ".");
   git(
     "-c",
@@ -63,12 +66,14 @@ async function initialize() {
     sourceBranch: "main",
     repoOriginUrl: "https://github.com/test/app",
   });
+  if (waitForSetup) await vi.waitFor(() => expect(row().setup_status).not.toBe("running"));
   return directory;
 }
 beforeEach(() => {
   fs.mkdirSync(".context", { recursive: true });
   root = fs.mkdtempSync(path.resolve(".context/environment-test-"));
   git("init", "-b", "main");
+  vi.stubEnv("TMPDIR", path.join(root, ".git"));
   fs.writeFileSync(path.join(root, "tracked.txt"), "original\n");
   fs.writeFileSync(
     path.join(root, ".gitignore"),
@@ -83,6 +88,7 @@ beforeEach(() => {
   mocks.db.prepare("INSERT INTO workspaces (id) VALUES (?)").run(workspaceId);
 });
 afterEach(() => {
+  vi.unstubAllEnvs();
   mocks.db?.close();
   fs.rmSync(root, { recursive: true, force: true });
 });
@@ -100,6 +106,7 @@ describe("local project environment journey", () => {
     fs.writeFileSync(path.join(root, ".env"), "APP_SECRET=local-test-value\n");
     const directory = await initialize();
     expect(row()).toMatchObject({ state: "ready", setup_status: "completed", init_stage: "done" });
+    expect(statusFile()).toBe("completed\n");
     expect(fs.readFileSync(path.join(directory, "proof.txt"), "utf8")).toBe("local-test-value");
     expect(fs.readFileSync(path.join(directory, "tracked.txt"), "utf8")).toBe(
       "original\nsetup edit\n"
@@ -113,7 +120,12 @@ describe("local project environment journey", () => {
       .db!.prepare("UPDATE workspaces SET first_session_id = 'chat-1', started_by = ? WHERE id = ?")
       .run(startedBy, workspaceId);
     await initialize();
-    expect(row()).toMatchObject({ state: "ready", current_session_id: "chat-1" });
+    expect(row()).toMatchObject({
+      state: "ready",
+      current_session_id: "chat-1",
+      setup_status: "none",
+    });
+    expect(statusFile()).toBe("none\n");
     expect(mocks.db!.prepare("SELECT id, started_by FROM sessions").all()).toEqual([
       { id: "chat-1", started_by: startedBy },
     ]);
@@ -138,6 +150,24 @@ describe("local project environment journey", () => {
     expect(
       (await readLocalProjectEnvironment(directory, "https://github.com/test/app")).project
     ).toEqual({ version: 1 });
+  });
+  it("opens the chat during a saved recipe lookup and never starts its script after an archive", async () => {
+    mocks.cloud.mockReturnValue({ baseUrl: "https://cloud.test", apiKey: "key" });
+    let answer!: (value: unknown) => void;
+    mocks.saved.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    const directory = await initialize(false);
+    expect(row()).toMatchObject({ state: "ready", setup_status: "running" });
+    expect(statusFile()).toBe("running\n");
+    expect(mocks.saved).toHaveBeenCalledTimes(1);
+    stopWorkspaceSetup(workspaceId, "archived");
+    answer({ configured: true, project: { version: 1, setup: "touch unexpected" } });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(row()).toMatchObject({
+      setup_status: "failed",
+      error_message: "Setup was stopped when the workspace was archived.",
+    });
+    expect(statusFile()).toBe("failed\n");
+    expect(fs.existsSync(path.join(directory, "unexpected"))).toBe(false);
   });
   it("reports invalid files, allows repair and an explicit retry, and never falls back on an error", async () => {
     fs.mkdirSync(path.join(root, ".deus"));
@@ -200,6 +230,7 @@ describe("local project environment journey", () => {
         error_message: "Setup exited with code 1.",
         error_detail: "compiling\nmissing <tool>",
       });
+      expect(statusFile()).toBe("failed 1\n");
       writeProjectFile(directory, { version: 1, setup: "exit 1" });
       await prepareLocalEnvironment(workspaceId, directory);
       expect(row()).toMatchObject({
@@ -251,6 +282,8 @@ describe("local project environment journey", () => {
     try {
       const setup = prepareLocalEnvironment(workspaceId, root);
       await vi.waitFor(() => expect(fs.existsSync(path.join(root, "started"))).toBe(true));
+      expect(row().setup_status).toBe("running");
+      expect(statusFile()).toBe("running\n");
       vi.advanceTimersByTime(300_000);
       await setup;
       expect(row()).toMatchObject({
@@ -258,6 +291,7 @@ describe("local project environment journey", () => {
         error_message: "Setup timed out after five minutes.",
         error_detail: null,
       });
+      expect(statusFile()).toBe("failed\n");
     } finally {
       vi.useRealTimers();
     }
@@ -333,6 +367,15 @@ describe("local project environment journey", () => {
     await expect(
       environment.runSetupCommand(workspaceId, "true", root, process.env)
     ).rejects.toThrow("Deus is closing.");
+    // A recipe that resolves after shutdown cannot spawn; its durable status still explains the stop.
+    project({ version: 1, setup: "touch unexpected" });
+    await environment.prepareLocalEnvironment(workspaceId, root);
+    expect(row()).toMatchObject({
+      setup_status: "failed",
+      error_message: "Setup was stopped when Deus closed. Run it again.",
+    });
+    expect(statusFile()).toBe("failed\n");
+    expect(fs.existsSync(path.join(root, "unexpected"))).toBe(false);
   });
   it("makes a saved recipe publishable while retaining ignored workspace data", () => {
     fs.writeFileSync(path.join(root, ".gitignore"), ".deus/\n");

@@ -228,16 +228,23 @@ exception has its subject already: a workspace on a pull request or branch
 (`GitHubPickerModal`).
 
 Creating a local workspace writes its row and returns. The rest runs in the
-background, in four stages: `fetch` (origin's latest for the branch it starts
-from), `worktree` (`git worktree add` on a new branch), `setup` (the project's
-setup script), `session` (the first chat, and `state = 'ready'`). Each stage
+background, in three stages: `fetch` (origin's latest for the branch it starts
+from), `worktree` (`git worktree add` on a new branch), and `session` (the first
+chat and `state = 'ready'`). Each stage
 writes `init_stage` and pushes the `workspaces` resource, which is the only
 progress channel: the desktop, the web app and a phone all follow it.
 
 - Only `worktree` and `session` are fatal. A fetch that fails still starts the
   workspace, from what is on this computer, and records why
-  (`init_fetch_issue`: `offline`, `auth` or `failed`); a setup script that fails
-  is `setup_status = 'failed'`, with its own retry.
+  (`init_fetch_issue`: `offline`, `auth` or `failed`).
+- Once the checkout exists, the first chat can take its message while the project's
+  setup script runs. A local turn is told the running command, log and status
+  file, or a failure's reason, last log lines and current retry command. Completed
+  and unconfigured setups add nothing to the turn. `setSetupStatus` writes the
+  row and its temp status file together. A failed script has its own header retry.
+  Archiving or deleting the workspace stops its setup process group. Quitting
+  during setup leaves the checkout and chat ready, with setup marked failed
+  and a reason saying Deus stopped it.
 - A fatal failure removes what the attempt made and leaves `state = 'error'`
   with a plain reason (`error_message`) and the tool's own words
   (`error_detail`). `retryWorkspaceInit` starts the same row again, so whatever
@@ -278,9 +285,9 @@ screen; `session/lib/firstMessage.ts` holds the rules. Where it is kept follows
 the window (`capabilities.singleWindow`): a browser tab keeps its own
 (sessionStorage), so a reload does not lose it and a tab opened beside it does
 not find it and send it too; the desktop app, which is one window, keeps it on the
-device (localStorage), so quitting does not lose it either. Quitting the
-desktop app stops the start, so the reopened app shows a failed start with the
-message still waiting, and Retry sends it. It is sent once: a chat that already
+device (localStorage), so quitting does not lose it either. Quitting before the
+first chat opens stops the start, so the reopened desktop app shows a failed
+start with the message still waiting, and Retry sends it. It is sent once: a chat that already
 has a message, or is answering one, is never sent it again, and a send the
 backend refuses goes into that chat's composer with a toast rather than being
 retried. Send it from anywhere else and two workspaces started in a row lose
@@ -424,8 +431,8 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   between calls: a message to a busy chat is sent within the call if its turn
   ends on its own in time, else nothing is sent and the answer says why. The
   host holds only a new workspace's first task: `start` takes it and sends it
-  as the turn the package minted once setup ends; a setup that took longer
-  than 30 minutes sends nothing, and the chat says so in its error; a stop
+  as the turn the package minted once the first chat is ready. A start that took
+  longer than 30 minutes sends nothing, and the chat says so in its error; a stop
   drops it. At its commit, in one synchronous step, the host refuses
   (`Refused`): a start by an archived chat or into an archived workspace; a
   fourth workspace agents started while three are set up; an archive whose

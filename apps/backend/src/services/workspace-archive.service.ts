@@ -6,6 +6,7 @@ import {
   wakeCloudWorkspaceWithFeedback,
 } from "./cloud-workspace-init.service";
 import { invalidate } from "./query-engine";
+import { stopWorkspaceSetup } from "./project-environment.service";
 import { autoProgressStatus } from "./workspace-status.service";
 
 /**
@@ -28,7 +29,9 @@ async function performArchive(workspaceId: string, check?: () => void): Promise<
 
   check?.();
   db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
+  const stopped = stopWorkspaceSetup(workspaceId, "archived");
   autoProgressStatus(workspaceId, "done", { force: true });
+  await stopped;
 }
 
 // Archive, unarchive and explicit wake share one queue: a delayed Resume

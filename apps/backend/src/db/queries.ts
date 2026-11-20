@@ -107,7 +107,7 @@ export function getWorkspaceForMiddleware(
   return db
     .prepare(
       `
-    SELECT w.*, r.root_path, r.git_default_branch, r.name as repo_name
+    SELECT w.*, r.root_path, r.git_default_branch, r.git_origin_url, r.name as repo_name
     FROM workspaces w
     LEFT JOIN repositories r ON w.repository_id = r.id
     WHERE w.id = ?

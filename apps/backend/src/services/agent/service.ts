@@ -51,6 +51,7 @@ import {
 import { invalidate } from "../query-engine";
 import { openWith } from "../streams";
 import { agentDeviceFor } from "../simulator-context";
+import { setupForTurn } from "../project-environment.service";
 import { handleAutomationToolRequest } from "../automations";
 import { requireParam } from "../../lib/query-params";
 
@@ -166,6 +167,7 @@ export async function startTurn(
   const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, {
     ...options,
     ...apps,
+    setup: await setupForTurn(sessionId, options.cwd),
     agentDeviceSession: device.session,
     simulator: device.udid ? { udid: device.udid } : null,
     // Negotiated at the handshake, not guessed from a harness list.

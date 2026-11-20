@@ -49,9 +49,10 @@ the same workspaces. It checks, in order:
   bubble it will be; no folder and no branch are left. The chat's composer is
   there on both devices, the phone's as wide as the screen. Nothing else is offered: no new chat, no Create PR, no
   tools pane, no tab bar on the phone.
-- Retry starts the same workspace again: same id and name, each stage reaching
-  both devices over the WebSocket, the kept message sent to the chat it opens,
-  once, and that chat opening with how the workspace started. While it starts,
+- Retry keeps the workspace's id and name. A Git post-checkout hook holds the
+  checkout while both devices show it in progress. Releasing the hook opens the
+  first chat and sends its waiting message once, while the setup script is
+  still running. Releasing the script updates the step in that chat. During checkout,
   a second message typed on its page is refused with a toast and stays in the
   composer; when the chat opens it is in the chat's composer, which has the
   same x, width and bottom. A workspace that started can be neither retried
@@ -73,8 +74,9 @@ the same workspaces. It checks, in order:
   message is still in Home's composer.
 - A message waiting for a workspace whose chat was already spoken to (from
   another window) is not sent: it goes into that chat's composer.
-- A setup script exits with an error. Its chat opens with the last two log lines
-  visible as plain text in the start warning.
+- A setup script exits with an error. Its chat shows the last two log lines
+  as plain text. Retrying the edited recipe from the header clears the warning
+  in the same chat.
 
 ```sh
 bun run native:node

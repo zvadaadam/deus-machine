@@ -64,6 +64,23 @@ describe("a starting workspace", () => {
 describe("a workspace that started", () => {
   const ready = { ...local, state: "ready", init_stage: "done", current_session_id: "s" } as const;
 
+  it("has a usable checkout and chat while its setup step is still running", () => {
+    const workspace = { ...ready, setup_status: "running" } as const;
+    expect(hasCheckout(workspace)).toBe(true);
+    const start = workspaceStart(workspace);
+    expect(start).toMatchObject({
+      phase: "ready",
+      summary: "Workspace ready",
+      brief: "Running setup…",
+      warnings: [],
+    });
+    expect(labels(start)).toEqual([
+      "done: Checked for the latest changes",
+      "done: Made a safe copy",
+      "active: Running setup…",
+    ]);
+  });
+
   it("folds its steps under one line, with no setup step when the project has none", () => {
     const start = workspaceStart(ready);
     expect(start).toMatchObject({ phase: "ready", summary: "Workspace ready", warnings: [] });
@@ -178,7 +195,7 @@ describe("a start in a few words, for the sidebar row", () => {
     );
   });
 
-  it("says nothing once ready, unless the setup script is running again or failed", () => {
+  it("says nothing once ready, unless the setup script is running or failed", () => {
     expect(workspaceStart(ready).brief).toBeNull();
     expect(workspaceStart({ ...ready, kind: "cloud" }).brief).toBeNull();
     expect(workspaceStart({ ...ready, setup_status: "completed" }).brief).toBeNull();

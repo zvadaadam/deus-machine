@@ -2,7 +2,7 @@
 
 import path from "path";
 import fs from "fs";
-import os from "os";
+import { setupFile } from "../services/setup-status";
 import * as api from "@shared/api/workspaces";
 import type { ParsedInputOf } from "@shared/api/op";
 import { uuidv7 } from "@shared/lib/uuid";
@@ -95,7 +95,7 @@ async function createWorkspace(
 /**
  * A workspace on this computer: the row now, everything slow in the
  * background. The pipeline (services/workspace-init) fetches origin, makes
- * the worktree, runs setup and opens the first chat, under the id minted
+ * the worktree and opens the first chat alongside setup, under the id minted
  * here (`first_session_id`); each stage and any failure reaches clients on
  * `workspaces`, and a failure can be retried on this same row. `startedBy`
  * is who started it when not the person; `admit`, run synchronously right
@@ -201,7 +201,7 @@ export default [
     const { workspace } = loadWorkspace(workspaceId);
     try {
       return {
-        logs: fs.readFileSync(path.join(os.tmpdir(), `deus-${workspace.id}-setup.log`), "utf8"),
+        logs: fs.readFileSync(setupFile(workspace.id, "log"), "utf8"),
       };
     } catch {
       return { logs: null };
@@ -256,6 +256,8 @@ export default [
     if (workspace.kind === "cloud") {
       throw new ValidationError("Prepare the cloud environment in a new workspace.");
     }
+    if (workspace.state !== "ready")
+      throw new ValidationError("Setup can only be retried in a ready workspace.");
     if (workspace.setup_status !== "failed") {
       throw new ValidationError("Setup is not in a failed state.");
     }

@@ -184,7 +184,7 @@ function message(sessionId: string, turnId: string, role: string, text: string, 
     .run(`p-${id}`, id, sessionId, JSON.stringify({ id: `p-${id}`, type: "text", text }));
 }
 
-/** Setup ends as the pipeline ends it: the first chat opened under its minted id, the workspace ready. */
+/** Checkout finished and the workspace is ready with its first chat. */
 function ready(entry: { id: string; workspace: { id: string } }) {
   const w = state.db
     .prepare("SELECT started_by FROM workspaces WHERE id = ?")
@@ -322,6 +322,9 @@ describe("sending and starting", () => {
     };
     const entry = await host.start!(LEAD as never, input as never);
     expect(entry).toMatchObject({ status: "setting_up", startedBy: LEAD });
+    state.db
+      .prepare("UPDATE workspaces SET setup_status = 'running' WHERE id = ?")
+      .run(entry.workspace.id);
     ready(entry);
     await vi.waitFor(() => expect(state.sent.map((s) => s.input.turnId)).toEqual(["first-1"]));
 

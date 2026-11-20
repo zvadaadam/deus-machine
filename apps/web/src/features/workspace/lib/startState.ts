@@ -62,7 +62,7 @@ export interface WorkspaceStart {
 }
 
 /** The local pipeline's stages, in order (backend: services/workspace-init). */
-const STAGES = ["fetch", "worktree", "setup", "session"] as const;
+const STAGES = ["fetch", "worktree", "session"] as const;
 
 /** Why the workspace may be behind: it started without the remote's latest. */
 function fetchIssueNotice(issue: InitFetchIssue): string {
@@ -137,7 +137,9 @@ export function workspaceStart(workspace: StartFields): WorkspaceStart {
 
   // The stage being worked on; everything before it is done. A ready workspace
   // has passed them all, whatever its row says (older rows say "done").
-  const at = phase === "ready" ? STAGES.length : STAGES.indexOf(workspace.init_stage as never);
+  // An older host can still be waiting for setup after making the checkout.
+  const stage = workspace.init_stage === "setup" ? "session" : workspace.init_stage;
+  const at = phase === "ready" ? STAGES.length : STAGES.indexOf(stage as never);
   const reached = (stage: (typeof STAGES)[number]) => at > STAGES.indexOf(stage);
   const working = (stage: (typeof STAGES)[number]) =>
     phase === "starting" && at === STAGES.indexOf(stage);
@@ -194,7 +196,7 @@ export function workspaceStart(workspace: StartFields): WorkspaceStart {
     brief: match(phase)
       .with("failed", () => "Failed")
       .with("starting", () => active?.short ?? active?.label ?? "Starting…")
-      // Ready, but its setup script is running again, or failed.
+      // Setup can be running on the first turn or on a later retry.
       .with("ready", () =>
         active
           ? (active.short ?? active.label)

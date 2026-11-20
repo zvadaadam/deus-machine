@@ -24,7 +24,7 @@ const evidence = path.join(root, ".context/workspace-start");
 await mkdir(evidence, { recursive: true });
 const directory = await mkdtemp(path.join(evidence, "run-"));
 
-// ── A project with one commit, a setup script slow enough to watch, and two rows.
+// ── A project with one commit and two workspaces.
 const repo = path.join(directory, "project");
 await mkdir(path.join(repo, ".deus"), { recursive: true });
 const git = (...args) => execFileSync("git", args, { cwd: repo, stdio: "pipe" }).toString().trim();
@@ -34,7 +34,7 @@ git("config", "user.email", "journey@example.test");
 await writeFile(path.join(repo, "README.md"), "Workspace start journey\n");
 await writeFile(
   path.join(repo, ".deus/environment.json"),
-  JSON.stringify({ version: 1, setup: "sleep 1.5" })
+  JSON.stringify({ version: 1, setup: "echo ready" })
 );
 git("add", ".");
 git("commit", "-qm", "First commit");
@@ -58,7 +58,10 @@ gitLaunch("config", "user.email", "journey@example.test");
 await writeFile(path.join(launch, "README.md"), "Launch\n");
 await writeFile(
   path.join(launch, ".deus/environment.json"),
-  JSON.stringify({ version: 1, setup: "sleep 3" })
+  JSON.stringify({
+    version: 1,
+    setup: "touch setup-started; while [ ! -e finish-setup ]; do sleep 0.1; done",
+  })
 );
 gitLaunch("add", ".");
 gitLaunch("commit", "-qm", "First commit");
@@ -106,6 +109,7 @@ const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/serv
     PORT: "0",
     DEUS_USER_DATA_DIR: directory,
     DATABASE_PATH: path.join(directory, "deus.db"),
+    TMPDIR: directory,
     // Never the login Keychain, and git never climbs out of the run into this checkout.
     DEUS_VAULT_NO_KEYCHAIN: "1",
     GIT_CEILING_DIRECTORIES: directory,
@@ -377,11 +381,19 @@ try {
 
   // ── 4. Retry in place, watched from a second device.
   gitLaunch("branch", "develop");
+  // Git waits inside the checkout, before a chat exists. Setup has its own gate afterwards.
+  const hooks = path.join(launch, ".git", "hooks");
+  gitLaunch("config", "core.hooksPath", hooks);
+  await writeFile(
+    path.join(hooks, "post-checkout"),
+    '#!/bin/sh\ngate="$(git rev-parse --git-common-dir)/finish-checkout"\nwhile [ ! -e "$gate" ]; do sleep 0.1; done\n',
+    { mode: 0o755 }
+  );
   await panel(a).getByRole("button", { name: "Retry", exact: true }).click();
   // Stages reach every client over the WebSocket: the phone follows the desktop's retry.
   await Promise.all([
-    panel(a).getByText("Running setup…").waitFor(),
-    panel(b).getByText("Running setup…").waitFor(),
+    panel(a).getByText("Making a safe copy…").waitFor(),
+    panel(b).getByText("Making a safe copy…").waitFor(),
   ]);
   await waiting.getByText("Add a dark mode toggle to the settings page").waitFor();
   // One message waits per workspace: a second is refused in words and stays in the box.
@@ -402,6 +414,9 @@ try {
   });
   await watchBottom(a);
   await shot(a, "starting", 0);
+  assert.equal((await workspace(failing.id)).current_session_id, null);
+  assert.equal(sends("Add a dark mode toggle to the settings page"), 0);
+  await writeFile(path.join(launch, ".git", "finish-checkout"), "");
   const retried = await until("the retried workspace to be ready", async () => {
     const row = await workspace(failing.id);
     return row.state === "ready" ? row : null;
@@ -417,17 +432,26 @@ try {
     retried.git_branch
   );
   // The kept message is sent to the chat the retry opened.
-  await until("the kept message to be sent", () =>
-    sent.some(
-      (frame) =>
-        frame.includes('"sendMessage"') &&
-        frame.includes("Add a dark mode toggle to the settings page")
-    )
+  await until("the kept message to be sent to the first chat", () =>
+    sent.some((raw) => {
+      const { action, params } = JSON.parse(raw);
+      return (
+        action === "sendMessage" &&
+        params.sessionId === retried.current_session_id &&
+        params.content === "Add a dark mode toggle to the settings page"
+      );
+    })
   );
   await until("the sent message to stop waiting", () =>
     a.evaluate((id) => !window.pendingFirstMessages.get(id), failing.id)
   );
   const handover = await readBottom(a);
+  const checkoutPath = path.join(launch, ".deus", retried.slug);
+  await until("the setup script to start", () =>
+    existsSync(path.join(checkoutPath, "setup-started"))
+  );
+  const setupAtFirstSend = (await workspace(failing.id)).setup_status;
+  assert.equal(setupAtFirstSend, "running", "the first send is made before setup can finish");
   // What was typed on the start page is in the chat's composer, which sits where it sat.
   // (This backend refuses the send, so the kept message comes back ahead of it.)
   await until(
@@ -449,6 +473,8 @@ try {
   // The chat it started with opens with how it started: one line, its steps folded under it.
   await startLine(a).waitFor();
   await startLine(a).getByRole("button").first().click();
+  await startLine(a).getByText("Running setup…").waitFor();
+  await writeFile(path.join(checkoutPath, "finish-setup"), "");
   await startLine(a).getByText("Ran setup").waitFor();
   await shot(a, "started");
   await a.waitForTimeout(1000);
@@ -463,8 +489,8 @@ try {
   );
   assert.equal((await workspace(failing.id)).state, "ready");
   check(
-    "Retry starts the same workspace again, both clients follow it, the kept message is sent once, a second is refused and moves to the chat, and the chat opens with the start",
-    { composer: { start: startBox, chat: chatBox }, handover }
+    "Both clients follow the retry through checkout. The first chat receives its message while setup runs, keeps the second draft and shows setup finish.",
+    { setupAtFirstSend, composer: { start: startBox, chat: chatBox }, handover }
   );
 
   // ── 5. The remote cannot be reached: the workspace still starts, and its chat says it may be behind.
@@ -680,7 +706,29 @@ try {
     "The setup script failed, so this workspace started without it. Setup exited with code 1.\nChecking tools\nMissing <b>clang</b>"
   );
   await startLine(a).screenshot({ path: path.join(evidence, "setup-warning.png") });
-  check("A failed setup opens the chat with the last two log lines visible as plain text");
+  const failedRow = await workspace(failedSetup.id);
+  const failedCheckout = checkout(failedRow.slug);
+  await writeFile(
+    path.join(failedCheckout, ".deus/environment.json"),
+    JSON.stringify({ version: 1, setup: "echo repaired" })
+  );
+  const retrySetup = a
+    .locator('[data-slot="workspace-header"] button')
+    .filter({ has: a.locator(".lucide-rotate-cw") });
+  await retrySetup.hover();
+  await a.getByRole("tooltip", { name: "Retry setup" }).waitFor();
+  await retrySetup.click();
+  await until(
+    "the repaired setup to finish",
+    async () => (await workspace(failedSetup.id)).setup_status === "completed"
+  );
+  const repaired = await workspace(failedSetup.id);
+  assert.equal(repaired.current_session_id, failedRow.current_session_id);
+  assert.equal(repaired.error_detail, null);
+  await warning.waitFor({ state: "hidden" });
+  check(
+    "A failed setup shows its last two lines as plain text. Retrying the edited recipe from the header clears the warning in the same chat."
+  );
 
   assert.deepEqual(errors, []);
   report.errors = errors;

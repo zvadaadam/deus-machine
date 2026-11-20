@@ -7,9 +7,8 @@
  *             the workspace starts from the copy already on this computer, and
  *             the row says why (`init_fetch_issue`).
  *   worktree  `git worktree add` on a new branch. Fatal.
- *   setup     the project's setup script. Never fatal: it reports through
- *             `setup_status` and can be run again on its own.
  *   session   the first chat, and `state = 'ready'`. Fatal.
+ * The project's setup runs alongside the first turn and reports through setup_status.
  *
  * Each stage writes its name to `init_stage` and pushes the workspace list, so
  * the desktop, the web app and a phone all follow the same progress.
@@ -31,17 +30,18 @@ import { ConflictError, NotFoundError } from "../lib/errors";
 import { GitError, runGit } from "../lib/git-process";
 import { processGroupsStopped } from "../lib/process-groups";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
-import { prepareLocalEnvironment } from "./project-environment.service";
+import { prepareLocalEnvironment, stopWorkspaceSetup } from "./project-environment.service";
+import { SETUP_INTERRUPTED, setSetupStatus } from "./setup-status";
 import { invalidate } from "./query-engine";
 import { generateUniqueName } from "./workspace.service";
 
 const FETCH_TIMEOUT_MS = 30_000;
 const WORKTREE_TIMEOUT_MS = 120_000;
 
-type Stage = "fetch" | "worktree" | "setup" | "session";
+type Stage = "fetch" | "worktree" | "session";
 
 /** From these stages on, the folder and branch under the workspace's name are the attempt's own. */
-const OWNS_WORKTREE: ReadonlySet<string> = new Set<Stage>(["worktree", "setup", "session"]);
+const OWNS_WORKTREE: ReadonlySet<string> = new Set(["worktree", "session", "setup"]); // Older interrupted starts can be in setup.
 
 export interface InitContext {
   workspaceId: string;
@@ -123,7 +123,7 @@ async function claimName(ctx: InitContext): Promise<InitContext> {
 
 // ─── Stages ─────────────────────────────────────────────────────
 
-function setStage(workspaceId: string, stage: Stage | "done"): void {
+function setStage(workspaceId: string, stage: Stage): void {
   try {
     getDatabase()
       .prepare("UPDATE workspaces SET init_stage = ? WHERE id = ?")
@@ -297,7 +297,7 @@ function openFirstSession(workspaceId: string): boolean {
       "INSERT INTO sessions (id, workspace_id, status, started_by, updated_at) VALUES (?, ?, 'idle', ?, datetime('now'))"
     ).run(sessionId, workspaceId, row.started_by);
     db.prepare(
-      "UPDATE workspaces SET state = 'ready', current_session_id = ?, first_session_id = ? WHERE id = ?"
+      "UPDATE workspaces SET state = 'ready', init_stage = 'done', current_session_id = ?, first_session_id = ? WHERE id = ?"
     ).run(sessionId, sessionId, workspaceId);
     return true;
   })();
@@ -347,7 +347,7 @@ function failWorkspace(workspaceId: string, stage: string, failure: Failure): vo
   getDatabase()
     .prepare(
       `UPDATE workspaces
-       SET state = 'error', init_stage = ?, setup_status = 'none', error_message = ?, error_detail = ?
+       SET state = 'error', init_stage = ?, error_message = ?, error_detail = ?
        WHERE id = ?`
     )
     .run(stage, failure.message, failure.detail, workspaceId);
@@ -376,20 +376,15 @@ export async function initializeWorkspace(initial: InitContext): Promise<void> {
     setStage(ctx.workspaceId, stage);
     await createWorktree(ctx, source.base);
 
-    // Setup reports its own failure and can be run again; the agent can work
-    // in the checkout, or repair it, either way.
-    stage = "setup";
-    setStage(ctx.workspaceId, stage);
-    await prepareLocalEnvironment(ctx.workspaceId, ctx.workspacePath, ctx.repoOriginUrl).catch(
-      (err) => console.warn(`[WORKSPACE] Setup for ${ctx.workspaceId} failed:`, err)
-    );
-    // Deus is closing and stopped the setup (which records that, not throws):
-    // open no chat now. The next start fails the row as interrupted.
     if (processGroupsStopped()) return;
-
     stage = "session";
     setStage(ctx.workspaceId, stage);
-    if (openFirstSession(ctx.workspaceId)) setStage(ctx.workspaceId, "done");
+    if (openFirstSession(ctx.workspaceId)) {
+      // Marks setup running synchronously, before a ready observer can send the first task.
+      void prepareLocalEnvironment(ctx.workspaceId, ctx.workspacePath, ctx.repoOriginUrl).catch(
+        (err) => console.warn(`[WORKSPACE] Setup for ${ctx.workspaceId} failed:`, err)
+      );
+    }
     invalidate(["workspaces", "sessions"]);
   } catch (err) {
     // Deus is closing and stopped what this was running: the row stays as it
@@ -422,6 +417,7 @@ interface StartRow {
   git_source_branch: string | null;
   git_target_branch: string | null;
   init_stage: string | null;
+  setup_status: string;
   provider_workspace_id: string | null;
   current_session_id: string | null;
   root_path: string | null;
@@ -431,7 +427,7 @@ interface StartRow {
 
 const START_ROW = `
   SELECT w.id, w.kind, w.state, w.slug, w.git_branch, w.git_source_branch, w.git_target_branch,
-         w.init_stage, w.provider_workspace_id, w.current_session_id,
+         w.init_stage, w.setup_status, w.provider_workspace_id, w.current_session_id,
          r.root_path, r.git_default_branch, r.git_origin_url
   FROM workspaces w LEFT JOIN repositories r ON r.id = w.repository_id`;
 
@@ -445,12 +441,13 @@ export function retryWorkspaceInit(workspaceId: string): void {
   const claimed = db
     .prepare(
       `UPDATE workspaces
-       SET state = 'initializing', init_stage = NULL, setup_status = 'none',
+       SET state = 'initializing', init_stage = NULL,
            error_message = NULL, error_detail = NULL, init_fetch_issue = NULL
        WHERE id = ? AND state = 'error' AND kind = 'worktree'`
     )
     .run(workspaceId);
   if (claimed.changes === 0) throw new ConflictError("This workspace is not waiting for a retry.");
+  if (row.setup_status !== "none") setSetupStatus(workspaceId, "none");
   invalidate(["workspaces"]);
   void initializeWorkspace({
     workspaceId,
@@ -468,7 +465,7 @@ export function retryWorkspaceInit(workspaceId: string): void {
  * instead: deleting it would take its chats with it. A cloud workspace whose
  * computer exists is the platform's to remove, so it is archived too.
  */
-export function deleteFailedWorkspace(workspaceId: string): void {
+export function deleteFailedWorkspace(workspaceId: string): void | Promise<void> {
   const db = getDatabase();
   const row = db.prepare(`${START_ROW} WHERE w.id = ?`).get(workspaceId) as StartRow | undefined;
   if (!row) throw new NotFoundError("Workspace not found");
@@ -482,8 +479,10 @@ export function deleteFailedWorkspace(workspaceId: string): void {
   if (used) throw new ConflictError("This workspace has chats. Archive it instead.");
   // Its sessions go with it (ON DELETE CASCADE). The failed attempt already
   // removed its folder and branch.
+  const stopped = stopWorkspaceSetup(workspaceId, "deleted");
   db.prepare("DELETE FROM workspaces WHERE id = ? AND state = 'error'").run(workspaceId);
   invalidate(["workspaces", "sessions"]);
+  return stopped;
 }
 
 /**
@@ -497,6 +496,12 @@ export function deleteFailedWorkspace(workspaceId: string): void {
  */
 export function failInterruptedWorkspaces(): number {
   const db = getDatabase();
+  const interrupted = db
+    .prepare("SELECT id FROM workspaces WHERE setup_status = 'running'")
+    .all() as { id: string }[];
+  for (const row of interrupted) {
+    setSetupStatus(row.id, "failed", { message: SETUP_INTERRUPTED });
+  }
   const rows = db.prepare(`${START_ROW} WHERE w.state = 'initializing'`).all() as StartRow[];
   let failed = 0;
   for (const row of rows) {
@@ -515,10 +520,5 @@ export function failInterruptedWorkspaces(): number {
       );
     }
   }
-  db.prepare(
-    `UPDATE workspaces
-     SET setup_status = 'failed', error_message = 'Setup was stopped when Deus closed. Run it again.'
-     WHERE setup_status = 'running'`
-  ).run();
   return failed;
 }

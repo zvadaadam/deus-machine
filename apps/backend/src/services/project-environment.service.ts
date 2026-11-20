@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import { spawn, execFileSync } from "node:child_process";
 import { parseEnv, stripVTControlCharacters } from "node:util";
 import {
@@ -19,7 +18,8 @@ import { processGroupsStopped, trackProcessGroup } from "../lib/process-groups";
 import { cloudAccount, cloudOrg, requireCloudOrg } from "./agent/cloud/config";
 import { getCloudEnvironmentInfo } from "./cloud-environment.service";
 import { createBackendChildEnv } from "@shared/lib/child-env";
-import { invalidate } from "./query-engine";
+import { SETUP_INTERRUPTED, setSetupStatus, setupFile } from "./setup-status";
+import type { WorkspaceSetup } from "./agent/workspace-context";
 import type { WorkspaceWithDetailsRow } from "../db";
 
 function environmentFile(directory: string): string {
@@ -148,51 +148,115 @@ export function localProjectEnv(project: ProjectEnvironment, directory: string):
   return env;
 }
 
+interface SetupRun {
+  controller: AbortController;
+  command?: string;
+  process?: Promise<void>;
+}
+const runs = new Map<string, SetupRun>();
+
+/** A local turn's briefing. Only a failed setup needs to resolve the current retry command. */
+export async function setupForTurn(
+  sessionId: string,
+  directory: string
+): Promise<WorkspaceSetup | null> {
+  const query = getDatabase().prepare(`
+    SELECT w.id, w.setup_status, w.error_message, w.error_detail, r.git_origin_url
+    FROM sessions s JOIN workspaces w ON w.id = s.workspace_id
+    JOIN repositories r ON r.id = w.repository_id
+    WHERE s.id = ? AND w.kind = 'worktree' AND w.setup_status IN ('running', 'failed')`);
+  const read = () =>
+    query.get(sessionId) as
+      | Pick<
+          WorkspaceWithDetailsRow,
+          "id" | "setup_status" | "error_message" | "error_detail" | "git_origin_url"
+        >
+      | undefined;
+  let row = read();
+  let command: string | undefined;
+  if (row?.setup_status === "failed") {
+    const current = await readLocalProjectEnvironment(directory, row.git_origin_url).catch(
+      () => null
+    );
+    if (current?.project)
+      command = resolveProjectEnvironment(current.project, "local").setup ?? undefined;
+    // A retry may have started or finished while looking up the saved recipe.
+    row = read();
+  }
+  if (!row) return null;
+  if (row.setup_status === "running") {
+    return {
+      state: "running",
+      command: runs.get(row.id)?.command,
+      log: setupFile(row.id, "log"),
+      statusFile: setupFile(row.id, "status"),
+    };
+  }
+  return {
+    state: "failed",
+    reason: row.error_message ?? "The setup did not finish.",
+    detail: row.error_detail,
+    command,
+  };
+}
+
+export function stopWorkspaceSetup(workspaceId: string, action: "archived" | "deleted") {
+  const run = runs.get(workspaceId);
+  if (!run) return;
+  const reason = new Error(`Setup was stopped when the workspace was ${action}.`);
+  run.controller.abort(reason);
+  runs.delete(workspaceId);
+  setSetupStatus(workspaceId, "failed", reason);
+  return run.process?.catch(() => {});
+}
+
 /** One setup runner for initial preparation and an explicit retry. No implicit installs or Git resets. */
 export async function prepareLocalEnvironment(
   workspaceId: string,
   directory: string,
   repoUrl?: string | null
 ): Promise<void> {
-  const db = getDatabase();
-  db.prepare(
-    "UPDATE workspaces SET setup_status = 'running', error_message = NULL, error_detail = NULL WHERE id = ?"
-  ).run(workspaceId);
-  invalidate(["workspaces"]);
+  if (runs.has(workspaceId)) return;
+  const run: SetupRun = { controller: new AbortController() };
+  runs.set(workspaceId, run);
+  const { signal } = run.controller;
   try {
+    setSetupStatus(workspaceId, "running");
     const { project } = await readLocalProjectEnvironment(directory, repoUrl);
-    if (!project) {
-      db.prepare("UPDATE workspaces SET setup_status = 'none' WHERE id = ?").run(workspaceId);
-      return;
+    signal.throwIfAborted();
+    if (project) {
+      const recipe = resolveProjectEnvironment(project, "local");
+      const env = localProjectEnv(project, directory);
+      const missing = missingEnvironmentVariables(recipe.requiredEnv, env);
+      if (missing.length)
+        throw new Error(`Add the missing local environment variables: ${missing.join(", ")}`);
+      if (recipe.setup) {
+        run.command = recipe.setup;
+        run.process = runSetupCommand(workspaceId, recipe.setup, directory, env, signal);
+        await run.process;
+      }
     }
-    const recipe = resolveProjectEnvironment(project, "local");
-    const env = localProjectEnv(project, directory);
-    const missing = missingEnvironmentVariables(recipe.requiredEnv, env);
-    if (missing.length)
-      throw new Error(`Add the missing local environment variables: ${missing.join(", ")}`);
-    if (recipe.setup) await runSetupCommand(workspaceId, recipe.setup, directory, env);
-    db.prepare(
-      "UPDATE workspaces SET setup_status = 'completed', error_message = NULL WHERE id = ?"
-    ).run(workspaceId);
+    if (!signal.aborted) setSetupStatus(workspaceId, run.command ? "completed" : "none");
   } catch (error) {
-    db.prepare(
-      "UPDATE workspaces SET setup_status = 'failed', error_message = ?, error_detail = ? WHERE id = ?"
-    ).run(
-      (error as Error).message,
-      error instanceof SetupExitError ? error.detail : null,
-      workspaceId
-    );
+    if (!signal.aborted) {
+      runs.delete(workspaceId);
+      setSetupStatus(
+        workspaceId,
+        "failed",
+        processGroupsStopped() ? { message: SETUP_INTERRUPTED } : (error as Error)
+      );
+    }
   } finally {
-    invalidate(["workspaces"]);
+    if (runs.get(workspaceId) === run) runs.delete(workspaceId);
   }
 }
 
 class SetupExitError extends Error {
   constructor(
-    code: number | null,
+    readonly exitCode: number | null,
     readonly detail: string | null
   ) {
-    super(`Setup exited with code ${code}.${detail ? "" : " View the setup log for details."}`);
+    super(`Setup exited with code ${exitCode}.${detail ? "" : " View the setup log for details."}`);
   }
 }
 
@@ -217,9 +281,10 @@ export async function runSetupCommand(
   workspaceId: string,
   command: string,
   directory: string,
-  env: NodeJS.ProcessEnv
+  env: NodeJS.ProcessEnv,
+  signal?: AbortSignal
 ): Promise<void> {
-  const logPath = path.join(os.tmpdir(), `deus-${workspaceId}-setup.log`);
+  const logPath = setupFile(workspaceId, "log");
   const exitCode = await new Promise<number | null>((resolve, reject) => {
     if (processGroupsStopped()) {
       reject(new Error("Deus is closing."));
@@ -245,6 +310,7 @@ export async function runSetupCommand(
         }
       }
     };
+    signal?.addEventListener("abort", killProcessGroup, { once: true });
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
@@ -254,6 +320,7 @@ export async function runSetupCommand(
     const finish = (result: Error | number | null) => {
       if (finished) return;
       finished = true;
+      signal?.removeEventListener("abort", killProcessGroup);
       untrack();
       clearTimeout(timer);
       if (result instanceof Error) {
@@ -267,9 +334,8 @@ export async function runSetupCommand(
       finish(error);
     });
     child.once("close", (code) => {
-      if (code === 0 && !timedOut) return finish(0);
-      if (processGroupsStopped())
-        return finish(new Error("Setup was stopped when Deus closed. Run it again."));
+      if (signal?.aborted) return finish(signal.reason);
+      if (processGroupsStopped()) return finish(new Error(SETUP_INTERRUPTED));
       if (timedOut) return finish(new Error("Setup timed out after five minutes."));
       finish(code);
     });
