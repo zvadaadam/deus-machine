@@ -365,7 +365,12 @@ export function BrowserConsoleMessagesToolRenderer({ toolUse, toolResult }: Tool
 
 export function BrowserScreenshotToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const image = toolResult ? extractImage(toolResult.content) : null;
-  const text = toolResult ? extractText(toolResult.content) : "";
+  // Claude Code (2.1.327) adds where it saved the picture: the card shows the tool's own words.
+  const text = toolResult
+    ? extractText(toolResult.content)
+        .replace(/\[Image: source: [^\]]*\]\s*/g, "")
+        .trim()
+    : "";
 
   return (
     <BaseToolRenderer
