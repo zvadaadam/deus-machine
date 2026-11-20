@@ -837,6 +837,7 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
       lists: [
         {
           harness: "claude-code",
+          source: "live",
           models: [
             {
               id: "opus",
@@ -895,6 +896,59 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
       )
     ).resolves.toMatchObject({ workspace: { name: "lead" } });
     expect(state.sent.at(-1)).toMatchObject({ input: { model: "opus", thinkingLevel: "low" } });
+    // `off` is never judged: Claude takes it as no extended thinking on any model.
+    for (const model of ["opus", "haiku"])
+      await expect(
+        host.start!(
+          LEAD as never,
+          startInput({ workspace: { id: "w-lead", name: "lead" }, model, thinkingLevel: "off" })
+        )
+      ).resolves.toMatchObject({ workspace: { name: "lead" } });
+    expect(state.sent.at(-1)).toMatchObject({ input: { model: "haiku", thinkingLevel: "off" } });
+  });
+
+  it("a level is judged only by a list this computer's CLI gave: a catalog with models is not", async () => {
+    const host = createDeusHost();
+    const lists = (claude: "live" | "catalog") => ({
+      lists: [
+        {
+          harness: "claude-code",
+          source: claude,
+          models: [
+            { id: "opus", harness: "claude-code", label: "Opus", thinking: { levels: ["high"] } },
+          ],
+        },
+        {
+          harness: "codex-app-server",
+          source: claude === "live" ? "catalog" : "live",
+          models: [
+            {
+              id: "gpt-5",
+              harness: "codex-app-server",
+              label: "GPT-5",
+              thinking: { levels: ["high"] },
+            },
+          ],
+        },
+      ],
+    });
+    const start = () =>
+      host.start!(
+        LEAD as never,
+        startInput({
+          workspace: { id: "w-lead", name: "lead" },
+          model: "opus",
+          thinkingLevel: "max",
+        })
+      );
+    // Claude's CLI did not answer (its catalog, with models), Codex's did: not judged.
+    state.ops.agentModels = () => lists("catalog");
+    await expect(start()).resolves.toMatchObject({ workspace: { name: "lead" } });
+    state.ops.agentModels = () => lists("live");
+    await expect(start()).rejects.toMatchObject({
+      message:
+        'refused (invalid_input): start_session: thinking: "max" is not a level opus offers; its levels are "high". Nothing was started.',
+    });
   });
 
   it("H15: a model the agent does not offer here makes no chat", async () => {

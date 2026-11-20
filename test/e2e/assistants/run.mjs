@@ -620,6 +620,7 @@ try {
     ["send_message", { session: "voyager:1", message: "Ship it." }],
     ["start_session", { project: "Remote test", workspace: "quarry", message: "Look around." }],
     ["add_project", { repository: "octocat/hello-world" }],
+    ["answer_request", { session: "voyager:1", answer: "approve" }],
   ]) {
     const answer = await chatgpt.call(tool, args);
     assert.equal(answer.isError, true, `${tool}: ${answer.text}`);
@@ -641,7 +642,7 @@ try {
     { whoami: who, list, read, wait: waitedRead }
   );
   check(
-    "Read only: every tool that changes something (archive, stop_sessions, send_message, start_session, add_project) is refused with the access refusal and the read-only sentence, and nothing changed",
+    "Read only: every tool that changes something (archive, stop_sessions, send_message, start_session, add_project, answer_request) is refused with the access refusal and the read-only sentence, and nothing changed",
     writes
   );
   check(
@@ -759,6 +760,22 @@ try {
   assert.match(listArchived, /harbor:1 +archived/);
   const stopIdle = ok(await chatgpt.call("stop_sessions", { sessions: ["voyager:1", "atlas:1"] }));
   assert.equal(stopIdle, '- "voyager:1": nothing was running\n- "atlas:1": nothing was running');
+  // answer_request where nothing waits on an answer: refused, nothing sent.
+  const noRequest = await chatgpt.call("answer_request", {
+    session: "voyager:1",
+    answer: "approve",
+  });
+  assert.equal(noRequest.isError, true, noRequest.text);
+  assert.equal(
+    noRequest.text,
+    'refused (not_waiting): "voyager:1" is not waiting on that request (status: idle). Nothing was sent.\n  -> send_message(session: "voyager:1", message: "<your answer>")'
+  );
+  const namedRequest = await chatgpt.call("answer_request", {
+    session: "voyager:1",
+    request: "req-e2e-1",
+    answer: "approve",
+  });
+  assert.equal(namedRequest.text, noRequest.text);
   const secretOperate = await chatgpt.call("read_changes", { session: "voyager:1", file: ".env" });
   assert.equal(secretOperate.isError, true, secretOperate.text);
   assert(!secretOperate.text.includes("sk_live"), "no content of an unchanged file");
@@ -774,8 +791,8 @@ try {
   );
   assert.doesNotMatch(unknown.text, /nimbus|harbor/);
   check(
-    "Raised to Operate: archive archives a workspace by its name and another by its id (each checked in the computer's database), and they leave the list (status archived lists them); stop_sessions on two idle chats says for each that nothing was running; an unknown session is refused with the known ones (not the archived or cloud ones)",
-    { archived, archivedById, stop: stopIdle, unknown: unknown.text }
+    "Raised to Operate: archive archives a workspace by its name and another by its id (each checked in the computer's database), and they leave the list (status archived lists them); stop_sessions on two idle chats says for each that nothing was running; answer_request on a chat that waits on nothing is refused (not_waiting), with or without a request id, and suggests send_message; an unknown session is refused with the known ones (not the archived or cloud ones)",
+    { archived, archivedById, stop: stopIdle, unknown: unknown.text, answer: noRequest.text }
   );
   check(
     "Operate: read_changes on the unchanged .env is still refused with none of its content, while a changed file's diff is shown as quoted lines",
@@ -839,9 +856,12 @@ try {
     ["stop by id", "stop_sessions", { sessions: [seeded.nimbus.sessionId] }],
     ["archive by id", "archive", { workspaces: [seeded.nimbus.sessionId] }],
     ["archive the chat by id", "archive", { sessions: [seeded.nimbus.sessionId] }],
+    ["archive by its workspace's id", "archive", { workspaces: [seeded.nimbus.workspaceId] }],
   ]) {
     const answer = await chatgpt.call(tool, args);
     assert.equal(answer.isError, true, `${what}: ${answer.text}`);
+    // Not found, so no other guard (a person's chat, a workspace's last) answers for it.
+    assert.match(answer.text, /refused \(not_found\): No session, workspace or project /, what);
     assert.doesNotMatch(answer.text, /Refactor the checkout|Cloud refactor/, what);
     nimbusRefusals[what] = answer.text;
   }
@@ -855,6 +875,11 @@ try {
       .n,
     1,
     "nothing was started in the cloud workspace"
+  );
+  assert.equal(
+    readDb("SELECT is_hidden FROM sessions WHERE id = ?", seeded.nimbus.sessionId).is_hidden,
+    0,
+    "the cloud chat was not put away"
   );
   assert.equal(
     readDb("SELECT state FROM workspaces WHERE id = ?", seeded.nimbus.workspaceId).state,

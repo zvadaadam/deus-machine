@@ -743,18 +743,22 @@ export function createDeusHost(): DeusHost {
         const { agentHarness, model } = settingsFor(input);
         if (input.model || input.thinkingLevel) {
           const lists = await run(agentModels, {}).then((answer) => answer.lists);
-          const live = lists.some((l) => l.harness === agentHarness && l.models.length);
-          if (input.model && !findModel(live ? lists : CATALOG_MODEL_LISTS, agentHarness, model))
+          const own = lists.find((l) => l.harness === agentHarness);
+          const known = own?.models.length ? lists : CATALOG_MODEL_LISTS;
+          if (input.model && !findModel(known, agentHarness, model))
             throw new OperatorError(
               "invalid_input",
               `start_session: model: ${JSON.stringify(input.model)} is not one ${agentHarness} offers here; list_models names them. Nothing was started.`
             );
-          // Levels are checked against this computer's own list only: the catalog's are provisional.
-          const levels = live
-            ? findModel(lists, agentHarness, model)?.row.thinking.levels
-            : undefined;
+          // Levels are judged only by what this computer's CLI listed: a catalog's are
+          // provisional. `off` is never judged: Claude reads it as no extended thinking
+          // on any model, though its rows list only effort levels.
+          const levels =
+            own?.source === "live"
+              ? findModel(lists, agentHarness, model)?.row.thinking.levels
+              : undefined;
           const level = input.thinkingLevel;
-          if (level && levels && !levels.includes(level) && !(level === "off" && !levels.length))
+          if (level && level !== "off" && levels && !levels.includes(level))
             throw new OperatorError(
               "invalid_input",
               `start_session: thinking: ${JSON.stringify(level)} is not a level ${model} offers; ${levels.length ? `its levels are ${levels.map((l) => JSON.stringify(l)).join(", ")}` : "it has no thinking levels"}. Nothing was started.`

@@ -346,7 +346,7 @@ takes about 13 seconds with the Postgres image pulled. It checks, in order:
   its name, how each turn ended), the same by reference and by id;
   `wait_for_sessions` on two settled chats answers at once; `read_changes`
   lists the changed file. `archive`, `stop_sessions`, `send_message`,
-  `start_session` and `add_project` are refused with the read-only sentence,
+  `start_session`, `add_project` and `answer_request` are refused with the read-only sentence,
   and nothing changes.
 - `read_changes` on a file that is not on the changed list (a seeded `.env`) is
   refused, showing none of its content, for a read-only and an operate assistant.
@@ -360,14 +360,16 @@ takes about 13 seconds with the Postgres image pulled. It checks, in order:
   that the computer ended the connection because the access changed.
 - Operate: `archive` archives one workspace by name and another by id (checked
   in the database) and they leave the list (`status: ["archived"]` lists them);
-  `stop_sessions` on two idle chats says nothing was running for each; an
+  `stop_sessions` on two idle chats says nothing was running for each;
+  `answer_request` on a chat that waits on nothing is refused (`not_waiting`); an
   unknown session is refused with the known ones, never an archived or cloud one.
 - An archived workspace: a message to its chat and a start in it are refused as
   archived, and archiving it again says it already is.
 - A cloud workspace seeded in the computer's database (its own window lists it)
   is not in an assistant's list, is not found by name, `name:1`,
   `project/name`, chat id or workspace id, and cannot be read, waited on, sent
-  to, started in, stopped or archived.
+  to, started in, stopped or archived: each is refused `not_found`, and its chat
+  is not put away.
 - `archive` of one chat: a chat another chat started is put away (`is_hidden`,
   the workspace's current chat moves) and then takes no message; a chat the
   person started, and a workspace's only chat, are refused in words that say
