@@ -19,7 +19,6 @@ import { useGlobalSessionNotifications } from "@/features/session/hooks/useGloba
 import { useAgentEvents } from "@/features/session/hooks/useAgentEvents";
 import { useQueryProtocol } from "@/shared/hooks/useQueryProtocol";
 import { useBackendRestart } from "@/shared/hooks/useBackendRestart";
-import { useAnalyticsConsent } from "@/platform/analytics";
 import { useSettings } from "@/features/settings";
 import {
   useAuth,
@@ -129,7 +128,6 @@ function ServerContent() {
   useAgentEvents();
 
   useBackendRestart();
-  useAnalyticsConsent();
 
   // While settings load, show a loading state
   if (settingsQuery.isLoading) {

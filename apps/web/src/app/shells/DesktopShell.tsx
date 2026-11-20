@@ -23,7 +23,6 @@ import { useAgentEvents } from "@/features/session/hooks/useAgentEvents";
 import { useQueryProtocol } from "@/shared/hooks/useQueryProtocol";
 import { useBackendRestart } from "@/shared/hooks/useBackendRestart";
 import { useAutoUpdate, useUpdateToast, UpdateProvider } from "@/features/updates";
-import { useAnalyticsConsent } from "@/platform/analytics";
 export function DesktopShell({ reset }: { reset: () => void }) {
   // First, so the socket is already opening when the queries below fire their
   // first requests (they wait for it rather than fail into a retry).
@@ -44,9 +43,6 @@ export function DesktopShell({ reset }: { reset: () => void }) {
 
   // Global listener: backend restart -> update cached port + force WS reconnect
   useBackendRestart();
-
-  // Sync PostHog opt-in/out state with analytics_enabled setting
-  useAnalyticsConsent();
 
   // Electron owns the update schedule. Its staged update survives renderer reloads.
   const autoUpdate = useAutoUpdate();

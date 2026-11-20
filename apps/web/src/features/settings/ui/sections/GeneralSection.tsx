@@ -20,7 +20,7 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { RotateCcw, Loader2, RefreshCw, CheckCircle2, AlertCircle, Download } from "lucide-react";
 import { useUIStore } from "@/shared/stores/uiStore";
-import { setAnalyticsEnabled } from "@/platform/analytics";
+import { stopAnalytics } from "@/platform/analytics";
 import { capabilities } from "@/platform";
 import { releaseUrl, useUpdateContext } from "@/features/updates";
 import type { GeneralSectionProps } from "./types";
@@ -149,9 +149,8 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
           id="analytics-toggle"
           checked={settings.analytics_enabled !== false}
           onCheckedChange={async (checked) => {
-            setAnalyticsEnabled(checked);
-            const ok = await saveSetting("analytics_enabled", checked);
-            if (!ok) setAnalyticsEnabled(!checked);
+            if (!checked) stopAnalytics();
+            await saveSetting("analytics_enabled", checked);
           }}
         />
       </div>
