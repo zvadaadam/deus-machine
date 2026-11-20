@@ -10,7 +10,7 @@ describe("appServerName", () => {
 
   it("keeps the app's id on Claude, apart from the names Claude keeps for itself", () => {
     expect(appServerName("context7", "claude-code")).toBe("context7");
-    expect(appServerName("deus", "claude-code")).toBe("deus");
+    expect(appServerName("deus", "claude-code")).toBe("app_deus");
     expect(appServerName("computer", "claude-code")).toBe("app_computer");
   });
 });

@@ -9,8 +9,8 @@
 
 import type { AgentHarness } from "./enums";
 
-/** Names Claude's harness keeps for its own servers. */
-const RESERVED = new Set(["computer"]);
+/** Names an app's server may not take on Claude: the harness's own, and `deus`, which cards read as Deus's own tools. */
+const RESERVED = new Set(["computer", "deus"]);
 
 /** The name a turn on `harness` gives an installed app's server. */
 export function appServerName(appId: string, harness: AgentHarness): string {
