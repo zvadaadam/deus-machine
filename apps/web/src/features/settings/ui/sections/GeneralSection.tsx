@@ -240,7 +240,7 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
                         .
                       </>
                     ) : (
-                      "Deus couldn't check for updates."
+                      "Couldn't get the latest update. Deus will try again."
                     )}
                   </span>
                 </div>
