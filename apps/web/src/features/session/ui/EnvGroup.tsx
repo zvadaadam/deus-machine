@@ -1,16 +1,6 @@
-/**
- * The environment line in a transcript: what was set up for this chat to run
- * in, read like a tool row. While it runs, a shimmering title over a card of
- * the steps reached so far; once it settles fine, one quiet line whose steps
- * open on a click; when it fails, the title says so and the card stays open
- * with the reason and the ways out (`footer`). Warnings sit under the line,
- * always in view.
- *
- * Cloud provisioning (CloudEnvProgress) and a local workspace's start
- * (WorkspaceStartGroup) both render through it, so the two read alike.
- */
-import { useState, type ReactNode } from "react";
-import { AnimatePresence, m } from "framer-motion";
+/** The transcript's shared line for a local checkout or a cloud computer. */
+import { useId, useRef, useState, type ReactNode } from "react";
+import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import {
   ChevronRight,
   CircleCheck,
@@ -18,72 +8,126 @@ import {
   CloudOff,
   Laptop,
   Loader2,
+  RotateCcw,
   TriangleAlert,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import type { StartWarning } from "@/features/workspace/lib/startState";
 import { cn } from "@/shared/lib/utils";
 
 export interface EnvLine {
   key: string;
   label: string;
   icon: "done" | "active" | "warning" | "error";
+  warning?: StartWarning;
+  actions?: { retry: () => void; viewLog: () => void };
 }
 
-const ICON = "h-3.5 w-3.5 flex-shrink-0";
+const ICON = "size-3.5 shrink-0";
+const ROW = "flex min-h-7.5 items-center gap-2 pointer-coarse:min-h-11";
+const QUIET = "text-text-tertiary dark:text-text-secondary/80";
+const TRIGGER = "control-interaction rounded-lg text-left focus-visible:ring-text-secondary";
+// Keep the xs button's visible surface while filling its row's touch target.
+const ACTION =
+  "relative before:absolute before:inset-x-0 before:top-1/2 before:h-7.5 before:-translate-y-1/2 pointer-coarse:before:h-11";
 
-function StepRow({ line }: { line: EnvLine }) {
+/** Each warning owns its disclosure. Unmounting it on a retry closes just that warning. */
+function WarningRow({
+  line,
+  warning,
+  focusTitle,
+}: {
+  line: EnvLine;
+  warning: StartWarning;
+  focusTitle: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const { actions } = line;
   return (
-    <div
-      className={cn(
-        "flex items-center gap-2",
-        line.icon === "done" && "text-text-tertiary",
-        line.icon === "active" && "text-text-secondary",
-        line.icon === "warning" && "text-warning",
-        line.icon === "error" && "text-destructive/80"
-      )}
-      role={line.icon === "error" ? "alert" : undefined}
-    >
-      {line.icon === "done" && <CircleCheck className={cn(ICON, "text-text-muted")} />}
-      {line.icon === "active" && (
-        <Loader2 className={cn(ICON, "animate-spin motion-reduce:animate-none")} />
-      )}
-      {(line.icon === "warning" || line.icon === "error") && <TriangleAlert className={ICON} />}
-      <span className="min-w-0">{line.label}</span>
-    </div>
+    <>
+      <div className={ROW}>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={id}
+          onClick={() => setOpen(!open)}
+          className={cn(ROW, TRIGGER, QUIET, "hover:text-text-primary min-w-0")}
+        >
+          <TriangleAlert aria-hidden className={cn(ICON, "text-warning")} />
+          <span className="flex min-w-0 items-baseline gap-1">
+            <span className="shrink-0">{line.label}</span>
+            {warning.preview && (
+              <>
+                <span aria-hidden>·</span>
+                <samp className="min-w-0 truncate font-mono text-sm">{warning.preview}</samp>
+              </>
+            )}
+          </span>
+          <ChevronRight aria-hidden className={cn("size-3 shrink-0", open && "rotate-90")} />
+        </button>
+        {actions && (
+          <Button
+            type="button"
+            size="xs"
+            variant="secondary"
+            className={ACTION}
+            onClick={() => {
+              focusTitle();
+              actions.retry();
+            }}
+          >
+            <RotateCcw aria-hidden className="size-3" /> Run again
+          </Button>
+        )}
+      </div>
+      <div id={id} hidden={!open} className="text-text-secondary ms-5.5 mb-1">
+        <p className="text-base text-pretty wrap-anywhere select-text">{warning.message}</p>
+        {warning.output && (
+          <pre className="bg-bg-raised mt-1.5 rounded-sm px-2.5 py-1.5 font-mono text-sm wrap-anywhere whitespace-pre-wrap select-text">
+            <samp className="font-mono">{warning.output}</samp>
+          </pre>
+        )}
+        {actions && (
+          <div className={cn(ROW, "mt-0.5")}>
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              className={cn(ACTION, "ps-0")}
+              onClick={actions.viewLog}
+            >
+              View log
+            </Button>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
 interface EnvGroupProps {
   title: string;
-  /** Where it runs: the title's icon. */
   where: "local" | "cloud";
   state: "running" | "ready" | "asleep" | "failed";
-  /** The steps reached so far, in the card. */
   steps?: EnvLine[];
-  /** A short note after the title, e.g. "1 warning". */
-  note?: string;
-  /** Under the steps, inside the card: a failure's ways out. */
+  /** A failed start's details, Retry and Delete, inside its steps card. */
   footer?: ReactNode;
-  warnings?: string[];
 }
 
-export function EnvGroup({
-  title,
-  where,
-  state,
-  steps = [],
-  note,
-  footer,
-  warnings = [],
-}: EnvGroupProps) {
-  // The steps are in view while it runs, and a failure's ways out always. Only
-  // a line that settled fine folds them away, and a click opens them again:
-  // that run's steps, so the next run told on this line starts folded.
+export function EnvGroup({ title, where, state, steps = [], footer }: EnvGroupProps) {
   const [openedRun, setOpenedRun] = useState<string>();
+  const titleButton = useRef<HTMLButtonElement>(null);
+  const reduceMotion = useReducedMotion();
+  const cardId = useId();
+  const live = steps.filter(
+    (line) => state === "ready" && (line.warning || line.icon === "active")
+  );
+  const history = steps.filter((line) => !live.includes(line));
   const run = steps[0]?.key;
-  const opened = run !== undefined && openedRun === run;
-  const hasCard = steps.length > 0 || !!footer;
+  const hasCard = history.length > 0 || !!footer;
   const foldable = hasCard && state !== "running" && state !== "failed";
-  const open = hasCard && (!foldable || opened);
+  const open = hasCard && (!foldable || (run !== undefined && openedRun === run));
   const Icon =
     state === "failed"
       ? TriangleAlert
@@ -93,83 +137,100 @@ export function EnvGroup({
           ? Cloud
           : Laptop;
 
+  const renderStep = (line: EnvLine) => {
+    const Mark =
+      line.icon === "done" ? CircleCheck : line.icon === "active" ? Loader2 : TriangleAlert;
+    return (
+      <div key={line.key} data-env-step={line.key}>
+        {line.warning ? (
+          <WarningRow
+            line={line}
+            warning={line.warning}
+            focusTitle={() => titleButton.current?.focus({ preventScroll: true })}
+          />
+        ) : (
+          <div
+            role={line.icon === "error" ? "alert" : undefined}
+            className={cn(
+              "flex items-center gap-2",
+              line.icon === "error" && "text-destructive/80",
+              line.icon === "done" && "text-text-tertiary",
+              line.icon === "active" && "text-text-secondary",
+              live.includes(line) && [ROW, QUIET]
+            )}
+          >
+            <Mark
+              aria-hidden
+              className={cn(
+                ICON,
+                line.icon === "done" && "text-text-muted",
+                line.icon === "active" && "animate-spin motion-reduce:animate-none",
+                line.icon === "warning" && "text-warning"
+              )}
+            />
+            <span className="min-w-0">{line.label}</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div className="flex w-full min-w-0 flex-col text-sm" role="status" aria-live="polite">
+    <div role="status" aria-live="polite" className="flex w-full min-w-0 flex-col text-sm">
       <button
         type="button"
-        onClick={() => setOpenedRun(opened ? undefined : run)}
+        ref={titleButton}
         disabled={!foldable}
         aria-expanded={foldable ? open : undefined}
+        aria-controls={foldable && open ? cardId : undefined}
+        onClick={() => setOpenedRun(open ? undefined : run)}
         className={cn(
-          "group flex w-full items-center gap-2 px-2 py-1.5 text-left opacity-80",
-          foldable && "cursor-pointer transition-opacity duration-150 hover:opacity-100",
-          "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
+          ROW,
+          "focus-visible:ring-ring w-fit max-w-full rounded-lg px-2 py-1.5 text-left focus-visible:ring-2 focus-visible:outline-none",
+          foldable ? "cursor-pointer" : state !== "ready" && "opacity-80"
         )}
       >
-        <span className="relative h-3.5 w-3.5 flex-shrink-0">
-          <Icon
-            className={cn(
-              "absolute top-0 left-0 h-3.5 w-3.5 transition-opacity duration-150 ease-out",
-              state === "failed" ? "text-destructive/80" : "text-muted-foreground",
-              foldable && (opened ? "opacity-0" : "group-hover:opacity-0")
-            )}
-            aria-hidden="true"
-          />
-          {foldable && (
-            <ChevronRight
-              className={cn(
-                "text-muted-foreground/50 absolute top-0 left-0 h-3.5 w-3.5 transition-[transform,opacity] duration-150 ease-out",
-                open && "rotate-90",
-                opened ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-              )}
-              aria-hidden="true"
-            />
-          )}
-        </span>
+        <Icon
+          aria-hidden
+          className={cn(ICON, state === "failed" ? "text-destructive/80" : "text-text-tertiary")}
+        />
         <span
           className={cn(
-            "font-medium",
-            state === "running" && "text-muted-foreground tool-loading-shimmer",
-            state === "failed" && "text-destructive/80",
-            (state === "ready" || state === "asleep") && "text-foreground/70"
+            "text-text-secondary font-medium",
+            state === "running" && [
+              "text-muted-foreground",
+              !reduceMotion && "tool-loading-shimmer",
+            ],
+            state === "failed" && "text-destructive/80"
           )}
         >
           {title}
         </span>
-        {note && <span className="text-warning">· {note}</span>}
+        {foldable && (
+          <ChevronRight
+            aria-hidden
+            className={cn("text-text-tertiary size-3 shrink-0", open && "rotate-90")}
+          />
+        )}
       </button>
-
+      {live.length > 0 && <div className="mx-2 max-w-xl">{live.map(renderStep)}</div>}
       <AnimatePresence initial={false}>
         {open && (
           <m.div
+            id={cardId}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.18, ease: [0.215, 0.61, 0.355, 1] }}
+            transition={{ duration: reduceMotion ? 0 : 0.18, ease: [0.215, 0.61, 0.355, 1] }}
             className="overflow-hidden"
           >
-            <div className="border-border-subtle mx-2 mt-0.5 mb-1 flex max-w-xl flex-col gap-1.5 rounded-lg border px-3 py-2.5">
-              {steps.map((line) => (
-                <StepRow key={line.key} line={line} />
-              ))}
+            <div className="inset-ring-border-subtle mt-0.5 mb-1 flex max-w-xl flex-col gap-1.5 rounded-lg px-2 py-2.5 inset-ring">
+              {history.map(renderStep)}
               {footer}
             </div>
           </m.div>
         )}
       </AnimatePresence>
-
-      {warnings.length > 0 && (
-        <div className="flex flex-col gap-1.5 px-2 pt-1 pb-1">
-          {warnings.map((warning) => (
-            <div
-              key={warning}
-              className="border-warning/20 border-l-warning bg-warning/5 text-warning max-w-xl rounded-lg border border-l-2 px-3 py-2 wrap-anywhere whitespace-pre-line"
-            >
-              {warning}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

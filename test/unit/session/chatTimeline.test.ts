@@ -244,7 +244,7 @@ describe("buildChatTimeline", () => {
       cloud: false,
       summary: "Workspace ready",
       steps: [],
-      warnings: [],
+      brief: null,
     };
 
     const { items, spacings } = buildChatTimeline([prompt, reply], [], false, [], [], start);

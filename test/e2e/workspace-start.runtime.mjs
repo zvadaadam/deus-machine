@@ -18,6 +18,8 @@ import { chromium } from "playwright";
 import { SCHEMA_SQL } from "../../shared/schema.ts";
 import { LOOPBACK_WEB_ORIGINS } from "../../shared/web-origins.ts";
 import { connectBackend } from "./lib/operations.mjs";
+import { seedToolTurn, checkSetupWarning } from "./lib/setup-warning.mjs";
+import { freePort } from "./remote-access/stack.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const evidence = path.join(root, ".context/workspace-start");
@@ -190,7 +192,7 @@ try {
     cacheDir: path.join(directory, "vite-cache"),
     logLevel: "error",
     define: { "import.meta.env.VITE_BACKEND_PORT": JSON.stringify(String(port)) },
-    server: { host: "127.0.0.1", port: 0, fs: { allow: [root] } },
+    server: { host: "127.0.0.1", port: await freePort(), strictPort: true, fs: { allow: [root] } },
   });
   await vite.listen();
   const url = (id) => `${vite.resolvedUrls.local[0]}s/local/w/${id}`;
@@ -291,7 +293,8 @@ try {
     sent.filter((frame) => frame.includes('"sendMessage"') && frame.includes(text)).length;
   const startLine = (page) => page.getByRole("status").filter({ hasText: "Workspace ready" });
 
-  await a.goto(url(home));
+  // The first navigation also transforms the app against this run's empty Vite cache.
+  await a.goto(url(home), { timeout: 90_000 });
   await b.goto(url(home));
   await Promise.all([attach(a), attach(b)]);
 
@@ -470,11 +473,13 @@ try {
   ]) {
     assert(Math.abs(start - chat) <= 1, `the composer's ${what} moved: ${start} → ${chat}`);
   }
-  // The chat it started with opens with how it started: one line, its steps folded under it.
+  // Running setup stays visible in the live chat. A finished setup belongs only in history.
   await startLine(a).waitFor();
-  await startLine(a).getByRole("button").first().click();
   await startLine(a).getByText("Running setup…").waitFor();
   await writeFile(path.join(checkoutPath, "finish-setup"), "");
+  await startLine(a).getByText("Running setup…").waitFor({ state: "detached" });
+  assert.equal(await startLine(a).innerText(), "Workspace ready");
+  await startLine(a).getByRole("button", { name: "Workspace ready", exact: true }).click();
   await startLine(a).getByText("Ran setup").waitFor();
   await shot(a, "started");
   await a.waitForTimeout(1000);
@@ -505,8 +510,10 @@ try {
   // Off the row and out of focus, so its hover card is not in the picture.
   await a.mouse.move(1100, 600);
   await a.evaluate(() => document.activeElement?.blur());
-  await startLine(a).getByText("1 warning").waitFor();
-  await a.getByText(/Couldn't reach the remote repository.*It may be behind\./).waitFor();
+  await startLine(a).getByRole("button", { name: "Copy may be out of date" }).click();
+  await startLine(a)
+    .getByText("We couldn’t reach the remote, so this copy may be out of date.")
+    .waitFor();
   await shot(a, "behind");
   check(
     "An unreachable remote does not stop a start; the chat opens with a warning that it may be behind"
@@ -697,27 +704,73 @@ try {
   );
   git("add", ".deus/environment.json");
   git("commit", "-qm", "Exercise a failing setup");
+  await b.goto(url(home));
+  await attach(b);
   const failedSetup = await create();
+  const failedRow = await until("setup to fail", async () => {
+    const row = await workspace(failedSetup.id);
+    return row.setup_status === "failed" && row;
+  });
+  seedToolTurn(db, failedRow.current_session_id);
   await a.locator(`[data-workspace-id="${failedSetup.id}"]`).click();
-  const warning = startLine(a).getByText(/The setup script failed,/);
-  await warning.waitFor();
-  assert.equal(
-    await warning.textContent(),
-    "The setup script failed, so this workspace started without it. Setup exited with code 1.\nChecking tools\nMissing <b>clang</b>"
-  );
-  await startLine(a).screenshot({ path: path.join(evidence, "setup-warning.png") });
-  const failedRow = await workspace(failedSetup.id);
+  // The phone has followed the same start. Navigate in the live app so it keeps its start history.
+  await b.getByRole("button", { name: "Expand sidebar", exact: true }).click();
+  const phoneRow = b.locator(`[data-workspace-id="${failedSetup.id}"]`);
+  if (!(await phoneRow.isVisible())) {
+    await b.getByRole("button", { name: "Toggle project workspaces" }).click();
+  }
+  await phoneRow.click();
+  await checkSetupWarning(a, startLine(a), evidence);
+  await checkSetupWarning(b, startLine(b), evidence, true);
   const failedCheckout = checkout(failedRow.slug);
-  await writeFile(
-    path.join(failedCheckout, ".deus/environment.json"),
-    JSON.stringify({ version: 1, setup: "echo repaired" })
-  );
   const retrySetup = a
     .locator('[data-slot="workspace-header"] button')
     .filter({ has: a.locator(".lucide-rotate-cw") });
   await retrySetup.hover();
   await a.getByRole("tooltip", { name: "Retry setup" }).waitFor();
+  const group = startLine(a);
+  const step = group.locator('[data-env-step="setup"]');
+  const original = await step.elementHandle();
+  const rowTop = () =>
+    step.evaluate(
+      (el) =>
+        el.getBoundingClientRect().top - el.closest('[role="status"]').getBoundingClientRect().top
+    );
+  const failedTop = await rowTop();
+  // The original header action still works. A failed retry returns to the same row.
   await retrySetup.click();
+  await step.getByText("Running setup…").waitFor();
+  await step.getByRole("button", { name: /^Setup failed/ }).waitFor();
+  assert(await original.evaluate((el) => el.isConnected));
+  await writeFile(
+    path.join(failedCheckout, ".deus/environment.json"),
+    JSON.stringify({
+      version: 1,
+      setup: "while [ ! -e finish-retry ]; do sleep 0.1; done; echo repaired",
+    })
+  );
+  await group.getByRole("button", { name: "Run again", exact: true }).press("Enter");
+  await step.getByText("Running setup…", { exact: true }).waitFor();
+  assert(await original.evaluate((el) => el.isConnected), "retry keeps the same step");
+  assert.equal(await rowTop(), failedTop, "retry stays in the same row");
+  const phoneStep = startLine(b).locator('[data-env-step="setup"]');
+  await phoneStep.getByText("Running setup…").waitFor();
+  assert.equal(
+    await phoneStep.locator("svg").evaluate((el) => window.getComputedStyle(el).animationName),
+    "none"
+  );
+  assert.equal(await step.getByRole("button").count(), 0);
+  assert(
+    await group
+      .getByRole("button", { name: "Workspace ready" })
+      .evaluate((el) => el === document.activeElement)
+  );
+  for (const theme of ["dark", "light"]) {
+    await a.emulateMedia({ colorScheme: theme });
+    await a.waitForFunction((name) => document.documentElement.classList.contains(name), theme);
+    await shot(a, `setup-retrying-${theme}`);
+  }
+  await writeFile(path.join(failedCheckout, "finish-retry"), "");
   await until(
     "the repaired setup to finish",
     async () => (await workspace(failedSetup.id)).setup_status === "completed"
@@ -725,9 +778,12 @@ try {
   const repaired = await workspace(failedSetup.id);
   assert.equal(repaired.current_session_id, failedRow.current_session_id);
   assert.equal(repaired.error_detail, null);
-  await warning.waitFor({ state: "hidden" });
+  await step.waitFor({ state: "detached" });
+  assert.equal(await group.innerText(), "Workspace ready");
+  await group.getByRole("button", { name: "Workspace ready" }).press("Space");
+  await group.getByText("Ran setup", { exact: true }).waitFor();
   check(
-    "A failed setup shows its last two lines as plain text. Retrying the edited recipe from the header clears the warning in the same chat."
+    "The setup row shares the tool grid, previews literal output and opens the log. Run again stays in place until the repaired setup folds into history in the same chat."
   );
 
   assert.deepEqual(errors, []);

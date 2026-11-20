@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 import type { WorkspaceStart } from "@/features/workspace/lib/startState";
 import { useStartRecovery } from "@/features/workspace/hooks/useStartRecovery";
+import { useSetupActions } from "@/features/workspace/hooks/useSetupActions";
 import { EnvGroup } from "./EnvGroup";
 
 /**
@@ -23,20 +24,25 @@ export function WorkspaceStartGroup({
   repoId?: string;
   start: WorkspaceStart;
 }) {
-  const warnings = start.warnings.length;
+  const setupActions = useSetupActions(workspaceId);
   return (
     <EnvGroup
       title={start.summary}
       where={start.cloud ? "cloud" : "local"}
       state={start.phase === "starting" ? "running" : start.phase}
       steps={[
-        ...start.steps.map((step) => ({ key: step.key, label: step.label, icon: step.state })),
+        ...start.steps.map(({ state, ...step }) => ({
+          ...step,
+          icon: state,
+          actions:
+            !start.cloud && start.phase === "ready" && step.key === "setup" && step.warning
+              ? setupActions
+              : undefined,
+        })),
         ...(start.failure
           ? [{ key: "failure", label: start.failure.reason, icon: "error" as const }]
           : []),
       ]}
-      note={warnings > 0 ? `${warnings} ${warnings === 1 ? "warning" : "warnings"}` : undefined}
-      warnings={start.warnings}
       footer={
         start.failure && (
           <StartFailure workspaceId={workspaceId} repoId={repoId} failure={start.failure} />
@@ -61,7 +67,7 @@ function StartFailure({
 
   return (
     <>
-      <div className="mt-0.5 flex min-h-7 items-center gap-2">
+      <div className="mt-0.5 flex min-h-7 items-center gap-2 pointer-coarse:[&_button]:min-h-11">
         {failure.detail && (
           <button
             type="button"
@@ -91,7 +97,7 @@ function StartFailure({
         )}
       </div>
       {detailsOpen && (
-        <pre className="border-border-subtle bg-bg-elevated text-text-tertiary max-h-48 w-full overflow-auto rounded-lg border px-3 py-2 font-mono text-xs break-words whitespace-pre-wrap select-text">
+        <pre className="border-border-subtle bg-bg-elevated text-text-tertiary ms-5.5 max-h-48 overflow-auto rounded-lg border px-3 py-2 font-mono text-xs break-words whitespace-pre-wrap select-text">
           {failure.detail}
         </pre>
       )}

@@ -74,9 +74,11 @@ the same workspaces. It checks, in order:
   message is still in Home's composer.
 - A message waiting for a workspace whose chat was already spoken to (from
   another window) is not sent: it goes into that chat's composer.
-- A setup script exits with an error. Its chat shows the last two log lines
-  as plain text. Retrying the edited recipe from the header clears the warning
-  in the same chat.
+- A failed setup previews its last output line beside Run again. Opening it shows
+  the last two lines as plain text and offers the full log. The header can retry a
+  failed script. Retrying the repaired recipe in the transcript keeps the running
+  step in place, then folds it into history. The desktop and phone compare the
+  warning’s alignment with a tool call from a fixture turn.
 
 ```sh
 bun run native:node

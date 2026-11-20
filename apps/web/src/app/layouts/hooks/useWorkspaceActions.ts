@@ -13,7 +13,6 @@ import { useState, useCallback } from "react";
 import { toast } from "sonner";
 import {
   useArchiveWorkspace,
-  useRetrySetup,
   useProjectEnvironment,
 } from "@/features/workspace/api/workspace.queries";
 import { api } from "@shared/api";
@@ -23,6 +22,7 @@ import { simulatorStoreActions } from "@/features/simulator/store";
 import type { ContentTab } from "@/features/workspace/store";
 import type { Workspace } from "@/shared/types";
 import { prTargetBranch } from "@/features/workspace/lib/prState";
+import { useSetupActions } from "@/features/workspace/hooks/useSetupActions";
 
 interface UseWorkspaceActionsOptions {
   selectedWorkspace: Workspace | null;
@@ -100,29 +100,8 @@ export function useWorkspaceActions({
     });
   }, [selectedWorkspace, archiveWorkspace]);
 
-  const { mutate: retrySetup } = useRetrySetup();
-  const handleRetrySetup = useCallback(() => {
-    if (!selectedWorkspace) return;
-    retrySetup(selectedWorkspace.id);
-  }, [selectedWorkspace, retrySetup]);
-
-  const handleViewSetupLogs = useCallback(() => {
-    if (!selectedWorkspace) return;
-    call(api.setupLogs, { workspaceId: selectedWorkspace.id })
-      .then(({ logs }) => {
-        if (!logs) {
-          toast.error("No setup logs available.");
-          return;
-        }
-        const blob = new Blob([logs], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        window.open(url, "_blank");
-        setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      })
-      .catch(() => {
-        toast.error("Failed to fetch setup logs.");
-      });
-  }, [selectedWorkspace]);
+  const { retry: handleRetrySetup, viewLog: handleViewSetupLogs } =
+    useSetupActions(selectedWorkspaceId);
 
   // --- Project environment commands ---
 
