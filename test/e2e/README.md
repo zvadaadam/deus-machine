@@ -2,6 +2,13 @@
 
 This directory contains all test files for the Deus application.
 
+Every backend a runner starts gets `DEUS_VAULT_NO_KEYCHAIN=1`, so it never reads
+or creates the person's "Deus Integrations" Keychain item (its vault key goes in
+a file beside the run's database), and `GIT_CEILING_DIRECTORIES` set to the
+run's folder, so git never climbs out of a test folder under `.context/` into
+this checkout; start a backend yourself for a runner (`dev:web` below) with
+`DEUS_VAULT_NO_KEYCHAIN=1` too.
+
 ## Test Files
 
 ### Runtime client network and relay tests
@@ -518,7 +525,7 @@ Start the app from this worktree with Node 22 and isolated state:
 
 ```bash
 mkdir -p .context/project-environment-app
-DATABASE_PATH="$PWD/.context/project-environment-app/deus.db" \
+DATABASE_PATH="$PWD/.context/project-environment-app/deus.db" DEUS_VAULT_NO_KEYCHAIN=1 \
 AGNT_API_KEY= DEUS_CLOUD_AGNT_API_KEY= bun run dev:web
 ```
 
@@ -550,7 +557,7 @@ Comprehensive end-to-end test suite that verifies:
 
 ```bash
 # Backend must be running first!
-bun run dev:web  # Start in separate terminal
+DEUS_VAULT_NO_KEYCHAIN=1 bun run dev:web  # Start in separate terminal
 
 # Then run test (use the backend port from dev:web output)
 export BACKEND_PORT=60068  # Use actual port from backend
