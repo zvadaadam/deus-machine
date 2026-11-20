@@ -30,8 +30,9 @@ function SentFromChat({ sessionId, name }: { sessionId: string; name?: string })
     ?.flatMap((group) => group.workspaces)
     .find((w) => w.id === session?.workspace_id);
   const title = session?.title || name || "another chat";
-  const elsewhere = workspace && workspace.id !== selected;
-  const label = elsewhere ? `${workspace.title || workspace.slug} · ${title}` : title;
+  const place = workspace && workspace.id !== selected ? workspace.title || workspace.slug : null;
+  // A workspace named as its chat (its first, titled alike) is said once.
+  const label = place && place !== title ? `${place} · ${title}` : title;
   return (
     <div className={CAPTION}>
       Sent from
