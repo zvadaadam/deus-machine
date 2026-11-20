@@ -10,8 +10,8 @@
 // A clone can outlast a call. Each folder (by its lower-cased path: the disk
 // may not tell `App` from `app`) has at most one add in flight: a
 // call for the same repository joins it, and one that sees it end answers its
-// outcome. When a call is cut short (`maxWaitFor`) it says it is still
-// cloning; the outcome is then kept for the next call (30 minutes), which
+// outcome. When the call's deadline (the package's `CallScope`) nears it
+// says it is still cloning; the outcome is then kept for the next call (30 minutes), which
 // reports it. A project that is already here is returned with nothing cloned.
 
 import fs from "node:fs";
@@ -29,7 +29,10 @@ import {
   type CloneAddress,
 } from "../../lib/clone-address";
 import { AppError, ConflictError } from "../../lib/errors";
-import { maxWaitFor, type DeusHost } from "./host";
+import type { DeusHost, Who } from "./host";
+
+/** A call answers "still cloning" this long before its deadline, so the answer arrives. */
+const ANSWER_MARGIN_MS = 1000;
 
 /** An outcome no call has heard is kept this long for the next call. */
 const UNHEARD_KEPT_MS = 30 * 60_000;
@@ -67,8 +70,10 @@ function failureFor(address: CloneAddress, error: unknown): Error {
     return error instanceof Error ? error : new Error(String(error));
   }
   // Ours (access, a folder taken meanwhile): said as written.
-  if (error.statusCode !== 500) return new OperatorError(`${error.message} Nothing was added.`);
+  if (error.statusCode !== 500)
+    return new OperatorError("unsupported", `${error.message} Nothing was added.`);
   return new OperatorError(
+    "unsupported",
     `could not clone ${quoted(address.url)}. Nothing was added. git said:\n${quote(error.message)}`
   );
 }
@@ -82,7 +87,7 @@ export function addProjectTool(host: DeusHost) {
   const flightKey = (folder: string) => folder.toLowerCase();
 
   /** The project for this repository that has a folder here. */
-  async function projectHere(caller: Caller, key: string): Promise<Repository | undefined> {
+  async function projectHere(caller: Who, key: string): Promise<Repository | undefined> {
     const projects = await host.act(caller, repos.repos, {});
     return projects.find(
       (p) => p.root_path && p.git_origin_url && repositoryKey(p.git_origin_url) === key
@@ -90,7 +95,7 @@ export function addProjectTool(host: DeusHost) {
   }
 
   /** Add `folder` as the project, or the project that already is that folder. */
-  async function addFolder(caller: Caller, folder: string): Promise<Repository> {
+  async function addFolder(caller: Who, folder: string): Promise<Repository> {
     try {
       return await host.act(caller, repos.addRepo, { root_path: folder });
     } catch (error) {
@@ -100,7 +105,7 @@ export function addProjectTool(host: DeusHost) {
     }
   }
 
-  async function add(caller: Caller, flight: Flight, folder: string): Promise<Added> {
+  async function add(caller: Who, flight: Flight, folder: string): Promise<Added> {
     const { address } = flight;
     const here = await projectHere(caller, address.key);
     if (here) return { how: "here", repo: here };
@@ -118,6 +123,7 @@ export function addProjectTool(host: DeusHost) {
         repositoryKey(inspected.git_origin_url) === address.key;
       if (!same) {
         throw new OperatorError(
+          "unsupported",
           `The folder ${quoted(folder)} already exists and is not a clone of ${quoted(address.url)}. Nothing was cloned; no other folder is used.`
         );
       }
@@ -133,13 +139,14 @@ export function addProjectTool(host: DeusHost) {
   }
 
   /** The flight for this folder now: one in flight, one ended and not heard, or a new one. */
-  function flightFor(caller: Caller, address: CloneAddress, folder: string): Flight {
+  function flightFor(caller: Who, address: CloneAddress, folder: string): Flight {
     const held = flights.get(flightKey(folder));
     const stale = held?.settledAt !== undefined && Date.now() - held.settledAt > UNHEARD_KEPT_MS;
     if (held && !stale) {
       if (held.address.key === address.key) return held;
       if (held.settledAt === undefined) {
         throw new OperatorError(
+          "unsupported",
           `The folder ${quoted(folder)} is being cloned for another repository. Nothing was cloned; no other folder is used.`
         );
       }
@@ -180,7 +187,7 @@ export function addProjectTool(host: DeusHost) {
     }
   }
 
-  return tool({
+  return tool<{ repository: z.ZodString }, Caller>({
     name: "add_project",
     title: "Add project",
     description:
@@ -194,20 +201,22 @@ export function addProjectTool(host: DeusHost) {
           "A GitHub owner/name, or an https:// or ssh (git@host:owner/name) address, with no user name or password in it"
         ),
     },
-    readOnly: false,
+    effect: "write",
     openWorld: true,
-    async run({ repository }, caller: Caller) {
+    async run({ repository }, caller, call) {
       const parsed = parseCloneAddress(repository);
-      if (!parsed.ok) throw new OperatorError(`${parsed.reason} Nothing was cloned.`);
+      if (!parsed.ok)
+        throw new OperatorError("invalid_input", `${parsed.reason} Nothing was cloned.`);
       const { address } = parsed;
       const folder = path.join(projectsFolder(), address.name);
       // The name is safe characters only; the folder is always directly in the projects folder.
       if (path.dirname(folder) !== projectsFolder()) {
-        throw new OperatorError(`${CLONE_REFUSALS.name} Nothing was cloned.`);
+        throw new OperatorError("invalid_input", `${CLONE_REFUSALS.name} Nothing was cloned.`);
       }
 
       const flight = flightFor(caller, address, folder);
-      if (!(await ended(flight, maxWaitFor(caller)))) {
+      const seconds = Math.max(0, (call.deadline - Date.now() - ANSWER_MARGIN_MS) / 1000);
+      if (!(await ended(flight, seconds))) {
         const doing =
           flight.phase === "cloning"
             ? `still cloning ${quoted(address.url)} into ${quoted(folder)}.`

@@ -106,6 +106,8 @@ export default [
     invalidate(["workspaces", "sessions"]);
     return getSessionRaw(db, sessionId)!;
   }),
-  handle(api.sendMessage, sendMessage),
-  handle(api.stopSession, stopSession),
+  // A client's send is the person's: no origin comes from the operation's input.
+  handle(api.sendMessage, (input) => sendMessage(input)),
+  // A client's stop is the person's.
+  handle(api.stopSession, (input) => stopSession(input)),
 ];

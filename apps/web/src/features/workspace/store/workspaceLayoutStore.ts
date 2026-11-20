@@ -32,6 +32,7 @@ interface WorkspaceLayoutState {
   fileTreePinned: boolean; // true = expanded file tree panel, false = minimap strip + hover
   chatTabSessionIds: string[]; // Ordered session IDs for open chat tabs
   activeChatTabSessionId: string | null; // Which chat tab is active
+  knownChatSessionIds: string[]; // The chats the tab view knew when it last saved
   pendingTerminalCommand: string | null; // Command to auto-run in a new terminal tab (e.g. "claude login")
   simulatorUdid: string | null; // Last-used simulator UDID for this workspace
   terminalTabs: PersistedTerminalTab[]; // Per-workspace terminal tab metadata
@@ -54,7 +55,8 @@ interface WorkspaceLayoutStore {
   setChatTabState: (
     workspaceId: string,
     sessionIds: string[],
-    activeSessionId: string | null
+    activeSessionId: string | null,
+    knownSessionIds?: string[]
   ) => void;
   setTerminalTabState: (
     workspaceId: string,
@@ -77,6 +79,7 @@ export const defaultLayout: WorkspaceLayoutState = {
   fileTreePinned: true,
   chatTabSessionIds: [],
   activeChatTabSessionId: null,
+  knownChatSessionIds: [],
   pendingTerminalCommand: null,
   simulatorUdid: null,
   terminalTabs: [],
@@ -118,10 +121,11 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
         setPendingFileNavigation: (workspaceId, navigation) =>
           get().setLayout(workspaceId, { pendingFileNavigation: navigation }),
         setPanelMode: (workspaceId, panelMode) => get().setLayout(workspaceId, { panelMode }),
-        setChatTabState: (workspaceId, sessionIds, activeSessionId) =>
+        setChatTabState: (workspaceId, sessionIds, activeSessionId, knownSessionIds) =>
           get().setLayout(workspaceId, {
             chatTabSessionIds: sessionIds,
             activeChatTabSessionId: activeSessionId,
+            ...(knownSessionIds ? { knownChatSessionIds: knownSessionIds } : {}),
           }),
         setTerminalTabState: (workspaceId, tabs, activeTabId, nextNum) =>
           get().setLayout(workspaceId, {
@@ -199,8 +203,15 @@ export const workspaceLayoutActions = {
       panelMode: store.getLayout(workspaceId).panelMode === "content" ? "content" : "split",
     });
   },
-  setChatTabState: (workspaceId: string, sessionIds: string[], activeSessionId: string | null) =>
-    useWorkspaceLayoutStore.getState().setChatTabState(workspaceId, sessionIds, activeSessionId),
+  setChatTabState: (
+    workspaceId: string,
+    sessionIds: string[],
+    activeSessionId: string | null,
+    knownSessionIds?: string[]
+  ) =>
+    useWorkspaceLayoutStore
+      .getState()
+      .setChatTabState(workspaceId, sessionIds, activeSessionId, knownSessionIds),
   setTerminalTabState: (
     workspaceId: string,
     tabs: PersistedTerminalTab[],

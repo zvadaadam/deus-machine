@@ -77,3 +77,31 @@ describe("a waiting message whose chat was spoken to first", () => {
     expect(missedFirstMessages([spoken], {})).toEqual([]);
   });
 });
+
+describe("the first chat, whatever chat is current (H10)", () => {
+  // Another chat (an agent's second opinion) was opened in the workspace before this client came back.
+  const opened = {
+    ...ready,
+    current_session_id: "chat-second",
+    session_status: "working",
+    latest_message_sent_at: "2026-11-20T10:00:00Z",
+    first_session_id: "chat-a",
+    first_session_status: "idle",
+    first_session_last_message_at: null,
+  } as const;
+
+  it("is sent to the first chat, by that chat's own state", () => {
+    expect(dueFirstMessages([opened], { a: first })).toEqual([
+      { workspaceId: "a", sessionId: "chat-a", first },
+    ]);
+    expect(missedFirstMessages([opened], { a: first })).toEqual([]);
+  });
+
+  it("goes to the first chat's composer when that chat was spoken to first", () => {
+    const spoken = { ...opened, first_session_last_message_at: "2026-11-20T10:00:00Z" };
+    expect(dueFirstMessages([spoken], { a: first })).toEqual([]);
+    expect(missedFirstMessages([spoken], { a: first })).toEqual([
+      { workspaceId: "a", sessionId: "chat-a", first },
+    ]);
+  });
+});

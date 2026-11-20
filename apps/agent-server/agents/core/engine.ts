@@ -5,6 +5,7 @@
 
 import { AgentRuntime, createAgentRegistry, type AgentRegistry } from "@zvada/agent-server/core";
 import { deusTools } from "../deus-tools";
+import { chatTools } from "../../host-link";
 import { trackedSessions } from "../../session-tracker";
 import { createCheckpoint } from "./checkpoint";
 import { decideToolUse } from "./tool-policy";
@@ -29,7 +30,7 @@ export function getRegistry(): AgentRegistry {
     // cached downloads), never whatever binary the host happens to have.
     // Operator escape hatches ($CLAUDE_CLI_PATH / $CODEX_CLI_PATH) still win.
     provision: { mode: "pinned" },
-    hostTools: ({ sessionId }) => deusTools(sessionId),
+    hostTools: ({ sessionId }) => chatTools(deusTools(sessionId)),
     claudeCode: {
       // Sub-agent text must reach the wire. Claude's own Cron* tools are off by
       // agent-server (CLAUDE_CODE_DISABLE_CRON): scheduling is Automations'

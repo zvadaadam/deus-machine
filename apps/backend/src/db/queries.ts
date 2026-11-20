@@ -5,7 +5,11 @@
  * Route handlers call these functions instead of inline SQL.
  */
 import type Database from "better-sqlite3";
-import { decodePart } from "@zvada/agent-server/protocol";
+import {
+  ReportedOriginSchema,
+  decodePart,
+  type ReportedOrigin,
+} from "@zvada/agent-server/protocol";
 import type { Part, UnknownPart } from "@shared/protocol-types";
 import type {
   RepositoryRow,
@@ -39,12 +43,16 @@ const WORKSPACE_ROW_COLUMNS = `
     s.status as session_status,
     s.error_category as session_error_category,
     s.error_message as session_error_message,
-    s.last_user_message_at as latest_message_sent_at`;
+    s.last_user_message_at as latest_message_sent_at,
+    w.first_session_id,
+    fs.status as first_session_status,
+    fs.last_user_message_at as first_session_last_message_at`;
 
 const WORKSPACE_JOINS = `
   FROM workspaces w
   LEFT JOIN repositories r ON w.repository_id = r.id
   LEFT JOIN sessions s ON w.current_session_id = s.id
+  LEFT JOIN sessions fs ON w.first_session_id = fs.id
 `;
 
 const WORKSPACE_DETAILS_SELECT = `
@@ -139,10 +147,14 @@ export function getWorkspacesBySessionIds(
       s.status as session_status,
       s.error_category as session_error_category,
       s.error_message as session_error_message,
-      s.last_user_message_at as latest_message_sent_at
+      s.last_user_message_at as latest_message_sent_at,
+      w.first_session_id,
+      fs.status as first_session_status,
+      fs.last_user_message_at as first_session_last_message_at
     FROM workspaces w
     LEFT JOIN repositories r ON w.repository_id = r.id
     LEFT JOIN sessions s ON w.current_session_id = s.id
+    LEFT JOIN sessions fs ON w.first_session_id = fs.id
     WHERE w.current_session_id IN (${placeholders})
   `
     )
@@ -191,10 +203,10 @@ export function getSessionRaw(db: Database.Database, id: string): SessionRow | u
   return row ? coerceSessionBooleans(row) : undefined;
 }
 
-/** All sessions for a workspace, ordered by creation time (UUID7 is chronological). */
+/** A workspace's chats, archived ones (`is_hidden`) left out, ordered by creation (UUID7 is chronological). */
 export function getSessionsByWorkspaceId(db: Database.Database, workspaceId: string): SessionRow[] {
   const rows = db
-    .prepare("SELECT * FROM sessions WHERE workspace_id = ? ORDER BY id ASC")
+    .prepare("SELECT * FROM sessions WHERE workspace_id = ? AND is_hidden = 0 ORDER BY id ASC")
     .all(workspaceId) as SessionRow[];
   return rows.map(coerceSessionBooleans);
 }
@@ -227,7 +239,7 @@ export function getMessages(
       .all(sessionId, opts.before, opts.limit) as MessageRow[];
   }
 
-  if (opts.after) {
+  if (opts.after !== undefined) {
     // Load newer: fetch N messages after seq, already in ascending order
     return db
       .prepare(
@@ -318,6 +330,17 @@ function decodeStoredPart(row: PartRow): Part | UnknownPart | undefined {
  * knowledge, stored as `parts.seq`) — the array order IS the order, and the
  * query above already sorts by it.
  */
+/** A stored origin, read back; one that does not parse is none (the person). */
+function readOrigin(stored: string | null): ReportedOrigin | null {
+  if (!stored) return null;
+  try {
+    const parsed = ReportedOriginSchema.safeParse(JSON.parse(stored));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 export function attachParts(db: Database.Database, messages: MessageRow[]): MessageRowWithParts[] {
   if (messages.length === 0) return [];
 
@@ -339,6 +362,7 @@ export function attachParts(db: Database.Database, messages: MessageRow[]): Mess
 
   return messages.map((msg) => ({
     ...msg,
+    origin: readOrigin(msg.origin),
     parts: partsByMessageId.get(msg.id) ?? [],
   }));
 }

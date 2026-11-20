@@ -10,6 +10,7 @@ import type { Message } from "@/shared/types";
 import { readUserMessageContent } from "../lib/userMessageContent";
 import { PartsRenderer } from "./blocks";
 import { TextBlock } from "./blocks/TextBlock";
+import { SentFrom } from "./SentFrom";
 
 import { cn } from "@/shared/lib/utils";
 import { Copy, ChevronDown, ChevronUp } from "lucide-react";
@@ -71,7 +72,8 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
   const handleCopy = () => copy(texts.join("\n"));
 
   return (
-    <div className="group relative flex flex-col items-end">
+    <div className="group relative flex flex-col items-end gap-1">
+      {message.origin && <SentFrom origin={message.origin} />}
       <div
         className={cn(
           "max-w-[85%]",

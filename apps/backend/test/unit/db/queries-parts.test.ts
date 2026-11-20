@@ -26,6 +26,7 @@ function makeMessage(overrides: Partial<MessageRow> = {}): MessageRow {
     model: "opus",
     sent_at: "2026-01-01T00:00:00Z",
     parent_tool_call_id: null,
+    origin: null,
     ...overrides,
   };
 }

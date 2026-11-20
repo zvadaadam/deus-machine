@@ -229,7 +229,8 @@ describe("createWorkspace", () => {
       .map(([sql]) => String(sql))
       .find((sql) => sql.includes("INSERT INTO workspaces"));
     expect(insert).toContain("'initializing'");
-    // id, repository, slug, title, branch, source branch, target branch, PR url, PR number
+    // id, repository, slug, title, branch, source branch, target branch, PR url, PR number,
+    // the first chat's id (minted now), who started it (none: the person)
     expect(mockStmt.run).toHaveBeenCalledWith(
       "ws-test-uuid",
       "repo-001",
@@ -239,6 +240,8 @@ describe("createWorkspace", () => {
       "develop",
       "main",
       null,
+      null,
+      "ws-test-uuid",
       null
     );
   });

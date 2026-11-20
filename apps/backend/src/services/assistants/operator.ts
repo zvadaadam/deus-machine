@@ -1,73 +1,70 @@
 // backend/src/services/assistants/operator.ts
-// The operator tools this computer offers: the module's session tools over
-// this computer's workspaces (./host.ts), and the four Deus adds (a
-// workspace's changes, archiving it, adding a project by cloning it
-// (./add-project.ts), feedback to the Deus team). What a caller
-// may run is decided here.
+// The operator tools this computer offers (`@zvada/agent-server/operator`,
+// LLP 0019): the package's session tools over this computer's chats
+// (./host.ts), and the three Deus adds (a workspace's changes, adding a
+// project by cloning it (./add-project.ts), feedback to the Deus team).
 //
-// They are served over MCP (`answerMcp`, the `agentMcp` operation): the
-// module's handler answers `initialize`, `tools/list` and `tools/call`.
-// The list is the same for everyone: an assistant keeps it from when it
-// connected, so it cannot follow an access level. Access is checked per call:
-// this computer's window and its paired devices may run everything; an
-// assistant the person allowed to read runs the tools that only read; one not
-// allowed yet, or denied, runs nothing. Each write is checked again just before
-// it happens (the host's `act`).
+// Two kinds of caller reach them. Outside callers (an assistant, a paired
+// device, this computer's window) through MCP (`answerMcp`, the `agentMcp`
+// operation): the list is the same for everyone, and the host's `authorize`
+// reads an assistant's access per call. Every chat on this computer, as its
+// own tools (`withSessionTools`): the engine delivers them with the Deus
+// tools in one source, and the session's agent is the caller.
 //
 // Text from a repository (file names, diffs) and names are untrusted: a name
 // is one quoted line (`quoted`), a diff a block of quoted lines (`quote`), so
 // neither can read as one of the tool's own lines.
 
 import { z } from "zod";
-import path from "node:path";
 import * as Sentry from "@sentry/node";
+import path from "node:path";
 import {
   OperatorError,
   callHint,
   createMcpHandler,
   createOperator,
+  operatorSessionTools,
   quote,
   quoted,
   tool,
+  type ExternalCaller,
   type McpHandler,
   type Operator,
-  type ToolSource,
 } from "@zvada/agent-server/operator";
+import type { HostToolSource } from "@zvada/agent-server/core";
 import * as workspaces from "@shared/api/workspaces";
-import { LOCAL_CALLER, type Caller } from "../../api/registry";
-import { AppError } from "../../lib/errors";
+import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
+import type { Caller } from "../../api/registry";
+import { provideSessionTools } from "../agent/service";
 import { getServerName } from "../server-name";
-import { refusalFor } from "./access";
-import { ASSISTANT_FAILURE } from "./sentences";
-import { FEEDBACK_CATEGORIES, FeedbackNotSent, sendFeedback } from "./feedback";
+import { currentHost } from "./access";
 import { addProjectTool } from "./add-project";
-import { createDeusHost, maxWaitFor, type DeusHost } from "./host";
+import { FEEDBACK_CATEGORIES, FeedbackNotSent, sendFeedback } from "./feedback";
+import { createDeusHost, refusing, type DeusHost } from "./host";
+import * as store from "./store";
 
 /** One file's diff is cut here: enough to review a change, not a whole regenerated file. */
 const DIFF_LIMIT = 20_000;
 /** Files listed by `read_changes` before it says how many more there are. */
 const FILES_LIMIT = 100;
 /** The version of the tools this server offers, not of the app. */
-const SERVER_VERSION = "1.0.0";
+const SERVER_VERSION = "2.0.0";
 
 /** A path as git lists it, so `./a.ts`, `a.ts` and `b/../a.ts` are one file. */
 const normal = (file: string) =>
   path.posix.normalize(file.replace(/\\/g, "/")).replace(/^\.\//, "");
 
-// Trimmed and refused when nothing is left, in the module's words for its own.
 const sessionArg = z
   .string()
   .trim()
   .min(1, "must not be empty or only spaces")
-  .describe("The session: its name as list_sessions shows it, group/name, or its id");
+  .describe("The session, as list_sessions prints it");
 
 function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
-  const workspaceFor = async (caller: Caller, session: string) => {
-    const entry = await operator().find(caller, session);
-    return { entry, workspace: await host.workspaceOf(entry.id) };
-  };
-
-  const readChanges = tool({
+  const readChanges = tool<
+    { session: typeof sessionArg; file: z.ZodOptional<z.ZodString> },
+    Caller
+  >({
     name: "read_changes",
     title: "Read changes",
     description:
@@ -80,80 +77,58 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
         .optional()
         .describe("A file as read_changes lists it, to see its diff"),
     },
-    readOnly: true,
-    async run({ session, file }, caller: Caller) {
-      const { workspace } = await workspaceFor(caller, session);
-      const { files, total_count } = await host.act(caller, workspaces.diffFiles, {
-        workspaceId: workspace.id,
-      });
-      if (file) {
-        // Only a changed file: the diff of an unchanged one is the whole file,
-        // and that may be a secret git ignores (.env).
-        const listed = files.find((f) => normal(f.file) === normal(file));
-        if (!listed) {
-          throw new OperatorError(
-            `${quoted(file)} is not one of ${quoted(workspace.slug)}'s changed files. Nothing was shown.\n  ${callHint("read_changes", { session })}`
-          );
-        }
-        const { diff } = await host.act(caller, workspaces.diffFile, {
-          workspaceId: workspace.id,
-          file: listed.file,
+    effect: "read",
+    run: ({ session, file }, caller) =>
+      refusing(async () => {
+        const entry = await operator().find(caller, session);
+        const workspaceId = entry.workspace.id;
+        const name = quoted(entry.workspace.name);
+        const { files, total_count } = await host.act(caller, workspaces.diffFiles, {
+          workspaceId,
         });
-        const name = quoted(listed.file);
-        if (!diff.trim()) return `${name}: no changes`;
-        const cut = diff.length > DIFF_LIMIT;
+        if (file) {
+          // Only a changed file: the diff of an unchanged one is the whole file,
+          // and that may be a secret git ignores (.env).
+          const listed = files.find((f) => normal(f.file) === normal(file));
+          if (!listed) {
+            throw new OperatorError(
+              "not_found",
+              `${quoted(file)} is not one of ${name}'s changed files. Nothing was shown.`,
+              { next: callHint("read_changes", { session }) }
+            );
+          }
+          const { diff } = await host.act(caller, workspaces.diffFile, {
+            workspaceId,
+            file: listed.file,
+          });
+          if (!diff.trim()) return `${quoted(listed.file)}: no changes`;
+          const cut = diff.length > DIFF_LIMIT;
+          return [
+            `diff of ${quoted(listed.file)} (+${listed.additions} -${listed.deletions}):`,
+            quote(cut ? diff.slice(0, DIFF_LIMIT) : diff),
+            ...(cut ? [`(cut at ${DIFF_LIMIT} of ${diff.length} characters)`] : []),
+          ].join("\n");
+        }
+        if (files.length === 0) return `${name}: no changes`;
+        const total = total_count ?? files.length;
+        const shown = files.slice(0, FILES_LIMIT);
         return [
-          `diff of ${name} (+${listed.additions} -${listed.deletions}):`,
-          quote(cut ? diff.slice(0, DIFF_LIMIT) : diff),
-          ...(cut ? [`(cut at ${DIFF_LIMIT} of ${diff.length} characters)`] : []),
+          `${name}: ${total} file(s) changed`,
+          ...shown.map((f) => `  ${quoted(f.file)}  +${f.additions} -${f.deletions}`),
+          ...(total > shown.length ? [`  (and ${total - shown.length} more)`] : []),
+          `  ${callHint("read_changes", { session, file: shown[0]!.file })}`,
         ].join("\n");
-      }
-      if (files.length === 0) return `${quoted(workspace.slug)}: no changes`;
-      const total = total_count ?? files.length;
-      const shown = files.slice(0, FILES_LIMIT);
-      return [
-        `${quoted(workspace.slug)}: ${total} file(s) changed`,
-        ...shown.map((f) => `  ${quoted(f.file)}  +${f.additions} -${f.deletions}`),
-        ...(total > shown.length ? [`  (and ${total - shown.length} more)`] : []),
-        `  ${callHint("read_changes", { session, file: shown[0]!.file })}`,
-      ].join("\n");
-    },
+      }),
   });
 
-  const archiveWorkspace = tool({
-    name: "archive_workspace",
-    title: "Archive workspace",
-    description:
-      "Put a finished session's workspace away: it leaves the list, and its branch and changes are kept. One whose start failed is removed instead.",
-    input: { session: sessionArg },
-    readOnly: false,
-    destructive: true,
-    async run({ session }, caller: Caller) {
-      const { entry, workspace } = await workspaceFor(caller, session);
-      // Whatever its view says: setup's end would set it ready again.
-      if (workspace.state === "initializing") {
-        throw new OperatorError(
-          `${quoted(entry.name)} is still being set up. Nothing was archived.\n  ${callHint("wait_for_session", { session })}`
-        );
-      }
-      if (entry.phase === "working" || entry.phase === "needs_input") {
-        throw new OperatorError(
-          `${quoted(entry.name)} is still ${entry.phase === "working" ? "working" : "waiting on an answer"}. Nothing was archived.\n  ${callHint("stop_session", { session })}`
-        );
-      }
-      // A start that failed has no chat, branch or changes to keep: it is removed, as the app does.
-      if (workspace.state === "error" && !workspace.current_session_id) {
-        await host.act(caller, workspaces.deleteWorkspace, { workspaceId: workspace.id });
-        return `removed ${quoted(entry.name)}: its start had failed, so there was nothing to keep.`;
-      }
-      await host.act(caller, workspaces.archiveWorkspace, { workspaceId: workspace.id });
-      // The branch by name: where the person finds the work again.
-      const branch = workspace.git_branch ? ` ${quoted(workspace.git_branch)}` : "";
-      return `archived ${quoted(entry.name)}. Its branch${branch} and changes are kept.`;
+  const sendFeedbackTool = tool<
+    {
+      category: z.ZodOptional<z.ZodEnum<{ [K in (typeof FEEDBACK_CATEGORIES)[number]]: K }>>;
+      subject: z.ZodOptional<z.ZodString>;
+      message: z.ZodString;
     },
-  });
-
-  const sendFeedbackTool = tool({
+    Caller
+  >({
     name: "send_feedback",
     title: "Send feedback",
     description:
@@ -179,8 +154,8 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
         .max(5000)
         .describe("What happened and what you expected, specific enough to act on"),
     },
-    // It changes nothing on this computer, so an assistant allowed to read may send it.
-    readOnly: true,
+    // It posts outside, so it is a write; the host lets an assistant allowed to read send it.
+    effect: "write",
     openWorld: true,
     async run({ category = "tool", subject, message }) {
       try {
@@ -198,14 +173,17 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
         ].join("\n");
       } catch (error) {
         if (error instanceof FeedbackNotSent) {
-          throw new OperatorError(`${error.message} Nothing was sent; try again later.`);
+          throw new OperatorError(
+            "unsupported",
+            `${error.message} Nothing was sent; try again later.`
+          );
         }
         throw error;
       }
     },
   });
 
-  return [readChanges, archiveWorkspace, addProjectTool(host), sendFeedbackTool];
+  return [readChanges, addProjectTool(host), sendFeedbackTool];
 }
 
 let operator: Operator<Caller> | null = null;
@@ -215,63 +193,82 @@ function theOperator(): Operator<Caller> {
   if (!operator) {
     const host = createDeusHost();
     const made: Operator<Caller> = createOperator<Caller>(host, {
-      // A held call answers "still working" before the caller's connection is cut.
-      maxWaitSeconds: (caller) => maxWaitFor(caller),
       extra: deusTools(host, () => made),
+      // What failed is reported here; the caller is told only the package's sentence.
+      onError: (error, tool) => {
+        Sentry.captureException(error, { tags: { operatorTool: tool } });
+        console.error(`[Assistants] ${tool} failed:`, error);
+      },
     });
     operator = made;
   }
   return operator;
 }
 
-/**
- * The tools as MCP lists and runs them. The list is the same for every
- * caller. A call is checked against the caller's access first; a refusal is
- * thrown with words the model can act on, and the MCP handler answers it as an
- * `isError` tool result. Anything else that fails is a bug: reported here, and
- * an assistant is told only `ASSISTANT_FAILURE`, never its internal text.
- */
-const source: ToolSource<Caller> = {
-  tools: () => theOperator().tools(LOCAL_CALLER),
-  async call(name, args, caller) {
-    const ops = theOperator();
-    const { assistant } = caller;
-    if (assistant) {
-      const found = ops.tools(caller).find((t) => t.name === name);
-      const refusal = refusalFor(assistant.access, found?.readOnly === false ? "operate" : "read");
-      if (refusal) throw new OperatorError(refusal);
-    }
-    try {
-      return await ops.call(name, args, caller);
-    } catch (error) {
-      if (error instanceof OperatorError) throw error;
-      // A refusal of the app's own (access read again, a conflict, a not-found):
-      // the MCP binding passes only an OperatorError's words through as written.
-      if (error instanceof AppError) throw new OperatorError(error.message);
-      Sentry.captureException(error);
-      console.error(`[Assistants] ${name} failed:`, error);
-      throw assistant ? new Error(ASSISTANT_FAILURE) : error;
-    }
-  },
-};
+/** An outside caller as the package knows it: an assistant speaks as itself, a device or the window as the person. */
+function external(caller: Caller): ExternalCaller<Caller> {
+  const assistant = caller.assistant;
+  const host = assistant && currentHost();
+  const name = host ? store.findAssistant(host, assistant.clientId)?.name : undefined;
+  return {
+    kind: "external",
+    id: assistant
+      ? `assistant:${assistant.clientId}`
+      : caller.deviceId
+        ? `device:${caller.deviceId}`
+        : "window",
+    speaksAs: assistant ? "assistant" : "person",
+    ...(assistant ? { name: name ?? assistant.clientId } : {}),
+    ...(caller.endsAt !== undefined ? { endsAt: caller.endsAt } : {}),
+    auth: caller,
+  };
+}
 
 let handler: McpHandler<Caller> | null = null;
 
 /**
  * Answer one MCP message (or a batch) for `caller`: the JSON-RPC response, an
- * array for a batch, or null when there is nothing to answer. Built on first
- * use, titled with this computer's name as it is then.
+ * array for a batch, or null when there is nothing to answer. A refusal is an
+ * `isError` tool result in words the model can act on; any other failure is
+ * one generic sentence (the package's `refused (failed)`), reported by the host.
  */
 export function answerMcp(message: unknown, caller: Caller): Promise<unknown> {
-  handler ??= createMcpHandler(source, {
-    name: "deus",
-    version: SERVER_VERSION,
-    title: `Deus on ${getServerName()}`,
-    instructions:
-      "Start with list_sessions to see the coding agents on this computer; what you may do here is decided by the person on this computer.",
-  });
+  handler ??= createMcpHandler(
+    {
+      tools: () => theOperator().tools(),
+      call: (name, args, from: Caller) => theOperator().call(name, args, external(from)),
+    },
+    {
+      name: "deus",
+      version: SERVER_VERSION,
+      title: `Deus on ${getServerName()}`,
+      instructions:
+        "Start with list_sessions to see the coding agents on this computer; what you may do here is decided by the person on this computer.",
+    }
+  );
   return handler(message, caller);
 }
+
+/**
+ * A chat's tools: the operator's (the chat itself the caller, as the engine
+ * fills it) beside the Deus tools in one source. The Deus tools run as they
+ * always have; the operator's words and rules are the package's. The
+ * guidance goes in the turn's instructions, so it is not repeated here.
+ */
+export function withSessionTools(own: HostToolSource): HostToolSource {
+  const ops = operatorSessionTools(theOperator(), { name: own.name, instructions: "" });
+  const mine = new Set(own.tools.map((t) => t.name));
+  return {
+    ...own,
+    name: DEUS_TOOLS_SERVER,
+    tools: [...ops.tools, ...own.tools],
+    call: (name, args, caller, signal) =>
+      mine.has(name) ? own.call(name, args, caller, signal) : ops.call(name, args, caller, signal),
+  };
+}
+
+// Every chat's tools carry the operator's from the engine's next session on.
+provideSessionTools(withSessionTools);
 
 /** Tests only: build the tools and the MCP handler again (over a new host). */
 export function _resetOperator(): void {

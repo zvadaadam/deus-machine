@@ -25,6 +25,8 @@ export interface Message {
   model?: string | null; // Model that produced the message
   /** Set when this message is a subagent's output: the toolCallId that spawned it. */
   parent_tool_call_id?: string | null;
+  /** Who sent a user message when not the person: another chat, or an outside assistant. */
+  origin?: import("@zvada/agent-server/protocol").ReportedOrigin | null;
   /** Engine Part snapshots in stream order (attached by the backend). */
   parts?: Array<Part | UnknownPart>;
 }

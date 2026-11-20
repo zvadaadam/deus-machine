@@ -8,8 +8,41 @@ import type { PendingFirstMessage } from "@/features/workspace/store/workspaceSt
 
 type FirstMessageFields = Pick<
   Workspace,
-  "id" | "state" | "current_session_id" | "latest_message_sent_at" | "session_status"
+  | "id"
+  | "state"
+  | "current_session_id"
+  | "latest_message_sent_at"
+  | "session_status"
+  | "first_session_id"
+  | "first_session_status"
+  | "first_session_last_message_at"
 >;
+
+/**
+ * The chat a waiting first message belongs to, and that chat's own state:
+ * the workspace's first chat (its id minted with the workspace), whatever
+ * chat is current since (another chat, an agent's second opinion, may have
+ * been opened). A workspace from before first-chat ids falls back to its
+ * current chat.
+ */
+export function firstChatOf(workspace: FirstMessageFields): {
+  sessionId: string;
+  status: string | null;
+  spokenTo: boolean;
+} | null {
+  if (workspace.first_session_id && workspace.first_session_status != null)
+    return {
+      sessionId: workspace.first_session_id,
+      status: workspace.first_session_status,
+      spokenTo: workspace.first_session_last_message_at != null,
+    };
+  if (workspace.first_session_id || !workspace.current_session_id) return null;
+  return {
+    sessionId: workspace.current_session_id,
+    status: workspace.session_status,
+    spokenTo: workspace.latest_message_sent_at !== null,
+  };
+}
 
 export interface FirstMessageDelivery {
   workspaceId: string;
@@ -17,17 +50,16 @@ export interface FirstMessageDelivery {
   first: PendingFirstMessage;
 }
 
-/** A workspace whose first chat is open and has heard nothing yet. */
-function awaitsFirstMessage(
-  workspace: FirstMessageFields
-): workspace is FirstMessageFields & { current_session_id: string } {
-  return (
-    workspace.state === "ready" &&
-    !!workspace.current_session_id &&
+/** The first chat, when it is open and has heard nothing yet. */
+function awaitsFirstMessage(workspace: FirstMessageFields): string | null {
+  const chat = firstChatOf(workspace);
+  return workspace.state === "ready" &&
+    chat &&
     // Already said once (an earlier delivery, before a reload or a quit): never twice.
-    workspace.latest_message_sent_at === null &&
-    workspace.session_status !== "working"
-  );
+    !chat.spokenTo &&
+    chat.status !== "working"
+    ? chat.sessionId
+    : null;
 }
 
 /** The waiting messages whose workspaces are ready for them now. */
@@ -37,9 +69,8 @@ export function dueFirstMessages(
 ): FirstMessageDelivery[] {
   return workspaces.flatMap((workspace) => {
     const first = pending[workspace.id];
-    return first && awaitsFirstMessage(workspace)
-      ? [{ workspaceId: workspace.id, sessionId: workspace.current_session_id, first }]
-      : [];
+    const sessionId = first ? awaitsFirstMessage(workspace) : null;
+    return first && sessionId ? [{ workspaceId: workspace.id, sessionId, first }] : [];
   });
 }
 
@@ -54,8 +85,9 @@ export function missedFirstMessages(
 ): FirstMessageDelivery[] {
   return workspaces.flatMap((workspace) => {
     const first = pending[workspace.id];
-    return first && workspace.current_session_id && workspace.latest_message_sent_at !== null
-      ? [{ workspaceId: workspace.id, sessionId: workspace.current_session_id, first }]
+    const chat = first ? firstChatOf(workspace) : null;
+    return first && chat?.spokenTo
+      ? [{ workspaceId: workspace.id, sessionId: chat.sessionId, first }]
       : [];
   });
 }

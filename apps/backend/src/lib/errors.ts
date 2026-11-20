@@ -40,3 +40,11 @@ export class ConflictError extends AppError {
     this.name = "ConflictError";
   }
 }
+
+/** The chat runs a turn, or waits on an answer: the send is refused, typed so a caller can tell. */
+export class ChatBusyError extends ConflictError {
+  constructor(message: string) {
+    super(message);
+    this.name = "ChatBusyError";
+  }
+}

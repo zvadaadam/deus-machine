@@ -75,9 +75,10 @@ export function waitingOf(request: ToolRequestEventData): Waiting | null {
   if (request.method === "exitPlanMode") {
     const input = request.params.toolInput;
     return {
-      kind: "decision",
+      kind: "plan",
       request: {
         requestId: request.requestId,
+        purpose: "plan",
         title: PLAN_TITLE,
         toolCall: {
           toolName: "ExitPlanMode",
@@ -131,5 +132,8 @@ export function replyFor(request: ToolRequestEventData, answer: Answer): ToolRep
     const feedback = outcome.outcome === "selected" ? outcome.message?.trim() : undefined;
     return { result: { approved: false, ...(feedback ? { feedback } : {}) } };
   }
-  throw new OperatorError("That answer does not fit what the agent asked. Nothing was sent.");
+  throw new OperatorError(
+    "invalid_input",
+    "answer_request: answer: it does not fit what the agent asked. Nothing was sent."
+  );
 }

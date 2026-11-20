@@ -5,7 +5,12 @@
 // system-prompt append, resume plumbing.
 
 import { parseAgentInput } from "@zvada/agent-server/protocol";
-import type { AgentInput, McpServerConfig, TurnStartParams } from "@zvada/agent-server/protocol";
+import type {
+  AgentInput,
+  McpServerConfig,
+  Origin,
+  TurnStartParams,
+} from "@zvada/agent-server/protocol";
 import type { AgentHarness } from "@shared/enums";
 import type { ThinkingLevel, PermissionMode } from "@shared/protocol";
 import { buildSystemPromptAppend } from "./system-prompt";
@@ -81,6 +86,8 @@ export interface DeusTurnOptions {
   simulator?: { udid: string } | null;
   /** The workspace's agent-device session (`agentDeviceFor`); the chat's id without one. */
   agentDeviceSession?: string;
+  /** Who sent the message when not the person: set by the operator's host only, never a client. */
+  origin?: Origin;
 }
 
 /** Assemble the wire params for one turn (ids are minted by the caller). */
@@ -96,6 +103,7 @@ export function buildTurnStartParams(
     sessionId,
     turnId,
     input: options.supportsImages ? input : withoutImageParts(input),
+    ...(options.origin && options.origin.kind !== "person" ? { origin: options.origin } : {}),
     config: {
       harness: agentHarness,
       cwd: options.cwd,

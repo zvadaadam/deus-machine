@@ -23,7 +23,6 @@ import { getErrorMessage } from "@shared/lib/errors";
 import type { RepoGroup } from "@shared/types/workspace";
 import { getAgentHarnessForModel, getModelId } from "@/shared/agents";
 import { useDefaultThinkingLevel } from "@/features/settings/api";
-import { useWorkspaceStore } from "@/features/workspace/store";
 import {
   pendingFirstMessages,
   useWorkspaceStartStore,
@@ -31,10 +30,12 @@ import {
 import { newTurnId, useSendMessage } from "../api/session.queries";
 import {
   dueFirstMessages,
+  firstChatOf,
   missedFirstMessages,
   type FirstMessageDelivery,
 } from "../lib/firstMessage";
 import { createOptimisticUserMessage } from "../lib/optimisticMessage";
+import { openChat } from "../lib/openChat";
 import { returnMessageToComposer } from "../lib/returnToComposer";
 import { emptyComposer, sessionComposerActions } from "../store/sessionComposerStore";
 
@@ -62,11 +63,12 @@ export function useFirstMessageDelivery(repoGroups: RepoGroup[], loaded: boolean
     // What was typed on the start page moves to the chat before anything is
     // sent, so a delivery below finds the chat's composer already seeded.
     for (const workspace of workspaces) {
-      if (workspace.current_session_id) {
-        sessionComposerActions.move(workspace.id, workspace.current_session_id, {
+      const chat = firstChatOf(workspace);
+      if (chat) {
+        sessionComposerActions.move(workspace.id, chat.sessionId, {
           // Spoken to already (from another device, maybe with another agent):
           // its history sets the model, and only what was typed here moves.
-          settings: workspace.latest_message_sent_at === null,
+          settings: !chat.spokenTo,
         });
       }
     }
@@ -102,12 +104,10 @@ export function useFirstMessageDelivery(repoGroups: RepoGroup[], loaded: boolean
       } catch (error) {
         pendingFirstMessages.clear(workspaceId);
         await returnToComposer(sessionId, first.message).catch(() => {});
-        const open = () => useWorkspaceStore.getState().selectWorkspace(workspaceId);
+        const open = () => openChat(workspaceId, sessionId);
         toast.error(getErrorMessage(error), {
           description: "Your message is in that chat's composer.",
-          ...(useWorkspaceStore.getState().selectedWorkspaceId === workspaceId
-            ? {}
-            : { action: { label: "Open", onClick: open } }),
+          action: { label: "Open", onClick: open },
         });
       } finally {
         sending.current.delete(workspaceId);

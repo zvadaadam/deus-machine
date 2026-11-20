@@ -101,14 +101,15 @@ export function persistMessages(
     }
 
     const upsert = db.prepare(
-      `INSERT INTO messages (id, session_id, role, turn_id, model, sent_at, parent_tool_call_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO messages (id, session_id, role, turn_id, model, sent_at, parent_tool_call_id, origin)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          role = excluded.role,
          turn_id = excluded.turn_id,
          model = COALESCE(excluded.model, messages.model),
          sent_at = COALESCE(excluded.sent_at, messages.sent_at),
-         parent_tool_call_id = COALESCE(excluded.parent_tool_call_id, messages.parent_tool_call_id)`
+         parent_tool_call_id = COALESCE(excluded.parent_tool_call_id, messages.parent_tool_call_id),
+         origin = COALESCE(excluded.origin, messages.origin)`
     );
     for (const message of messages) {
       upsert.run(
@@ -118,7 +119,9 @@ export function persistMessages(
         message.turnId,
         message.model ?? null,
         iso(message.startedAt),
-        message.parentToolCallId ?? null
+        message.parentToolCallId ?? null,
+        // Who sent a user message, as the engine echoed it: never a client's word.
+        message.role === "user" && message.origin ? JSON.stringify(message.origin) : null
       );
     }
     return { ok: true, value: undefined };
@@ -426,6 +429,16 @@ export function settleInterruptedSessions(): WriteResult<string[]> {
         JSON.stringify(ids)
       );
     }
+    // Every local turn that never ended ends now, as failed, not only those of the
+    // chats just settled: no local turn survives the process, and an unended turn
+    // row would hold every read cursor at its first message.
+    db.prepare(
+      `UPDATE turns SET ended_at = ?, outcome = ?
+       WHERE ended_at IS NULL AND session_id IN (SELECT s.id FROM sessions s JOIN workspaces w ON w.id = s.workspace_id WHERE w.kind != 'cloud')`
+    ).run(
+      Date.now(),
+      JSON.stringify({ stopReason: "error", error: { message: "Deus quit mid-turn." } })
+    );
     return { ok: true, value: ids };
   } catch (error) {
     return failed("interrupted sessions", error);
@@ -476,10 +489,10 @@ export function persistSessionTitle(sessionId: string, title: string): WriteResu
   const db = getDatabase();
   try {
     db.transaction(() => {
-      db.prepare(`UPDATE sessions SET title = ?, updated_at = datetime('now') WHERE id = ?`).run(
-        title,
-        sessionId
-      );
+      // Set once, like the workspace's below: a title given at the start is not replaced by the summary.
+      db.prepare(
+        `UPDATE sessions SET title = ?, updated_at = datetime('now') WHERE id = ? AND title IS NULL`
+      ).run(title, sessionId);
       // Auto-set workspace title only if not already set (preserves PR titles and user renames)
       db.prepare(
         `UPDATE workspaces SET title = ?

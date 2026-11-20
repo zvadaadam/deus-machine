@@ -10,48 +10,31 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useCreateSession, useWorkspaceSessions } from "@/features/session/api/session.queries";
-import { getAgentLabel, getAgentHarnessForModel, type AgentHarness } from "@/shared/agents";
+import { getAgentHarnessForModel, type AgentHarness } from "@/shared/agents";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import {
   sessionComposerActions,
   useSessionComposerStore,
 } from "@/features/session/store/sessionComposerStore";
 import type { Session } from "@/features/session/types";
-import type {
-  ChatTab,
-  ClosedSessionTab,
-  PendingChatTab,
-  SessionChatTab,
-} from "@/features/session/ui/tabs";
+import type { ChatTab, ClosedSessionTab, SessionChatTab } from "@/features/session/ui/tabs";
 import { getChatTabSessionId, isSessionChatTab } from "@/features/session/ui/tabs";
+import {
+  NEW_CHAT_LABEL,
+  arrivedTab,
+  arrivedWhileAway,
+  createPendingTab,
+  getOpenSessionIds,
+  nextStartedChatLabel,
+  reconcileLive,
+  sessionToTab,
+} from "./chatTabsSync";
+import { openChatDone, useOpenChatStore } from "@/features/session/lib/openChat";
 
-const NEW_CHAT_LABEL = "New chat";
 const MAX_CLOSED_TABS = 20;
 
 function createClosedTabId(sessionId: string): string {
   return `${sessionId}-${Date.now()}-${crypto.randomUUID()}`;
-}
-
-function getOpenSessionIds(tabs: ChatTab[]): Set<string> {
-  const ids = new Set<string>();
-  for (const tab of tabs) {
-    if (isSessionChatTab(tab)) ids.add(tab.sessionId);
-  }
-  return ids;
-}
-
-function buildStartedChatLabel(agentHarness: AgentHarness, sequence: number): string {
-  return `${getAgentLabel(agentHarness)} #${sequence}`;
-}
-
-function createPendingTab(): PendingChatTab {
-  return {
-    kind: "pending",
-    id: "tab-default",
-    label: NEW_CHAT_LABEL,
-    agentHarness: "claude-code",
-    hasStarted: false,
-  };
 }
 
 function createPlaceholderSessionTab(
@@ -68,29 +51,6 @@ function createPlaceholderSessionTab(
     hasStarted: false,
     initialModel,
   };
-}
-
-/** Build a tab from a session record. Sequence is computed externally. */
-function sessionToTab(session: Session, sequence: number): SessionChatTab {
-  const hasStarted = session.message_count > 0;
-  return {
-    kind: "session",
-    id: `tab-${session.id}`,
-    sessionId: session.id,
-    label: hasStarted ? buildStartedChatLabel(session.agent_harness, sequence) : NEW_CHAT_LABEL,
-    agentHarness: session.agent_harness,
-    hasStarted,
-    // Hydrated tabs let SessionComposer restore the model from recorded turns.
-    // initialModel is reserved for an explicit choice when opening a new tab.
-  };
-}
-
-/** Keep existing labels stable when chats start out of order or tabs close. */
-function nextStartedChatLabel(tabs: ChatTab[], agentHarness: AgentHarness): string {
-  const labels = new Set(tabs.filter((tab) => tab.hasStarted).map((tab) => tab.label));
-  let sequence = 1;
-  while (labels.has(buildStartedChatLabel(agentHarness, sequence))) sequence++;
-  return buildStartedChatLabel(agentHarness, sequence);
 }
 
 /** Compute per-harness sequence numbers for a list of sessions (in order). */
@@ -112,9 +72,13 @@ interface UseChatTabsOptions {
   activeSessionId: string | null | undefined;
 }
 
+/** An open-chat request older than this is dropped: a click's answer, not a later surprise. */
+const OPEN_CHAT_REQUEST_MAX_AGE_MS = 10_000;
+
 export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions) {
   // Fetch all sessions for this workspace (for hydrating tab metadata)
-  const { data: workspaceSessions } = useWorkspaceSessions(workspaceId);
+  const { data: workspaceSessions, dataUpdatedAt: sessionsReadAt } =
+    useWorkspaceSessions(workspaceId);
 
   // Build session lookup map
   const sessionMap = useMemo(() => {
@@ -184,32 +148,41 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
   // --- Hydrate tabs with real session data when sessions load ---
 
   const hydrated = useRef(false);
+  /** The closed tabs as of this render, for the live reconcile's tabs update. */
+  const closedNow = useRef(closedTabs);
+  useEffect(() => {
+    closedNow.current = closedTabs;
+  }, [closedTabs]);
+  /** Chats the live list has shown: one gone from it since was put away (or deleted). */
+  const seen = useRef(new Set<string>());
   useEffect(() => {
     if (!workspaceSessions) return;
     if (hydrated.current) {
-      // A cloud snapshot can establish that an untitled chat has started after
-      // discovery has already hydrated the tabs. Preserve order and draft choices.
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reconcile persisted tabs with server discovery
+      // Functional updates over the state as it is, so they compose with any other
+      // update in the same render (the first chat replacing the placeholder).
+      const before = seen.current;
+      seen.current = new Set(workspaceSessions.map((s) => s.id));
+      setClosedTabs(
+        (closed) => reconcileLive({ tabs: [], closed }, workspaceSessions, before).closed
+      );
       setMainTabs((tabs) => {
-        const updated = [...tabs];
-        let changed = false;
-        tabs.forEach((tab, index) => {
-          const session = isSessionChatTab(tab) ? sessionMap.get(tab.sessionId) : undefined;
-          if (tab.hasStarted || !session || session.message_count === 0) return;
-          changed = true;
-          updated[index] = {
-            ...tab,
-            hasStarted: true,
-            initialModel: undefined,
-            agentHarness: session.agent_harness,
-            label: nextStartedChatLabel(updated, session.agent_harness),
-          };
-        });
-        return changed ? updated : tabs;
+        // The closed list matters: a chat opened with "+" and closed before a push lists it is an arrival.
+        const next = reconcileLive(
+          { tabs, closed: closedNow.current },
+          workspaceSessions,
+          before
+        ).tabs;
+        if (next !== tabs)
+          setActiveMainTabId((active) =>
+            next.some((t) => t.id === active) ? active : (next.at(-1)?.id ?? "tab-default")
+          );
+        return next;
       });
       return;
     }
     hydrated.current = true;
+    seen.current = new Set(workspaceSessions.map((s) => s.id));
+    const known = workspaceLayoutActions.getLayout(workspaceId).knownChatSessionIds;
 
     setMainTabs((prev) => {
       // Filter out orphaned session IDs (deleted from DB)
@@ -217,6 +190,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
         (tab) => !isSessionChatTab(tab) || sessionMap.has(tab.sessionId)
       );
 
+      let hydratedTabs: ChatTab[];
       if (validTabs.length === 0) {
         // All persisted sessions are gone — fall back to active session
         const fallbackId = activeSessionId;
@@ -229,22 +203,30 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
               ? createPlaceholderSessionTab(fallbackId)
               : createPendingTab();
         setActiveMainTabId(tab.id);
-        return [tab];
+        hydratedTabs = [tab];
+      } else {
+        // Compute sequences across all valid sessions in tab order
+        const orderedSessions = validTabs
+          .filter(isSessionChatTab)
+          .map((tab) => sessionMap.get(tab.sessionId)!)
+          .filter(Boolean);
+        const sequences = computeSequences(orderedSessions);
+
+        // Hydrate each placeholder with real session data
+        hydratedTabs = validTabs.map((t) => {
+          if (!isSessionChatTab(t)) return t;
+          const session = sessionMap.get(t.sessionId)!;
+          return sessionToTab(session, sequences.get(session.id) ?? 1);
+        });
       }
 
-      // Compute sequences across all valid sessions in tab order
-      const orderedSessions = validTabs
-        .filter(isSessionChatTab)
-        .map((tab) => sessionMap.get(tab.sessionId)!)
-        .filter(Boolean);
-      const sequences = computeSequences(orderedSessions);
-
-      // Hydrate each placeholder with real session data
-      const hydratedTabs = validTabs.map((t) => {
-        if (!isSessionChatTab(t)) return t;
-        const session = sessionMap.get(t.sessionId)!;
-        return sessionToTab(session, sequences.get(session.id) ?? 1);
-      });
+      // Chats that arrived while the workspace was not on screen become tabs too.
+      for (const session of arrivedWhileAway(
+        workspaceSessions,
+        getOpenSessionIds(hydratedTabs),
+        known
+      ))
+        hydratedTabs.push(arrivedTab(hydratedTabs, session));
 
       // Fix active tab if it was orphaned
       setActiveMainTabId((prevActive) => {
@@ -254,7 +236,36 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
 
       return hydratedTabs;
     });
-  }, [workspaceSessions, sessionMap, activeSessionId]);
+  }, [workspaceSessions, sessionMap, activeSessionId, workspaceId]);
+
+  // --- A request to show one chat (openChat), taken when mounted or already mounted ---
+
+  const requested = useOpenChatStore((state) => state.requested[workspaceId]);
+  useEffect(() => {
+    if (!requested || !hydrated.current || !workspaceSessions) return;
+    // Taken late, it would move the person's focus after they have gone on to something else.
+    if (Date.now() - requested.at > OPEN_CHAT_REQUEST_MAX_AGE_MS) {
+      openChatDone(workspaceId, requested.id);
+      return;
+    }
+    const session = sessionMap.get(requested.sessionId);
+    // A target not in the list waits for a list read from the host since the
+    // request (a cached one can predate the chat), and is dropped only if absent then.
+    if (!session) {
+      if (sessionsReadAt > requested.at) openChatDone(workspaceId, requested.id);
+      return;
+    }
+    if (!openChatDone(workspaceId, requested.id)) return;
+    const target = requested.sessionId;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- consume a navigation request
+    setMainTabs((tabs) =>
+      tabs.some((t) => isSessionChatTab(t) && t.sessionId === target)
+        ? tabs
+        : [...tabs, arrivedTab(tabs, session)]
+    );
+    setClosedTabs((closed) => closed.filter((c) => c.sessionId !== target));
+    setActiveMainTabId(`tab-${target}`);
+  }, [requested, sessionMap, workspaceSessions, sessionsReadAt, workspaceId]);
 
   // --- Persist tab state to localStorage on every change ---
   // Debounced to avoid writing on every intermediate state update.
@@ -271,7 +282,9 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       workspaceLayoutActions.setChatTabState(
         workspaceId,
         chatSessionIds,
-        activeSessionIdForPersist
+        activeSessionIdForPersist,
+        // What this view knew, so chats that arrive while it is away open as tabs next time.
+        hydrated.current ? [...seen.current] : undefined
       );
     }, 100);
 
@@ -344,7 +357,14 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
         const newSession = await createSessionMutation.mutateAsync(workspaceId);
         const agentHarness = initialModel ? getAgentHarnessForModel(initialModel) : "claude-code";
         const newTab = createPlaceholderSessionTab(newSession.id, agentHarness, initialModel);
-        setMainTabs((prevTabs) => [...prevTabs, newTab]);
+        // The live list may have added it already: one tab, with the person's choice.
+        setMainTabs((prevTabs) =>
+          prevTabs.some((t) => t.id === newTab.id)
+            ? prevTabs.map((t) =>
+                t.id === newTab.id && !t.hasStarted ? { ...t, agentHarness, initialModel } : t
+              )
+            : [...prevTabs, newTab]
+        );
         setActiveMainTabId(newTab.id);
       } catch (error) {
         console.error("[useChatTabs] Failed to create new session:", error);

@@ -120,6 +120,91 @@ describeWithDb("sendMessage", () => {
     expect(row(SESSION).status).toBe("working");
   });
 
+  it("the same turn asked again: the first's answer once it is known, its state left as it is", async () => {
+    vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+    let admit!: () => void;
+    const startTurn = vi
+      .spyOn(agentService, "startTurn")
+      .mockImplementation(() => new Promise<never>((resolve) => (admit = resolve as () => void)));
+    const first = send(SESSION);
+    // Still pending: the retry waits for it, and is not acknowledged before it.
+    let answered = false;
+    const retry = send(SESSION).then((r) => ((answered = true), r));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(answered).toBe(false);
+    admit();
+    await expect(first).resolves.toEqual({ turnId: "turn-1" });
+    await expect(retry).resolves.toEqual({ turnId: "turn-1" });
+    // A different request under the same id is a conflict, never acknowledged.
+    await expect(
+      sendMessage({
+        sessionId: SESSION,
+        content: "other",
+        model: "claude-opus-4-6",
+        agentHarness: "claude-code",
+        turnId: "turn-1",
+      })
+    ).rejects.toThrow("A different message");
+    expect(startTurn).toHaveBeenCalledOnce();
+  });
+
+  it("an ended turn asked again answers from its stored echo, and is not flipped back to working", async () => {
+    db.prepare("INSERT INTO turns (session_id, turn_id, ended_at) VALUES (?, 'turn-1', 1)").run(
+      SESSION
+    );
+    db.prepare(
+      "INSERT INTO messages (id, session_id, role, turn_id) VALUES ('m1', ?, 'user', 'turn-1')"
+    ).run(SESSION);
+    db.prepare(
+      "INSERT INTO parts (id, message_id, session_id, type, data) VALUES ('p1', 'm1', ?, 'text', ?)"
+    ).run(SESSION, JSON.stringify({ type: "text", text: "hello" }));
+    const startTurn = vi.spyOn(agentService, "startTurn");
+    await expect(send(SESSION)).resolves.toEqual({ turnId: "turn-1" });
+    expect(row(SESSION).status).toBe("idle");
+    expect(startTurn).not.toHaveBeenCalled();
+  });
+
+  it("the same turn asked again after its admission failed is sent anew", async () => {
+    vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+    const startTurn = vi
+      .spyOn(agentService, "startTurn")
+      .mockRejectedValueOnce(new Error("spawn failed"))
+      .mockResolvedValueOnce(undefined as never);
+    await expect(send(SESSION, "turn-9")).rejects.toThrow();
+    db.prepare("UPDATE sessions SET status = 'idle' WHERE id = ?").run(SESSION);
+    await expect(send(SESSION, "turn-9")).resolves.toEqual({ turnId: "turn-9" });
+    expect(startTurn).toHaveBeenCalledTimes(2);
+  });
+
+  it("F1: a stop during admission, then a refused start, leaves no turn row: a retry runs anew", async () => {
+    vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+    let refuse!: (err: unknown) => void;
+    const startTurn = vi
+      .spyOn(agentService, "startTurn")
+      .mockImplementationOnce(() => new Promise<never>((_, reject) => (refuse = reject)))
+      .mockResolvedValueOnce(undefined as never);
+    const first = send(SESSION, "turn-7");
+    // The stop sees the turn as live (registered before the engine's verdict) and claims it.
+    vi.spyOn(agentService, "liveTurnId").mockReturnValue("turn-7");
+    vi.spyOn(agentService, "stopSession").mockResolvedValue({ outcome: "cancelled" } as never);
+    await run(api.stopSession, { sessionId: SESSION });
+    refuse(new WireRequestError(WIRE_ERROR_CODES.shuttingDown, "server is shutting down"));
+    await expect(first).rejects.toThrow();
+    // No turn of that id exists, so a read has no running turn to show.
+    expect(db.prepare("SELECT COUNT(*) AS n FROM turns WHERE turn_id = 'turn-7'").get()).toEqual({
+      n: 0,
+    });
+    vi.mocked(agentService.liveTurnId).mockReturnValue(undefined);
+    db.prepare("UPDATE sessions SET status = 'idle' WHERE id = ?").run(SESSION);
+    await expect(send(SESSION, "turn-7")).resolves.toEqual({ turnId: "turn-7" });
+    expect(startTurn).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses a busy chat with a typed error", async () => {
+    db.prepare("UPDATE sessions SET status = 'working' WHERE id = ?").run(SESSION);
+    await expect(send(SESSION, "turn-2")).rejects.toMatchObject({ name: "ChatBusyError" });
+  });
+
   it.each([
     ["read-only", "Unsupported permission mode"],
     ["bypassPermissions", "Unsupported permission mode"],

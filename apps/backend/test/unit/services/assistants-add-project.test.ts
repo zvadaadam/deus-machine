@@ -35,7 +35,10 @@ vi.mock("../../../src/services/query-engine", () => ({
 }));
 vi.mock("../../../src/services/server-name", () => ({ getServerName: () => "Proof Mac" }));
 vi.mock("@sentry/node", () => ({ captureException: state.report }));
-vi.mock("../../../src/services/agent/service", () => ({ liveTurnId: () => undefined }));
+vi.mock("../../../src/services/agent/service", () => ({
+  liveTurnId: () => undefined,
+  provideSessionTools: () => {},
+}));
 vi.mock("../../../src/services/settings.service", () => ({ getSetting: () => undefined }));
 vi.mock("../../../src/services/streams", () => ({ publish: vi.fn() }));
 vi.mock("../../../src/services/account-session", () => ({
@@ -77,6 +80,7 @@ import { createDeusHost } from "../../../src/services/assistants/host";
 import { _resetOperator } from "../../../src/services/assistants/operator";
 import { NOT_ALLOWED_YET, READ_ONLY } from "../../../src/services/assistants/sentences";
 import { CLONE_REFUSALS } from "../../../src/lib/clone-address";
+import { ConflictError } from "../../../src/lib/errors";
 import { assistantCaller as assistant, operations } from "../../helpers";
 
 const REAL_GIT = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
@@ -421,6 +425,23 @@ describe("what is already here", () => {
   });
 });
 
+describe("the same folder added meanwhile (H18)", () => {
+  it("by the person while the tool clones: the tool returns that project", async () => {
+    // The app's add answers 409 with the project the folder already is (another add won).
+    state.ops.addRepo = ({ root_path }) => {
+      insertProject("widget", root_path as string, "https://github.com/acme/widget");
+      throw new ConflictError("Repository already exists", {
+        id: "seed-widget",
+        name: "widget",
+        root_path,
+      });
+    };
+    const said = await addProject("acme/widget");
+    expect(said).toContain('"widget"');
+    expect(said).not.toContain("refused");
+  });
+});
+
 describe("a clone", () => {
   it("that fails answers with git's words quoted, and adds nothing", async () => {
     await expect(addProject("acme/missing")).rejects.toThrow(
@@ -498,14 +519,13 @@ describe("then start_session", () => {
 });
 
 describe("projects with no folder on this computer", () => {
-  it("are not listed, and starting a session in one is refused with how to put it here", async () => {
+  it("starting a session in one is refused with how to put it here", async () => {
     insertProject("widget", null, "https://github.com/acme/widget");
     insertProject("gadget", path.join(home, "gadget"), null);
-    expect(await createDeusHost().groups!(LOCAL_CALLER)).toEqual(["gadget"]);
     await expect(
       callTool(assistant(), "start_session", { project: "widget", message: "go", wait: 0 })
     ).rejects.toThrow(
-      '"widget" is a cloud project: it has no folder on this computer, so no session can start here. add_project puts it on this computer.\n' +
+      'refused (unsupported): "widget" is a cloud project: it has no folder on this computer, so no session can start here. Nothing was started; add_project puts it on this computer.\n' +
         '  -> add_project(repository: "acme/widget")'
     );
   });

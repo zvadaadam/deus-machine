@@ -385,6 +385,7 @@ function toMessageRow(sessionId: string, message: ConversationMessage): Message 
     ...(message.parentToolCallId !== undefined && {
       parent_tool_call_id: message.parentToolCallId,
     }),
+    ...(message.origin !== undefined && { origin: message.origin }),
     parts: message.parts,
   };
 }

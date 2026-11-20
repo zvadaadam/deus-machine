@@ -127,6 +127,10 @@ export interface WorkspaceWithDetailsRow {
   session_error_category: string | null;
   session_error_message: string | null;
   latest_message_sent_at: string | null;
+  /** The first chat's id, minted with the workspace, and that chat's own status and when it was last spoken to. */
+  first_session_id?: string | null;
+  first_session_status?: SessionStatus | null;
+  first_session_last_message_at?: string | null;
 }
 
 // ─── sessions ────────────────────────────────────────────────
@@ -169,6 +173,8 @@ export interface MessageRow {
   model: string | null;
   sent_at: string | null;
   parent_tool_call_id: string | null;
+  /** The engine's origin of a user message not the person's, as JSON. */
+  origin: string | null;
 }
 
 export interface PartRow {
@@ -197,7 +203,9 @@ export interface CompactionRow {
 }
 
 /** MessageRow enriched with the engine Part snapshots from the parts table. */
-export interface MessageRowWithParts extends MessageRow {
+export interface MessageRowWithParts extends Omit<MessageRow, "origin"> {
+  /** Who sent a user message when not the person (`ReportedOrigin`). */
+  origin: import("@zvada/agent-server/protocol").ReportedOrigin | null;
   parts: Array<
     import("@shared/protocol-types").Part | import("@shared/protocol-types").UnknownPart
   >;

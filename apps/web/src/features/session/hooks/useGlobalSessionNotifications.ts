@@ -24,7 +24,7 @@
  * Sonner toasts handle in-app feedback.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { match } from "ts-pattern";
 import { toast } from "sonner";
@@ -35,12 +35,12 @@ import { track } from "@/platform/analytics";
 import { unreadActions } from "@/features/session/store/unreadStore";
 import { useWorkspaceStore } from "@/features/workspace/store";
 import { markStartedIn } from "@/features/workspace/store/workspaceStartStore";
-import {
-  useWorkspaceLayoutStore,
-  workspaceLayoutActions,
-} from "@/features/workspace/store/workspaceLayoutStore";
+import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { show as showWindow } from "@/platform/native/window";
-import type { SessionStatus } from "@shared/types/session";
+import { openChat } from "@/features/session/lib/openChat";
+import type { Session, SessionStatus } from "@shared/types/session";
+import { ACTIVE_TURN_STATUSES } from "@shared/enums";
+import { useWorkingSessionIds } from "@/features/session/api/session.queries";
 import type { RepoGroup, SetupStatus, Workspace, WorkspaceState } from "@shared/types/workspace";
 
 /**
@@ -64,15 +64,7 @@ function formatBody(repoName: string, ws: Workspace): string {
 function navigateToWorkspace(workspaceId: string, sessionId: string): void {
   unreadActions.markRead(sessionId);
   showWindow();
-  useWorkspaceStore.getState().selectWorkspace(workspaceId);
-  // Only update chat tabs if workspace has existing layout state.
-  // Stale notification clicks (workspace archived) skip this to avoid orphaned entries.
-  const existing = useWorkspaceLayoutStore.getState().layouts[workspaceId];
-  if (!existing || existing.activeChatTabSessionId === sessionId) return;
-  const sessionIds = existing.chatTabSessionIds.includes(sessionId)
-    ? existing.chatTabSessionIds
-    : [...existing.chatTabSessionIds, sessionId];
-  workspaceLayoutActions.setChatTabState(workspaceId, sessionIds, sessionId);
+  openChat(workspaceId, sessionId);
 }
 
 /**
@@ -90,6 +82,11 @@ function checkIsViewingSession(workspaceId: string, sessionId: string): boolean 
 
 export function useGlobalSessionNotifications() {
   const prevStatusMap = useRef(new Map<string, SessionStatus>());
+  const prevCurrentMap = useRef(new Map<string, string | null>());
+  /** Chats no longer current that were still working: followed through their own record. */
+  const orphans = useRef(new Map<string, { ws: Workspace; repoName: string }>());
+  const [orphanIds, setOrphanIds] = useState<string[]>([]);
+  useWorkingSessionIds(orphanIds);
   const prevSetupStatusMap = useRef(new Map<string, SetupStatus>());
   const prevStateMap = useRef(new Map<string, WorkspaceState>());
   const finishedBatch = useRef<FinishedEntry[]>([]);
@@ -131,6 +128,100 @@ export function useGlobalSessionNotifications() {
       }
     }
 
+    /**
+     * One chat's status, as last seen: unread, finished, needs input, failed.
+     * The workspace's current chat is followed through the workspace list; a
+     * chat no longer current that was still working (a second opinion was
+     * opened beside it) is followed through its own record until it settles.
+     */
+    function sessionStatusChanged(
+      ws: Workspace,
+      repoName: string,
+      sessionId: string,
+      status: SessionStatus,
+      errorCategory: string | null | undefined
+    ) {
+      const prevStatus = prevStatusMap.current.get(sessionId);
+      prevStatusMap.current.set(sessionId, status);
+
+      if (prevStatus && prevStatus !== status) {
+        // Mark session as unread when transitioning out of "working"
+        // to any terminal state — but only if user is not currently
+        // viewing that exact session.
+        if (
+          prevStatus === "working" &&
+          (status === "idle" ||
+            status === "error" ||
+            status === "needs_response" ||
+            status === "needs_plan_response")
+        ) {
+          const isViewingSession = checkIsViewingSession(ws.id, sessionId);
+          if (!isViewingSession) {
+            unreadActions.markUnread(sessionId);
+          }
+        }
+
+        // working → idle = agent finished
+        if (prevStatus === "working" && status === "idle") {
+          track("ai_turn_completed", { session_id: sessionId });
+          if (canNotify && !isWindowFocused()) {
+            queueFinished({
+              workspaceId: ws.id,
+              sessionId,
+              repoName: repoName,
+              label: ws.title || ws.git_branch || ws.slug,
+            });
+          }
+        }
+
+        // → needs_response = agent needs user input
+        if (status === "needs_response" && canNotify && !isWindowFocused()) {
+          sendNotification({
+            title: "Agent needs input",
+            body: formatBody(repoName, ws),
+            sound: "Ping",
+            onClick: () => navigateToWorkspace(ws.id, sessionId),
+          });
+        }
+
+        // → needs_plan_response = plan ready for review
+        if (status === "needs_plan_response" && canNotify && !isWindowFocused()) {
+          sendNotification({
+            title: "Plan ready for review",
+            body: formatBody(repoName, ws),
+            sound: "Ping",
+            onClick: () => navigateToWorkspace(ws.id, sessionId),
+          });
+        }
+
+        // → error = agent errored (with category-aware title)
+        if (status === "error") {
+          const category = errorCategory ?? undefined;
+          track("session_error_displayed", {
+            session_id: sessionId,
+            error_category: category,
+          });
+
+          if (canNotify && !isWindowFocused()) {
+            const title = match(category)
+              .with("auth", () => "Authentication Error")
+              .with("rate_limit", () => "Rate Limited")
+              .with("context_limit", () => "Context Limit Reached")
+              .with("network", () => "Network Error")
+              .with("db_write", () => "Database Error")
+              .with("process_exit", () => "Agent Process Crashed")
+              .otherwise(() => "Agent Error");
+            sendNotification({
+              title,
+              body: formatBody(repoName, ws),
+              sound: "Basso",
+              onClick: () => navigateToWorkspace(ws.id, sessionId),
+            });
+          }
+        }
+      }
+    }
+
     function queueFinished(entry: FinishedEntry) {
       finishedBatch.current.push(entry);
       if (!batchTimerRef.current) {
@@ -145,96 +236,66 @@ export function useGlobalSessionNotifications() {
       if (event.type !== "updated" || !event.query.queryKey[0]) return;
 
       const key = event.query.queryKey;
+      if (key[0] === "sessions" && key[1] === "detail") {
+        const sessionId = String(key[2]);
+        const orphan = orphans.current.get(sessionId);
+        if (!orphan) return;
+        const session = event.query.state.data as Session | null | undefined;
+        // Gone or put away: nothing more to follow.
+        if (session === null || session?.is_hidden) {
+          orphans.current.delete(sessionId);
+          setOrphanIds([...orphans.current.keys()]);
+          return;
+        }
+        if (!session) return;
+        sessionStatusChanged(
+          orphan.ws,
+          orphan.repoName,
+          sessionId,
+          session.status,
+          session.error_category
+        );
+        if (!ACTIVE_TURN_STATUSES.includes(session.status)) {
+          orphans.current.delete(sessionId);
+          setOrphanIds([...orphans.current.keys()]);
+        }
+        return;
+      }
       if (key[0] !== "workspaces" || key[1] !== "by-repo") return;
 
       const groups = event.query.state.data as RepoGroup[] | undefined;
       if (!groups) return;
 
+      // A followed chat whose workspace left the list (archived, deleted) is released.
+      const present = new Set(groups.flatMap((group) => group.workspaces.map((w) => w.id)));
+      let released = false;
+      for (const [id, { ws }] of orphans.current)
+        if (!present.has(ws.id)) released = orphans.current.delete(id) || released;
+      if (released) setOrphanIds([...orphans.current.keys()]);
+
       for (const group of groups) {
         for (const ws of group.workspaces) {
           // --- Session status transitions ---
-          if (ws.current_session_id && ws.session_status) {
-            const sessionId = ws.current_session_id;
-            const status = ws.session_status as SessionStatus;
-            const prevStatus = prevStatusMap.current.get(sessionId);
-            prevStatusMap.current.set(sessionId, status);
-
-            if (prevStatus && prevStatus !== status) {
-              // Mark session as unread when transitioning out of "working"
-              // to any terminal state — but only if user is not currently
-              // viewing that exact session.
-              if (
-                prevStatus === "working" &&
-                (status === "idle" ||
-                  status === "error" ||
-                  status === "needs_response" ||
-                  status === "needs_plan_response")
-              ) {
-                const isViewingSession = checkIsViewingSession(ws.id, sessionId);
-                if (!isViewingSession) {
-                  unreadActions.markUnread(sessionId);
-                }
-              }
-
-              // working → idle = agent finished
-              if (prevStatus === "working" && status === "idle") {
-                track("ai_turn_completed", { session_id: sessionId });
-                if (canNotify && !isWindowFocused()) {
-                  queueFinished({
-                    workspaceId: ws.id,
-                    sessionId,
-                    repoName: group.repo_name,
-                    label: ws.title || ws.git_branch || ws.slug,
-                  });
-                }
-              }
-
-              // → needs_response = agent needs user input
-              if (status === "needs_response" && canNotify && !isWindowFocused()) {
-                sendNotification({
-                  title: "Agent needs input",
-                  body: formatBody(group.repo_name, ws),
-                  sound: "Ping",
-                  onClick: () => navigateToWorkspace(ws.id, sessionId),
-                });
-              }
-
-              // → needs_plan_response = plan ready for review
-              if (status === "needs_plan_response" && canNotify && !isWindowFocused()) {
-                sendNotification({
-                  title: "Plan ready for review",
-                  body: formatBody(group.repo_name, ws),
-                  sound: "Ping",
-                  onClick: () => navigateToWorkspace(ws.id, sessionId),
-                });
-              }
-
-              // → error = agent errored (with category-aware title)
-              if (status === "error") {
-                const category = ws.session_error_category ?? undefined;
-                track("session_error_displayed", {
-                  session_id: sessionId,
-                  error_category: category,
-                });
-
-                if (canNotify && !isWindowFocused()) {
-                  const title = match(category)
-                    .with("auth", () => "Authentication Error")
-                    .with("rate_limit", () => "Rate Limited")
-                    .with("context_limit", () => "Context Limit Reached")
-                    .with("network", () => "Network Error")
-                    .with("db_write", () => "Database Error")
-                    .with("process_exit", () => "Agent Process Crashed")
-                    .otherwise(() => "Agent Error");
-                  sendNotification({
-                    title,
-                    body: formatBody(group.repo_name, ws),
-                    sound: "Basso",
-                    onClick: () => navigateToWorkspace(ws.id, sessionId),
-                  });
-                }
-              }
+          // The chat that was current, if it was still working, is followed on its own.
+          const prevCurrent = prevCurrentMap.current.get(ws.id);
+          prevCurrentMap.current.set(ws.id, ws.current_session_id);
+          if (prevCurrent && prevCurrent !== ws.current_session_id) {
+            const was = prevStatusMap.current.get(prevCurrent);
+            if (was && ACTIVE_TURN_STATUSES.includes(was)) {
+              orphans.current.set(prevCurrent, { ws, repoName: group.repo_name });
+              setOrphanIds([...orphans.current.keys()]);
             }
+          }
+          if (ws.current_session_id && ws.session_status) {
+            if (orphans.current.delete(ws.current_session_id))
+              setOrphanIds([...orphans.current.keys()]);
+            sessionStatusChanged(
+              ws,
+              group.repo_name,
+              ws.current_session_id,
+              ws.session_status as SessionStatus,
+              ws.session_error_category
+            );
           }
 
           // --- Start transitions ---
@@ -242,13 +303,15 @@ export function useGlobalSessionNotifications() {
           prevStateMap.current.set(ws.id, ws.state);
 
           // Local only: a cloud chat already tells its computer's story (cloud:env).
+          // The start is told in the workspace's first chat, whatever chat is current.
+          const firstChat = ws.first_session_id ?? ws.current_session_id;
           if (
             prevState === "initializing" &&
             ws.state === "ready" &&
             ws.kind !== "cloud" &&
-            ws.current_session_id
+            firstChat
           ) {
-            markStartedIn(ws.id, ws.current_session_id);
+            markStartedIn(ws.id, firstChat);
           }
 
           if (prevState === "initializing" && ws.state === "error") {
