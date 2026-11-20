@@ -36,7 +36,6 @@ vi.mock("@zvada/agent-server/server", async () => {
         "bin/codex",
         "bin/codex-code-mode-host",
         "codex-path/rg",
-        "codex-resources/zsh/bin/zsh",
         ...(platform?.startsWith("linux-") ? ["codex-resources/bwrap"] : []),
       ]) {
         write(path.join(codex, entry), entry, true);
@@ -138,7 +137,6 @@ describe("bundled Codex package", () => {
         "bin/codex-code-mode-host"
       );
       expect(existsSync(path.join(payload, "codex-package.json"))).toBe(true);
-      expect(existsSync(path.join(payload, "codex-resources/zsh/bin/zsh"))).toBe(true);
       if (platform === "linux")
         expect(existsSync(path.join(payload, "codex-resources/bwrap"))).toBe(true);
       expect(existsSync(path.join(packaged, "bin/index.js.map"))).toBe(false);

@@ -33,7 +33,7 @@ const BUNDLED_CLIS = [...BUNDLED_BINARIES, "agent-device"];
 function codexHelpers(runtimeKey) {
   return [
     "codex-runtime/bin/codex-code-mode-host",
-    "codex-runtime/codex-resources/zsh/bin/zsh",
+    // Codex 0.169.1 ships no zsh of its own (0.160.0 did, in codex-resources/zsh).
     ...(runtimeKey.startsWith("linux-") ? ["codex-runtime/codex-resources/bwrap"] : []),
   ];
 }

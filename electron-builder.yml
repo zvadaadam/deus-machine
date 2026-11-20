@@ -39,7 +39,6 @@ mac:
     - "Contents/Resources/bin/deus-runtime"
     - "Contents/Resources/bin/codex-runtime/bin/codex"
     - "Contents/Resources/bin/codex-runtime/bin/codex-code-mode-host"
-    - "Contents/Resources/bin/codex-runtime/codex-resources/zsh/bin/zsh"
     - "Contents/Resources/bin/claude"
     - "Contents/Resources/bin/gh"
     - "Contents/Resources/bin/codex-runtime/codex-path/rg"
