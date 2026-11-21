@@ -43,7 +43,7 @@ vi.mock("child_process", () => ({
   execFile: m.execFile,
   execFileSync: (cmd: string, args: string[], opts?: { cwd?: string }) => {
     m.execFileSync(cmd, args, opts);
-    if (cmd === "git" && args.includes("--show-toplevel")) return Buffer.from(`${opts?.cwd}\n`);
+    if (cmd === "git" && args.includes("--show-toplevel")) return `${opts?.cwd}\n`;
     return Buffer.from("");
   },
   spawn: m.spawn,

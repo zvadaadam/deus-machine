@@ -87,7 +87,7 @@ function failureFor(address: CloneAddress, error: unknown): Error {
   );
 }
 
-export function addProjectTool(host: DeusHost, report: (error: unknown) => void) {
+export function addProjectTool(host: DeusHost) {
   /**
    * Adds in flight (or ended, not heard yet), by the folder they clone into,
    * lower-cased: on a case-insensitive disk `owner/App` and `owner/app` are one folder.
@@ -224,11 +224,11 @@ export function addProjectTool(host: DeusHost, report: (error: unknown) => void)
       if ("error" in outcome) {
         const { error } = outcome;
         if (flight.phase !== "cloned") throw failureFor(address, error);
-        let reason = "";
+        let reason: string;
         if (error instanceof OperatorError)
           reason = error.message.replace(/^refused \([a-z_]+\): /, "");
         else if (error instanceof AppError && error.statusCode < 500) reason = error.message;
-        else report(error);
+        else throw error;
         throw new OperatorError(
           error instanceof OperatorError ? error.code : "failed",
           `Cloned into ${quoted(folder)}, but could not add the project.${reason ? ` ${reason}` : ""}`,

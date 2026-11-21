@@ -183,16 +183,7 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
     },
   });
 
-  return [
-    readChanges,
-    addProjectTool(host, (error) => reportFailure(error, "add_project")),
-    sendFeedbackTool,
-  ];
-}
-
-function reportFailure(error: unknown, tool: string) {
-  Sentry.captureException(error, { tags: { operatorTool: tool } });
-  console.error(`[Assistants] ${tool} failed:`, error);
+  return [readChanges, addProjectTool(host), sendFeedbackTool];
 }
 
 let operator: Operator<Caller> | null = null;
@@ -204,7 +195,10 @@ function theOperator(): Operator<Caller> {
     const made: Operator<Caller> = createOperator<Caller>(host, {
       extra: deusTools(host, () => made),
       // What failed is reported here; the caller is told only the package's sentence.
-      onError: reportFailure,
+      onError: (error, tool) => {
+        Sentry.captureException(error, { tags: { operatorTool: tool } });
+        console.error(`[Assistants] ${tool} failed:`, error);
+      },
     });
     operator = made;
   }

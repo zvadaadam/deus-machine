@@ -69,7 +69,7 @@ vi.mock("child_process", () => ({
   execFileSync: vi.fn<(...args: any[]) => any>(
     (cmd: string, args: string[], opts?: { cwd?: string; encoding?: string }) => {
       if (cmd === "git" && args?.includes("--show-toplevel")) {
-        return Buffer.from((opts?.cwd ?? "") + "\n");
+        return (opts?.cwd ?? "") + "\n";
       }
       if (cmd === "git" && args?.[0] === "remote" && args?.[1] === "get-url") {
         return opts?.encoding
@@ -303,7 +303,7 @@ describe("inspectRepo", () => {
     "refuses a missing or invalid toplevel %j before writing",
     async (root) => {
       const { execFileSync } = await import("child_process");
-      vi.mocked(execFileSync).mockReturnValueOnce(Buffer.from(root));
+      vi.mocked(execFileSync).mockReturnValueOnce(root);
       if (root === "/vanished")
         mockFs.statSync
           .mockImplementationOnce(() => ({ isDirectory: () => true }))

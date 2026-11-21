@@ -209,9 +209,7 @@ async function inspectRepository(rootPath: string): Promise<InspectedRepository>
       stdio: ["ignore", "pipe", "pipe"],
       // The first git spawn on a cold Mac can take more than 2s.
       timeout: 10_000,
-    })
-      .toString()
-      .replace(/\r?\n$/, "");
+    }).replace(/\r?\n$/, "");
   } catch (error) {
     const failure = isExecError(error) ? error : undefined;
     if (failure?.status === 128) throw new ValidationError("Path is not a git repository");

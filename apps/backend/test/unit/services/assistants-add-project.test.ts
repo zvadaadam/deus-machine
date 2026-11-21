@@ -80,7 +80,7 @@ import { createDeusHost } from "../../../src/services/assistants/host";
 import { _resetOperator } from "../../../src/services/assistants/operator";
 import { NOT_ALLOWED_YET, READ_ONLY } from "../../../src/services/assistants/sentences";
 import { CLONE_REFUSALS } from "../../../src/lib/clone-address";
-import { ConflictError } from "../../../src/lib/errors";
+import { AppError, ConflictError } from "../../../src/lib/errors";
 import { assistantCaller as assistant, operations } from "../../helpers";
 
 const REAL_GIT = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
@@ -468,16 +468,20 @@ describe("a clone", () => {
     }
   );
 
-  it("reports an unexpected add failure privately and tells the caller where the clone is", async () => {
-    const failure = new Error("private database detail");
-    state.ops.addRepo = () => {
-      throw failure;
-    };
-    const attempt = addProject("acme/widget");
-    await expect(attempt).rejects.toThrow("Cloned into");
-    await expect(attempt).rejects.not.toThrow(failure.message);
-    expect(state.report).toHaveBeenCalledWith(failure, { tags: { operatorTool: "add_project" } });
-  });
+  it.each([new Error("private database detail"), new AppError(500, "private service detail")])(
+    "leaves an unexpected $name to the operator and adopts the clone on retry",
+    async (failure) => {
+      state.ops.addRepo = () => {
+        throw failure;
+      };
+      const answer = await addProject("acme/widget");
+      expect(answer).toContain("not confirmed");
+      expect(answer).not.toContain(failure.message);
+      delete state.ops.addRepo;
+      expect(await addProject("acme/widget")).toContain("Nothing was cloned.");
+      expect(clones()).toHaveLength(1);
+    }
+  );
 
   it("checks a fresh clone's origin before adding it", async () => {
     await expect(addProject("acme/wrong-origin")).rejects.toThrow("different origin");
