@@ -600,87 +600,68 @@ export async function openAutomationRun(
   // The run's sandbox is in the automation's organization.
   const orgId = automation.organization_id ?? defaultCloudOrgId();
 
-  // Already adopted — reuse the rows, but heal the transcript first: the run
-  // may have finished (or continued) while deus was closed, and a PARTIAL
-  // transcript is as stale as an empty one — a message-count gate would
-  // freeze it forever. The insert path is idempotent, so backfill always.
-  if (run.session_id && run.workspace_id && store.sessionExists(run.session_id)) {
-    const { workspace_id: workspaceId, session_id: sessionId } = run;
-    return changeWorkspaceState(workspaceId, async () => {
-      assertCurrentAccount(identity);
-      if (run.provider_session_id) {
-        await backfillTranscript(sessionId, run.provider_session_id, identity, orgId);
-      }
-      assertCurrentAccount(identity);
-      // The user may have archived the adopted workspace since — an archived
-      // row is invisible to the workspace queries, so opening the run would
-      // select an id the frontend cannot resolve. Resurface it, like the
-      // adoption path does.
-      reviveAdoptedWorkspace(workspaceId, sessionId);
-      return { workspaceId, sessionId };
+  let rows =
+    run.session_id && run.workspace_id && store.sessionExists(run.session_id)
+      ? { workspaceId: run.workspace_id, sessionId: run.session_id }
+      : null;
+  const firstOpen = !rows;
+  if (rows) {
+    // A run may have continued while Deus was closed. Even a partial transcript needs backfill.
+    if (run.provider_session_id) {
+      await backfillTranscript(rows.sessionId, run.provider_session_id, identity, orgId);
+    }
+  } else {
+    if (!run.provider_session_id) {
+      throw new ConflictError("This run has no session to open (it was skipped or never started).");
+    }
+    if (!automation.repository_id) {
+      throw new NotFoundError("This automation's repository isn't on this Mac.");
+    }
+
+    const detail = await platform.fetchSessionDetail(run.provider_session_id, orgId);
+    assertCurrentAccount(identity);
+    if (!detail.workspaceId) throw new NotFoundError("The run's sandbox is gone.");
+    rows = store.adoptRunRows({
+      runId,
+      automationId: automation.id,
+      repositoryId: automation.repository_id,
+      automationName: automation.name,
+      providerSessionId: run.provider_session_id,
+      providerWorkspaceId: detail.workspaceId,
+      organizationId: orgId,
+      newWorkspaceSlug: () => generateUniqueName(getDatabase()),
     });
-  }
-
-  if (!run.provider_session_id) {
-    throw new ConflictError("This run has no session to open (it was skipped or never started).");
-  }
-  if (!automation.repository_id) {
-    throw new NotFoundError("This automation's repository isn't on this Mac.");
-  }
-
-  const detail = await platform.fetchSessionDetail(run.provider_session_id, orgId);
-  assertCurrentAccount(identity);
-  if (!detail.workspaceId) throw new NotFoundError("The run's sandbox is gone.");
-
-  const providerSessionId = run.provider_session_id;
-  const providerWorkspaceId = detail.workspaceId;
-  const repositoryId = automation.repository_id;
-  // Two first opens may discover the same computer before it has a local id.
-  return changeWorkspaceState(`automation:${providerWorkspaceId}`, () => {
-    const workspaceId = store.workspaceForRun(providerSessionId, providerWorkspaceId) ?? uuidv7();
-    return changeWorkspaceState(workspaceId, async () => {
-      assertCurrentAccount(identity);
-      const { sessionId, revived } = store.adoptRunRows({
-        workspaceId,
-        runId,
-        automationId: automation.id,
-        repositoryId,
-        automationName: automation.name,
-        providerSessionId,
-        providerWorkspaceId,
-        organizationId: orgId,
-        newWorkspaceSlug: () => generateUniqueName(getDatabase()),
-      });
-
-      // Backfill the transcript from the platform's stored messages — the run
-      // executed server-side, so the live channel never folded its events here.
-      const inserted = store.backfillSessionTranscript(sessionId, detail.messages);
-      if (inserted > 0) {
-        console.log(
-          `[Automations] backfilled ${inserted} message(s) for adopted run ${runId} → session ${sessionId}`
-        );
-        // Rows no event of the chat announced: whoever has its transcript open reads it again.
-        resetSubscribers(sessionEvents, { sessionId });
-      }
-      invalidate(
-        ["workspaces", "sessions", "session", ...AUTOMATION_RESOURCES],
-        revived ? undefined : { sessionIds: [sessionId] }
+    const { sessionId } = rows;
+    const inserted = store.backfillSessionTranscript(sessionId, detail.messages);
+    if (inserted > 0) {
+      console.log(
+        `[Automations] backfilled ${inserted} message(s) for adopted run ${runId} → session ${sessionId}`
       );
-
-      // Attach the live session channel (call-time import: the driver sits in the
-      // agent service graph, which imports this module through the tool dispatch).
-      void import("../agent/cloud/driver")
-        .then(({ ensureCloudSession }) => {
-          assertCurrentAccount(identity);
-          return ensureCloudSession(sessionId);
-        })
-        .catch((err) => {
-          console.warn(`[Automations] session channel attach failed for run ${runId}:`, err);
-        });
-
-      return { workspaceId, sessionId };
+      // Rows no event of the chat announced: whoever has its transcript open reads it again.
+      resetSubscribers(sessionEvents, { sessionId });
+    }
+    invalidate(["workspaces", "sessions", "session", ...AUTOMATION_RESOURCES], {
+      sessionIds: [sessionId],
     });
+  }
+
+  const { workspaceId, sessionId } = rows;
+  await changeWorkspaceState(workspaceId, async () => {
+    assertCurrentAccount(identity);
+    reviveAdoptedWorkspace(workspaceId, sessionId);
   });
+  if (firstOpen) {
+    // Opening the channel can wake the computer. Wait for the queued revival first.
+    void import("../agent/cloud/driver")
+      .then(({ ensureCloudSession }) => {
+        assertCurrentAccount(identity);
+        return ensureCloudSession(sessionId);
+      })
+      .catch((err) => {
+        console.warn(`[Automations] session channel attach failed for run ${runId}:`, err);
+      });
+  }
+  return rows;
 }
 
 /** Heal an adopted-but-empty transcript from the platform's stored messages. */

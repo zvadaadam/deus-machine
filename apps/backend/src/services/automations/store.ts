@@ -4,11 +4,7 @@
 // instantly. Sync logic lives in service.ts; this file owns rows.
 
 import { uuidv7 } from "@shared/lib/uuid";
-import {
-  attachAdoptedSession,
-  insertAdoptedWorkspace,
-  markAdoptedWorkspaceReady,
-} from "../workspace-lifecycle";
+import { attachAdoptedSession, insertAdoptedWorkspace } from "../workspace-lifecycle";
 import { getDatabase } from "../../lib/database";
 import type { AutomationRow, AutomationRunRow, AutomationWithDetailsRow } from "../../db/types";
 
@@ -198,17 +194,6 @@ export function sessionExists(sessionId: string): boolean {
   return getDatabase().prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId) !== undefined;
 }
 
-/** A reused platform chat belongs to its original workspace, even after archive. */
-export function workspaceForRun(session: string, computer: string): string | null {
-  const row = getDatabase()
-    .prepare(
-      `SELECT COALESCE((SELECT workspace_id FROM sessions WHERE provider_session_id = ?),
-        (SELECT id FROM workspaces WHERE provider_workspace_id = ? ORDER BY state = 'archived', updated_at DESC, id LIMIT 1)) AS workspace_id`
-    )
-    .get(session, computer) as { workspace_id: string | null };
-  return row.workspace_id;
-}
-
 /**
  * Find-or-create the deus workspace/session rows for a run's platform ids —
  * ONE transaction, so a mid-sequence failure can never leave a workspace
@@ -219,7 +204,6 @@ export function workspaceForRun(session: string, computer: string): string | nul
  * queries — an archived owner is resurfaced instead.
  */
 export function adoptRunRows(input: {
-  workspaceId: string;
   runId: string;
   automationId: string;
   repositoryId: string;
@@ -236,19 +220,24 @@ export function adoptRunRows(input: {
       .prepare("SELECT id, workspace_id FROM sessions WHERE provider_session_id = ?")
       .get(input.providerSessionId) as { id: string; workspace_id: string } | undefined;
 
-    const { workspaceId } = input;
-    const revived = markAdoptedWorkspaceReady(db, workspaceId);
-    if (!revived && !db.prepare("SELECT 1 FROM workspaces WHERE id = ?").get(workspaceId)) {
-      insertAdoptedWorkspace(db, {
-        id: workspaceId,
-        repository_id: input.repositoryId,
-        slug: input.newWorkspaceSlug(),
-        title: input.automationName,
-        provider_workspace_id: input.providerWorkspaceId,
-        organization_id: input.organizationId,
-      });
-    }
     if (!session) {
+      const workspace = db
+        .prepare(
+          `SELECT id FROM workspaces WHERE provider_workspace_id = ?
+           ORDER BY state = 'archived', updated_at DESC, id LIMIT 1`
+        )
+        .get(input.providerWorkspaceId) as { id: string } | undefined;
+      const workspaceId = workspace?.id ?? uuidv7();
+      if (!workspace) {
+        insertAdoptedWorkspace(db, {
+          id: workspaceId,
+          repository_id: input.repositoryId,
+          slug: input.newWorkspaceSlug(),
+          title: input.automationName,
+          provider_workspace_id: input.providerWorkspaceId,
+          organization_id: input.organizationId,
+        });
+      }
       const sessionId = uuidv7();
       db.prepare(
         `INSERT INTO sessions (id, workspace_id, agent_harness, provider_session_id, status)
@@ -257,6 +246,7 @@ export function adoptRunRows(input: {
       session = { id: sessionId, workspace_id: workspaceId };
     }
 
+    const workspaceId = session.workspace_id;
     attachAdoptedSession(db, workspaceId, session.id, input.organizationId);
     db.prepare("UPDATE automation_runs SET session_id = ?, workspace_id = ? WHERE id = ?").run(
       session.id,
@@ -267,7 +257,7 @@ export function adoptRunRows(input: {
       workspaceId,
       input.automationId
     );
-    return { workspaceId, sessionId: session.id, revived };
+    return { workspaceId, sessionId: session.id };
   });
   return adopt();
 }

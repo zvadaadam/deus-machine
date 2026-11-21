@@ -619,8 +619,8 @@ export function reviveAdoptedWorkspace(workspaceId: string, sessionId: string): 
   if (revived || selected.changes) invalidate(["workspaces"]);
 }
 
-/** reviveAdoptedWorkspace publishes after selecting the chat, or openAutomationRun after commit and backfill. */
-export function markAdoptedWorkspaceReady(db: Database, workspaceId: string): boolean {
+/** reviveAdoptedWorkspace publishes after selecting the chat. */
+function markAdoptedWorkspaceReady(db: Database, workspaceId: string): boolean {
   return (
     db
       .prepare(
