@@ -1,4 +1,4 @@
-/* global document, getComputedStyle, innerWidth, requestAnimationFrame, CSSAnimation, CSSTransition, DOMMatrixReadOnly */
+/* global document, getComputedStyle, innerWidth, requestAnimationFrame, CSSAnimation, CSSTransition, DOMMatrixReadOnly, MutationObserver */
 // Exercise the real control primitives with mouse, keyboard and touch layouts.
 import assert from "node:assert/strict";
 import { createServer as createHttpServer } from "node:http";
@@ -7,6 +7,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { createServer } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import { chromium } from "playwright";
+import { expect } from "playwright/test";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const artifacts = path.join(root, ".context/controls-ui");
@@ -44,7 +45,7 @@ function App() {
  <section className="flex flex-wrap items-center gap-3" aria-label="Button sizes">{["xs","sm","default","lg"].map(size=><Button variant="outline" size={size} key={size}>{size} action</Button>)}<Button size="icon-xs" variant="ghost" aria-label="Add"><Plus /></Button><Button className="rounded-full" size="icon" aria-label="Circular action"><Plus /></Button></section>
  <section className="flex flex-wrap items-center gap-3">
  <ButtonGroup><Button size="xs">Create PR</Button><DropdownMenu><DropdownMenuTrigger asChild><Button variant="secondary" size="xs">main<ChevronDown /></Button></DropdownMenuTrigger><DropdownMenuContent><DropdownMenuItem onSelect={()=>setCount(n=>n+1)}>Choose branch</DropdownMenuItem><DropdownMenuItem>Rename branch</DropdownMenuItem><DropdownMenuItem onSelect={()=>setPick("Menu inspect")}>Inspect branch</DropdownMenuItem></DropdownMenuContent></DropdownMenu></ButtonGroup>
- <DropdownMenu><DropdownMenuTrigger asChild><Button variant="secondary">Target: {target}</Button></DropdownMenuTrigger><DropdownMenuContent><DropdownMenuRadioGroup value={target} onValueChange={setTarget}>{["Local","Cloud"].map(place=><DropdownMenuRadioItem key={place} value={place}>{place}</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup></DropdownMenuContent></DropdownMenu>
+ <DropdownMenu><DropdownMenuTrigger asChild><Button variant="secondary">Target: {target}</Button></DropdownMenuTrigger><DropdownMenuContent><DropdownMenuRadioGroup value={target} onValueChange={setTarget}>{["Cloud","Local"].map(place=><DropdownMenuRadioItem key={place} value={place}>{place}</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup></DropdownMenuContent></DropdownMenu>
  <Select defaultValue="local"><SelectTrigger aria-label="Environment"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="local">Local</SelectItem><SelectItem value="cloud">Cloud</SelectItem></SelectContent></Select>
  <Button variant="outline" asChild><a href="#target">Link action</a></Button>
  <Dialog><DialogTrigger asChild><Button variant="secondary">Open dialog</Button></DialogTrigger><DialogContent><DialogTitle>Preferences</DialogTitle><DialogDescription>Account preferences</DialogDescription></DialogContent></Dialog>
@@ -103,6 +104,7 @@ if (location.hash === "#desktop-edge") document.documentElement.classList.add("e
 createRoot(document.getElementById("root")!).render(fixtures[location.hash] ?? <App/>);
 `
 );
+const http = createHttpServer();
 const server = await createServer({
   configFile: false,
   root,
@@ -128,9 +130,17 @@ const server = await createServer({
       },
     },
   ],
-  server: { middlewareMode: true, hmr: false },
+  // Keep Vite's client on the fixture's own port when other runners are open.
+  server: { middlewareMode: true, hmr: { server: http }, watch: null },
 });
-const http = createHttpServer(server.middlewares);
+http.on("request", server.middlewares);
+function assertSameBounds(before, after, message) {
+  for (const key of ["x", "y", "width", "height"])
+    assert(
+      Math.abs(before[key] - after[key]) < 0.5,
+      `${message} (${key}: ${before[key]} → ${after[key]})`
+    );
+}
 let browser;
 try {
   await new Promise((resolve) => http.listen(0, "127.0.0.1", resolve));
@@ -155,13 +165,13 @@ try {
   const before = await primary.boundingBox();
   await primary.hover();
   await page.mouse.down();
-  assert.deepEqual(
-    await primary.boundingBox(),
+  assertSameBounds(
     before,
+    await primary.boundingBox(),
     "Pressing does not move the control or scale its label"
   );
   await page.mouse.up();
-  assert.equal(await page.getByText("Actions: 1", { exact: true }).count(), 1);
+  await page.getByText("Actions: 1", { exact: true }).waitFor();
   const disabled = page.getByRole("button", { name: "Disabled", exact: true });
   assert(await disabled.isDisabled());
   await disabled.dispatchEvent("click");
@@ -178,30 +188,24 @@ try {
   await page.getByRole("menuitem", { name: "Choose branch" }).waitFor();
   await page.keyboard.press("Escape");
   await page.getByRole("menuitem", { name: "Choose branch" }).waitFor({ state: "detached" });
-  assert(
-    await page
-      .getByRole("button", { name: "main", exact: true })
-      .evaluate((el) => el === document.activeElement)
-  );
+  await expect(page.getByRole("button", { name: "main", exact: true })).toBeFocused();
   async function assertFill(list, marker, shouldSnap = true) {
-    await list.locator('[data-slot="glide"][data-lit]').waitFor();
-    assert(
-      await list.evaluate(
-        async (el, { marker, shouldSnap }) => {
-          const fill = el.querySelector('[data-slot="glide"]');
-          const row = el.querySelector(marker);
-          const snapped = !getComputedStyle(fill).transitionProperty.includes("transform");
-          await Promise.allSettled(fill.getAnimations().map((animation) => animation.finished));
-          return (
-            (!shouldSnap || snapped) &&
-            Number(getComputedStyle(fill).opacity) === 1 &&
-            Math.abs(fill.getBoundingClientRect().top - row.getBoundingClientRect().top) < 1
-          );
-        },
-        { marker, shouldSnap }
-      ),
-      "The fill paints the target and keyboard changes snap"
-    );
+    const fill = list.locator('[data-slot="glide"][data-lit]');
+    const row = list.locator(marker);
+    await expect(row).toBeVisible();
+    await expect(fill).toHaveCSS("opacity", "1");
+    if (shouldSnap) await expect(fill).not.toHaveCSS("transition-property", /transform/);
+    await expect
+      .poll(
+        () =>
+          list.evaluate((el, selector) => {
+            const painted = el.querySelector('[data-slot="glide"]').getBoundingClientRect();
+            const target = el.querySelector(selector)?.getBoundingClientRect();
+            return target ? Math.abs(painted.top - target.top) : Infinity;
+          }, marker),
+        { message: "The fill paints the marked row" }
+      )
+      .toBeLessThan(1);
   }
   // Radix and cmdk own the Enter target. Capture transitionrun so this assertion
   // still sees the pointer travel when the entire 80 ms elapses between test calls.
@@ -216,6 +220,7 @@ try {
     const rows = list.getByRole(itemRole);
     await rows.first().hover();
     await list.locator(marker).filter({ hasText: "Choose branch" }).waitFor();
+    await assertFill(list, marker, false);
     await list.evaluate((el) => {
       el.querySelector('[data-slot="glide"]').addEventListener("transitionrun", (event) => {
         if (event.propertyName === "transform") el.dataset.sawTravel = "";
@@ -237,27 +242,37 @@ try {
     await page.getByTestId("picked").filter({ hasText: expected }).waitFor();
     if (itemRole === "menuitem") await list.waitFor({ state: "detached" });
   }
-  // A check mark does not paint a background. The focused checked option must still light.
-  for (const [trigger, surface] of [
-    [page.getByRole("combobox", { name: "Environment" }), "[data-radix-select-viewport]"],
-    [page.getByRole("button", { name: "Target: Local" }), '[data-slot="dropdown-menu-content"]'],
+  // Select opens on its value. A radio menu can open on an unchecked item.
+  await page.mouse.move(0, 0);
+  for (const [trigger, surface, role] of [
+    [page.getByRole("combobox", { name: "Environment" }), "[data-radix-select-viewport]", "option"],
+    [
+      page.getByRole("button", { name: /^Target: / }),
+      '[data-slot="dropdown-menu-content"]',
+      "menuitemradio",
+    ],
   ]) {
-    await trigger.focus();
-    await page.keyboard.press("ArrowDown");
+    await trigger.press("ArrowDown");
     const list = page.locator(surface);
-    const checked = "[data-state=checked][data-highlighted]";
-    await list.locator(checked).filter({ hasText: "Local" }).waitFor();
-    await assertFill(list, checked);
-    await page.keyboard.press("ArrowDown");
-    await list.locator("[data-highlighted]").filter({ hasText: "Cloud" }).waitFor();
-    await assertFill(list, "[data-highlighted]");
+    const focused = "[data-highlighted]:focus";
+    await assertFill(list, focused);
+    if (role === "menuitemradio") {
+      const checked = await list.getByRole(role, { checked: true }).innerText();
+      await page.keyboard.press(checked.trim()[0].toLowerCase());
+    }
+    await assertFill(list, focused + "[data-state=checked]");
+    const last = list.getByRole(role).last();
+    await page.keyboard.press(
+      (await last.getAttribute("data-state")) === "checked" ? "ArrowUp" : "ArrowDown"
+    );
+    const other = focused + "[data-state=unchecked]";
+    await assertFill(list, other);
+    const choice = (await list.locator(other).innerText()).trim();
     await page.keyboard.press("Enter");
     await list.waitFor({ state: "detached" });
-    const picked =
-      surface === "[data-radix-select-viewport]"
-        ? page.getByRole("combobox", { name: "Environment" })
-        : page.getByRole("button", { name: "Target: Cloud" });
-    assert.match(await picked.innerText(), /Cloud/);
+    await expect(trigger).toContainText(choice);
+    // Radix restores focus asynchronously after removing the popup.
+    await expect(trigger).toBeFocused();
   }
   await page.getByRole("combobox", { name: "Environment" }).click();
   await page.getByRole("option", { name: "Local", exact: true }).click();
@@ -266,11 +281,16 @@ try {
   assert(page.url().endsWith("#target"), "Button asChild preserves link behavior");
   const survivingTab = page.getByTestId("second-tabs").getByRole("tab", { name: "First" });
   const indicator = () =>
-    survivingTab.evaluate((el) => getComputedStyle(el, "::after").backgroundColor);
+    survivingTab.evaluate((el) => {
+      const ctx = document.createElement("canvas").getContext("2d");
+      ctx.fillStyle = getComputedStyle(el, "::after").backgroundColor;
+      ctx.fillRect(0, 0, 1, 1);
+      return [...ctx.getImageData(0, 0, 1, 1).data];
+    });
   const color = await indicator();
-  assert.notEqual(color, "rgba(0, 0, 0, 0)");
+  assert(color[3] > 0);
   await page.getByRole("button", { name: "Toggle first tab set" }).click();
-  assert.equal(
+  assert.deepEqual(
     await indicator(),
     color,
     "Unmounting another tab set preserves this active indicator"
@@ -293,7 +313,7 @@ try {
     await page.evaluate(async (t) => {
       document.documentElement.classList.toggle("dark", t === "dark");
       await new Promise(requestAnimationFrame);
-      await Promise.all(
+      await Promise.allSettled(
         document
           .getAnimations()
           .filter((a) => a instanceof CSSTransition)
@@ -364,7 +384,7 @@ try {
       assert(first.opacity > 0 && first.opacity < 1 && last.opacity > 0 && last.opacity < 1);
       assert(state === "open" ? first.opacity < last.opacity : first.opacity > last.opacity);
       assert(first.still && last.still);
-      assert.deepEqual(first.bounds, last.bounds, `${slot} fades in place`);
+      assertSameBounds(first.bounds, last.bounds, `${slot} fades in place`);
     }
     await page.locator(selector).waitFor({ state: "detached" });
   }
@@ -375,7 +395,7 @@ try {
   });
   await mobile.goto(url);
   await mobile.getByRole("button", { name: "default", exact: true }).tap();
-  assert.equal(await mobile.getByText("Actions: 1", { exact: true }).count(), 1);
+  await mobile.getByText("Actions: 1", { exact: true }).waitFor();
   assert(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await mobile.screenshot({ path: path.join(artifacts, "mobile.png"), fullPage: true });
   await mobile.getByRole("combobox", { name: "Environment" }).focus();
@@ -395,11 +415,10 @@ try {
   await assertFill(navigation, "[data-sidebar=menu-button]:hover", false);
   const bounds = await last.boundingBox();
   await settings.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height + 200);
-  const alpha = await navigation.locator('[data-slot="glide"]').evaluate(async (fill) => {
-    await Promise.allSettled(fill.getAnimations().map((animation) => animation.finished));
-    return getComputedStyle(fill).opacity;
-  });
-  assert.equal(alpha, "0", "Empty Settings space releases the hovered row");
+  await expect(
+    navigation.locator('[data-slot="glide"]'),
+    "Empty Settings space releases the hovered row"
+  ).toHaveCSS("opacity", "0");
   await last.hover();
   await assertFill(navigation, "[data-sidebar=menu-button]:hover", false);
   await navigation
@@ -410,44 +429,60 @@ try {
     return list.scrollHeight === list.querySelector("ul").offsetHeight;
   });
   await settings.close();
-  const desktop = await browser.newPage();
+  const desktop = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+  await desktop.mouse.move(600, 400);
   await desktop.goto(url + "#desktop-edge");
+  const zone = desktop.locator('.electron [data-state=collapsed] [data-slot="sidebar-hover-zone"]');
+  await expect(zone).toBeVisible();
   assert(
-    await desktop.locator('[data-slot="sidebar-hover-zone"]').evaluate((zone) => {
-      const rect = zone.getBoundingClientRect();
-      return document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2) === zone;
+    await zone.evaluate((el) => {
+      const { x, y, width, height } = el.getBoundingClientRect();
+      return document.elementFromPoint(x + width / 2, y + height / 2) === el;
     }),
     "The collapsed desktop sidebar receives pointer input at the window edge"
   );
   await desktop.keyboard.press("Control+b");
   const grip = desktop.getByRole("separator", { name: "Resize sidebar" });
-  await desktop.waitForFunction(
-    () => document.querySelector('[data-slot="sidebar-gap"]').getBoundingClientRect().width === 344
-  );
-  const { x, y } = await grip.evaluate((el) => {
-    const rect = el.getBoundingClientRect();
-    return { x: rect.x - 1, y: rect.y + rect.height / 2 };
-  });
+  const gap = desktop.locator('[data-state=expanded] [data-slot="sidebar-gap"]');
+  await expect
+    .poll(() =>
+      gap.evaluate((el) =>
+        Math.abs(
+          el.getBoundingClientRect().width -
+            parseFloat(getComputedStyle(el).getPropertyValue("--sidebar-width"))
+        )
+      )
+    )
+    .toBeLessThan(0.5);
+  const hit = await grip.locator(":scope > div").first().boundingBox();
+  const x = hit.x + hit.width / 2,
+    y = hit.y + hit.height / 2;
   await desktop.mouse.move(x, y);
   await desktop.mouse.down();
-  await desktop.locator("[data-resizing]").waitFor();
-  const dragFrames = grip.evaluate((divider) => {
+  await expect(desktop.locator('[data-resizing] [data-slot="sidebar-container"]')).toHaveCSS(
+    "transition-property",
+    "none"
+  );
+  const dragFrames = await grip.evaluateHandle((divider) => {
     const wrapper = divider.closest('[data-slot="sidebar-wrapper"]');
     const sidebar = wrapper.querySelector('[data-slot="sidebar-container"]');
     const frames = [];
-    return new Promise((resolve) => {
-      function sample() {
-        if (!wrapper.hasAttribute("data-resizing")) return resolve(frames);
-        frames.push([divider.getBoundingClientRect().x, sidebar.getBoundingClientRect().right]);
-        requestAnimationFrame(sample);
-      }
-      sample();
-    });
+    function sample() {
+      if (!wrapper.hasAttribute("data-resizing")) return;
+      frames.push([divider.getBoundingClientRect().x, sidebar.getBoundingClientRect().right]);
+      requestAnimationFrame(sample);
+    }
+    sample();
+    return frames;
   });
   await desktop.mouse.move(x + 60, y, { steps: 8 });
+  await expect
+    .poll(() =>
+      dragFrames.evaluate((frames, target) => Math.abs(frames.at(-1)[0] - target), x + 60)
+    )
+    .toBeLessThanOrEqual(1);
   await desktop.mouse.up();
-  const frames = await dragFrames;
-  assert(new Set(frames.map(([edge]) => edge)).size >= 3, "Sampled the grip in motion");
+  const frames = await dragFrames.jsonValue();
   assert(
     frames.every(([edge, panel]) => Math.abs(edge - panel) <= 1),
     "Sidebar follows the grip on every frame"
@@ -463,34 +498,50 @@ try {
     const sample = await browser.newPage({ reducedMotion, permissions: ["clipboard-write"] });
     await sample.goto(url + "#no-jumps");
     const strip = sample.getByRole("tablist", { name: "Content panel" });
-    const travel = await strip.evaluate(async (el) => {
-      const tabs = el.querySelectorAll('[role="tab"]');
-      const x = () => tabs[2].getBoundingClientRect().x;
-      const before = x();
-      tabs[1].click();
-      await new Promise(requestAnimationFrame);
-      const panel = document.querySelector('[data-testid="panel"]').textContent;
-      const positions = [x()];
-      while (el.getAnimations({ subtree: true }).some((a) => a instanceof CSSTransition)) {
-        await new Promise(requestAnimationFrame);
-        positions.push(x());
-      }
-      return { before, panel, positions };
+    const files = strip.getByRole("tab", { name: "Files" });
+    const panel = sample.getByTestId("panel");
+    const timeline = await sample.context().newCDPSession(sample);
+    // Hold the CSS timeline while input and React continue normally.
+    await timeline.send("Animation.setPlaybackRate", { playbackRate: 0 });
+    const initialWidth = (await files.boundingBox()).width;
+    await files.evaluate((tab) => {
+      const selected = new MutationObserver(() => {
+        tab.dataset.panelAtSelection = document.querySelector('[data-testid="panel"]').textContent;
+        selected.disconnect();
+      });
+      selected.observe(tab, { attributeFilter: ["aria-selected"] });
     });
-    assert.equal(travel.panel, "files", "The panel switches on the first frame");
-    assert.notEqual(travel.before, travel.positions.at(-1));
-    const steps = new Set(travel.positions).size;
-    assert(
-      reducedMotion === "reduce" ? steps === 1 : steps > 2,
-      "Strip travel follows the motion preference"
-    );
+    await files.click();
+    await expect(files).toHaveAttribute("data-panel-at-selection", "files");
+    const travel = await files.evaluate((tab) => {
+      const width = () => tab.getBoundingClientRect().width;
+      const move = tab
+        .getAnimations({ subtree: true })
+        .find((a) => a.transitionProperty === "grid-template-columns");
+      let middle = null;
+      if (move) {
+        move.pause();
+        move.currentTime = move.effect.getTiming().duration / 2;
+        middle = width();
+        move.finish();
+      }
+      return { middle, end: width() };
+    });
+    assert(travel.end > initialWidth);
+    if (reducedMotion === "reduce") assert.equal(travel.middle, null, "Reduced motion snaps");
+    else
+      assert(
+        initialWidth < travel.middle && travel.middle < travel.end,
+        "The tab grows between its endpoints"
+      );
 
     const references = sample.getByRole("tablist", { name: "References" }).getByRole("tab");
     const fourth = await references.nth(3).boundingBox();
     await references.nth(1).click();
-    assert.deepEqual(
-      await references.nth(3).boundingBox(),
+    await expect(references.nth(1)).toHaveAttribute("aria-selected", "true");
+    assertSameBounds(
       fourth,
+      await references.nth(3).boundingBox(),
       "Changing weight holds the next tabs in place"
     );
 
@@ -499,7 +550,7 @@ try {
     await sample.getByRole("button", { name: "Copy", exact: true }).click();
     const copied = sample.getByRole("button", { name: "Copied!" });
     await copied.getByRole("status").filter({ hasText: "Copied" }).waitFor({ state: "attached" });
-    assert.deepEqual(await cell.boundingBox(), before);
+    assertSameBounds(before, await cell.boundingBox(), "Copy feedback holds its bounds");
     const glyphs = await cell.locator("svg").evaluateAll((icons) =>
       icons.map((icon) => {
         const s = getComputedStyle(icon);
@@ -512,48 +563,45 @@ try {
     );
     assert(glyphs.every((g) => g.moves === (reducedMotion !== "reduce")));
 
-    const read = await sample
-      .getByRole("button", { name: "Toggle pending" })
-      .evaluate(async (button) => {
-        button.click();
-        await Promise.resolve();
-        const placeholder = document.querySelector('[data-slot="skeleton"]');
-        const animations = placeholder.getAnimations();
-        const fade = animations.find((a) => a.animationName === "fadeIn");
-        // Inspect the last possible frame of a fast read, then let its data arrive.
-        fade.pause();
-        fade.currentTime = 159;
-        const opacity = getComputedStyle(placeholder).opacity;
-        button.click();
-        await new Promise(requestAnimationFrame);
-        const { delay, duration } = fade.effect.getTiming();
-        return {
-          opacity,
-          removed: !placeholder.isConnected,
-          delay,
-          duration,
-          pulses: animations.some((a) => a.animationName === "pulse"),
-        };
-      });
+    const pending = sample.getByRole("button", { name: "Toggle pending" });
+    await pending.click();
+    const skeleton = sample.locator('[data-slot="skeleton"]');
+    const read = await skeleton.evaluate((placeholder) => {
+      const animations = placeholder.getAnimations();
+      const fade = animations.find((a) => a.animationName === "fadeIn");
+      // Inspect the last possible frame of a fast read, then let its data arrive.
+      fade.pause();
+      const { delay, duration } = fade.effect.getTiming();
+      fade.currentTime = delay - 1;
+      const opacity = getComputedStyle(placeholder).opacity;
+      return {
+        opacity,
+        delay,
+        duration,
+        pulses: animations.some((a) => a.animationName === "pulse"),
+      };
+    });
     assert.deepEqual(read, {
       opacity: "0",
-      removed: true,
       delay: 160,
       duration: 80,
       pulses: reducedMotion !== "reduce",
     });
+    await pending.click();
+    await skeleton.waitFor({ state: "detached" });
+    await timeline.send("Animation.setPlaybackRate", { playbackRate: 1 });
 
     const changes = strip.getByRole("tab", { name: "Changes" });
-    const files = strip.getByRole("tab", { name: "Files" });
+    await sample.clock.install();
     await changes.evaluate((button) => button.click());
     await changes.hover();
-    await sample.waitForTimeout(700);
+    await sample.clock.fastForward(700);
     const activeDescription = await changes.getAttribute("aria-describedby");
     // Keep the pointer in the panel. Moving it to Files can dismiss the stale tooltip.
-    await sample.mouse.move(900, 500);
+    await panel.hover();
     await files.evaluate((button) => button.click());
     await strip.getByRole("tab", { name: "Files", selected: true }).waitFor();
-    await sample.waitForTimeout(700);
+    await sample.clock.fastForward(700);
     assert.equal(await sample.locator('[data-slot="tooltip-content"]:visible').count(), 0);
     assert.equal(activeDescription, null);
 
@@ -563,7 +611,7 @@ try {
     assert.equal(await changes.getAttribute("aria-describedby"), await hint.getAttribute("id"));
     await changes.click();
     await hint.waitFor({ state: "detached" });
-    await sample.mouse.move(900, 500);
+    await panel.hover();
     await files.hover();
     await sample.getByRole("tooltip", { name: "Files" }).waitFor();
     await sample.close();
@@ -573,6 +621,6 @@ try {
   );
 } finally {
   await browser?.close();
-  await new Promise((resolve) => http.close(resolve));
   await server.close();
+  await new Promise((resolve) => http.close(resolve));
 }
