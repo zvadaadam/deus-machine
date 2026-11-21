@@ -52,7 +52,13 @@ const {
 
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
-vi.mock("../../../src/services/streams", () => ({ resetSubscribers: mockResetSubscribers }));
+const socketFor = vi.hoisted(() => vi.fn());
+vi.mock("../../../src/services/ws.service", () => ({ getConnection: socketFor }));
+vi.mock("../../../src/services/agent", () => ({ answerToolRequest: vi.fn() }));
+vi.mock("../../../src/services/streams", () => ({
+  resetSubscribers: mockResetSubscribers,
+  dropConnection: vi.fn(),
+}));
 vi.mock("../../../src/services/agent/cloud/config", async () =>
   (await import("../../cloud-config-mock")).cloudConfigMock(mockGetCloudConfig)
 );
@@ -88,6 +94,7 @@ import {
   validateSchedule,
 } from "../../../src/services/automations/service";
 import { summaryToRow, runSummaryToRow } from "../../../src/services/automations/platform";
+import { changeWorkspaceState } from "../../../src/services/workspace-lifecycle";
 import * as store from "../../../src/services/automations/store";
 import { resetCloudModelListsForTests } from "../../../src/services/agent/cloud/models";
 import { handleAutomationToolRequest } from "../../../src/services/automations/agent-rpc";
@@ -1139,6 +1146,62 @@ describeWithDb("openAutomationRun", () => {
     );
   });
 
+  it.each([false, true])(
+    "waits for a queued archive before opening an adopted=%s run",
+    async (linked) => {
+      const first = await openAutomationRun("run-1");
+      if (!linked) db.exec("UPDATE automation_runs SET session_id = NULL, workspace_id = NULL");
+      const gate = Promise.withResolvers<void>();
+      const closing = changeWorkspaceState(first.workspaceId, async () => {
+        await gate.promise;
+        db.prepare("UPDATE workspaces SET state='archived' WHERE id=?").run(first.workspaceId);
+      });
+      let finished = false;
+      const opening = openAutomationRun("run-1").then(() => {
+        finished = true;
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      const premature = finished;
+      gate.resolve();
+      await Promise.all([closing, opening]);
+      expect(premature).toBe(false);
+      expect(db.prepare("SELECT state FROM workspaces").pluck().get()).toBe("ready");
+    }
+  );
+
+  it("sends a new selection to both subscribed devices and stays quiet on a second open", async () => {
+    const first = await openAutomationRun("run-1");
+    store.upsertRuns([runSummaryToRow(runFixture({ id: "run-2", sessionId: "run-2" }))]);
+    await openAutomationRun("run-2");
+    const engine = await vi.importActual<typeof import("../../../src/services/query-engine")>(
+      "../../../src/services/query-engine"
+    );
+    const { Registry } = await import("../../../src/api/registry");
+    const { default: operations } = await import("../../../src/api/workspaces");
+    engine.serveOperations(new Registry(operations));
+    const frames = new Map(["window", "phone"].map((id) => [id, vi.fn()]));
+    socketFor.mockImplementation((id: string) => ({ deviceId: id, ws: { send: frames.get(id) } }));
+    for (const [id, send] of frames) {
+      engine.handleFrame(id, { type: "q:subscribe", resource: "workspaces", id: "sidebar" });
+      expect(send).toHaveBeenCalledOnce();
+      send.mockClear();
+    }
+    try {
+      await mockInvalidate.withImplementation(engine.invalidate, async () => {
+        await openAutomationRun("run-1");
+        await openAutomationRun("run-1");
+      });
+      for (const send of frames.values()) {
+        expect(send).toHaveBeenCalledOnce();
+        expect(JSON.parse(send.mock.calls[0][0]).data[0].workspaces).toContainEqual(
+          expect.objectContaining({ id: first.workspaceId, current_session_id: first.sessionId })
+        );
+      }
+    } finally {
+      for (const id of frames.keys()) engine.removeSubs(id);
+    }
+  });
+
   it("does not adopt a late session after the account changes", async () => {
     sdk.getSession.mockImplementationOnce(async () => {
       mockGetCloudConfig.mockReturnValue({
@@ -1163,6 +1226,7 @@ describeWithDb("openAutomationRun", () => {
 
   it("does not backfill or revive an adopted run after the account changes", async () => {
     const adopted = store.adoptRunRows({
+      workspaceId: "adopted",
       runId: "run-1",
       automationId: "auto-1",
       repositoryId: "r1",

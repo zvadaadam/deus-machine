@@ -60,9 +60,9 @@ const attempts = new Map<string, { controller: AbortController; settle: Cleanup 
 
 /** A failed checkout hands its cleanup to the queue. Archive can abort and settle
  * the same work from inside that queue without waiting on a task queued behind it. */
-export async function runLocalAttempt(
+export async function runWorkspaceAttempt(
   workspaceId: string,
-  checkout: (signal: AbortSignal) => Promise<Cleanup | void>
+  start: (signal: AbortSignal) => Promise<Cleanup | void>
 ): Promise<void> {
   if (attempts.has(workspaceId)) return;
   const controller = new AbortController();
@@ -71,7 +71,7 @@ export async function runLocalAttempt(
   const settle = () => (settling ??= stopped.promise.then((cleanup) => cleanup?.()));
   attempts.set(workspaceId, { controller, settle });
   try {
-    const cleanup = await checkout(controller.signal);
+    const cleanup = await start(controller.signal);
     stopped.resolve(cleanup);
     if (cleanup) {
       if (controller.signal.aborted) await settle();
@@ -339,76 +339,177 @@ export function claimCloudRetry(db: Database, workspaceId: string): void {
   invalidate([...WORKSPACE_RESOURCES], {});
 }
 
-export function failCloudStart(db: Database, workspaceId: string, message: string): void {
-  // Keep the failed stage as diagnostic context alongside the specific error.
-  db.prepare("UPDATE workspaces SET state = 'error', error_message = ? WHERE id = ?").run(
-    message,
-    workspaceId
-  );
+export function failCloudStart(
+  db: Database,
+  id: string,
+  message: string,
+  token: AbortSignal,
+  detail: string | null = null
+): void {
+  if (!ownsAttempt(id, token)) return;
+  const updated = db
+    .prepare(
+      "UPDATE workspaces SET state = 'error', error_message = ?, error_detail = ? WHERE id = ? AND state = 'initializing'"
+    )
+    .run(message, detail, id);
+  if (!updated.changes) return;
+  attempts.delete(id);
   invalidate([...WORKSPACE_RESOURCES], {});
 }
 
 export function attachCloudComputer(
   db: Database,
-  workspaceId: string,
+  id: string,
   providerId: string,
   mintedAt: number | null,
-  beforePublish: () => void
-): void {
-  db.prepare(
-    "UPDATE workspaces SET provider_workspace_id = ?, init_stage = 'creating cloud session', last_inline_mint_at = ? WHERE id = ?"
-  ).run(providerId, mintedAt, workspaceId);
+  beforePublish: () => void,
+  token: AbortSignal
+): boolean {
+  if (!ownsAttempt(id, token)) return false;
+  const attached = db
+    .prepare(
+      "UPDATE workspaces SET provider_workspace_id = ?, init_stage = 'creating cloud session', last_inline_mint_at = ? WHERE id = ? AND state = 'initializing'"
+    )
+    .run(providerId, mintedAt, id);
+  if (!attached.changes) return false;
   try {
     beforePublish();
   } finally {
     invalidate([...WORKSPACE_RESOURCES], {});
   }
+  return true;
+}
+
+/** Archive holds the queue until the retired attempt has accounted for its allocation. */
+export function retainArchivedComputer(
+  db: Database,
+  id: string,
+  providerId: string,
+  mintedAt: number | null
+): void {
+  db.prepare(
+    "UPDATE workspaces SET provider_workspace_id = ?, last_inline_mint_at = ? WHERE id = ? AND state = 'archived' AND provider_workspace_id IS NULL"
+  ).run(providerId, mintedAt, id);
 }
 
 export function attachCloudChat(
   db: Database,
-  workspaceId: string,
-  providerSessionId: string
-): string {
+  id: string,
+  providerSessionId: string,
+  token: AbortSignal
+): string | null {
+  if (!ownsAttempt(id, token)) return null;
   const sessionId = uuidv7();
-  db.transaction(() => {
+  const attached = db.transaction(() => {
+    const updated = db
+      .prepare(
+        "UPDATE workspaces SET current_session_id = ?, init_stage = 'provisioning sandbox' WHERE id = ? AND state = 'initializing'"
+      )
+      .run(sessionId, id);
+    if (!updated.changes) return false;
     db.prepare(
       "INSERT INTO sessions (id, workspace_id, provider_session_id, status, updated_at) VALUES (?, ?, ?, 'idle', datetime('now'))"
-    ).run(sessionId, workspaceId, providerSessionId);
-    db.prepare(
-      "UPDATE workspaces SET current_session_id = ?, init_stage = 'provisioning sandbox' WHERE id = ?"
-    ).run(sessionId, workspaceId);
+    ).run(sessionId, id, providerSessionId);
+    return true;
   })();
+  if (!attached) return null;
   invalidate([...WORKSPACE_RESOURCES], {});
   return sessionId;
 }
 
+function cloudWorkspaceChat(db: Database, id: string) {
+  return db
+    .prepare(
+      `SELECT w.state, s.id AS chat FROM workspaces w LEFT JOIN sessions s
+    ON s.id = w.current_session_id AND s.workspace_id = w.id WHERE w.id = ?`
+    )
+    .get(id) as { state: string; chat: string | null } | undefined;
+}
+
+export async function ensureWorkspaceChat(
+  db: Database,
+  id: string,
+  open: (token: AbortSignal) => Promise<unknown>
+) {
+  const selected = () => cloudWorkspaceChat(db, id)?.chat;
+  const existing = selected();
+  if (existing) return existing;
+  // A wake can arrive between allocation and the original chat response.
+  await attempts.get(id)?.settle();
+  const attached = selected();
+  if (attached) return attached;
+  await runWorkspaceAttempt(id, async (token) => {
+    const repairing = db
+      .prepare(
+        "UPDATE workspaces SET state = 'initializing', init_stage = 'creating cloud session', error_message = NULL, error_detail = NULL WHERE id = ? AND state != 'archived'"
+      )
+      .run(id);
+    if (!repairing.changes) return;
+    invalidate([...WORKSPACE_RESOURCES], {});
+    await open(token);
+  });
+  const sessionId = selected();
+  if (!sessionId) throw new ConflictError("The workspace has no chat to wake.");
+  return sessionId;
+}
+
+type CloudReport = { status?: string; step?: string; errorMessage?: string; reason?: string };
+function projectCloudStatus(data: CloudReport, row: { archived: boolean; hasChat: boolean }) {
+  if (row.archived || !row.hasChat) return;
+  switch (data.status) {
+    case "running":
+      return ["ready", null, null, null] as const;
+    case "provisioning":
+      return [
+        "initializing",
+        typeof data.step === "string" ? data.step : "provisioning",
+        null,
+        null,
+      ] as const;
+    case "paused":
+    case "stopped":
+    case "resuming":
+      return ["ready", data.status, null, null] as const;
+    case "error": {
+      const message = [data.errorMessage, data.reason, data.step].find(
+        (s) => typeof s === "string" && s.trim()
+      );
+      return ["error", null, message ?? "The cloud computer reported an error.", null] as const;
+    }
+  }
+}
+
+const wakes = new Map<string, object>();
+
+export function queueCloudWake<T>(id: string, wake: (current: () => boolean) => Promise<T>) {
+  return changeWorkspaceState(id, async () => {
+    const token = {};
+    wakes.set(id, token);
+    try {
+      return await wake(() => wakes.get(id) === token);
+    } finally {
+      wakes.delete(id);
+    }
+  });
+}
+
 export function applyCloudStatus(
   workspaceId: string,
-  data: { status?: string; step?: string },
+  data: CloudReport,
   { beforePublish }: { beforePublish: () => void }
 ): void {
+  wakes.delete(workspaceId);
   const db = getDatabase();
-  const status = data.status ?? "";
-  if (status === "running") {
+  const row = cloudWorkspaceChat(db, workspaceId);
+  if (!row) return;
+  const fields = projectCloudStatus(data, {
+    archived: row.state === "archived",
+    hasChat: !!row.chat,
+  });
+  if (fields)
     db.prepare(
-      "UPDATE workspaces SET state = 'ready', init_stage = NULL, error_message = NULL WHERE id = ? AND state != 'archived'"
-    ).run(workspaceId);
-  } else if (status === "provisioning") {
-    db.prepare(
-      "UPDATE workspaces SET state = 'initializing', init_stage = ? WHERE id = ? AND state != 'archived'"
-    ).run(data.step ?? "provisioning", workspaceId);
-  } else if (status === "error") {
-    db.prepare(
-      "UPDATE workspaces SET state = 'error', error_message = ? WHERE id = ? AND state != 'archived'"
-    ).run(data.step ?? "cloud workspace error", workspaceId);
-  } else {
-    // paused/stopped/resuming — surface as the init stage without leaving 'ready'.
-    db.prepare("UPDATE workspaces SET init_stage = ? WHERE id = ? AND state != 'archived'").run(
-      status || null,
-      workspaceId
-    );
-  }
+      "UPDATE workspaces SET state = ?, init_stage = ?, error_message = ?, error_detail = ? WHERE id = ?"
+    ).run(...fields, workspaceId);
   try {
     beforePublish();
   } finally {
@@ -467,7 +568,10 @@ export function markRestored(db: Database, workspaceId: string) {
   if (row.state !== "archived") return;
   if (row.kind === "cloud" && row.provider_workspace_id) {
     // Open the row before waking so the driver can apply an early platform report.
-    db.prepare("UPDATE workspaces SET state = 'ready' WHERE id = ?").run(workspaceId);
+    db.prepare("UPDATE workspaces SET state = ? WHERE id = ?").run(
+      cloudWorkspaceChat(db, workspaceId)?.chat ? "ready" : "initializing",
+      workspaceId
+    );
   } else {
     db.prepare(
       "UPDATE workspaces SET state = CASE WHEN current_session_id IS NULL THEN 'error' ELSE 'ready' END WHERE id = ?"
@@ -482,14 +586,16 @@ export function rollbackCloudRestore(db: Database, workspaceId: string): void {
 }
 
 /** Resurface an archived adopted workspace and repoint its current session.
- *  Only a revival invalidates the workspace list. */
+ *  Both membership and selection belong to the workspace list. */
 export function reviveAdoptedWorkspace(workspaceId: string, sessionId: string): void {
   const db = getDatabase();
   const revived = markAdoptedWorkspaceReady(db, workspaceId);
-  db.prepare(
-    "UPDATE workspaces SET current_session_id = ?, updated_at = datetime('now') WHERE id = ? AND current_session_id IS NOT ?"
-  ).run(sessionId, workspaceId, sessionId);
-  if (revived) invalidate(["workspaces"]);
+  const selected = db
+    .prepare(
+      "UPDATE workspaces SET current_session_id = ?, updated_at = datetime('now') WHERE id = ? AND current_session_id IS NOT ?"
+    )
+    .run(sessionId, workspaceId, sessionId);
+  if (revived || selected.changes) invalidate(["workspaces"]);
 }
 
 /** reviveAdoptedWorkspace publishes after selecting the chat, or openAutomationRun after commit and backfill. */

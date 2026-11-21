@@ -13,9 +13,10 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("../../../src/db", () => ({ getWorkspaceRaw: mocks.workspace }));
 vi.mock("../../../src/lib/database", () => ({
-  getDatabase: () => ({ prepare: () => ({ run: mocks.run }) }),
+  getDatabase: () => ({ prepare: () => ({ run: mocks.run, get: () => ({ chat: "chat" }) }) }),
 }));
 vi.mock("../../../src/services/cloud-workspace-init.service", () => ({
+  CloudChatError: class extends Error {},
   pauseCloudWorkspace: mocks.pause,
   wakeCloudWorkspaceWithFeedback: mocks.wake,
 }));
@@ -92,7 +93,8 @@ describe("workspace unarchive", () => {
     release();
     await Promise.all([archiving, opening]);
     expect(mocks.wake).toHaveBeenCalledWith(
-      expect.objectContaining({ provider_workspace_id: "cloud-vm" })
+      expect.objectContaining({ provider_workspace_id: "cloud-vm" }),
+      expect.any(Function)
     );
     expect(mocks.run).toHaveBeenCalledTimes(2);
   });

@@ -45,7 +45,12 @@ vi.mock("../../../src/lib/database", () => ({
         }
         return mocks.run(...args);
       },
-      get: () => (sql.includes("init_stage") ? mocks.workspace : { last_inline_mint_at: 0 }),
+      get: () =>
+        sql.includes("AS chat")
+          ? { chat: "session" }
+          : sql.includes("init_stage")
+            ? mocks.workspace
+            : { last_inline_mint_at: 0 },
     }),
   }),
 }));
@@ -54,9 +59,12 @@ vi.mock("../../../src/services/query-engine", () => ({ invalidate: vi.fn() }));
 import {
   clearGithubTokenRefreshFlights,
   refreshWorkspaceGithubToken,
-  wakeCloudWorkspaceWithFeedback,
+  wakeCloudWorkspaceWithFeedback as wake,
 } from "../../../src/services/cloud-workspace-init.service";
 import { forgetGithubAnswers } from "../../../src/services/github-remote";
+
+const wakeCloudWorkspaceWithFeedback = (workspace: Parameters<typeof wake>[0]) =>
+  wake(workspace, () => true);
 
 beforeEach(() => {
   vi.resetAllMocks();

@@ -7,7 +7,7 @@ import {
   finishLocalStart,
   insertLocalWorkspace,
   markArchived,
-  runLocalAttempt,
+  runWorkspaceAttempt,
 } from "../../../src/services/workspace-lifecycle";
 
 let db: Database.Database;
@@ -50,14 +50,17 @@ it.each([
     initial: true,
     expected: { state: "ready", current_session_id: "first" },
     write: (step: () => void) =>
-      runLocalAttempt("w", async (token) => finishLocalStart("w", step, token)),
+      runWorkspaceAttempt("w", async (token) => finishLocalStart("w", step, token)),
     notification: [["workspaces", "sessions"]],
   },
   {
     operation: "attaching a cloud computer",
     initial: true,
     expected: { provider_workspace_id: "vm", init_stage: "creating cloud session" },
-    write: (step: () => void) => attachCloudComputer(db, "w", "vm", 42, step),
+    write: (step: () => void) =>
+      runWorkspaceAttempt("w", async (token) => {
+        attachCloudComputer(db, "w", "vm", 42, step, token);
+      }),
     notification: [["workspaces", "sessions", "session"], {}],
   },
   {
@@ -70,10 +73,14 @@ it.each([
   },
 ])(
   "publishes the committed row when an effect throws during $operation",
-  async ({ initial, expected, write, notification }) => {
+  async ({ operation, initial, expected, write, notification }) => {
     if (initial)
       db.exec(
         "INSERT INTO workspaces (id, repository_id, slug, first_session_id) VALUES ('w', 'r', 'work', 'first')"
+      );
+    if (operation === "applying cloud status")
+      db.exec(
+        "INSERT INTO sessions (id, workspace_id) VALUES ('chat', 'w'); UPDATE workspaces SET current_session_id = 'chat' WHERE id = 'w'"
       );
     const read = () => db.prepare("SELECT * FROM workspaces WHERE id = 'w'").get();
     const error = new Error("intervening effect failed");

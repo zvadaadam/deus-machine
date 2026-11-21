@@ -463,15 +463,15 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         // spinner forever. Fail here, before that gate. (paused replays.)
         if (sessionStatus === "stopped") scheduleTurnKill(session, "stopped");
       } else if (sessionStatus === "error") {
-        recordWorkspaceStatus(session.deusWorkspaceId, { status: "error" });
+        recordWorkspaceStatus(session.deusWorkspaceId, { ...state, status: "error" });
         tellCloudEnv(session, { status: "error" });
         scheduleTurnKill(session, "error");
-      } else if (sessionStatus === "provisioning") {
+      } else if (sessionStatus === "provisioning" || sessionStatus === "resuming") {
         // Connected mid-setup (fresh create attaches while the sandbox is
         // still building) — show the stack immediately; the step events
         // that follow append to it.
-        recordWorkspaceStatus(session.deusWorkspaceId, { status: "provisioning" });
-        tellCloudEnv(session, { status: "provisioning" });
+        recordWorkspaceStatus(session.deusWorkspaceId, { ...state, status: sessionStatus });
+        tellCloudEnv(session, { status: sessionStatus });
         // Recovery truth can arrive VIA the snapshot when the live
         // workspace.state frame fell into a socket gap — the reconnect
         // doesn't fire onDown (the socket retries internally), so an armed

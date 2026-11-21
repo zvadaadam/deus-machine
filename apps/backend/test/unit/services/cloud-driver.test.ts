@@ -109,7 +109,11 @@ vi.mock("../../../src/services/streams", () => ({
 
 const mockRun = vi.fn((..._args: unknown[]) => ({ changes: 0, lastInsertRowid: 0 }));
 const mockGet = vi.fn(
-  (): Record<string, unknown> => ({ kind: "cloud", provider_workspace_id: "agnt-ws-1" })
+  (): Record<string, unknown> => ({
+    kind: "cloud",
+    provider_workspace_id: "agnt-ws-1",
+    chat: "deus-session-1",
+  })
 );
 const mockPrepare = vi.fn<(sql: string) => Pick<Database.Statement, "run" | "get">>(() => ({
   run: mockRun,
@@ -1076,7 +1080,7 @@ describe("cloud driver frame → fold contract", () => {
 
   it("updates the workspace row from workspace.state frames", () => {
     capturedOnFrame!({ type: "workspace.state", data: { status: "running" } });
-    expect(mockRun).toHaveBeenCalledWith("deus-ws-1");
+    expect(mockRun).toHaveBeenCalledWith("ready", null, null, null, "deus-ws-1");
     expect(mockInvalidate).toHaveBeenCalled();
   });
 
@@ -1090,6 +1094,9 @@ describe("cloud driver frame → fold contract", () => {
         db.prepare(
           "INSERT INTO workspaces (id, repository_id, slug, kind, state, init_stage) VALUES ('deus-ws-1', 'repo', 'vm', 'cloud', ?, 'running')"
         ).run(state);
+        db.exec(
+          "INSERT INTO sessions (id, workspace_id) VALUES ('chat','deus-ws-1'); UPDATE workspaces SET current_session_id='chat'"
+        );
         mockInvalidate.mockClear();
         await mockPrepare.withImplementation(
           (sql) => db.prepare(sql),
@@ -1111,7 +1118,7 @@ describe("cloud driver frame → fold contract", () => {
   it.each([
     { status: "running", expectedState: "ready", expectedStage: null },
     { status: "provisioning", expectedState: "initializing", expectedStage: "restoring" },
-    { status: "error", expectedState: "error", expectedStage: "resuming" },
+    { status: "error", expectedState: "error", expectedStage: null },
     { status: "already-running", expectedState: "ready", expectedStage: null },
     { status: "refresh-failed", expectedState: "ready", expectedStage: null },
     { status: "resume-failed", expectedState: "archived", expectedStage: "paused" },
@@ -1132,6 +1139,7 @@ describe("cloud driver frame → fold contract", () => {
       mockGetWorkspace.mockResolvedValueOnce({
         status: status === "already-running" || status === "refresh-failed" ? "running" : "paused",
       });
+      db.exec("INSERT INTO sessions (id, workspace_id) VALUES ('deus-session-1','deus-ws-1')");
       const connectionsBefore = connectCount;
       try {
         await mockPrepare.withImplementation(
@@ -1286,8 +1294,7 @@ describe("cloud driver frame → fold contract", () => {
     mockRun.mockClear();
     capturedOnFrame!({ type: "workspace.state", data: { step: 42 } });
     expect(mockPublish).not.toHaveBeenCalled();
-    // The row update has its own tolerance and still runs.
-    expect(mockRun).toHaveBeenCalled();
+    expect(mockRun).not.toHaveBeenCalled();
   });
 
   it("learns an asleep sandbox from the connect snapshot (row + chat line)", () => {
@@ -1470,7 +1477,11 @@ describe("cloud driver session lifecycle", () => {
         )
       );
     } finally {
-      mockGet.mockImplementation(() => ({ kind: "cloud", provider_workspace_id: "agnt-ws-1" }));
+      mockGet.mockImplementation(() => ({
+        kind: "cloud",
+        provider_workspace_id: "agnt-ws-1",
+        chat: "deus-session-1",
+      }));
     }
   });
 
@@ -1496,7 +1507,11 @@ describe("cloud driver session lifecycle", () => {
       // No key for its organization: the organization-scoped metadata push is skipped.
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/metadata"))).toBe(false);
     } finally {
-      mockGet.mockImplementation(() => ({ kind: "cloud", provider_workspace_id: "agnt-ws-1" }));
+      mockGet.mockImplementation(() => ({
+        kind: "cloud",
+        provider_workspace_id: "agnt-ws-1",
+        chat: "deus-session-1",
+      }));
     }
   });
 

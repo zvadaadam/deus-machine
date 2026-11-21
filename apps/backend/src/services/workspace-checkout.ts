@@ -12,7 +12,7 @@ import {
   failStart,
   finishLocalStart,
   recordFetchOutcome,
-  runLocalAttempt,
+  runWorkspaceAttempt,
   type Stage,
 } from "./workspace-lifecycle";
 import { prepareLocalEnvironment } from "./project-environment.service";
@@ -297,7 +297,7 @@ function describeFailure(stage: Stage, error: unknown, ctx: InitContext): Failur
 }
 
 export function initializeWorkspace(ctx: InitContext): Promise<void> {
-  return runLocalAttempt(ctx.workspaceId, (signal) => checkout(ctx, signal));
+  return runWorkspaceAttempt(ctx.workspaceId, (signal) => checkout(ctx, signal));
 }
 
 async function checkout(ctx: InitContext, signal: AbortSignal) {

@@ -28,7 +28,7 @@ import { generateUniqueName } from "../workspace.service";
 import type { RepositoryRow } from "../../db/types";
 import * as platform from "./platform";
 import * as store from "./store";
-import { reviveAdoptedWorkspace } from "../workspace-lifecycle";
+import { changeWorkspaceState, reviveAdoptedWorkspace } from "../workspace-lifecycle";
 import { getProviderAccounts } from "../provider-accounts.service";
 import { defaultProviderAccount } from "@shared/types/provider-account";
 import {
@@ -605,16 +605,20 @@ export async function openAutomationRun(
   // transcript is as stale as an empty one — a message-count gate would
   // freeze it forever. The insert path is idempotent, so backfill always.
   if (run.session_id && run.workspace_id && store.sessionExists(run.session_id)) {
-    if (run.provider_session_id) {
-      await backfillTranscript(run.session_id, run.provider_session_id, identity, orgId);
-    }
-    assertCurrentAccount(identity);
-    // The user may have archived the adopted workspace since — an archived
-    // row is invisible to the workspace queries, so opening the run would
-    // select an id the frontend cannot resolve. Resurface it, like the
-    // adoption path does.
-    reviveAdoptedWorkspace(run.workspace_id, run.session_id);
-    return { workspaceId: run.workspace_id, sessionId: run.session_id };
+    const { workspace_id: workspaceId, session_id: sessionId } = run;
+    return changeWorkspaceState(workspaceId, async () => {
+      assertCurrentAccount(identity);
+      if (run.provider_session_id) {
+        await backfillTranscript(sessionId, run.provider_session_id, identity, orgId);
+      }
+      assertCurrentAccount(identity);
+      // The user may have archived the adopted workspace since — an archived
+      // row is invisible to the workspace queries, so opening the run would
+      // select an id the frontend cannot resolve. Resurface it, like the
+      // adoption path does.
+      reviveAdoptedWorkspace(workspaceId, sessionId);
+      return { workspaceId, sessionId };
+    });
   }
 
   if (!run.provider_session_id) {
@@ -628,43 +632,54 @@ export async function openAutomationRun(
   assertCurrentAccount(identity);
   if (!detail.workspaceId) throw new NotFoundError("The run's sandbox is gone.");
 
-  const { workspaceId, sessionId } = store.adoptRunRows({
-    runId,
-    automationId: automation.id,
-    repositoryId: automation.repository_id,
-    automationName: automation.name,
-    providerSessionId: run.provider_session_id,
-    providerWorkspaceId: detail.workspaceId,
-    organizationId: orgId,
-    newWorkspaceSlug: () => generateUniqueName(getDatabase()),
-  });
-
-  // Backfill the transcript from the platform's stored messages — the run
-  // executed server-side, so the live channel never folded its events here.
-  const inserted = store.backfillSessionTranscript(sessionId, detail.messages);
-  if (inserted > 0) {
-    console.log(
-      `[Automations] backfilled ${inserted} message(s) for adopted run ${runId} → session ${sessionId}`
-    );
-    // Rows no event of the chat announced: whoever has its transcript open reads it again.
-    resetSubscribers(sessionEvents, { sessionId });
-  }
-  invalidate(["workspaces", "sessions", "session", ...AUTOMATION_RESOURCES], {
-    sessionIds: [sessionId],
-  });
-
-  // Attach the live session channel (call-time import: the driver sits in the
-  // agent service graph, which imports this module through the tool dispatch).
-  void import("../agent/cloud/driver")
-    .then(({ ensureCloudSession }) => {
+  const providerSessionId = run.provider_session_id;
+  const providerWorkspaceId = detail.workspaceId;
+  const repositoryId = automation.repository_id;
+  // Two first opens may discover the same computer before it has a local id.
+  return changeWorkspaceState(`automation:${providerWorkspaceId}`, () => {
+    const workspaceId = store.workspaceForRun(providerSessionId, providerWorkspaceId) ?? uuidv7();
+    return changeWorkspaceState(workspaceId, async () => {
       assertCurrentAccount(identity);
-      return ensureCloudSession(sessionId);
-    })
-    .catch((err) => {
-      console.warn(`[Automations] session channel attach failed for run ${runId}:`, err);
-    });
+      const { sessionId } = store.adoptRunRows({
+        workspaceId,
+        runId,
+        automationId: automation.id,
+        repositoryId,
+        automationName: automation.name,
+        providerSessionId,
+        providerWorkspaceId,
+        organizationId: orgId,
+        newWorkspaceSlug: () => generateUniqueName(getDatabase()),
+      });
 
-  return { workspaceId, sessionId };
+      // Backfill the transcript from the platform's stored messages — the run
+      // executed server-side, so the live channel never folded its events here.
+      const inserted = store.backfillSessionTranscript(sessionId, detail.messages);
+      if (inserted > 0) {
+        console.log(
+          `[Automations] backfilled ${inserted} message(s) for adopted run ${runId} → session ${sessionId}`
+        );
+        // Rows no event of the chat announced: whoever has its transcript open reads it again.
+        resetSubscribers(sessionEvents, { sessionId });
+      }
+      invalidate(["workspaces", "sessions", "session", ...AUTOMATION_RESOURCES], {
+        sessionIds: [sessionId],
+      });
+
+      // Attach the live session channel (call-time import: the driver sits in the
+      // agent service graph, which imports this module through the tool dispatch).
+      void import("../agent/cloud/driver")
+        .then(({ ensureCloudSession }) => {
+          assertCurrentAccount(identity);
+          return ensureCloudSession(sessionId);
+        })
+        .catch((err) => {
+          console.warn(`[Automations] session channel attach failed for run ${runId}:`, err);
+        });
+
+      return { workspaceId, sessionId };
+    });
+  });
 }
 
 /** Heal an adopted-but-empty transcript from the platform's stored messages. */

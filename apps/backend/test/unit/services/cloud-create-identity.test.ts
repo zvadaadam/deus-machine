@@ -56,6 +56,7 @@ const environment = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.run.mockReturnValue({ changes: 1 });
   resetCloudConfigForTests();
   clearGithubTokenRefreshFlights();
   setCloudRuntimeCredentials({
@@ -106,6 +107,7 @@ it("stops creation when the human switches accounts during preparation", async (
   await vi.waitFor(() =>
     expect(mocks.run).toHaveBeenCalledWith(
       expect.stringContaining("Your Deus account changed"),
+      null,
       expect.any(String)
     )
   );

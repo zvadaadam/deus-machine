@@ -2,6 +2,7 @@ import { getWorkspaceRaw } from "../db";
 import { getDatabase } from "../lib/database";
 import { NotFoundError, ValidationError } from "../lib/errors";
 import {
+  CloudChatError,
   pauseCloudWorkspace,
   wakeCloudWorkspaceWithFeedback,
 } from "./cloud-workspace-init.service";
@@ -10,6 +11,7 @@ import {
   markArchived,
   markRestored,
   rollbackCloudRestore,
+  queueCloudWake,
 } from "./workspace-lifecycle";
 import { stopWorkspaceSetup } from "./project-environment.service";
 import { autoProgressStatus } from "./workspace-status.service";
@@ -47,7 +49,7 @@ export function archiveWorkspace(workspaceId: string, check?: () => void): Promi
 }
 
 export function wakeWorkspace(workspaceId: string) {
-  return changeWorkspaceState(workspaceId, async () => {
+  return queueCloudWake(workspaceId, async (current) => {
     const workspace = getWorkspaceRaw(getDatabase(), workspaceId);
     if (!workspace) throw new NotFoundError("Workspace not found");
     if (workspace.kind !== "cloud" || !workspace.provider_workspace_id) {
@@ -56,30 +58,36 @@ export function wakeWorkspace(workspaceId: string) {
     if (workspace.state === "archived") {
       throw new ValidationError("Workspace is archived — unarchive it first");
     }
-    return wakeCloudWorkspaceWithFeedback({
-      ...workspace,
-      provider_workspace_id: workspace.provider_workspace_id,
-    });
+    return wakeCloudWorkspaceWithFeedback(
+      {
+        ...workspace,
+        provider_workspace_id: workspace.provider_workspace_id,
+      },
+      current
+    );
   });
 }
 
 export function unarchiveWorkspace(workspaceId: string): Promise<void> {
-  return changeWorkspaceState(workspaceId, async () => {
+  return queueCloudWake(workspaceId, async (current) => {
     const db = getDatabase();
     const workspace = markRestored(db, workspaceId);
     if (!workspace) return;
     if (workspace.kind === "cloud" && workspace.provider_workspace_id) {
       try {
-        const result = await wakeCloudWorkspaceWithFeedback({
-          ...workspace,
-          provider_workspace_id: workspace.provider_workspace_id,
-        });
+        const result = await wakeCloudWorkspaceWithFeedback(
+          {
+            ...workspace,
+            provider_workspace_id: workspace.provider_workspace_id,
+          },
+          current
+        );
         // A failed status refresh can still leave the computer serving.
         if (!result.ok && result.status !== "running") {
           throw new Error("Could not wake the cloud machine. Try again.");
         }
       } catch (err) {
-        rollbackCloudRestore(db, workspaceId);
+        if (current() && !(err instanceof CloudChatError)) rollbackCloudRestore(db, workspaceId);
         throw err;
       }
     }

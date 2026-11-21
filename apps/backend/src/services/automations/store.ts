@@ -198,6 +198,17 @@ export function sessionExists(sessionId: string): boolean {
   return getDatabase().prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId) !== undefined;
 }
 
+/** A reused platform chat belongs to its original workspace, even after archive. */
+export function workspaceForRun(session: string, computer: string): string | null {
+  return getDatabase()
+    .prepare(
+      `SELECT COALESCE((SELECT workspace_id FROM sessions WHERE provider_session_id = ?),
+        (SELECT id FROM workspaces WHERE provider_workspace_id = ? ORDER BY state = 'archived', updated_at DESC, id LIMIT 1))`
+    )
+    .pluck()
+    .get(session, computer) as string | null;
+}
+
 /**
  * Find-or-create the deus workspace/session rows for a run's platform ids —
  * ONE transaction, so a mid-sequence failure can never leave a workspace
@@ -208,6 +219,7 @@ export function sessionExists(sessionId: string): boolean {
  * queries — an archived owner is resurfaced instead.
  */
 export function adoptRunRows(input: {
+  workspaceId: string;
   runId: string;
   automationId: string;
   repositoryId: string;
@@ -224,29 +236,20 @@ export function adoptRunRows(input: {
       .prepare("SELECT id, workspace_id FROM sessions WHERE provider_session_id = ?")
       .get(input.providerSessionId) as { id: string; workspace_id: string } | undefined;
 
-    let workspaceId: string;
-    if (session) {
-      workspaceId = session.workspace_id;
+    const { workspaceId } = input;
+    if (db.prepare("SELECT 1 FROM workspaces WHERE id = ?").get(workspaceId)) {
       markAdoptedWorkspaceReady(db, workspaceId);
     } else {
-      const found = db
-        .prepare(
-          "SELECT id FROM workspaces WHERE provider_workspace_id = ? AND state != 'archived'"
-        )
-        .get(input.providerWorkspaceId) as { id: string } | undefined;
-      if (found) {
-        workspaceId = found.id;
-      } else {
-        workspaceId = uuidv7();
-        insertAdoptedWorkspace(db, {
-          id: workspaceId,
-          repository_id: input.repositoryId,
-          slug: input.newWorkspaceSlug(),
-          title: input.automationName,
-          provider_workspace_id: input.providerWorkspaceId,
-          organization_id: input.organizationId,
-        });
-      }
+      insertAdoptedWorkspace(db, {
+        id: workspaceId,
+        repository_id: input.repositoryId,
+        slug: input.newWorkspaceSlug(),
+        title: input.automationName,
+        provider_workspace_id: input.providerWorkspaceId,
+        organization_id: input.organizationId,
+      });
+    }
+    if (!session) {
       const sessionId = uuidv7();
       db.prepare(
         `INSERT INTO sessions (id, workspace_id, agent_harness, provider_session_id, status)

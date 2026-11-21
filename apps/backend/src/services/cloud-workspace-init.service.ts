@@ -36,6 +36,9 @@ import {
   insertCloudWorkspace,
   claimCloudRetry,
   setCloudWakeStage,
+  runWorkspaceAttempt,
+  ensureWorkspaceChat,
+  retainArchivedComputer,
 } from "./workspace-lifecycle";
 import {
   cloudAccount,
@@ -109,11 +112,10 @@ export function createCloudWorkspace(params: CreateCloudWorkspaceParams): {
     organization_id: org.orgId,
   });
 
-  void provisionCloudWorkspace(
-    workspaceId,
-    httpsOrigin(repo.git_origin_url),
-    { source: sourceBranch, work: workBranch },
-    org
+  const origin = httpsOrigin(repo.git_origin_url);
+  const branch = { source: sourceBranch, work: workBranch };
+  void runWorkspaceAttempt(workspaceId, (token) =>
+    provisionCloudWorkspace(workspaceId, token, origin, branch, org)
   );
 
   return { workspaceId, slug };
@@ -146,14 +148,13 @@ export function retryCloudWorkspace(workspaceId: string): void {
     throw new NotFoundError("Workspace not found");
   const org = requireCloudOrg(workspace.organization_id);
   claimCloudRetry(db, workspaceId);
-  void provisionCloudWorkspace(
-    workspaceId,
-    httpsOrigin(repo.git_origin_url),
-    {
-      source: workspace.git_target_branch || repo.git_default_branch || "main",
-      work: workspace.git_branch,
-    },
-    org
+  const origin = httpsOrigin(repo.git_origin_url);
+  const branch = {
+    source: workspace.git_target_branch || repo.git_default_branch || "main",
+    work: workspace.git_branch,
+  };
+  void runWorkspaceAttempt(workspaceId, (token) =>
+    provisionCloudWorkspace(workspaceId, token, origin, branch, org)
   );
 }
 
@@ -165,24 +166,34 @@ interface CloudWorkspaceRef {
 
 /** Archive suspends the VM and keeps both its filesystem and remote backups. */
 export async function pauseCloudWorkspace(
-  workspace: CloudWorkspaceRef & { provider_workspace_id: string }
+  workspace: CloudWorkspaceRef & { provider_workspace_id: string; state?: string }
 ): Promise<void> {
   if (!cloudAccount()) throw new ValidationError("Cloud workspaces are not configured");
-  const config = requireCloudOrg(workspace.organization_id);
-  // Let the lifecycle owner decide: a disconnected VM may report stopped
-  // while its processes are still running.
-  try {
-    await agntPauseWorkspace(workspace.provider_workspace_id, {
-      baseUrl: config.baseUrl,
-      apiKey: config.apiKey,
-    });
-  } catch (err) {
-    if (isDeusError(err) && err.code === "WORKSPACE_STARTING") {
-      throw new ConflictError(
-        "The cloud computer is still starting. Try archiving it once it is ready."
-      );
+  return pauseComputer(
+    workspace.provider_workspace_id,
+    requireCloudOrg(workspace.organization_id),
+    workspace.state === "initializing"
+  );
+}
+
+/** WorkspaceDO allows ten minutes to provision. A confirmed archive holds the VM asleep. */
+async function pauseComputer(id: string, org: CloudOrg, waitForStart: boolean) {
+  const limit = 10 * 60_000;
+  const deadline = Date.now() + limit;
+  const signal = waitForStart ? AbortSignal.timeout(limit) : undefined;
+  for (let delay = 1_000; ; delay = Math.min(delay * 2, 30_000)) {
+    try {
+      return await agntPauseWorkspace(id, { baseUrl: org.baseUrl, apiKey: org.apiKey, signal });
+    } catch (err) {
+      if (!isDeusError(err) || err.code !== "WORKSPACE_STARTING") throw err;
+      const remaining = deadline - Date.now();
+      if (!waitForStart || remaining <= 0) {
+        throw new ConflictError(
+          "The cloud computer is still starting. Try archiving it once it is ready."
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, Math.min(delay, remaining)));
     }
-    throw err;
   }
 }
 
@@ -449,21 +460,31 @@ function setInlineMintStamp(
 const githubTokenRefreshes = new Map<string, Promise<RepositoryAuth | null>>();
 
 /** Explicit wake releases the platform hold; the runtime owns resume and recovery. */
-export async function wakeCloudWorkspaceWithFeedback(workspace: {
-  id: string;
-  provider_workspace_id: string;
-  current_session_id: string | null;
-  repository_id?: string | null;
-  organization_id?: string | null;
-}): Promise<{ ok: boolean; status: string; error?: string }> {
+export async function wakeCloudWorkspaceWithFeedback(
+  workspace: {
+    id: string;
+    provider_workspace_id: string;
+    current_session_id: string | null;
+    repository_id?: string | null;
+    organization_id?: string | null;
+  },
+  current: () => boolean
+): Promise<{ ok: boolean; status: string; error?: string }> {
   const db = getDatabase();
-  const sessionId = workspace.current_session_id;
+  const sessionId = await ensureWorkspaceChat(db, workspace.id, (token) =>
+    openCloudChat(
+      workspace.id,
+      workspace.provider_workspace_id,
+      () => requireCloudOrg(workspace.organization_id),
+      token
+    )
+  );
   const announce = (data: Record<string, unknown>) => {
-    if (sessionId) announceCloudEnv(workspace.id, sessionId, data);
+    announceCloudEnv(workspace.id, sessionId, data);
   };
 
   const isServing = () => {
-    if (!sessionId || !hasLiveCloudSession(sessionId)) return false;
+    if (!hasLiveCloudSession(sessionId)) return false;
     const row = db
       .prepare("SELECT state, init_stage FROM workspaces WHERE id = ?")
       .get(workspace.id) as { state: string; init_stage: string | null } | undefined;
@@ -474,11 +495,11 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
   // HTTP status can fail while the existing session still serves the computer.
   // A channel alone is insufficient: it also stays open while the VM sleeps.
   const refreshing = status === "running" || (status === null && isServing());
-  if (status === "running") {
+  if (current() && status === "running") {
     // An earlier wake may have succeeded despite a lost response. An online
     // resume is a no-op, so no later frame is guaranteed to clear stale sleep.
     setCloudWakeStage(db, workspace.id, null);
-  } else if (!refreshing) {
+  } else if (current() && !refreshing) {
     setCloudWakeStage(db, workspace.id, "resuming");
     announce({ status: "resuming" });
   }
@@ -499,22 +520,16 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
     console.warn(`[WORKSPACE] cloud wake failed: ${err}`);
     if (refreshing && isServing()) return { ok: false, status: "running" };
     const failedStatus = status === "paused" || status === "stopped" ? status : "error";
-    setCloudWakeStage(db, workspace.id, failedStatus);
     const error =
       err instanceof Error ? err.message : "Could not wake the cloud machine. Try again.";
-    announce({ status: failedStatus, reason: error });
+    if (current()) {
+      setCloudWakeStage(db, workspace.id, failedStatus);
+      announce({ status: failedStatus, reason: error });
+    }
     return { ok: false, status: failedStatus, error };
   }
 
-  if (sessionId) {
-    try {
-      await ensureCloudSession(sessionId);
-    } catch (err) {
-      // The resume may have succeeded; the channel reconnects on the next
-      // send — a transient connect failure must not fail the wake.
-      console.warn(`[WORKSPACE] cloud wake reconnect failed (continuing): ${err}`);
-    }
-  }
+  await connectCloudChat(sessionId);
   invalidate(["workspaces"], {});
   return { ok: true, status: status === "running" ? "running" : "resuming" };
 }
@@ -764,23 +779,66 @@ async function refreshEnvironmentGithubToken(
   }
 }
 
+/** Once the chat exists a socket failure is recoverable on the next send or wake. */
+async function connectCloudChat(sessionId: string) {
+  try {
+    await ensureCloudSession(sessionId);
+  } catch (err) {
+    console.warn(
+      `[CloudInit] session channel connect failed for ${sessionId} (send/wake will retry): ${err}`
+    );
+  }
+}
+
+/** A room retry on this computer reuses the id of its first platform request. */
+async function openCloudChat(
+  id: string,
+  workspaceId: string,
+  credentials: () => CloudOrg,
+  token: AbortSignal
+) {
+  try {
+    const org = credentials();
+    const session = await agntCreateSession({
+      baseUrl: org.baseUrl,
+      apiKey: org.apiKey,
+      workspaceId,
+      sessionId: id,
+    });
+    return attachCloudChat(getDatabase(), id, session.id, token);
+  } catch (err) {
+    const message = "The cloud computer exists, but its chat did not open.";
+    failCloudStart(
+      getDatabase(),
+      id,
+      message,
+      token,
+      err instanceof Error ? err.message : String(err)
+    );
+    throw new CloudChatError(message);
+  }
+}
+
+export class CloudChatError extends Error {}
+
 async function provisionCloudWorkspace(
   workspaceId: string,
+  token: AbortSignal,
   originUrl: string,
   branch: { source: string; work: string },
   org: CloudOrg
 ): Promise<void> {
   const db = getDatabase();
-  const identity = getCloudIdentitySignal();
+  const preparing = AbortSignal.any([getCloudIdentitySignal(), token]);
   const { baseUrl, apiKey } = org;
   try {
     const userId = await getCloudWorkspaceUserId(org.orgId);
-    identity.throwIfAborted();
+    preparing.throwIfAborted();
     // A specialized environment (agent-authored via agnt_configure_environment,
     // resolved by the derived repo name) wins; absence of one IS the default —
     // the inline recipe below, exactly as before.
     const envInfo = await getCloudEnvironmentInfo(originUrl, org.orgId);
-    identity.throwIfAborted();
+    preparing.throwIfAborted();
     if (envInfo.lookupFailed)
       throw new Error(
         "Could not load project settings. Try again when the cloud connection is available."
@@ -801,7 +859,7 @@ async function provisionCloudWorkspace(
       repositoryAuth =
         (await refreshEnvironmentGithubTokenOnce(originUrl, envInfo.environmentId, org)) ??
         undefined;
-      identity.throwIfAborted();
+      preparing.throwIfAborted();
       // Every cloud workspace shows a Simulator tab; an environment saved
       // before devices existed cannot honour it, and the recipe is captured
       // at create — so upgrade the environment FIRST (enabling is free:
@@ -826,7 +884,7 @@ async function provisionCloudWorkspace(
       // DO refreshes secrets on every ensure, so each provision gets a
       // fresh mint instead of replaying a stale one.
       const mint = await mintRepoInstallationToken(originUrl, org.orgId);
-      identity.throwIfAborted();
+      preparing.throwIfAborted();
       repositoryAuth = mint.token
         ? { type: "github_app" }
         : mint.definitive
@@ -850,7 +908,8 @@ async function provisionCloudWorkspace(
           failCloudStart(
             db,
             workspaceId,
-            `GitHub access required — install the Deus GitHub App for ${slug} to run it in the cloud.`
+            `GitHub access required — install the Deus GitHub App for ${slug} to run it in the cloud.`,
+            token
           );
           return;
         }
@@ -861,7 +920,7 @@ async function provisionCloudWorkspace(
       }
       environment = recipe;
     }
-    identity.throwIfAborted();
+    preparing.throwIfAborted();
     const provider = await agntCreateWorkspace({
       baseUrl,
       apiKey,
@@ -871,29 +930,33 @@ async function provisionCloudWorkspace(
       // New branch off the source — the sandbox's whole life happens here.
       checkout: { branch: branch.work, from: branch.source },
     });
-    attachCloudComputer(db, workspaceId, provider.id, inlineMintStampAtCreate, () => {
-      if (repositoryAuth) markWorkspaceTokenRefreshed(provider.id);
-    });
-
-    const providerSession = await agntCreateSession({ baseUrl, apiKey, workspaceId: provider.id });
-    const sessionId = attachCloudChat(db, workspaceId, providerSession.id);
-
-    // Open the session socket now: workspace.state events drive init_stage →
-    // 'ready', and the first user send needs the channel anyway. A socket
-    // failure here is NOT a provisioning failure — the workspace and session
-    // exist and the sandbox keeps provisioning; the next send (or the wake
-    // button) reconnects. Marking the row 'error' would report a dead
-    // workspace for a transient connect problem.
-    try {
-      await ensureCloudSession(sessionId);
-    } catch (err) {
-      console.warn(
-        `[CloudInit] session channel connect failed for ${workspaceId} (send/wake will retry): ${err}`
+    const attached = attachCloudComputer(
+      db,
+      workspaceId,
+      provider.id,
+      inlineMintStampAtCreate,
+      () => {
+        if (repositoryAuth) markWorkspaceTokenRefreshed(provider.id);
+      },
+      token
+    );
+    if (!attached) {
+      retainArchivedComputer(db, workspaceId, provider.id, inlineMintStampAtCreate);
+      await pauseComputer(provider.id, org, true).catch((err) =>
+        console.warn(
+          `[CloudInit] Could not confirm pause for archived workspace ${workspaceId} (${provider.id}): ${err}`
+        )
       );
+      return;
     }
+    const sessionId = await openCloudChat(workspaceId, provider.id, () => org, token);
+    if (!sessionId || token.aborted) return;
+
+    await connectCloudChat(sessionId);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (token.aborted || err instanceof CloudChatError) return;
     console.error(`[CloudInit] provisioning failed for ${workspaceId}: ${message}`);
-    failCloudStart(db, workspaceId, `Cloud provisioning failed: ${message}`);
+    failCloudStart(db, workspaceId, `Cloud provisioning failed: ${message}`, token);
   }
 }
