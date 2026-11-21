@@ -282,10 +282,13 @@ describe("addRepo", () => {
     expect(detectDefaultBranch).toHaveBeenCalledWith("/path/to/repo");
   });
 
-  it("refuses a folder that is not a git repository", async () => {
+  it("refuses a folder that is not a git repository in git's locale", async () => {
     const { execFileSync } = await import("child_process");
     vi.mocked(execFileSync).mockImplementationOnce(() => {
-      throw new Error("fatal: not a git repository");
+      throw Object.assign(
+        new Error("fatal : ni ceci ni aucun de ses répertoires parents n'est un dépôt git"),
+        { status: 128 }
+      );
     });
 
     await expect(run(api.addRepo, { root_path: "/path/to/folder" })).rejects.toMatchObject({

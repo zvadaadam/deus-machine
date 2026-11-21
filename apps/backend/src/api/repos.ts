@@ -213,10 +213,9 @@ async function inspectRepository(rootPath: string): Promise<InspectedRepository>
       .toString()
       .replace(/\r?\n$/, "");
   } catch (error) {
-    if (error instanceof Error && error.message.includes("not a git repository")) {
-      throw new ValidationError("Path is not a git repository");
-    }
-    const cause = isExecError(error) ? (error.code ?? error.status) : undefined;
+    const failure = isExecError(error) ? error : undefined;
+    if (failure?.status === 128) throw new ValidationError("Path is not a git repository");
+    const cause = failure?.code ?? failure?.status;
     throw new ValidationError(
       `Git could not inspect the repository folder${cause ? ` (${cause})` : ""}.`
     );
