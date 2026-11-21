@@ -33,6 +33,7 @@ import {
   CLOUD_STILL_STARTING,
   applyCloudStatus,
   type LatestCloudReport,
+  cloudIsWakingOrRunning,
   attachCloudComputer,
   attachCloudChat,
   failCloudStart,
@@ -447,6 +448,7 @@ const githubTokenRefreshes = new Map<string, Promise<RepositoryAuth | null>>();
 export async function wakeCloudWorkspaceWithFeedback(
   workspace: {
     id: string;
+    state?: string;
     provider_workspace_id: string;
     current_session_id: string | null;
     repository_id?: string | null;
@@ -503,6 +505,9 @@ export async function wakeCloudWorkspaceWithFeedback(
   } catch (err) {
     const news = latest();
     if (news?.outcome) return news.outcome;
+    // Restore can use the status read when no newer channel report superseded it.
+    if (workspace.state === "archived" && !news && status && cloudIsWakingOrRunning(status))
+      return { ok: true, status };
     console.warn(`[WORKSPACE] cloud wake failed: ${err}`);
     if (refreshing && isServing()) return { ok: false, status: "running" };
     const failedStatus = status === "paused" || status === "stopped" ? status : "error";
