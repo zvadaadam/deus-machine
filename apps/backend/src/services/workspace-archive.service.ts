@@ -41,7 +41,7 @@ export function archiveWorkspace(
       });
     }
 
-    const checkout = markArchived(db, workspaceId, check, by);
+    const checkout = markArchived(db, workspace, check, by);
     try {
       stopStream(workspaceId);
       const stopped = stopWorkspaceSetup(workspaceId);

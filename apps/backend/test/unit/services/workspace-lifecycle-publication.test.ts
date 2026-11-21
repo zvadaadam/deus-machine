@@ -101,15 +101,16 @@ it("checks archive admission immediately before writing the row", () => {
     "INSERT INTO workspaces (id, repository_id, slug, state) VALUES ('w', 'r', 'work', 'ready')"
   );
   const state = db.prepare("SELECT state FROM workspaces WHERE id = 'w'").pluck();
+  const workspace = { id: "w", kind: "worktree", provider_workspace_id: null } as const;
   const refused = new Error("archive refused");
   expect(() =>
-    markArchived(db, "w", () => {
+    markArchived(db, workspace, () => {
       throw refused;
     })
   ).toThrow(refused);
   expect(state.get()).toBe("ready");
 
-  markArchived(db, "w", () => expect(state.get()).toBe("ready"));
+  markArchived(db, workspace, () => expect(state.get()).toBe("ready"));
   expect(state.get()).toBe("archived");
   expect(invalidate).not.toHaveBeenCalled();
 });

@@ -1,5 +1,7 @@
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import workspaceOperations from "../../../src/api/workspaces";
+import { Registry, LOCAL_CALLER } from "../../../src/api/registry";
 import { DeusError } from "@deus-hq/sdk";
 import {
   archiveWorkspace,
@@ -163,71 +165,79 @@ const report = (id: string, status: string) =>
   applyCloudStatus(id, { status }, { beforePublish() {} });
 const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-it.each(["before allocation", "allocation", "chat"] as const)(
-  "keeps an archive made during %s when the platform answers late",
+const windowArchive = (workspaceId: string) =>
+  new Registry(workspaceOperations).run(
+    "archiveWorkspace",
+    "write",
+    { workspaceId },
+    { caller: LOCAL_CALLER }
+  );
+const stillStarting = "This cloud workspace is still starting. Archive it once it is ready.";
+
+it.each(["checking access", "allocating", "opening the chat"] as const)(
+  "answers archive during %s without waiting for the outstanding start request",
   async (stage) => {
     const gate = Promise.withResolvers<unknown>();
     const held =
-      stage === "before allocation"
+      stage === "checking access"
         ? mock.publicRepo
-        : stage === "allocation"
+        : stage === "allocating"
           ? mock.allocate
           : mock.createSession;
     held.mockReturnValueOnce(gate.promise);
     const { workspaceId } = createCloudWorkspace({ repositoryId: "r" });
     await vi.waitFor(() => expect(held).toHaveBeenCalledOnce());
-    const by = { kind: "session", sessionId: "archiver" } as const;
-    const closing = archiveWorkspace(workspaceId, undefined, by);
-    await vi.waitFor(() => expect(row(workspaceId)).toMatchObject({ state: "archived" }));
-    const archivedAt = db
-      .prepare("SELECT archived_at FROM workspaces WHERE id = ?")
-      .pluck()
-      .get(workspaceId);
+    const before = row(workspaceId);
     mock.invalidate.mockClear();
-    // Another retired start cannot supply its computer to this archive.
-    attachCloudComputer(db, workspaceId, "unrelated-vm", null, vi.fn(), AbortSignal.abort());
-    gate.resolve(
-      stage === "before allocation" ? true : { id: stage === "allocation" ? "vm" : "platform-chat" }
+    const answer = vi.fn();
+    const closing = Promise.resolve(windowArchive(workspaceId)).then(
+      () => answer("archived"),
+      (err: Error) => answer(err.message)
     );
-    await closing;
     await nextTurn();
-    const hasVM = stage !== "before allocation";
-    expect(row(workspaceId)).toMatchObject({
-      archived_at: archivedAt,
-      archived_by: JSON.stringify(by),
-      state: "archived",
-      current_session_id: null,
-      error_message: null,
-      provider_workspace_id: hasVM ? "vm" : null,
-      init_stage: stage === "chat" ? "creating cloud session" : "creating cloud workspace",
-    });
-    expect(archivedAt).toEqual(expect.any(String));
-    expect(mock.allocate).toHaveBeenCalledTimes(hasVM ? 1 : 0);
-    expect(mock.pause).toHaveBeenCalledTimes(hasVM ? 1 : 0);
-    expect(mock.createSession).toHaveBeenCalledTimes(stage === "chat" ? 1 : 0);
-    expect(db.prepare("SELECT id FROM sessions").all()).toEqual([]);
-    expect(mock.connect).not.toHaveBeenCalled();
-    if (stage !== "allocation") expect(mock.invalidate).not.toHaveBeenCalled();
+    const known = stage === "opening the chat";
+    try {
+      expect(answer).toHaveBeenCalledWith(known ? "archived" : stillStarting);
+      expect(mock.pause).toHaveBeenCalledTimes(known ? 1 : 0);
+      if (known) {
+        expect(mock.invalidate.mock.calls).toEqual([[["workspaces"]]]);
+        expect(row(workspaceId)).toMatchObject({
+          state: "archived",
+          provider_workspace_id: "vm",
+          current_session_id: null,
+          archived_by: null,
+          archived_at: expect.any(String),
+        });
+        // Undo opens the same computer's chat even though the retired request has not returned.
+        await unarchiveWorkspace(workspaceId);
+        const restored = row(workspaceId);
+        expect(restored).toMatchObject({ state: "ready", current_session_id: expect.any(String) });
+        mock.invalidate.mockClear();
+        gate.resolve({ id: "late-chat" });
+        await nextTurn();
+        expect(row(workspaceId)).toEqual(restored);
+        expect(mock.invalidate).not.toHaveBeenCalled();
+        expect(db.prepare("SELECT provider_session_id FROM sessions").pluck().all()).toEqual([
+          "platform-chat",
+        ]);
+      } else {
+        expect(row(workspaceId)).toEqual(before);
+        expect(mock.invalidate).not.toHaveBeenCalled();
+      }
+    } finally {
+      gate.resolve(stage === "checking access" ? true : { id: known ? "late-chat" : "vm" });
+      await closing;
+      await nextTurn();
+    }
+    expect(mock.allocate.mock.calls.filter(([call]) => !call.workspaceId)).toHaveLength(1);
+    if (!known)
+      expect(row(workspaceId)).toMatchObject({
+        state: "initializing",
+        provider_workspace_id: "vm",
+        current_session_id: expect.any(String),
+      });
   }
 );
-
-it("ignores a late failed Retry after archive", async () => {
-  mock.allocate.mockRejectedValueOnce(new Error("offline"));
-  const { workspaceId } = createCloudWorkspace({ repositoryId: "r" });
-  await vi.waitFor(() => expect(row(workspaceId)).toMatchObject({ state: "error" }));
-  const reply = Promise.withResolvers<never>();
-  mock.allocate.mockReturnValueOnce(reply.promise);
-  retryCloudWorkspace(workspaceId);
-  await vi.waitFor(() => expect(mock.allocate).toHaveBeenCalledTimes(2));
-  const closing = archiveWorkspace(workspaceId);
-  await vi.waitFor(() => expect(row(workspaceId)).toMatchObject({ state: "archived" }));
-  mock.invalidate.mockClear();
-  reply.reject(new Error("old failure"));
-  await closing;
-  await nextTurn();
-  expect(row(workspaceId)).toMatchObject({ state: "archived", error_message: null });
-  expect(mock.invalidate).not.toHaveBeenCalled();
-});
 
 it("ignores another token even while the new start is initializing", async () => {
   const reply = Promise.withResolvers<boolean>();
@@ -250,46 +260,6 @@ it("ignores another token even while the new start is initializing", async () =>
     await nextTurn();
   }
 });
-
-it.each(["confirm", "expire"])(
-  "records a late computer before retrying its pause until %s",
-  async (outcome) => {
-    const reply = Promise.withResolvers<{ id: string }>();
-    mock.allocate.mockReturnValueOnce(reply.promise);
-    const starting = new DeusError("WORKSPACE_STARTING", "starting", 409);
-    mock.pause.mockRejectedValue(starting);
-    if (outcome === "confirm")
-      mock.pause
-        .mockRejectedValueOnce(starting)
-        .mockRejectedValueOnce(starting)
-        .mockResolvedValue(undefined);
-    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const { workspaceId } = createCloudWorkspace({ repositoryId: "r" });
-    await vi.waitFor(() => expect(mock.allocate).toHaveBeenCalledOnce());
-    const closing = archiveWorkspace(workspaceId);
-    await vi.waitFor(() => expect(row(workspaceId)).toMatchObject({ state: "archived" }));
-    vi.useFakeTimers();
-    reply.resolve({ id: "late-vm" });
-    await vi.advanceTimersByTimeAsync(0);
-    expect(row(workspaceId)).toMatchObject({
-      state: "archived",
-      provider_workspace_id: "late-vm",
-      current_session_id: null,
-    });
-    expect(mock.pause).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(600_000);
-    await closing;
-    const calls = mock.pause.mock.calls.length;
-    expect(calls).toBeGreaterThan(1);
-    expect(mock.pause.mock.calls.every(([vm]) => vm === "late-vm")).toBe(true);
-    if (outcome === "confirm") expect(calls).toBe(3);
-    else
-      expect(log.mock.calls.filter((args) => args.join(" ").includes(workspaceId))).toHaveLength(1);
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(mock.pause).toHaveBeenCalledTimes(calls);
-    expect(mock.createSession).not.toHaveBeenCalled();
-  }
-);
 
 it("repairs a failed first chat through restore then wake on the original computer", async () => {
   mock.createSession
@@ -361,22 +331,30 @@ it.each(["during status read", "during resume", "after wake"] as const)(
   }
 );
 
-it("waits for a known provisioning computer to accept its pause before archiving it", async () => {
+it("refuses the first WORKSPACE_STARTING pause immediately and leaves the live list alone", async () => {
   const { workspaceId } = createCloudWorkspace({ repositoryId: "r" });
   await vi.waitFor(() => expect(mock.connect).toHaveBeenCalledOnce());
+  const snapshot = row(workspaceId);
+  const error = new DeusError("WORKSPACE_STARTING", "starting", 409);
+  mock.pause.mockRejectedValueOnce(error);
+  mock.invalidate.mockClear();
   vi.useFakeTimers();
-  mock.pause.mockRejectedValueOnce(new DeusError("WORKSPACE_STARTING", "starting", 409));
+  const answer = vi.fn();
   const archiving = archiveWorkspace(workspaceId).then(
-    () => null,
-    (err: unknown) => err
+    () => answer("archived"),
+    (err: Error) => answer(err.message)
   );
   await vi.advanceTimersByTimeAsync(0);
-  expect(row(workspaceId)).toMatchObject({ state: "initializing" });
-  await vi.advanceTimersByTimeAsync(1000);
-  expect(await archiving).toBeNull();
-  report(workspaceId, "running");
-  expect(row(workspaceId)).toMatchObject({ state: "archived", provider_workspace_id: "vm" });
-  expect(mock.pause).toHaveBeenCalledTimes(2);
+  try {
+    expect(answer).toHaveBeenCalledWith(stillStarting);
+    expect(row(workspaceId)).toEqual(snapshot);
+    expect(mock.invalidate).not.toHaveBeenCalled();
+  } finally {
+    await vi.advanceTimersByTimeAsync(60_000);
+    await archiving;
+  }
+  expect(mock.pause).toHaveBeenCalledOnce();
+  expect(mock.allocate).toHaveBeenCalledOnce();
 });
 
 it("joins the initial chat request when a wake arrives before its answer", async () => {

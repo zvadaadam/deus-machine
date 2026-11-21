@@ -30,6 +30,7 @@ import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 import { getRepositoryById } from "../db";
 import { invalidate } from "./query-engine";
 import {
+  CLOUD_STILL_STARTING,
   applyCloudStatus,
   type LatestCloudReport,
   attachCloudComputer,
@@ -167,34 +168,16 @@ interface CloudWorkspaceRef {
 
 /** Archive suspends the VM and keeps both its filesystem and remote backups. */
 export async function pauseCloudWorkspace(
-  workspace: CloudWorkspaceRef & { provider_workspace_id: string; state?: string }
+  workspace: CloudWorkspaceRef & { provider_workspace_id: string }
 ): Promise<void> {
   if (!cloudAccount()) throw new ValidationError("Cloud workspaces are not configured");
-  return pauseComputer(
-    workspace.provider_workspace_id,
-    requireCloudOrg(workspace.organization_id),
-    workspace.state === "initializing"
-  );
-}
-
-/** WorkspaceDO allows ten minutes to provision. A confirmed archive holds the VM asleep. */
-async function pauseComputer(id: string, org: CloudOrg, waitForStart: boolean) {
-  const limit = 10 * 60_000;
-  const deadline = Date.now() + limit;
-  const signal = waitForStart ? AbortSignal.timeout(limit) : undefined;
-  for (let delay = 1_000; ; delay = Math.min(delay * 2, 30_000)) {
-    try {
-      return await agntPauseWorkspace(id, { baseUrl: org.baseUrl, apiKey: org.apiKey, signal });
-    } catch (err) {
-      if (!isDeusError(err) || err.code !== "WORKSPACE_STARTING") throw err;
-      const remaining = deadline - Date.now();
-      if (!waitForStart || remaining <= 0) {
-        throw new ConflictError(
-          "The cloud computer is still starting. Try archiving it once it is ready."
-        );
-      }
-      await new Promise((resolve) => setTimeout(resolve, Math.min(delay, remaining)));
-    }
+  const { baseUrl, apiKey } = requireCloudOrg(workspace.organization_id);
+  try {
+    await agntPauseWorkspace(workspace.provider_workspace_id, { baseUrl, apiKey });
+  } catch (err) {
+    if (isDeusError(err) && err.code === "WORKSPACE_STARTING")
+      throw new ConflictError(CLOUD_STILL_STARTING);
+    throw err;
   }
 }
 
@@ -841,16 +824,16 @@ async function provisionCloudWorkspace(
   org: CloudOrg
 ): Promise<void> {
   const db = getDatabase();
-  const preparing = AbortSignal.any([getCloudIdentitySignal(), token]);
+  const identity = getCloudIdentitySignal();
   const { baseUrl, apiKey } = org;
   try {
     const userId = await getCloudWorkspaceUserId(org.orgId);
-    preparing.throwIfAborted();
+    identity.throwIfAborted();
     // A specialized environment (agent-authored via agnt_configure_environment,
     // resolved by the derived repo name) wins; absence of one IS the default —
     // the inline recipe below, exactly as before.
     const envInfo = await getCloudEnvironmentInfo(originUrl, org.orgId);
-    preparing.throwIfAborted();
+    identity.throwIfAborted();
     if (envInfo.lookupFailed)
       throw new Error(
         "Could not load project settings. Try again when the cloud connection is available."
@@ -871,7 +854,7 @@ async function provisionCloudWorkspace(
       repositoryAuth =
         (await refreshEnvironmentGithubTokenOnce(originUrl, envInfo.environmentId, org)) ??
         undefined;
-      preparing.throwIfAborted();
+      identity.throwIfAborted();
       // Every cloud workspace shows a Simulator tab; an environment saved
       // before devices existed cannot honour it, and the recipe is captured
       // at create — so upgrade the environment FIRST (enabling is free:
@@ -896,7 +879,7 @@ async function provisionCloudWorkspace(
       // DO refreshes secrets on every ensure, so each provision gets a
       // fresh mint instead of replaying a stale one.
       const mint = await mintRepoInstallationToken(originUrl, org.orgId);
-      preparing.throwIfAborted();
+      identity.throwIfAborted();
       repositoryAuth = mint.token
         ? { type: "github_app" }
         : mint.definitive
@@ -932,7 +915,7 @@ async function provisionCloudWorkspace(
       }
       environment = recipe;
     }
-    preparing.throwIfAborted();
+    identity.throwIfAborted();
     const provider = await agntCreateWorkspace({
       baseUrl,
       apiKey,
@@ -952,14 +935,7 @@ async function provisionCloudWorkspace(
       },
       token
     );
-    if (!attached) {
-      await pauseComputer(provider.id, org, true).catch((err) =>
-        console.warn(
-          `[CloudInit] Could not confirm pause for archived workspace ${workspaceId} (${provider.id}): ${err}`
-        )
-      );
-      return;
-    }
+    if (!attached) return;
     const sessionId = await openCloudChat(workspaceId, provider.id, () => org, token);
     if (!sessionId || token.aborted) return;
 

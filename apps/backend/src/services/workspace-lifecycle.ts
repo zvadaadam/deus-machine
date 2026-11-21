@@ -366,14 +366,7 @@ export function attachCloudComputer(
   beforePublish: () => void,
   token: AbortSignal
 ): boolean {
-  if (attempts.get(id)?.controller.signal !== token) return false;
-  if (token.aborted) {
-    // Archive holds the queue until the allocation from this exact attempt has been paused.
-    db.prepare(
-      "UPDATE workspaces SET provider_workspace_id = ?, last_inline_mint_at = ? WHERE id = ? AND state = 'archived' AND provider_workspace_id IS NULL"
-    ).run(providerId, mintedAt, id);
-    return false;
-  }
+  if (!ownsAttempt(id, token)) return false;
   const attached = db
     .prepare(
       "UPDATE workspaces SET provider_workspace_id = ?, init_stage = 'creating cloud session', last_inline_mint_at = ? WHERE id = ? AND state = 'initializing'"
@@ -553,21 +546,29 @@ export function changeWorkspaceState<T>(workspaceId: string, change: () => Promi
   return next;
 }
 
-/** The API and assistants' host publish after archiveWorkspace finishes the pause, write, workflow update, setup stop and checkout cleanup. */
+export const CLOUD_STILL_STARTING =
+  "This cloud workspace is still starting. Archive it once it is ready.";
+
+/** The API and assistants' host publish after the confirmed pause, archive, local effects and checkout cleanup. */
 export function markArchived(
   db: Database,
-  workspaceId: string,
+  workspace: Pick<WorkspaceRow, "id" | "kind" | "provider_workspace_id">,
   check?: () => void,
   by: Origin | null = null
 ) {
+  const { id, kind, provider_workspace_id } = workspace;
+  const attempt = attempts.get(id);
+  if (kind === "cloud" && attempt && !provider_workspace_id)
+    throw new ConflictError(CLOUD_STILL_STARTING);
   const archivedBy = by && by.kind !== "person" ? JSON.stringify(by) : null;
   check?.();
   db.prepare(
     "UPDATE workspaces SET state = 'archived', archived_at = datetime('now'), archived_by = ? WHERE id = ?"
-  ).run(archivedBy, workspaceId);
-  const attempt = attempts.get(workspaceId);
+  ).run(archivedBy, id);
   attempt?.controller.abort();
-  return attempt?.settle();
+  if (kind === "cloud")
+    attempts.delete(id); // A late chat from the paused computer no longer owns this row.
+  else return attempt?.settle();
 }
 
 /** The updateWorkspace API publishes after unarchiveWorkspace finishes wake and the workflow update. */
