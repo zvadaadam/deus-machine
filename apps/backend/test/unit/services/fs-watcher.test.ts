@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -6,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fileChanges } from "@shared/api/files";
 import { dropConnection, subscribe, unsubscribe } from "../../../src/services/streams";
 import { destroyAllWatchers } from "../../../src/services/fs-watcher.service";
+import { scanWorkspaceFiles } from "../../../src/services/files.service";
 import "../../../src/api/files";
 
 const { watch, load, clients } = vi.hoisted(() => ({
@@ -54,6 +56,40 @@ afterEach(() => {
 });
 
 describe("the fileChanges subscription", () => {
+  it("returns the current cached tree when the watch starts and when it publishes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deus-watch-cache-"));
+    const tree = () => scanWorkspaceFiles(root).files.map((file) => file.path);
+    try {
+      execFileSync("git", ["init", "-q", root]);
+      expect(tree()).toEqual([]);
+      await writeFile(join(root, "before-watch.txt"), "");
+      load.mockReturnValueOnce({ workspacePath: root, workspace: { current_session_id: "chat" } });
+      const frames = open("ui");
+      const atStart = tree();
+      await writeFile(join(root, "during-watch.txt"), "");
+      changed("during-watch.txt");
+      vi.advanceTimersByTime(500);
+      expect(frames.map((frame) => frame.type)).toEqual(["q:subscribed", "q:event"]);
+      expect({ atStart, afterEvent: tree() }).toEqual({
+        atStart: ["before-watch.txt"],
+        afterEvent: ["before-watch.txt", "during-watch.txt"],
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("publishes during three seconds of continuous writes and again when they settle", () => {
+    const frames = open("ui");
+    for (let i = 0; i < 30; i++) {
+      changed("dev.db-wal");
+      vi.advanceTimersByTime(100);
+    }
+    expect(frames.map((frame) => frame.type)).toEqual(["q:subscribed", "q:event"]);
+    vi.advanceTimersByTime(500);
+    expect(frames.map((frame) => frame.type)).toEqual(["q:subscribed", "q:event", "q:event"]);
+  });
+
   it("keeps watching for the second window, reuses a brief disconnect and closes after the last leaves", () => {
     const a = open("a");
     const b = open("b");

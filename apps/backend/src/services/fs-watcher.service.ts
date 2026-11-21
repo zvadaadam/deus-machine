@@ -22,13 +22,20 @@ function startWatch(workspaceId: string, workspacePath: string) {
   const scope = { workspaceId };
   let active = true;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let deadline: number | undefined;
+  const flush = () => {
+    deadline = undefined;
+    invalidateCache(workspacePath);
+    publish(fileChanges, scope, null);
+  };
   const watcher = watch(workspacePath, { recursive: true }, (_kind, filename) => {
     if (!active || ignored(filename)) return;
+    // A busy log or database must not postpone every other edit in the checkout.
+    const now = performance.now();
+    deadline ??= now + 2000;
     clearTimeout(timer);
-    timer = setTimeout(() => {
-      invalidateCache(workspacePath);
-      publish(fileChanges, scope, null);
-    }, 500);
+    if (now >= deadline) flush();
+    else timer = setTimeout(flush, Math.min(500, deadline - now));
   });
   // Someone may have edited the checkout while no client was following it.
   invalidateCache(workspacePath);

@@ -182,8 +182,9 @@ sent every other chat's tokens.
 A `fileChanges` subscription names one workspace. On macOS its first follower
 opens a recursive watch on the local checkout. The last one leaving, including
 a dropped connection, closes it after three seconds so a quick return reuses
-the watch. Each 500 ms burst refreshes the file and diff caches. An unavailable
-or failed watch ends the subscription and the client resumes polling.
+the watch. The file and diff caches refresh after 500 ms of quiet or two seconds
+of continuous changes. An unavailable or failed watch ends the subscription
+and the client resumes polling.
 
 The private workspace package `@deus/runtime-client` (`packages/runtime-client/`)
 owns transport, pending operations and subscriptions. Its root entry has no React,
