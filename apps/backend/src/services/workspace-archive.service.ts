@@ -14,6 +14,7 @@ import {
   queueCloudWake,
 } from "./workspace-lifecycle";
 import { stopWorkspaceSetup } from "./project-environment.service";
+import { stopStream } from "./simulator-context";
 import { autoProgressStatus } from "./workspace-status.service";
 
 /**
@@ -36,6 +37,7 @@ async function performArchive(workspaceId: string, check?: () => void): Promise<
 
   const checkout = markArchived(db, workspaceId, check);
   try {
+    stopStream(workspaceId);
     const stopped = stopWorkspaceSetup(workspaceId);
     autoProgressStatus(workspaceId, "done", { force: true });
     await stopped;
