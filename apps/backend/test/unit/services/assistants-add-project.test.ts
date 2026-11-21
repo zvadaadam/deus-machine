@@ -543,7 +543,8 @@ describe("a clone", () => {
     // Another form of the same address joins the clone in flight.
     const second = await addProject("git@github.com:acme/slow.git", ending(7));
     expect(second).toContain("still cloning");
-    expect(clones()).toHaveLength(1);
+    // A short call can return before the child has scheduled its first write.
+    await vi.waitFor(() => expect(clones()).toHaveLength(1), { timeout: 5000 });
 
     fs.writeFileSync(release, "");
     const third = await addProject("acme/slow", assistant());
