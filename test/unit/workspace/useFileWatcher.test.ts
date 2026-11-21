@@ -83,7 +83,7 @@ it("keeps polling available until the host opens the watch, including after reco
   invalidated.mockClear();
   socket.message({ type: "authenticated" });
   expect(socket.frames("q:subscribe")).toHaveLength(2);
-  expect(invalidated).toHaveBeenCalledWith({ queryKey: ["files", "w"] }); // onReset
+  expect(invalidated).toHaveBeenCalledWith({ queryKey: ["files", "w"] }, undefined); // onReset
   expect(useFileWatcher("w")).toBe(false);
   opening(id);
   expect(useFileWatcher("w")).toBe(true);
@@ -115,6 +115,39 @@ it("reads Files again after acquisition when the initial read is still in flight
   }
 });
 
+it.each([
+  { resource: "workspaceFiles", queryKey: ["files", "w"] },
+  { resource: "diffFiles", queryKey: queryKeys.workspaces.diffFiles("w") },
+])(
+  "accepts a slow $resource reply while a refused watch keeps polling",
+  async ({ resource, queryKey }) => {
+    vi.useFakeTimers();
+    const observer = new QueryObserver(runtime.queryClient, {
+      queryKey,
+      queryFn: () => runtime.sendRequest(resource, { workspaceId: "w" }),
+      initialData: "cached",
+      staleTime: 30_000,
+    });
+    const unobserve = observer.subscribe(() => {});
+    try {
+      refuse(mount());
+      const [onRefusal] = socket.frames("q:request");
+      socket.message({ type: "q:response", id: onRefusal.id, data: "before edit" });
+      await vi.advanceTimersByTimeAsync(5000);
+      const [, firstPoll] = socket.frames("q:request");
+      await vi.advanceTimersByTimeAsync(6000); // The next poll ticks while this read is in flight.
+      socket.message({ type: "q:response", id: firstPoll.id, data: "after edit" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(observer.getCurrentResult().data).toBe("after edit");
+      expect(socket.frames("q:request")).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(socket.frames("q:request")).toHaveLength(3);
+    } finally {
+      unobserve();
+    }
+  }
+);
+
 it.each(["initial", "active"])(
   "polls visible Files and Changes only after an %s watch is refused",
   (when) => {
@@ -130,13 +163,19 @@ it.each(["initial", "active"])(
     expect(invalidated).not.toHaveBeenCalled();
     refuse(id);
     expect(useFileWatcher("w")).toBe(false);
-    expect(invalidated).toHaveBeenCalledWith({ queryKey: ["files", "w"] });
+    expect(invalidated).toHaveBeenCalledWith({ queryKey: ["files", "w"] }, undefined);
     invalidated.mockClear();
     vi.advanceTimersByTime(4999);
     expect(invalidated).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
-    expect(invalidated).toHaveBeenCalledWith({ queryKey: ["files", "w"] });
-    expect(invalidated).toHaveBeenCalledWith({ queryKey: queryKeys.workspaces.diffFiles("w") });
+    expect(invalidated).toHaveBeenCalledWith(
+      { queryKey: ["files", "w"] },
+      { cancelRefetch: false }
+    );
+    expect(invalidated).toHaveBeenCalledWith(
+      { queryKey: queryKeys.workspaces.diffFiles("w") },
+      { cancelRefetch: false }
+    );
     page.visibilityState = "hidden";
     invalidated.mockClear();
     vi.advanceTimersByTime(10_000);
@@ -148,7 +187,10 @@ it.each(["initial", "active"])(
     socket.message({ type: "authenticated" });
     expect(useFileWatcher("w")).toBe(false);
     vi.advanceTimersByTime(5000);
-    expect(invalidated).toHaveBeenCalledWith({ queryKey: ["files", "w"] });
+    expect(invalidated).toHaveBeenCalledWith(
+      { queryKey: ["files", "w"] },
+      { cancelRefetch: false }
+    );
     stop!();
     stop = undefined;
     invalidated.mockClear();

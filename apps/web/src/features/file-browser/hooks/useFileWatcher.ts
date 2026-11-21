@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type InvalidateOptions } from "@tanstack/react-query";
 import { api } from "@shared/api";
 import { getRuntimeClient, runtimeForQueryClient } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
@@ -13,17 +13,20 @@ export function useFileWatcher(workspaceId: string | null): boolean {
   useEffect(() => {
     if (!workspaceId) return;
     const files = { queryKey: ["files", workspaceId] };
-    const readAgain = () => {
-      void cache.invalidateQueries(files);
-      void cache.invalidateQueries({ queryKey: queryKeys.workspaces.environment(workspaceId) });
-      void cache.invalidateQueries({ queryKey: queryKeys.workspaces.diffStats(workspaceId) });
-      void cache.invalidateQueries({ queryKey: queryKeys.workspaces.diffFiles(workspaceId) });
-      void cache.invalidateQueries({ queryKey: ["workspaces", "diff-file", workspaceId] });
+    const readAgain = (options?: InvalidateOptions) => {
+      for (const queryKey of [
+        files.queryKey,
+        queryKeys.workspaces.environment(workspaceId),
+        queryKeys.workspaces.diffStats(workspaceId),
+        queryKeys.workspaces.diffFiles(workspaceId),
+        ["workspaces", "diff-file", workspaceId],
+      ])
+        void cache.invalidateQueries({ queryKey }, options);
     };
     let opening = true;
     let poll: ReturnType<typeof setInterval> | undefined;
-    const pollIfVisible = () => {
-      if (runtime.isConnected() && document.visibilityState === "visible") readAgain();
+    const pollIfVisible = (options?: InvalidateOptions) => {
+      if (runtime.isConnected() && document.visibilityState === "visible") readAgain(options);
     };
     const disconnect = runtime.onConnectionChange((connected) => {
       if (!connected) {
@@ -45,7 +48,8 @@ export function useFileWatcher(workspaceId: string | null): boolean {
       onRefused: () => {
         setWatched(null);
         pollIfVisible();
-        poll = setInterval(pollIfVisible, 5000); // Same cadence as Changes in workspace.queries.ts.
+        // Same cadence as Changes in workspace.queries.ts. Let a slower read finish.
+        poll = setInterval(() => pollIfVisible({ cancelRefetch: false }), 5000);
       },
     });
     return () => {
