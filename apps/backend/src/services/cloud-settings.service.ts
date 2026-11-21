@@ -13,7 +13,6 @@ import {
   defaultCloudOrgId,
   getCloudConnectionIdentity,
   getCloudIdentitySignal,
-  hasFallbackCloudKey,
 } from "./agent/cloud/config";
 
 /** Fixed dashboard paths use the human's session, never the organization SDK key. */
@@ -220,17 +219,15 @@ function currentCloudOrganizations(): CloudOrganizations {
     return { available: false, accountId: null, defaultOrganizationId: null, items: [] };
   }
   const list = account.sessionToken ? listedOrganizations() : null;
-  const keyed = new Set(cloudOrgKeyIds());
-  const fallback = hasFallbackCloudKey();
   const items = (list?.items ?? []).map((org) => ({
     id: org.id,
     name: org.name,
     role: org.role,
-    ready: keyed.has(org.id) || fallback,
+    ready: cloudOrg(org.id) !== null,
   }));
   return {
     // Any organization this backend can act in: the default one's key may be the one missing.
-    available: cloudOrg() !== null || keyed.size > 0,
+    available: cloudOrg() !== null || cloudOrgKeyIds().length > 0,
     accountId: list?.accountId ?? null,
     defaultOrganizationId: defaultCloudOrgId() ?? items[0]?.id ?? null,
     items,

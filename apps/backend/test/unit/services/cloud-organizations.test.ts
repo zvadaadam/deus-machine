@@ -14,6 +14,7 @@ import {
   resetCloudOrganizationsForTests,
 } from "../../../src/services/cloud-settings.service";
 import {
+  cloudOrg,
   resetCloudConfigForTests,
   setCloudRuntimeCredentials,
 } from "../../../src/services/agent/cloud/config";
@@ -79,6 +80,24 @@ describe("cloudOrganizations, the live value", () => {
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ["", "", false],
+    ["", "secondary", true],
+    ["primary", "", true],
+    [undefined, "", false],
+  ] as const)(
+    "resolves organization readiness from the same key (primary %s, secondary %s)",
+    async (primary, secondary, expected) => {
+      vi.stubEnv("DEUS_CLOUD_AGNT_API_KEY", primary);
+      vi.stubEnv("AGNT_API_KEY", secondary);
+      await push({ deusCloudSessionToken: session("alice") });
+      for (const item of getCloudOrganizations().items) {
+        expect(item.ready).toBe(expected);
+        expect(cloudOrg(item.id) !== null).toBe(expected);
+      }
+    }
+  );
 
   it("is read from the platform when credentials are pushed, ready by the keys held", async () => {
     await push({ deusCloudSessionToken: session("alice"), orgKeys: { org_b: "key_b" } });
