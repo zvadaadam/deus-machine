@@ -52,7 +52,7 @@ function SetupLog({ workspaceId }: { workspaceId: string }) {
       {isPending
         ? "Loading setup log…"
         : isError
-          ? "Couldn’t load the setup log."
+          ? "Couldn't load the setup log."
           : "No setup log is available."}
     </p>
   );

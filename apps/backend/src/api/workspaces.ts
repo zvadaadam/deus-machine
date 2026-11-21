@@ -2,6 +2,7 @@
 
 import path from "path";
 import fs from "fs";
+import { stripVTControlCharacters } from "node:util";
 import { setupFile } from "../services/setup-status";
 import * as api from "@shared/api/workspaces";
 import type { ParsedInputOf } from "@shared/api/op";
@@ -180,9 +181,8 @@ export default [
   handle(api.setupLogs, ({ workspaceId }) => {
     const { workspace } = loadWorkspace(workspaceId);
     try {
-      return {
-        logs: fs.readFileSync(setupFile(workspace.id, "log"), "utf8"),
-      };
+      const logs = fs.readFileSync(setupFile(workspace.id, "log"), "utf8");
+      return { logs: stripVTControlCharacters(logs) };
     } catch {
       return { logs: null };
     }

@@ -1,4 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
+import fs from "fs";
 import * as api from "@shared/api/workspaces";
 import { operations } from "../../helpers";
 import { ConflictError } from "../../../src/lib/errors";
@@ -88,7 +89,8 @@ vi.mock("child_process", () => ({
   spawn: vi.fn<(...args: any[]) => any>(),
 }));
 
-vi.mock("util", () => ({
+vi.mock("util", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("node:util")>()),
   promisify: () => mockExecFileAsync,
 }));
 
@@ -300,6 +302,19 @@ describe("createWorkspace", () => {
     expect(mockInitializeWorkspace).toHaveBeenCalledWith(
       expect.objectContaining({ sourceBranch: "main" })
     );
+  });
+});
+
+describe("setupLogs", () => {
+  it("removes terminal formatting and preserves literal output and line breaks", async () => {
+    mockStmt.get.mockReturnValueOnce(MOCK_CREATED_WORKSPACE);
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(
+      "Checking tools\n\x1b[31mMissing <b>clang</b>\x1b[0m\n"
+    );
+    await expect(run(api.setupLogs, { workspaceId: MOCK_CREATED_WORKSPACE.id })).resolves.toEqual({
+      logs: "Checking tools\nMissing <b>clang</b>\n",
+    });
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
   });
 });
 

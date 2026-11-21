@@ -216,8 +216,7 @@ export async function checkSetupWarning(page, group, evidence, touch = false) {
     const dialog = page.getByRole("dialog", { name: "Setup log" });
     const fullLog = dialog.getByRole("region", { name: "Setup output" });
     await fullLog.waitFor();
-    const text = await fullLog.textContent();
-    assert(text.startsWith("starting\n") && text.includes(lastLine));
+    assert.equal(await fullLog.textContent(), `starting\nChecking tools\n${lastLine}\n`);
     assert.equal(await fullLog.locator("*").count(), 0, "the whole file is plain text");
     assert.equal(await fullLog.evaluate((el) => getComputedStyle(el).overflowY), "auto");
     assert.equal(page.context().pages().length, pages, "the log opens in the same window");
