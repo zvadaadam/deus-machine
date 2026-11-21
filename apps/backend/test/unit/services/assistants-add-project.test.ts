@@ -114,6 +114,7 @@ for arg in "$@"; do
         echo "remote: Repository not found." >&2
         echo "fatal: repository '$url/' not found" >&2
         exit 128 ;;
+      *wrong-origin*) url="https://github.com/elsewhere/widget" ;;
       *slow*|*Slow*)
         i=0
         while [ ! -e "${release}" ] && [ $i -lt 400 ]; do sleep 0.05; i=$((i+1)); done ;;
@@ -366,32 +367,29 @@ describe("what is already here", () => {
   });
 
   it.each([
-    ["a plain folder", (folder: string) => fs.mkdirSync(folder, { recursive: true })],
+    ["not a git repository", (folder: string) => fs.mkdirSync(folder, { recursive: true })],
     [
-      "another repository",
+      'origin is "https://github.com/other/widget"',
       (folder: string) => gitFolder(folder, "https://github.com/other/widget"),
     ],
-    ["a repository with no origin", (folder: string) => gitFolder(folder)],
+    ["no origin", (folder: string) => gitFolder(folder)],
     [
-      "a folder inside another repository",
+      "inside another repository",
       (folder: string) => {
         gitFolder(developer, "https://github.com/acme/widget");
         fs.mkdirSync(folder);
       },
     ],
     [
-      "a link that leads nowhere",
+      "does not exist or is inaccessible",
       (folder: string) => {
         fs.mkdirSync(developer, { recursive: true });
         fs.symlinkSync(path.join(home, "nowhere"), folder);
       },
     ],
-  ])("a folder that is %s is refused by name, and no other folder is used", async (_, make) => {
-    const folder = path.join(developer, "widget");
-    make(folder);
-    await expect(addProject("acme/widget")).rejects.toThrow(
-      `The folder ${JSON.stringify(folder)} already exists and is not a clone of "https://github.com/acme/widget". Nothing was cloned; no other folder is used.`
-    );
+  ] as const)("explains why the existing folder cannot be adopted: %s", async (reason, make) => {
+    make(path.join(developer, "widget"));
+    await expect(addProject("acme/widget")).rejects.toThrow(reason);
     expect(clones()).toEqual([]);
     expect(projects()).toEqual([]);
   });
@@ -443,6 +441,25 @@ describe("the same folder added meanwhile (H18)", () => {
 });
 
 describe("a clone", () => {
+  it("checks a fresh clone's origin before adding it", async () => {
+    await expect(addProject("acme/wrong-origin")).rejects.toThrow(
+      'origin is "https://github.com/elsewhere/widget"'
+    );
+    expect(projects()).toEqual([]);
+  });
+
+  it("refuses an add that returned a different folder", async () => {
+    state.ops.addRepo = () => ({ id: "wrong", name: "", root_path: "" });
+    await expect(addProject("acme/widget")).rejects.toThrow(/folder/i);
+  });
+
+  it("keeps credentials from an existing folder's origin out of the refusal", async () => {
+    gitFolder(path.join(developer, "widget"), "https://user:TOKEN@github.com/other/widget");
+    const result = addProject("acme/widget");
+    await expect(result).rejects.toThrow(/origin/);
+    await expect(result).rejects.not.toThrow(/TOKEN/);
+  });
+
   it("that fails answers with git's words quoted, and adds nothing", async () => {
     await expect(addProject("acme/missing")).rejects.toThrow(
       'could not clone "https://github.com/acme/missing". Nothing was added. git said:\n' +

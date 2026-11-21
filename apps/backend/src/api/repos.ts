@@ -8,6 +8,7 @@ import { promisify } from "util";
 import * as api from "@shared/api/repos";
 import type { ParsedInputOf } from "@shared/api/op";
 import { uuidv7 } from "@shared/lib/uuid";
+import { isExecError } from "@shared/lib/errors";
 import {
   githubRepoSlug,
   httpsOrigin,
@@ -204,14 +205,24 @@ async function inspectRepository(rootPath: string): Promise<InspectedRepository>
   try {
     root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
       cwd: root,
-      // The first git spawn on a cold macOS CI runner can take more than 2s
-      // (Gatekeeper scans the packaged app): robust matters more than snappy.
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      // The first git spawn on a cold Mac can take more than 2s.
       timeout: 10_000,
     })
       .toString()
-      .trim();
-  } catch {
-    throw new ValidationError("Path is not a git repository");
+      .replace(/\r?\n$/, "");
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("not a git repository")) {
+      throw new ValidationError("Path is not a git repository");
+    }
+    const cause = isExecError(error) ? (error.code ?? error.status) : undefined;
+    throw new ValidationError(
+      `Git could not inspect the repository folder${cause ? ` (${cause})` : ""}.`
+    );
+  }
+  if (!path.isAbsolute(root) || !fs.statSync(root, { throwIfNoEntry: false })?.isDirectory()) {
+    throw new ValidationError("Git did not return an existing repository folder.");
   }
 
   return {

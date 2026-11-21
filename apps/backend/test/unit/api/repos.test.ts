@@ -296,6 +296,22 @@ describe("addRepo", () => {
 });
 
 describe("inspectRepo", () => {
+  it.each(["", "relative", "/vanished"])(
+    "refuses a missing or invalid toplevel %j before writing",
+    async (root) => {
+      const { execFileSync } = await import("child_process");
+      vi.mocked(execFileSync).mockReturnValueOnce(Buffer.from(root));
+      if (root === "/vanished")
+        mockFs.statSync
+          .mockImplementationOnce(() => ({ isDirectory: () => true }))
+          .mockReturnValueOnce(undefined);
+      await expect(run(api.addRepo, { root_path: "/path/to/clone" })).rejects.toThrow(
+        /git.*(folder|toplevel)/i
+      );
+      expect(mockStmt.run).not.toHaveBeenCalled();
+    }
+  );
+
   it("returns normalized repo metadata without registering it", async () => {
     await expect(run(api.inspectRepo, { root_path: "/path/to/deus" })).resolves.toEqual({
       root_path: "/path/to/deus",
