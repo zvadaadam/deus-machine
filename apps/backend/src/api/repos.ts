@@ -245,7 +245,7 @@ export async function addRepository(rootPath: string): Promise<Repository> {
     // The repository is already a project with no folder here: this folder
     // becomes its folder. Two folders of one repository stay two projects.
     const waiting = inspected.git_origin_url
-      ? projectsWithOrigin(db, inspected.git_origin_url).find((repo) => !repo.root_path)
+      ? projectsWithOrigin(db, inspected.git_origin_url).find((repo) => repo.root_path === null)
       : undefined;
     if (waiting) {
       db.prepare("UPDATE repositories SET root_path = ?, git_default_branch = ? WHERE id = ?").run(

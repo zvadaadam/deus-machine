@@ -421,6 +421,24 @@ describe("what is already here", () => {
       },
     ]);
   });
+
+  it("adds a matching clone even when a legacy blank project has the same origin", async () => {
+    const origin = "https://github.com/acme/widget";
+    const folder = path.join(developer, "widget");
+    gitFolder(folder, origin);
+    state.db.exec("DROP TRIGGER validate_project_insert");
+    insertProject("", "", origin);
+    state.db.exec(SCHEMA_SQL);
+
+    expect(await addProject("acme/widget")).toContain(
+      `added "widget" from ${JSON.stringify(folder)}`
+    );
+    expect(projects()).toEqual([
+      { name: "", root_path: "", git_origin_url: origin },
+      { name: "widget", root_path: folder, git_origin_url: origin },
+    ]);
+    expect(clones()).toEqual([]);
+  });
 });
 
 describe("the same folder added meanwhile (H18)", () => {
