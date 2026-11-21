@@ -184,6 +184,8 @@ it.each(["before allocation", "allocation", "chat"] as const)(
       .pluck()
       .get(workspaceId);
     mock.invalidate.mockClear();
+    // Another retired start cannot supply its computer to this archive.
+    attachCloudComputer(db, workspaceId, "unrelated-vm", null, vi.fn(), AbortSignal.abort());
     gate.resolve(
       stage === "before allocation" ? true : { id: stage === "allocation" ? "vm" : "platform-chat" }
     );

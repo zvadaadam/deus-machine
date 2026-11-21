@@ -40,7 +40,6 @@ import {
   setCloudWakeStage,
   runWorkspaceAttempt,
   ensureWorkspaceChat,
-  retainArchivedComputer,
 } from "./workspace-lifecycle";
 import {
   cloudAccount,
@@ -954,7 +953,6 @@ async function provisionCloudWorkspace(
       token
     );
     if (!attached) {
-      retainArchivedComputer(db, workspaceId, provider.id, inlineMintStampAtCreate);
       await pauseComputer(provider.id, org, true).catch((err) =>
         console.warn(
           `[CloudInit] Could not confirm pause for archived workspace ${workspaceId} (${provider.id}): ${err}`

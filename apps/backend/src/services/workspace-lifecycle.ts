@@ -366,7 +366,14 @@ export function attachCloudComputer(
   beforePublish: () => void,
   token: AbortSignal
 ): boolean {
-  if (!ownsAttempt(id, token)) return false;
+  if (attempts.get(id)?.controller.signal !== token) return false;
+  if (token.aborted) {
+    // Archive holds the queue until the allocation from this exact attempt has been paused.
+    db.prepare(
+      "UPDATE workspaces SET provider_workspace_id = ?, last_inline_mint_at = ? WHERE id = ? AND state = 'archived' AND provider_workspace_id IS NULL"
+    ).run(providerId, mintedAt, id);
+    return false;
+  }
   const attached = db
     .prepare(
       "UPDATE workspaces SET provider_workspace_id = ?, init_stage = 'creating cloud session', last_inline_mint_at = ? WHERE id = ? AND state = 'initializing'"
@@ -379,18 +386,6 @@ export function attachCloudComputer(
     invalidate([...WORKSPACE_RESOURCES], {});
   }
   return true;
-}
-
-/** Archive holds the queue until the retired attempt has accounted for its allocation. */
-export function retainArchivedComputer(
-  db: Database,
-  id: string,
-  providerId: string,
-  mintedAt: number | null
-): void {
-  db.prepare(
-    "UPDATE workspaces SET provider_workspace_id = ?, last_inline_mint_at = ? WHERE id = ? AND state = 'archived' AND provider_workspace_id IS NULL"
-  ).run(providerId, mintedAt, id);
 }
 
 export function attachCloudChat(
