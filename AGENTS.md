@@ -182,9 +182,10 @@ sent every other chat's tokens.
 A `fileChanges` subscription names one workspace. On macOS its first follower
 opens a recursive watch on the local checkout. The last one leaving, including
 a dropped connection, closes it after three seconds so a quick return reuses
-the watch. The file and diff caches refresh after 500 ms of quiet or two seconds
-of continuous changes. An unavailable or failed watch ends the subscription
-and the client resumes polling.
+the watch. An opening event confirms the watch and refreshes Files and Changes.
+Later edits refresh them after 500 ms of quiet or two seconds of continuous
+changes. If the host refuses or loses the watch, the client polls every five
+seconds while the workspace is visible and connected.
 
 The private workspace package `@deus/runtime-client` (`packages/runtime-client/`)
 owns transport, pending operations and subscriptions. Its root entry has no React,
@@ -836,7 +837,7 @@ A state change must leave its neighbours in place. Reserve space for a heavier l
 - Never edit outside your worktree directory
 - Never start the app outside your worktree directory
 - Never use npm or yarn
-- WebSocket push over polling — only poll for git diffs on working sessions
+- WebSocket push over polling — only poll for git diffs on working sessions or when a visible local workspace cannot be watched
 - All colors via CSS variables/tokens, never hardcoded
 
 ## Feedback to Deus

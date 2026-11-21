@@ -5,7 +5,7 @@ import { AppError, ValidationError } from "../lib/errors";
 import { loadWorkspace } from "../middleware/workspace-loader";
 import { watchWorkspace } from "../services/fs-watcher.service";
 import { resolveNode } from "../services/node/driver";
-import { onFollow } from "../services/streams";
+import { onFollow, openWith } from "../services/streams";
 import { handle } from "./registry";
 
 /** The workspace's files, on whichever node owns them (this computer or its cloud sandbox). */
@@ -21,6 +21,7 @@ onFollow(api.fileChanges, ({ workspaceId }) => {
   }
   return watchWorkspace(workspaceId, workspacePath);
 });
+openWith(api.fileChanges, () => [null]);
 
 export default [
   handle(api.workspaceFiles, ({ workspaceId }) => nodeOf(workspaceId).fsTree()),

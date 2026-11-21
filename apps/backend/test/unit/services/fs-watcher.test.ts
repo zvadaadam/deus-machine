@@ -33,6 +33,8 @@ function open(client: string, workspaceId = "w") {
   const frames: { type: string; data?: unknown }[] = [];
   clients.set(client, frames);
   subscribe(client, "files", fileChanges, { workspaceId });
+  expect(frames.map((frame) => frame.type)).toEqual(["q:event", "q:subscribed"]);
+  frames.length = 0; // From here the caller observes only subsequent edits or errors.
   return frames;
 }
 const native = (n = 0) => watch.mock.results[n].value as EventEmitter & { close: () => void };
@@ -69,7 +71,7 @@ describe("the fileChanges subscription", () => {
       await writeFile(join(root, "during-watch.txt"), "");
       changed("during-watch.txt");
       vi.advanceTimersByTime(500);
-      expect(frames.map((frame) => frame.type)).toEqual(["q:subscribed", "q:event"]);
+      expect(frames.map((frame) => frame.type)).toEqual(["q:event"]);
       expect({ atStart, afterEvent: tree() }).toEqual({
         atStart: ["before-watch.txt"],
         afterEvent: ["before-watch.txt", "during-watch.txt"],
@@ -85,9 +87,9 @@ describe("the fileChanges subscription", () => {
       changed("dev.db-wal");
       vi.advanceTimersByTime(100);
     }
-    expect(frames.map((frame) => frame.type)).toEqual(["q:subscribed", "q:event"]);
+    expect(frames.map((frame) => frame.type)).toEqual(["q:event"]);
     vi.advanceTimersByTime(500);
-    expect(frames.map((frame) => frame.type)).toEqual(["q:subscribed", "q:event", "q:event"]);
+    expect(frames.map((frame) => frame.type)).toEqual(["q:event", "q:event"]);
   });
 
   it("keeps watching for the second window, reuses a brief disconnect and closes after the last leaves", () => {
@@ -101,8 +103,8 @@ describe("the fileChanges subscription", () => {
     unsubscribe("a", "files");
     changed("src/a");
     vi.advanceTimersByTime(500);
-    expect(a.map((f) => f.type)).toEqual(["q:subscribed"]);
-    expect(b.map((f) => f.type)).toEqual(["q:subscribed", "q:event"]);
+    expect(a.map((f) => f.type)).toEqual([]);
+    expect(b.map((f) => f.type)).toEqual(["q:event"]);
     dropConnection("b");
     vi.advanceTimersByTime(2000);
     open("back");
@@ -118,7 +120,7 @@ describe("the fileChanges subscription", () => {
     native().emit("error", new Error("closed"));
     changed("src/b", 1);
     vi.advanceTimersByTime(500);
-    expect(back.map((f) => f.type)).toEqual(["q:subscribed", "q:event"]);
+    expect(back.map((f) => f.type)).toEqual(["q:event"]);
   });
 
   it("ignores private and generated subtrees, but hears recipes, hidden leaves and nameless events", () => {
@@ -135,7 +137,7 @@ describe("the fileChanges subscription", () => {
     ])
       changed(name);
     vi.advanceTimersByTime(500);
-    expect(frames).toHaveLength(1);
+    expect(frames).toHaveLength(0);
     for (const name of [
       ".deus",
       ".deus/environment.json",
@@ -147,13 +149,13 @@ describe("the fileChanges subscription", () => {
       changed(name);
       vi.advanceTimersByTime(500);
     }
-    expect(frames.slice(1).map((f) => f.data)).toEqual(Array(6).fill(null));
+    expect(frames.map((f) => f.data)).toEqual(Array(6).fill(null));
     for (let i = 0; i < 20; i++) {
       changed(".DS_Store");
       vi.advanceTimersByTime(10);
     }
     vi.advanceTimersByTime(499);
-    expect(frames.slice(1)).toHaveLength(7);
+    expect(frames).toHaveLength(7);
   });
 
   it("resolves the workspace on the host and refuses a missing scope, cloud workspace or absent checkout", () => {
@@ -182,7 +184,8 @@ describe("the fileChanges subscription", () => {
     });
     expect(() => open("ui")).toThrow("ENOSPC");
     expect(clients.get("ui")).toEqual([]);
-    expect(open("ui").map((f) => f.type)).toEqual(["q:subscribed"]);
+    open("ui");
+    expect(watch).toHaveBeenCalledTimes(2);
   });
 
   it("ends every follower of a broken watch and leaves the other workspace delivering", () => {
@@ -193,9 +196,8 @@ describe("the fileChanges subscription", () => {
     native().emit("error", new Error("watch failed"));
     changed("src/c", 1);
     vi.advanceTimersByTime(500);
-    for (const frames of [a, b])
-      expect(frames.map((f) => f.type)).toEqual(["q:subscribed", "q:error"]);
-    expect(other.map((f) => f.type)).toEqual(["q:subscribed", "q:event"]);
+    for (const frames of [a, b]) expect(frames.map((f) => f.type)).toEqual(["q:error"]);
+    expect(other.map((f) => f.type)).toEqual(["q:event"]);
     expect(native().close).toHaveBeenCalledOnce();
     expect(unsubscribe("a", "files")).toBe(false);
     open("retry");
