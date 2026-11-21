@@ -606,7 +606,7 @@ describe("names", () => {
 });
 
 it("seeds a ready integration CLI workspace once, without publishing", () => {
-  const insert = prepareWorkspaceFixture(db(), "cli");
+  const insert = prepareWorkspaceFixture(db());
   insert.run("cli", "r");
   const seeded = row("cli");
   expect(seeded).toMatchObject({

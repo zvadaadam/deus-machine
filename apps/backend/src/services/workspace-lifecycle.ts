@@ -716,15 +716,9 @@ export function adoptRunRows(input: {
   return adopt();
 }
 
-/** The integration CLI and sidebar demo seed prepare their rows on their own database. */
-export function prepareWorkspaceFixture(db: Database, fixture: "cli" | "demo") {
+/** The integration CLI prepares a ready workspace on its own database. */
+export function prepareWorkspaceFixture(db: Database) {
   return db.prepare(
-    fixture === "cli"
-      ? `INSERT OR IGNORE INTO workspaces (id, repository_id, slug, state) VALUES (?, ?, 'cli-test', 'ready')`
-      : `INSERT INTO workspaces (
-     id, repository_id, slug, title, git_branch, git_target_branch, state, status,
-     current_session_id, pr_url, pr_number, pr_state, pr_is_draft, pr_review_status,
-     pr_has_conflicts, pr_ci_status, pr_checked_at, setup_status, init_stage, updated_at
-   ) VALUES (?, ?, ?, ?, ?, 'main', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'none', ?, ?)`
+    `INSERT OR IGNORE INTO workspaces (id, repository_id, slug, state) VALUES (?, ?, 'cli-test', 'ready')`
   );
 }

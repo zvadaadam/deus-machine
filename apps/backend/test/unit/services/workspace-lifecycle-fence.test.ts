@@ -7,7 +7,6 @@ import { expect, it } from "vitest";
 
 const backend = path.resolve(__dirname, "../../..");
 const owner = "src/services/workspace-lifecycle.ts";
-const seed = "../../scripts/dev/seed-demo-states.ts";
 const unknown = "«dynamic»";
 const protectedColumns = new Set([
   "state",
@@ -152,13 +151,10 @@ function sqlText(node: ts.Expression, checker: ts.TypeChecker, seen = new Set<ts
 function violations(file: ts.SourceFile, checker: ts.TypeChecker, db: Database.Database): string[] {
   const found: string[] = [];
   const relative = path.relative(backend, file.fileName);
-  const namedFixture = relative === "cli.ts" || relative === seed;
   function visit(node: ts.Node): void {
-    if (!namedFixture && ts.isIdentifier(node) && node.text === "prepareWorkspaceFixture") {
+    if (relative !== "cli.ts" && ts.isIdentifier(node) && node.text === "prepareWorkspaceFixture") {
       const line = file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1;
-      found.push(
-        `${relative}:${line} only the integration CLI and demo seed use prepareWorkspaceFixture`
-      );
+      found.push(`${relative}:${line} only the integration CLI uses prepareWorkspaceFixture`);
     }
     if (ts.isCallExpression(node) && node.arguments[0]) {
       const callee = node.expression;
@@ -199,13 +195,11 @@ function violations(file: ts.SourceFile, checker: ts.TypeChecker, db: Database.D
         ts.isPropertyAccessExpression(forwarding.left) &&
         forwarding.left.name.text === method;
       const schema =
-        (relative === "src/lib/database.ts" || relative === seed) &&
+        relative === "src/lib/database.ts" &&
         decl &&
         ts.isImportSpecifier(decl) &&
         ["SCHEMA_SQL", "BACKFILL_SQL"].includes((decl.propertyName ?? decl.name).text) &&
-        ["@shared/schema", "../../shared/schema"].includes(
-          (decl.parent.parent.parent.moduleSpecifier as ts.StringLiteral).text
-        );
+        (decl.parent.parent.parent.moduleSpecifier as ts.StringLiteral).text === "@shared/schema";
       const regexExec =
         method === "exec" &&
         receiver &&
@@ -231,11 +225,11 @@ function violations(file: ts.SourceFile, checker: ts.TypeChecker, db: Database.D
 
 it("keeps workspace lifecycle writes and deletion in the owner", () => {
   // Schema creation/backfill lives in shared/schema.ts. Unit, integration
-  // and e2e fixtures live outside src. The CLI and demo seed are checked too.
+  // and e2e fixtures live outside src. The integration CLI is checked too.
   const files = readdirSync(path.join(backend, "src"), { recursive: true, encoding: "utf8" })
     .filter((f) => /\.(?:[cm]?[jt]sx?|sql)$/.test(f))
     .map((f) => `src/${f}`)
-    .concat("cli.ts", seed)
+    .concat("cli.ts")
     .filter((f) => f !== owner);
   const paths = files.map((f) => path.resolve(backend, f));
   const program = ts.createProgram(
@@ -291,7 +285,7 @@ it("checks assembled statements and distinguishes assignment targets from reads"
     'db.exec(`DELETE FROM"workspaces"`); // reject',
     "db.prepare(`UPDATE ${unresolvedTable} SET state = ?`); // reject",
     "db.prepare(`INSERT INTO workspaces (${unresolvedColumns}) VALUES (?)`); // reject",
-    'prepareWorkspaceFixture(db, "cli"); // reject',
+    "prepareWorkspaceFixture(db); // reject",
   ];
   const host = ts.createCompilerHost({});
   const ast = ts.createSourceFile(file, source.join("\n"), ts.ScriptTarget.Latest, true);

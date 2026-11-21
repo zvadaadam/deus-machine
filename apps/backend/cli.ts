@@ -254,7 +254,7 @@ async function main() {
   db.prepare(
     `INSERT OR IGNORE INTO repositories (id, name, root_path) VALUES (?, 'cli-test', ?)`
   ).run(repoId, opts.cwd);
-  prepareWorkspaceFixture(db, "cli").run(workspaceId, repoId);
+  prepareWorkspaceFixture(db).run(workspaceId, repoId);
   db.prepare(
     `INSERT INTO sessions (id, workspace_id, agent_harness, status) VALUES (?, ?, ?, 'working')`
   ).run(sessionId, workspaceId, opts.agent);
