@@ -48,3 +48,10 @@ export class ChatBusyError extends ConflictError {
     this.name = "ChatBusyError";
   }
 }
+
+export class AgentServerDisconnectedError extends AppError {
+  constructor() {
+    super(503, "Agent server is disconnected");
+    this.name = "AgentServerDisconnectedError";
+  }
+}

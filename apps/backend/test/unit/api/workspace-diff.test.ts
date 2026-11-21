@@ -87,6 +87,24 @@ describe("diff operations (through NodeDriver)", () => {
     });
   });
 
+  it("reports a failed local comparison to every diff operation without exposing git's paths", async () => {
+    setLocal();
+    git.resolveParentBranch.mockRejectedValue(
+      Object.assign(new Error("git in a private folder"), { killed: true })
+    );
+    try {
+      for (const result of [
+        () => run(api.diffStats, local),
+        () => run(api.diffFiles, local),
+        () => run(api.diffFile, { ...local, file: "a.ts" }),
+      ]) {
+        await expect(result()).rejects.toThrow("Could not read the changes: git timed out.");
+      }
+    } finally {
+      git.resolveParentBranch.mockResolvedValue("main");
+    }
+  });
+
   it("diffFile without a file is refused", async () => {
     setLocal();
     await expect(run(api.diffFile, local as never)).rejects.toMatchObject({

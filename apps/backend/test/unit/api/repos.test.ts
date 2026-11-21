@@ -69,7 +69,7 @@ vi.mock("child_process", () => ({
   execFileSync: vi.fn<(...args: any[]) => any>(
     (cmd: string, args: string[], opts?: { cwd?: string; encoding?: string }) => {
       if (cmd === "git" && args?.includes("--show-toplevel")) {
-        return Buffer.from((opts?.cwd ?? "") + "\n");
+        return (opts?.cwd ?? "") + "\n";
       }
       if (cmd === "git" && args?.[0] === "remote" && args?.[1] === "get-url") {
         return opts?.encoding
@@ -282,10 +282,13 @@ describe("addRepo", () => {
     expect(detectDefaultBranch).toHaveBeenCalledWith("/path/to/repo");
   });
 
-  it("refuses a folder that is not a git repository", async () => {
+  it("refuses a folder that is not a git repository in git's locale", async () => {
     const { execFileSync } = await import("child_process");
     vi.mocked(execFileSync).mockImplementationOnce(() => {
-      throw new Error("fatal: not a git repository");
+      throw Object.assign(
+        new Error("fatal : ni ceci ni aucun de ses répertoires parents n'est un dépôt git"),
+        { status: 128 }
+      );
     });
 
     await expect(run(api.addRepo, { root_path: "/path/to/folder" })).rejects.toMatchObject({
@@ -296,6 +299,22 @@ describe("addRepo", () => {
 });
 
 describe("inspectRepo", () => {
+  it.each(["", "relative", "/vanished"])(
+    "refuses a missing or invalid toplevel %j before writing",
+    async (root) => {
+      const { execFileSync } = await import("child_process");
+      vi.mocked(execFileSync).mockReturnValueOnce(root);
+      if (root === "/vanished")
+        mockFs.statSync
+          .mockImplementationOnce(() => ({ isDirectory: () => true }))
+          .mockReturnValueOnce(undefined);
+      await expect(run(api.addRepo, { root_path: "/path/to/clone" })).rejects.toThrow(
+        /git.*(folder|toplevel)/i
+      );
+      expect(mockStmt.run).not.toHaveBeenCalled();
+    }
+  );
+
   it("returns normalized repo metadata without registering it", async () => {
     await expect(run(api.inspectRepo, { root_path: "/path/to/deus" })).resolves.toEqual({
       root_path: "/path/to/deus",

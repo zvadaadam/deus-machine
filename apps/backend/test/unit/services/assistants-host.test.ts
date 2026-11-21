@@ -6,6 +6,9 @@
 
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { WireRequestError } from "@zvada/agent-server/client";
+import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
+import { CATALOG_MODEL_LISTS } from "@shared/models";
 import type { AnyOp } from "@shared/api/op";
 import { SCHEMA_SQL } from "@shared/schema";
 
@@ -51,6 +54,7 @@ vi.mock("@sentry/node", () => ({ captureException: vi.fn() }));
 vi.mock("../../../src/services/agent/service", () => ({
   liveTurnId: (sessionId: string) => state.live.get(sessionId),
   provideSessionTools: () => {},
+  isConnected: () => false,
 }));
 vi.mock("../../../src/services/agent/tool-relay", () => ({
   pendingFor: (sessionId: string) => state.pending.filter((r) => r.sessionId === sessionId),
@@ -115,7 +119,13 @@ vi.mock("../../../src/services/assistants/store", () => ({
 import { LOCAL_CALLER, type Caller } from "../../../src/api/registry";
 import handlers from "../../../src/api/assistants";
 import * as api from "@shared/api/assistants";
-import { ChatBusyError } from "../../../src/lib/errors";
+import * as turns from "../../../src/services/agent/turns";
+import {
+  AgentServerDisconnectedError,
+  AppError,
+  ChatBusyError,
+  ConflictError,
+} from "../../../src/lib/errors";
 import { persistSessionTitle } from "../../../src/services/agent/persistence";
 import { createDeusHost } from "../../../src/services/assistants/host";
 import { _resetOperator, withSessionTools } from "../../../src/services/assistants/operator";
@@ -500,6 +510,74 @@ describe("through MCP and as a chat's own tools", () => {
     return { text: reply.result.content[0].text as string, isError: reply.result.isError === true };
   };
 
+  it("says when a diff cannot be read, including in a settled turn's outcome", async () => {
+    const why = "Could not read the changes: git returned no merge base.";
+    state.ops.diffFiles = () => {
+      throw new ConflictError(why);
+    };
+    const host = createDeusHost();
+    const [entry] = await host.list(LEAD as never, {});
+    await expect(host.outcome!(LEAD as never, entry!)).resolves.toBe(why);
+    for (const args of [{ session: "lead:1" }, { session: "lead:1", file: "script" }]) {
+      expect(await call(LOCAL_CALLER, "read_changes", args)).toMatchObject({
+        isError: true,
+        text: expect.stringContaining(why),
+      });
+    }
+  });
+
+  it("answers a definite engine-down send once, with the reason", async () => {
+    const realTurns = await vi.importActual<typeof turns>("../../../src/services/agent/turns");
+    const send = vi.spyOn(turns, "sendMessage").mockImplementation(realTurns.sendMessage);
+    const result = await call(LOCAL_CALLER, "send_message", {
+      session: "lead:1",
+      message: "go",
+      wait: 1,
+    });
+    expect(result).toMatchObject({
+      isError: true,
+      text: expect.stringContaining("Nothing was sent or started. Restart Deus"),
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not tell the caller the engine stopped for a different service's 503", async () => {
+    state.sendRefusal = new AppError(503, "Deus Cloud is not configured.");
+    const { text } = await call(LOCAL_CALLER, "send_message", {
+      session: "lead:1",
+      message: "go",
+      wait: 1,
+    });
+    expect(text).toContain("not confirmed");
+    expect(text).not.toContain("Restart Deus");
+  });
+
+  it("lists the engine's built-in models when the engine cannot answer", async () => {
+    state.ops.agentModels = () => {
+      throw new Error("Agent server not connected");
+    };
+    const { text, isError } = await call(LOCAL_CALLER, "list_models", {});
+    expect(isError).toBe(false);
+    for (const { harness, models } of CATALOG_MODEL_LISTS) {
+      expect(text).toContain(harness);
+      expect(text).toContain(models[0]!.id);
+    }
+  });
+
+  it("retains the unknown outcome of unclassified wire errors", async () => {
+    const args = { session: "lead:1", message: "go", wait: 1 };
+    state.sendRefusal = new WireRequestError(
+      WIRE_ERROR_CODES.harnessNotAvailable,
+      "private runtime details"
+    );
+    expect((await call(LOCAL_CALLER, "send_message", args)).text).toContain("not confirmed");
+    state.sendRefusal = new WireRequestError(
+      WIRE_ERROR_CODES.internalError,
+      "request timed out: turn/start"
+    );
+    expect((await call(LOCAL_CALLER, "send_message", args)).text).toContain("not confirmed");
+  });
+
   it("an outside caller is told which computer it reaches: in the instructions and in whoami", async () => {
     const where =
       'These are the coding agents on the computer "Proof Mac" itself: its own workspaces and their chats. Cloud workspaces are not listed here.';
@@ -736,6 +814,21 @@ describe("each commit re-reads what it depends on, with no await before its writ
 });
 
 describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12, H15, H17)", () => {
+  it("dates equally old prompts by the latest assistant message; parts within a message have no clock", async () => {
+    const host = createDeusHost();
+    const promptTime = new Date(Date.now() - 12 * 60_000).toISOString();
+    const insert = state.db.prepare(
+      "INSERT INTO sessions (id, workspace_id, chat, updated_at, last_user_message_at) VALUES (?, 'w-lead', ?, ?, ?)"
+    );
+    insert.run("silent", 2, promptTime, promptTime);
+    insert.run("busy", 3, promptTime, promptTime);
+    message("busy", "answer", "assistant", "A recent reply.");
+    const entries = await host.list(LEAD as never, {});
+    const ageOf = (id: string) => entries.find((e) => e.id === id)!.lastActivityAt!;
+    expect(ageOf("silent")).toBe(Date.parse(promptTime));
+    expect(ageOf("busy")).toBeGreaterThan(ageOf("silent"));
+  });
+
   it("H7: a stop while the first task is handed to the engine stops it by its minted id", async () => {
     const host = createDeusHost();
     const entry = await host.start!(LEAD as never, startInput({ turnId: "first-7" }));
@@ -791,7 +884,11 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
         LEAD as never,
         startInput({ workspace: { id: "w-lead", name: "lead" }, harness: "acp" })
       )
-    ).rejects.toMatchObject({ code: "invalid_input" });
+    ).rejects.toMatchObject({
+      code: "invalid_input",
+      message: expect.stringContaining('"acp" does not run here'),
+    });
+    expect(state.sent).toHaveLength(0);
     expect((state.db.prepare("SELECT COUNT(*) AS n FROM sessions").get() as { n: number }).n).toBe(
       before
     );
@@ -1048,15 +1145,30 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
 
   it("H15: a first task refused after the chat was made is that chat's error, not a refusal", async () => {
     const host = createDeusHost();
-    state.sendRefusal = new Error("engine unavailable");
+    state.sendRefusal = new AgentServerDisconnectedError();
     const entry = await host.start!(
       LEAD as never,
-      startInput({ workspace: { id: "w-lead", name: "lead" } })
+      startInput({ workspace: { id: "w-lead", name: "lead" }, turnId: "delivery" })
     );
     expect(entry).toMatchObject({
       status: "error",
-      error: "Its first task could not be delivered.",
+      error: expect.stringContaining("Restart Deus"),
     });
+    expect(await host.turn(LEAD as never, entry.id, "delivery")).toEqual({ state: "unknown" });
+  });
+
+  it("keeps an unknown send failure on the new session without ending an engine turn", async () => {
+    const host = createDeusHost();
+    state.sendRefusal = new Error("lost reply");
+    const entry = await host.start!(
+      LEAD as never,
+      startInput({
+        workspace: { id: "w-lead", name: "lead" },
+        turnId: "unknown-delivery",
+      })
+    );
+    expect(entry.error).toBe("Its first task could not be delivered.");
+    expect((await host.view(LEAD as never, entry.id, {})).turns).toEqual([]);
   });
 
   it("H17: a read after the last message sees a later cancel; a turn with no messages is shown", async () => {

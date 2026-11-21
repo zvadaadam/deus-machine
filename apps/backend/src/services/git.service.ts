@@ -3,6 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import { promisify } from "util";
 import { isExecError } from "@shared/lib/errors";
+import { ConflictError } from "../lib/errors";
 
 // Every git call here is asynchronous: the backend's event loop also runs the
 // agent engine, and the web app asks for diff stats of every working
@@ -135,7 +136,10 @@ export async function resolveParentBranch(
         timeout: 2000,
       });
       return cacheAndReturn(result);
-    } catch {}
+    } catch (error) {
+      // show-ref --verify --quiet exits 1 when the ref does not exist.
+      if (!isExecError(error) || error.code !== 1 || error.killed) throw error;
+    }
   }
 
   return cacheAndReturn(defaultBranch || "main");
@@ -276,29 +280,33 @@ export async function getMergeBase(workspacePath: string, parentBranch: string):
       encoding: "utf-8",
       timeout: 5000,
     });
-    return stdout.trim();
-  } catch {
-    // Fallback to HEAD — shows only uncommitted changes.
-    // Previous fallback (parentBranch) caused phantom diffs when origin/main
-    // advanced far beyond HEAD (thousands of false deletions).
-    console.warn(`[GIT] merge-base failed for ${parentBranch}, falling back to HEAD`);
-    return "HEAD";
+    const base = stdout.trim();
+    if (!base) throw new ConflictError("Could not read the changes: git returned no merge base.");
+    return base;
+  } catch (error) {
+    // No common ancestor: compare just the working tree to HEAD. Comparing to
+    // the unrelated parent branch used to show thousands of false deletions.
+    if (
+      isExecError(error) &&
+      error.code === 1 &&
+      !error.killed &&
+      error.stdout === "" &&
+      error.stderr === ""
+    )
+      return "HEAD";
+    throw error;
   }
 }
 
 /** Returns untracked files (not ignored, not staged) in the workspace. */
 async function getUntrackedFiles(workspacePath: string): Promise<string[]> {
-  try {
-    const { stdout } = await execFileAsync("git", ["ls-files", "--others", "--exclude-standard"], {
-      cwd: workspacePath,
-      encoding: "utf-8",
-      timeout: 5000,
-    });
-    const output = stdout.trim();
-    return output ? output.split("\n") : [];
-  } catch {
-    return [];
-  }
+  const { stdout } = await execFileAsync("git", ["ls-files", "--others", "--exclude-standard"], {
+    cwd: workspacePath,
+    encoding: "utf-8",
+    timeout: 5000,
+  });
+  const output = stdout.trim();
+  return output ? output.split("\n") : [];
 }
 
 /** Counts newlines in a file. Returns 0 for binary, oversized, or unreadable files. */
@@ -334,29 +342,25 @@ export async function getDiffStats(
   workspacePath: string,
   parentBranch: string
 ): Promise<{ additions: number; deletions: number }> {
-  try {
-    const mergeBase = await getMergeBase(workspacePath, parentBranch);
+  const mergeBase = await getMergeBase(workspacePath, parentBranch);
 
-    // Diff merge-base against working directory (committed + staged + unstaged tracked changes)
-    const { stdout } = await execFileAsync("git", ["diff", mergeBase, "--shortstat"], {
-      cwd: workspacePath,
-      encoding: "utf-8",
-      timeout: 5000,
-    });
-    const output = stdout.trim();
+  // Diff merge-base against working directory (committed + staged + unstaged tracked changes)
+  const { stdout } = await execFileAsync("git", ["diff", mergeBase, "--shortstat"], {
+    cwd: workspacePath,
+    encoding: "utf-8",
+    timeout: 5000,
+  });
+  const output = stdout.trim();
 
-    let additions = parseInt(output.match(/(\d+)\s+insertion(?:s)?/)?.[1] || "0", 10);
-    const deletions = parseInt(output.match(/(\d+)\s+deletion(?:s)?/)?.[1] || "0", 10);
+  let additions = parseInt(output.match(/(\d+)\s+insertion(?:s)?/)?.[1] || "0", 10);
+  const deletions = parseInt(output.match(/(\d+)\s+deletion(?:s)?/)?.[1] || "0", 10);
 
-    // Add untracked files (each line counts as an addition)
-    for (const file of await getUntrackedFiles(workspacePath)) {
-      additions += await countFileLines(path.join(workspacePath, file));
-    }
-
-    return { additions, deletions };
-  } catch {
-    return { additions: 0, deletions: 0 };
+  // Add untracked files (each line counts as an addition)
+  for (const file of await getUntrackedFiles(workspacePath)) {
+    additions += await countFileLines(path.join(workspacePath, file));
   }
+
+  return { additions, deletions };
 }
 
 /**
@@ -367,39 +371,35 @@ export async function getDiffFiles(
   workspacePath: string,
   parentBranch: string
 ): Promise<Array<{ file: string; additions: number; deletions: number }>> {
-  try {
-    const mergeBase = await getMergeBase(workspacePath, parentBranch);
-    const files: Array<{ file: string; additions: number; deletions: number }> = [];
+  const mergeBase = await getMergeBase(workspacePath, parentBranch);
+  const files: Array<{ file: string; additions: number; deletions: number }> = [];
 
-    // Tracked changes: diff merge-base against working directory
-    const { stdout } = await execFileAsync("git", ["diff", mergeBase, "--numstat"], {
-      cwd: workspacePath,
-      encoding: "utf-8",
-      timeout: 5000,
-    });
-    const output = stdout.trim();
+  // Tracked changes: diff merge-base against working directory
+  const { stdout } = await execFileAsync("git", ["diff", mergeBase, "--numstat"], {
+    cwd: workspacePath,
+    encoding: "utf-8",
+    timeout: 5000,
+  });
+  const output = stdout.trim();
 
-    if (output) {
-      for (const line of output.split("\n")) {
-        const [additions, deletions, file] = line.split("\t");
-        files.push({
-          file,
-          additions: parseInt(additions, 10) || 0,
-          deletions: parseInt(deletions, 10) || 0,
-        });
-      }
+  if (output) {
+    for (const line of output.split("\n")) {
+      const [additions, deletions, file] = line.split("\t");
+      files.push({
+        file,
+        additions: parseInt(additions, 10) || 0,
+        deletions: parseInt(deletions, 10) || 0,
+      });
     }
-
-    // Untracked files: count lines as additions
-    for (const file of await getUntrackedFiles(workspacePath)) {
-      const lineCount = await countFileLines(path.join(workspacePath, file));
-      files.push({ file, additions: lineCount, deletions: 0 });
-    }
-
-    return files;
-  } catch {
-    return [];
   }
+
+  // Untracked files: count lines as additions
+  for (const file of await getUntrackedFiles(workspacePath)) {
+    const lineCount = await countFileLines(path.join(workspacePath, file));
+    files.push({ file, additions: lineCount, deletions: 0 });
+  }
+
+  return files;
 }
 
 /**
@@ -408,7 +408,7 @@ export async function getDiffFiles(
  */
 export async function getFileDiff(
   workspacePath: string,
-  parentBranch: string,
+  mergeBase: string,
   filePath: string
 ): Promise<string> {
   // Defense-in-depth: validate even though callers should already sanitize
@@ -416,8 +416,6 @@ export async function getFileDiff(
   if (!safePath) {
     throw new Error(`Invalid file path: ${filePath}`);
   }
-
-  const mergeBase = await getMergeBase(workspacePath, parentBranch);
 
   // Diff merge-base against working directory for tracked files
   const { stdout: output } = await execFileAsync("git", ["diff", mergeBase, "--", safePath], {
@@ -440,7 +438,7 @@ export async function getFileDiff(
     return stdout;
   } catch (e: unknown) {
     // Exit code 1 = differences found (expected); stdout contains the diff
-    if (isExecError(e) && e.stdout) return e.stdout.toString();
+    if (isExecError(e) && e.code === 1 && !e.killed && e.stdout) return e.stdout;
     throw e;
   }
 }

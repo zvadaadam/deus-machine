@@ -70,7 +70,7 @@ import { createLocalWorkspace } from "../../api/workspaces";
 import { archiveWorkspace } from "../workspace-archive.service";
 import { attachParts, getMessages, getSessionRaw, hasOlderMessages } from "../../db";
 import { getDatabase } from "../../lib/database";
-import { AppError, ChatBusyError } from "../../lib/errors";
+import { AgentServerDisconnectedError, AppError, ChatBusyError } from "../../lib/errors";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
 import { liveTurnId } from "../agent/service";
 import { answer as answerToolRequest, pendingFor } from "../agent/tool-relay";
@@ -214,6 +214,11 @@ export interface DeusHost extends OperatorHost<Caller> {
  * before it (`authorize`): its sentence, then this computer's.
  */
 function appRefusal(error: unknown): unknown {
+  if (error instanceof AgentServerDisconnectedError)
+    return new OperatorError(
+      "unsupported",
+      "The agent engine is not running on this computer. Nothing was sent or started. Restart Deus before sending the task again."
+    );
   if (!(error instanceof AppError) || error.statusCode >= 500) return error;
   return error.statusCode === 403
     ? refuse.access(error.message)
@@ -314,9 +319,10 @@ export function createDeusHost(): DeusHost {
       const status = statusOf(row, ended.get(id));
       // The workspace's title and time stand in only for a first chat with no row yet.
       const title = row.session_id ? row.s_title : row.ws_title;
-      const activity =
-        epochMs(row.last_user_message_at) ??
-        epochMs(row.session_id ? row.s_updated_at : row.ws_updated_at);
+      const activity = Math.max(
+        epochMs(row.last_user_message_at) ?? 0,
+        epochMs(row.session_id ? row.s_updated_at : row.ws_updated_at) ?? 0
+      );
       const root = computeWorkspacePath({ root_path: row.root_path, slug: row.slug });
       // Why: a failed start, or a first task that could not be delivered (no messages yet).
       const error = !row.session_id
@@ -887,7 +893,10 @@ export function createDeusHost(): DeusHost {
       }),
 
     async models() {
-      const { lists } = await run(agentModels, {});
+      const lists = await run(agentModels, {}).then(
+        (answer) => answer.lists,
+        () => CATALOG_MODEL_LISTS
+      );
       return lists.flatMap((list) =>
         pickerModels(lists, list.harness).map(
           (m): ModelEntry => ({
@@ -923,15 +932,20 @@ export function createDeusHost(): DeusHost {
     },
 
     async outcome(caller, entry) {
-      const { files, total_count } = await act(caller, workspaces.diffFiles, {
-        workspaceId: entry.workspace.id,
-      });
-      if (files.length === 0) return "changes: none";
-      const shown = files
-        .slice(0, 10)
-        .map((f) => `${JSON.stringify(f.file)} (+${f.additions} -${f.deletions})`);
-      const more = (total_count ?? files.length) - shown.length;
-      return `changes: ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""}`;
+      try {
+        const { files, total_count } = await act(caller, workspaces.diffFiles, {
+          workspaceId: entry.workspace.id,
+        });
+        if (files.length === 0) return "changes: none";
+        const shown = files
+          .slice(0, 10)
+          .map((f) => `${JSON.stringify(f.file)} (+${f.additions} -${f.deletions})`);
+        const more = (total_count ?? files.length) - shown.length;
+        return `changes: ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""}`;
+      } catch (error) {
+        if (error instanceof AppError && error.statusCode < 500) return error.message;
+        throw error;
+      }
     },
 
     onChange(listener) {

@@ -214,14 +214,6 @@ describe("exec-dependent functions", () => {
       expect(result).toEqual({ additions: 13, deletions: 20 });
     });
 
-    it("returns zeros on error", async () => {
-      git.mockImplementation(() => {
-        throw new Error("git failed");
-      });
-      const result = await getDiffStats("/workspace", "origin/main");
-      expect(result).toEqual({ additions: 0, deletions: 0 });
-    });
-
     it("parses single insertion shortstat", async () => {
       git.mockImplementation((...args: any[]) => {
         const gitArgs = args[1] as string[];
@@ -272,29 +264,57 @@ describe("exec-dependent functions", () => {
       expect(result[1]).toEqual({ file: "src/new-file.ts", additions: 3, deletions: 0 });
       expect(result[2]).toEqual({ file: "src/old-file.ts", additions: 0, deletions: 15 });
     });
-
-    it("returns empty array on error", async () => {
-      git.mockImplementation(() => {
-        throw new Error("git failed");
-      });
-      const result = await getDiffFiles("/workspace", "origin/main");
-      expect(result).toEqual([]);
-    });
   });
 
   describe("getMergeBase", () => {
+    it("compares unrelated histories to HEAD and propagates other exits", async () => {
+      const fail = (code: number, stderr = "", stdout = "", killed = false) =>
+        Object.assign(new Error("git failed"), { code, stdout, stderr, killed });
+      git.mockImplementation(() => {
+        throw fail(1);
+      });
+      await expect(getMergeBase("/workspace", "other")).resolves.toBe("HEAD");
+      for (const error of [
+        fail(128),
+        fail(1, "fatal"),
+        fail(1, "", "unexpected"),
+        fail(1, "", "", true),
+      ]) {
+        git.mockImplementation(() => {
+          throw error;
+        });
+        await expect(getMergeBase("/workspace", "other")).rejects.toBe(error);
+      }
+    });
+
     it("returns trimmed merge-base hash", async () => {
       git.mockReturnValue("abc123\n");
       const result = await getMergeBase("/workspace", "origin/main");
       expect(result).toBe("abc123");
     });
 
-    it("returns HEAD as fallback on error", async () => {
-      git.mockImplementation(() => {
-        throw new Error("git failed");
+    it("rejects a missing merge base, even when git exited successfully", async () => {
+      git.mockReturnValue("  \n");
+      await expect(getMergeBase("/workspace", "main")).rejects.toThrow(/merge base/i);
+    });
+  });
+
+  describe.each([getDiffFiles, getDiffStats])("%o", (read) => {
+    it.each(["merge-base", "diff", "ls-files"])("rejects a failed git %s", async (command) => {
+      git.mockImplementation((_cmd, [subcommand]) => {
+        if (subcommand === command) throw new Error("git failed");
+        return subcommand === "merge-base" ? "abc123" : "";
       });
-      const result = await getMergeBase("/workspace", "origin/main");
-      expect(result).toBe("HEAD");
+      await expect(read("/workspace", "main")).rejects.toThrow();
+    });
+  });
+
+  it("accepts empty tracked and untracked lists from a clean workspace", async () => {
+    git.mockImplementation((_cmd, [command]) => (command === "merge-base" ? "abc123" : ""));
+    await expect(getDiffFiles("/workspace", "main")).resolves.toEqual([]);
+    await expect(getDiffStats("/workspace", "main")).resolves.toEqual({
+      additions: 0,
+      deletions: 0,
     });
   });
 
@@ -382,8 +402,15 @@ describe("exec-dependent functions", () => {
     const refsThatExist = (refs: string[]) =>
       git.mockImplementation((_cmd: string, args: readonly string[]) => {
         if (args[0] === "show-ref" && refs.includes(args[3])) return "";
-        throw new Error("not found");
+        throw Object.assign(new Error("not found"), { code: 1 });
       });
+
+    it("propagates a spawn failure while looking up the parent", async () => {
+      git.mockImplementation(() => {
+        throw Object.assign(new Error("cannot start git"), { code: "EMFILE" });
+      });
+      await expect(resolveParentBranch("/ws-spawn-failed", "feature", "main")).rejects.toThrow();
+    });
 
     it("keeps its answer across several 5-second polls, and expires after 30s", async () => {
       vi.useFakeTimers();

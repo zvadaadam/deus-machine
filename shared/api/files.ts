@@ -6,8 +6,6 @@ import { out, read, write } from "./op";
 import { stream } from "./stream";
 
 const workspaceId = z.object({ workspaceId: z.string().min(1) });
-/** A folder on the computer that runs the backend, as an absolute path. */
-const workspacePath = z.object({ workspacePath: z.string().min(1) });
 
 /** The workspace's files as a tree, ignored files left out. */
 export const workspaceFiles = read({
@@ -46,19 +44,9 @@ export const invalidateFileCache = write({
   output: out<void>(),
 });
 
-/** Start announcing changes under a local workspace's folder on `fileChanges`. */
-export const fsWatch = write({ name: "fsWatch", input: workspacePath, output: out<void>() });
-
-export const fsUnwatch = write({ name: "fsUnwatch", input: workspacePath, output: out<void>() });
-
-export interface FileChangeEvent {
-  change_type: "add" | "change" | "unlink" | "mixed" | "metadataonly";
-  affected_count: number;
-}
-
-/** Files changed in a watched workspace folder (see `fsWatch`), a burst at a time. */
+/** A local checkout changed. Its followers read the files and diffs again. */
 export const fileChanges = stream({
   name: "fileChanges",
-  scope: workspacePath,
-  event: out<FileChangeEvent>(),
+  scope: workspaceId,
+  event: out<null>(),
 });

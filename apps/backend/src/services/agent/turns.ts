@@ -17,7 +17,13 @@ import { readPermissionMode, readThinkingLevel } from "@shared/protocol";
 import { readCloudTurnSelection, type CloudTurnSelection } from "@shared/cloud-models";
 import { ACTIVE_TURN_STATUSES } from "@shared/enums";
 import { getDatabase } from "../../lib/database";
-import { ChatBusyError, ConflictError, NotFoundError, ValidationError } from "../../lib/errors";
+import {
+  AgentServerDisconnectedError,
+  ChatBusyError,
+  ConflictError,
+  NotFoundError,
+  ValidationError,
+} from "../../lib/errors";
 import { getSessionRaw, getTurn, getWorkspaceForMiddleware } from "../../db";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
 import {
@@ -320,7 +326,7 @@ async function sendMessageOnce(
     // therefore strands that bubble on screen forever, durable nowhere. Throw so
     // the write fails and the composer's rollback runs.
     if (!agentService.isConnected()) {
-      const err = new Error("Agent server is disconnected");
+      const err = new AgentServerDisconnectedError();
       handleAgentError(sessionId, err);
       throw err;
     }

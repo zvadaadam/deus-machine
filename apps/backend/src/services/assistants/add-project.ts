@@ -22,7 +22,6 @@ import * as repos from "@shared/api/repos";
 import type { Repository } from "@shared/types/repository";
 import type { Caller } from "../../api/registry";
 import {
-  CLONE_REFUSALS,
   parseCloneAddress,
   projectsFolder,
   repositoryKey,
@@ -37,22 +36,32 @@ const ANSWER_MARGIN_MS = 1000;
 /** An outcome no call has heard is kept this long for the next call. */
 const UNHEARD_KEPT_MS = 30 * 60_000;
 
-type Added = { how: "here" | "adopted" | "cloned"; repo: Repository };
+type Added = { how: "here" | "adopted" | "cloned"; name: string; folder: string };
+
+function registered(how: Added["how"], repo: Repository, folder: string): Added {
+  if (!repo.name || repo.root_path !== folder)
+    throw new OperatorError(
+      "failed",
+      "Deus did not register the inspected folder. Check the project on this computer."
+    );
+  return { how, name: repo.name, folder: repo.root_path };
+}
 
 /** One folder's add: being checked, cloned or added, then its outcome until a call hears it. */
 interface Flight {
   address: CloneAddress;
-  phase: "checking" | "cloning" | "adding";
+  phase: "checking" | "cloning" | "cloned";
   done: Promise<Added>;
   outcome?: { added: Added } | { error: unknown };
   settledAt?: number;
 }
 
 /** The project's name as `start_session` takes it, and where it is. */
-function answerFor(address: CloneAddress, { how, repo }: Added): string {
-  const name = quoted(repo.name);
-  const where = quoted(repo.root_path ?? "");
-  const start = callHint("start_session", { project: repo.name, message: "<the first task>" });
+function answerFor(address: CloneAddress, added: Added): string {
+  const { how } = added;
+  const name = quoted(added.name);
+  const where = quoted(added.folder);
+  const start = callHint("start_session", { project: added.name, message: "<the first task>" });
   if (how === "here") {
     return `${name} is already a project on this computer, in ${where}. Nothing was cloned.\n  ${start}`;
   }
@@ -86,56 +95,47 @@ export function addProjectTool(host: DeusHost) {
   const flights = new Map<string, Flight>();
   const flightKey = (folder: string) => folder.toLowerCase();
 
-  /** The project for this repository that has a folder here. */
-  async function projectHere(caller: Who, key: string): Promise<Repository | undefined> {
-    const projects = await host.act(caller, repos.repos, {});
-    return projects.find(
-      (p) => p.root_path && p.git_origin_url && repositoryKey(p.git_origin_url) === key
-    );
-  }
-
-  /** Add `folder` as the project, or the project that already is that folder. */
-  async function addFolder(caller: Who, folder: string): Promise<Repository> {
-    try {
-      return await host.act(caller, repos.addRepo, { root_path: folder });
-    } catch (error) {
-      const existing = error instanceof ConflictError ? (error.details as Repository) : undefined;
-      if (existing?.id) return existing;
-      throw error;
-    }
-  }
-
   async function add(caller: Who, flight: Flight, folder: string): Promise<Added> {
     const { address } = flight;
-    const here = await projectHere(caller, address.key);
-    if (here) return { how: "here", repo: here };
+    const projects = await host.act(caller, repos.repos, {});
+    const here = projects.find(
+      (p) => p.root_path && p.git_origin_url && repositoryKey(p.git_origin_url) === address.key
+    );
+    if (here?.root_path) return registered("here", here, here.root_path);
 
-    // A link counts as taken even when it leads nowhere.
-    if (fs.existsSync(folder) || isLink(folder)) {
-      // Only that repository's own clone, at that folder's top: never another's, or a folder inside one.
-      const inspected = await host
-        .act(caller, repos.inspectRepo, { root_path: folder })
-        .catch(() => undefined);
-      const same =
-        inspected &&
-        inspected.root_path === realPath(folder) &&
-        inspected.git_origin_url &&
-        repositoryKey(inspected.git_origin_url) === address.key;
-      if (!same) {
-        throw new OperatorError(
-          "unsupported",
-          `The folder ${quoted(folder)} already exists and is not a clone of ${quoted(address.url)}. Nothing was cloned; no other folder is used.`
-        );
-      }
-      flight.phase = "adding";
-      return { how: "adopted", repo: await addFolder(caller, folder) };
+    // lstat counts even a dangling link as taken.
+    const exists = !!fs.lstatSync(folder, { throwIfNoEntry: false });
+    if (!exists) {
+      flight.phase = "cloning";
+      await host.act(caller, repos.gitClone, { url: address.url, targetPath: folder });
+      flight.phase = "cloned";
     }
 
-    flight.phase = "cloning";
-    // Through `act`: access is read again just before the clone starts.
-    await host.act(caller, repos.gitClone, { url: address.url, targetPath: folder });
-    flight.phase = "adding";
-    return { how: "cloned", repo: await addFolder(caller, folder) };
+    const inspected = await host.act(caller, repos.inspectRepo, { root_path: folder });
+    if (inspected.root_path !== fs.realpathSync.native(folder)) {
+      throw new OperatorError(
+        "unsupported",
+        `The folder ${quoted(folder)} is inside another repository. Nothing was added.`
+      );
+    }
+    const origin = inspected.git_origin_url;
+    if (!origin || repositoryKey(origin) !== address.key) {
+      const why = origin ? "it has a different origin" : "git reported no origin";
+      throw new OperatorError(
+        "unsupported",
+        `Could not add ${quoted(address.url)} from ${quoted(folder)}: ${why}.`
+      );
+    }
+
+    let repo: Repository;
+    try {
+      repo = await host.act(caller, repos.addRepo, { root_path: folder });
+    } catch (error) {
+      // The person may have registered the same folder while this call was cloning.
+      if (!(error instanceof ConflictError && error.details)) throw error;
+      repo = error.details as Repository;
+    }
+    return registered(exists ? "adopted" : "cloned", repo, inspected.root_path);
   }
 
   /** The flight for this folder now: one in flight, one ended and not heard, or a new one. */
@@ -209,11 +209,6 @@ export function addProjectTool(host: DeusHost) {
         throw new OperatorError("invalid_input", `${parsed.reason} Nothing was cloned.`);
       const { address } = parsed;
       const folder = path.join(projectsFolder(), address.name);
-      // The name is safe characters only; the folder is always directly in the projects folder.
-      if (path.dirname(folder) !== projectsFolder()) {
-        throw new OperatorError("invalid_input", `${CLONE_REFUSALS.name} Nothing was cloned.`);
-      }
-
       const flight = flightFor(caller, address, folder);
       const seconds = Math.max(0, (call.deadline - Date.now() - ANSWER_MARGIN_MS) / 1000);
       if (!(await ended(flight, seconds))) {
@@ -226,25 +221,21 @@ export function addProjectTool(host: DeusHost) {
       // Heard: the next call starts afresh (and finds the project, when it was added).
       if (flights.get(flightKey(folder)) === flight) flights.delete(flightKey(folder));
       const outcome = flight.outcome!;
-      if ("error" in outcome) throw failureFor(address, outcome.error);
+      if ("error" in outcome) {
+        const { error } = outcome;
+        if (flight.phase !== "cloned") throw failureFor(address, error);
+        let reason: string;
+        if (error instanceof OperatorError)
+          reason = error.message.replace(/^refused \([a-z_]+\): /, "");
+        else if (error instanceof AppError && error.statusCode < 500) reason = error.message;
+        else throw error;
+        throw new OperatorError(
+          error instanceof OperatorError ? error.code : "failed",
+          `Cloned into ${quoted(folder)}, but could not add the project.${reason ? ` ${reason}` : ""}`,
+          { next: callHint("add_project", { repository }) }
+        );
+      }
       return answerFor(address, outcome.added);
     },
   });
-}
-
-function isLink(target: string): boolean {
-  try {
-    return fs.lstatSync(target).isSymbolicLink();
-  } catch {
-    return false;
-  }
-}
-
-/** The path as the disk spells it (git's top level does too), not as it was asked. */
-function realPath(target: string): string | undefined {
-  try {
-    return fs.realpathSync.native(target);
-  } catch {
-    return undefined;
-  }
 }

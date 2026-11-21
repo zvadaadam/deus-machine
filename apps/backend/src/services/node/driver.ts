@@ -22,7 +22,7 @@ import path from "path";
 import fs from "fs";
 import { getErrorMessage, isExecError } from "@shared/lib/errors";
 import type { FileMatch, FileTreeResponse } from "@shared/types/files";
-import { ValidationError } from "../../lib/errors";
+import { AppError, ConflictError, ValidationError } from "../../lib/errors";
 import * as gitService from "../git.service";
 import * as filesService from "../files.service";
 import {
@@ -94,32 +94,49 @@ class LocalNodeDriver implements NodeDriver {
     private readonly workspacePath: string
   ) {}
 
-  private parentBranch(): Promise<string> {
-    return gitService.resolveParentBranch(
-      this.workspacePath,
-      this.workspace.git_target_branch,
-      this.workspace.git_default_branch
-    );
+  private async readChanges<T>(read: (parent: string) => Promise<T>): Promise<T> {
+    try {
+      const parent = await gitService.resolveParentBranch(
+        this.workspacePath,
+        this.workspace.git_target_branch,
+        this.workspace.git_default_branch
+      );
+      return await read(parent);
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      // A git diagnostic can contain private paths or repository-controlled text.
+      const failure = isExecError(error) ? error : undefined;
+      let reason = failure?.code ? `git failed (${failure.code})` : "git could not finish the read";
+      if (failure?.killed) reason = "git timed out";
+      else if (failure?.stderr?.includes("not a git repository"))
+        reason = "the workspace is not a git repository";
+      else if (/unknown revision|not a valid (object|commit) name/i.test(failure?.stderr ?? ""))
+        reason = "the comparison branch could not be found";
+      throw new ConflictError(`Could not read the changes: ${reason}.`);
+    }
   }
 
-  async diffStats(): Promise<DiffStats> {
-    return gitService.getDiffStats(this.workspacePath, await this.parentBranch());
+  diffStats(): Promise<DiffStats> {
+    return this.readChanges((parent) => gitService.getDiffStats(this.workspacePath, parent));
   }
 
   async diffFiles(): Promise<DiffFilesResult> {
-    return { files: await gitService.getDiffFiles(this.workspacePath, await this.parentBranch()) };
+    return {
+      files: await this.readChanges((parent) =>
+        gitService.getDiffFiles(this.workspacePath, parent)
+      ),
+    };
   }
 
   async diffFile(file: string): Promise<DiffFileOutcome> {
     const workspacePath = this.workspacePath;
-    const parentBranch = await this.parentBranch();
     const safeFilePath = gitService.resolveWorkspaceRelativePath(workspacePath, file);
     if (!safeFilePath) throw new ValidationError("Invalid file path");
 
-    try {
-      const output = await gitService.getFileDiff(workspacePath, parentBranch, safeFilePath);
+    return this.readChanges(async (parent) => {
+      const mergeBase = await gitService.getMergeBase(workspacePath, parent);
+      const output = await gitService.getFileDiff(workspacePath, mergeBase, safeFilePath);
       const diffInfo = gitService.extractDiffInfo(output);
-      const mergeBase = await gitService.getMergeBase(workspacePath, parentBranch);
       const safeOldPath =
         gitService.resolveWorkspaceRelativePath(workspacePath, diffInfo.oldPath || safeFilePath) ||
         safeFilePath;
@@ -151,33 +168,7 @@ class LocalNodeDriver implements NodeDriver {
       }
 
       return { ok: true, file, diff: output, old_content: oldContent, new_content: newContent };
-    } catch (gitError: unknown) {
-      const msg = getErrorMessage(gitError);
-      const killed = isExecError(gitError) && gitError.killed;
-      const errorResponse: Record<string, unknown> = {
-        error: "diff_failed",
-        message: "Failed to get diff",
-        retryable: true,
-        details: { file, parentBranch, reason: null as string | null },
-      };
-      const details = errorResponse.details as Record<string, unknown>;
-      if (killed) {
-        errorResponse.message = "Diff operation timed out";
-        details.reason = "timeout";
-      } else if (msg.includes("unknown revision")) {
-        errorResponse.message = "Parent branch not found";
-        details.reason = "branch_not_found";
-        errorResponse.retryable = false;
-      } else if (msg.includes("not a git repository")) {
-        errorResponse.message = "Not a git repository";
-        details.reason = "not_git_repo";
-        errorResponse.retryable = false;
-      } else {
-        details.reason = "git_error";
-        details.errorMessage = msg;
-      }
-      return { ok: false, status: 500, body: errorResponse };
-    }
+    });
   }
 
   async fsTree(): Promise<FileTreeResponse> {

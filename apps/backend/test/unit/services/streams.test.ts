@@ -15,6 +15,7 @@ import {
   _reset,
   dropConnection,
   openWith,
+  onFollow,
   publish,
   resetSubscribers,
   subscribe,
@@ -324,5 +325,36 @@ describe("streams", () => {
       { type: "q:event", id: "s2", event: "terminalOutput", data: { text: "waiting" } },
     ]);
     expect(asked).toEqual([{ workspaceId: "w", id: "t1" }, { workspaceId: "w", id: "t2" }, {}]);
+  });
+});
+
+describe("followers that own a resource", () => {
+  it("acquires only whole scopes, releases a replaced subscription and drops a connection's holds", () => {
+    const releases: string[] = [];
+    onFollow(output, ({ workspaceId, id }) => () => {
+      releases.push(workspaceId + "/" + id);
+    });
+    connect("ui");
+    expect(() => subscribe("ui", "t", output, {})).toThrow("terminalOutput");
+    subscribe("ui", "t", output, { workspaceId: "one", id: "a" });
+    subscribe("ui", "t", output, { workspaceId: "two", id: "b" });
+    subscribe("ui", "u", output, { workspaceId: "two", id: "c" });
+    expect(releases).toEqual(["one/a"]);
+    dropConnection("ui");
+    expect(releases).toEqual(["one/a", "two/b", "two/c"]);
+    expect(unsubscribe("ui", "t")).toBe(false);
+  });
+
+  it("leaves no subscription or acknowledgment behind when acquisition fails", () => {
+    const ui = connect("ui");
+    onFollow(output, () => {
+      throw new Error("unavailable");
+    });
+    expect(() => subscribe("ui", "t", output, { workspaceId: "w", id: "p" })).toThrow(
+      "unavailable"
+    );
+    publish(output, { workspaceId: "w", id: "p" }, { text: "missed" });
+    expect(ui).toEqual([]);
+    expect(unsubscribe("ui", "t")).toBe(false);
   });
 });
