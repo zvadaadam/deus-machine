@@ -120,7 +120,12 @@ import { LOCAL_CALLER, type Caller } from "../../../src/api/registry";
 import handlers from "../../../src/api/assistants";
 import * as api from "@shared/api/assistants";
 import * as turns from "../../../src/services/agent/turns";
-import { AppError, ChatBusyError, ConflictError } from "../../../src/lib/errors";
+import {
+  AgentServerDisconnectedError,
+  AppError,
+  ChatBusyError,
+  ConflictError,
+} from "../../../src/lib/errors";
 import { persistSessionTitle } from "../../../src/services/agent/persistence";
 import { createDeusHost } from "../../../src/services/assistants/host";
 import { _resetOperator, withSessionTools } from "../../../src/services/assistants/operator";
@@ -534,6 +539,17 @@ describe("through MCP and as a chat's own tools", () => {
       text: expect.stringContaining("Nothing was sent or started. Restart Deus"),
     });
     expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not tell the caller the engine stopped for a different service's 503", async () => {
+    state.sendRefusal = new AppError(503, "Deus Cloud is not configured.");
+    const { text } = await call(LOCAL_CALLER, "send_message", {
+      session: "lead:1",
+      message: "go",
+      wait: 1,
+    });
+    expect(text).toContain("not confirmed");
+    expect(text).not.toContain("Restart Deus");
   });
 
   it("lists the engine's built-in models when the engine cannot answer", async () => {
@@ -1143,7 +1159,7 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
 
   it("H15: a first task refused after the chat was made is that chat's error, not a refusal", async () => {
     const host = createDeusHost();
-    state.sendRefusal = new AppError(503, "private internal detail");
+    state.sendRefusal = new AgentServerDisconnectedError();
     const entry = await host.start!(
       LEAD as never,
       startInput({ workspace: { id: "w-lead", name: "lead" }, turnId: "delivery" })

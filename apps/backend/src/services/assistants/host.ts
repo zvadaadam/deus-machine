@@ -70,7 +70,7 @@ import { createLocalWorkspace } from "../../api/workspaces";
 import { archiveWorkspace } from "../workspace-archive.service";
 import { attachParts, getMessages, getSessionRaw, hasOlderMessages } from "../../db";
 import { getDatabase } from "../../lib/database";
-import { AppError, ChatBusyError } from "../../lib/errors";
+import { AgentServerDisconnectedError, AppError, ChatBusyError } from "../../lib/errors";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
 import { liveTurnId } from "../agent/service";
 import { answer as answerToolRequest, pendingFor } from "../agent/tool-relay";
@@ -214,13 +214,12 @@ export interface DeusHost extends OperatorHost<Caller> {
  * before it (`authorize`): its sentence, then this computer's.
  */
 function appRefusal(error: unknown): unknown {
-  if (!(error instanceof AppError)) return error;
-  if (error.statusCode === 503)
+  if (error instanceof AgentServerDisconnectedError)
     return new OperatorError(
       "unsupported",
       "The agent engine is not running on this computer. Nothing was sent or started. Restart Deus before sending the task again."
     );
-  if (error.statusCode >= 500) return error;
+  if (!(error instanceof AppError) || error.statusCode >= 500) return error;
   return error.statusCode === 403
     ? refuse.access(error.message)
     : new OperatorError("unsupported", `${error.message} Nothing was done.`);
