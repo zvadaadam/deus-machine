@@ -40,7 +40,7 @@ function guardedSchema() {
   return guard;
 }
 
-function writesLifecycle(sql: string, db: Database.Database) {
+function writesLifecycle(sql: string, db: Database.Database, directRun = false) {
   // Keep quoted values and identifiers intact while splitting exec() batches.
   const pieces =
     sql.match(
@@ -54,6 +54,7 @@ function writesLifecycle(sql: string, db: Database.Database) {
     }
     const raw = statement.trim();
     statement = "";
+    if (directRun && !/^(?:with|update|insert|replace|delete)\b/i.test(raw)) continue;
     // An unresolved head or a write target that could resolve to workspaces
     // cannot establish ownership. Other tables may build their own SQL.
     if (raw.split(/\s+/, 1)[0].includes(unknown)) return true;
@@ -215,13 +216,7 @@ function violations(file: ts.SourceFile, checker: ts.TypeChecker, db: Database.D
         method === "exec" &&
         receiver &&
         checker.typeToString(checker.getTypeAtLocation(receiver)) === "RegExp";
-      if (
-        !schema &&
-        !regexExec &&
-        !forwardedParameter &&
-        (!directRun || /^\s*(?:with|update|insert|replace|delete)\b/i.test(sql)) &&
-        writesLifecycle(sql, db)
-      ) {
+      if (!schema && !regexExec && !forwardedParameter && writesLifecycle(sql, db, directRun)) {
         const line = file.getLineAndCharacterOfPosition(arg.getStart(file)).line + 1;
         found.push(
           `${path.relative(backend, file.fileName)}:${line} ${sql.trim().replace(/\s+/g, " ")}`
@@ -291,6 +286,9 @@ it("checks assembled statements and distinguishes assignment targets from reads"
     'let sql = head + "title = ?"; sql += ", setup_status = ?";',
     "db.exec(sql); // reject",
     'db.query("DELETE FROM " + table); // reject',
+    'db.run("/* archived */ UPDATE workspaces SET state = 1"); // reject',
+    'db.run("-- note\\nDELETE FROM workspaces"); // reject',
+    'db.run("/* title only */ UPDATE workspaces SET title = state");',
     'db.run("DELETE FROM " + table); // reject',
     'db["prepare"](head + "setup_status = ?"); // reject',
     'db.exec("UPDATE[workspaces] SET title = state");',
@@ -327,12 +325,17 @@ function forbiddenImports(source: string, mirror = false): string[] {
     const spec = specifier && ts.isStringLiteralLike(specifier) ? specifier.text : "<dynamic>";
     const only =
       ts.isImportDeclaration(node) && !node.importClause?.name && node.importClause?.namedBindings;
-    const normalized = path.posix.normalize(spec);
     const allowed = mirror
       ? ["node:fs", "node:os", "node:path"].includes(spec) ||
         (spec === "@shared/enums" && ts.isImportDeclaration(node) && node.importClause?.isTypeOnly)
-      : /^(?:@shared|\.\.\/(?:lib|db))(?:\/|$)/.test(normalized) &&
-        !/\/agent\/|\.service(?:\.|$)/.test(normalized);
+      : [
+          "../db",
+          "../lib/database",
+          "../lib/errors",
+          "@shared/enums",
+          "@shared/lib/uuid",
+          "@shared/types/workspace",
+        ].includes(spec);
     if (allowed) return;
     const binding =
       spec === "./query-engine"
@@ -379,6 +382,7 @@ it("keeps the lifecycle owner below the services that use it", () => {
   expect(
     forbiddenImports(`
     import type { Stage } from "./workspace-init.service";
+    import {helper} from "../lib/reexported-service";
     const agent = import("./agent/cloud/driver");
     export { start } from "../lib/../services/project-environment.service";
     const hidden = require(dynamic);
@@ -388,6 +392,7 @@ it("keeps the lifecycle owner below the services that use it", () => {
   `)
   ).toEqual([
     "./workspace-init.service",
+    "../lib/reexported-service",
     "./agent/cloud/driver",
     "../lib/../services/project-environment.service",
     "<dynamic>",
