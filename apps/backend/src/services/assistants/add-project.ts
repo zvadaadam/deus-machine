@@ -120,13 +120,7 @@ export function addProjectTool(host: DeusHost, report: (error: unknown) => void)
     }
     const origin = inspected.git_origin_url;
     if (!origin || repositoryKey(origin) !== address.key) {
-      // Never echo credentials or a private local path from an existing remote.
-      const parsed = origin && parseCloneAddress(origin);
-      const why = !origin
-        ? "git reported no origin"
-        : parsed && parsed.ok
-          ? `its origin is ${quoted(parsed.address.url)}`
-          : "it has a different origin";
+      const why = origin ? "it has a different origin" : "git reported no origin";
       throw new OperatorError(
         "unsupported",
         `Could not add ${quoted(address.url)} from ${quoted(folder)}: ${why}.`

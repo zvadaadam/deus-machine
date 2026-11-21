@@ -368,10 +368,7 @@ describe("what is already here", () => {
 
   it.each([
     ["not a git repository", (folder: string) => fs.mkdirSync(folder, { recursive: true })],
-    [
-      'origin is "https://github.com/other/widget"',
-      (folder: string) => gitFolder(folder, "https://github.com/other/widget"),
-    ],
+    ["different origin", (folder: string) => gitFolder(folder, "https://github.com/other/widget")],
     ["no origin", (folder: string) => gitFolder(folder)],
     [
       "inside another repository",
@@ -442,19 +439,14 @@ describe("what is already here", () => {
 });
 
 describe("the same folder added meanwhile (H18)", () => {
-  it("by the person while the tool clones: the tool returns that project", async () => {
+  it("by the person while the tool clones: the start hint names their registered project", async () => {
     // The app's add answers 409 with the project the folder already is (another add won).
     state.ops.addRepo = ({ root_path }) => {
-      insertProject("widget", root_path as string, "https://github.com/acme/widget");
-      throw new ConflictError("Repository already exists", {
-        id: "seed-widget",
-        name: "widget",
-        root_path,
-      });
+      insertProject("Widget on disk", root_path as string, "https://github.com/acme/widget");
+      return state.run({ name: "addRepo", kind: "write" }, { root_path });
     };
     const said = await addProject("acme/widget");
-    expect(said).toContain('"widget"');
-    expect(said).not.toContain("refused");
+    expect(said).toContain('start_session(project: "Widget on disk"');
   });
 });
 
@@ -488,25 +480,19 @@ describe("a clone", () => {
   });
 
   it("checks a fresh clone's origin before adding it", async () => {
-    await expect(addProject("acme/wrong-origin")).rejects.toThrow(
-      'origin is "https://github.com/elsewhere/widget"'
-    );
+    await expect(addProject("acme/wrong-origin")).rejects.toThrow("different origin");
     expect(projects()).toEqual([]);
   });
 
   it("refuses an add that returned a different folder", async () => {
-    state.ops.addRepo = () => ({ id: "wrong", name: "", root_path: "" });
-    await expect(addProject("acme/widget")).rejects.toThrow(/folder/i);
-  });
-
-  it("names a project by its registration, including when another caller registered it", async () => {
-    state.ops.addRepo = () => {
-      throw new ConflictError("Already registered", {
-        name: "Widget on disk",
-        root_path: fs.realpathSync(path.join(developer, "widget")),
-      });
-    };
-    expect(await addProject("acme/widget")).toContain('start_session(project: "Widget on disk"');
+    state.ops.addRepo = () => ({
+      id: "wrong",
+      name: "Widget",
+      root_path: path.join(developer, "other"),
+    });
+    await expect(addProject("acme/widget")).rejects.toThrow(
+      "did not register the inspected folder"
+    );
   });
 
   it("refuses a legacy blank name even when the registered folder matches", async () => {
@@ -519,11 +505,15 @@ describe("a clone", () => {
     );
   });
 
-  it("keeps credentials from an existing folder's origin out of the refusal", async () => {
-    gitFolder(path.join(developer, "widget"), "https://user:TOKEN@github.com/other/widget");
+  it.each([
+    ["internal-path/private-repo", /internal-path|private-repo/],
+    ["https://user:TOKEN@github.com/other/widget", /TOKEN|other\/widget/],
+  ] as const)("keeps the different origin %s out of the refusal", async (origin, privateText) => {
+    gitFolder(path.join(developer, "widget"), origin);
     const result = addProject("acme/widget");
-    await expect(result).rejects.toThrow(/origin/);
-    await expect(result).rejects.not.toThrow(/TOKEN/);
+    await expect(result).rejects.toThrow("different origin");
+    await expect(result).rejects.not.toThrow(privateText);
+    expect(projects()).toEqual([]);
   });
 
   it("that fails answers with git's words quoted, and adds nothing", async () => {
