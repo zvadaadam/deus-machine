@@ -717,7 +717,7 @@ exec "$REAL_GIT" "$@"
   it("archive at the first-chat step ignores a late failure and a delayed ready", async () => {
     const ready = lifecycle.finishLocalStart;
     let lateReady!: () => void;
-    let archived!: Promise<void>;
+    let archived!: ReturnType<typeof archiveWorkspace>;
     const gate = vi.spyOn(lifecycle, "finishLocalStart").mockImplementationOnce((...args) => {
       expect(row("w").init_stage).toBe("session");
       lateReady = () => ready(...args);
