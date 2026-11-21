@@ -398,12 +398,10 @@ it.each(["running", "provisioning", "resuming", "paused", "stopped", "error"])(
         () => false
       );
       expect.soft(restored).toBe(comingUp);
-      expect
-        .soft(row(workspaceId))
-        .toMatchObject({
-          state: comingUp ? (status === "provisioning" ? "initializing" : "ready") : "archived",
-          current_session_id: expect.any(String),
-        });
+      expect.soft(row(workspaceId)).toMatchObject({
+        state: comingUp ? (status === "provisioning" ? "initializing" : "ready") : "archived",
+        current_session_id: expect.any(String),
+      });
       if (!comingUp && !restored) {
         mock.resume.mockImplementationOnce(async () => report(workspaceId, "running"));
         await unarchiveWorkspace(workspaceId);
