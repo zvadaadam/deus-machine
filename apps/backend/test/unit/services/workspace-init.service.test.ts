@@ -169,6 +169,45 @@ describe("local project environment journey", () => {
     expect(statusFile()).toBe("failed\n");
     expect(fs.existsSync(path.join(directory, "unexpected"))).toBe(false);
   });
+  it.each(["success", "failure"])(
+    "ignores a replaced setup run's late %s in the row and its file",
+    async (outcome) => {
+      const directory = await initialize();
+      mocks.cloud.mockReturnValue({ baseUrl: "https://cloud.test", apiKey: "key" });
+      const old = Promise.withResolvers<unknown>();
+      mocks.saved.mockReturnValueOnce(old.promise);
+      const first = prepareLocalEnvironment(workspaceId, directory, "https://github.com/test/app");
+      expect(mocks.saved).toHaveBeenCalledOnce();
+      await stopWorkspaceSetup(workspaceId);
+      writeProjectFile(directory, {
+        version: 1,
+        setup: "touch running; while [ ! -f finish ]; do sleep 0.05; done",
+      });
+      const replacement = prepareLocalEnvironment(workspaceId, directory);
+      try {
+        await vi.waitFor(() => expect(fs.existsSync(path.join(directory, "running"))).toBe(true));
+        const before = row();
+        const mirror = vi.spyOn(fs, "renameSync");
+        try {
+          if (outcome === "failure") old.reject(new Error("late"));
+          else old.resolve({ configured: true, project: { version: 1, setup: "touch stale" } });
+          await first;
+          expect(row()).toEqual(before);
+          expect(statusFile()).toBe("running\n");
+          expect(mirror).not.toHaveBeenCalled();
+          expect(fs.existsSync(path.join(directory, "stale"))).toBe(false);
+        } finally {
+          mirror.mockRestore();
+        }
+      } finally {
+        fs.writeFileSync(path.join(directory, "finish"), "");
+        await replacement;
+      }
+      expect(row().setup_status).toBe("completed");
+      expect(statusFile()).toBe("completed\n");
+    }
+  );
+
   it("reports invalid files, allows repair and an explicit retry, and never falls back on an error", async () => {
     fs.mkdirSync(path.join(root, ".deus"));
     fs.writeFileSync(path.join(root, ".deus/environment.json"), "broken");

@@ -55,22 +55,62 @@ export function insertLocalWorkspace(
   }
 }
 
-export function advanceLocalStage(workspaceId: string, stage: Stage): void {
+type Cleanup = () => Promise<void>;
+const attempts = new Map<string, { controller: AbortController; settle: Cleanup }>();
+
+/** A failed checkout hands its cleanup to the queue. Archive can abort and settle
+ * the same work from inside that queue without waiting on a task queued behind it. */
+export async function runLocalAttempt(
+  workspaceId: string,
+  checkout: (signal: AbortSignal) => Promise<Cleanup | void>
+): Promise<void> {
+  if (attempts.has(workspaceId)) return;
+  const controller = new AbortController();
+  const stopped = Promise.withResolvers<Cleanup | void>();
+  let settling: Promise<void> | undefined;
+  const settle = () => (settling ??= stopped.promise.then((cleanup) => cleanup?.()));
+  attempts.set(workspaceId, { controller, settle });
   try {
-    getDatabase()
-      .prepare("UPDATE workspaces SET init_stage = ? WHERE id = ?")
+    const cleanup = await checkout(controller.signal);
+    stopped.resolve(cleanup);
+    if (cleanup) {
+      if (controller.signal.aborted) await settle();
+      else await changeWorkspaceState(workspaceId, settle);
+    }
+  } finally {
+    stopped.resolve(); // Also release an archive if checkout threw before returning its cleanup.
+    if (attempts.get(workspaceId)?.controller === controller) attempts.delete(workspaceId);
+  }
+}
+
+function ownsAttempt(id: string, token: AbortSignal): boolean {
+  return attempts.get(id)?.controller.signal === token && !token.aborted;
+}
+
+export function advanceLocalStage(workspaceId: string, stage: Stage, token: AbortSignal): void {
+  if (!ownsAttempt(workspaceId, token)) return;
+  try {
+    const update = getDatabase()
+      .prepare("UPDATE workspaces SET init_stage = ? WHERE id = ? AND state = 'initializing'")
       .run(stage, workspaceId);
+    if (!update.changes) return;
   } catch (err) {
     // The stage is progress, not state: a locked database must not stop the work.
     console.warn(`[WORKSPACE] Could not record stage "${stage}" for ${workspaceId}:`, err);
+    return;
   }
   invalidate(["workspaces"]);
 }
 
 /** The next stage (worktree), or a start failure, publishes the recorded fetch outcome. */
-export function recordFetchOutcome(workspaceId: string, issue: InitFetchIssue | null): void {
+export function recordFetchOutcome(
+  workspaceId: string,
+  issue: InitFetchIssue | null,
+  token: AbortSignal
+): void {
+  if (!ownsAttempt(workspaceId, token)) return;
   getDatabase()
-    .prepare("UPDATE workspaces SET init_fetch_issue = ? WHERE id = ?")
+    .prepare("UPDATE workspaces SET init_fetch_issue = ? WHERE id = ? AND state = 'initializing'")
     .run(issue, workspaceId);
 }
 
@@ -79,7 +119,12 @@ export function recordFetchOutcome(workspaceId: string, issue: InitFetchIssue | 
  * started it; only while the workspace is still starting, in the same
  * transaction. Setup is marked running before a ready observer can send.
  */
-export function finishLocalStart(workspaceId: string, beforePublish: () => void): void {
+export function finishLocalStart(
+  workspaceId: string,
+  beforePublish: () => void,
+  token: AbortSignal
+): void {
+  if (!ownsAttempt(workspaceId, token)) return;
   const db = getDatabase();
   const opened = db.transaction(() => {
     const row = db
@@ -99,26 +144,46 @@ export function finishLocalStart(workspaceId: string, beforePublish: () => void)
     ).run(sessionId, sessionId, workspaceId);
     return true;
   })();
+  if (!opened) return;
+  attempts.delete(workspaceId); // The checkout now belongs to the chat.
   try {
-    if (opened) beforePublish();
+    beforePublish();
   } finally {
     invalidate(["workspaces", "sessions"]);
   }
 }
 
+type StartFailure = { message: string; detail: string | null };
 export function failStart(
   workspaceId: string,
   stage: string,
-  failure: { message: string; detail: string | null }
+  failure: StartFailure,
+  token: AbortSignal
+): boolean {
+  return ownsAttempt(workspaceId, token) && writeStartFailure(workspaceId, stage, failure);
+}
+
+/** A previous process has no live token. Recovery never takes a start still owned by this one. */
+export function failInterruptedStart(
+  workspaceId: string,
+  stage: string,
+  failure: StartFailure
 ): void {
-  getDatabase()
+  if (!attempts.has(workspaceId)) writeStartFailure(workspaceId, stage, failure);
+}
+
+function writeStartFailure(workspaceId: string, stage: string, failure: StartFailure): boolean {
+  const update = getDatabase()
     .prepare(
       `UPDATE workspaces
        SET state = 'error', init_stage = ?, error_message = ?, error_detail = ?
-       WHERE id = ?`
+       WHERE id = ? AND state = 'initializing'`
     )
     .run(stage, failure.message, failure.detail, workspaceId);
+  if (!update.changes) return false;
+  attempts.delete(workspaceId);
   invalidate(["workspaces"]);
+  return true;
 }
 
 interface StartRow {
@@ -150,6 +215,9 @@ function hasLocalStartInputs(
   return !!(row?.root_path && row.slug && row.git_branch);
 }
 
+const FAILED_TO_START = `state = 'error' AND current_session_id IS NULL AND provider_workspace_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM sessions WHERE workspace_id = workspaces.id)`;
+
 export function claimLocalRetry(workspaceId: string) {
   const db = getDatabase();
   const row = db.prepare(`${START_ROW} WHERE w.id = ?`).get(workspaceId) as StartRow | undefined;
@@ -160,7 +228,7 @@ export function claimLocalRetry(workspaceId: string) {
       `UPDATE workspaces
        SET state = 'initializing', init_stage = NULL,
            error_message = NULL, error_detail = NULL, init_fetch_issue = NULL
-       WHERE id = ? AND state = 'error' AND kind = 'worktree'`
+       WHERE id = ? AND kind = 'worktree' AND ${FAILED_TO_START}`
     )
     .run(workspaceId);
   if (claimed.changes === 0) throw new ConflictError("This workspace is not waiting for a retry.");
@@ -182,13 +250,10 @@ export function deleteFailedWorkspace(workspaceId: string): void {
     throw new ConflictError("Only a workspace that failed to start can be deleted.");
   if (row.provider_workspace_id)
     throw new ConflictError("This workspace has a cloud computer. Archive it instead.");
-  const used = db
-    .prepare("SELECT 1 FROM sessions WHERE workspace_id = ? AND message_count > 0 LIMIT 1")
-    .get(workspaceId);
-  if (used) throw new ConflictError("This workspace has chats. Archive it instead.");
-  // Its sessions go with it (ON DELETE CASCADE). The failed attempt already
-  // removed its folder and branch.
-  db.prepare("DELETE FROM workspaces WHERE id = ? AND state = 'error'").run(workspaceId);
+  const deleted = db
+    .prepare(`DELETE FROM workspaces WHERE id = ? AND ${FAILED_TO_START}`)
+    .run(workspaceId);
+  if (!deleted.changes) throw new ConflictError("This workspace has chats. Archive it instead.");
   invalidate(["workspaces", "sessions"]);
 }
 
@@ -203,14 +268,27 @@ export function interruptedStarts() {
     .prepare(`${START_ROW} WHERE w.state = 'initializing'`)
     .all() as StartRow[];
   // The platform continues provisioning a cloud workspace which already has a chat.
-  return rows.filter((row) => row.kind !== "cloud" || !row.current_session_id);
+  return rows.filter(
+    (row) => !attempts.has(row.id) && (row.kind !== "cloud" || !row.current_session_id)
+  );
+}
+
+type SetupFailure = { message: string; detail?: string | null; exitCode?: number | null };
+
+export function finishSetupRun(
+  workspaceId: string,
+  status: "completed" | "failed" | "none",
+  current: () => boolean,
+  failure?: SetupFailure
+): void {
+  if (current()) setSetupStatus(workspaceId, status, failure);
 }
 
 /** The row is the app's status; the file lets a turn already running check it with cat. */
 export function setSetupStatus(
   workspaceId: string,
   status: SetupStatus,
-  failure?: { message: string; detail?: string | null; exitCode?: number | null }
+  failure?: SetupFailure
 ): void {
   const update = getDatabase()
     .prepare(
@@ -254,7 +332,7 @@ export function claimCloudRetry(db: Database, workspaceId: string): void {
       `UPDATE workspaces
        SET state = 'initializing', init_stage = 'creating cloud workspace',
            error_message = NULL, error_detail = NULL
-       WHERE id = ? AND state = 'error' AND provider_workspace_id IS NULL`
+       WHERE id = ? AND ${FAILED_TO_START}`
     )
     .run(workspaceId);
   if (claimed.changes === 0) throw new ConflictError("This workspace is not waiting for a retry.");
@@ -373,10 +451,13 @@ export function changeWorkspaceState<T>(workspaceId: string, change: () => Promi
   return next;
 }
 
-/** The API and assistants' host publish after archiveWorkspace finishes the pause, write, status update and setup stop. */
-export function markArchived(db: Database, workspaceId: string, check?: () => void): void {
+/** The API and assistants' host publish after archiveWorkspace finishes the pause, write, workflow update, setup stop and checkout cleanup. */
+export function markArchived(db: Database, workspaceId: string, check?: () => void) {
   check?.();
   db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
+  const attempt = attempts.get(workspaceId);
+  attempt?.controller.abort();
+  return attempt?.settle();
 }
 
 /** The updateWorkspace API publishes after unarchiveWorkspace finishes wake and the workflow update. */

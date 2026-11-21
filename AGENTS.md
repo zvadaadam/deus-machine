@@ -241,7 +241,10 @@ It starts the local job in `workspace-checkout.ts`. The lifecycle owner
 and writes `state`,
 `init_stage`, `setup_status`, `init_fetch_issue`, `error_message` and `error_detail`.
 `workspace-lifecycle-fence.test.ts` checks the owner's imports and checks backend
-SQL and the integration CLI for lifecycle writes.
+SQL and the integration CLI for lifecycle writes. Each local start has an
+in-memory attempt token. Archiving aborts that checkout and waits for its git
+processes and cleanup. Retry waits in the same queue. Retry and Delete both
+require an error row with no chat, current chat pointer or cloud computer.
 
 Creating a local workspace writes its row and returns. The rest runs in the
 background, in three stages: `fetch` (origin's latest for the branch it starts

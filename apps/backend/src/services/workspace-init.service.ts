@@ -19,7 +19,8 @@ import {
 } from "./workspace-checkout";
 import {
   claimLocalRetry,
-  failStart,
+  failInterruptedStart,
+  changeWorkspaceState,
   insertLocalWorkspace,
   interruptedStarts,
   runningSetups,
@@ -109,16 +110,18 @@ export async function createLocalWorkspace(
   return { workspaceId, firstSessionId };
 }
 
-export function retryWorkspaceInit(workspaceId: string): void {
-  const row = claimLocalRetry(workspaceId);
-  void initializeWorkspace({
-    workspaceId,
-    repoRootPath: row.root_path,
-    workspacePath: computeWorkspacePath(row),
-    branchName: row.git_branch,
-    sourceBranch:
-      row.git_source_branch ?? row.git_target_branch ?? row.git_default_branch ?? "main",
-    repoOriginUrl: row.git_origin_url,
+export function retryWorkspaceInit(workspaceId: string) {
+  return changeWorkspaceState(workspaceId, async () => {
+    const row = claimLocalRetry(workspaceId);
+    void initializeWorkspace({
+      workspaceId,
+      repoRootPath: row.root_path,
+      workspacePath: computeWorkspacePath(row),
+      branchName: row.git_branch,
+      sourceBranch:
+        row.git_source_branch ?? row.git_target_branch ?? row.git_default_branch ?? "main",
+      repoOriginUrl: row.git_origin_url,
+    });
   });
 }
 
@@ -138,18 +141,21 @@ export function failInterruptedWorkspaces(): number {
   let failed = 0;
   for (const row of interruptedStarts()) {
     const cloud = row.kind === "cloud";
-    failStart(row.id, row.init_stage ?? "fetch", {
+    if (!cloud && row.root_path && row.git_branch && OWNS_WORKTREE.has(row.init_stage ?? "")) {
+      const { root_path, git_branch } = row;
+      void changeWorkspaceState(row.id, () =>
+        removeWorktree(root_path, computeWorkspacePath(row), git_branch)
+      ).catch((err) =>
+        console.warn(`[WORKSPACE] Could not remove what ${row.id} left behind:`, err)
+      );
+    }
+    failInterruptedStart(row.id, row.init_stage ?? "fetch", {
       message: cloud
         ? "Deus closed before the cloud computer was ready."
         : "Deus closed before this workspace was ready.",
       detail: null,
     });
     failed++;
-    if (!cloud && row.root_path && row.git_branch && OWNS_WORKTREE.has(row.init_stage ?? "")) {
-      void removeWorktree(row.root_path, computeWorkspacePath(row), row.git_branch).catch((err) =>
-        console.warn(`[WORKSPACE] Could not remove what ${row.id} left behind:`, err)
-      );
-    }
   }
   return failed;
 }

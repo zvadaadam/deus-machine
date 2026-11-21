@@ -32,10 +32,14 @@ async function performArchive(workspaceId: string, check?: () => void): Promise<
     });
   }
 
-  markArchived(db, workspaceId, check);
-  const stopped = stopWorkspaceSetup(workspaceId);
-  autoProgressStatus(workspaceId, "done", { force: true });
-  await stopped;
+  const checkout = markArchived(db, workspaceId, check);
+  try {
+    const stopped = stopWorkspaceSetup(workspaceId);
+    autoProgressStatus(workspaceId, "done", { force: true });
+    await stopped;
+  } finally {
+    await checkout;
+  }
 }
 
 export function archiveWorkspace(workspaceId: string, check?: () => void): Promise<void> {

@@ -84,6 +84,8 @@ export default [
     const db = getDatabase();
     const workspace = getWorkspaceRaw(db, workspaceId);
     if (!workspace) throw new NotFoundError("Workspace not found");
+    if (workspace.state === "archived")
+      throw new ConflictError("This workspace is archived. Restore it first to open a chat.");
     // A workspace's first chat is made by its start: a local one's once its
     // checkout exists, a cloud one's once its computer does. One made before
     // that would hide a failed start behind an empty chat, and take Retry and

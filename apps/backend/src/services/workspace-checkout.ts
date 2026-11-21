@@ -1,26 +1,6 @@
-/**
- * A local workspace from "create" to "ready", and back from a failure.
- *
- * Starting runs in the background, in order:
- *
- *   fetch     origin's latest for the source branch. Never fatal: without it
- *             the workspace starts from the copy already on this computer, and
- *             the row says why (`init_fetch_issue`).
- *   worktree  `git worktree add` on a new branch. Fatal.
- *   session   the first chat, and `state = 'ready'`. Fatal.
- * The project's setup runs alongside the first turn and reports through setup_status.
- *
- * Each stage writes its name to `init_stage` and pushes the workspace list, so
- * the desktop, the web app and a phone all follow the same progress.
- *
- * A fatal failure removes what the attempt made and leaves the row in `error`
- * with a plain reason (`error_message`) and the tool's own words
- * (`error_detail`). From there it is started again in place
- * (`retryWorkspaceInit`: same row, so whatever waits on its id still does) or
- * deleted (`deleteFailedWorkspace`). A backend that stops mid-start leaves a
- * row nothing is working on; `failInterruptedWorkspaces` turns those into the
- * same failure at the next start.
- */
+/** Runs a local checkout from fetch through its first chat. A fetch failure is a
+ * warning. A later failure hands the attempt's worktree and branch to the
+ * workspace queue for cleanup before another start can claim the same name. */
 import fs from "fs";
 import path from "path";
 import type { InitFetchIssue } from "@shared/enums";
@@ -32,6 +12,7 @@ import {
   failStart,
   finishLocalStart,
   recordFetchOutcome,
+  runLocalAttempt,
   type Stage,
 } from "./workspace-lifecycle";
 import { prepareLocalEnvironment } from "./project-environment.service";
@@ -67,8 +48,8 @@ const succeeds = (command: Promise<unknown>): Promise<boolean> =>
 
 // ─── Names ──────────────────────────────────────────────────────
 
-async function branchPrefix(repoRootPath: string): Promise<string> {
-  const user = await runGit(["config", "user.name"], { cwd: repoRootPath }).catch(() => "");
+async function branchPrefix(repoRootPath: string, signal?: AbortSignal): Promise<string> {
+  const user = await runGit(["config", "user.name"], { cwd: repoRootPath, signal }).catch(() => "");
   return (
     user
       .trim()
@@ -82,13 +63,14 @@ async function branchPrefix(repoRootPath: string): Promise<string> {
  * The last two outlive a reset database, and `git worktree add` refuses both.
  */
 export async function pickWorkspaceName(
-  repoRootPath: string
+  repoRootPath: string,
+  signal?: AbortSignal
 ): Promise<{ slug: string; branchName: string }> {
-  const prefix = await branchPrefix(repoRootPath);
+  const prefix = await branchPrefix(repoRootPath, signal);
   const listed = await runGit(
     // Not `:short`: a branch a tag shares its name with is shortened to `heads/<name>`.
     ["for-each-ref", "--format=%(refname:lstrip=2)", `refs/heads/${prefix}/`],
-    { cwd: repoRootPath }
+    { cwd: repoRootPath, signal }
   ).catch(() => "");
   const branches = new Set(listed.split("\n"));
   const slug = generateUniqueName(
@@ -105,16 +87,18 @@ export async function pickWorkspaceName(
  * taken (a cleanup that failed, something made by hand) is not reused: the
  * workspace takes a new one.
  */
-async function claimName(ctx: InitContext): Promise<InitContext> {
+async function claimName(ctx: InitContext, signal: AbortSignal): Promise<InitContext> {
   const taken =
     fs.existsSync(ctx.workspacePath) ||
     (await succeeds(
       runGit(["show-ref", "--verify", "--quiet", `refs/heads/${ctx.branchName}`], {
         cwd: ctx.repoRootPath,
+        signal,
       })
     ));
   if (!taken) return ctx;
-  const { slug, branchName } = await pickWorkspaceName(ctx.repoRootPath);
+  const { slug, branchName } = await pickWorkspaceName(ctx.repoRootPath, signal);
+  signal.throwIfAborted();
   getDatabase()
     .prepare("UPDATE workspaces SET slug = ?, git_branch = ? WHERE id = ?")
     .run(slug, branchName, ctx.workspaceId);
@@ -154,11 +138,12 @@ export function fetchIssue(error: unknown): InitFetchIssue | null {
  * whatever is here, and says so.
  */
 async function refreshSource(
-  ctx: InitContext
+  ctx: InitContext,
+  signal: AbortSignal
 ): Promise<{ base: string; issue: InitFetchIssue | null }> {
   const cwd = ctx.repoRootPath;
   let issue: InitFetchIssue | null = null;
-  if (await succeeds(runGit(["remote", "get-url", "origin"], { cwd }))) {
+  if (await succeeds(runGit(["remote", "get-url", "origin"], { cwd, signal }))) {
     try {
       // Into origin's ref by name: a clone that tracks only some branches (a
       // `--single-branch` or shallow one) would not update it otherwise.
@@ -166,8 +151,10 @@ async function refreshSource(
       await runGit(["fetch", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`], {
         cwd,
         timeoutMs: FETCH_TIMEOUT_MS,
+        signal,
       });
     } catch (err) {
+      signal.throwIfAborted();
       issue = fetchIssue(err);
       console.warn(
         `[WORKSPACE] Could not fetch origin/${ctx.sourceBranch} (${issue ?? "not on origin"}): ${err instanceof Error ? err.message : err}`
@@ -175,7 +162,10 @@ async function refreshSource(
     }
   }
   const onOrigin = await succeeds(
-    runGit(["show-ref", "--verify", "--quiet", `refs/remotes/origin/${ctx.sourceBranch}`], { cwd })
+    runGit(["show-ref", "--verify", "--quiet", `refs/remotes/origin/${ctx.sourceBranch}`], {
+      cwd,
+      signal,
+    })
   );
   return { base: onOrigin ? `origin/${ctx.sourceBranch}` : ctx.sourceBranch, issue };
 }
@@ -189,19 +179,20 @@ async function refreshSource(
  */
 export async function excludeWorkspacesFromRepo(
   repoRootPath: string,
-  workspacePath: string
+  workspacePath: string,
+  signal?: AbortSignal
 ): Promise<void> {
   const cwd = repoRootPath;
   // Already ignored: .gitignore, a global exclude or an earlier workspace.
   if (
     await succeeds(
-      runGit(["check-ignore", "-q", path.relative(repoRootPath, workspacePath)], { cwd })
+      runGit(["check-ignore", "-q", path.relative(repoRootPath, workspacePath)], { cwd, signal })
     )
   )
     return;
   const excludeFile = path.resolve(
     repoRootPath,
-    (await runGit(["rev-parse", "--git-path", "info/exclude"], { cwd })).trim()
+    (await runGit(["rev-parse", "--git-path", "info/exclude"], { cwd, signal })).trim()
   );
   fs.mkdirSync(path.dirname(excludeFile), { recursive: true });
   fs.appendFileSync(
@@ -224,14 +215,16 @@ function copyLocalEnvFiles(ctx: InitContext): void {
   }
 }
 
-async function createWorktree(ctx: InitContext, base: string): Promise<void> {
+async function createWorktree(ctx: InitContext, base: string, signal: AbortSignal): Promise<void> {
   await runGit(["worktree", "add", "-b", ctx.branchName, ctx.workspacePath, base], {
     cwd: ctx.repoRootPath,
     timeoutMs: WORKTREE_TIMEOUT_MS,
+    signal,
   });
-  await excludeWorkspacesFromRepo(ctx.repoRootPath, ctx.workspacePath).catch((err) => {
+  await excludeWorkspacesFromRepo(ctx.repoRootPath, ctx.workspacePath, signal).catch((err) => {
     console.warn("[WORKSPACE] Could not hide .deus workspaces from git status:", err);
   });
+  signal.throwIfAborted();
   copyLocalEnvFiles(ctx);
 }
 
@@ -303,50 +296,55 @@ function describeFailure(stage: Stage, error: unknown, ctx: InitContext): Failur
   return { message: "Git could not make this workspace's copy of the project.", detail };
 }
 
-/** Workspaces this process is starting right now. */
-const starting = new Set<string>();
+export function initializeWorkspace(ctx: InitContext): Promise<void> {
+  return runLocalAttempt(ctx.workspaceId, (signal) => checkout(ctx, signal));
+}
 
-export async function initializeWorkspace(initial: InitContext): Promise<void> {
-  if (starting.has(initial.workspaceId)) return;
-  starting.add(initial.workspaceId);
-  let ctx = initial;
+async function checkout(ctx: InitContext, signal: AbortSignal) {
   let stage: Stage = "fetch";
   try {
-    advanceLocalStage(ctx.workspaceId, stage);
-    const source = await refreshSource(ctx);
-    recordFetchOutcome(ctx.workspaceId, source.issue);
-    ctx = await claimName(ctx);
+    advanceLocalStage(ctx.workspaceId, stage, signal);
+    const source = await refreshSource(ctx, signal);
+    signal.throwIfAborted();
+    recordFetchOutcome(ctx.workspaceId, source.issue, signal);
+    ctx = await claimName(ctx, signal);
+    signal.throwIfAborted();
 
     stage = "worktree";
-    advanceLocalStage(ctx.workspaceId, stage);
-    await createWorktree(ctx, source.base);
+    advanceLocalStage(ctx.workspaceId, stage, signal);
+    await createWorktree(ctx, source.base, signal);
 
     if (processGroupsStopped()) return;
+    signal.throwIfAborted();
     stage = "session";
-    advanceLocalStage(ctx.workspaceId, stage);
-    finishLocalStart(ctx.workspaceId, () => {
-      void prepareLocalEnvironment(ctx.workspaceId, ctx.workspacePath, ctx.repoOriginUrl).catch(
-        (err) => console.warn(`[WORKSPACE] Setup for ${ctx.workspaceId} failed:`, err)
-      );
-    });
-  } catch (err) {
-    // Deus is closing and stopped what this was running: the row stays as it
-    // is, and the next start fails it as interrupted (failInterruptedWorkspaces).
-    if (processGroupsStopped()) return;
-    console.error(
-      `[WORKSPACE] Stage "${stage}" failed for ${ctx.workspaceId}: ${err instanceof Error ? err.message : err}`
+    advanceLocalStage(ctx.workspaceId, stage, signal);
+    finishLocalStart(
+      ctx.workspaceId,
+      () => {
+        void prepareLocalEnvironment(ctx.workspaceId, ctx.workspacePath, ctx.repoOriginUrl).catch(
+          (err) => console.warn(`[WORKSPACE] Setup for ${ctx.workspaceId} failed:`, err)
+        );
+      },
+      signal
     );
-    if (OWNS_WORKTREE.has(stage)) {
-      await removeWorktree(ctx.repoRootPath, ctx.workspacePath, ctx.branchName).catch((e) =>
-        console.warn(`[WORKSPACE] Could not remove what ${ctx.workspaceId} left behind:`, e)
-      );
-    }
-    try {
-      failStart(ctx.workspaceId, stage, describeFailure(stage, err, ctx));
-    } catch (e) {
-      console.error(`[WORKSPACE] Could not record the failure of ${ctx.workspaceId}:`, e);
-    }
-  } finally {
-    starting.delete(ctx.workspaceId);
+    signal.throwIfAborted();
+  } catch (err) {
+    // Shutdown leaves the durable stage for startup recovery.
+    if (processGroupsStopped()) return;
+    return async () => {
+      if (!signal.aborted) {
+        try {
+          if (!failStart(ctx.workspaceId, stage, describeFailure(stage, err, ctx), signal)) return;
+          console.error(`[WORKSPACE] Stage "${stage}" failed for ${ctx.workspaceId}:`, err);
+        } catch (error) {
+          console.error(`[WORKSPACE] Could not record the failure of ${ctx.workspaceId}:`, error);
+        }
+      }
+      if (OWNS_WORKTREE.has(stage)) {
+        await removeWorktree(ctx.repoRootPath, ctx.workspacePath, ctx.branchName).catch((error) =>
+          console.warn(`[WORKSPACE] Could not remove what ${ctx.workspaceId} left behind:`, error)
+        );
+      }
+    };
   }
 }

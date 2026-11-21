@@ -176,6 +176,18 @@ describeWithDb("createSession", () => {
     }
   );
 
+  it.each([undefined, "previous"])(
+    "refuses a new chat in an archived workspace with pointer %s",
+    async (chat) => {
+      workspace("w-archived", "worktree", "archived", chat);
+      await expect(run(api.createSession, { workspaceId: "w-archived" })).rejects.toMatchObject({
+        statusCode: 409,
+        message: "This workspace is archived. Restore it first to open a chat.",
+      });
+      expect(chats("w-archived")).toBe(chat ? 1 : 0);
+    }
+  );
+
   it("refuses one in a cloud workspace that failed before its computer existed", async () => {
     workspace("w-cloud", "cloud", "error");
     await expect(run(api.createSession, { workspaceId: "w-cloud" })).rejects.toMatchObject({

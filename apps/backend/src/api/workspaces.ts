@@ -121,7 +121,7 @@ export default [
     const workspace = getWorkspaceRaw(getDatabase(), workspaceId);
     if (!workspace) throw new NotFoundError("Workspace not found");
     if (workspace.kind === "cloud") retryCloudWorkspace(workspaceId);
-    else retryWorkspaceInit(workspaceId);
+    else return retryWorkspaceInit(workspaceId);
   }),
   // Only a workspace that never started: see deleteFailedWorkspace.
   handle(api.deleteWorkspace, ({ workspaceId }) => deleteFailedWorkspace(workspaceId)),

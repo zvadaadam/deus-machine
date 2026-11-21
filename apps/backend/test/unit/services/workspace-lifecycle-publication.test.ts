@@ -7,6 +7,7 @@ import {
   finishLocalStart,
   insertLocalWorkspace,
   markArchived,
+  runLocalAttempt,
 } from "../../../src/services/workspace-lifecycle";
 
 let db: Database.Database;
@@ -48,7 +49,8 @@ it.each([
     operation: "opening the first chat",
     initial: true,
     expected: { state: "ready", current_session_id: "first" },
-    write: (step: () => void) => finishLocalStart("w", step),
+    write: (step: () => void) =>
+      runLocalAttempt("w", async (token) => finishLocalStart("w", step, token)),
     notification: [["workspaces", "sessions"]],
   },
   {
@@ -68,7 +70,7 @@ it.each([
   },
 ])(
   "publishes the committed row when an effect throws during $operation",
-  ({ initial, expected, write, notification }) => {
+  async ({ initial, expected, write, notification }) => {
     if (initial)
       db.exec(
         "INSERT INTO workspaces (id, repository_id, slug, first_session_id) VALUES ('w', 'r', 'work', 'first')"
@@ -80,7 +82,7 @@ it.each([
       expect(invalidate).not.toHaveBeenCalled();
       throw error;
     });
-    expect(() => write(observed)).toThrow(error);
+    await expect(Promise.resolve().then(() => write(observed))).rejects.toThrow(error);
     expect(observed).toHaveBeenCalledOnce();
     expect(invalidate.mock.calls).toEqual([notification]);
     expect(read()).toMatchObject(expected);
