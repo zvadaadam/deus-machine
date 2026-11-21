@@ -548,18 +548,13 @@ describe("through MCP and as a chat's own tools", () => {
     }
   });
 
-  it("distinguishes an explicit admission refusal from a lost answer", async () => {
+  it("retains the unknown outcome of unclassified wire errors", async () => {
     const args = { session: "lead:1", message: "go", wait: 1 };
     state.sendRefusal = new WireRequestError(
       WIRE_ERROR_CODES.harnessNotAvailable,
       "private runtime details"
     );
-    const refused = await call(LOCAL_CALLER, "send_message", args);
-    expect(refused).toMatchObject({
-      isError: true,
-      text: expect.stringMatching(/agent.*unavailable/i),
-    });
-    expect(refused.text).not.toContain("private runtime details");
+    expect((await call(LOCAL_CALLER, "send_message", args)).text).toContain("not confirmed");
     state.sendRefusal = new WireRequestError(
       WIRE_ERROR_CODES.internalError,
       "request timed out: turn/start"

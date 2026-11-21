@@ -49,8 +49,6 @@ import {
   type TurnFact,
   type ViewTurn,
 } from "@zvada/agent-server/operator";
-import { WireRequestError } from "@zvada/agent-server/client";
-import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
 import type { AnyOp, InputOf, OutputOf } from "@shared/api/op";
 import * as sessions from "@shared/api/sessions";
 import { agentModels } from "@shared/api/settings";
@@ -231,15 +229,10 @@ function appRefusal(error: unknown): unknown {
     : new OperatorError("unsupported", `${error.message} Nothing was done.`);
 }
 
-/** An explicit admission refusal. The client also uses internalError for a lost or malformed answer. */
+/** The disconnected guard runs before the engine receives the turn. */
 function admissionRefusal(error: unknown): string | undefined {
   if (error instanceof AppError && error.statusCode === 503)
     return "The agent engine is not running on this computer. Nothing was sent or started. Restart Deus before sending the task again.";
-  if (!(error instanceof WireRequestError) || error.code === WIRE_ERROR_CODES.internalError) return;
-  if (error.code === WIRE_ERROR_CODES.harnessNotAvailable)
-    return "The requested agent is unavailable on this computer.";
-  if (error.code === WIRE_ERROR_CODES.shuttingDown) return "The agent engine is shutting down.";
-  return "The agent engine refused this turn. Check the chat in Deus.";
 }
 
 /** Run `work`, its app refusals said as refusals. */
