@@ -481,17 +481,18 @@ export function createDeusHost(): DeusHost {
       );
     } catch (error) {
       const said = appRefusal(error);
-      let why: string | undefined;
-      if (said instanceof OperatorError)
-        why = said.message.split("\n")[0]!.replace(/^refused \([a-z_]+\): /, "");
-      else if (said instanceof Refused && said.refusal.code === "archived")
-        why = "The chat was archived.";
-      undelivered(sessionId, why);
+      undelivered(
+        sessionId,
+        said instanceof OperatorError
+          ? said.message.split("\n")[0]!.replace(/^refused \([a-z_]+\): /, "")
+          : ""
+      );
+      throw said;
     }
   }
 
   /** The chat's first task was not delivered: its error says so, and why. */
-  function undelivered(sessionId: string, why?: string) {
+  function undelivered(sessionId: string, why: string) {
     getDatabase()
       .prepare(
         "UPDATE sessions SET status = 'error', error_message = ? WHERE id = ? AND message_count = 0"
@@ -528,11 +529,13 @@ export function createDeusHost(): DeusHost {
           return;
         }
         entry.unwatch();
-        entry.sending = sendFirst(held.caller, sessionId, held.input).finally(() => {
-          firsts.delete(sessionId);
-          // Told after the hold is gone, so a wait that reads again sees the outcome.
-          invalidate(["sessions"], { sessionIds: [sessionId] });
-        });
+        entry.sending = sendFirst(held.caller, sessionId, held.input)
+          .catch(() => {})
+          .finally(() => {
+            firsts.delete(sessionId);
+            // Told after the hold is gone, so a wait that reads again sees the outcome.
+            invalidate(["sessions"], { sessionIds: [sessionId] });
+          });
         invalidate(["sessions"], { sessionIds: [sessionId] });
       }
     }
@@ -792,7 +795,7 @@ export function createDeusHost(): DeusHost {
           })();
           invalidate(["workspaces", "sessions"]);
           // Made: a first task that cannot be delivered is the chat's error, not a refusal.
-          await sendFirst(caller, sessionId, input);
+          await sendFirst(caller, sessionId, input).catch(() => {});
           return entryById(sessionId)!;
         }
         mayStart(caller, input);

@@ -1143,20 +1143,6 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     expect(told).toContainEqual([["session"], ["s-second"]]);
   });
 
-  it("records the archived chat as the reason its held first task was never sent", async () => {
-    const host = createDeusHost();
-    const entry = await host.start!(LEAD as never, startInput({ turnId: "held" }));
-    state.db.exec(`CREATE TEMP TRIGGER hide_first_chat AFTER INSERT ON sessions
-       BEGIN UPDATE sessions SET is_hidden = 1 WHERE id = NEW.id; END`);
-    ready(entry);
-    expect(
-      state.db.prepare("SELECT error_message FROM sessions WHERE id = ?").get(entry.id)
-    ).toMatchObject({
-      error_message: expect.stringMatching(/could not be delivered.*archived/i),
-    });
-    expect(state.sent).toHaveLength(0);
-  });
-
   it("H15: a first task refused after the chat was made is that chat's error, not a refusal", async () => {
     const host = createDeusHost();
     state.sendRefusal = new AgentServerDisconnectedError();
