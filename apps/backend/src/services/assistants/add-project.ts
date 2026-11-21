@@ -28,7 +28,7 @@ import {
   type CloneAddress,
 } from "../../lib/clone-address";
 import { AppError, ConflictError } from "../../lib/errors";
-import type { DeusHost, Who } from "./host";
+import { refusalSentence, type DeusHost, type Who } from "./host";
 
 /** A call answers "still cloning" this long before its deadline, so the answer arrives. */
 const ANSWER_MARGIN_MS = 1000;
@@ -225,8 +225,7 @@ export function addProjectTool(host: DeusHost) {
         const { error } = outcome;
         if (flight.phase !== "cloned") throw failureFor(address, error);
         let reason: string;
-        if (error instanceof OperatorError)
-          reason = error.message.replace(/^refused \([a-z_]+\): /, "");
+        if (error instanceof OperatorError) reason = refusalSentence(error);
         else if (error instanceof AppError && error.statusCode < 500) reason = error.message;
         else throw error;
         throw new OperatorError(

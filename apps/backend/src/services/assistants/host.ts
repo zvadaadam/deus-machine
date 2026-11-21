@@ -208,6 +208,10 @@ export interface DeusHost extends OperatorHost<Caller> {
   act<O extends AnyOp>(caller: Who, op: O, input: InputOf<O>): Promise<OutputOf<O>>;
 }
 
+export function refusalSentence(error: OperatorError): string {
+  return error.message.split("\n", 1)[0]!.replace(/^refused \([a-z_]+\): /, "");
+}
+
 /**
  * The app's own refusals (4xx) in the package's words; anything else as it is,
  * for `onError`. An access refusal at a commit reads as the package's own
@@ -481,12 +485,7 @@ export function createDeusHost(): DeusHost {
       );
     } catch (error) {
       const said = appRefusal(error);
-      undelivered(
-        sessionId,
-        said instanceof OperatorError
-          ? said.message.split("\n")[0]!.replace(/^refused \([a-z_]+\): /, "")
-          : ""
-      );
+      undelivered(sessionId, said instanceof OperatorError ? refusalSentence(said) : "");
       throw said;
     }
   }
