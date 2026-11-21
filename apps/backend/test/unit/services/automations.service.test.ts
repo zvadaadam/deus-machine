@@ -88,7 +88,6 @@ import {
   validateSchedule,
 } from "../../../src/services/automations/service";
 import { summaryToRow, runSummaryToRow } from "../../../src/services/automations/platform";
-import { adoptRunRows } from "../../../src/services/workspace-lifecycle";
 import * as store from "../../../src/services/automations/store";
 import { resetCloudModelListsForTests } from "../../../src/services/agent/cloud/models";
 import { handleAutomationToolRequest } from "../../../src/services/automations/agent-rpc";
@@ -1163,7 +1162,7 @@ describeWithDb("openAutomationRun", () => {
   });
 
   it("does not backfill or revive an adopted run after the account changes", async () => {
-    const adopted = adoptRunRows({
+    const adopted = store.adoptRunRows({
       runId: "run-1",
       automationId: "auto-1",
       repositoryId: "r1",

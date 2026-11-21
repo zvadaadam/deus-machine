@@ -84,7 +84,7 @@ vi.mock("../../../src/services/agent/turns", () => ({
 // The app's own workspace creation runs; only its name lookup (git) and its
 // background start are stood in for, the lookup awaitable so a test can act
 // while a creation waits on it.
-vi.mock("../../../src/services/workspace-init.service", () => ({
+vi.mock("../../../src/services/workspace-checkout", () => ({
   pickWorkspaceName: async () => {
     await state.naming?.();
     const n = ++state.created;

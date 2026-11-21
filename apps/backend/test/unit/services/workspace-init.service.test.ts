@@ -19,7 +19,7 @@ vi.mock("../../../src/services/agent/cloud/config", async () =>
 vi.mock("../../../src/services/cloud-environment.service", () => ({
   getCloudEnvironmentInfo: mocks.saved,
 }));
-import { initializeWorkspace } from "../../../src/services/workspace-init.service";
+import { initializeWorkspace } from "../../../src/services/workspace-checkout";
 import { setupFile } from "../../../src/services/setup-status";
 import {
   readLocalProjectEnvironment,

@@ -66,7 +66,8 @@ import {
   pickerModels,
 } from "@shared/models";
 import { LOCAL_CALLER, type Caller } from "../../api/registry";
-import { archiveWorkspace, createLocalWorkspace } from "../workspace-lifecycle";
+import { archiveWorkspace } from "../workspace-archive.service";
+import { createLocalWorkspace } from "../workspace-init.service";
 import { attachParts, getMessages, getSessionRaw, hasOlderMessages } from "../../db";
 import { getDatabase } from "../../lib/database";
 import { AgentServerDisconnectedError, AppError, ChatBusyError } from "../../lib/errors";

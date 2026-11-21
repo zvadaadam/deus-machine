@@ -30,13 +30,12 @@ import {
 import { invalidate } from "../services/query-engine";
 import {
   archiveWorkspace,
-  createWorkspace,
-  deleteFailedWorkspace,
-  retryCloudWorkspace,
-  retryWorkspaceInit,
   unarchiveWorkspace,
   wakeWorkspace,
-} from "../services/workspace-lifecycle";
+} from "../services/workspace-archive.service";
+import { createWorkspace, retryWorkspaceInit } from "../services/workspace-init.service";
+import { retryCloudWorkspace } from "../services/cloud-workspace-init.service";
+import { deleteFailedWorkspace } from "../services/workspace-lifecycle";
 import { setWorkspaceStatus } from "../services/workspace-status.service";
 import { handle } from "./registry";
 

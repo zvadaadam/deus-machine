@@ -46,7 +46,7 @@ vi.mock("../../../src/lib/database", () => ({
   getDatabase: vi.fn<(...args: any[]) => any>(() => mockDb),
 }));
 
-vi.mock("../../../src/services/workspace-init.service", () => ({
+vi.mock("../../../src/services/workspace-checkout", () => ({
   initializeWorkspace: (...args: unknown[]) => mockInitializeWorkspace(...args),
   pickWorkspaceName: async () => ({ slug: "europa", branchName: "testuser/europa" }),
 }));
@@ -59,12 +59,16 @@ const cloud = vi.hoisted(() => ({ pause: vi.fn(), wake: vi.fn(), retry: vi.fn() 
 vi.mock("../../../src/services/cloud-workspace-init.service", () => ({
   pauseCloudWorkspace: cloud.pause,
   wakeCloudWorkspaceWithFeedback: cloud.wake,
+  retryCloudWorkspace: cloud.retry,
+}));
+
+vi.mock("../../../src/services/workspace-init.service", async (original) => ({
+  ...(await original<typeof import("../../../src/services/workspace-init.service")>()),
+  retryWorkspaceInit: mockRetryWorkspaceInit,
 }));
 
 vi.mock("../../../src/services/workspace-lifecycle", async (original) => ({
   ...(await original<typeof import("../../../src/services/workspace-lifecycle")>()),
-  retryWorkspaceInit: mockRetryWorkspaceInit,
-  retryCloudWorkspace: cloud.retry,
   deleteFailedWorkspace: mockDeleteFailedWorkspace,
 }));
 

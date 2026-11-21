@@ -156,6 +156,15 @@ function violations(file: ts.SourceFile, checker: ts.TypeChecker, db: Database.D
       const line = file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1;
       found.push(`${relative}:${line} only the integration CLI uses prepareWorkspaceFixture`);
     }
+    if (
+      relative !== "src/services/setup-status.ts" &&
+      ts.isIdentifier(node) &&
+      node.text === "writeSetupStatusFile"
+    ) {
+      found.push(
+        `${relative}:${file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1} the lifecycle owner writes the setup status mirror`
+      );
+    }
     if (ts.isCallExpression(node) && node.arguments[0]) {
       const callee = node.expression;
       const method = ts.isPropertyAccessExpression(callee)
@@ -286,6 +295,7 @@ it("checks assembled statements and distinguishes assignment targets from reads"
     "db.prepare(`UPDATE ${unresolvedTable} SET state = ?`); // reject",
     "db.prepare(`INSERT INTO workspaces (${unresolvedColumns}) VALUES (?)`); // reject",
     "prepareWorkspaceFixture(db); // reject",
+    "writeSetupStatusFile(id, status); // reject",
   ];
   const host = ts.createCompilerHost({});
   const ast = ts.createSourceFile(file, source.join("\n"), ts.ScriptTarget.Latest, true);
@@ -302,4 +312,81 @@ it("checks assembled statements and distinguishes assignment targets from reads"
   db.close();
   const badLines = source.flatMap((line, index) => (line.endsWith("// reject") ? [index + 1] : []));
   expect(found.map((message) => Number(message.match(/:(\d+) /)?.[1]))).toEqual(badLines);
+});
+
+// The owner can publish through invalidate and write its setup-status file
+// mirror. That helper does only file I/O. Services call the owner from above.
+function forbiddenImports(source: string, mirror = false): string[] {
+  const file = ts.createSourceFile("owner.ts", source, ts.ScriptTarget.Latest, true);
+  const found: string[] = [];
+  function check(specifier: ts.Node | undefined, node: ts.Node) {
+    const spec = specifier && ts.isStringLiteralLike(specifier) ? specifier.text : "<dynamic>";
+    const only =
+      ts.isImportDeclaration(node) && !node.importClause?.name && node.importClause?.namedBindings;
+    const normalized = path.posix.normalize(spec);
+    const allowed = mirror
+      ? ["node:fs", "node:os", "node:path"].includes(spec) ||
+        (spec === "@shared/enums" && ts.isImportDeclaration(node) && node.importClause?.isTypeOnly)
+      : /^(?:@shared|\.\.\/(?:lib|db))(?:\/|$)/.test(normalized) &&
+        !/\/agent\/|\.service(?:\.|$)/.test(normalized);
+    if (allowed) return;
+    const binding =
+      spec === "./query-engine"
+        ? "invalidate"
+        : spec === "./setup-status"
+          ? "writeSetupStatusFile"
+          : null;
+    if (
+      !mirror &&
+      binding &&
+      only &&
+      ts.isNamedImports(only) &&
+      only.elements.length === 1 &&
+      (only.elements[0].propertyName ?? only.elements[0].name).text === binding
+    )
+      return;
+    found.push(spec);
+  }
+  function visit(node: ts.Node): void {
+    if (ts.isImportDeclaration(node) || (ts.isExportDeclaration(node) && node.moduleSpecifier)) {
+      check(node.moduleSpecifier, node);
+    } else if (
+      ts.isCallExpression(node) &&
+      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(node.expression) && node.expression.text === "require"))
+    ) {
+      check(node.arguments[0], node);
+    } else if (ts.isExternalModuleReference(node)) {
+      check(node.expression, node);
+    } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
+      check(node.argument.literal, node);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(file);
+  return found;
+}
+
+it("keeps the lifecycle owner below the services that use it", () => {
+  expect(forbiddenImports(readFileSync(path.join(backend, owner), "utf8"))).toEqual([]);
+  expect(
+    forbiddenImports(readFileSync(path.join(backend, "src/services/setup-status.ts"), "utf8"), true)
+  ).toEqual([]);
+  expect(
+    forbiddenImports(`
+    import type { Stage } from "./workspace-init.service";
+    const agent = import("./agent/cloud/driver");
+    export { start } from "../lib/../services/project-environment.service";
+    const hidden = require(dynamic);
+    import * as queries from "./query-engine";
+    import { invalidate } from "./query-engine";
+    import { writeSetupStatusFile } from "./setup-status";
+  `)
+  ).toEqual([
+    "./workspace-init.service",
+    "./agent/cloud/driver",
+    "../lib/../services/project-environment.service",
+    "<dynamic>",
+    "./query-engine",
+  ]);
 });

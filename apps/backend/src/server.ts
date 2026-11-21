@@ -27,7 +27,7 @@ import { initAutomations } from "./services/automations";
 import { refreshCloudOrganizations } from "./services/cloud-settings.service";
 import { forgetUnusedAssistants } from "./services/assistants";
 import { startIntegrations } from "./services/integrations";
-import { failInterruptedWorkspaces } from "./services/workspace-lifecycle";
+import { failInterruptedWorkspaces } from "./services/workspace-init.service";
 import { stopWhenStdinEnds } from "./lib/parent-stdin";
 
 // Initialize Sentry before anything else.

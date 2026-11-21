@@ -160,7 +160,7 @@ import {
   resetCloudConfigForTests,
   setCloudRuntimeCredentials,
 } from "../../../src/services/agent/cloud/config";
-import { unarchiveWorkspace } from "../../../src/services/workspace-lifecycle";
+import { unarchiveWorkspace } from "../../../src/services/workspace-archive.service";
 import { persistSessionBackToWorking } from "../../../src/services/agent/persistence";
 import { cloudPreviewChanges } from "@shared/api/browser";
 import { sessionEvents } from "@shared/api/sessions";
@@ -1769,7 +1769,16 @@ describe("cloud driver simulator channel", () => {
     for (const status of ["stopped", "paused", "error"]) {
       ready();
       mockPublish.mockClear();
+      mockInvalidate.mockClear();
+      mockRun.mockClear();
       capturedOnFrame!({ type: "workspace.state", data: { status } });
+      expect(mockPublish.mock.calls[0][0]).toBe(cloudSimulatorEvents);
+      expect(mockRun.mock.invocationCallOrder[0]).toBeLessThan(
+        mockPublish.mock.invocationCallOrder[0]
+      );
+      expect(mockPublish.mock.invocationCallOrder[0]).toBeLessThan(
+        mockInvalidate.mock.invocationCallOrder[0]
+      );
       // The park is announced (clients drop the URL) and cached.
       const [parked] = deviceEvents();
       expect(parked).toEqual(deviceStatus({ status: "stopped", platform: "ios" }));

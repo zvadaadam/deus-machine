@@ -20,17 +20,21 @@ import {
   isDeusError,
   Environment,
 } from "@deus-hq/sdk";
+import { uuidv7 } from "@shared/lib/uuid";
+import { generateUniqueName } from "./workspace.service";
 import type { RepositoryAuth } from "@deus-hq/api";
 import { githubRepoSlug, httpsOrigin } from "@shared/git-origin";
 import type { CloudRepoAccess, CloudRepoAccessStatus } from "@shared/types/cloud-access";
 import { getDatabase } from "../lib/database";
-import { ConflictError, ValidationError } from "../lib/errors";
+import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 import { getRepositoryById } from "../db";
 import { invalidate } from "./query-engine";
 import {
   attachCloudComputer,
   attachCloudChat,
   failCloudStart,
+  insertCloudWorkspace,
+  claimCloudRetry,
   setCloudWakeStage,
 } from "./workspace-lifecycle";
 import {
@@ -54,6 +58,104 @@ import {
   getCloudEnvironmentInfo,
   enableCloudEnvironmentSimulator,
 } from "./cloud-environment.service";
+
+interface CreateCloudWorkspaceParams {
+  repositoryId: string;
+  /** Branch the sandbox checks out; defaults to the repo's default branch. */
+  sourceBranch?: string;
+  /** The organization it runs in; the default organization when omitted. */
+  organizationId?: string | null;
+}
+
+/**
+ * Create a cloud workspace: row now, sandbox in the background.
+ * Throws synchronously for everything the user must fix (no config, repo
+ * without a remote); background failures land on the row as state='error'.
+ */
+export function createCloudWorkspace(params: CreateCloudWorkspaceParams): {
+  workspaceId: string;
+  slug: string;
+} {
+  if (!cloudAccount()) {
+    throw new ValidationError(
+      "Cloud workspaces are not configured — set DEUS_CLOUD_AGNT_API_KEY (and DEUS_CLOUD_AGNT_URL for a non-production backend)."
+    );
+  }
+  const org = requireCloudOrg(params.organizationId);
+
+  const db = getDatabase();
+  const repo = getRepositoryById(db, params.repositoryId);
+  if (!repo) throw new NotFoundError(`Repository not found: ${params.repositoryId}`);
+  if (!repo.git_origin_url) {
+    throw new ValidationError(
+      "Cloud workspaces need a git remote: this repository has no origin URL for the sandbox to clone."
+    );
+  }
+
+  const workspaceId = uuidv7();
+  const slug = generateUniqueName(db);
+  const sourceBranch = params.sourceBranch || repo.git_default_branch || "main";
+  // The sandbox works on its OWN branch off the source (parity with local
+  // worktrees): PRs need head ≠ base, and the turn-end wip snapshots hang off
+  // this branch's history.
+  const workBranch = slug;
+
+  insertCloudWorkspace(db, {
+    id: workspaceId,
+    repository_id: params.repositoryId,
+    slug,
+    git_branch: workBranch,
+    git_target_branch: sourceBranch,
+    organization_id: org.orgId,
+  });
+
+  void provisionCloudWorkspace(
+    workspaceId,
+    httpsOrigin(repo.git_origin_url),
+    { source: sourceBranch, work: workBranch },
+    org
+  );
+
+  return { workspaceId, slug };
+}
+
+/**
+ * Provision a failed cloud workspace again, on the same row. Only while no
+ * computer exists for it: everything that fails before the platform is asked
+ * for one (GitHub access, project settings, the request itself) is safe to
+ * repeat. Once a computer exists, waking it is the way back.
+ */
+export function retryCloudWorkspace(workspaceId: string): void {
+  if (!cloudAccount())
+    throw new ValidationError("Sign in to Deus Cloud to try this workspace again.");
+  const db = getDatabase();
+  const workspace = db
+    .prepare(
+      "SELECT repository_id, git_branch, git_target_branch, organization_id FROM workspaces WHERE id = ? AND kind = 'cloud'"
+    )
+    .get(workspaceId) as
+    | {
+        repository_id: string;
+        git_branch: string | null;
+        git_target_branch: string | null;
+        organization_id: string | null;
+      }
+    | undefined;
+  const repo = workspace && getRepositoryById(db, workspace.repository_id);
+  if (!workspace?.git_branch || !repo?.git_origin_url)
+    throw new NotFoundError("Workspace not found");
+  const org = requireCloudOrg(workspace.organization_id);
+  claimCloudRetry(db, workspaceId);
+  void provisionCloudWorkspace(
+    workspaceId,
+    httpsOrigin(repo.git_origin_url),
+    {
+      source: workspace.git_target_branch || repo.git_default_branch || "main",
+      work: workspace.git_branch,
+    },
+    org
+  );
+}
 
 /** The columns a cloud workspace's platform calls are derived from. */
 interface CloudWorkspaceRef {
@@ -251,7 +353,7 @@ const tokenRefreshMarks = new Map<string, number>();
 const tokenRefreshFlights = new Map<string, Promise<boolean>>();
 
 /** A successful re-create (either lane) counts as a mint for the connect hook. */
-export function markWorkspaceTokenRefreshed(providerWorkspaceId: string): void {
+function markWorkspaceTokenRefreshed(providerWorkspaceId: string): void {
   tokenRefreshMarks.set(providerWorkspaceId, Date.now());
 }
 
@@ -662,7 +764,7 @@ async function refreshEnvironmentGithubToken(
   }
 }
 
-export async function provisionCloudWorkspace(
+async function provisionCloudWorkspace(
   workspaceId: string,
   originUrl: string,
   branch: { source: string; work: string },
@@ -769,7 +871,9 @@ export async function provisionCloudWorkspace(
       // New branch off the source — the sandbox's whole life happens here.
       checkout: { branch: branch.work, from: branch.source },
     });
-    attachCloudComputer(db, workspaceId, provider.id, inlineMintStampAtCreate, !!repositoryAuth);
+    attachCloudComputer(db, workspaceId, provider.id, inlineMintStampAtCreate, () => {
+      if (repositoryAuth) markWorkspaceTokenRefreshed(provider.id);
+    });
 
     const providerSession = await agntCreateSession({ baseUrl, apiKey, workspaceId: provider.id });
     const sessionId = attachCloudChat(db, workspaceId, providerSession.id);

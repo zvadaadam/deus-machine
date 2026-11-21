@@ -4,7 +4,7 @@ import { SCHEMA_SQL } from "@shared/schema";
 import {
   createCloudWorkspace,
   retryCloudWorkspace,
-} from "../../../src/services/workspace-lifecycle";
+} from "../../../src/services/cloud-workspace-init.service";
 
 let db: Database.Database;
 const mock = vi.hoisted(() => ({

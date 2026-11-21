@@ -235,11 +235,13 @@ ends on Home with that project chosen. There is no creation dialog. The one
 exception has its subject already: a workspace on a pull request or branch
 (`GitHubPickerModal`).
 
-The backend's `services/workspace-lifecycle.ts` owns workspace creation, the six
-lifecycle columns (`state`, `init_stage`, `setup_status`, `init_fetch_issue`,
-`error_message`, `error_detail`) and deletion of failed starts. The app and the
-assistants' host use the same local creator. `workspace-lifecycle-fence.test.ts`
-checks backend SQL and the integration CLI for writes outside the owner.
+The app and assistants' host share the creator in `services/workspace-init.service.ts`.
+It starts the local job in `workspace-checkout.ts`. The lifecycle owner
+(`workspace-lifecycle.ts`) holds the per-workspace queue, deletes failed starts,
+and writes `state`,
+`init_stage`, `setup_status`, `init_fetch_issue`, `error_message` and `error_detail`.
+`workspace-lifecycle-fence.test.ts` checks the owner's imports and checks backend
+SQL and the integration CLI for lifecycle writes.
 
 Creating a local workspace writes its row and returns. The rest runs in the
 background, in three stages: `fetch` (origin's latest for the branch it starts

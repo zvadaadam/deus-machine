@@ -44,6 +44,7 @@ import {
   applyCloudSimulatorStatus,
   buildCloudSimulatorExecFrameData,
   forgetCloudSimulators,
+  parkCloudSimulator,
   readCloudSimulatorExecResult,
   readCloudSimulatorStatus,
   relayCloudSimulatorEvent,
@@ -202,6 +203,19 @@ export function shutdownCloudDriver(): void {
 }
 
 // ---- Workspace row effects ----
+
+function recordWorkspaceStatus(
+  workspaceId: string,
+  data: { status?: string; step?: string }
+): void {
+  applyCloudStatus(workspaceId, data, {
+    beforePublish() {
+      // A dropped sandbox socket may never deliver the device's own stopped event.
+      if (data.status === "stopped" || data.status === "paused" || data.status === "error")
+        parkCloudSimulator(workspaceId);
+    },
+  });
+}
 
 /** Tell the clients following a workspace's environment (`cloudEnvironment`).
  *  Ephemeral on purpose: the chat shows a live provisioning/wake progress
@@ -441,7 +455,7 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         );
       }
       if (sessionStatus === "paused" || sessionStatus === "stopped") {
-        applyCloudStatus(session.deusWorkspaceId, { status: sessionStatus });
+        recordWorkspaceStatus(session.deusWorkspaceId, { status: sessionStatus });
         tellCloudEnv(session, { status: sessionStatus });
         // The live `workspace.state` frame is LOST when the socket is down
         // while the sandbox stops; this snapshot is then the only truth, and
@@ -449,14 +463,14 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         // spinner forever. Fail here, before that gate. (paused replays.)
         if (sessionStatus === "stopped") scheduleTurnKill(session, "stopped");
       } else if (sessionStatus === "error") {
-        applyCloudStatus(session.deusWorkspaceId, { status: "error" });
+        recordWorkspaceStatus(session.deusWorkspaceId, { status: "error" });
         tellCloudEnv(session, { status: "error" });
         scheduleTurnKill(session, "error");
       } else if (sessionStatus === "provisioning") {
         // Connected mid-setup (fresh create attaches while the sandbox is
         // still building) — show the stack immediately; the step events
         // that follow append to it.
-        applyCloudStatus(session.deusWorkspaceId, { status: "provisioning" });
+        recordWorkspaceStatus(session.deusWorkspaceId, { status: "provisioning" });
         tellCloudEnv(session, { status: "provisioning" });
         // Recovery truth can arrive VIA the snapshot when the live
         // workspace.state frame fell into a socket gap — the reconnect
@@ -465,7 +479,7 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         // frame path disarms it.
         clearTurnKill(session);
       } else if (sessionStatus === "ready" || sessionStatus === "running") {
-        applyCloudStatus(session.deusWorkspaceId, { status: "running" });
+        recordWorkspaceStatus(session.deusWorkspaceId, { status: "running" });
         clearTurnKill(session);
       }
 
@@ -488,7 +502,7 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       // Workspace owns recovery; its intermediate error is wake progress,
       // not evidence that the turn or its hosted device stopped.
       const data = raw.status === "error" && raw.recovering ? { ...raw, status: "resuming" } : raw;
-      applyCloudStatus(session.deusWorkspaceId, data);
+      recordWorkspaceStatus(session.deusWorkspaceId, data);
       // The public host template rides the running state: a new sandbox
       // (reprovision) brings a new one, a platform-reported `null` means no
       // sandbox behind the session. Absent = an older platform / a state that

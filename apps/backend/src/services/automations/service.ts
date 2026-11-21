@@ -28,7 +28,7 @@ import { generateUniqueName } from "../workspace.service";
 import type { RepositoryRow } from "../../db/types";
 import * as platform from "./platform";
 import * as store from "./store";
-import { adoptRunRows, reviveAdoptedWorkspace } from "../workspace-lifecycle";
+import { reviveAdoptedWorkspace } from "../workspace-lifecycle";
 import { getProviderAccounts } from "../provider-accounts.service";
 import { defaultProviderAccount } from "@shared/types/provider-account";
 import {
@@ -628,7 +628,7 @@ export async function openAutomationRun(
   assertCurrentAccount(identity);
   if (!detail.workspaceId) throw new NotFoundError("The run's sandbox is gone.");
 
-  const { workspaceId, sessionId } = adoptRunRows({
+  const { workspaceId, sessionId } = store.adoptRunRows({
     runId,
     automationId: automation.id,
     repositoryId: automation.repository_id,

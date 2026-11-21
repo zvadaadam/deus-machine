@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
 import type { SetupStatus } from "@shared/enums";
 
 export const SETUP_INTERRUPTED = "Setup was stopped when Deus closed. Run it again.";
@@ -17,7 +16,7 @@ export function writeSetupStatusFile(
   code?: number | null
 ): void {
   const file = setupFile(workspaceId, "status");
-  const temporary = `${file}.${randomUUID()}`;
+  const temporary = `${file}.${crypto.randomUUID()}`;
   try {
     fs.writeFileSync(temporary, code == null ? `${status}\n` : `${status} ${code}\n`, {
       flag: "wx",

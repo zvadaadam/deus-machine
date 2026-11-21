@@ -35,15 +35,19 @@ import {
   pickWorkspaceName,
   removeWorktree,
   type InitContext,
-} from "../../../src/services/workspace-init.service";
+} from "../../../src/services/workspace-checkout";
 import {
   archiveWorkspace,
-  deleteFailedWorkspace,
-  failInterruptedWorkspaces,
-  prepareWorkspaceFixture,
-  retryWorkspaceInit,
-  setSetupStatus,
   unarchiveWorkspace,
+} from "../../../src/services/workspace-archive.service";
+import {
+  failInterruptedWorkspaces,
+  retryWorkspaceInit,
+} from "../../../src/services/workspace-init.service";
+import {
+  deleteFailedWorkspace,
+  prepareWorkspaceFixture,
+  setSetupStatus,
 } from "../../../src/services/workspace-lifecycle";
 import {
   prepareLocalEnvironment,
@@ -440,7 +444,7 @@ describe("a start Deus closed in the middle of", () => {
     // Modules of their own: once stopped they stay stopped, as the backend does.
     vi.resetModules();
     const groups = await import("../../../src/lib/process-groups");
-    const init = await import("../../../src/services/workspace-init.service");
+    const init = await import("../../../src/services/workspace-checkout");
     await init.initializeWorkspace(add("w", "vega"));
     await vi.waitFor(() =>
       expect(fs.existsSync(path.join(workspacePath("vega"), "started"))).toBe(true)
