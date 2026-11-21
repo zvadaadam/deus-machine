@@ -64,7 +64,7 @@ import {
 import { forgetGithubAnswers } from "../../../src/services/github-remote";
 
 const wakeCloudWorkspaceWithFeedback = (workspace: Parameters<typeof wake>[0]) =>
-  wake(workspace, () => true);
+  wake(workspace, () => undefined);
 
 beforeEach(() => {
   vi.resetAllMocks();

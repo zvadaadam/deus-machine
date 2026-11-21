@@ -54,7 +54,7 @@ export function archiveWorkspace(
 }
 
 export function wakeWorkspace(workspaceId: string) {
-  return queueCloudWake(workspaceId, async (current) => {
+  return queueCloudWake(workspaceId, async (latest) => {
     const workspace = getWorkspaceRaw(getDatabase(), workspaceId);
     if (!workspace) throw new NotFoundError("Workspace not found");
     if (workspace.kind !== "cloud" || !workspace.provider_workspace_id) {
@@ -68,13 +68,13 @@ export function wakeWorkspace(workspaceId: string) {
         ...workspace,
         provider_workspace_id: workspace.provider_workspace_id,
       },
-      current
+      latest
     );
   });
 }
 
 export function unarchiveWorkspace(workspaceId: string): Promise<void> {
-  return queueCloudWake(workspaceId, async (current) => {
+  return queueCloudWake(workspaceId, async (latest) => {
     const db = getDatabase();
     const workspace = markRestored(db, workspaceId);
     if (!workspace) return;
@@ -85,14 +85,14 @@ export function unarchiveWorkspace(workspaceId: string): Promise<void> {
             ...workspace,
             provider_workspace_id: workspace.provider_workspace_id,
           },
-          current
+          latest
         );
         // A failed status refresh can still leave the computer serving.
         if (!result.ok && result.status !== "running") {
           throw new Error("Could not wake the cloud machine. Try again.");
         }
       } catch (err) {
-        if (current() && !(err instanceof CloudChatError)) rollbackCloudRestore(db, workspaceId);
+        if (!latest() && !(err instanceof CloudChatError)) rollbackCloudRestore(db, workspaceId);
         throw err;
       }
     }

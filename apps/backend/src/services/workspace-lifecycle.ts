@@ -480,14 +480,16 @@ function projectCloudStatus(data: CloudReport, row: { archived: boolean; hasChat
   }
 }
 
-const wakes = new Map<string, object>();
+type WakeReport = { status?: string; error?: string };
+export type LatestCloudReport = () => WakeReport | undefined;
+const wakes = new Map<string, { report?: WakeReport }>();
 
-export function queueCloudWake<T>(id: string, wake: (current: () => boolean) => Promise<T>) {
+export function queueCloudWake<T>(id: string, wake: (latest: LatestCloudReport) => Promise<T>) {
   return changeWorkspaceState(id, async () => {
-    const token = {};
-    wakes.set(id, token);
+    const watch: { report?: WakeReport } = {};
+    wakes.set(id, watch);
     try {
-      return await wake(() => wakes.get(id) === token);
+      return await wake(() => watch.report);
     } finally {
       wakes.delete(id);
     }
@@ -497,9 +499,10 @@ export function queueCloudWake<T>(id: string, wake: (current: () => boolean) => 
 export function applyCloudStatus(
   workspaceId: string,
   data: CloudReport,
-  { beforePublish }: { beforePublish: () => void }
+  effects?: { beforePublish: () => void }
 ): void {
-  wakes.delete(workspaceId);
+  const wake = wakes.get(workspaceId);
+  if (wake) wake.report ??= {}; // Even an unrecognized report supersedes tentative stage writes.
   const db = getDatabase();
   const row = cloudWorkspaceChat(db, workspaceId);
   if (!row) return;
@@ -507,12 +510,14 @@ export function applyCloudStatus(
     archived: row.state === "archived",
     hasChat: !!row.chat,
   });
-  if (fields)
+  if (fields) {
     db.prepare(
       "UPDATE workspaces SET state = ?, init_stage = ?, error_message = ?, error_detail = ? WHERE id = ?"
     ).run(...fields, workspaceId);
+    if (wake) wake.report = { status: data.status, error: fields[2] ?? undefined };
+  }
   try {
-    beforePublish();
+    effects?.beforePublish();
   } finally {
     invalidate(["workspaces"], {});
   }

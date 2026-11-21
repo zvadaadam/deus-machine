@@ -30,6 +30,8 @@ import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 import { getRepositoryById } from "../db";
 import { invalidate } from "./query-engine";
 import {
+  applyCloudStatus,
+  type LatestCloudReport,
   attachCloudComputer,
   attachCloudChat,
   failCloudStart,
@@ -468,7 +470,7 @@ export async function wakeCloudWorkspaceWithFeedback(
     repository_id?: string | null;
     organization_id?: string | null;
   },
-  current: () => boolean
+  latest: LatestCloudReport
 ): Promise<{ ok: boolean; status: string; error?: string }> {
   const db = getDatabase();
   const sessionId = await ensureWorkspaceChat(db, workspace.id, (token) =>
@@ -495,11 +497,11 @@ export async function wakeCloudWorkspaceWithFeedback(
   // HTTP status can fail while the existing session still serves the computer.
   // A channel alone is insufficient: it also stays open while the VM sleeps.
   const refreshing = status === "running" || (status === null && isServing());
-  if (current() && status === "running") {
+  if (!latest() && status === "running") {
     // An earlier wake may have succeeded despite a lost response. An online
     // resume is a no-op, so no later frame is guaranteed to clear stale sleep.
     setCloudWakeStage(db, workspace.id, null);
-  } else if (current() && !refreshing) {
+  } else if (!latest() && !refreshing) {
     setCloudWakeStage(db, workspace.id, "resuming");
     announce({ status: "resuming" });
   }
@@ -517,12 +519,20 @@ export async function wakeCloudWorkspaceWithFeedback(
   try {
     await resumeCloudWorkspace(workspace);
   } catch (err) {
+    const news = latest();
+    if (news?.status) {
+      return {
+        ok: ["running", "resuming", "provisioning"].includes(news.status),
+        status: news.status,
+        error: news.error,
+      };
+    }
     console.warn(`[WORKSPACE] cloud wake failed: ${err}`);
     if (refreshing && isServing()) return { ok: false, status: "running" };
     const failedStatus = status === "paused" || status === "stopped" ? status : "error";
     const error =
       err instanceof Error ? err.message : "Could not wake the cloud machine. Try again.";
-    if (current()) {
+    if (!news) {
       setCloudWakeStage(db, workspace.id, failedStatus);
       announce({ status: failedStatus, reason: error });
     }
@@ -530,7 +540,10 @@ export async function wakeCloudWorkspaceWithFeedback(
   }
 
   await connectCloudChat(sessionId);
-  invalidate(["workspaces"], {});
+  // An already-running VM need not emit another frame for its newly repaired chat.
+  if (sessionId !== workspace.current_session_id && status === "running" && !latest())
+    applyCloudStatus(workspace.id, { status });
+  else invalidate(["workspaces"], {});
   return { ok: true, status: status === "running" ? "running" : "resuming" };
 }
 

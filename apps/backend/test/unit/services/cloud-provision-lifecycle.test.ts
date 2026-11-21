@@ -313,6 +313,8 @@ it("repairs a failed first chat through restore then wake on the original comput
   );
   expect(mock.allocate.mock.calls.filter(([request]) => !request.workspaceId)).toHaveLength(1);
   expect(row(workspaceId)).toMatchObject({
+    state: "ready",
+    init_stage: null,
     provider_workspace_id: "vm",
     current_session_id: expect.any(String),
     error_message: null,
@@ -344,7 +346,11 @@ it.each(["during status read", "during resume", "after wake"] as const)(
     await vi.waitFor(() => expect(mock.resume).toHaveBeenCalledOnce());
     if (when === "during resume") report(workspaceId, "resuming"); // Same stage as the wake's tentative write.
     resume.reject(new Error("old wake failed"));
-    expect(await waking).toMatchObject({ ok: false });
+    expect(await waking).toMatchObject(
+      when === "after wake"
+        ? { ok: false }
+        : { ok: true, status: when === "during resume" ? "resuming" : "running" }
+    );
     if (when === "after wake") report(workspaceId, "running");
     expect(row(workspaceId)).toMatchObject({
       state: "ready",
@@ -401,6 +407,6 @@ it("keeps a running report that arrives before restore's failed resume response"
     report(workspaceId, "running");
     throw new Error("resume failed");
   });
-  await expect(unarchiveWorkspace(workspaceId)).rejects.toThrow();
+  await unarchiveWorkspace(workspaceId);
   expect(row(workspaceId)).toMatchObject({ state: "ready", init_stage: null, error_message: null });
 });
