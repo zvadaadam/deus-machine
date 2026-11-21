@@ -7,7 +7,7 @@ import { hasParkedDirectQuestion } from "@/features/session/cloud/directQuestion
 import { RuntimeClient } from "@/platform/ws/runtime-client";
 import { messagesKey } from "@/features/session/lib/agentEventFold";
 import { createOptimisticUserMessage } from "@/features/session/lib/optimisticMessage";
-import { useSessionComposerStore } from "@/features/session/store/sessionComposerStore";
+import { composerStore } from "@/features/session/store/sessionComposerStore";
 import { toast } from "sonner";
 import { queryKeys } from "@/shared/api/queryKeys";
 import type { PaginatedMessages } from "@shared/types/session";
@@ -351,7 +351,7 @@ describe("direct cloud session published frames", () => {
     expect(setState).toHaveBeenCalledWith({ message: "Account unavailable", category: "internal" });
     // Not lost: what was sent is back in the chat's composer.
     await vi.waitFor(() =>
-      expect(useSessionComposerStore.getState().pendingContent[sessionId]?.draft).toBe("Hello")
+      expect(composerStore(queryClient).getState().pendingContent[sessionId]?.draft).toBe("Hello")
     );
     getDirectSession(sessionId, queryClient)!.sendMessage("Retry", "retry", TURN);
     setState.mockClear();
@@ -636,7 +636,7 @@ describe("direct cloud session published frames", () => {
     expect(setState).toHaveBeenCalledWith("error");
     expect(setState).toHaveBeenCalledWith({
       message: "Reconnect your provider account",
-      category: null,
+      category: "AUTH_FAILED",
     });
   });
 
@@ -674,7 +674,7 @@ describe("direct cloud session published frames", () => {
     });
     expect(setState).toHaveBeenCalledWith({
       message: "Reconnect your provider account",
-      category: null,
+      category: "provider_auth",
     });
     setState.mockClear();
     onFrame({ type: "turn.started", turnId: "turn-next", timestamp: 3 });

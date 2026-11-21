@@ -604,7 +604,7 @@ export function useCloudDirectSession(
           (pendingTurnActive() ? pendingTurn?.turnId : undefined);
         if (recoverable || (turnId !== undefined && live !== undefined && turnId !== live)) return;
         setStatus("error");
-        setError(error.message);
+        setError(error.message, error.code === "AGENT_EXECUTION_FAILED" ? "internal" : error.code);
         return;
       }
       foldFrame(frame);

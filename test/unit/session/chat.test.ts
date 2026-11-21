@@ -140,3 +140,25 @@ it("notifies scrolling for appended messages within a turn and empty outcomes, b
     client.clear();
   }
 });
+
+it("keeps a first-send refusal in an otherwise empty chat", () => {
+  const client = new QueryClient();
+  try {
+    const html = renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(Chat, {
+          messages: [],
+          loading: false,
+          sessionStatus: "error",
+          errorMessage: "The engine refused this send.",
+        })
+      )
+    );
+    expect(html).toContain("The engine refused this send.");
+    expect(html).not.toContain("What would you like to work on?");
+  } finally {
+    client.clear();
+  }
+});

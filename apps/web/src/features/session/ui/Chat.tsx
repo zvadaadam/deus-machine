@@ -1,7 +1,7 @@
 import { tempo } from "@/shared/lib/tempo";
 import { match } from "ts-pattern";
 import type { Compaction, Message, SessionTurn, SessionStatus } from "@/shared/types";
-import { ACTIVE_TURN_STATUSES, type WorkspaceKind } from "@shared/enums";
+import { ACTIVE_TURN_STATUSES, type AgentHarness, type WorkspaceKind } from "@shared/enums";
 import { MessageItem } from "./MessageItem";
 import { AssistantTurn } from "./AssistantTurn";
 import { CompactionChip } from "./CompactionChip";
@@ -34,10 +34,8 @@ interface ChatProps {
   errorMessage?: string | null;
   /** Structured error category from classifyError (e.g. "auth", "rate_limit") */
   errorCategory?: string;
-  agentHarness?: string | null;
+  agentHarness?: AgentHarness | null;
   latestMessageSentAt?: string | null;
-  onStop?: () => void; // Callback to stop/cancel the session
-  onOpenLoginTerminal?: () => void;
   onRetryInNewChat?: () => void;
   /** True when there are older messages beyond the loaded window */
   hasOlder?: boolean;
@@ -75,7 +73,6 @@ export function Chat({
   errorCategory,
   agentHarness,
   latestMessageSentAt,
-  onOpenLoginTerminal,
   onRetryInNewChat,
   hasOlder = false,
   loadingOlder = false,
@@ -138,7 +135,7 @@ export function Chat({
       buildChatTimeline(
         messages,
         compactions,
-        sessionStatus === "working",
+        ACTIVE_TURN_STATUSES.includes(sessionStatus),
         cloudEnvEntries,
         turns,
         workspaceStart
@@ -248,7 +245,7 @@ export function Chat({
   // finished assistant turn.
   const indicatorMarginClass = lastRole === "user" ? "mt-0" : "mt-1";
   const showSessionError =
-    sessionStatus === "error" || ACTIVE_TURN_STATUSES.includes(sessionStatus);
+    !!errorMessage && (sessionStatus === "error" || ACTIVE_TURN_STATUSES.includes(sessionStatus));
 
   return (
     <div className={cn("relative min-h-0 flex-1", className)}>
@@ -267,11 +264,7 @@ export function Chat({
             <Skeleton className="h-4 w-[90%]" />
             <Skeleton className="h-4 w-[80%]" />
           </div>
-        ) : timeline.length === 0 ? (
-          // Empty means NOTHING to show — no messages AND no env markers. A
-          // fresh cloud workspace provisioning before its first message has a
-          // timeline (the spliced cloudEnv item), so it renders through the
-          // one virtualized flow below, top-of-flow like a first agent turn.
+        ) : timeline.length === 0 && !showSessionError && sessionStatus !== "working" ? (
           <WorkspaceEmptyState
             repoName={workspaceRepoName}
             parentBranch={workspaceParentBranch}
@@ -368,7 +361,7 @@ export function Chat({
                               messages={t.messages}
                               turn={t.record}
                               isLatest={t.isLatest}
-                              isWorking={sessionStatus === "working"}
+                              isWorking={ACTIVE_TURN_STATUSES.includes(sessionStatus)}
                               startedAt={t.startedAt}
                             />
                           ))
@@ -426,7 +419,7 @@ export function Chat({
 
               {/* Session-level error — rendered inline in the chat flow (law of locality) */}
               <AnimatePresence>
-                {showSessionError && errorMessage && (
+                {showSessionError && (
                   <m.div
                     key="session-error"
                     initial={{ opacity: 0 }}
@@ -441,7 +434,7 @@ export function Chat({
                       message={errorMessage}
                       category={errorCategory}
                       agentHarness={agentHarness}
-                      onOpenLoginTerminal={onOpenLoginTerminal}
+                      cloud={workspaceKind === "cloud" || isCloudDirectWebMode()}
                       onRetryInNewChat={retryInNewChat}
                     />
                   </m.div>

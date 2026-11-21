@@ -13,13 +13,12 @@ import { useSessionWithMessages, useLoadOlderMessages } from "../api/session.que
 import { PlanApprovalOverlay } from "./PlanApprovalOverlay";
 import { AgentQuestionOverlay } from "./AgentQuestionOverlay";
 import { Button } from "@/components/ui/button";
-import { X, Upload } from "lucide-react";
+import { X } from "lucide-react";
 import type { AgentHarness } from "@/shared/agents";
 import type { WorkspaceKind } from "@shared/enums";
 import type { WorkspaceStart } from "@/features/workspace/lib/startState";
-import { workspaceLayoutActions } from "@/features/workspace/store";
 import { sessionComposerActions } from "../store/sessionComposerStore";
-import { processImageFiles } from "../lib/imageAttachments";
+import { ImageDropTarget } from "./ImageDropTarget";
 
 const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
 
@@ -193,54 +192,6 @@ export function SessionPanel({
   // session actions.
   const composerRef = useRef<SessionComposerRef>(null);
 
-  // Full-panel drag & drop — uses dragOver (fires continuously) for reliable detection
-  const [isDragging, setIsDragging] = useState(false);
-
-  const handleDragOver = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (!isDragging) setIsDragging(true);
-    },
-    [isDragging]
-  );
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // Only dismiss when cursor truly leaves the container bounds
-    const rect = e.currentTarget.getBoundingClientRect();
-    if (
-      e.clientX < rect.left ||
-      e.clientX >= rect.right ||
-      e.clientY < rect.top ||
-      e.clientY >= rect.bottom
-    ) {
-      setIsDragging(false);
-    }
-  }, []);
-
-  const handleDrop = useCallback(
-    async (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setIsDragging(false);
-      const files = Array.from(e.dataTransfer.files);
-      if (files.length > 0) {
-        const processed = await processImageFiles(files);
-        if (processed.length) {
-          sessionComposerActions.addImageAttachments(sessionId, processed);
-        }
-      }
-    },
-    [sessionId]
-  );
-
-  // Native drag-drop — Electron handles file drops via standard HTML5 drag-drop
-  // events. The renderer has full access to File objects from the drop event,
-  // so no special IPC is needed.
-  // Standard HTML5 drag-drop is handled by MessageInput's existing drop handler.
-
   // Counter incremented when the human clicks Send — triggers auto-scroll resume
   const [userSendCount, setUserSendCount] = useState(0);
 
@@ -263,20 +214,6 @@ export function SessionPanel({
     setUserSendCount((c) => c + 1);
     onSessionStarted?.();
   }, [onSessionStarted]);
-
-  // Error action handlers
-  const handleOpenLoginTerminal = useCallback(() => {
-    if (!workspaceId) return;
-    workspaceLayoutActions.setLayout(workspaceId, {
-      activeContentTab: "terminal",
-      panelMode: "split",
-    });
-    workspaceLayoutActions.setPendingTerminalCommand(workspaceId, "claude login");
-  }, [workspaceId]);
-
-  const handleRetryInNewChat = useCallback(() => {
-    onOpenNewTab?.();
-  }, [onOpenNewTab]);
 
   // Pending agent request for THIS session (plan approval or questions)
   const pendingRequest = pendingRequests.get(sessionId) ?? null;
@@ -304,19 +241,6 @@ export function SessionPanel({
     resolveQuestion(sessionId, ["USER_CANCELLED"]);
   }, [resolveQuestion, sessionId]);
 
-  // Drop overlay shared between embedded and dialog layouts
-  const dropOverlay = isDragging && (
-    <div className="animate-drop-overlay-enter absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="border-border/60 bg-muted/80 flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed px-12 py-10 backdrop-blur-md">
-        <Upload className="text-muted-foreground h-10 w-10" />
-        <p className="text-foreground text-base font-medium">Add files</p>
-        <p className="text-muted-foreground text-sm">
-          Drop any files here to add them to your message
-        </p>
-      </div>
-    </div>
-  );
-
   // If embedded, render without overlay but with message input
   if (embedded) {
     return (
@@ -327,14 +251,10 @@ export function SessionPanel({
         cloud={workspaceKind === "cloud"}
         subagentMessages={subagentMessages}
       >
-        <div
-          className={`${CONTENT_WIDTH_CLASSES} relative flex min-h-0 flex-1 flex-col`}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
+        <ImageDropTarget
+          composerId={sessionId}
+          className={`${CONTENT_WIDTH_CLASSES} flex min-h-0 flex-1 flex-col`}
         >
-          {dropOverlay}
-
           <Chat
             messages={messages}
             compactions={compactions}
@@ -351,9 +271,7 @@ export function SessionPanel({
             hasOlder={hasOlder}
             loadingOlder={loadOlderMutation.isPending}
             onLoadOlder={handleLoadOlder}
-            onStop={() => composerRef.current?.stopSession()}
-            onOpenLoginTerminal={workspaceId ? handleOpenLoginTerminal : undefined}
-            onRetryInNewChat={handleRetryInNewChat}
+            onRetryInNewChat={onOpenNewTab}
             workspaceRepoName={workspaceRepoName}
             workspaceParentBranch={workspaceParentBranch}
             workspaceStart={workspaceStart}
@@ -399,7 +317,7 @@ export function SessionPanel({
             onAgentHarnessChange={onAgentHarnessChange}
             onSendComplete={handleSendComplete}
           />
-        </div>
+        </ImageDropTarget>
       </SessionProvider>
     );
   }
@@ -429,14 +347,7 @@ export function SessionPanel({
           </Button>
         </div>
 
-        <div
-          className="relative flex flex-1 overflow-hidden"
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
-          {dropOverlay}
-
+        <ImageDropTarget composerId={sessionId} className="flex flex-1 overflow-hidden">
           {/* Main Content Area */}
           <div className="flex min-h-0 flex-1 flex-col">
             <SessionProvider
@@ -464,9 +375,7 @@ export function SessionPanel({
                   hasOlder={hasOlder}
                   loadingOlder={loadOlderMutation.isPending}
                   onLoadOlder={handleLoadOlder}
-                  onStop={() => composerRef.current?.stopSession()}
-                  onOpenLoginTerminal={workspaceId ? handleOpenLoginTerminal : undefined}
-                  onRetryInNewChat={handleRetryInNewChat}
+                  onRetryInNewChat={onOpenNewTab}
                   workspaceRepoName={workspaceRepoName}
                   workspaceParentBranch={workspaceParentBranch}
                   workspaceStart={workspaceStart}
@@ -513,7 +422,7 @@ export function SessionPanel({
               </div>
             </SessionProvider>
           </div>
-        </div>
+        </ImageDropTarget>
       </div>
     </div>
   );

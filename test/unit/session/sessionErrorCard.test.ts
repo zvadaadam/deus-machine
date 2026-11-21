@@ -63,3 +63,17 @@ describe("a send the cloud refused", () => {
     expect(html).toMatch(/min-w-\[min\(100%,16rem\)\]/);
   });
 });
+
+it("only offers starting a chat when the action is available", () => {
+  for (const onRetryInNewChat of [undefined, vi.fn()]) {
+    const html = renderToStaticMarkup(
+      createElement(SessionErrorCard, {
+        message: "Usage limit reached",
+        category: "rate_limit",
+        onRetryInNewChat,
+      })
+    );
+    expect(html.includes("Start a new chat")).toBe(!!onRetryInNewChat);
+    expect(html.includes("New chat")).toBe(!!onRetryInNewChat);
+  }
+});

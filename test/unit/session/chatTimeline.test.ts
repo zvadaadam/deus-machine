@@ -1,10 +1,7 @@
 /**
  * Compaction placement.
  *
- * A compaction is a POSITIONAL entity (protocol §5): it renders between the
- * turn it fired during and that turn's successor, and a reload must land it in
- * the same slot the live stream did. These tests pin the anchor rules so the
- * divider can't drift to the bottom of the transcript.
+ * A completed compaction follows its settled turn in both live and reloaded transcripts.
  */
 import { describe, expect, it } from "vitest";
 
@@ -446,4 +443,38 @@ describe("turnStopNotice", () => {
       expect(turnStopNotice(reason)).toBeNull();
     }
   });
+});
+
+it("holds only the active turn's completed compactions until success or stop", () => {
+  const rows = ["earlier", "active"].map((turn_id) =>
+    message({
+      id: turn_id,
+      turn_id,
+      parts: [{ id: turn_id, type: "text", text: turn_id, state: "done" }],
+    })
+  );
+  const markers = [
+    compaction({ turn_id: "earlier" }),
+    compaction({ turn_id: "active", compaction_id: "first" }),
+    compaction({ turn_id: "active", compaction_id: "second" }),
+    compaction({ turn_id: "active", compaction_id: "running", status: "in_progress" }),
+    compaction({ turn_id: "active", compaction_id: "failed", status: "failed" }),
+  ];
+  const result = buildChatTimeline(rows, markers, true);
+  expect(shape(result.items)).toEqual([
+    "assistant:earlier",
+    "compaction:c-earlier",
+    "assistant:active",
+    "compaction:running",
+    "compaction:failed",
+  ]);
+  for (const stopReason of ["end_turn", "cancelled"]) {
+    const settled = buildChatTimeline(rows, markers, true, [], [{ turnId: "active", stopReason }]);
+    expect(shape(settled.items).slice(3)).toEqual([
+      "compaction:first",
+      "compaction:second",
+      "compaction:running",
+      "compaction:failed",
+    ]);
+  }
 });

@@ -33,7 +33,6 @@ interface WorkspaceLayoutState {
   chatTabSessionIds: string[]; // Ordered session IDs for open chat tabs
   activeChatTabSessionId: string | null; // Which chat tab is active
   knownChatSessionIds: string[]; // The chats the tab view knew when it last saved
-  pendingTerminalCommand: string | null; // Command to auto-run in a new terminal tab (e.g. "claude login")
   simulatorUdid: string | null; // Last-used simulator UDID for this workspace
   terminalTabs: PersistedTerminalTab[]; // Per-workspace terminal tab metadata
   activeTerminalTabId: string | null; // Which terminal tab is active
@@ -50,7 +49,6 @@ interface WorkspaceLayoutStore {
   setSelectedFilePath: (workspaceId: string, path: string | null) => void;
   setPendingFileNavigation: (workspaceId: string, navigation: PendingFileNavigation | null) => void;
   setPanelMode: (workspaceId: string, mode: WorkspacePanelMode) => void;
-  setPendingTerminalCommand: (workspaceId: string, command: string | null) => void;
   setSimulatorUdid: (workspaceId: string, udid: string | null) => void;
   setChatTabState: (
     workspaceId: string,
@@ -80,7 +78,6 @@ export const defaultLayout: WorkspaceLayoutState = {
   chatTabSessionIds: [],
   activeChatTabSessionId: null,
   knownChatSessionIds: [],
-  pendingTerminalCommand: null,
   simulatorUdid: null,
   terminalTabs: [],
   activeTerminalTabId: null,
@@ -133,8 +130,6 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
             activeTerminalTabId: activeTabId,
             nextTerminalNum: nextNum,
           }),
-        setPendingTerminalCommand: (workspaceId, command) =>
-          get().setLayout(workspaceId, { pendingTerminalCommand: command }),
         setSimulatorUdid: (workspaceId, udid) =>
           get().setLayout(workspaceId, { simulatorUdid: udid }),
 
@@ -161,7 +156,6 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
               {
                 ...layout,
                 pendingFileNavigation: null,
-                pendingTerminalCommand: null,
                 terminalTabs: [],
                 activeTerminalTabId: null,
                 nextTerminalNum: 1,
@@ -219,8 +213,6 @@ export const workspaceLayoutActions = {
     nextNum: number
   ) =>
     useWorkspaceLayoutStore.getState().setTerminalTabState(workspaceId, tabs, activeTabId, nextNum),
-  setPendingTerminalCommand: (workspaceId: string, command: string | null) =>
-    useWorkspaceLayoutStore.getState().setPendingTerminalCommand(workspaceId, command),
   setSimulatorUdid: (workspaceId: string, udid: string | null) =>
     useWorkspaceLayoutStore.getState().setSimulatorUdid(workspaceId, udid),
   clearWorkspaceLayout: (workspaceId: string) =>

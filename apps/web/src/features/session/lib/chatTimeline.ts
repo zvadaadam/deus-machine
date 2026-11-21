@@ -1,18 +1,4 @@
-/**
- * The chat timeline: everything `<Chat>` renders, derived from the rows it was
- * given. Turns, the compaction markers between them, the padding each slot
- * gets, and what the agent is doing right now.
- *
- * A compaction is not a message and not a part — it is a positional entity
- * (protocol §5) that belongs BETWEEN the turn it was emitted during and that
- * turn's successor. Placement is by `turn_id`, so a reload lands the divider
- * in the same slot the live stream did.
- *
- * All of it used to be a four-stage `useMemo` chain inside the component —
- * pure functions of props, held in the reader's head, and untestable without
- * React. `buildChatTimeline` is that chain, once: Chat renders, this derives.
- */
-
+/** Turns and their dividers, derived from the same rows for live events and history. */
 import { match } from "ts-pattern";
 import {
   agentActivity,
@@ -98,9 +84,10 @@ export function buildChatTimeline(
   start?: WorkspaceStart
 ): ChatTimeline {
   const rendered = renderableMessages(messages);
-  const conversation = conversationView(rendered, working);
+  const conversation = conversationView(rendered, working, records.at(-1));
   const grouped = groupTurns(conversation, rendered, records);
-  const items = insertCloudEnv(insertCompactions(grouped, compactions), envEntries);
+  const active = conversation.turns.find((turn) => turn.status === "active");
+  const items = insertCloudEnv(insertCompactions(grouped, compactions, active?.turnId), envEntries);
   // The message that asked for the workspace, then how the workspace started.
   if (start) {
     const asked = items[0]?.type === "user" ? 1 : 0;
@@ -296,22 +283,11 @@ function turnSpacingClasses(
   return cn(topClass, bottomClass);
 }
 
-/**
- * Splice compaction markers into the turn list at their anchor position.
- *
- * Anchor rules, in order:
- *   1. The LAST turn holding the compaction's `turn_id` — a compaction fires
- *      mid-turn, so it renders once that turn is closed.
- *   2. No such turn loaded (paginated away, or the marker beat its turn's
- *      first message): fall back to `created_at` against turn end times.
- *   3. Older than everything loaded: emit above the first turn.
- *
- * Markers are never dropped — a divider that vanishes is worse than one an
- * approximate slot away.
- */
+/** Completed compactions follow their settled turn. Until then, work keeps streaming. */
 export function insertCompactions(
   turns: Turn[],
-  compactions: readonly Compaction[]
+  compactions: readonly Compaction[],
+  activeTurnId?: string
 ): ChatTimelineItem[] {
   if (compactions.length === 0) return turns;
 
@@ -329,7 +305,8 @@ export function insertCompactions(
   // Turn index → markers emitted after it. -1 means "above the first turn".
   const afterTurn = new Map<number, Compaction[]>();
   for (const compaction of [...compactions].sort(byCreatedAt)) {
-    if (!isRenderable(compaction)) continue;
+    if (compaction.status === "cancelled") continue;
+    if (compaction.status === "completed" && compaction.turn_id === activeTurnId) continue;
     const anchor =
       anchorByTurnId.get(compaction.turn_id) ?? fallbackAnchor(turnEndedAt, compaction);
     const bucket = afterTurn.get(anchor);
@@ -421,11 +398,6 @@ function itemEndTime(item: ChatTimelineItem): number {
 
 function byCreatedAt(a: Compaction, b: Compaction): number {
   return a.created_at.localeCompare(b.created_at);
-}
-
-/** A cancelled compaction never happened — nothing to tell the reader. */
-function isRenderable(compaction: Compaction): boolean {
-  return compaction.status !== "cancelled";
 }
 
 function fallbackAnchor(turnEndedAt: readonly number[], compaction: Compaction): number {

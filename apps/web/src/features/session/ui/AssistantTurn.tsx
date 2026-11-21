@@ -1,16 +1,8 @@
-import { Collapse } from "@/components/ui/collapse";
-import { useMemo, useState, useId, memo } from "react";
-import { AnimatePresence } from "framer-motion";
+import { memo, useMemo } from "react";
 import type { Message, SessionTurn } from "@/shared/types";
 import { turnStopNotice } from "../lib/chatTimeline";
-import { PartBlock } from "./blocks/PartBlock";
-import { ChatResourceCards } from "./blocks/ChatResourceCards";
-import { assistantTurnContent } from "../lib/assistantTurnContent";
-import { extractChatResources } from "../lib/chatResources";
-import { useSession } from "../context";
+import { PartsRenderer } from "./blocks/PartsRenderer";
 import { TurnFooter } from "./TurnFooter";
-import { TurnStatsHeader } from "./TurnStatsHeader";
-import { calculateTurnStats } from "./utils";
 import { Square, TriangleAlert } from "lucide-react";
 
 interface AssistantTurnProps {
@@ -28,24 +20,8 @@ export const AssistantTurn = memo(function AssistantTurn({
   isWorking,
   startedAt,
 }: AssistantTurnProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const activityId = useId();
-  const { workspacePath } = useSession();
-  const projected = useMemo(() => assistantTurnContent(messages), [messages]);
-  const stats = useMemo(() => calculateTurnStats(messages), [messages]);
+  const parts = useMemo(() => messages.flatMap((message) => message.parts ?? []), [messages]);
   const isStreaming = isLatest && isWorking && !turn?.stopReason && turn?.endedAt === undefined;
-  const resources = useMemo(
-    () =>
-      extractChatResources({
-        parts: projected.parts,
-        isComplete: !isStreaming,
-        workspacePath,
-      }),
-    [projected.parts, isStreaming, workspacePath]
-  );
-  const lastPart = projected.parts.at(-1);
-  const streamingTextId = lastPart?.type === "text" ? lastPart.id : undefined;
-
   const isCancelled = turn?.stopReason === "cancelled";
   const stopNotice = turnStopNotice(turn?.stopReason);
 
@@ -54,39 +30,8 @@ export const AssistantTurn = memo(function AssistantTurn({
       className="assistant-turn flex w-full min-w-0 flex-col"
       style={{ contain: "layout style" }}
     >
-      {projected.activity.length > 0 && (
-        <>
-          <TurnStatsHeader
-            stats={stats}
-            isExpanded={isExpanded}
-            onClick={() => setIsExpanded(!isExpanded)}
-            activityId={activityId}
-            label={isStreaming ? (projected.currentActivity ?? "Working") : "Activity"}
-          />
-          <AnimatePresence initial={false}>
-            {isExpanded && (
-              <Collapse
-                key="activity"
-                id={activityId}
-                className="border-border-subtle ml-3 flex min-w-0 flex-col gap-1 border-l pl-2"
-              >
-                {projected.activity.map((part) => (
-                  <PartBlock key={part.id} part={part} isStreaming={isStreaming} />
-                ))}
-              </Collapse>
-            )}
-          </AnimatePresence>
-        </>
-      )}
       <div className="flex min-w-0 flex-col gap-1 overflow-x-hidden">
-        {projected.content.map((part) => (
-          <PartBlock
-            key={part.id}
-            part={part}
-            isStreaming={isStreaming && part.id === streamingTextId}
-          />
-        ))}
-        <ChatResourceCards resources={resources} />
+        <PartsRenderer parts={parts} isStreamingTurn={isStreaming} />
       </div>
       {!isStreaming && (
         <>

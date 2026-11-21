@@ -24,7 +24,7 @@
  */
 
 import type { ConversationMessage, ConversationState } from "@shared/protocol-types";
-import type { Message } from "../types";
+import type { Message, SessionTurn } from "../types";
 
 /**
  * Project rows into the state the selectors read.
@@ -32,7 +32,11 @@ import type { Message } from "../types";
  * `working` marks the last turn active. Without it every turn reads as ended
  * and `agentActivity` can only answer "idle" — the indicator would never move.
  */
-export function conversationView(messages: Message[], working: boolean): ConversationState {
+export function conversationView(
+  messages: Message[],
+  working: boolean,
+  latest?: SessionTurn
+): ConversationState {
   const timeline: ConversationMessage[] = messages.map((message) => ({
     kind: "message",
     messageId: message.id,
@@ -46,7 +50,10 @@ export function conversationView(messages: Message[], working: boolean): Convers
     startedAt: message.sent_at ? Date.parse(message.sent_at) : 0,
   }));
 
-  const lastTurnId = timeline[timeline.length - 1]?.turnId;
+  // A start can precede its first message, and an end can precede the session's idle status.
+  const latestEnded = latest?.endedAt !== undefined || !!latest?.stopReason;
+  const lastTurnId = latest && !latestEnded ? latest.turnId : timeline.at(-1)?.turnId;
+  const active = working && !(latestEnded && latest?.turnId === lastTurnId);
   return {
     timeline,
     turns:
@@ -55,7 +62,7 @@ export function conversationView(messages: Message[], working: boolean): Convers
         : [
             {
               turnId: lastTurnId,
-              status: working ? "active" : "ended",
+              status: active ? "active" : "ended",
               errors: [],
               startedAt: 0,
             },

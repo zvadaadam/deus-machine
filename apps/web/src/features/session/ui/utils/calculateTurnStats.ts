@@ -1,21 +1,4 @@
-/**
- * Turn Statistics Calculator
- *
- * Analyzes assistant turn messages to extract aggregated statistics:
- * - Tool call counts (total and per-subagent)
- * - File changes (unique files affected)
- *
- * Used by AssistantTurn component to display collapsed summary.
- */
-
-import type { Message } from "@/shared/types";
-import type { ToolPart } from "@shared/protocol-types";
-
-export interface TurnStats {
-  toolCount: number;
-  subagentCount: number;
-  filesChanged: number;
-}
+import type { Part } from "@shared/protocol-types";
 
 const FILE_MODIFYING_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 
@@ -25,34 +8,23 @@ function getToolInputFilePath(input: unknown): string | null {
   return typeof filePath === "string" && filePath.length > 0 ? filePath : null;
 }
 
-export function calculateTurnStats(messages: Message[]): TurnStats {
+export function calculateTurnStats(parts: readonly Part[]) {
   let toolCount = 0;
   let subagentCount = 0;
   const fileSet = new Set<string>();
 
-  for (const message of messages) {
-    if (!message.parts) continue;
-
-    for (const part of message.parts) {
-      if ("raw" in part || part.type !== "tool") continue;
-      toolCount++;
-
-      const toolPart: ToolPart = part;
-      if (toolPart.kind === "task" || toolPart.subagent) {
-        subagentCount++;
+  for (const part of parts) {
+    if (part.type !== "tool") continue;
+    toolCount++;
+    if (part.kind === "task" || part.subagent) subagentCount++;
+    if (part.state.status !== "completed") continue;
+    if (part.toolName === "apply_patch") {
+      for (const item of part.state.content ?? []) {
+        if (item.type === "diff") fileSet.add(item.path);
       }
-
-      if (toolPart.state.status !== "completed") continue;
-      if (toolPart.toolName === "apply_patch") {
-        for (const item of toolPart.state.content ?? []) {
-          if (item.type === "diff") fileSet.add(item.path);
-        }
-      } else if (FILE_MODIFYING_TOOLS.has(toolPart.toolName)) {
-        const filePath = getToolInputFilePath(toolPart.state.input);
-        if (filePath) {
-          fileSet.add(filePath);
-        }
-      }
+    } else if (FILE_MODIFYING_TOOLS.has(part.toolName)) {
+      const filePath = getToolInputFilePath(part.state.input);
+      if (filePath) fileSet.add(filePath);
     }
   }
 
