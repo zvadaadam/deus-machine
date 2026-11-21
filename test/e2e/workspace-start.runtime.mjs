@@ -178,11 +178,13 @@ try {
     );
 
   // ── 1. The row the last backend abandoned.
-  const abandoned = await workspace(interrupted);
-  assert.equal(abandoned.state, "error");
+  const abandoned = await until("the interrupted start to finish cleanup", async () => {
+    const row = await workspace(interrupted);
+    return row.state === "error" && row;
+  });
   assert.equal(abandoned.error_message, "Deus closed before this workspace was ready.");
-  await until("the half-made worktree to be removed", () => !existsSync(checkout("halley")));
-  await until("its branch to be removed", () => !branches().includes("journey-test/halley"));
+  assert.equal(existsSync(checkout("halley")), false);
+  assert.equal(branches().includes("journey-test/halley"), false);
   assert(!git("worktree", "list").includes("halley"));
   check("A start the previous backend abandoned fails at startup and its locked worktree is gone");
 
