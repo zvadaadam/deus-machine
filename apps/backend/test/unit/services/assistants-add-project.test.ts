@@ -441,6 +441,34 @@ describe("the same folder added meanwhile (H18)", () => {
 });
 
 describe("a clone", () => {
+  it.each(["inspectRepo", "addRepo"])(
+    "reports the clone left on disk when %s fails",
+    async (op) => {
+      const folder = path.join(developer, "widget");
+      state.ops[op] = () => {
+        throw new ConflictError("The folder could not be registered.");
+      };
+      await expect(addProject("acme/widget")).rejects.toThrow(
+        `Cloned into ${JSON.stringify(folder)}, but could not add the project. The folder could not be registered.\n  -> add_project(`
+      );
+      expect(fs.existsSync(path.join(folder, ".git"))).toBe(true);
+      delete state.ops[op];
+      expect(await addProject("acme/widget")).toContain("Nothing was cloned.");
+      expect(clones()).toHaveLength(1);
+    }
+  );
+
+  it("reports an unexpected add failure privately and tells the caller where the clone is", async () => {
+    const failure = new Error("private database detail");
+    state.ops.addRepo = () => {
+      throw failure;
+    };
+    const attempt = addProject("acme/widget");
+    await expect(attempt).rejects.toThrow("Cloned into");
+    await expect(attempt).rejects.not.toThrow(failure.message);
+    expect(state.report).toHaveBeenCalledWith(failure, { tags: { operatorTool: "add_project" } });
+  });
+
   it("checks a fresh clone's origin before adding it", async () => {
     await expect(addProject("acme/wrong-origin")).rejects.toThrow(
       'origin is "https://github.com/elsewhere/widget"'

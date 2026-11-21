@@ -50,7 +50,7 @@ function registered(how: Added["how"], repo: Repository, folder: string): Added 
 /** One folder's add: being checked, cloned or added, then its outcome until a call hears it. */
 interface Flight {
   address: CloneAddress;
-  phase: "checking" | "cloning" | "adding";
+  phase: "checking" | "cloning" | "cloned";
   done: Promise<Added>;
   outcome?: { added: Added } | { error: unknown };
   settledAt?: number;
@@ -87,7 +87,7 @@ function failureFor(address: CloneAddress, error: unknown): Error {
   );
 }
 
-export function addProjectTool(host: DeusHost) {
+export function addProjectTool(host: DeusHost, report: (error: unknown) => void) {
   /**
    * Adds in flight (or ended, not heard yet), by the folder they clone into,
    * lower-cased: on a case-insensitive disk `owner/App` and `owner/app` are one folder.
@@ -108,9 +108,9 @@ export function addProjectTool(host: DeusHost) {
     if (!exists) {
       flight.phase = "cloning";
       await host.act(caller, repos.gitClone, { url: address.url, targetPath: folder });
+      flight.phase = "cloned";
     }
 
-    flight.phase = "adding";
     const inspected = await host.act(caller, repos.inspectRepo, { root_path: folder });
     if (inspected.root_path !== fs.realpathSync.native(folder)) {
       throw new OperatorError(
@@ -227,7 +227,20 @@ export function addProjectTool(host: DeusHost) {
       // Heard: the next call starts afresh (and finds the project, when it was added).
       if (flights.get(flightKey(folder)) === flight) flights.delete(flightKey(folder));
       const outcome = flight.outcome!;
-      if ("error" in outcome) throw failureFor(address, outcome.error);
+      if ("error" in outcome) {
+        const { error } = outcome;
+        if (flight.phase !== "cloned") throw failureFor(address, error);
+        let reason = "";
+        if (error instanceof OperatorError)
+          reason = error.message.replace(/^refused \([a-z_]+\): /, "");
+        else if (error instanceof AppError && error.statusCode < 500) reason = error.message;
+        else report(error);
+        throw new OperatorError(
+          error instanceof OperatorError ? error.code : "failed",
+          `Cloned into ${quoted(folder)}, but could not add the project.${reason ? ` ${reason}` : ""}`,
+          { next: callHint("add_project", { repository }) }
+        );
+      }
       return answerFor(address, outcome.added);
     },
   });
