@@ -1137,6 +1137,12 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
         messages: [],
       }),
     ]);
+    message(entry.id, "later", "user", "follow-up");
+    const listed = (await host.list(LEAD as never, {})).find((e) => e.id === entry.id);
+    expect(listed?.error).toBeUndefined();
+    expect((await host.view(LEAD as never, entry.id, {})).turns).toContainEqual(
+      expect.objectContaining({ turnId: "delivery", error: entry.error })
+    );
   });
 
   it("records the refused first task even when a different sender has a live turn", async () => {

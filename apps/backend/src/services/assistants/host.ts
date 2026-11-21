@@ -264,9 +264,6 @@ const AGENT_NAMES = Object.entries(HARNESS_LABELS)
   .map(([id, label]) => `${JSON.stringify(id)} (${label})`)
   .join(" and ");
 
-/** What a chat the host could not deliver its first task to says, the reason kept safe. */
-const FIRST_TASK = "Its first task ";
-
 export function createDeusHost(): DeusHost {
   /** First tasks held for workspaces being set up, by the chat's id. */
   const firsts = new Map<string, Held>();
@@ -343,7 +340,7 @@ export function createDeusHost(): DeusHost {
       // Setup and delivery refusals belong to the entry; engine turn errors are in its view.
       const error = !row.session_id
         ? row.error_message
-        : !row.message_count || row.s_error?.startsWith(FIRST_TASK)
+        : status === "error" && !row.message_count
           ? row.s_error
           : null;
       return [
@@ -518,8 +515,8 @@ export function createDeusHost(): DeusHost {
     )
       return;
     const message = why
-      ? `${FIRST_TASK}could not be delivered. ${why}`
-      : `${FIRST_TASK}has no delivery confirmation. Check the chat before sending it again.`;
+      ? `Its first task could not be delivered. ${why}`
+      : "Its first task has no delivery confirmation. Check the chat before sending it again.";
     const error = { category: "internal" as const, message };
     db.transaction(() => {
       saveTurn(db, sessionId, { turnId, endedAt: Date.now(), stopReason: "error", error });
