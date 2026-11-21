@@ -274,14 +274,28 @@ export async function getGitFileContent(
 }
 
 export async function getMergeBase(workspacePath: string, parentBranch: string): Promise<string> {
-  const { stdout } = await execFileAsync("git", ["merge-base", parentBranch, "HEAD"], {
-    cwd: workspacePath,
-    encoding: "utf-8",
-    timeout: 5000,
-  });
-  const base = stdout.trim();
-  if (!base) throw new ConflictError("Could not read the changes: git returned no merge base.");
-  return base;
+  try {
+    const { stdout } = await execFileAsync("git", ["merge-base", parentBranch, "HEAD"], {
+      cwd: workspacePath,
+      encoding: "utf-8",
+      timeout: 5000,
+    });
+    const base = stdout.trim();
+    if (!base) throw new ConflictError("Could not read the changes: git returned no merge base.");
+    return base;
+  } catch (error) {
+    // No common ancestor: compare just the working tree to HEAD. Comparing to
+    // the unrelated parent branch used to show thousands of false deletions.
+    if (
+      isExecError(error) &&
+      error.code === 1 &&
+      !error.killed &&
+      error.stdout === "" &&
+      error.stderr === ""
+    )
+      return "HEAD";
+    throw error;
+  }
 }
 
 /** Returns untracked files (not ignored, not staged) in the workspace. */

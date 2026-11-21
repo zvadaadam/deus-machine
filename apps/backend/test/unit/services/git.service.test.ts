@@ -267,6 +267,26 @@ describe("exec-dependent functions", () => {
   });
 
   describe("getMergeBase", () => {
+    it("compares unrelated histories to HEAD and propagates other exits", async () => {
+      const fail = (code: number, stderr = "", stdout = "", killed = false) =>
+        Object.assign(new Error("git failed"), { code, stdout, stderr, killed });
+      git.mockImplementation(() => {
+        throw fail(1);
+      });
+      await expect(getMergeBase("/workspace", "other")).resolves.toBe("HEAD");
+      for (const error of [
+        fail(128),
+        fail(1, "fatal"),
+        fail(1, "", "unexpected"),
+        fail(1, "", "", true),
+      ]) {
+        git.mockImplementation(() => {
+          throw error;
+        });
+        await expect(getMergeBase("/workspace", "other")).rejects.toBe(error);
+      }
+    });
+
     it("returns trimmed merge-base hash", async () => {
       git.mockReturnValue("abc123\n");
       const result = await getMergeBase("/workspace", "origin/main");
