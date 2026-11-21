@@ -11,15 +11,24 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+function storedTheme(): Theme | undefined {
+  const value = localStorage.getItem("theme");
+  return value === "light" || value === "dark" || value === "system" ? value : undefined;
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [preference, setThemeState] = useState<Theme | undefined>(() => {
-    const stored = localStorage.getItem("theme");
-    if (stored === "light" || stored === "dark" || stored === "system") {
-      return stored;
-    }
-    return undefined;
-  });
+  const [preference, setThemeState] = useState(storedTheme);
   const theme = preference ?? "system";
+
+  useEffect(() => {
+    const sync = (event: StorageEvent) => {
+      if (event.storageArea === localStorage && (event.key === "theme" || event.key === null)) {
+        setThemeState(storedTheme());
+      }
+    };
+    window.addEventListener("storage", sync);
+    return () => window.removeEventListener("storage", sync);
+  }, []);
 
   const [actualTheme, setActualTheme] = useState<"light" | "dark">(() => {
     // Resolve initial theme synchronously to avoid flicker

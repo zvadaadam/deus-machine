@@ -17,6 +17,7 @@ import type { RepositoryItemProps } from "../model/types";
 import type { Workspace, DiffStats, RepoGroup } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
 import { WorkspaceItem } from "./WorkspaceItem";
+import { ArchivedWorkspaces } from "./ArchivedWorkspaces";
 
 import { SidebarRow, SidebarRowMain, SidebarRowIconSlot, SidebarRowRight } from "./SidebarRow";
 import { DeusRepositoryBanner } from "./DeusRepositoryBanner";
@@ -37,6 +38,7 @@ export function RepositoryItem({
   onNewWorkspace,
   onNewWorkspaceFromGitHub,
   windowLocation,
+  inPlace,
   onArchive,
   onStatusChange,
   diffStatsMap,
@@ -159,6 +161,7 @@ export function RepositoryItem({
                   onStatusChange={onStatusChange}
                 />
               )}
+              {sidebarExpanded && <ArchivedWorkspaces repository={repository} inPlace={inPlace} />}
             </ul>
           </Collapse>
         )}

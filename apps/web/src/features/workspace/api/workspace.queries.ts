@@ -358,65 +358,44 @@ export function useCreateWorkspace() {
   });
 }
 
-/**
- * Archive workspace mutation with optimistic update
- *
- * Flow:
- * 1. User clicks archive → UI updates IMMEDIATELY (workspace removed from list)
- * 2. HTTP request sent in background
- * 3. Success: Cache already correct, refetch confirms
- * 4. Error: Rollback to previous state, show error
- */
-export function useArchiveWorkspace() {
+/** Remove one sidebar row. A refusal restores it only if a live update hasn't already done so. */
+function useRemoveWorkspace(action: typeof api.archiveWorkspace | typeof api.deleteWorkspace) {
   const queryClient = useQueryClient();
   const queryKey = queryKeys.workspaces.byRepo(SIDEBAR_WORKSPACE_STATE);
 
   return useMutation({
-    mutationFn: (workspaceId: string) => call(api.archiveWorkspace, { workspaceId }),
+    mutationFn: (workspaceId: string) => call(action, { workspaceId }),
     retry: false,
-
-    // Optimistic update: Remove workspace from UI immediately
-    onMutate: async (workspaceId: string) => {
-      // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+    onMutate: async (workspaceId) => {
       await queryClient.cancelQueries({ queryKey });
-
-      // Snapshot the previous value
-      const previousData = queryClient.getQueryData<RepoGroup[]>(queryKey);
-
-      // Optimistically remove the workspace from the list
-      queryClient.setQueryData<RepoGroup[]>(queryKey, (old) => {
-        if (!old) return old;
-        return produce(old, (draft) => {
-          for (const repo of draft) {
-            const index = repo.workspaces.findIndex((w) => w.id === workspaceId);
-            if (index !== -1) {
-              repo.workspaces.splice(index, 1);
-              break;
-            }
-          }
-        });
-      });
-
-      // Return context with the previous value for rollback
-      return { previousData };
+      const groups = queryClient.getQueryData<RepoGroup[]>(queryKey);
+      const row = groups?.flatMap((group) => group.workspaces).find((w) => w.id === workspaceId);
+      if (row) queryClient.setQueryData(queryKey, mergeWorkspaceDelta(groups, undefined, [row.id]));
+      return row;
     },
-
-    // If mutation fails, roll back to the previous value
-    onError: (_err, _workspaceId, context) => {
-      if (context?.previousData) {
-        queryClient.setQueryData(queryKey, context.previousData);
+    onError: (_error, _id, removed) => {
+      if (!removed) return;
+      const groups = queryClient.getQueryData<RepoGroup[]>(queryKey);
+      if (groups && !groups.some((group) => group.workspaces.some((w) => w.id === removed.id))) {
+        queryClient.setQueryData(queryKey, mergeWorkspaceDelta(groups, [removed]));
       }
     },
-
     onSuccess: (_data, workspaceId) => {
-      track("workspace_archived", { workspace_id: workspaceId });
+      if (action === api.archiveWorkspace)
+        track("workspace_archived", { workspace_id: workspaceId });
     },
-
-    // Always refetch after error or success to ensure consistency
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
     },
   });
+}
+
+export function useArchiveWorkspace() {
+  return useRemoveWorkspace(api.archiveWorkspace);
+}
+
+export function useDeleteFailedWorkspace() {
+  return useRemoveWorkspace(api.deleteWorkspace);
 }
 
 /**
@@ -427,48 +406,6 @@ export function useRetryWorkspaceInit() {
   return useMutation({
     mutationFn: (workspaceId: string) => call(api.retryWorkspaceInit, { workspaceId }),
     retry: false,
-  });
-}
-
-/**
- * Delete a workspace that never started. Leaves the list at once, and comes
- * back if the backend refuses.
- */
-export function useDeleteFailedWorkspace() {
-  const queryClient = useQueryClient();
-  const queryKey = queryKeys.workspaces.byRepo(SIDEBAR_WORKSPACE_STATE);
-
-  return useMutation({
-    mutationFn: (workspaceId: string) => call(api.deleteWorkspace, { workspaceId }),
-    retry: false,
-
-    onMutate: async (workspaceId: string) => {
-      await queryClient.cancelQueries({ queryKey });
-      const previousData = queryClient.getQueryData<RepoGroup[]>(queryKey);
-      queryClient.setQueryData<RepoGroup[]>(queryKey, (old) => {
-        if (!old) return old;
-        return produce(old, (draft) => {
-          for (const repo of draft) {
-            const index = repo.workspaces.findIndex((w) => w.id === workspaceId);
-            if (index !== -1) {
-              repo.workspaces.splice(index, 1);
-              break;
-            }
-          }
-        });
-      });
-      return { previousData };
-    },
-
-    onError: (_err, _workspaceId, context) => {
-      if (context?.previousData) {
-        queryClient.setQueryData(queryKey, context.previousData);
-      }
-    },
-
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
-    },
   });
 }
 
@@ -531,10 +468,7 @@ export function useUpdateWorkspaceStatus() {
   });
 }
 
-/**
- * Unarchive workspace mutation — restores state to "ready".
- * Used by the undo toast after archiving.
- */
+/** Restore from the sidebar or Undo. The live workspace row tells us what opened. */
 export function useUnarchiveWorkspace() {
   const queryClient = useQueryClient();
 
@@ -543,9 +477,7 @@ export function useUnarchiveWorkspace() {
     onSuccess: (_data, workspaceId) => {
       track("workspace_unarchived", { workspace_id: workspaceId });
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
-    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all }),
   });
 }
 

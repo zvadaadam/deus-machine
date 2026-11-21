@@ -138,11 +138,6 @@ export function MainLayout() {
 
   const webDirect = isCloudDirectWebMode();
 
-  const selectedWorkspaceIdRef = useRef(selectedWorkspaceId);
-  useEffect(() => {
-    selectedWorkspaceIdRef.current = selectedWorkspaceId;
-  });
-
   // Opening a cloud workspace attaches its session channel (Durable Object
   // side — does NOT wake the VM). The snapshot that comes back is how deus
   // learns an old sandbox is paused: the row updates and the chat shows
@@ -288,61 +283,26 @@ export function MainLayout() {
     return group?.repo_name ?? "";
   }, [githubPickerRepoId, repoGroups]);
 
-  // --- Archive with undo (ref-stable for memoized sidebar items) ---
-
-  const archiveWorkspaceMutation = useArchiveWorkspace();
-  const unarchiveMutation = useUnarchiveWorkspace();
-
-  // Ref-stable archive handler: archiveWorkspaceMutation and selectedWorkspace
-  // change frequently (every render / every workspace click), so we capture
-  // them in refs to keep the callback identity stable. This matters because
-  // onArchive flows through the entire sidebar tree to every memoized WorkspaceItem.
-  const archiveMutationRef = useRef(archiveWorkspaceMutation);
-  const unarchiveMutationRef = useRef(unarchiveMutation);
-  const selectedWorkspaceRef = useRef(selectedWorkspace);
-  useEffect(() => {
-    archiveMutationRef.current = archiveWorkspaceMutation;
-    unarchiveMutationRef.current = unarchiveMutation;
-    selectedWorkspaceRef.current = selectedWorkspace;
-  });
-
+  const { mutateAsync: archive } = useArchiveWorkspace();
+  const { mutateAsync: restore } = useUnarchiveWorkspace();
   const archiveWorkspace = useCallback(
     async (workspaceId: string) => {
-      // Said at once, though a cloud workspace's archive waits for its computer
-      // to pause. Undo waits for the archive too, and undoes only one that
-      // happened: a failed archive has nothing to restore (it is reported below).
-      const archiving = archiveMutationRef.current.mutateAsync(workspaceId);
-      const archived = toast("Workspace archived", {
-        duration: 5000,
-        action: {
-          label: "Undo",
-          onClick: () => {
-            void archiving.then(
-              () =>
-                unarchiveMutationRef.current.mutateAsync(workspaceId).catch((error) => {
-                  toast.error(getErrorMessage(error));
-                }),
-              () => {}
-            );
-          },
-        },
-      });
       try {
-        await archiving;
-        if (selectedWorkspaceRef.current?.id === workspaceId) {
-          selectWorkspace(null);
-        }
+        await archive(workspaceId);
+        if (useWorkspaceStore.getState().selectedWorkspaceId === workspaceId) selectWorkspace(null);
+        toast("Workspace archived", {
+          duration: 5000,
+          action: {
+            label: "Undo",
+            onClick: () =>
+              void restore(workspaceId).catch((error) => toast.error(getErrorMessage(error))),
+          },
+        });
       } catch (error) {
-        toast.dismiss(archived);
-        console.error("Error archiving workspace:", error);
-        toast.error(
-          isCloudDirectWebMode()
-            ? "Archiving is done from the desktop app for now"
-            : getErrorMessage(error)
-        );
+        toast.error(getErrorMessage(error));
       }
     },
-    [selectWorkspace]
+    [archive, restore, selectWorkspace]
   );
 
   // --- Workflow status change (ref-stable like archive) ---
@@ -504,9 +464,7 @@ export function MainLayout() {
           onStartNewProject={() => repoActions.setShowStartNewModal(true)}
           onAddFromGitHub={() => handleAddFromGitHub()}
           addActions={addActions}
-          // Archive + workflow status are Mac-backend mutations; web-direct has no
-          // transport for them, so the sidebar gets no handlers and never renders the
-          // hover archive button or the status menu (the toasts above stay as a net).
+          // The connected computer handles archive and workflow changes.
           onArchive={webDirect ? undefined : archiveWorkspace}
           onStatusChange={webDirect ? undefined : handleStatusChange}
           onOpenAutomations={openAutomations}

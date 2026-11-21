@@ -78,6 +78,7 @@ export interface RepositoryItemProps {
   onNewWorkspaceFromGitHub?: (repoId: string) => void;
   /** Where the window is (`offersNewFromBranch`). */
   windowLocation: WorkspaceLocation;
+  inPlace: (workspace: Pick<Workspace, "kind" | "organization_id">) => boolean;
   onArchive?: (workspaceId: string) => void;
   onStatusChange?: (workspaceId: string, status: WorkspaceStatus) => void;
   // Avoid mounting workspace list when sidebar is offcanvas-collapsed.

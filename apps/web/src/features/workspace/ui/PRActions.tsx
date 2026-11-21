@@ -82,6 +82,7 @@ export function PRActions({
   };
 
   const state = derivePRActionState(prStatus, ghStatus, localTargetBranch);
+  if (state.type === "unchecked") return null;
 
   return (
     <div className="flex items-center gap-1.5">
@@ -178,8 +179,7 @@ export function PRActions({
 // ---------------------------------------------------------------------------
 
 function PRLink({ state }: { state: PRActionState }) {
-  if (state.type === "gh_unavailable" || state.type === "no_pr" || state.type === "error")
-    return null;
+  if (!("prNumber" in state)) return null;
 
   return (
     <Tooltip delayDuration={200}>

@@ -182,9 +182,13 @@ export function MobilePRStatusBar({
   const state = derivePRActionState(prStatus, ghStatus, targetBranch);
 
   return match(state)
-    .with({ type: "gh_unavailable" }, () => null)
-    .with({ type: "error" }, () => null)
-    .with({ type: "no_pr" }, () => null)
+    .with(
+      { type: "gh_unavailable" },
+      { type: "error" },
+      { type: "no_pr" },
+      { type: "unchecked" },
+      () => null
+    )
     .with({ type: "ci_pending" }, (s) => (
       <StatusBar prNumber={s.prNumber} prUrl={s.prUrl}>
         <span className="text-warning flex items-center gap-1 text-xs">

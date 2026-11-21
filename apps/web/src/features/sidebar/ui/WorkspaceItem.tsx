@@ -14,7 +14,7 @@ import { useAutomationForWorkspace } from "@/features/automations";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
 import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
 import { prefetchWorkspace } from "@/features/workspace/api/prefetch";
-import { workspaceStart } from "@/features/workspace/lib/startState";
+import { canRecoverStart, workspaceStart } from "@/features/workspace/lib/startState";
 import { getDisplayStatus } from "../lib/status";
 import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "../lib/utils";
 import type { WorkspaceItemProps } from "../model/types";
@@ -188,7 +188,8 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
     onArchive?.(workspace.id);
   };
 
-  const canArchive = !isInitializing && workspace.state !== "archived" && !!onArchive;
+  const canArchive =
+    !isInitializing && !canRecoverStart(workspace) && workspace.state !== "archived" && !!onArchive;
 
   const row = (
     <SidebarRow

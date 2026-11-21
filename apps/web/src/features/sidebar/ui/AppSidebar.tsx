@@ -20,6 +20,8 @@ import { cn } from "@/shared/lib/utils";
 import { Glide } from "@/components/ui/glide";
 import { Sidebar, SidebarContent, SidebarMenu, useSidebar } from "@/components/ui/sidebar";
 import { useUIStore } from "@/shared/stores/uiStore";
+import { useCloudOrganizations } from "@/shared/hooks/useCloudOrganizations";
+import { placeKey, placeOf } from "../lib/location";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useSidebarStore } from "../store/sidebarStore";
 import type { AppSidebarProps } from "../model/types";
@@ -72,6 +74,7 @@ export function AppSidebar({
   // Mac backend): the Automations row hides and the empty state points at the
   // desktop app instead of a project picker that isn't there.
   const webDirect = isCloudDirectWebMode();
+  const organizations = useCloudOrganizations();
 
   // On mobile, close the sidebar sheet after selecting a workspace
   const handleWorkspaceClick = React.useCallback(
@@ -229,6 +232,9 @@ export function AppSidebar({
                       onNewWorkspace={onNewWorkspace}
                       onNewWorkspaceFromGitHub={onNewWorkspaceFromGitHub}
                       windowLocation={places.location}
+                      inPlace={(workspace) =>
+                        placeKey(placeOf(workspace, organizations)) === places.current
+                      }
                       onArchive={onArchive}
                       onStatusChange={onStatusChange}
                       diffStatsMap={diffStatsMap}

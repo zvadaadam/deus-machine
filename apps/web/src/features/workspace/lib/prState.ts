@@ -16,7 +16,7 @@ import type { PRStatus, GhCliStatus, CheckDetail, Workspace } from "@/shared/typ
  * Priority order (highest to lowest):
  *   1. GitHub integration unavailable (blocks PR actions)
  *   2. error (GitHub unreachable — timeout or network failure)
- *   3. no PR (initial state)
+ *   3. unchecked or conclusively no PR
  *   4. merged (terminal)
  *   5. closed (terminal — not merged)
  *   6. conflicts (must resolve before anything else)
@@ -29,6 +29,7 @@ import type { PRStatus, GhCliStatus, CheckDetail, Workspace } from "@/shared/typ
 export type PRActionState =
   | { type: "gh_unavailable"; reason: "not_installed" | "not_authenticated" }
   | { type: "error"; reason: "timeout" | "network" }
+  | { type: "unchecked" }
   | { type: "no_pr" }
   | { type: "merged"; prNumber: number; prUrl: string }
   | { type: "closed"; prNumber: number; prUrl: string }
@@ -82,9 +83,9 @@ export function derivePRActionState(
     return { type: "error", reason: "network" };
   }
 
-  // No PR exists yet
+  // No remote, no checkout, or the lookup hasn't finished. None establishes that a PR can be opened.
   if (!prStatus?.has_pr || !prStatus.pr_number) {
-    return { type: "no_pr" };
+    return { type: prStatus?.conclusive && !prStatus.has_pr ? "no_pr" : "unchecked" };
   }
 
   const prNumber = prStatus.pr_number;
