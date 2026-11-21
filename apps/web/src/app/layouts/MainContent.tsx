@@ -132,7 +132,7 @@ export function MainContent({
   const connectionState = useConnectionState().state;
   const isDisconnected = connectionState === "disconnected";
 
-  // --- Workspace actions (PR bridge, archive, retry, manifest) ---
+  // --- Workspace actions (PR bridge, archive, manifest) ---
   const {
     createPRHandler,
     setCreatePRHandler,
@@ -143,8 +143,6 @@ export function MainContent({
     handleCreatePR,
     handleSendAgentMessage,
     handleArchive,
-    handleRetrySetup,
-    handleViewSetupLogs,
     environmentTasks,
     handleRunTask,
   } = useWorkspaceActions({
@@ -265,12 +263,6 @@ export function MainContent({
               workspace={selectedWorkspace}
               sendAgentMessageHandler={sendAgentMessageHandler}
               handleSendAgentMessage={handleSendAgentMessage}
-              onRetrySetup={
-                selectedWorkspace.setup_status === "failed" ? handleRetrySetup : undefined
-              }
-              onViewSetupLogs={
-                selectedWorkspace.setup_status === "failed" ? handleViewSetupLogs : undefined
-              }
               setCreatePRHandler={setCreatePRHandler}
               setSendAgentMessageHandler={setSendAgentMessageHandler}
               isWatched={isWatched}
@@ -299,6 +291,7 @@ export function MainContent({
                 chat={
                   <>
                     <WorkspaceHeader
+                      workspaceId={selectedWorkspace.id}
                       repositoryId={selectedWorkspace.repository_id}
                       title={selectedWorkspace.title ?? undefined}
                       repositoryName={selectedWorkspace.repo_name}
@@ -317,14 +310,6 @@ export function MainContent({
                       setupError={selectedWorkspace.error_message}
                       onSendAgentMessage={
                         sendAgentMessageHandler ? handleSendAgentMessage : undefined
-                      }
-                      onRetrySetup={
-                        selectedWorkspace.setup_status === "failed" ? handleRetrySetup : undefined
-                      }
-                      onViewSetupLogs={
-                        selectedWorkspace.setup_status === "failed"
-                          ? handleViewSetupLogs
-                          : undefined
                       }
                       workspaceStatus={selectedWorkspace.status}
                       onStatusChange={

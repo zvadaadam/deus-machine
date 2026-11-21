@@ -36,10 +36,6 @@ interface MobileLayoutProps {
   workspace: Workspace;
   sendAgentMessageHandler: ((text: string) => Promise<void>) | null;
   handleSendAgentMessage: (text: string) => void;
-  /** Pre-gated by caller: only passed when setup_status === "failed" */
-  onRetrySetup?: () => void;
-  /** Pre-gated by caller: only passed when setup_status === "failed" */
-  onViewSetupLogs?: () => void;
   setCreatePRHandler: (handler: (() => void) | null) => void;
   setSendAgentMessageHandler: Dispatch<SetStateAction<((text: string) => Promise<void>) | null>>;
   isWatched: boolean;
@@ -62,8 +58,6 @@ export function MobileLayout({
   workspace,
   sendAgentMessageHandler,
   handleSendAgentMessage,
-  onRetrySetup,
-  onViewSetupLogs,
   setCreatePRHandler,
   setSendAgentMessageHandler,
   isWatched,
@@ -141,6 +135,7 @@ export function MobileLayout({
       {/* Header row -- workspace title on left, compact Create PR pill on right */}
       <div className="flex min-w-0 flex-shrink-0 items-center justify-between pr-2">
         <WorkspaceHeader
+          workspaceId={workspace.id}
           repositoryId={workspace.repository_id}
           title={workspace.title ?? undefined}
           repositoryName={workspace.repo_name}
@@ -152,8 +147,6 @@ export function MobileLayout({
           setupStatus={workspace.setup_status}
           setupError={workspace.error_message}
           onSendAgentMessage={sendAgentMessageHandler ? handleSendAgentMessage : undefined}
-          onRetrySetup={onRetrySetup}
-          onViewSetupLogs={onViewSetupLogs}
           workspaceStatus={workspace.status}
           onStatusChange={onStatusChange}
           tasks={environmentTasks}

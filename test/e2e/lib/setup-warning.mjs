@@ -1,6 +1,28 @@
 /* global document, getComputedStyle */
 import assert from "node:assert/strict";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
+
+// Hold only this phone's retry on its way to the real backend. The other client can act first.
+export async function holdSetupRetry(page) {
+  const gate = Promise.withResolvers();
+  let writes = 0;
+  await page.routeWebSocket(
+    (url) => url.pathname === "/ws",
+    (route) => {
+      const host = route.connectToServer();
+      route.onMessage(async (raw) => {
+        const frame = JSON.parse(String(raw));
+        if (frame.type === "q:mutate" && frame.action === "retrySetup") {
+          writes++;
+          await gate.promise;
+        }
+        host.send(raw);
+      });
+    }
+  );
+  return { writes: () => writes, release: gate.resolve };
+}
 
 // The agentless journey can render a real transcript tool by reading a finished
 // turn from its disposable database. No chat or tool is executed to make the fixture.
@@ -43,6 +65,36 @@ export function seedToolTurn(db, sessionId) {
   })();
 }
 
+// Chromium's accessibility tree, with the warning and its history both open.
+async function checkLiveTree(page, evidence) {
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    await cdp.send("Accessibility.enable");
+    const { root } = await cdp.send("DOM.getDocument");
+    const { nodeId } = await cdp.send("DOM.querySelector", {
+      nodeId: root.nodeId,
+      selector: '[data-slot="env-group"]:has([data-env-step="setup"])',
+    });
+    const { nodes } = await cdp.send("Accessibility.queryAXTree", { nodeId, role: "status" });
+    const regions = [];
+    for (const node of nodes) {
+      assert.equal(node.properties.find((p) => p.name === "live")?.value.value, "polite");
+      const children = await cdp.send("Accessibility.getChildAXNodes", { id: node.nodeId });
+      regions.push(children.nodes.map((child) => [child.role.value, child.name.value]));
+    }
+    assert.deepEqual(regions, [
+      [["StaticText", "Workspace ready"]],
+      [["StaticText", "Setup failed"]],
+    ]);
+    await writeFile(
+      path.join(evidence, "setup-warning-live-regions.json"),
+      JSON.stringify(regions, null, 2)
+    );
+  } finally {
+    await cdp.detach();
+  }
+}
+
 export async function checkSetupWarning(page, group, evidence, touch = false) {
   const title = group.getByRole("button", { name: "Workspace ready", exact: true });
   const issue = group.getByRole("button", { name: /^Setup failed/ });
@@ -55,7 +107,20 @@ export async function checkSetupWarning(page, group, evidence, touch = false) {
   await issue.waitFor();
   assert.equal(await issue.locator("samp").textContent(), lastLine);
   assert.equal(await issue.locator("b").count(), 0);
-  assert.equal(await group.getAttribute("aria-live"), "polite");
+  const announcements = group.getByRole("status");
+  const checkAnnouncements = async () => {
+    assert.equal(
+      await group.getAttribute("aria-live"),
+      "off",
+      "opt out of the surrounding live chat log"
+    );
+    assert.deepEqual(
+      await Promise.all((await announcements.all()).map((region) => region.ariaSnapshot())),
+      ["- status: Workspace ready", "- status: Setup failed"]
+    );
+    assert.equal(await group.locator('[role="status"][aria-live="polite"]').count(), 2);
+  };
+  await checkAnnouncements();
   assert.equal(await title.getAttribute("aria-expanded"), "false");
   await page.bringToFront();
   await page.mouse.move(page.viewportSize().width - 120, page.viewportSize().height / 2);
@@ -134,16 +199,42 @@ export async function checkSetupWarning(page, group, evidence, touch = false) {
         style: `body::before { ${guide}; left: ${iconX}px } body::after { ${guide}; left: ${labelX}px }`,
       });
     }
+    // Neither opening the warning nor unfolding its step history changes the announcements.
+    await title.press("Enter");
+    await group.getByText("Made a safe copy").waitFor();
+    await checkAnnouncements();
+    if (!touch && theme === "dark") {
+      await checkLiveTree(page, evidence);
+      await writeFile(path.join(evidence, "setup-warning-aria.txt"), await group.ariaSnapshot());
+    }
+    await title.press("Enter");
+    await group.getByText("Made a safe copy").waitFor({ state: "detached" });
+
+    const trigger = theme === "light" ? page.getByRole("button", { name: "View setup logs" }) : log;
+    const pages = page.context().pages().length;
+    await trigger.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "Setup log" });
+    const fullLog = dialog.getByRole("region", { name: "Setup output" });
+    await fullLog.waitFor();
+    const text = await fullLog.textContent();
+    assert(text.startsWith("starting\n") && text.includes(lastLine));
+    assert.equal(await fullLog.locator("*").count(), 0, "the whole file is plain text");
+    assert.equal(await fullLog.evaluate((el) => getComputedStyle(el).overflowY), "auto");
+    assert.equal(page.context().pages().length, pages, "the log opens in the same window");
+    if (!touch) {
+      await page.screenshot({
+        path: path.join(evidence, `setup-log-${theme}.png`),
+        animations: "disabled",
+      });
+    }
+    if (theme === "light") await dialog.getByRole("button", { name: "Close" }).click();
+    else await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "detached" });
+    assert(
+      await trigger.evaluate((el) => el === document.activeElement),
+      "focus returns to the log action"
+    );
     await issue.press("Space");
     await clearFocus();
-  }
-  if (!touch) {
-    await issue.press("Enter");
-    const [popup] = await Promise.all([page.context().waitForEvent("page"), log.press("Enter")]);
-    await popup.waitForLoadState();
-    assert((await popup.locator("body").innerText()).includes(lastLine));
-    assert.equal(await popup.locator("b").count(), 0);
-    await popup.close();
-    await issue.press("Space");
   }
 }

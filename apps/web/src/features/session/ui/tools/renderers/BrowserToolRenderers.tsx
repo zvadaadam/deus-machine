@@ -31,7 +31,8 @@ import {
 } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";
-import { extractImage, extractText, OutputBlock, ICON_CLS } from "./shared";
+import { OutputBlock } from "@/components/ui/output-block";
+import { extractImage, extractText, ICON_CLS } from "./shared";
 import type { ToolRendererProps } from "../../chat-types";
 
 /** Truncate a domain from URL for preview */

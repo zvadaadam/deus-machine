@@ -18,7 +18,7 @@ import { chromium } from "playwright";
 import { SCHEMA_SQL } from "../../shared/schema.ts";
 import { LOOPBACK_WEB_ORIGINS } from "../../shared/web-origins.ts";
 import { connectBackend } from "./lib/operations.mjs";
-import { seedToolTurn, checkSetupWarning } from "./lib/setup-warning.mjs";
+import { seedToolTurn, checkSetupWarning, holdSetupRetry } from "./lib/setup-warning.mjs";
 import { freePort } from "./remote-access/stack.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
@@ -290,7 +290,11 @@ try {
   };
   const sends = (text) =>
     sent.filter((frame) => frame.includes('"sendMessage"') && frame.includes(text)).length;
-  const startLine = (page) => page.getByRole("status").filter({ hasText: "Workspace ready" });
+  const startLine = (page) =>
+    page
+      .locator('[data-slot="env-group"]')
+      .filter({ has: page.getByRole("button", { name: "Workspace ready", exact: true }) });
+  const status = (section, text) => section.getByRole("status").filter({ hasText: text });
 
   // The first navigation also transforms the app against this run's empty Vite cache.
   await a.goto(url(home), { timeout: 90_000 });
@@ -394,8 +398,8 @@ try {
   await panel(a).getByRole("button", { name: "Retry", exact: true }).click();
   // Stages reach every client over the WebSocket: the phone follows the desktop's retry.
   await Promise.all([
-    panel(a).getByText("Making a safe copy…").waitFor(),
-    panel(b).getByText("Making a safe copy…").waitFor(),
+    status(panel(a), "Making a safe copy…").waitFor(),
+    status(panel(b), "Making a safe copy…").waitFor(),
   ]);
   await waiting.getByText("Add a dark mode toggle to the settings page").waitFor();
   // One message waits per workspace: a second is refused in words and stays in the box.
@@ -474,9 +478,9 @@ try {
   }
   // Running setup stays visible in the live chat. A finished setup belongs only in history.
   await startLine(a).waitFor();
-  await startLine(a).getByText("Running setup…").waitFor();
+  await status(startLine(a), "Running setup…").waitFor();
   await writeFile(path.join(checkoutPath, "finish-setup"), "");
-  await startLine(a).getByText("Running setup…").waitFor({ state: "detached" });
+  await status(startLine(a), "Running setup…").waitFor({ state: "detached" });
   assert.equal(await startLine(a).innerText(), "Workspace ready");
   await startLine(a).getByRole("button", { name: "Workspace ready", exact: true }).click();
   await startLine(a).getByText("Ran setup").waitFor();
@@ -526,7 +530,7 @@ try {
   assert(slow.ackMs < 1500, `creating must not wait for the fetch (took ${slow.ackMs}ms)`);
   await a.goto(url(slow.id));
   await attach(a);
-  await panel(a).getByText("Getting the latest changes…").waitFor();
+  await status(panel(a), "Getting the latest changes…").waitFor();
   assert.equal((await workspace(slow.id)).init_stage, "fetch");
   // Started with no message: one typed on its start page waits, and is sent when it is ready.
   const asked = "Explain how this project is laid out";
@@ -581,7 +585,7 @@ try {
     .locator('[data-slot="waiting-message"]')
     .getByText("Write the changelog")
     .waitFor();
-  await panel(a).getByText("Getting the latest changes…").waitFor();
+  await status(panel(a), "Getting the latest changes…").waitFor();
   await shot(a, "starting-row", 0);
   // The window reloads while both are starting, and reopens on neither.
   await a.reload();
@@ -693,16 +697,18 @@ try {
   check("A waiting message whose chat was spoken to first goes to that chat's composer, unsent");
 
   // ── 11. A failed setup still opens the chat, with the script's own words in view.
+  const failSetup =
+    "printf 'Checking tools\\n\\033[31mMissing <b>clang</b>\\033[0m\\n' >&2; exit 1";
   await writeFile(
     path.join(repo, ".deus/environment.json"),
     JSON.stringify({
       version: 1,
-      setup:
-        "echo starting; sleep 1; printf 'Checking tools\\n\\033[31mMissing <b>clang</b>\\033[0m\\n' >&2; exit 1",
+      setup: `echo starting; sleep 1; ${failSetup}`,
     })
   );
   git("add", ".deus/environment.json");
   git("commit", "-qm", "Exercise a failing setup");
+  const heldRetry = await holdSetupRetry(b);
   await b.goto(url(home));
   await attach(b);
   const failedSetup = await create();
@@ -713,18 +719,18 @@ try {
   seedToolTurn(db, failedRow.current_session_id);
   await a.locator(`[data-workspace-id="${failedSetup.id}"]`).click();
   // The phone has followed the same start. Navigate in the live app so it keeps its start history.
-  await b.getByRole("button", { name: "Expand sidebar", exact: true }).click();
-  const phoneRow = b.locator(`[data-workspace-id="${failedSetup.id}"]`);
-  if (!(await phoneRow.isVisible())) {
-    await b.getByRole("button", { name: "Toggle project workspaces" }).click();
-  }
-  await phoneRow.click();
+  const openOnPhone = async (id) => {
+    await b.getByRole("button", { name: "Expand sidebar", exact: true }).click();
+    const row = b.locator(`[data-workspace-id="${id}"]`);
+    if (!(await row.isVisible()))
+      await b.getByRole("button", { name: "Toggle project workspaces" }).click();
+    await row.click();
+  };
+  await openOnPhone(failedSetup.id);
   await checkSetupWarning(a, startLine(a), evidence);
   await checkSetupWarning(b, startLine(b), evidence, true);
   const failedCheckout = checkout(failedRow.slug);
-  const retrySetup = a
-    .locator('[data-slot="workspace-header"] button')
-    .filter({ has: a.locator(".lucide-rotate-cw") });
+  const retrySetup = a.getByRole("button", { name: "Retry setup", exact: true });
   await retrySetup.hover();
   await a.getByRole("tooltip", { name: "Retry setup" }).waitFor();
   const group = startLine(a);
@@ -733,27 +739,65 @@ try {
   const rowTop = () =>
     step.evaluate(
       (el) =>
-        el.getBoundingClientRect().top - el.closest('[role="status"]').getBoundingClientRect().top
+        el.getBoundingClientRect().top -
+        el.closest('[data-slot="env-group"]').getBoundingClientRect().top
     );
   const failedTop = await rowTop();
-  // The original header action still works. A failed retry returns to the same row.
+  // A slow write locks both actions on the phone, even before React can paint disabled.
+  const phoneRetry = startLine(b).getByRole("button", { name: "Run again" });
+  await phoneRetry.evaluate((button) => {
+    button.click();
+    button.click();
+    document.querySelector('button[aria-label="Retry setup"]').click();
+  });
+  await until("the phone’s retry to be on the wire", () => heldRetry.writes() > 0);
+  assert(await phoneRetry.isDisabled());
+  assert(await b.getByRole("button", { name: "Retry setup" }).isDisabled());
+  await openOnPhone(home);
+  await phoneRetry.waitFor({ state: "detached" });
+
+  // The desktop gets its write through first. The real refusal still reaches the phone
+  // after navigation has unmounted the transcript that requested the retry.
+  const recipe = path.join(failedCheckout, ".deus/environment.json");
+  await writeFile(
+    recipe,
+    JSON.stringify({
+      version: 1,
+      setup: `seq 80; while [ ! -e finish-failed-retry ]; do sleep 0.1; done; ${failSetup}`,
+    })
+  );
   await retrySetup.click();
-  await step.getByText("Running setup…").waitFor();
+  await status(step, "Running setup…").waitFor();
+  heldRetry.release();
+  await toast(b, "Setup is not in a failed state.").waitFor();
+  assert.equal(heldRetry.writes(), 1, "one retry write across both buttons");
+  await writeFile(path.join(failedCheckout, "finish-failed-retry"), "");
   await step.getByRole("button", { name: /^Setup failed/ }).waitFor();
   assert(await original.evaluate((el) => el.isConnected));
+  await openOnPhone(failedSetup.id);
+  await phoneRetry.waitFor();
+  assert(await phoneRetry.isEnabled());
+  // A new run replaces the file. Its full log can be read and scrolled from the keyboard.
+  await a.getByRole("button", { name: "View setup logs" }).click();
+  const retriedLog = a.getByRole("region", { name: "Setup output" }).filter({ hasText: "80" });
+  await retriedLog.focus();
+  await retriedLog.press("End");
+  await until("the log to scroll", () => retriedLog.evaluate((el) => el.scrollTop > 0));
+  await a.keyboard.press("Escape");
+  await a.getByRole("dialog", { name: "Setup log" }).waitFor({ state: "detached" });
   await writeFile(
-    path.join(failedCheckout, ".deus/environment.json"),
+    recipe,
     JSON.stringify({
       version: 1,
       setup: "while [ ! -e finish-retry ]; do sleep 0.1; done; echo repaired",
     })
   );
   await group.getByRole("button", { name: "Run again", exact: true }).press("Enter");
-  await step.getByText("Running setup…", { exact: true }).waitFor();
+  await status(step, "Running setup…").waitFor();
   assert(await original.evaluate((el) => el.isConnected), "retry keeps the same step");
   assert.equal(await rowTop(), failedTop, "retry stays in the same row");
   const phoneStep = startLine(b).locator('[data-env-step="setup"]');
-  await phoneStep.getByText("Running setup…").waitFor();
+  await status(phoneStep, "Running setup…").waitFor();
   assert.equal(
     await phoneStep.locator("svg").evaluate((el) => window.getComputedStyle(el).animationName),
     "none"
@@ -782,7 +826,7 @@ try {
   await group.getByRole("button", { name: "Workspace ready" }).press("Space");
   await group.getByText("Ran setup", { exact: true }).waitFor();
   check(
-    "The setup row shares the tool grid, previews literal output and opens the log. Run again stays in place until the repaired setup folds into history in the same chat."
+    "The setup row shares the tool grid and announces just its label. Both log actions show literal output in the app. A slow retry is sent once, a refusal survives navigation, and a repaired setup folds into history."
   );
 
   assert.deepEqual(errors, []);

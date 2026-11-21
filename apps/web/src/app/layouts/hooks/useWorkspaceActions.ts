@@ -1,10 +1,10 @@
 /**
- * Workspace Actions Hook — PR bridge, archive, retry, and project commands.
+ * Workspace Actions Hook — PR bridge, archive, and project commands.
  *
  * Extracts all workspace-level action handlers from MainContent, keeping
  * the layout component focused on panel geometry. This hook manages:
  * - PR handler bridge (ChatArea sets handlers, WorkspaceHeader consumes them)
- * - Archive, retry setup, view setup logs
+ * - Archive the workspace
  * - Project command discovery and execution
  * - Target branch selection for PR creation
  */
@@ -22,7 +22,6 @@ import { simulatorStoreActions } from "@/features/simulator/store";
 import type { ContentTab } from "@/features/workspace/store";
 import type { Workspace } from "@/shared/types";
 import { prTargetBranch } from "@/features/workspace/lib/prState";
-import { useSetupActions } from "@/features/workspace/hooks/useSetupActions";
 
 interface UseWorkspaceActionsOptions {
   selectedWorkspace: Workspace | null;
@@ -81,7 +80,7 @@ export function useWorkspaceActions({
     [sendAgentMessageHandler]
   );
 
-  // --- Archive & retry ---
+  // --- Archive ---
 
   const { mutate: archiveWorkspace } = useArchiveWorkspace();
   const handleArchive = useCallback(() => {
@@ -99,9 +98,6 @@ export function useWorkspaceActions({
       onError: (error) => toast.error(error.message),
     });
   }, [selectedWorkspace, archiveWorkspace]);
-
-  const { retry: handleRetrySetup, viewLog: handleViewSetupLogs } =
-    useSetupActions(selectedWorkspaceId);
 
   // --- Project environment commands ---
 
@@ -142,8 +138,6 @@ export function useWorkspaceActions({
     handleCreatePR,
     handleSendAgentMessage,
     handleArchive,
-    handleRetrySetup,
-    handleViewSetupLogs,
     // Project environment
     environmentTasks,
     handleRunTask,

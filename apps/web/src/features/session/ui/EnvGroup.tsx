@@ -12,6 +12,8 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SetupLogDialog } from "@/features/workspace/ui/SetupLogDialog";
+import type { useSetupActions } from "@/features/workspace/hooks/useSetupActions";
 import type { StartWarning } from "@/features/workspace/lib/startState";
 import { cn } from "@/shared/lib/utils";
 
@@ -20,7 +22,7 @@ export interface EnvLine {
   label: string;
   icon: "done" | "active" | "warning" | "error";
   warning?: StartWarning;
-  actions?: { retry: () => void; viewLog: () => void };
+  actions?: ReturnType<typeof useSetupActions>;
 }
 
 const ICON = "size-3.5 shrink-0";
@@ -72,6 +74,7 @@ function WarningRow({
             size="xs"
             variant="secondary"
             className={ACTION}
+            disabled={actions.retrying}
             onClick={() => {
               focusTitle();
               actions.retry();
@@ -90,15 +93,11 @@ function WarningRow({
         )}
         {actions && (
           <div className={cn(ROW, "mt-0.5")}>
-            <Button
-              type="button"
-              size="xs"
-              variant="ghost"
-              className={cn(ACTION, "ps-0")}
-              onClick={actions.viewLog}
-            >
-              View log
-            </Button>
+            <SetupLogDialog workspaceId={actions.workspaceId}>
+              <Button type="button" size="xs" variant="ghost" className={cn(ACTION, "ps-0")}>
+                View log
+              </Button>
+            </SetupLogDialog>
           </div>
         )}
       </div>
@@ -140,8 +139,15 @@ export function EnvGroup({ title, where, state, steps = [], footer }: EnvGroupPr
   const renderStep = (line: EnvLine) => {
     const Mark =
       line.icon === "done" ? CircleCheck : line.icon === "active" ? Loader2 : TriangleAlert;
+    const announce = line.icon === "active" || line.icon === "warning";
     return (
       <div key={line.key} data-env-step={line.key}>
+        {/* The same live node changes from failed to running even as its controls unmount. */}
+        {announce && (
+          <span role="status" aria-live="polite" className="sr-only">
+            {line.label}
+          </span>
+        )}
         {line.warning ? (
           <WarningRow
             line={line}
@@ -168,7 +174,9 @@ export function EnvGroup({ title, where, state, steps = [], footer }: EnvGroupPr
                 line.icon === "warning" && "text-warning"
               )}
             />
-            <span className="min-w-0">{line.label}</span>
+            <span aria-hidden={announce || undefined} className="min-w-0">
+              {line.label}
+            </span>
           </div>
         )}
       </div>
@@ -176,11 +184,13 @@ export function EnvGroup({ title, where, state, steps = [], footer }: EnvGroupPr
   };
 
   return (
-    <div role="status" aria-live="polite" className="flex w-full min-w-0 flex-col text-sm">
+    // The transcript is itself a polite log. Only the status labels below should announce.
+    <div data-slot="env-group" aria-live="off" className="flex w-full min-w-0 flex-col text-sm">
       <button
         type="button"
         ref={titleButton}
         disabled={!foldable}
+        aria-label={title}
         aria-expanded={foldable ? open : undefined}
         aria-controls={foldable && open ? cardId : undefined}
         onClick={() => setOpenedRun(open ? undefined : run)}
@@ -195,6 +205,8 @@ export function EnvGroup({ title, where, state, steps = [], footer }: EnvGroupPr
           className={cn(ICON, state === "failed" ? "text-destructive/80" : "text-text-tertiary")}
         />
         <span
+          role="status"
+          aria-live="polite"
           className={cn(
             "text-text-secondary font-medium",
             state === "running" && [

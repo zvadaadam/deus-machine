@@ -562,18 +562,3 @@ export function useProjectEnvironment(workspaceId: string | null) {
     staleTime: Infinity,
   });
 }
-
-/**
- * Retry failed setup for a workspace.
- * Invalidates workspace queries to refresh setup_status.
- */
-export function useRetrySetup() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (workspaceId: string) => call(api.retrySetup, { workspaceId }),
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
-    },
-  });
-}

@@ -35,6 +35,8 @@ import type { SetupStatus } from "@/shared/types";
 import type { WorkspaceKind, WorkspaceStatus } from "@shared/enums";
 import type { ProjectTask } from "@shared/types/project-environment";
 import { HeaderRunButton } from "./HeaderRunButton";
+import { SetupLogDialog } from "./SetupLogDialog";
+import { useSetupActions } from "../hooks/useSetupActions";
 import { WorkflowStatusIcon } from "@/features/sidebar/ui/WorkflowStatusIcon";
 import { WorkspaceStatusMenu } from "@/features/sidebar/ui/WorkspaceStatusMenu";
 import { AppIcon, groupAppsByCategory } from "@/shared/lib/appIcons";
@@ -43,6 +45,7 @@ import { fixSetupErrorPrompt } from "@/features/session/lib/sessionPrompts";
 import { uiActions } from "@/shared/stores/uiStore";
 
 interface WorkspaceHeaderProps {
+  workspaceId: string;
   repositoryId: string;
   trailingActions?: ReactNode;
   title?: string;
@@ -53,8 +56,6 @@ interface WorkspaceHeaderProps {
   setupStatus?: SetupStatus;
   setupError?: string | null;
   onSendAgentMessage?: (text: string) => void;
-  onRetrySetup?: () => void;
-  onViewSetupLogs?: () => void;
   workspaceStatus?: WorkspaceStatus;
   onStatusChange?: (status: WorkspaceStatus) => void;
   tasks?: ProjectTask[];
@@ -78,6 +79,7 @@ interface WorkspaceHeaderProps {
  * The 44px bar keeps Open, run and layout actions beside the workspace identity.
  */
 export function WorkspaceHeader({
+  workspaceId,
   repositoryId,
   trailingActions,
   title,
@@ -87,8 +89,6 @@ export function WorkspaceHeader({
   setupStatus,
   setupError,
   onSendAgentMessage,
-  onRetrySetup,
-  onViewSetupLogs,
   workspaceStatus,
   onStatusChange,
   tasks,
@@ -101,6 +101,7 @@ export function WorkspaceHeader({
   onOpenAutomation,
 }: WorkspaceHeaderProps) {
   const { state: sidebarState, toggleSidebar } = useSidebar();
+  const { retry, retrying } = useSetupActions(workspaceId);
   const sidebarCollapsed = sidebarState === "collapsed";
   const showSidebarToggle = sidebarCollapsed || mobile;
 
@@ -279,22 +280,22 @@ export function WorkspaceHeader({
               <AlertTriangle className="h-3 w-3" />
               <span>{SETUP_FAILED}</span>
             </span>
-            {onViewSetupLogs && (
-              <Tooltip delayDuration={200}>
+            <Tooltip delayDuration={200}>
+              <SetupLogDialog workspaceId={workspaceId}>
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    onClick={onViewSetupLogs}
+                    aria-label="View setup logs"
                     className="control-interaction text-text-muted hover:text-text-secondary rounded-lg px-1.5 py-0.5 text-sm"
                   >
                     <ScrollText className="h-3 w-3" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p className="text-xs">View setup logs</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+              </SetupLogDialog>
+              <TooltipContent side="bottom">
+                <p className="text-xs">View setup logs</p>
+              </TooltipContent>
+            </Tooltip>
             {onSendAgentMessage && (
               <Tooltip delayDuration={200}>
                 <TooltipTrigger asChild>
@@ -311,22 +312,22 @@ export function WorkspaceHeader({
                 </TooltipContent>
               </Tooltip>
             )}
-            {onRetrySetup && (
-              <Tooltip delayDuration={200}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={onRetrySetup}
-                    className="control-interaction text-text-muted hover:text-text-secondary rounded-lg px-1.5 py-0.5 text-sm"
-                  >
-                    <RotateCw className="h-3 w-3" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p className="text-xs">Retry setup</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+            <Tooltip delayDuration={200}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Retry setup"
+                  disabled={retrying}
+                  onClick={retry}
+                  className="control-interaction text-text-muted hover:text-text-secondary rounded-lg px-1.5 py-0.5 text-sm"
+                >
+                  <RotateCw className="h-3 w-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p className="text-xs">Retry setup</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
         )}
       </div>

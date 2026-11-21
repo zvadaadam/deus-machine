@@ -7,7 +7,7 @@ import { WorkspaceStartGroup } from "@/features/session/ui/WorkspaceStartGroup";
 const platform = vi.hoisted(() => ({ singleWindow: false }));
 vi.mock("@/platform/capabilities", () => ({ capabilities: platform }));
 vi.mock("@/features/workspace/hooks/useSetupActions", () => ({
-  useSetupActions: () => ({ retry: vi.fn(), viewLog: vi.fn() }),
+  useSetupActions: (workspaceId: string) => ({ workspaceId, retry: vi.fn(), retrying: false }),
 }));
 vi.mock("@/features/workspace/hooks/useStartRecovery", () => ({ useStartRecovery: vi.fn() }));
 

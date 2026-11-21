@@ -1,7 +1,8 @@
 import { HelpCircle, GitCompare, MessageCircle, Terminal } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";
-import { extractText, OutputBlock, ICON_CLS } from "./shared";
+import { OutputBlock } from "@/components/ui/output-block";
+import { extractText, ICON_CLS } from "./shared";
 import type { ToolRendererProps } from "../../chat-types";
 import { getPathLeaf } from "../utils/getPathLeaf";
 
