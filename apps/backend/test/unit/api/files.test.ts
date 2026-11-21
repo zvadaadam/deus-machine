@@ -15,12 +15,6 @@ const files = vi.hoisted(() => ({
 }));
 vi.mock("../../../src/services/files.service", () => files);
 
-const watcher = vi.hoisted(() => ({
-  watchWorkspace: vi.fn(async () => {}),
-  unwatchWorkspace: vi.fn(async () => {}),
-}));
-vi.mock("../../../src/services/fs-watcher.service", () => watcher);
-
 vi.mock("../../../src/middleware/workspace-loader", () => ({
   loadWorkspace: () => ({
     workspace: { id: "ws-123", root_path: "/repos/myrepo", slug: "test-ws" },
@@ -186,35 +180,5 @@ describe("fileSearch", () => {
       statusCode: 400,
     });
     expect(files.listTopFiles).not.toHaveBeenCalled();
-  });
-});
-
-describe("fsWatch and fsUnwatch", () => {
-  it("start and stop the watcher for the named folder", async () => {
-    expect(await run(api.fsWatch, { workspacePath: WORKSPACE_PATH })).toBeUndefined();
-    expect(watcher.watchWorkspace).toHaveBeenCalledExactlyOnceWith(WORKSPACE_PATH);
-
-    expect(await run(api.fsUnwatch, { workspacePath: WORKSPACE_PATH })).toBeUndefined();
-    expect(watcher.unwatchWorkspace).toHaveBeenCalledExactlyOnceWith(WORKSPACE_PATH);
-  });
-
-  it("are refused without a folder", async () => {
-    await expect(run(api.fsWatch, {} as never)).rejects.toMatchObject({
-      statusCode: 400,
-      message: "fsWatch requires workspacePath",
-    });
-    await expect(run(api.fsUnwatch, {} as never)).rejects.toMatchObject({
-      statusCode: 400,
-      message: "fsUnwatch requires workspacePath",
-    });
-    expect(watcher.watchWorkspace).not.toHaveBeenCalled();
-  });
-
-  it("report a watcher that cannot start", async () => {
-    watcher.watchWorkspace.mockRejectedValueOnce(new Error("EMFILE: too many open files"));
-
-    await expect(run(api.fsWatch, { workspacePath: WORKSPACE_PATH })).rejects.toThrow(
-      "EMFILE: too many open files"
-    );
   });
 });

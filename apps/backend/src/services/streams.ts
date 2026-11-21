@@ -14,7 +14,12 @@
 // again, as it did when it first opened it).
 
 import { scopeMatches, type AnyStream, type EventOf, type ScopeOf } from "@shared/api/stream";
-import type { QEventFrame, QResetFrame, QSubscribedFrame } from "@shared/types/query-protocol";
+import type {
+  QErrorFrame,
+  QEventFrame,
+  QResetFrame,
+  QSubscribedFrame,
+} from "@shared/types/query-protocol";
 import { subscriptionKey } from "@deus/runtime-client";
 import { ValidationError } from "../lib/errors";
 import { getConnection } from "./ws.service";
@@ -31,6 +36,7 @@ interface Subscription {
   filter: Record<string, unknown>;
   /** Names its whole scope on a resumable stream: its events carry their number. */
   numbered: boolean;
+  release?: () => void;
 }
 
 interface Log {
@@ -51,6 +57,7 @@ const logs = new Map<string, Map<string, Log>>();
 const holding = new Map<string, Set<string>>();
 /** stream name → what a new subscriber is sent first (see `openWith`). */
 const openings = new Map<string, (scope: Record<string, unknown>) => unknown[]>();
+const follows = new Map<string, (scope: Record<string, unknown>) => () => void>();
 
 /**
  * Where this process starts numbering. A number therefore never means two
@@ -62,7 +69,10 @@ let firstSeq = Date.now() * 1000;
 
 const subscriptionId = (connectionId: string, id: string) => `${connectionId}\n${id}`;
 
-function send(connectionId: string, frame: QEventFrame | QResetFrame | QSubscribedFrame): void {
+function send(
+  connectionId: string,
+  frame: QEventFrame | QResetFrame | QSubscribedFrame | QErrorFrame
+): void {
   try {
     getConnection(connectionId)?.ws.send(JSON.stringify(frame));
   } catch {
@@ -159,6 +169,14 @@ export function openWith<S extends AnyStream>(
   openings.set(stream.name, current as (scope: Record<string, unknown>) => unknown[]);
 }
 
+/** A follower of a whole scope acquires a resource until it leaves or its connection closes. */
+export function onFollow<S extends AnyStream>(
+  stream: S,
+  acquire: (scope: ScopeOf<S>) => () => void
+): void {
+  follows.set(stream.name, acquire as (scope: Record<string, unknown>) => () => void);
+}
+
 /**
  * Subscribe a connection. `after` is the number of the last event the
  * subscriber received: it is sent what the stream kept since, or a reset when
@@ -172,7 +190,9 @@ export function subscribe(
   rawFilter: unknown,
   after?: number
 ): void {
-  const parsed = stream.scope.partial().safeParse(rawFilter ?? {});
+  unsubscribe(connectionId, id);
+  const acquire = follows.get(stream.name);
+  const parsed = (acquire ? stream.scope : stream.scope.partial()).safeParse(rawFilter ?? {});
   if (!parsed.success) {
     throw new ValidationError(`${stream.name}: ${parsed.error.issues[0]?.message ?? "bad scope"}`);
   }
@@ -188,6 +208,7 @@ export function subscribe(
     stream: stream.name,
     filter,
     numbered: scope !== undefined,
+    release: acquire?.(filter),
   });
   const log = scope && logs.get(stream.name)?.get(subscriptionKey(scope));
   // Where the scope stands: the number of its newest kept event.
@@ -255,21 +276,40 @@ export function resetSubscribers<S extends AnyStream>(stream: S, scope: ScopeOf<
 }
 
 export function unsubscribe(connectionId: string, id: string): boolean {
-  return subscriptions.delete(subscriptionId(connectionId, id));
+  const key = subscriptionId(connectionId, id);
+  const sub = subscriptions.get(key);
+  if (!sub) return false;
+  subscriptions.delete(key);
+  sub.release?.();
+  return true;
+}
+
+/** A source stopped delivering. End its subscriptions through the client's usual refusal path. */
+export function refuseSubscribers<S extends AnyStream>(
+  stream: S,
+  scope: ScopeOf<S>,
+  message: string
+): void {
+  for (const sub of subscriptions.values()) {
+    if (sub.stream !== stream.name || !scopeMatches(sub.filter, scope)) continue;
+    unsubscribe(sub.connectionId, sub.id);
+    send(sub.connectionId, { type: "q:error", id: sub.id, code: "SUBSCRIBE_ERROR", message });
+  }
 }
 
 /** A connection closed: forget what it was listening to. */
 export function dropConnection(connectionId: string): void {
-  for (const [key, sub] of subscriptions) {
-    if (sub.connectionId === connectionId) subscriptions.delete(key);
+  for (const sub of subscriptions.values()) {
+    if (sub.connectionId === connectionId) unsubscribe(connectionId, sub.id);
   }
 }
 
 /** Tests only: forget everything, and number from `first` as a new process would. */
 export function _reset(first = 0): void {
-  subscriptions.clear();
+  for (const sub of subscriptions.values()) unsubscribe(sub.connectionId, sub.id);
   logs.clear();
   holding.clear();
   openings.clear();
+  follows.clear();
   firstSeq = first;
 }

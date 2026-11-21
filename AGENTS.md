@@ -179,6 +179,12 @@ client package does this bookkeeping; a consumer supplies only `onReset`
 not reload the chats a window holds, and a phone following one chat is not
 sent every other chat's tokens.
 
+A `fileChanges` subscription names one workspace. On macOS its first follower
+opens a recursive watch on the local checkout. The last one leaving, including
+a dropped connection, closes it after three seconds so a quick return reuses
+the watch. Each 500 ms burst refreshes the file and diff caches. An unavailable
+or failed watch ends the subscription and the client resumes polling.
+
 The private workspace package `@deus/runtime-client` (`packages/runtime-client/`)
 owns transport, pending operations and subscriptions. Its root entry has no React,
 TanStack or app dependencies; `/query` adds a dedicated TanStack Query cache.
@@ -738,7 +744,8 @@ Vitest with `vi.mock()` and `vi.hoisted()`. Tests live outside `src/` — never 
 What ships is not what those run on, so two checks run the shipped thing. The
 packaged app's backend is Bun, with `bun:sqlite` behind `apps/backend/src/lib/sqlite.ts`
 and Bun's own terminal behind `openTerminal` in `services/pty.service.ts`:
-`bun run test:bun` runs `sqlite-parity.test.ts` and `pty-parity.test.ts` on it
+`bun run test:bun` runs `sqlite-parity.test.ts`, `pty-parity.test.ts` and
+`fs-watcher-parity.test.ts` on it
 (the same files run on Node inside `test:backend`); add a case there when the
 backend starts using another SQLite or terminal call. `bun run smoke:cli-package` packs the npm CLI, installs the
 tarball into an empty folder and runs `deus --version` and `deus start`. It

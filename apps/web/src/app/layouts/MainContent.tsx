@@ -168,7 +168,7 @@ export function MainContent({
   // folder on this computer can be watched here (rule 1): a cloud workspace's
   // files are on its computer.
   const watchedFolder = isReady && selectedWorkspace ? localFolder(selectedWorkspace) : null;
-  const isWatched = useFileWatcher(watchedFolder, watchedFolder ? selectedWorkspaceId : null);
+  const isWatched = useFileWatcher(watchedFolder ? selectedWorkspaceId : null);
 
   // --- Content tab change ---
   const handleContentTabChange = useCallback(
