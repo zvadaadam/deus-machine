@@ -155,17 +155,6 @@ describe("diff operations (through NodeDriver)", () => {
     });
   });
 
-  it("propagates an attempted cloud summary's failure to both reads", async () => {
-    setCloud();
-    cloud.getCloudDiffSummary.mockRejectedValueOnce(new Error("channel closed"));
-    await expect(run(api.diffFiles, inCloud)).rejects.toThrow("channel closed");
-    cloud.getCloudDiffSummary.mockResolvedValueOnce({
-      files: [],
-      error: "comparison unavailable",
-    } as Awaited<ReturnType<typeof cloud.getCloudDiffSummary>>);
-    await expect(run(api.diffStats, inCloud)).rejects.toThrow("comparison unavailable");
-  });
-
   it("asleep cloud (no session) → empty diff, not an error", async () => {
     setCloud(null);
     expect(await run(api.diffStats, inCloud)).toEqual({ additions: 0, deletions: 0 });

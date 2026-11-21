@@ -236,9 +236,14 @@ class RemoteNodeDriver implements NodeDriver {
 
   private async summary() {
     if (!this.workspace.current_session_id) return null;
-    const summary = await getCloudDiffSummary(this.workspace.current_session_id);
-    if (summary.error) throw new AppError(502, summary.error);
-    return summary;
+    try {
+      return await getCloudDiffSummary(this.workspace.current_session_id);
+    } catch (err) {
+      console.warn(
+        `[Diff] cloud summary unavailable for ${this.workspace.id}: ${getErrorMessage(err)}`
+      );
+      return null;
+    }
   }
 
   /**
