@@ -38,6 +38,15 @@ const UNHEARD_KEPT_MS = 30 * 60_000;
 
 type Added = { how: "here" | "adopted" | "cloned"; name: string; folder: string };
 
+function registered(how: Added["how"], repo: Repository, folder: string): Added {
+  if (!repo.name || repo.root_path !== folder)
+    throw new OperatorError(
+      "failed",
+      "Deus did not register the inspected folder. Check the project on this computer."
+    );
+  return { how, name: repo.name, folder: repo.root_path };
+}
+
 /** One folder's add: being checked, cloned or added, then its outcome until a call hears it. */
 interface Flight {
   address: CloneAddress;
@@ -92,7 +101,7 @@ export function addProjectTool(host: DeusHost) {
     const here = projects.find(
       (p) => p.root_path && p.git_origin_url && repositoryKey(p.git_origin_url) === address.key
     );
-    if (here?.root_path) return { how: "here", name: here.name, folder: here.root_path };
+    if (here?.root_path) return registered("here", here, here.root_path);
 
     // lstat counts even a dangling link as taken.
     const exists = !!fs.lstatSync(folder, { throwIfNoEntry: false });
@@ -132,13 +141,7 @@ export function addProjectTool(host: DeusHost) {
       if (!(error instanceof ConflictError && error.details)) throw error;
       repo = error.details as Repository;
     }
-    if (repo.root_path !== inspected.root_path) {
-      throw new OperatorError(
-        "failed",
-        "Deus did not register the inspected folder. Check the project on this computer."
-      );
-    }
-    return { how: exists ? "adopted" : "cloned", name: address.name, folder };
+    return registered(exists ? "adopted" : "cloned", repo, inspected.root_path);
   }
 
   /** The flight for this folder now: one in flight, one ended and not heard, or a new one. */

@@ -453,6 +453,26 @@ describe("a clone", () => {
     await expect(addProject("acme/widget")).rejects.toThrow(/folder/i);
   });
 
+  it("names a project by its registration, including when another caller registered it", async () => {
+    state.ops.addRepo = () => {
+      throw new ConflictError("Already registered", {
+        name: "Widget on disk",
+        root_path: fs.realpathSync(path.join(developer, "widget")),
+      });
+    };
+    expect(await addProject("acme/widget")).toContain('start_session(project: "Widget on disk"');
+  });
+
+  it("refuses a legacy blank name even when the registered folder matches", async () => {
+    state.ops.addRepo = () => ({
+      name: "",
+      root_path: fs.realpathSync(path.join(developer, "widget")),
+    });
+    await expect(addProject("acme/widget")).rejects.toThrow(
+      "did not register the inspected folder"
+    );
+  });
+
   it("keeps credentials from an existing folder's origin out of the refusal", async () => {
     gitFolder(path.join(developer, "widget"), "https://user:TOKEN@github.com/other/widget");
     const result = addProject("acme/widget");
