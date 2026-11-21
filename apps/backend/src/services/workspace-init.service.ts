@@ -141,20 +141,22 @@ export function failInterruptedWorkspaces(): number {
   let failed = 0;
   for (const row of interruptedStarts()) {
     const cloud = row.kind === "cloud";
+    const fail = () =>
+      failInterruptedStart(row.id, row.init_stage ?? "fetch", {
+        message: cloud
+          ? "Deus closed before the cloud computer was ready."
+          : "Deus closed before this workspace was ready.",
+        detail: null,
+      });
     if (!cloud && row.root_path && row.git_branch && OWNS_WORKTREE.has(row.init_stage ?? "")) {
       const { root_path, git_branch } = row;
-      void changeWorkspaceState(row.id, () =>
-        removeWorktree(root_path, computeWorkspacePath(row), git_branch)
-      ).catch((err) =>
+      void changeWorkspaceState(row.id, async () => {
+        await removeWorktree(root_path, computeWorkspacePath(row), git_branch);
+        fail();
+      }).catch((err) =>
         console.warn(`[WORKSPACE] Could not remove what ${row.id} left behind:`, err)
       );
-    }
-    failInterruptedStart(row.id, row.init_stage ?? "fetch", {
-      message: cloud
-        ? "Deus closed before the cloud computer was ready."
-        : "Deus closed before this workspace was ready.",
-      detail: null,
-    });
+    } else fail();
     failed++;
   }
   return failed;

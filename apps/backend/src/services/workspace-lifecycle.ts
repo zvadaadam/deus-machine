@@ -73,6 +73,7 @@ export async function runWorkspaceAttempt(
   attempts.set(workspaceId, { controller, settle });
   try {
     const cleanup = await start(controller.signal);
+    if (attempts.get(workspaceId)?.controller !== controller) return; // A ready chat owns its checkout.
     stopped.resolve(cleanup);
     if (cleanup) {
       if (controller.signal.aborted) await settle();

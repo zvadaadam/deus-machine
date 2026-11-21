@@ -332,18 +332,20 @@ async function checkout(ctx: InitContext, signal: AbortSignal) {
     // Shutdown leaves the durable stage for startup recovery.
     if (processGroupsStopped()) return;
     return async () => {
-      if (!signal.aborted) {
+      if (OWNS_WORKTREE.has(stage)) {
         try {
-          if (!failStart(ctx.workspaceId, stage, describeFailure(stage, err, ctx), signal)) return;
-          console.error(`[WORKSPACE] Stage "${stage}" failed for ${ctx.workspaceId}:`, err);
+          await removeWorktree(ctx.repoRootPath, ctx.workspacePath, ctx.branchName);
         } catch (error) {
-          console.error(`[WORKSPACE] Could not record the failure of ${ctx.workspaceId}:`, error);
+          console.warn(`[WORKSPACE] Could not remove what ${ctx.workspaceId} left behind:`, error);
+          return; // Keep the stage so startup recovery can finish.
         }
       }
-      if (OWNS_WORKTREE.has(stage)) {
-        await removeWorktree(ctx.repoRootPath, ctx.workspacePath, ctx.branchName).catch((error) =>
-          console.warn(`[WORKSPACE] Could not remove what ${ctx.workspaceId} left behind:`, error)
-        );
+      if (signal.aborted || processGroupsStopped()) return;
+      try {
+        if (failStart(ctx.workspaceId, stage, describeFailure(stage, err, ctx), signal))
+          console.error(`[WORKSPACE] Stage "${stage}" failed for ${ctx.workspaceId}:`, err);
+      } catch (error) {
+        console.error(`[WORKSPACE] Could not record the failure of ${ctx.workspaceId}:`, error);
       }
     };
   }
