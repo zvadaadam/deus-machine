@@ -1,6 +1,7 @@
+import { tempo } from "@/shared/lib/tempo";
 import { forwardRef } from "react";
 import { X } from "lucide-react";
-import { m, useReducedMotion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   Dialog,
   DialogClose,
@@ -25,16 +26,15 @@ interface PastedImageCardProps {
 
 export const PastedImageCard = forwardRef<HTMLDivElement, PastedImageCardProps>(
   function PastedImageCard({ preview, fileName, onRemove, size = "md" }, ref) {
-    const reduceMotion = useReducedMotion();
     return (
       <Dialog>
         <m.div
           ref={ref}
-          layout={!reduceMotion}
-          initial={reduceMotion ? false : { opacity: 0, scale: 0.95 }}
+          layout
+          initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95 }}
-          transition={{ duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }}
+          exit={{ opacity: 0, scale: 0.95, transition: tempo.moderate.exit }}
+          transition={tempo.moderate}
           className="group relative shrink-0"
         >
           <DialogTrigger asChild>
@@ -44,7 +44,7 @@ export const PastedImageCard = forwardRef<HTMLDivElement, PastedImageCardProps>(
                 // Pure black/white outline at 10% opacity (the skill's image rule —
                 // never a tinted neutral, which picks up the surface color and
                 // reads as dirt on the image edge).
-                "focus-visible:ring-ring/60 bg-bg-muted/40 relative block cursor-zoom-in overflow-hidden border border-black/10 transition-transform duration-150 ease-out focus-visible:ring-2 focus-visible:outline-none active:scale-[0.96] dark:border-white/10",
+                "focus-visible:ring-ring/60 bg-bg-muted/40 relative block cursor-zoom-in overflow-hidden border border-black/10 transition-transform focus-visible:ring-2 focus-visible:outline-none motion-safe:active:scale-[0.96] dark:border-white/10",
                 SIZE_CLASSES[size]
               )}
               aria-label={`Preview image ${fileName}`}
@@ -81,7 +81,7 @@ export const PastedImageCard = forwardRef<HTMLDivElement, PastedImageCardProps>(
               {fileName}
             </DialogTitle>
             <DialogClose
-              className="focus-visible:ring-ring/60 text-foreground/70 hover:text-foreground hover:bg-bg-muted relative -mt-1 -mr-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-[transform,background-color,color] duration-150 ease-out focus-visible:ring-2 focus-visible:outline-none active:scale-[0.96]"
+              className="focus-visible:ring-ring/60 text-foreground/70 hover:text-foreground hover:bg-bg-muted relative -mt-1 -mr-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-[scale,background-color,color] focus-visible:ring-2 focus-visible:outline-none motion-safe:active:scale-[0.96]"
               aria-label="Close preview"
             >
               <X className="h-4 w-4" />

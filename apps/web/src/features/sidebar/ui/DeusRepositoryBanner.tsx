@@ -38,7 +38,7 @@ export function DeusRepositoryBanner({ onNewWorkspace, className }: DeusReposito
             className={cn(
               "text-text-tertiary",
               "decoration-border-default underline underline-offset-[2px]",
-              "ease transition-colors duration-200",
+              "transition-colors",
               "hover:text-text-secondary hover:decoration-border-strong",
               // Invisible touch-padding so tap target is comfortable
               "-mx-0.5 px-0.5"

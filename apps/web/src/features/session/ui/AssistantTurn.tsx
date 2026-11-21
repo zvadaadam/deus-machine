@@ -1,5 +1,6 @@
+import { Collapse } from "@/components/ui/collapse";
 import { useMemo, useState, useId, memo } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import type { Message, SessionTurn } from "@/shared/types";
 import { turnStopNotice } from "../lib/chatTimeline";
 import { PartBlock } from "./blocks/PartBlock";
@@ -29,7 +30,6 @@ export const AssistantTurn = memo(function AssistantTurn({
 }: AssistantTurnProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const activityId = useId();
-  const reducedMotion = useReducedMotion();
   const { workspacePath } = useSession();
   const projected = useMemo(() => assistantTurnContent(messages), [messages]);
   const stats = useMemo(() => calculateTurnStats(messages), [messages]);
@@ -65,19 +65,15 @@ export const AssistantTurn = memo(function AssistantTurn({
           />
           <AnimatePresence initial={false}>
             {isExpanded && (
-              <motion.div
+              <Collapse
                 key="activity"
                 id={activityId}
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: reducedMotion ? 0 : 0.2, ease: [0.165, 0.84, 0.44, 1] }}
-                className="border-border-subtle ml-3 flex min-w-0 flex-col gap-1 overflow-hidden border-l pl-2"
+                className="border-border-subtle ml-3 flex min-w-0 flex-col gap-1 border-l pl-2"
               >
                 {projected.activity.map((part) => (
                   <PartBlock key={part.id} part={part} isStreaming={isStreaming} />
                 ))}
-              </motion.div>
+              </Collapse>
             )}
           </AnimatePresence>
         </>

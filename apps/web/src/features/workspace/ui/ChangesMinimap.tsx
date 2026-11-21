@@ -11,6 +11,7 @@
  * Hover-intent pattern: shared timeout between strip and panel prevents flicker.
  */
 
+import { tempo } from "@/shared/lib/tempo";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, m } from "framer-motion";
@@ -30,16 +31,6 @@ interface ChangesMinimapProps {
 
 const HOVER_ENTER_DELAY = 150;
 const HOVER_LEAVE_DELAY = 200;
-
-const panelVariants = {
-  hidden: { opacity: 0, x: 4 },
-  visible: { opacity: 1, x: 0 },
-};
-
-const panelTransition = {
-  duration: 0.15,
-  ease: [0.165, 0.84, 0.44, 1] as const, // ease-out-quart
-};
 
 export function ChangesMinimap({
   fileChanges,
@@ -116,7 +107,7 @@ export function ChangesMinimap({
               type="button"
               onClick={() => handleFileClickAndPin(path)}
               className={cn(
-                "h-[2px] flex-shrink-0 rounded-full transition-opacity duration-150",
+                "h-[2px] flex-shrink-0 rounded-full transition-opacity",
                 STATUS_BG[status],
                 selectedFile === path ? "w-3.5 opacity-100" : "w-2.5 opacity-60"
               )}
@@ -131,11 +122,10 @@ export function ChangesMinimap({
         <AnimatePresence>
           {showPanel && (
             <m.div
-              initial="hidden"
-              animate="visible"
-              exit="hidden"
-              variants={panelVariants}
-              transition={panelTransition}
+              initial={{ opacity: 0, x: 4 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 4, transition: tempo.moderate.exit }}
+              transition={tempo.moderate}
               style={{
                 position: "fixed",
                 top: panelRect.top,

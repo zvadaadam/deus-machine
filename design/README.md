@@ -721,9 +721,9 @@ font-medium` text). Step 1, "Give your assistant this prompt", holds the prompt 
   both `text-accent-red-muted`, both on board `30`. The row's hover retains the specific
   stored error, including provisioning failures.
 
-Motion values (curves, durations, press scales) are plotted on board `02`; overlay opacities
-and focus-ring rules on board `05`. Both are read straight out of `global.css` and the
-components — if you change an easing or a duration in code, change it there too.
+When the tempo tokens or a control's press scale change, update board `02`.
+Keep overlay opacity and focus rings on board `05`.
+Choose tiers, curves and list highlights from [the motion rules](./motion.md).
 
 ## Working on the file
 

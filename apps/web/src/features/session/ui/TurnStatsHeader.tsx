@@ -28,7 +28,7 @@ export const TurnStatsHeader = memo(function TurnStatsHeader({
         // Match BaseToolRenderer exactly: px-2 py-1.5 text-sm
         "flex items-center gap-2 px-2 py-1.5 text-sm",
         "w-full cursor-pointer text-left",
-        "transition-opacity duration-150 ease-out",
+        "transition-opacity",
         "opacity-80 hover:opacity-100",
         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
       )}
@@ -41,7 +41,7 @@ export const TurnStatsHeader = memo(function TurnStatsHeader({
         <div className="relative h-3.5 w-3.5 flex-shrink-0">
           <ChevronRight
             className={cn(
-              "text-muted-foreground/50 absolute top-0 left-0 h-3.5 w-3.5 transition-[transform,opacity] duration-150 ease-out",
+              "text-muted-foreground/50 absolute top-0 left-0 h-3.5 w-3.5 transition-[rotate,opacity]",
               isExpanded && "rotate-90"
             )}
             aria-hidden="true"

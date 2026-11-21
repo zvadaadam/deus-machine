@@ -19,6 +19,8 @@
  * into the session mutation + clears store content on success.
  */
 
+import { tempo } from "@/shared/lib/tempo";
+import { Collapse } from "@/components/ui/collapse";
 import { useEffect } from "react";
 import type { SessionStatus } from "@/shared/types";
 import { agentConfigOf } from "@/features/workspace/lib/reach";
@@ -420,8 +422,8 @@ export function MessageInput({
             key="setup-nudge"
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 6 }}
-            transition={{ duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }}
+            exit={{ opacity: 0, y: 6, transition: tempo.moderate.exit }}
+            transition={tempo.moderate}
             className="mb-2 flex"
           >
             <button
@@ -458,14 +460,7 @@ export function MessageInput({
 
         <AnimatePresence initial={false}>
           {slashCommand.isOpen && (
-            <motion.div
-              key="slash-command-sheet"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.18, ease: [0.215, 0.61, 0.355, 1] }}
-              className="w-full overflow-hidden"
-            >
+            <Collapse key="slash-command-sheet" tier="fast" className="w-full">
               <SlashCommandPopover
                 results={slashCommand.results}
                 loading={slashCommand.loading}
@@ -473,20 +468,13 @@ export function MessageInput({
                 query={slashCommand.query}
                 onSelect={slashCommand.selectItem}
               />
-            </motion.div>
+            </Collapse>
           )}
         </AnimatePresence>
 
         <AnimatePresence initial={false}>
           {fileMention.isOpen && (
-            <motion.div
-              key="file-mention-sheet"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.18, ease: [0.215, 0.61, 0.355, 1] }}
-              className="w-full overflow-hidden"
-            >
+            <Collapse key="file-mention-sheet" tier="fast" className="w-full">
               <FileMentionPopover
                 results={fileMention.results}
                 loading={fileMention.loading}
@@ -494,7 +482,7 @@ export function MessageInput({
                 query={fileMention.query}
                 onSelect={fileMention.selectFile}
               />
-            </motion.div>
+            </Collapse>
           )}
         </AnimatePresence>
 

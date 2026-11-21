@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
-import { LazyMotion, domAnimation } from "framer-motion";
+import { LazyMotion, MotionConfig, domAnimation } from "framer-motion";
 import { ErrorFallback } from "@/shared/components";
 import { createBoundaryErrorHandler } from "@/shared/utils/errorReporting";
 import { Toaster } from "@/components/ui/sonner";
@@ -85,7 +85,7 @@ function App() {
 
   return (
     <LazyMotion features={domAnimation} strict>
-      {content}
+      <MotionConfig reducedMotion="user">{content}</MotionConfig>
     </LazyMotion>
   );
 }

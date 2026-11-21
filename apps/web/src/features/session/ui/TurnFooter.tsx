@@ -1,6 +1,6 @@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { memo, useCallback, useMemo } from "react";
-import { Check, Copy } from "lucide-react";
+import { memo, useMemo } from "react";
+import { CopyIcon } from "@/components/ui/copy-icon";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Message, SessionTurn } from "@/shared/types";
 import { useCopyToClipboard } from "@/shared/hooks";
@@ -33,11 +33,6 @@ export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }
       tokens.input + tokens.output + (tokens.cache?.read ?? 0) + (tokens.cache?.write ?? 0);
     return total > 0 ? formatTokenCount(total) : null;
   }, [tokens]);
-
-  const handleCopy = useCallback(() => {
-    if (!copyText) return;
-    void copy(copyText);
-  }, [copy, copyText]);
 
   const timestampTooltip = useMemo(() => {
     if (durationMs == null || startMs == null) return null;
@@ -72,7 +67,7 @@ export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }
               <TooltipTrigger asChild>
                 <span
                   tabIndex={0}
-                  className="hover:bg-foreground/5 focus-visible:ring-ring inline-flex cursor-help rounded-sm px-1 font-mono tracking-tight tabular-nums transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:outline-none"
+                  className="hover:bg-foreground/5 focus-visible:ring-ring inline-flex cursor-help rounded-sm px-1 font-mono tracking-tight tabular-nums transition-colors focus-visible:ring-2 focus-visible:outline-none"
                   aria-label={`Turn took ${formatTurnDurationLabel(durationMs)}. Started ${timestampTooltip.startedLabel}. Finished ${timestampTooltip.endedLabel}.`}
                 >
                   {formatTurnDurationLabel(durationMs)}
@@ -205,7 +200,7 @@ export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }
       {copyText && (
         <button
           type="button"
-          onClick={handleCopy}
+          onClick={() => void copy(copyText)}
           className={cn(
             "control-interaction hover:bg-foreground/5 inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-lg",
             copied
@@ -215,7 +210,7 @@ export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }
           aria-label={copied ? "Copied response" : "Copy response"}
           title={copied ? "Copied" : "Copy response"}
         >
-          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+          <CopyIcon copied={copied} className="size-3" />
         </button>
       )}
     </div>

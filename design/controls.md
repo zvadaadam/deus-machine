@@ -12,10 +12,10 @@ ordinary actions, including menu triggers and links through `asChild`.
 `TabPill` owns session, browser and terminal tabs. Radix owns menu, select and tab
 keyboard behavior.
 
-Controls that need their own markup use `control-interaction` from `global.css`:
-150ms transitions for color, background, border, shadow and opacity; a 2px
-keyboard focus ring; and disabled pointer/opacity behavior. It does not set layout,
-dimensions or selected colors. No extra component wrapper is needed.
+Controls that need their own markup use `control-interaction` from `global.css`.
+It gives color, background, border, shadow and opacity the fast tempo, adds a 2px
+keyboard focus ring and handles disabled states. The control owns its layout and
+selected colors.
 
 | Property       | Rule                                                                                                      |
 | -------------- | --------------------------------------------------------------------------------------------------------- |
@@ -27,7 +27,25 @@ dimensions or selected colors. No extra component wrapper is needed.
 | Secondary      | `control-surface` with foreground text; outline adds `border-strong`                                      |
 | Hover / press  | Filled controls use surface-hover / surface-pressed; ghost controls use foreground at 5% / 9%             |
 | Focus          | Keyboard-only 2px ring; inset on clipped PR halves, contrasting foreground on the filled half             |
-| Motion         | No hover growth or press scaling; reduced motion suppresses transitions                                   |
+| Motion         | Hover and press preserve geometry. Reduced motion keeps color and opacity feedback.                       |
+
+Bare Tailwind transitions run at 80ms in both directions. A departing surface uses its
+tier’s exit duration. Add `tempo-moderate` or `tempo-slow` when a larger surface
+moves. Entrances, exits and control feedback use ease-out-quart.
+Layout moving in place uses `ease-move`. The workspace panel takes 240ms in either
+direction so its text reflows with a gentle start.
+
+| Surface                             | Tier     | Enter / exit |
+| ----------------------------------- | -------- | ------------ |
+| Control feedback, icons, tooltips   | Fast     | 80 / 60ms    |
+| Menus, popovers, measured details   | Moderate | 160 / 120ms  |
+| Dialogs, sheets and their backdrops | Slow     | 240 / 160ms  |
+
+Command lists that accept typing immediately use fast. This includes the command palette
+and GitHub picker with their backdrops, and the composer's `/` and `@` suggestions.
+
+Staggered entrances use 60ms steps. With reduced motion, surfaces fade in place
+and loading indicators remain still.
 
 Buttons reuse the existing radius system. `radius-lg` is 10px on Electron versions
 without continuous corners. Supporting browsers use

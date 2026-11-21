@@ -1,3 +1,4 @@
+import { tempo } from "@/shared/lib/tempo";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/shared/lib/utils";
@@ -16,8 +17,8 @@ export function SortableSessionTab({ id, children, className }: SortableSessionT
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
     transition: {
-      duration: 200,
-      easing: "cubic-bezier(.165, .84, .44, 1)",
+      duration: tempo.moderate.duration * 1000,
+      easing: "var(--ease-move)",
     },
   });
 

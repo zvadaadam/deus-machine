@@ -3,7 +3,6 @@
  * Deus account the computer belongs to, and that account must still have it.
  */
 import { useEffect } from "react";
-import { m, useReducedMotion } from "framer-motion";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { ConnectionIllustration } from "@/features/connection/ui/ConnectionIllustration";
@@ -12,14 +11,7 @@ import {
   redirectToWebCloudLogin,
   wasSignedOutDeliberately,
 } from "@/features/session/cloud/webCloudDirectConfig";
-import { EASE_OUT_QUART } from "@/shared/lib/animation";
 import { stashPairCode } from "../lib/pairing-link";
-
-const containerVariants = { hidden: {}, visible: { transition: { staggerChildren: 0.08 } } };
-const itemVariants = {
-  hidden: { opacity: 0, y: 12 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: EASE_OUT_QUART } },
-};
 
 function GateLayout({
   heading,
@@ -30,34 +22,20 @@ function GateLayout({
   body: string;
   children: React.ReactNode;
 }) {
-  const reduceMotion = useReducedMotion();
-  const variants = reduceMotion ? undefined : itemVariants;
   return (
     <div className="bg-background flex h-screen w-full items-center justify-center p-6">
-      <m.div
-        className="flex max-w-[380px] flex-col items-center gap-6 text-center"
-        {...(!reduceMotion && {
-          variants: containerVariants,
-          initial: "hidden",
-          animate: "visible",
-        })}
-      >
-        <m.div variants={variants}>
+      <div className="flex max-w-[380px] flex-col items-center gap-6 text-center [--enter-y:12px]">
+        <div className="enter-step">
           <ConnectionIllustration className="w-[260px] opacity-80" />
-        </m.div>
-        <m.h1 variants={variants} className="text-foreground text-xl font-semibold tracking-tight">
+        </div>
+        <h1 className="enter-step text-foreground text-xl font-semibold tracking-tight [--step:1]">
           {heading}
-        </m.h1>
-        <m.p
-          variants={variants}
-          className="text-muted-foreground max-w-[340px] text-sm leading-relaxed"
-        >
+        </h1>
+        <p className="enter-step text-muted-foreground max-w-[340px] text-sm leading-relaxed [--step:2]">
           {body}
-        </m.p>
-        <m.div variants={variants} className="flex items-center gap-2">
-          {children}
-        </m.div>
-      </m.div>
+        </p>
+        <div className="enter-step flex items-center gap-2 [--step:3]">{children}</div>
+      </div>
     </div>
   );
 }

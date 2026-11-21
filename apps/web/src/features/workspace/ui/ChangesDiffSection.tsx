@@ -82,7 +82,7 @@ function ChangesDiffSectionInner({
           whole row is clickable — no dead zones around the centred content. */}
       <div
         className={cn(
-          "group/row sticky top-0 z-[5] flex min-h-[44px] w-full items-center gap-2 px-3 py-1.5 transition-colors duration-200 ease-[cubic-bezier(.165,.84,.44,1)]",
+          "group/row sticky top-0 z-[5] flex min-h-[44px] w-full items-center gap-2 px-3 py-1.5 transition-colors",
           isActive && "bg-muted",
           !isActive && collapsed && "bg-muted/15 hover:bg-muted/30",
           !isActive && !collapsed && "hover:bg-muted bg-[var(--bg-elevated)]"
@@ -103,10 +103,10 @@ function ChangesDiffSectionInner({
               is driven by `group/row` on the outer div so it triggers from
               anywhere in the row, not just over the icon. */}
           <div className="relative h-3.5 w-3.5 flex-shrink-0">
-            <div className="absolute inset-0 flex items-center justify-center opacity-100 transition-opacity duration-150 ease-out group-hover/row:opacity-0">
+            <div className="absolute inset-0 flex items-center justify-center opacity-100 transition-opacity group-hover/row:opacity-0">
               <PierreFileIcon fileName={fileName} size={14} className="text-muted-foreground/70" />
             </div>
-            <div className="absolute inset-0 opacity-0 transition-opacity duration-150 ease-out group-hover/row:opacity-100">
+            <div className="absolute inset-0 opacity-0 transition-opacity group-hover/row:opacity-100">
               {collapsed ? (
                 <ChevronRight className="text-muted-foreground/60 h-3.5 w-3.5" />
               ) : (

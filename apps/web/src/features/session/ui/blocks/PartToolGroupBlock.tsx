@@ -5,9 +5,10 @@
  * Same visual as the legacy ToolGroupBlock but works with Part objects directly.
  */
 
+import { Collapse } from "@/components/ui/collapse";
 import { useState, useMemo, memo } from "react";
 import { ChevronRight, Layers } from "lucide-react";
-import { AnimatePresence, m } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
 import type { ToolPart } from "@shared/protocol-types";
 
@@ -17,8 +18,6 @@ interface PartToolGroupBlockProps {
   parts: ToolPart[];
   isSealed: boolean;
 }
-
-const expandTransition = { duration: 0.2, ease: [0.165, 0.84, 0.44, 1] as const };
 
 export const PartToolGroupBlock = memo(function PartToolGroupBlock({
   parts,
@@ -45,7 +44,7 @@ export const PartToolGroupBlock = memo(function PartToolGroupBlock({
             className={cn(
               "group flex items-center gap-2 px-2 py-1.5 text-sm",
               "w-full cursor-pointer text-left",
-              "transition-opacity duration-150 ease-out",
+              "transition-opacity",
               "opacity-80 hover:opacity-100",
               "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
             )}
@@ -56,7 +55,7 @@ export const PartToolGroupBlock = memo(function PartToolGroupBlock({
               <div className="relative h-3.5 w-3.5 flex-shrink-0">
                 <div
                   className={cn(
-                    "absolute top-0 left-0 transition-opacity duration-150 ease-out",
+                    "absolute top-0 left-0 transition-opacity",
                     isExpanded ? "opacity-0" : "opacity-100 group-hover:opacity-0"
                   )}
                 >
@@ -64,7 +63,7 @@ export const PartToolGroupBlock = memo(function PartToolGroupBlock({
                 </div>
                 <ChevronRight
                   className={cn(
-                    "text-muted-foreground/50 absolute top-0 left-0 h-3.5 w-3.5 transition-[transform,opacity] duration-150 ease-out",
+                    "text-muted-foreground/50 absolute top-0 left-0 h-3.5 w-3.5 transition-[rotate,opacity]",
                     isExpanded && "rotate-90",
                     isExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                   )}
@@ -91,17 +90,11 @@ export const PartToolGroupBlock = memo(function PartToolGroupBlock({
 
       <AnimatePresence>
         {isOpen && (
-          <m.div
-            initial={showHeader ? { opacity: 0, height: 0 } : false}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={expandTransition}
-            className="flex flex-col gap-0.5 overflow-hidden"
-          >
+          <Collapse initial={showHeader} className="flex flex-col gap-0.5">
             {parts.map((p) => (
               <ToolPartBlock key={p.id} part={p} />
             ))}
-          </m.div>
+          </Collapse>
         )}
       </AnimatePresence>
     </div>

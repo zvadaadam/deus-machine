@@ -22,15 +22,21 @@ TabsList.displayName = TabsPrimitive.List.displayName;
 const TabsTrigger = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
->(({ className, ...props }, ref) => (
+>(({ className, children, ...props }, ref) => (
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "text-muted-foreground/60 focus-visible:ring-ring/50 data-[state=inactive]:hover:text-foreground/70 data-[state=active]:text-foreground data-[state=active]:after:bg-primary border-border/40 relative inline-flex h-full items-center gap-1.5 border-r px-6 text-sm font-normal whitespace-nowrap transition-colors duration-150 outline-none focus-visible:ring-2 focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:font-medium data-[state=active]:after:absolute data-[state=active]:after:inset-x-0 data-[state=active]:after:bottom-0 data-[state=active]:after:h-0.5",
+      "text-muted-foreground/60 focus-visible:ring-ring/50 data-[state=inactive]:hover:text-foreground/70 data-[state=active]:text-foreground data-[state=active]:after:bg-primary border-border/40 relative inline-flex h-full items-center gap-1.5 border-r px-6 text-sm font-normal whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:font-medium data-[state=active]:after:absolute data-[state=active]:after:inset-x-0 data-[state=active]:after:bottom-0 data-[state=active]:after:h-0.5",
       className
     )}
     {...props}
-  />
+  >
+    {props.asChild
+      ? children
+      : React.Children.map(children, (child) =>
+          typeof child === "string" ? <span data-medium-label={child}>{child}</span> : child
+        )}
+  </TabsPrimitive.Trigger>
 ));
 TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
 

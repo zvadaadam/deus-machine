@@ -29,8 +29,8 @@ const DialogOverlay = React.forwardRef<
     data-slot="dialog-overlay"
     className={cn(
       "fixed inset-0 z-50 bg-black/50 will-change-[opacity]",
-      "data-[state=open]:animate-[overlay-enter_200ms_cubic-bezier(.215,.61,.355,1)]",
-      "data-[state=closed]:animate-[overlay-exit_150ms_cubic-bezier(.215,.61,.355,1)]",
+      "data-[state=open]:animate-[fadeIn_var(--tempo-slow)_var(--tempo-ease)]",
+      "data-[state=closed]:animate-[fadeOut_var(--tempo-slow-exit)_var(--tempo-ease)]",
       className
     )}
     {...props}
@@ -55,8 +55,8 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           "bg-background fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-2xl border p-6 shadow-lg will-change-[transform,opacity] sm:max-w-lg",
-          "data-[state=open]:animate-[dialog-enter_200ms_cubic-bezier(.215,.61,.355,1)]",
-          "data-[state=closed]:animate-[dialog-exit_150ms_cubic-bezier(.215,.61,.355,1)]",
+          "data-[state=open]:animate-[dialog-enter_var(--tempo-slow)_var(--tempo-ease)]",
+          "data-[state=closed]:animate-[dialog-exit_var(--tempo-slow-exit)_var(--tempo-ease)]",
           className
         )}
         {...props}

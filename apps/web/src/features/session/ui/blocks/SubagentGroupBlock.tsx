@@ -7,10 +7,11 @@
  * Header: Cpu icon + description + subagent_type badge + tool count + status
  */
 
+import { Collapse } from "@/components/ui/collapse";
 import { useState, useMemo } from "react";
 import { ChevronRight, Cpu, Loader2 } from "lucide-react";
 import NumberFlow from "@number-flow/react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
 import type { Message } from "../../types";
 import type { ToolUseBlock, ToolResultBlock } from "../tools/types";
@@ -26,8 +27,6 @@ interface SubagentGroupBlockProps {
   /** Normalized subagent metadata from the spawning tool part, when present. */
   subagent?: SubagentMetadata;
 }
-
-const expandTransition = { duration: 0.15, ease: [0.165, 0.84, 0.44, 1] as const };
 
 export function SubagentGroupBlock({
   toolUse,
@@ -71,7 +70,7 @@ export function SubagentGroupBlock({
         className={cn(
           "group flex items-center gap-2 px-2 py-1.5 text-sm",
           "w-full cursor-pointer text-left",
-          "transition-opacity duration-150 ease-out",
+          "transition-opacity",
           "opacity-80 hover:opacity-100",
           "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
         )}
@@ -86,7 +85,7 @@ export function SubagentGroupBlock({
               <>
                 <div
                   className={cn(
-                    "absolute top-0 left-0 transition-opacity duration-150 ease-out",
+                    "absolute top-0 left-0 transition-opacity",
                     isExpanded ? "opacity-0" : "opacity-100 group-hover:opacity-0"
                   )}
                 >
@@ -94,7 +93,7 @@ export function SubagentGroupBlock({
                 </div>
                 <ChevronRight
                   className={cn(
-                    "text-muted-foreground/50 absolute top-0 left-0 h-3.5 w-3.5 transition-[transform,opacity] duration-150 ease-out",
+                    "text-muted-foreground/50 absolute top-0 left-0 h-3.5 w-3.5 transition-[rotate,opacity]",
                     isExpanded && "rotate-90",
                     isExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                   )}
@@ -132,14 +131,7 @@ export function SubagentGroupBlock({
 
       <AnimatePresence initial={false}>
         {isExpanded && childMessages.length > 0 && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={expandTransition}
-            style={{ overflow: "hidden" }}
-            className="mt-0.5 ml-6"
-          >
+          <Collapse className="mt-0.5 ml-6">
             <SessionProvider
               sessionStatus={sessionStatus}
               workspaceId={workspaceId}
@@ -150,7 +142,7 @@ export function SubagentGroupBlock({
             >
               <SubagentMessageList messages={childMessages} />
             </SessionProvider>
-          </motion.div>
+          </Collapse>
         )}
       </AnimatePresence>
     </div>

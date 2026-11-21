@@ -10,9 +10,7 @@
  *   "relay"   — "Your computer isn't connected", no retry (relay handles it)
  */
 
-import { m, useReducedMotion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { EASE_OUT_QUART } from "@/shared/lib/animation";
 import { ConnectionIllustration } from "./ConnectionIllustration";
 
 interface ServerOfflinePageProps {
@@ -31,91 +29,54 @@ const COPY = {
   },
 } as const;
 
-// Staggered fade-in variants
-const containerVariants = {
-  hidden: {},
-  visible: {
-    transition: { staggerChildren: 0.08 },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 12 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.35, ease: EASE_OUT_QUART },
-  },
-};
-
 export function ServerOfflinePage({ onRetry, variant }: ServerOfflinePageProps) {
   const copy = COPY[variant];
-  const reduceMotion = useReducedMotion();
-  const variants = reduceMotion ? undefined : itemVariants;
 
   return (
     <div className="bg-background flex h-screen w-full items-center justify-center p-6">
-      <m.div
-        className="flex max-w-[380px] flex-col items-center gap-6 text-center"
-        {...(!reduceMotion && {
-          variants: containerVariants,
-          initial: "hidden",
-          animate: "visible",
-        })}
-      >
-        <m.div variants={variants}>
+      <div className="flex max-w-[380px] flex-col items-center gap-6 text-center [--enter-y:12px]">
+        <div className="enter-step">
           <ConnectionIllustration className="w-[260px] opacity-80" />
-        </m.div>
+        </div>
 
-        <m.h1 variants={variants} className="text-foreground text-xl font-semibold tracking-tight">
+        <h1 className="enter-step text-foreground text-xl font-semibold tracking-tight [--step:1]">
           {copy.heading}
-        </m.h1>
+        </h1>
 
-        <m.p
-          variants={variants}
-          className="text-muted-foreground max-w-[340px] text-sm leading-relaxed"
-        >
+        <p className="enter-step text-muted-foreground max-w-[340px] text-sm leading-relaxed [--step:2]">
           {copy.body}
-        </m.p>
+        </p>
 
         {variant === "desktop" && (
-          <m.div variants={variants}>
+          <div className="enter-step [--step:3]">
             <Button variant="outline" size="sm" onClick={onRetry}>
               Try again
             </Button>
-          </m.div>
+          </div>
         )}
 
-        <m.div variants={variants} className="flex items-center gap-2">
-          <WaitingDots reduced={reduceMotion} />
+        <div
+          className={`enter-step flex items-center gap-2 ${variant === "desktop" ? "[--step:4]" : "[--step:3]"}`}
+        >
+          <WaitingDots />
           <span className="text-text-muted text-xs">Waiting for connection</span>
-        </m.div>
-      </m.div>
+        </div>
+      </div>
     </div>
   );
 }
 
 /** Three pulsing dots — communicates "I'm alive and checking" */
-function WaitingDots({ reduced }: { reduced: boolean | null }) {
+function WaitingDots() {
   return (
     <div className="flex items-center gap-1">
-      {[0, 1, 2].map((i) =>
-        reduced ? (
-          <span key={i} className="bg-text-muted size-1 rounded-full opacity-40" />
-        ) : (
-          <m.span
-            key={i}
-            className="bg-text-muted size-1 rounded-full"
-            animate={{ opacity: [0.2, 0.8, 0.2] }}
-            transition={{
-              duration: 1.5,
-              repeat: Infinity,
-              delay: i * 0.2,
-              ease: "linear",
-            }}
-          />
-        )
-      )}
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="bg-text-muted size-1 rounded-full opacity-40 motion-safe:animate-[waiting-dot_1.5s_linear_infinite]"
+          style={{ animationDelay: `${i * 0.2}s` }}
+        />
+      ))}
     </div>
   );
 }

@@ -42,7 +42,7 @@ function SentFromChat({ sessionId, name }: { sessionId: string; name?: string })
       <button
         type="button"
         onClick={() => openChat(workspace.id, sessionId)}
-        className="bg-muted text-foreground hover:bg-accent max-w-64 truncate rounded-md px-1.5 py-0.5 transition-colors duration-200"
+        className="bg-muted text-foreground hover:bg-accent max-w-64 truncate rounded-md px-1.5 py-0.5 transition-colors"
       >
         {label}
       </button>

@@ -1,6 +1,6 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { cn } from "@/shared/lib/utils";
-import { EASE_OUT_QUART_CSS } from "@/shared/lib/animation";
+import { tempo } from "@/shared/lib/tempo";
 
 interface WelcomeStepProps {
   onNext: () => void;
@@ -12,6 +12,9 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [titleOffset, setTitleOffset] = useState(0);
   const titleRef = useRef<HTMLDivElement>(null);
+
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const handleRun = useCallback(() => {
     if (phase !== "idle") return;
@@ -30,18 +33,14 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
       setTitleOffset(viewportCenter - titleCenter);
     }
 
-    // Phase 1: fade out button
     setPhase("fade-content");
-
-    // Phase 2: title floats to true center
-    setTimeout(() => setPhase("center"), 500);
-
-    // Phase 3: swap text Deus → Devs (no glitch, clean)
-    setTimeout(() => setPhase("swap"), 1400);
-
-    // Phase 4: slide left + fade, then advance
-    setTimeout(() => setPhase("exit"), 2200);
-    setTimeout(() => onNext(), 2800);
+    const step = tempo.step * 1000;
+    timers.current = [
+      setTimeout(() => setPhase("center"), 4 * step),
+      setTimeout(() => setPhase("swap"), 11 * step),
+      setTimeout(() => setPhase("exit"), 22 * step),
+      setTimeout(onNext, 25 * step),
+    ];
   }, [phase, onNext]);
 
   const isAnimating = phase !== "idle";
@@ -52,37 +51,36 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
       {/* Brand title */}
       <div
         ref={titleRef}
-        className={cn("text-center select-none", isAnimating && "z-10")}
-        style={{
-          transition:
-            phase === "exit"
-              ? `transform 600ms ${EASE_OUT_QUART_CSS}, opacity 500ms ${EASE_OUT_QUART_CSS}`
-              : `transform 700ms ${EASE_OUT_QUART_CSS}`,
-          ...(phase === "center" || phase === "swap"
+        className={cn(
+          "text-center transition-[transform,opacity] select-none",
+          isAnimating && "z-10",
+          phase === "exit" ? "tempo-slow-exit" : "tempo-slow ease-move"
+        )}
+        style={
+          phase === "center" || phase === "swap"
             ? { transform: `translateY(${titleOffset}px)` }
             : phase === "exit"
               ? { transform: `translateX(-40%) translateY(${titleOffset}px)`, opacity: 0 }
-              : {}),
-        }}
+              : undefined
+        }
       >
         <h1 className="text-onboarding-foreground text-[86px] leading-[0.88] font-extrabold tracking-tighter">
           <span className="relative inline-block">
             {/* Deus — fades out */}
             <span
-              style={{
-                transition: `opacity 400ms ${EASE_OUT_QUART_CSS}`,
-                opacity: showDevs ? 0 : 1,
-              }}
+              className={cn(
+                "transition-opacity",
+                showDevs ? "tempo-slow-exit opacity-0" : "tempo-slow"
+              )}
             >
               Deus
             </span>
             {/* Devs — fades in, positioned on top */}
             <span
-              className="absolute inset-0"
-              style={{
-                transition: `opacity 400ms ${EASE_OUT_QUART_CSS}`,
-                opacity: showDevs ? 1 : 0,
-              }}
+              className={cn(
+                "absolute inset-0 transition-opacity",
+                showDevs ? "tempo-slow" : "tempo-slow-exit opacity-0"
+              )}
             >
               Devs
             </span>
@@ -95,20 +93,16 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
 
       {/* CTA */}
       <div
-        className="mt-8"
-        style={{
-          transition: `opacity 400ms ${EASE_OUT_QUART_CSS}, transform 400ms ${EASE_OUT_QUART_CSS}`,
-          ...(isAnimating ? { opacity: 0, transform: "translateY(12px)" } : {}),
-        }}
+        className={cn(
+          "tempo-slow-exit mt-8 transition-[opacity,translate]",
+          isAnimating && "translate-y-3 opacity-0"
+        )}
       >
         <button
           onClick={handleRun}
           className="control-interaction bg-onboarding-foreground text-onboarding-contrast/90 hover:bg-onboarding-foreground/90 active:bg-onboarding-foreground/80 rounded-full px-10 py-3.5 text-sm font-medium hover:opacity-95"
           style={{
             boxShadow: "0 0 30px -4px oklch(0.65 0.15 264 / 0.3), 0 2px 12px oklch(0 0 0 / 0.2)",
-            transition: isAnimating
-              ? `opacity 400ms ${EASE_OUT_QUART_CSS}, transform 400ms ${EASE_OUT_QUART_CSS}`
-              : `scale 250ms ${EASE_OUT_QUART_CSS}, opacity 200ms ${EASE_OUT_QUART_CSS}`,
           }}
         >
           Run Deus

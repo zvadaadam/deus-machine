@@ -11,6 +11,7 @@
  * two spans (tag prefix + identifier).
  */
 
+import { tempo } from "@/shared/lib/tempo";
 import type { ComponentType, ReactNode } from "react";
 import { X } from "lucide-react";
 import { m } from "framer-motion";
@@ -61,8 +62,8 @@ export function MentionChip({
       layout
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.15, ease: [0.165, 0.84, 0.44, 1] }}
+      exit={{ opacity: 0, scale: 0.95, transition: tempo.fast.exit }}
+      transition={tempo.fast}
       title={title}
       className={cn(
         "group relative flex shrink-0 items-center gap-1.5 rounded-full border py-1 pr-1.5 pl-2",

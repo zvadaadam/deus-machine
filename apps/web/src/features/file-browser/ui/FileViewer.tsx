@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
-import { Copy, Check, Loader2, X, Code, BookOpen } from "lucide-react";
+import { Loader2, X, Code, BookOpen } from "lucide-react";
+import { CopyIcon } from "@/components/ui/copy-icon";
+import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { highlightFileLines } from "@/shared/lib/syntaxHighlighter";
 import { detectLanguageFromPath } from "@/features/session/ui/tools/utils/detectLanguage";
 import { MarkdownRenderer } from "@/components/markdown/MarkdownRenderer";
@@ -33,7 +35,7 @@ interface FileViewerProps {
  * - Loading/error states
  */
 export function FileViewer({ workspaceId, filePath, onClose }: FileViewerProps) {
-  const [copied, setCopied] = useState(false);
+  const { copy, copied } = useCopyToClipboard();
   const isMarkdown = isMarkdownFile(filePath);
   const [showRawMarkdown, setShowRawMarkdown] = useState(false);
 
@@ -74,20 +76,6 @@ export function FileViewer({ workspaceId, filePath, onClose }: FileViewerProps) 
   const isEmpty = content != null && content.length === 0;
   const lines = content?.split("\n") || [];
   const isLoading = isContentLoading || isHighlighting;
-
-  /**
-   * Copy file content to clipboard
-   */
-  const handleCopy = async () => {
-    if (!content) return;
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy file:", err);
-    }
-  };
 
   /**
    * Render a single line with line number
@@ -145,12 +133,12 @@ export function FileViewer({ workspaceId, filePath, onClose }: FileViewerProps) 
             {!isLoading && !error && content && (
               <button
                 type="button"
-                onClick={handleCopy}
+                onClick={() => void copy(content)}
                 className="control-interaction text-muted-foreground hover:text-foreground flex h-5 w-5 items-center justify-center rounded-lg"
                 title={copied ? "Copied" : "Copy file content"}
-                aria-label="Copy file content"
+                aria-label={copied ? "Copied" : "Copy file content"}
               >
-                {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                <CopyIcon copied={copied} className="size-3" />
               </button>
             )}
 

@@ -1,13 +1,3 @@
-/**
- * Sidebar Component - Customized animation timing
- *
- * Modified from shadcn default to use 180ms/80ms transitions with ease-out cubic-bezier
- * for smooth, macOS-style animations. These timing changes affect internal primitives
- * (sidebar-gap, sidebar-container, SidebarRail, SidebarGroupLabel) globally.
- *
- * When updating from shadcn upstream, preserve these timing customizations.
- */
-
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
@@ -255,6 +245,8 @@ function Sidebar({
     );
   }
 
+  const move = "var(--tempo-slow) var(--ease-move)";
+  const flyout = `${hoverOpen ? "var(--tempo-slow)" : "var(--tempo-slow-exit)"} var(--tempo-ease)`;
   return (
     <div
       className="group peer text-sidebar-foreground hidden md:block"
@@ -288,8 +280,7 @@ function Sidebar({
       <div
         data-slot="sidebar-gap"
         className={cn(
-          "relative w-(--sidebar-width) bg-transparent transition-[width] ease-[cubic-bezier(.19,1,.22,1)]",
-          state === "expanded" ? "duration-[280ms]" : "duration-[200ms]",
+          "tempo-slow ease-move relative w-(--sidebar-width) bg-transparent transition-[width]",
           "group-data-[collapsible=offcanvas]:w-0",
           "group-data-[side=right]:rotate-180"
         )}
@@ -297,14 +288,7 @@ function Sidebar({
       <div
         data-slot="sidebar-container"
         className={cn(
-          "fixed inset-y-0 z-10 hidden w-(--sidebar-width) transition-[left,right,width,opacity,translate] md:flex",
-          // Unified ease-out-expo curve, duration varies by interaction
-          "ease-[cubic-bezier(.19,1,.22,1)]",
-          hoverOpen
-            ? "duration-[200ms]" // Flyout open
-            : state === "expanded"
-              ? "duration-[280ms]" // Normal open: layout reshaping, room to breathe
-              : "duration-[200ms]", // Close (normal + flyout dismiss)
+          "fixed inset-y-0 z-10 hidden w-(--sidebar-width) md:flex",
           // Collapsed positioning (off-screen)
           side === "left"
             ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
@@ -328,6 +312,10 @@ function Sidebar({
         onPointerEnter={openHover}
         onPointerLeave={closeHover}
         {...props}
+        style={{
+          transition: `opacity ${flyout}, translate ${flyout}, left ${move}, right ${move}, width ${move}`,
+          ...props.style,
+        }}
       >
         <div
           data-sidebar="sidebar"
@@ -394,7 +382,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
       onClick={toggleSidebar}
       title="Toggle Sidebar"
       className={cn(
-        "hover:after:bg-sidebar-border absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 transition-[background-color,transform] delay-[60ms] duration-[180ms] ease-[cubic-bezier(0.165,0.84,0.44,1)] group-data-[side=left]:-right-4 group-data-[side=right]:left-0 after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] sm:flex",
+        "hover:after:bg-sidebar-border tempo-slow ease-move absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 transition-[background-color,transform] group-data-[side=left]:-right-4 group-data-[side=right]:left-0 after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] sm:flex",
         "in-data-[side=left]:cursor-w-resize in-data-[side=right]:cursor-e-resize",
         "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
         "hover:group-data-[collapsible=offcanvas]:bg-sidebar group-data-[collapsible=offcanvas]:translate-x-0 group-data-[collapsible=offcanvas]:after:left-full",
@@ -412,7 +400,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
     <main
       data-slot="sidebar-inset"
       className={cn(
-        "bg-background relative flex w-full flex-1 flex-col transition-[margin,border-radius,box-shadow] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]",
+        "bg-background tempo-slow ease-move relative flex w-full flex-1 flex-col transition-[margin,border-radius,box-shadow]",
         "md:peer-data-[variant=inset]:mt-2 md:peer-data-[variant=inset]:mr-0 md:peer-data-[variant=inset]:mb-0 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-tl-xl",
         "md:peer-data-[variant=inset]:peer-data-[state=collapsed]:m-0 md:peer-data-[variant=inset]:peer-data-[state=collapsed]:rounded-none",
         className
@@ -500,7 +488,7 @@ function SidebarGroupLabel({
       data-slot="sidebar-group-label"
       data-sidebar="group-label"
       className={cn(
-        "text-sidebar-foreground/70 ring-sidebar-ring flex h-8 shrink-0 items-center rounded-lg px-2 text-xs font-medium outline-hidden transition-[margin,opacity] duration-[80ms] ease-[cubic-bezier(0.165,0.84,0.44,1)] focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
+        "text-sidebar-foreground/70 ring-sidebar-ring flex h-8 shrink-0 items-center rounded-lg px-2 text-xs font-medium outline-hidden transition-[margin,opacity] focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
         className
       )}
       {...props}
@@ -564,13 +552,13 @@ function SidebarMenuItem({ className, ...props }: React.ComponentProps<"li">) {
 }
 
 const sidebarMenuButtonVariants = cva(
-  "peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-lg p-2 text-left text-sm outline-hidden transition-colors duration-150 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground focus-visible:outline-none active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-data-[sidebar=menu-action]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground data-[state=open]:hover:bg-sidebar-accent data-[state=open]:hover:text-sidebar-accent-foreground [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
+  "peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-lg p-2 text-left text-sm outline-hidden transition-colors hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:text-sidebar-accent-foreground focus-visible:outline-none active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-data-[sidebar=menu-action]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground data-[state=open]:hover:text-sidebar-accent-foreground [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+        default: "",
         outline:
-          "bg-background shadow-[0_0_0_1px_var(--sidebar-border)] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_var(--sidebar-accent)]",
+          "bg-background shadow-[0_0_0_1px_var(--sidebar-border)] hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_var(--sidebar-accent)]",
       },
       size: {
         default: "h-8 text-sm",

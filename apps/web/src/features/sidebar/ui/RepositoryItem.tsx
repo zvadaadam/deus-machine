@@ -1,7 +1,8 @@
 import { useMemo } from "react";
+import { Collapse } from "@/components/ui/collapse";
 import { offersNewFromBranch } from "../lib/location";
 import { Plus, ChevronRight, ChevronDown, GitPullRequest } from "lucide-react";
-import { AnimatePresence, m, useReducedMotion } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import { SidebarMenuItem } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -41,7 +42,6 @@ export function RepositoryItem({
   diffStatsMap,
   sidebarExpanded,
 }: RepositoryItemProps) {
-  const reduceMotion = useReducedMotion();
   const repoName = getCleanRepoName(repository.repo_name);
   // Web-direct can't create workspaces (no Mac backend) — the hover actions
   // would only open a picker with nothing in it.
@@ -87,21 +87,21 @@ export function RepositoryItem({
               </span>
               <div className="relative flex h-4 w-4 shrink-0 items-center justify-center">
                 {workspaceCount > 0 && (
-                  <span className="text-text-disabled text-xs tabular-nums transition-opacity duration-150 group-focus-within/repository-item:opacity-0 group-hover/repository-item:opacity-0">
+                  <span className="text-text-disabled text-xs tabular-nums transition-opacity group-focus-within/repository-item:opacity-0 group-hover/repository-item:opacity-0">
                     {workspaceCount}
                   </span>
                 )}
                 <ChevronRight
                   className={cn(
                     "absolute inset-0 m-auto h-3.5 w-3.5",
-                    "text-text-muted opacity-0 transition-[transform,opacity] duration-150 group-focus-within/repository-item:opacity-100 group-hover/repository-item:opacity-100",
+                    "text-text-muted opacity-0 transition-[transform,opacity] group-focus-within/repository-item:opacity-100 group-hover/repository-item:opacity-100",
                     !isCollapsed && "rotate-90"
                   )}
                 />
               </div>
             </SidebarRowMain>
             {sidebarExpanded && canCreate && (
-              <SidebarRowRight className="gap-2 opacity-0 transition-opacity duration-150 group-focus-within/repository-item:opacity-100 group-hover/repository-item:opacity-100">
+              <SidebarRowRight className="gap-2 opacity-0 transition-opacity group-focus-within/repository-item:opacity-100 group-hover/repository-item:opacity-100">
                 {/* A workspace on a pull request or branch is a local one. */}
                 {offersNewFromBranch(windowLocation, repository) && onNewWorkspaceFromGitHub && (
                   <Tooltip>
@@ -144,28 +144,23 @@ export function RepositoryItem({
       </SidebarMenuItem>
       <AnimatePresence initial={false}>
         {!isCollapsed && (
-          <m.ul
-            key="workspace-list"
-            initial={reduceMotion ? false : { height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.165, 0.84, 0.44, 1] }}
-            className="flex min-w-0 flex-col overflow-hidden pt-1 pb-2"
-          >
-            {sidebarExpanded && (
-              <RepositoryWorkspaceList
-                repository={repository}
-                isDeus={isDeus}
-                selectedWorkspaceId={selectedWorkspaceId}
-                unreadWorkspaceIds={unreadWorkspaceIds}
-                diffStatsMap={diffStatsMap}
-                onNewWorkspace={onNewWorkspace}
-                onWorkspaceClick={onWorkspaceClick}
-                onArchive={onArchive}
-                onStatusChange={onStatusChange}
-              />
-            )}
-          </m.ul>
+          <Collapse key="workspace-list" className="min-w-0 pt-1 pb-2">
+            <ul className="flex min-w-0 flex-col">
+              {sidebarExpanded && (
+                <RepositoryWorkspaceList
+                  repository={repository}
+                  isDeus={isDeus}
+                  selectedWorkspaceId={selectedWorkspaceId}
+                  unreadWorkspaceIds={unreadWorkspaceIds}
+                  diffStatsMap={diffStatsMap}
+                  onNewWorkspace={onNewWorkspace}
+                  onWorkspaceClick={onWorkspaceClick}
+                  onArchive={onArchive}
+                  onStatusChange={onStatusChange}
+                />
+              )}
+            </ul>
+          </Collapse>
         )}
       </AnimatePresence>
     </Collapsible>
@@ -263,10 +258,7 @@ function RepositoryWorkspaceList({
               <SidebarRowMain>
                 <SidebarRowIconSlot>
                   <ChevronDown
-                    className={cn(
-                      "h-3.5 w-3.5 transition-transform duration-150",
-                      isExpanded && "rotate-180"
-                    )}
+                    className={cn("h-3.5 w-3.5 transition-transform", isExpanded && "rotate-180")}
                   />
                 </SidebarRowIconSlot>
                 <span className="text-xs font-medium">

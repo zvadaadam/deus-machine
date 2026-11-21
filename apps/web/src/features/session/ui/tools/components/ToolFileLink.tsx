@@ -77,7 +77,7 @@ export function ToolFileLink({ path, target, className }: ToolFileLinkProps) {
       <span className="block min-w-0 truncate" dir="rtl">
         {normalizedPath}
       </span>
-      <ArrowUpRight className="text-primary/45 group-hover/file-link:text-primary/70 group-focus-visible/file-link:text-primary/70 h-3.5 w-3.5 flex-shrink-0 opacity-90 transition-[color,transform,opacity] duration-150 ease-out group-hover/file-link:translate-x-px group-hover/file-link:opacity-100 group-focus-visible/file-link:translate-x-px group-focus-visible/file-link:opacity-100" />
+      <ArrowUpRight className="text-primary/45 group-hover/file-link:text-primary/70 group-focus-visible/file-link:text-primary/70 h-3.5 w-3.5 flex-shrink-0 opacity-90 transition-[color,translate,opacity] group-hover/file-link:opacity-100 group-focus-visible/file-link:opacity-100 motion-safe:group-hover/file-link:translate-x-px motion-safe:group-focus-visible/file-link:translate-x-px" />
     </button>
   );
 }

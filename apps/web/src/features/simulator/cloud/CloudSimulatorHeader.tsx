@@ -4,7 +4,8 @@ import type { ReactNode } from "react";
  * of SimulatorDeviceHeader: status dot + label, Start/Stop, Home, Screenshot.
  */
 
-import { Camera, Check, ExternalLink, Home, Link2, Loader2, Play, Square } from "lucide-react";
+import { Camera, ExternalLink, Home, Link2, Loader2, Play, Square } from "lucide-react";
+import { CopyIcon } from "@/components/ui/copy-icon";
 import { match } from "ts-pattern";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -167,11 +168,11 @@ export function CloudSimulatorHeader({
                 disabled={phase !== "live"}
                 aria-label={copied ? "Copied" : "Copy stream link"}
               >
-                {copied ? (
-                  <Check className="text-success h-3 w-3" />
-                ) : (
-                  <Link2 className="h-3 w-3" />
-                )}
+                <CopyIcon
+                  copied={copied}
+                  icon={Link2}
+                  className={cn("size-4", copied && "text-success")}
+                />
               </Button>
             </span>
           </TooltipTrigger>

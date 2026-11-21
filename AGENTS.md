@@ -814,6 +814,15 @@ stale after long editing sessions — save and relaunch Pen to get accurate scre
 component instance resolves its theme once per document, so light-mode sheets are built
 from primitives rather than instances.
 
+## Interface motion
+
+Never write a duration or curve at a UI transition call site. Use the tempo tokens.
+Use `fast` for control feedback, tooltips and command lists you type into, `moderate` for menus and small collapses, and `slow` for dialogs, sheets and layout panels.
+Give a surface and its backdrop the same tier. Use `ease-move` when visible layout moves in place.
+Use one `Glide` for a list of stable choices. Keep per-row hover for transcript items, virtual rows, cards with gutters and rows that move beneath a resting pointer.
+Never follow a row's interactive state (highlight, hover or focus) with `:has()` or `group-has-*`. Style the row directly.
+A state change must leave its neighbours in place. Reserve space for a heavier label or an icon swap. [Motion rules and tests](design/motion.md)
+
 ## Hard Rules
 
 - Never edit outside your worktree directory

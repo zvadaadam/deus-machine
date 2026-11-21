@@ -226,7 +226,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
       <div
         className={cn(
           "flex min-w-0 flex-1 items-center gap-1.5",
-          isInitializing && "animate-[shimmer_2s_ease-in-out_infinite]"
+          isInitializing && "animate-shimmer"
         )}
       >
         {onStatusChange ? (
@@ -333,7 +333,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
   );
 
   return (
-    <div className={cn(isInitializing && "animate-[fadeInUp_0.25s_cubic-bezier(.215,.61,.355,1)]")}>
+    <div className={cn(isInitializing && "animate-fade-in-up")}>
       {isInitializing ? (
         row
       ) : (

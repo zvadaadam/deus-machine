@@ -65,7 +65,7 @@ export function TabPill({
   return (
     <div
       className={cn(
-        "group flex h-7 items-center rounded-lg text-sm font-normal whitespace-nowrap transition-colors duration-150 select-none",
+        "group flex h-7 items-center rounded-lg text-sm font-normal whitespace-nowrap transition-colors select-none",
         active
           ? "bg-bg-raised text-text-secondary font-medium"
           : "text-text-muted hover:bg-control-hover hover:text-text-tertiary",
@@ -87,10 +87,10 @@ export function TabPill({
             "hover:bg-control-hover active:bg-control-pressed"
           )}
         >
-          <span className="absolute inset-0 grid place-items-center transition-opacity duration-150 group-hover:opacity-0">
+          <span className="absolute inset-0 grid place-items-center transition-opacity group-hover:opacity-0">
             {icon}
           </span>
-          <span className="absolute inset-0 grid place-items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+          <span className="absolute inset-0 grid place-items-center opacity-0 transition-opacity group-hover:opacity-100">
             <X className="h-3.5 w-3.5" />
           </span>
         </button>
@@ -107,7 +107,12 @@ export function TabPill({
         onKeyDown={onTitleKeyDown}
         className="control-interaction active:bg-control-pressed flex h-full min-w-0 flex-1 cursor-pointer items-center rounded-r-lg border-none bg-transparent pr-2.5 pl-0.5 text-left text-inherit"
       >
-        <span className="block truncate">{children}</span>
+        <span
+          className="block truncate"
+          data-medium-label={typeof children === "string" ? children : undefined}
+        >
+          {children}
+        </span>
       </button>
     </div>
   );

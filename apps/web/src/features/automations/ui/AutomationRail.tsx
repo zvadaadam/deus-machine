@@ -5,6 +5,7 @@
 
 import { CirclePause, CirclePlay, ChevronLeft, Plus } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { Glide } from "@/components/ui/glide";
 import { ScrollArea } from "@/components/ui";
 import type { Automation } from "@/shared/types";
 import { humanizeSchedule } from "../lib/schedule";
@@ -32,7 +33,7 @@ export function AutomationRail({
           <button
             type="button"
             onClick={onBack}
-            className="text-text-primary hover:text-text-secondary flex items-center gap-1 text-sm font-medium transition-colors duration-150"
+            className="text-text-primary hover:text-text-secondary flex items-center gap-1 text-sm font-medium transition-colors"
           >
             <ChevronLeft className="text-text-muted h-3.5 w-3.5" />
             Automations
@@ -47,7 +48,12 @@ export function AutomationRail({
           </button>
         </div>
         <ScrollArea className="min-h-0 flex-1">
-          <div className="flex flex-col gap-0.5">
+          <div className="relative isolate flex flex-col gap-0.5">
+            <Glide
+              rows="button"
+              selected="[data-active]"
+              className="bg-foreground/[0.04] rounded-lg"
+            />
             {automations.map((automation) => {
               const paused = automation.status === "paused";
               const StatusIcon = paused ? CirclePause : CirclePlay;
@@ -55,11 +61,12 @@ export function AutomationRail({
               return (
                 <button
                   key={automation.id}
+                  data-active={selected || undefined}
                   type="button"
                   onClick={() => onSelect(automation)}
                   className={cn(
                     "control-interaction flex items-center gap-2 rounded-lg px-2 py-[7px] text-left",
-                    selected ? "bg-bg-selection" : "hover:bg-foreground/[0.04]"
+                    selected && "bg-bg-selection"
                   )}
                 >
                   <StatusIcon

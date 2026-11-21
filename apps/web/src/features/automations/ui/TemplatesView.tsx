@@ -135,7 +135,7 @@ function TemplateCard({
     <button
       type="button"
       onClick={() => onUse(template.prefill)}
-      className="border-border-subtle bg-bg-elevated hover:border-border-default flex flex-col gap-1.5 rounded-lg border p-3.5 text-left transition-colors duration-150"
+      className="border-border-subtle bg-bg-elevated hover:border-border-default flex flex-col gap-1.5 rounded-lg border p-3.5 text-left transition-colors"
     >
       <div className="flex items-center gap-2">
         <template.icon className="text-text-secondary h-[15px] w-[15px] shrink-0" />

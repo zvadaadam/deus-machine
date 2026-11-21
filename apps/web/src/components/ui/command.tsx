@@ -3,6 +3,7 @@ import { Command as CommandPrimitive } from "cmdk";
 import { SearchIcon } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
+import { Glide } from "./glide";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 function Command({ className, ...props }: React.ComponentProps<typeof CommandPrimitive>) {
@@ -23,12 +24,18 @@ function CommandDialog({
   title = "Command Palette",
   ...props
 }: React.ComponentProps<typeof Dialog> & { title?: string }) {
+  // A command list accepts typing as soon as it opens.
+  const timing =
+    "[animation-duration:var(--tempo-fast)]! data-[state=closed]:[animation-duration:var(--tempo-fast-exit)]!";
   return (
     <Dialog {...props}>
       <DialogContent
-        className="vibrancy-bg border-border-subtle top-[20%] translate-y-0 overflow-hidden p-0 shadow-lg sm:max-w-[520px]"
+        className={cn(
+          "vibrancy-bg border-border-subtle top-[20%] translate-y-0 overflow-hidden p-0 shadow-lg sm:max-w-[520px]",
+          timing
+        )}
         showCloseButton={false}
-        overlayClassName="bg-black/8"
+        overlayClassName={cn("bg-black/8", timing)}
         aria-describedby={undefined}
       >
         <DialogTitle className="sr-only">{title}</DialogTitle>
@@ -65,13 +72,24 @@ function CommandInput({
   );
 }
 
-function CommandList({ className, ...props }: React.ComponentProps<typeof CommandPrimitive.List>) {
+function CommandList({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.List>) {
   return (
     <CommandPrimitive.List
       data-slot="command-list"
-      className={cn("max-h-[300px] overflow-x-hidden overflow-y-auto", className)}
+      // Clip the fill to the results so a filtered-out row cannot hold the list scrolled down.
+      className={cn(
+        "max-h-[300px] overflow-x-hidden overflow-y-auto [&>[cmdk-list-sizer]]:contain-paint",
+        className
+      )}
       {...props}
-    />
+    >
+      <Glide follow="data-selected" className="bg-accent rounded-lg" />
+      {children}
+    </CommandPrimitive.List>
   );
 }
 
@@ -119,7 +137,7 @@ function CommandItem({ className, ...props }: React.ComponentProps<typeof Comman
     <CommandPrimitive.Item
       data-slot="command-item"
       className={cn(
-        "data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground relative flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm outline-none select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+        "data-[selected=true]:text-accent-foreground relative flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm outline-none select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
         className
       )}
       {...props}

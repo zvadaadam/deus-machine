@@ -51,7 +51,7 @@ export function SimulatorLaunchPreview({
             <Button
               onClick={onStart}
               disabled={!selectedUdid || typeof onStart !== "function"}
-              className="min-h-11 min-w-[180px] gap-2 transition-[background-color,border-color,color,box-shadow] duration-150"
+              className="min-h-11 min-w-[180px] gap-2 transition-[background-color,border-color,color,box-shadow]"
             >
               <Play className="h-4 w-4" />
               Start Simulator

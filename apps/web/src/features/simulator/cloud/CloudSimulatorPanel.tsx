@@ -17,6 +17,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 import { api } from "@shared/api";
 import { getErrorMessage } from "@shared/lib/errors";
+import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { call } from "@/platform/ws";
 import type { Workspace } from "@/shared/types";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
@@ -82,9 +83,6 @@ interface ScreenshotRequest {
    *  nothing is attached before it. */
   answered: boolean;
 }
-
-/** How long the copy-link button shows its acknowledgement. */
-const COPIED_MS = 1500;
 
 /** What the idle chip appends to the composer draft. */
 const BUILD_AND_RUN_PROMPT = "Build and run the app on the cloud simulator";
@@ -283,19 +281,10 @@ export function CloudSimulatorPanel({
     openExternal(device.streamUrl).catch((e) => setSendError(getErrorMessage(e)));
   }, [device.streamUrl]);
 
-  const [copied, setCopied] = useState(false);
-  const handleCopyLink = useCallback(() => {
-    if (!device.streamUrl) return;
-    navigator.clipboard
-      .writeText(device.streamUrl)
-      .then(() => setCopied(true))
-      .catch((e) => setSendError(getErrorMessage(e)));
-  }, [device.streamUrl]);
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), COPIED_MS);
-    return () => clearTimeout(timer);
-  }, [copied]);
+  const { copy, copied } = useCopyToClipboard({
+    resetDelay: 1500,
+    onError: (error) => setSendError(getErrorMessage(error)),
+  });
 
   const handleAskAgent = useCallback(() => {
     const sid = activeChatSessionId(workspaceId);
@@ -312,7 +301,9 @@ export function CloudSimulatorPanel({
       onHome={handleHome}
       onScreenshot={handleScreenshot}
       onOpenExternal={handleOpenExternal}
-      onCopyLink={handleCopyLink}
+      onCopyLink={() => {
+        if (device.streamUrl) void copy(device.streamUrl);
+      }}
       copied={copied}
     />
   );
@@ -387,7 +378,7 @@ function DeviceStateBody({
           <div className="flex flex-col items-center gap-3">
             <Button
               onClick={onStart}
-              className="min-h-11 min-w-[180px] gap-2 transition-[background-color,border-color,color,box-shadow] duration-150"
+              className="min-h-11 min-w-[180px] gap-2 transition-[background-color,border-color,color,box-shadow]"
             >
               <Play className="h-4 w-4" />
               Start device

@@ -109,7 +109,7 @@ const AddProjectButton = forwardRef<HTMLButtonElement, ComponentPropsWithoutRef<
         ref={ref}
         type="button"
         aria-label="Add project"
-        className="text-text-muted hover:text-text-tertiary flex items-center gap-2 transition-colors duration-150"
+        className="text-text-muted hover:text-text-tertiary flex items-center gap-2 transition-colors"
         {...props}
       >
         <Plus className="h-4 w-4 shrink-0" />

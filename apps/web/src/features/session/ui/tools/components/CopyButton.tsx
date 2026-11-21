@@ -4,8 +4,8 @@
  * Reusable button for copying text to clipboard with visual feedback
  */
 
-import { useState, useEffect, useRef } from "react";
-import { Copy, Check } from "lucide-react";
+import { CopyIcon } from "@/components/ui/copy-icon";
+import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { cn } from "@/shared/lib/utils";
 
 interface CopyButtonProps {
@@ -16,70 +16,36 @@ interface CopyButtonProps {
 }
 
 export function CopyButton({ text, label = "Copy", className, size = "sm" }: CopyButtonProps) {
-  const [copied, setCopied] = useState(false);
-  const timerRef = useRef<number | null>(null);
-
-  const handleCopy = async (e: React.MouseEvent) => {
-    e.stopPropagation(); // Don't trigger parent clicks
-
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-
-      // Clear existing timer if any
-      if (timerRef.current) clearTimeout(timerRef.current);
-
-      // Set new timer
-      timerRef.current = window.setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy:", err);
-    }
-  };
-
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
-
-  const sizeClasses = {
-    sm: "h-6 px-2 text-sm",
-    md: "h-8 px-3 text-sm",
-  };
-
-  const iconSize = {
-    sm: "w-3 h-3",
-    md: "w-4 h-4",
-  };
+  const { copy, copied } = useCopyToClipboard();
 
   return (
     <button
       type="button"
-      onClick={handleCopy}
+      onClick={(event) => {
+        event.stopPropagation();
+        void copy(text);
+      }}
       className={cn(
         "control-interaction inline-flex items-center gap-1.5 rounded-lg",
         "hover:bg-control-hover active:bg-control-pressed bg-transparent",
         "text-muted-foreground hover:text-foreground",
         "border-border/40 hover:border-border border",
         "disabled:cursor-not-allowed",
-        sizeClasses[size],
+        "text-sm",
+        size === "sm" ? "h-6 px-2" : "h-8 px-3",
         className
       )}
       title={copied ? "Copied!" : label}
       aria-label={copied ? "Copied!" : label}
     >
-      {copied ? (
-        <>
-          <Check className={cn(iconSize[size], "text-success")} aria-hidden="true" />
-          <span className="text-success font-medium">Copied</span>
-        </>
-      ) : (
-        <>
-          <Copy className={iconSize[size]} aria-hidden="true" />
-          <span>{label}</span>
-        </>
-      )}
+      <CopyIcon
+        copied={copied}
+        className={cn(size === "sm" ? "size-3" : "size-4", copied && "text-success")}
+      />
+      <span aria-hidden="true" className="inline-grid [&>span]:[grid-area:1/1]">
+        <span className={cn(copied && "invisible")}>{label}</span>
+        <span className={cn("text-success font-medium", !copied && "invisible")}>Copied</span>
+      </span>
     </button>
   );
 }

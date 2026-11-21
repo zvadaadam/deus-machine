@@ -70,7 +70,7 @@ export function CliStatusRow({
           href={actionUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="bg-onboarding-foreground/10 text-onboarding-foreground hover:bg-onboarding-foreground/20 shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-200"
+          className="bg-onboarding-foreground/10 text-onboarding-foreground hover:bg-onboarding-foreground/20 shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
         >
           {actionLabel}
         </a>

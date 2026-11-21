@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGlide,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
@@ -100,9 +101,11 @@ export function ModelPicker({
         align="start"
         side={side}
         collisionPadding={8}
+        glide={false}
         className="flex w-96 max-w-[calc(100vw-1rem)] flex-col overflow-hidden p-0"
       >
-        <div className="border-border-subtle flex shrink-0 gap-1 border-b p-1">
+        <div className="border-border-subtle relative isolate flex shrink-0 gap-1 border-b p-1">
+          <DropdownMenuGlide selected="[aria-current=true]" />
           {groups.map((group) => {
             const isShown = group.agentHarness === shownAgent;
             return (
@@ -127,7 +130,8 @@ export function ModelPicker({
         </div>
 
         <div className="flex min-h-0 flex-1">
-          <div className="min-w-0 flex-1 overflow-y-auto p-1">
+          <div className="relative isolate min-w-0 flex-1 overflow-y-auto p-1">
+            <DropdownMenuGlide />
             {otherAgent && (
               <DropdownMenuLabel className="text-text-muted text-xs font-normal">
                 {keepsAgent ? "This chat keeps its agent" : "Opens a new chat"}
@@ -158,7 +162,8 @@ export function ModelPicker({
             })}
           </div>
 
-          <div className="border-border-subtle w-36 shrink-0 overflow-y-auto border-l p-1">
+          <div className="border-border-subtle relative isolate w-36 shrink-0 overflow-y-auto border-l p-1">
+            <DropdownMenuGlide />
             <DropdownMenuLabel className="text-text-muted text-xs font-normal">
               Thinking
             </DropdownMenuLabel>

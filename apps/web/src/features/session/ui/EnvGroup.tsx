@@ -1,6 +1,6 @@
 /** The transcript's shared line for a local checkout or a cloud computer. */
 import { useId, useRef, useState, type ReactNode } from "react";
-import { AnimatePresence, m, useReducedMotion } from "framer-motion";
+import { AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   ChevronRight,
   CircleCheck,
@@ -12,6 +12,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Collapse } from "@/components/ui/collapse";
 import { SetupLogDialog } from "@/features/workspace/ui/SetupLogDialog";
 import type { useSetupActions } from "@/features/workspace/hooks/useSetupActions";
 import type { StartWarning } from "@/features/workspace/lib/startState";
@@ -228,19 +229,12 @@ export function EnvGroup({ title, where, state, steps = [], footer }: EnvGroupPr
       {live.length > 0 && <div className="mx-2 max-w-xl">{live.map(renderStep)}</div>}
       <AnimatePresence initial={false}>
         {open && (
-          <m.div
-            id={cardId}
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: reduceMotion ? 0 : 0.18, ease: [0.215, 0.61, 0.355, 1] }}
-            className="overflow-hidden"
-          >
+          <Collapse id={cardId}>
             <div className="inset-ring-border-subtle mt-0.5 mb-1 flex max-w-xl flex-col gap-1.5 rounded-lg px-2 py-2.5 inset-ring">
               {history.map(renderStep)}
               {footer}
             </div>
-          </m.div>
+          </Collapse>
         )}
       </AnimatePresence>
     </div>

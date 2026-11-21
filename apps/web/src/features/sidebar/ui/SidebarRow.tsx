@@ -33,11 +33,13 @@ export const SidebarRow = React.forwardRef<HTMLDivElement, SidebarRowProps>(func
   return (
     <Comp
       ref={ref}
+      data-sidebar-row=""
+      data-active={isActive || undefined}
       className={cn(
         "group/sidebar-row relative flex w-full items-center justify-between gap-3 rounded-lg",
-        "transition-colors duration-100 ease-out",
+        "transition-colors",
         rowVariants[variant],
-        isActive ? "bg-bg-selection" : "hover:bg-foreground/[0.04]",
+        isActive && "bg-bg-selection",
         className
       )}
       {...props}

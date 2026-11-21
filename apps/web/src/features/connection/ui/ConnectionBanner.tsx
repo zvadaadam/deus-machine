@@ -9,13 +9,12 @@
  * Content cross-fades between stages via AnimatePresence.
  */
 
-import { AnimatePresence, m, useReducedMotion } from "framer-motion";
-import { EASE_OUT_QUART } from "@/shared/lib/animation";
+import { AnimatePresence, m } from "framer-motion";
+import { tempo } from "@/shared/lib/tempo";
 import { useConnectionState } from "../hooks/useConnectionState";
 
 export function ConnectionBanner() {
   const { state, sendAttemptFailed, retry } = useConnectionState();
-  const reduceMotion = useReducedMotion();
 
   const showBanner = state === "reconnecting" || state === "disconnected";
   const isEscalated = state === "disconnected";
@@ -30,13 +29,10 @@ export function ConnectionBanner() {
           aria-atomic="true"
           className="relative w-full overflow-hidden"
           style={{ height: 40 }}
-          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -40 }}
+          initial={{ opacity: 0, y: -40 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -40 }}
-          transition={{
-            duration: reduceMotion ? 0.1 : 0.25,
-            ease: EASE_OUT_QUART,
-          }}
+          exit={{ opacity: 0, y: -40, transition: tempo.moderate.exit }}
+          transition={tempo.moderate}
         >
           {/* Amber bottom accent line */}
           <div className="bg-accent-gold/30 absolute bottom-0 left-0 h-[2px] w-full" />
@@ -45,9 +41,7 @@ export function ConnectionBanner() {
             <div className="flex items-center gap-2.5">
               {/* Amber dot — suppress ping animation for reduced motion */}
               <span className="relative flex h-1.5 w-1.5">
-                {!reduceMotion && (
-                  <span className="bg-accent-gold absolute inline-flex h-full w-full animate-ping rounded-full opacity-40" />
-                )}
+                <span className="bg-accent-gold absolute inline-flex h-full w-full animate-ping rounded-full opacity-40" />
                 <span className="bg-accent-gold relative inline-flex h-1.5 w-1.5 rounded-full" />
               </span>
 
@@ -59,8 +53,8 @@ export function ConnectionBanner() {
                     className="flex items-baseline gap-1.5"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: reduceMotion ? 0 : 0.15 }}
+                    exit={{ opacity: 0, transition: tempo.fast.exit }}
+                    transition={tempo.fast}
                   >
                     <span className="text-text-secondary text-sm font-medium">
                       {sendAttemptFailed ? "Message queued" : "Connection lost"}
@@ -75,8 +69,8 @@ export function ConnectionBanner() {
                     className="text-text-muted text-sm"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: reduceMotion ? 0 : 0.15 }}
+                    exit={{ opacity: 0, transition: tempo.fast.exit }}
+                    transition={tempo.fast}
                   >
                     Reconnecting...
                   </m.span>
@@ -91,11 +85,11 @@ export function ConnectionBanner() {
                   key="retry-btn"
                   type="button"
                   onClick={retry}
-                  className="text-accent-gold hover:text-accent-gold/80 text-xs font-medium transition-colors duration-150"
+                  className="text-accent-gold hover:text-accent-gold/80 text-xs font-medium transition-colors"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: reduceMotion ? 0 : 0.2 }}
+                  exit={{ opacity: 0, transition: tempo.fast.exit }}
+                  transition={tempo.fast}
                 >
                   Retry now
                 </m.button>

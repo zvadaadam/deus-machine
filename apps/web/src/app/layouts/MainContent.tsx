@@ -229,7 +229,8 @@ export function MainContent({
       <div
         data-slot="main-content"
         className={cn(
-          "bg-bg-surface flex h-full min-w-0 flex-1 overflow-hidden transition-[border-radius,border-color,opacity] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]",
+          "bg-bg-surface flex h-full min-w-0 flex-1 overflow-hidden transition-[border-radius,border-color,opacity]",
+          sidebarOpen ? "tempo-slow" : "tempo-slow-exit",
           // Mobile: edge-to-edge, no border/rounding (sidebar is a Sheet overlay)
           isMobile
             ? "border-0"

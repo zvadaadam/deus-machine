@@ -5,6 +5,7 @@
  * - recording_stop → prominent video card in chat, click opens modal player
  */
 
+import { tempo } from "@/shared/lib/tempo";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Video, Play, Pause, X, Film } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -270,7 +271,7 @@ function RecordingCard({
       className={cn(
         "border-border/40 group relative overflow-hidden rounded-xl border text-left",
         "bg-background",
-        "cursor-pointer transition-all duration-200",
+        "cursor-pointer transition-[border-color,box-shadow]",
         "hover:border-border/60 hover:shadow-lg"
       )}
       style={{ width: "100%", minWidth: "400px" }}
@@ -284,7 +285,7 @@ function RecordingCard({
           <img
             src={thumbUrl}
             alt="Recording thumbnail"
-            className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.02]"
+            className="absolute inset-0 h-full w-full object-cover transition-transform motion-safe:group-hover:scale-[1.02]"
           />
         ) : (
           <div className="bg-muted absolute inset-0" />
@@ -296,8 +297,8 @@ function RecordingCard({
             className={cn(
               "flex h-14 w-14 items-center justify-center rounded-full",
               "bg-black/50 shadow-lg backdrop-blur-md",
-              "transition-all duration-200 ease-out",
-              "group-hover:scale-110 group-hover:bg-black/60"
+              "transition-[scale,background-color]",
+              "group-hover:bg-black/60 motion-safe:group-hover:scale-110"
             )}
           >
             <Play className="ml-1 h-6 w-6 fill-white text-white" />
@@ -396,16 +397,16 @@ function VideoModal({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
+      exit={{ opacity: 0, transition: tempo.slow.exit }}
+      transition={tempo.slow}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
       onClick={onClose}
     >
       <motion.div
         initial={{ scale: 0.92, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.92, opacity: 0 }}
-        transition={{ duration: 0.25, ease: [0.165, 0.84, 0.44, 1] }}
+        exit={{ scale: 0.92, opacity: 0, transition: tempo.slow.exit }}
+        transition={tempo.slow}
         className="bg-background border-border/40 relative flex max-h-[85vh] w-[90vw] max-w-5xl flex-col overflow-hidden rounded-xl border shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -446,7 +447,7 @@ function VideoModal({
               {/* Play/Pause overlay */}
               <div
                 className={cn(
-                  "absolute inset-0 flex items-center justify-center transition-opacity duration-200",
+                  "absolute inset-0 flex items-center justify-center transition-opacity",
                   playing ? "opacity-0 hover:opacity-100" : "opacity-100"
                 )}
               >
@@ -576,7 +577,7 @@ function ProgressBar({
     return (
       <div
         ref={barRef}
-        className="bg-muted/50 group relative h-1.5 cursor-pointer transition-[height] duration-150 hover:h-2.5"
+        className="bg-muted/50 group relative h-1.5 cursor-pointer transition-[height] hover:h-2.5"
         onClick={handleClick}
       >
         <div
@@ -596,7 +597,7 @@ function ProgressBar({
   return (
     <div
       ref={barRef}
-      className="group flex h-1.5 cursor-pointer gap-px transition-[height] duration-150 hover:h-2.5"
+      className="group flex h-1.5 cursor-pointer gap-px transition-[height] hover:h-2.5"
       onClick={handleClick}
     >
       {segments.map((seg, i) => {

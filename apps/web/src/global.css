@@ -6,6 +6,29 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@theme static {
+  --tempo-fast: 80ms;
+  --tempo-fast-exit: 60ms;
+  --tempo-moderate: 160ms;
+  --tempo-moderate-exit: 120ms;
+  --tempo-slow: 240ms;
+  --tempo-slow-exit: 160ms;
+  --tempo-ease: cubic-bezier(0.165, 0.84, 0.44, 1);
+  --tempo-step: 60ms;
+  --ease-move: cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+@utility tempo-* {
+  transition-duration: --value(--tempo-*);
+  transition-timing-function: var(--tw-ease, var(--tempo-ease));
+}
+
+/* Reserve the selected text's width while the visible label uses its current weight. */
+[data-medium-label]::after {
+  content: attr(data-medium-label);
+  @apply invisible block h-0 overflow-hidden font-medium;
+}
+
 /* Tailwind v4 Theme Configuration */
 @theme {
   /* Semantic colors - exposed to Tailwind utilities */
@@ -141,11 +164,9 @@
   --z-tooltip: var(--z-tooltip);
   --z-notification: var(--z-notification);
 
-  /* Easing curves — use via ease-out-quart, ease-out-expo, etc. */
-  --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
-  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-out-cubic: cubic-bezier(0.215, 0.61, 0.355, 1);
-  --ease-in-out-cubic: cubic-bezier(0.645, 0.045, 0.355, 1);
+  /* Unqualified transition utilities are control feedback. */
+  --default-transition-duration: var(--tempo-fast);
+  --default-transition-timing-function: var(--tempo-ease);
 
   /* Font families — System native for UI and code */
   --font-sans:
@@ -223,173 +244,54 @@
   --radius-4xl: calc(var(--radius-4xl-base) * var(--corner-radius-scale));
   --radius-full: 9999px;
 
-  /* Animations - Choreographed timing: content exits fast, container follows smooth */
-  --animate-fade-in: fadeIn 0.2s cubic-bezier(0, 0, 0.2, 1);
-  --animate-fade-in-up: fadeInUp 0.25s cubic-bezier(0, 0, 0.2, 1);
+  /* One-shot entrances and ambient loops */
+  --animate-fade-in: fadeIn var(--tempo-moderate) var(--tempo-ease);
+  --animate-fade-in-up: fadeInUp var(--tempo-moderate) var(--tempo-ease);
   --animate-shimmer: shimmer 2s ease-in-out infinite;
   --animate-subtle-spin: subtle-spin 2s linear infinite;
-  --animate-drop-overlay-enter: drop-overlay-enter 0.2s cubic-bezier(0.165, 0.84, 0.44, 1);
+  --animate-drop-overlay-enter: drop-overlay-enter var(--tempo-slow) var(--tempo-ease);
 }
 
-/* text-2xs is now defined in @theme above */
+/* Staged page entrances. The step is local to the element so a child can set its own delay. */
+@utility enter-step {
+  animation: fadeInUp var(--enter-time, var(--tempo-slow)) var(--tempo-ease)
+    calc(var(--step, 0) * var(--tempo-step)) backwards;
+}
 
 /* Shared by Button and controls whose semantics/layout require their own markup. */
 @utility control-interaction {
-  @apply focus-visible:ring-primary/60 transition-[color,background-color,border-color,box-shadow,opacity] duration-150 ease-out outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50;
+  @apply focus-visible:ring-primary/60 transition-[color,background-color,border-color,box-shadow,opacity] outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50;
 }
 
 @keyframes tooltip-enter {
   from {
     opacity: 0;
-    transform: scale(0.97) translateY(var(--tooltip-translate-y, 0))
-      translateX(var(--tooltip-translate-x, 0));
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0) translateX(0);
+    transform: var(
+      --tempo-transform,
+      scale(0.97) translate(var(--tooltip-translate-x, 0), var(--tooltip-translate-y, 0))
+    );
   }
 }
-
 @keyframes tooltip-exit {
-  from {
-    opacity: 1;
-    transform: scale(1) translateY(0) translateX(0);
-  }
   to {
     opacity: 0;
-    transform: scale(0.97) translateY(var(--tooltip-translate-y, 0))
-      translateX(var(--tooltip-translate-x, 0));
+    transform: var(
+      --tempo-transform,
+      scale(0.97) translate(var(--tooltip-translate-x, 0), var(--tooltip-translate-y, 0))
+    );
   }
 }
 
-/* Dropdown / popover enter/exit — used by Radix DropdownMenu, ContextMenu, Select.
- * Scale from 0.96 (not 0) + fade + directional slide for snappy, polished feel.
- * ease-out-cubic (.215,.61,.355,1): fast start, gentle settle — per Kowalski. */
 @keyframes dropdown-enter {
   from {
     opacity: 0;
-    transform: scale(0.96) translateY(var(--dropdown-slide-y, 0));
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: var(--tempo-transform, scale(0.96) translateY(var(--dropdown-slide-y, 0)));
   }
 }
-
 @keyframes dropdown-exit {
-  from {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
   to {
     opacity: 0;
-    transform: scale(0.96) translateY(var(--dropdown-slide-y, 0));
-  }
-}
-
-/* Overlay fade — used by Dialog, Sheet, AlertDialog overlays */
-@keyframes overlay-enter {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-@keyframes overlay-exit {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
-}
-
-/* Dialog center zoom — individual scale property avoids conflict with Tailwind translate */
-@keyframes dialog-enter {
-  from {
-    opacity: 0;
-    scale: 0.96;
-  }
-  to {
-    opacity: 1;
-    scale: 1;
-  }
-}
-@keyframes dialog-exit {
-  from {
-    opacity: 1;
-    scale: 1;
-  }
-  to {
-    opacity: 0;
-    scale: 0.96;
-  }
-}
-
-/* Sheet slide — slides in from edge */
-@keyframes sheet-enter-right {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-@keyframes sheet-exit-right {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(100%);
-  }
-}
-@keyframes sheet-enter-left {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-@keyframes sheet-exit-left {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-100%);
-  }
-}
-@keyframes sheet-enter-top {
-  from {
-    transform: translateY(-100%);
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-@keyframes sheet-exit-top {
-  from {
-    transform: translateY(0);
-  }
-  to {
-    transform: translateY(-100%);
-  }
-}
-@keyframes sheet-enter-bottom {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-@keyframes sheet-exit-bottom {
-  from {
-    transform: translateY(0);
-  }
-  to {
-    transform: translateY(100%);
+    transform: var(--tempo-transform, scale(0.96) translateY(var(--dropdown-slide-y, 0)));
   }
 }
 
@@ -397,8 +299,36 @@
   from {
     opacity: 0;
   }
+}
+@keyframes fadeOut {
   to {
-    opacity: 1;
+    opacity: 0;
+  }
+}
+
+@keyframes dialog-enter {
+  from {
+    opacity: 0;
+    transform: var(--tempo-transform, scale(0.96));
+  }
+}
+@keyframes dialog-exit {
+  to {
+    opacity: 0;
+    transform: var(--tempo-transform, scale(0.96));
+  }
+}
+
+@keyframes sheet-enter {
+  from {
+    opacity: var(--sheet-edge-opacity, 1);
+    transform: var(--tempo-transform, var(--sheet-offset));
+  }
+}
+@keyframes sheet-exit {
+  to {
+    opacity: var(--sheet-edge-opacity, 1);
+    transform: var(--tempo-transform, var(--sheet-offset));
   }
 }
 
@@ -418,11 +348,40 @@
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: var(--tempo-transform, translateY(var(--enter-y, 10px)));
+  }
+}
+
+@keyframes pair-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+    scale: 0.85;
+  }
+  50% {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+@keyframes waiting-dot {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes reasoning-pulse {
+  from {
+    opacity: 0.45;
+    scale: 0.92;
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    scale: 1;
   }
 }
 
@@ -490,63 +449,11 @@
   }
 }
 
-/* Pixel Grid - 3x3 agent status indicator animations
- * Uses CSS custom properties set on the grid container:
- *   --pixel-glow        : color
- *   --pixel-peak-opacity : max cell opacity (default 1)
- *   --pixel-glow-blur    : box-shadow blur radius (default 4px)
- *   --pixel-glow-spread  : box-shadow spread (default 1px)
- */
-@keyframes pixel-pulse {
-  0%,
-  100% {
-    opacity: 0;
-  }
-  20% {
-    opacity: var(--pixel-peak-opacity, 1);
-    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
-  }
-  40% {
-    opacity: 0;
-  }
-}
-
-@keyframes pixel-snake {
-  0% {
-    opacity: 0;
-  }
-  10% {
-    opacity: var(--pixel-peak-opacity, 1);
-    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
-  }
-  40% {
-    opacity: 0;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-
-@keyframes pixel-sparkle {
-  0%,
-  100% {
-    opacity: 0;
-  }
-  50% {
-    opacity: var(--pixel-peak-opacity, 1);
-    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
-  }
-}
-
 /* Full-panel drop overlay — fade + subtle scale for the drop zone */
 @keyframes drop-overlay-enter {
   from {
     opacity: 0;
-    transform: scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
+    transform: var(--tempo-transform, scale(0.98));
   }
 }
 
@@ -578,169 +485,13 @@
   animation: tool-shimmer 2s linear infinite;
 }
 
-/* Expand/collapse uses conditional render + inline animate-[fadeIn_150ms_ease-out].
-   No CSS grid height transitions needed — content mounts/
-   unmounts with a subtle opacity fade, removing DOM weight from collapsed
-   subtrees entirely. */
-
-/* One-shot entrance animations for chat items and tool blocks.
-   Replaces Framer Motion m.div wrappers — pure CSS, zero React overhead.
-   @keyframes + animation-fill-mode:both ensures the element starts hidden
-   and ends visible. No JS cleanup needed; the animation plays once on mount
-   then the element is a plain div with no ongoing cost.
-   Respects prefers-reduced-motion via the global media query.
-
-   Turn-level entrance: slide-up + fade. 8px/0.4s
-   entrance with elastic easing. Per-turn (not per-message) so it fires
-   once at conversation boundaries, not during mid-turn streaming.
-   Smooth auto-scroll runs concurrently — no conflict since the animation
-   is on the inner content div, not the virtualizer's positioning div. */
-@keyframes chatItemEnter {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 .chat-item-enter {
-  animation: chatItemEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-/* Tool group header entrance — opacity only, no translateY */
-@keyframes toolGroupHeaderFadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  --enter-y: 8px;
+  animation: fadeInUp var(--tempo-moderate) var(--tempo-ease) backwards;
 }
 
 .tool-group-header-enter {
-  animation: toolGroupHeaderFadeIn 150ms cubic-bezier(0.32, 0.72, 0, 1) both;
-}
-
-/* Tiered thinking animations - organic breathing effect */
-/* Core (center cell): largest amplitude, fastest, most opaque */
-@keyframes pixel-think-core {
-  0%,
-  100% {
-    opacity: 0.3;
-    transform: scale(0.85);
-  }
-  25% {
-    opacity: 0.9;
-    transform: scale(1.25);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.35);
-    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
-  }
-  75% {
-    opacity: 0.6;
-    transform: scale(1.05);
-  }
-}
-
-/* Support (edge-center cells): medium amplitude */
-@keyframes pixel-think-support {
-  0%,
-  100% {
-    opacity: 0.1;
-    transform: scale(0.65);
-  }
-  30% {
-    opacity: 0.7;
-    transform: scale(1.15);
-    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
-  }
-  60% {
-    opacity: 0.4;
-    transform: scale(0.9);
-  }
-}
-
-/* Subtle (corner cells): smallest amplitude, subtle shimmer */
-@keyframes pixel-think-subtle {
-  0%,
-  100% {
-    opacity: 0.05;
-    transform: scale(0.5);
-  }
-  40% {
-    opacity: 0.35;
-    transform: scale(0.9);
-  }
-  70% {
-    opacity: 0.15;
-    transform: scale(0.7);
-  }
-}
-
-/* Compacting animations — inward converge (corners → edges → center)
- * Thinking breathes outward; compacting breathes inward.
- * Structured, deliberate cascade: gather → channel → compress. */
-
-/* Corners: first to pulse, first to fade. Raw content being gathered.
- * Brief, dim glow — material being consumed. */
-@keyframes pixel-compact-corner {
-  0%,
-  30%,
-  100% {
-    opacity: 0;
-    transform: scale(0.5);
-  }
-  12% {
-    opacity: 0.5;
-    transform: scale(0.9);
-    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
-  }
-}
-
-/* Edges: second wave, channeling content inward. */
-@keyframes pixel-compact-edge {
-  0%,
-  18%,
-  55%,
-  100% {
-    opacity: 0;
-    transform: scale(0.55);
-  }
-  34% {
-    opacity: 0.7;
-    transform: scale(1.05);
-    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
-  }
-}
-
-/* Center: receives all content, glows strongest, holds briefly.
- * The "compressed" moment — result sits before fading. */
-@keyframes pixel-compact-center {
-  0%,
-  38%,
-  100% {
-    opacity: 0;
-    transform: scale(0.7);
-  }
-  54% {
-    opacity: 1;
-    transform: scale(1.3);
-    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
-  }
-  68% {
-    opacity: 0.5;
-    transform: scale(1);
-    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
-  }
-  82% {
-    opacity: 0;
-    transform: scale(0.8);
-  }
+  animation: fadeIn var(--tempo-fast) var(--tempo-ease);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -761,60 +512,22 @@
 
 /* ─── Onboarding Animations ──────────────────────────────────────────────── */
 
-/* Step transitions — GPU-accelerated (transform + opacity only) */
-@keyframes onboarding-step-enter-forward {
+@keyframes onboarding-step-enter {
   from {
     opacity: 0;
-    transform: translateX(60px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
+    transform: var(--tempo-transform, translateX(var(--step-x, 60px)));
   }
 }
-
-@keyframes onboarding-step-exit-forward {
-  from {
-    opacity: 1;
-    transform: translateX(0);
-  }
+@keyframes onboarding-step-exit {
   to {
     opacity: 0;
-    transform: translateX(-60px);
+    transform: var(--tempo-transform, translateX(calc(-1 * var(--step-x, 60px))));
   }
 }
-
-@keyframes onboarding-step-enter-back {
-  from {
-    opacity: 0;
-    transform: translateX(-60px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes onboarding-step-exit-back {
-  from {
-    opacity: 1;
-    transform: translateX(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateX(60px);
-  }
-}
-
-/* Card window: fades in with subtle scale-up + lift */
 @keyframes onboarding-card-enter {
   from {
     opacity: 0;
-    transform: scale(0.94) translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: var(--tempo-transform, scale(0.94) translateY(8px));
   }
 }
 
@@ -990,7 +703,6 @@
 
   /* --- Vibrancy tint system --- */
   --sidebar-tint-opacity: 75%;
-  --sidebar-tint-strong: 85%;
   --content-tint-opacity: 92%;
   --sidebar-wash: #ececec;
 
@@ -1171,7 +883,6 @@
 
   /* --- Vibrancy tint system --- */
   --sidebar-tint-opacity: 70%;
-  --sidebar-tint-strong: 88%;
   --content-tint-opacity: 78%;
   --sidebar-wash: #0f0f0f;
 
@@ -1304,7 +1015,7 @@ samp,
   margin: 0;
   padding: 0;
   transition-property: color, border-color, text-decoration-color, fill, stroke;
-  transition-duration: 200ms;
+  @apply tempo-fast;
 }
 
 /* Desktop vibrancy
@@ -1335,7 +1046,7 @@ samp,
     var(--sidebar) var(--sidebar-tint-opacity),
     transparent
   ) !important;
-  transition: background 200ms ease;
+  transition: background-color var(--tempo-fast) var(--tempo-ease);
 }
 
 /* Gradient wash overlay — breaks the flat monochrome look (Dia's WindowTint/BaseGradient) */
@@ -1350,7 +1061,7 @@ samp,
     color-mix(in oklch, var(--sidebar-wash) 25%, transparent) 0%,
     transparent 100%
   );
-  transition: opacity 200ms ease;
+  transition: opacity var(--tempo-fast) var(--tempo-ease);
 }
 
 /* Grain noise texture — 155x155 Gaussian noise PNG tile.
@@ -1372,6 +1083,11 @@ samp,
 .electron [data-slot="sidebar-wrapper"] > * {
   position: relative;
   z-index: 2;
+}
+
+/* Raise the edge target and flyout only while collapsed so the expanded resize handle stays reachable. */
+.electron [data-slot="sidebar-wrapper"] > [data-slot="sidebar"][data-collapsible="offcanvas"] {
+  z-index: 3;
 }
 
 /* Transparent pass-through so the wrapper tint shows uniformly */
@@ -1399,10 +1115,7 @@ samp,
     transparent
   ) !important;
   box-shadow: none;
-  transition:
-    background 200ms ease,
-    border-color 280ms cubic-bezier(0.19, 1, 0.22, 1),
-    border-radius 280ms cubic-bezier(0.19, 1, 0.22, 1);
+  transition-property: background-color, border-color, border-radius, opacity;
 }
 
 /* Edge-to-edge — sidebar collapsed: flatten card to seamless full-bleed */
@@ -1413,33 +1126,21 @@ samp,
   border-color: transparent !important;
 }
 
-/* Prevent CSS backdrop-filter from conflicting with native vibrancy layer on sidebar */
-.electron [data-slot="sidebar-wrapper"] *,
-.electron [data-slot="sidebar-container"] *,
-.electron [data-slot="sidebar"] *,
-.electron [data-slot="sidebar-inner"] * {
+/* The sidebar uses native vibrancy. Its sibling workspace uses CSS blur. */
+.electron [data-slot="sidebar"] * {
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 
-/* Disable sidebar CSS transitions during drag-resize so width follows
- * the mouse instantly. Transitions re-enable when drag ends (data-resizing removed).
- * This targets sidebar-gap (width), sidebar-container (width + position),
- * and sidebar-inset (margin) — the three elements that animate on open/close. */
+/* The grip owns the width during a drag, including the container's inline transition. */
 [data-resizing] [data-slot="sidebar-gap"],
 [data-resizing] [data-slot="sidebar-container"],
 [data-resizing] [data-slot="sidebar-inset"] {
-  transition: none;
+  transition: none !important;
 }
 
-/* Smooth panel resize for programmatic collapse/expand and boundary transitions.
- * ease at 300ms — gentle curve avoids the aggressive start of ease-out-quart
- * that caused visible content reflow jolt during boundary resize.
- * flex-grow is a layout property (not GPU-compositable), so we skip will-change
- * here. The transition is suppressed during drag, programmatic restore, and
- * window resize — it only fires on discrete collapse/expand actions. */
+/* A gentle start keeps the resizing panel from jolting its reflowing content. */
 [data-slot="resizable-panel"] {
-  transition: flex-grow 300ms ease;
+  transition: flex-grow var(--tempo-slow) var(--ease-move);
 }
 
 /* Disable panel transitions during react-resizable-panels drag.
@@ -1492,21 +1193,9 @@ samp,
   transform: translateZ(0);
 }
 
-/* Hover-reveal: near-opaque overlay when sidebar flies out over content */
+/* An opaque flyout keeps chat text from showing through the sidebar labels. */
 [data-hover-reveal="true"] [data-slot="sidebar-container"] {
-  background: color-mix(in oklch, var(--sidebar) 82%, transparent) !important;
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-}
-.electron [data-hover-reveal="true"] [data-slot="sidebar-container"] {
-  background: color-mix(
-    in oklch,
-    var(--sidebar) var(--sidebar-tint-strong),
-    transparent
-  ) !important;
-}
-[data-hover-reveal="true"] [data-sidebar="sidebar"] {
-  background: transparent !important;
+  background: var(--sidebar) !important;
 }
 
 /* Fullscreen — self-lit surfaces (no wallpaper behind in macOS fullscreen Space).
@@ -1545,11 +1234,6 @@ samp,
 /* Content: fully opaque — no value in semi-transparency over flat gray */
 .electron.fullscreen [data-slot="main-content"] {
   background: var(--background) !important;
-}
-
-/* Hover-reveal in fullscreen — still needs to feel elevated */
-.electron.fullscreen [data-hover-reveal="true"] [data-slot="sidebar-container"] {
-  background: color-mix(in oklch, var(--sidebar) 97%, transparent) !important;
 }
 
 /* Fullscreen + inactive: sidebar goes near-opaque (same dim pattern as windowed) */
@@ -1593,40 +1277,48 @@ button:not(:disabled),
 /* Theme switching: suppress color transitions during theme toggle */
 [data-theme-switching],
 [data-theme-switching] * {
-  transition-duration: 0s !important;
+  transition: none !important;
 }
 
-/* Accessibility: Reduced motion support */
+/* Keep the opacity endpoints and Radix's distinct exit animation names for unmount. */
 @media (prefers-reduced-motion: reduce) {
+  :root {
+    --tempo-transform: none;
+    --sheet-edge-opacity: 0;
+    --animate-spin: none;
+    --animate-ping: none;
+    --animate-pulse: none;
+    --animate-shimmer: none;
+    --animate-subtle-spin: none;
+  }
+
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition-property:
+      opacity, color, background-color, border-color, outline-color, text-decoration-color, fill,
+      stroke !important;
+  }
+
+  .tool-loading-shimmer {
+    animation: none;
   }
 }
-
-/* Frosted glass vibrancy utilities */
-/* Desktop: native vibrancy handles blur */
-/* Web: CSS backdrop-filter applied to child panels */
 
 /* Main container background - for modals, dialogs */
 .vibrancy-bg {
   background-color: color-mix(in oklch, var(--background) 72%, transparent);
   backdrop-filter: blur(20px) saturate(1.4);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
   transition-property: color, border-color, text-decoration-color, fill, stroke;
-  transition-duration: 200ms;
+  @apply tempo-fast;
 }
 
 /* Subtle panel sections - for headers, dividers */
 .vibrancy-panel {
   background-color: color-mix(in oklch, var(--background) 30%, transparent);
   backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
   transition-property: color, border-color, text-decoration-color, fill, stroke;
-  transition-duration: 200ms;
+  @apply tempo-fast;
 }
 
 /* Global scrollbar — one style for every scrollable container inside #root.
@@ -1648,7 +1340,7 @@ button:not(:disabled),
 #root ::-webkit-scrollbar-thumb {
   background: color-mix(in oklch, var(--muted-foreground) 12%, transparent);
   border-radius: var(--radius-sm);
-  transition: background 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition: background-color var(--tempo-fast) var(--tempo-ease);
 }
 
 #root ::-webkit-scrollbar-thumb:hover {
@@ -1677,18 +1369,6 @@ button:not(:disabled),
 #root .scrollbar-hidden::-webkit-scrollbar {
   width: 0;
   height: 0;
-}
-
-/* Reduce motion support for vibrancy and scrollbars */
-@media (prefers-reduced-motion: reduce) {
-  .vibrancy-bg,
-  .vibrancy-panel {
-    transition: none;
-  }
-
-  #root ::-webkit-scrollbar-thumb {
-    transition: none !important;
-  }
 }
 
 /* Redundant utilities removed - use Tailwind's shadow-* and p-* utilities instead */
@@ -1839,10 +1519,7 @@ diffs-container.diffs-theme-compact {
   background: var(--background);
   color: var(--muted-foreground);
   box-shadow: 0 1px 2px color-mix(in oklch, var(--foreground) 10%, transparent);
-  transition:
-    color 120ms ease,
-    border-color 120ms ease,
-    background 120ms ease;
+  @apply transition-colors;
 }
 
 .diff-hover-action:hover {
@@ -1898,9 +1575,7 @@ diffs-container.diffs-theme-compact {
   border-radius: var(--radius-full);
   padding: 2px 8px;
   font-size: 11px;
-  transition:
-    color 120ms ease,
-    background 120ms ease;
+  @apply transition-colors;
 }
 
 .diff-header-btn[aria-pressed="true"] {
@@ -1923,9 +1598,7 @@ diffs-container.diffs-theme-compact {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition:
-    color 120ms ease,
-    background 120ms ease;
+  @apply transition-colors;
 }
 
 .diff-header-icon:hover,
@@ -2170,18 +1843,11 @@ diffs-container.diffs-theme-compact {
 /* Hover effects only on devices with hover capability (not touch screens) */
 @media (hover: hover) and (pointer: fine) {
   .markdown-content a {
-    transition: opacity 200ms ease;
+    transition: opacity var(--tempo-fast) var(--tempo-ease);
   }
   .markdown-content a:hover {
     opacity: 0.7;
     text-decoration-color: var(--primary);
-  }
-}
-
-/* Disable transitions for users who prefer reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  .markdown-content a {
-    transition: none;
   }
 }
 
