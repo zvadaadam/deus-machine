@@ -8,7 +8,7 @@
  *         paired_devices, assistants, automations, automation_runs,
  *         extension_installations, integration_connections
  * Indexes: 18
- * Triggers: 9 (4 auto-update updated_at, 2 denormalized message_count + auto-seq, 1 chat number, 2 turn end order)
+ * Triggers: 11 (2 valid project rows, 4 auto-update updated_at, 2 denormalized message_count + auto-seq, 1 chat number, 2 turn end order)
  *
  * The agent-facing tables (messages, turns, parts, compactions) store the
  * @zvada/agent-server protocol verbatim: `parts.data` is the engine `Part`
@@ -356,6 +356,14 @@ export const SCHEMA_SQL = `
   -- Run history newest-first (agnt run ids are UUID7 — the PK carries time).
   CREATE INDEX IF NOT EXISTS idx_automation_runs_automation ON automation_runs(automation_id, id DESC);
   CREATE INDEX IF NOT EXISTS idx_integration_connections_app ON integration_connections(app_id);
+
+  -- Triggers also apply to existing databases, without rewriting existing projects.
+  CREATE TRIGGER IF NOT EXISTS validate_project_insert BEFORE INSERT ON repositories
+    WHEN NEW.name = '' OR NEW.root_path = ''
+    BEGIN SELECT RAISE(ABORT, 'A project needs a name and a non-empty folder when local'); END;
+  CREATE TRIGGER IF NOT EXISTS validate_project_update BEFORE UPDATE OF name, root_path ON repositories
+    WHEN NEW.name = '' OR NEW.root_path = ''
+    BEGIN SELECT RAISE(ABORT, 'A project needs a name and a non-empty folder when local'); END;
 
   -- Triggers: auto-update updated_at (4)
   CREATE TRIGGER IF NOT EXISTS update_repositories_updated_at

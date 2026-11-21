@@ -129,6 +129,31 @@ beforeEach(() => {
 
 afterEach(() => m.db.close());
 
+describe("project rows", () => {
+  it.each([
+    ["", "/repo"],
+    ["named", ""],
+  ])("refuses invalid names or folders on insert and update", (name, root) => {
+    const write = m.db.prepare("INSERT INTO repositories (id, name, root_path) VALUES (?, ?, ?)");
+    expect(() => write.run("new", name, root)).toThrow(/project/i);
+    write.run("cloud", "valid", null);
+    expect(() =>
+      m.db
+        .prepare("UPDATE repositories SET name = ?, root_path = ? WHERE id = 'cloud'")
+        .run(name, root)
+    ).toThrow(/project/i);
+  });
+
+  it("installs on an existing database without modifying its old blank row", () => {
+    m.db.exec("DROP TRIGGER IF EXISTS validate_project_insert");
+    insert("legacy", "", null);
+    m.db.exec(SCHEMA_SQL);
+    m.db.prepare("UPDATE repositories SET sort_order = 3 WHERE id = 'legacy'").run();
+    expect(rows()).toEqual([expect.objectContaining({ id: "legacy", root_path: "" })]);
+    expect(() => insert("another", "", null)).toThrow(/project/i);
+  });
+});
+
 describe("addCloudRepo", () => {
   it("adds a project with no folder, named after the repository, its default branch from GitHub", async () => {
     m.defaultBranch.mockResolvedValue("trunk");
