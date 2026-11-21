@@ -6,6 +6,9 @@
 
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { WireRequestError } from "@zvada/agent-server/client";
+import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
+import { CATALOG_MODEL_LISTS } from "@shared/models";
 import type { AnyOp } from "@shared/api/op";
 import { SCHEMA_SQL } from "@shared/schema";
 
@@ -51,6 +54,7 @@ vi.mock("@sentry/node", () => ({ captureException: vi.fn() }));
 vi.mock("../../../src/services/agent/service", () => ({
   liveTurnId: (sessionId: string) => state.live.get(sessionId),
   provideSessionTools: () => {},
+  isConnected: () => false,
 }));
 vi.mock("../../../src/services/agent/tool-relay", () => ({
   pendingFor: (sessionId: string) => state.pending.filter((r) => r.sessionId === sessionId),
@@ -115,7 +119,8 @@ vi.mock("../../../src/services/assistants/store", () => ({
 import { LOCAL_CALLER, type Caller } from "../../../src/api/registry";
 import handlers from "../../../src/api/assistants";
 import * as api from "@shared/api/assistants";
-import { ChatBusyError } from "../../../src/lib/errors";
+import * as turns from "../../../src/services/agent/turns";
+import { AppError, ChatBusyError, ConflictError } from "../../../src/lib/errors";
 import { persistSessionTitle } from "../../../src/services/agent/persistence";
 import { createDeusHost } from "../../../src/services/assistants/host";
 import { _resetOperator, withSessionTools } from "../../../src/services/assistants/operator";
@@ -499,6 +504,68 @@ describe("through MCP and as a chat's own tools", () => {
     );
     return { text: reply.result.content[0].text as string, isError: reply.result.isError === true };
   };
+
+  it("says when a diff cannot be read, including in a settled turn's outcome", async () => {
+    const why = "Could not read the changes: git returned no merge base.";
+    state.ops.diffFiles = () => {
+      throw new ConflictError(why);
+    };
+    const host = createDeusHost();
+    const [entry] = await host.list(LEAD as never, {});
+    await expect(host.outcome!(LEAD as never, entry!)).resolves.toBe(why);
+    for (const args of [{ session: "lead:1" }, { session: "lead:1", file: "script" }]) {
+      expect(await call(LOCAL_CALLER, "read_changes", args)).toMatchObject({
+        isError: true,
+        text: expect.stringContaining(why),
+      });
+    }
+  });
+
+  it("answers a definite engine-down send once, with the reason", async () => {
+    const realTurns = await vi.importActual<typeof turns>("../../../src/services/agent/turns");
+    const send = vi.spyOn(turns, "sendMessage").mockImplementation(realTurns.sendMessage);
+    const result = await call(LOCAL_CALLER, "send_message", {
+      session: "lead:1",
+      message: "go",
+      wait: 1,
+    });
+    expect(result).toMatchObject({
+      isError: true,
+      text: expect.stringContaining("Nothing was sent or started. Restart Deus"),
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("lists the engine's built-in models when the engine cannot answer", async () => {
+    state.ops.agentModels = () => {
+      throw new Error("Agent server not connected");
+    };
+    const { text, isError } = await call(LOCAL_CALLER, "list_models", {});
+    expect(isError).toBe(false);
+    for (const { harness, models } of CATALOG_MODEL_LISTS) {
+      expect(text).toContain(harness);
+      expect(text).toContain(models[0]!.id);
+    }
+  });
+
+  it("distinguishes an explicit admission refusal from a lost answer", async () => {
+    const args = { session: "lead:1", message: "go", wait: 1 };
+    state.sendRefusal = new WireRequestError(
+      WIRE_ERROR_CODES.harnessNotAvailable,
+      "private runtime details"
+    );
+    const refused = await call(LOCAL_CALLER, "send_message", args);
+    expect(refused).toMatchObject({
+      isError: true,
+      text: expect.stringMatching(/agent.*unavailable/i),
+    });
+    expect(refused.text).not.toContain("private runtime details");
+    state.sendRefusal = new WireRequestError(
+      WIRE_ERROR_CODES.internalError,
+      "request timed out: turn/start"
+    );
+    expect((await call(LOCAL_CALLER, "send_message", args)).text).toContain("not confirmed");
+  });
 
   it("an outside caller is told which computer it reaches: in the instructions and in whoami", async () => {
     const where =
@@ -1048,14 +1115,48 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
 
   it("H15: a first task refused after the chat was made is that chat's error, not a refusal", async () => {
     const host = createDeusHost();
-    state.sendRefusal = new Error("engine unavailable");
+    state.sendRefusal = new AppError(503, "private internal detail");
     const entry = await host.start!(
       LEAD as never,
-      startInput({ workspace: { id: "w-lead", name: "lead" } })
+      startInput({ workspace: { id: "w-lead", name: "lead" }, turnId: "delivery" })
     );
     expect(entry).toMatchObject({
       status: "error",
-      error: "Its first task could not be delivered.",
+      error: expect.stringContaining("Restart Deus"),
+    });
+    expect(await host.turn(LEAD as never, entry.id, "delivery")).toMatchObject({
+      state: "ended",
+      outcome: "failed",
+    });
+    const view = await host.view(LEAD as never, entry.id, {});
+    expect(view.turns).toEqual([
+      expect.objectContaining({
+        turnId: "delivery",
+        outcome: "failed",
+        error: entry.error,
+        messages: [],
+      }),
+    ]);
+  });
+
+  it("records the refused first task even when a different sender has a live turn", async () => {
+    const host = createDeusHost();
+    const entry = await host.start!(LEAD as never, startInput({ turnId: "first" }));
+    state.sendRefusal = new ChatBusyError("Another turn is working.");
+    ready(entry);
+    message(entry.id, "other", "user", "my own turn");
+    state.live.set(entry.id, "other");
+    state.db.prepare("UPDATE sessions SET status = 'working' WHERE id = ?").run(entry.id);
+    await vi.waitFor(async () => {
+      const view = await host.view(LEAD as never, entry.id, {});
+      expect(view).toMatchObject({ status: "working", running: "other" });
+      expect(view.turns).toContainEqual(
+        expect.objectContaining({
+          turnId: "first",
+          outcome: "failed",
+          error: expect.stringContaining("Another turn is working."),
+        })
+      );
     });
   });
 

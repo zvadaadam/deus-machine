@@ -49,6 +49,8 @@ import {
   type TurnFact,
   type ViewTurn,
 } from "@zvada/agent-server/operator";
+import { WireRequestError } from "@zvada/agent-server/client";
+import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
 import type { AnyOp, InputOf, OutputOf } from "@shared/api/op";
 import * as sessions from "@shared/api/sessions";
 import { agentModels } from "@shared/api/settings";
@@ -68,7 +70,14 @@ import {
 import { LOCAL_CALLER, type Caller } from "../../api/registry";
 import { createLocalWorkspace } from "../../api/workspaces";
 import { archiveWorkspace } from "../workspace-archive.service";
-import { attachParts, getMessages, getSessionRaw, hasOlderMessages } from "../../db";
+import {
+  attachParts,
+  getMessages,
+  getSessionRaw,
+  getTurn,
+  hasOlderMessages,
+  saveTurn,
+} from "../../db";
 import { getDatabase } from "../../lib/database";
 import { AppError, ChatBusyError } from "../../lib/errors";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
@@ -214,10 +223,23 @@ export interface DeusHost extends OperatorHost<Caller> {
  * before it (`authorize`): its sentence, then this computer's.
  */
 function appRefusal(error: unknown): unknown {
+  const why = admissionRefusal(error);
+  if (why) return new OperatorError("unsupported", why);
   if (!(error instanceof AppError) || error.statusCode >= 500) return error;
   return error.statusCode === 403
     ? refuse.access(error.message)
     : new OperatorError("unsupported", `${error.message} Nothing was done.`);
+}
+
+/** An explicit admission refusal. The client also uses internalError for a lost or malformed answer. */
+function admissionRefusal(error: unknown): string | undefined {
+  if (error instanceof AppError && error.statusCode === 503)
+    return "The agent engine is not running on this computer. Nothing was sent or started. Restart Deus before sending the task again.";
+  if (!(error instanceof WireRequestError) || error.code === WIRE_ERROR_CODES.internalError) return;
+  if (error.code === WIRE_ERROR_CODES.harnessNotAvailable)
+    return "The requested agent is unavailable on this computer.";
+  if (error.code === WIRE_ERROR_CODES.shuttingDown) return "The agent engine is shutting down.";
+  return "The agent engine refused this turn. Check the chat in Deus.";
 }
 
 /** Run `work`, its app refusals said as refusals. */
@@ -243,7 +265,7 @@ const AGENT_NAMES = Object.entries(HARNESS_LABELS)
   .join(" and ");
 
 /** What a chat the host could not deliver its first task to says, the reason kept safe. */
-const NOT_DELIVERED = "Its first task could not be delivered.";
+const FIRST_TASK = "Its first task ";
 
 export function createDeusHost(): DeusHost {
   /** First tasks held for workspaces being set up, by the chat's id. */
@@ -318,10 +340,10 @@ export function createDeusHost(): DeusHost {
         epochMs(row.last_user_message_at) ??
         epochMs(row.session_id ? row.s_updated_at : row.ws_updated_at);
       const root = computeWorkspacePath({ root_path: row.root_path, slug: row.slug });
-      // Why: a failed start, or a first task that could not be delivered (no messages yet).
+      // Setup and delivery refusals belong to the entry; engine turn errors are in its view.
       const error = !row.session_id
         ? row.error_message
-        : status === "error" && !row.message_count
+        : !row.message_count || row.s_error?.startsWith(FIRST_TASK)
           ? row.s_error
           : null;
       return [
@@ -474,24 +496,39 @@ export function createDeusHost(): DeusHost {
         input.origin
       );
     } catch (error) {
-      const said = appRefusal(error);
-      undelivered(
-        sessionId,
-        said instanceof OperatorError
-          ? said.message.split("\n")[0]!.replace(/^refused \([a-z_]+\): /, "")
-          : ""
-      );
-      throw said;
+      const why =
+        error instanceof AppError && error.statusCode < 500
+          ? error.message
+          : admissionRefusal(error);
+      undelivered(sessionId, input.turnId, why);
     }
   }
 
-  /** The chat's first task was not delivered: its error says so, and why. */
-  function undelivered(sessionId: string, why: string) {
-    getDatabase()
-      .prepare(
-        "UPDATE sessions SET status = 'error', error_message = ? WHERE id = ? AND message_count = 0"
-      )
-      .run(`${NOT_DELIVERED}${why ? ` ${why}` : ""}`, sessionId);
+  /** Record this task's outcome even if a different sender got to the new chat first. */
+  function undelivered(sessionId: string, turnId: string, why?: string) {
+    const db = getDatabase();
+    const session = getSessionRaw(db, sessionId);
+    const running = liveTurnId(sessionId);
+    const own = getTurn(db, sessionId, turnId);
+    if (
+      !session ||
+      running === turnId ||
+      own?.startedAt !== undefined ||
+      own?.endedAt !== undefined
+    )
+      return;
+    const message = why
+      ? `${FIRST_TASK}could not be delivered. ${why}`
+      : `${FIRST_TASK}has no delivery confirmation. Check the chat before sending it again.`;
+    const error = { category: "internal" as const, message };
+    db.transaction(() => {
+      saveTurn(db, sessionId, { turnId, endedAt: Date.now(), stopReason: "error", error });
+      if (!running && !ACTIVE_TURN_STATUSES.includes(session.status)) {
+        db.prepare(
+          "UPDATE sessions SET status = 'error', error_message = ?, error_category = ? WHERE id = ?"
+        ).run(error.message, error.category, sessionId);
+      }
+    })();
     invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
   }
 
@@ -519,17 +556,15 @@ export function createDeusHost(): DeusHost {
       else if (w.state === "ready" && w.current_session_id === sessionId) {
         if (Date.now() - entry.since > SETUP_LIMIT_MS) {
           drop(sessionId);
-          undelivered(sessionId, "Setup took longer than 30 minutes.");
+          undelivered(sessionId, held.input.turnId, "Setup took longer than 30 minutes.");
           return;
         }
         entry.unwatch();
-        entry.sending = sendFirst(held.caller, sessionId, held.input)
-          .catch(() => {})
-          .finally(() => {
-            firsts.delete(sessionId);
-            // Told after the hold is gone, so a wait that reads again sees the outcome.
-            invalidate(["sessions"], { sessionIds: [sessionId] });
-          });
+        entry.sending = sendFirst(held.caller, sessionId, held.input).finally(() => {
+          firsts.delete(sessionId);
+          // Told after the hold is gone, so a wait that reads again sees the outcome.
+          invalidate(["sessions"], { sessionIds: [sessionId] });
+        });
         invalidate(["sessions"], { sessionIds: [sessionId] });
       }
     }
@@ -789,7 +824,7 @@ export function createDeusHost(): DeusHost {
           })();
           invalidate(["workspaces", "sessions"]);
           // Made: a first task that cannot be delivered is the chat's error, not a refusal.
-          await sendFirst(caller, sessionId, input).catch(() => {});
+          await sendFirst(caller, sessionId, input);
           return entryById(sessionId)!;
         }
         mayStart(caller, input);
@@ -887,7 +922,10 @@ export function createDeusHost(): DeusHost {
       }),
 
     async models() {
-      const { lists } = await run(agentModels, {});
+      const lists = await run(agentModels, {}).then(
+        (answer) => answer.lists,
+        () => CATALOG_MODEL_LISTS
+      );
       return lists.flatMap((list) =>
         pickerModels(lists, list.harness).map(
           (m): ModelEntry => ({
@@ -923,15 +961,20 @@ export function createDeusHost(): DeusHost {
     },
 
     async outcome(caller, entry) {
-      const { files, total_count } = await act(caller, workspaces.diffFiles, {
-        workspaceId: entry.workspace.id,
-      });
-      if (files.length === 0) return "changes: none";
-      const shown = files
-        .slice(0, 10)
-        .map((f) => `${JSON.stringify(f.file)} (+${f.additions} -${f.deletions})`);
-      const more = (total_count ?? files.length) - shown.length;
-      return `changes: ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""}`;
+      try {
+        const { files, total_count } = await act(caller, workspaces.diffFiles, {
+          workspaceId: entry.workspace.id,
+        });
+        if (files.length === 0) return "changes: none";
+        const shown = files
+          .slice(0, 10)
+          .map((f) => `${JSON.stringify(f.file)} (+${f.additions} -${f.deletions})`);
+        const more = (total_count ?? files.length) - shown.length;
+        return `changes: ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""}`;
+      } catch (error) {
+        if (error instanceof AppError && error.statusCode < 500) return error.message;
+        throw error;
+      }
     },
 
     onChange(listener) {
