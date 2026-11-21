@@ -128,8 +128,8 @@ describe("the fileChanges subscription", () => {
     for (const name of [
       ".git/index.lock",
       "src/.cache/a",
-      "build",
-      "foo/node_modules",
+      "build/output",
+      "foo/node_modules/pkg",
       "target/log",
       "dist/app",
       ".deus/other/src",
@@ -157,6 +157,16 @@ describe("the fileChanges subscription", () => {
     vi.advanceTimersByTime(499);
     expect(frames).toHaveLength(7);
   });
+
+  it.each(["dist", "literal\\node_modules\\source"])(
+    "hears an edit to the regular file %s",
+    (name) => {
+      const frames = open("ui");
+      changed(name);
+      vi.advanceTimersByTime(500);
+      expect(frames.map((frame) => frame.type)).toEqual(["q:event"]);
+    }
+  );
 
   it("resolves the workspace on the host and refuses a missing scope, cloud workspace or absent checkout", () => {
     expect(() => subscribe("ui", "files", fileChanges, { workspacePath: "/" })).toThrow(

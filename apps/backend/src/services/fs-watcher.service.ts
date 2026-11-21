@@ -7,11 +7,9 @@ import { publish, refuseSubscribers } from "./streams";
 const watchers = new Map<string, ReturnType<typeof startWatch>>();
 
 function ignored(filename: string | null): boolean {
-  if (!filename) return false;
-  const name = filename.replaceAll("\\", "/");
-  if (name === ".deus/environment.json") return false;
-  // A hidden leaf may be an editor's temporary file in an atomic save.
-  return /(^|\/)(?:\.[^/]+\/|(?:node_modules|target|dist|build)(?:\/|$))/.test(name);
+  if (!filename || filename === ".deus/environment.json") return false;
+  // Ignore descendants only. The leaf can be a regular file or an editor's hidden temporary file.
+  return /(^|\/)(?:\.[^/]+|node_modules|target|dist|build)\//.test(filename);
 }
 
 function startWatch(workspaceId: string, workspacePath: string) {
