@@ -571,7 +571,7 @@ export function markArchived(
   const archivedBy = by && by.kind !== "person" ? JSON.stringify(by) : null;
   check?.();
   db.prepare(
-    "UPDATE workspaces SET state = 'archived', archived_at = datetime('now'), archived_by = ? WHERE id = ?"
+    "UPDATE workspaces SET state = 'archived', archived_at = datetime('now'), archived_by = ? WHERE id = ? AND state != 'archived'"
   ).run(archivedBy, id);
   attempt?.controller.abort();
   if (kind === "cloud")

@@ -79,6 +79,18 @@ describe("workspace archive", () => {
     expect(mocks.release).toHaveBeenCalledExactlyOnceWith("workspace");
   });
 
+  it("skips the pause and local effects for an already archived computer", async () => {
+    mocks.workspace.mockReturnValue({
+      id: "workspace",
+      kind: "cloud",
+      provider_workspace_id: "vm",
+      state: "archived",
+    });
+    await archiveWorkspace("workspace");
+    for (const effect of [mocks.pause, mocks.run, mocks.release, mocks.status])
+      expect(effect).not.toHaveBeenCalled();
+  });
+
   it("archives local workspaces without touching cloud infrastructure", async () => {
     mocks.workspace.mockReturnValue({ id: "workspace", kind: "worktree" });
     await archiveWorkspace("workspace");

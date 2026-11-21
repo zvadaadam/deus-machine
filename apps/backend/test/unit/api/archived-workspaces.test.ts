@@ -59,6 +59,22 @@ it("records the person and time, retains both on restore, and replaces both on t
   expect(last()).toEqual({ archived_at: now, archived_by: null });
 });
 
+it("keeps the original archive time and actor when a stale device archives again", async () => {
+  const by = { kind: "session", sessionId: "chat" } as const;
+  await archiveWorkspace("w", undefined, by);
+  const before = db
+    .prepare("SELECT archived_at, archived_by, updated_at FROM workspaces WHERE id='w'")
+    .get();
+  handleFrame("phone", { type: "q:subscribe", id: "sidebar", resource: "workspaces" });
+  socket.send.mockClear();
+  db.function("datetime", { varargs: true }, () => "2099-01-01");
+  await archive();
+  expect(
+    db.prepare("SELECT archived_at, archived_by, updated_at FROM workspaces WHERE id='w'").get()
+  ).toEqual(before);
+  expect(socket.send).not.toHaveBeenCalled();
+});
+
 it("reads one project's archived rows newest first with parsed origins and legacy times", async () => {
   expect(registry.find("archivedWorkspaces")).toBe(api.archivedWorkspaces);
   expect(registry.find("archivedWorkspaces")).toMatchObject({ kind: "read" });

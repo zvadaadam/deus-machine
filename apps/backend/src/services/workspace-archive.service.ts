@@ -27,11 +27,15 @@ export function archiveWorkspace(
   workspaceId: string,
   check?: () => void,
   by?: Origin | null
-): Promise<void> {
+): Promise<boolean> {
   return changeWorkspaceState(workspaceId, async () => {
     const db = getDatabase();
     const workspace = getWorkspaceRaw(db, workspaceId);
     if (!workspace) throw new NotFoundError("Workspace not found");
+    if (workspace.state === "archived") {
+      check?.();
+      return false;
+    }
     if (workspace.kind === "cloud" && workspace.provider_workspace_id) {
       // Confirm suspension before advertising the workspace as closed.
       await pauseCloudWorkspace({
@@ -49,6 +53,7 @@ export function archiveWorkspace(
     } finally {
       await checkout;
     }
+    return true;
   });
 }
 

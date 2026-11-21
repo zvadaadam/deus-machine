@@ -108,8 +108,7 @@ export default [
     invalidate(["workspaces", "sessions"]);
   }),
   handle(api.archiveWorkspace, async ({ workspaceId }) => {
-    await archiveWorkspace(workspaceId);
-    invalidate(["workspaces"]);
+    if (await archiveWorkspace(workspaceId)) invalidate(["workspaces"]);
   }),
   handle(api.updateWorkspaceTitle, ({ workspaceId, title }) => {
     const db = getDatabase();
