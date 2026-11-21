@@ -44,7 +44,6 @@ import {
   applyCloudSimulatorStatus,
   buildCloudSimulatorExecFrameData,
   forgetCloudSimulators,
-  parkCloudSimulator,
   readCloudSimulatorExecResult,
   readCloudSimulatorStatus,
   relayCloudSimulatorEvent,
@@ -83,6 +82,7 @@ import { ConflictError, NotFoundError, ValidationError } from "../../../lib/erro
 import { emitPtyData, emitPtyExit } from "../../pty.service";
 import { getSessionRaw } from "../../../db";
 import { clearGithubTokenRefreshFlights } from "../../cloud-workspace-init.service";
+import { applyCloudStatus } from "../../workspace-lifecycle";
 import { resolveCloudTurnExtensions } from "../../integrations";
 
 const LIFECYCLE_TYPES: ReadonlySet<string> = new Set(LIFECYCLE_EVENT_TYPES);
@@ -202,39 +202,6 @@ export function shutdownCloudDriver(): void {
 }
 
 // ---- Workspace row effects ----
-
-function updateCloudWorkspace(workspaceId: string, data: { status?: string; step?: string }): void {
-  const db = getDatabase();
-  const status = data.status ?? "";
-  if (status === "running") {
-    db.prepare(
-      "UPDATE workspaces SET state = 'ready', init_stage = NULL, error_message = NULL WHERE id = ? AND state != 'archived'"
-    ).run(workspaceId);
-  } else if (status === "provisioning") {
-    db.prepare(
-      "UPDATE workspaces SET state = 'initializing', init_stage = ? WHERE id = ? AND state != 'archived'"
-    ).run(data.step ?? "provisioning", workspaceId);
-  } else if (status === "error") {
-    db.prepare(
-      "UPDATE workspaces SET state = 'error', error_message = ? WHERE id = ? AND state != 'archived'"
-    ).run(data.step ?? "cloud workspace error", workspaceId);
-  } else {
-    // paused/stopped/resuming — surface as the init stage without leaving 'ready'.
-    db.prepare("UPDATE workspaces SET init_stage = ? WHERE id = ? AND state != 'archived'").run(
-      status || null,
-      workspaceId
-    );
-  }
-  // The hosted device attaches to the SANDBOX: agnt parks every device when
-  // the sandbox parks (stopped/paused/error) and settles a `stopped` status —
-  // but that settle rides the session socket, which is often exactly what is
-  // down when the sandbox dies. Park the cached device here too, so no client
-  // keeps a stream URL for a device the platform already billed off.
-  if (status === "stopped" || status === "paused" || status === "error") {
-    parkCloudSimulator(workspaceId);
-  }
-  invalidate(["workspaces"], {});
-}
 
 /** Tell the clients following a workspace's environment (`cloudEnvironment`).
  *  Ephemeral on purpose: the chat shows a live provisioning/wake progress
@@ -474,7 +441,7 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         );
       }
       if (sessionStatus === "paused" || sessionStatus === "stopped") {
-        updateCloudWorkspace(session.deusWorkspaceId, { status: sessionStatus });
+        applyCloudStatus(session.deusWorkspaceId, { status: sessionStatus });
         tellCloudEnv(session, { status: sessionStatus });
         // The live `workspace.state` frame is LOST when the socket is down
         // while the sandbox stops; this snapshot is then the only truth, and
@@ -482,14 +449,14 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         // spinner forever. Fail here, before that gate. (paused replays.)
         if (sessionStatus === "stopped") scheduleTurnKill(session, "stopped");
       } else if (sessionStatus === "error") {
-        updateCloudWorkspace(session.deusWorkspaceId, { status: "error" });
+        applyCloudStatus(session.deusWorkspaceId, { status: "error" });
         tellCloudEnv(session, { status: "error" });
         scheduleTurnKill(session, "error");
       } else if (sessionStatus === "provisioning") {
         // Connected mid-setup (fresh create attaches while the sandbox is
         // still building) — show the stack immediately; the step events
         // that follow append to it.
-        updateCloudWorkspace(session.deusWorkspaceId, { status: "provisioning" });
+        applyCloudStatus(session.deusWorkspaceId, { status: "provisioning" });
         tellCloudEnv(session, { status: "provisioning" });
         // Recovery truth can arrive VIA the snapshot when the live
         // workspace.state frame fell into a socket gap — the reconnect
@@ -498,7 +465,7 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         // frame path disarms it.
         clearTurnKill(session);
       } else if (sessionStatus === "ready" || sessionStatus === "running") {
-        updateCloudWorkspace(session.deusWorkspaceId, { status: "running" });
+        applyCloudStatus(session.deusWorkspaceId, { status: "running" });
         clearTurnKill(session);
       }
 
@@ -521,7 +488,7 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       // Workspace owns recovery; its intermediate error is wake progress,
       // not evidence that the turn or its hosted device stopped.
       const data = raw.status === "error" && raw.recovering ? { ...raw, status: "resuming" } : raw;
-      updateCloudWorkspace(session.deusWorkspaceId, data);
+      applyCloudStatus(session.deusWorkspaceId, data);
       // The public host template rides the running state: a new sandbox
       // (reprovision) brings a new one, a platform-reported `null` means no
       // sandbox behind the session. Absent = an older platform / a state that

@@ -66,8 +66,7 @@ import {
   pickerModels,
 } from "@shared/models";
 import { LOCAL_CALLER, type Caller } from "../../api/registry";
-import { createLocalWorkspace } from "../../api/workspaces";
-import { archiveWorkspace } from "../workspace-archive.service";
+import { archiveWorkspace, createLocalWorkspace } from "../workspace-lifecycle";
 import { attachParts, getMessages, getSessionRaw, hasOlderMessages } from "../../db";
 import { getDatabase } from "../../lib/database";
 import { AgentServerDisconnectedError, AppError, ChatBusyError } from "../../lib/errors";
@@ -800,7 +799,7 @@ export function createDeusHost(): DeusHost {
         }
         mayStart(caller, input);
         const { workspaceId, firstSessionId } = await createLocalWorkspace(
-          { repository_id: input.project.id, location: "local" } as never,
+          { repository_id: input.project.id },
           { startedBy: input.origin, admit: () => mayStart(caller, input) }
         );
         hold(firstSessionId, { caller, workspaceId, input });

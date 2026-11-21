@@ -8,7 +8,6 @@
 // wait-for-ready here — the sandbox may still be provisioning when the user
 // sends the first prompt; agnt queues it and runs it when the sidecar is up.
 
-import { uuidv7 } from "@shared/lib/uuid";
 import {
   createWorkspace as agntCreateWorkspace,
   createSession as agntCreateSession,
@@ -25,10 +24,15 @@ import type { RepositoryAuth } from "@deus-hq/api";
 import { githubRepoSlug, httpsOrigin } from "@shared/git-origin";
 import type { CloudRepoAccess, CloudRepoAccessStatus } from "@shared/types/cloud-access";
 import { getDatabase } from "../lib/database";
-import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
+import { ConflictError, ValidationError } from "../lib/errors";
 import { getRepositoryById } from "../db";
 import { invalidate } from "./query-engine";
-import { generateUniqueName } from "./workspace.service";
+import {
+  attachCloudComputer,
+  attachCloudChat,
+  failCloudStart,
+  setCloudWakeStage,
+} from "./workspace-lifecycle";
 import {
   cloudAccount,
   cloudOrg,
@@ -51,119 +55,10 @@ import {
   enableCloudEnvironmentSimulator,
 } from "./cloud-environment.service";
 
-const WORKSPACE_RESOURCES = ["workspaces", "sessions", "session"] as const;
-
-export interface CreateCloudWorkspaceParams {
-  repositoryId: string;
-  /** Branch the sandbox checks out; defaults to the repo's default branch. */
-  sourceBranch?: string;
-  /** The organization it runs in; the default organization when omitted. */
-  organizationId?: string | null;
-}
-
 /** The columns a cloud workspace's platform calls are derived from. */
 interface CloudWorkspaceRef {
   provider_workspace_id?: string | null;
   organization_id?: string | null;
-}
-
-/**
- * Create a cloud workspace: row now, sandbox in the background.
- * Throws synchronously for everything the user must fix (no config, repo
- * without a remote); background failures land on the row as state='error'.
- */
-export function createCloudWorkspace(params: CreateCloudWorkspaceParams): {
-  workspaceId: string;
-  slug: string;
-} {
-  if (!cloudAccount()) {
-    throw new ValidationError(
-      "Cloud workspaces are not configured — set DEUS_CLOUD_AGNT_API_KEY (and DEUS_CLOUD_AGNT_URL for a non-production backend)."
-    );
-  }
-  const org = requireCloudOrg(params.organizationId);
-
-  const db = getDatabase();
-  const repo = getRepositoryById(db, params.repositoryId);
-  if (!repo) throw new NotFoundError(`Repository not found: ${params.repositoryId}`);
-  if (!repo.git_origin_url) {
-    throw new ValidationError(
-      "Cloud workspaces need a git remote: this repository has no origin URL for the sandbox to clone."
-    );
-  }
-
-  const workspaceId = uuidv7();
-  const slug = generateUniqueName(db);
-  const sourceBranch = params.sourceBranch || repo.git_default_branch || "main";
-  // The sandbox works on its OWN branch off the source (parity with local
-  // worktrees): PRs need head ≠ base, and the turn-end wip snapshots hang off
-  // this branch's history.
-  const workBranch = slug;
-
-  db.prepare(
-    `INSERT INTO workspaces (
-       id, repository_id, slug, kind, git_branch, git_target_branch,
-       organization_id, state, init_stage, updated_at
-     ) VALUES (?, ?, ?, 'cloud', ?, ?, ?, 'initializing', 'creating cloud workspace', datetime('now'))`
-  ).run(workspaceId, params.repositoryId, slug, workBranch, sourceBranch, org.orgId);
-  invalidate([...WORKSPACE_RESOURCES], {});
-
-  void provisionInBackground(
-    workspaceId,
-    httpsOrigin(repo.git_origin_url),
-    { source: sourceBranch, work: workBranch },
-    org
-  );
-
-  return { workspaceId, slug };
-}
-
-/**
- * Provision a failed cloud workspace again, on the same row. Only while no
- * computer exists for it: everything that fails before the platform is asked
- * for one (GitHub access, project settings, the request itself) is safe to
- * repeat. Once a computer exists, waking it is the way back.
- */
-export function retryCloudWorkspace(workspaceId: string): void {
-  if (!cloudAccount())
-    throw new ValidationError("Sign in to Deus Cloud to try this workspace again.");
-  const db = getDatabase();
-  const workspace = db
-    .prepare(
-      "SELECT repository_id, git_branch, git_target_branch, organization_id FROM workspaces WHERE id = ? AND kind = 'cloud'"
-    )
-    .get(workspaceId) as
-    | {
-        repository_id: string;
-        git_branch: string | null;
-        git_target_branch: string | null;
-        organization_id: string | null;
-      }
-    | undefined;
-  const repo = workspace && getRepositoryById(db, workspace.repository_id);
-  if (!workspace?.git_branch || !repo?.git_origin_url)
-    throw new NotFoundError("Workspace not found");
-  const org = requireCloudOrg(workspace.organization_id);
-  // The claim: two clicks, or two devices, provision it once.
-  const claimed = db
-    .prepare(
-      `UPDATE workspaces
-       SET state = 'initializing', init_stage = 'creating cloud workspace',
-           error_message = NULL, error_detail = NULL
-       WHERE id = ? AND state = 'error' AND provider_workspace_id IS NULL`
-    )
-    .run(workspaceId);
-  if (claimed.changes === 0) throw new ConflictError("This workspace is not waiting for a retry.");
-  invalidate([...WORKSPACE_RESOURCES], {});
-  void provisionInBackground(
-    workspaceId,
-    httpsOrigin(repo.git_origin_url),
-    {
-      source: workspace.git_target_branch || repo.git_default_branch || "main",
-      work: workspace.git_branch,
-    },
-    org
-  );
 }
 
 /** Archive suspends the VM and keeps both its filesystem and remote backups. */
@@ -356,7 +251,7 @@ const tokenRefreshMarks = new Map<string, number>();
 const tokenRefreshFlights = new Map<string, Promise<boolean>>();
 
 /** A successful re-create (either lane) counts as a mint for the connect hook. */
-function markWorkspaceTokenRefreshed(providerWorkspaceId: string): void {
+export function markWorkspaceTokenRefreshed(providerWorkspaceId: string): void {
   tokenRefreshMarks.set(providerWorkspaceId, Date.now());
 }
 
@@ -464,10 +359,6 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
   const announce = (data: Record<string, unknown>) => {
     if (sessionId) announceCloudEnv(workspace.id, sessionId, data);
   };
-  const setStage = (stage: string | null) => {
-    db.prepare("UPDATE workspaces SET init_stage = ? WHERE id = ?").run(stage, workspace.id);
-    invalidate(["workspaces"], {});
-  };
 
   const isServing = () => {
     if (!sessionId || !hasLiveCloudSession(sessionId)) return false;
@@ -484,9 +375,9 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
   if (status === "running") {
     // An earlier wake may have succeeded despite a lost response. An online
     // resume is a no-op, so no later frame is guaranteed to clear stale sleep.
-    setStage(null);
+    setCloudWakeStage(db, workspace.id, null);
   } else if (!refreshing) {
-    setStage("resuming");
+    setCloudWakeStage(db, workspace.id, "resuming");
     announce({ status: "resuming" });
   }
   // Legacy workspaces may still carry a desktop-minted token. Refresh it when
@@ -506,7 +397,7 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
     console.warn(`[WORKSPACE] cloud wake failed: ${err}`);
     if (refreshing && isServing()) return { ok: false, status: "running" };
     const failedStatus = status === "paused" || status === "stopped" ? status : "error";
-    setStage(failedStatus);
+    setCloudWakeStage(db, workspace.id, failedStatus);
     const error =
       err instanceof Error ? err.message : "Could not wake the cloud machine. Try again.";
     announce({ status: failedStatus, reason: error });
@@ -771,7 +662,7 @@ async function refreshEnvironmentGithubToken(
   }
 }
 
-async function provisionInBackground(
+export async function provisionCloudWorkspace(
   workspaceId: string,
   originUrl: string,
   branch: { source: string; work: string },
@@ -854,11 +745,11 @@ async function provisionInBackground(
         // environment resolves its token separately and relies on the modal.
         const slug = githubRepoSlug(originUrl);
         if (slug && (await classifyRepoAccess(slug, mint, org.orgId)) === "needs_grant") {
-          db.prepare("UPDATE workspaces SET state = 'error', error_message = ? WHERE id = ?").run(
-            `GitHub access required — install the Deus GitHub App for ${slug} to run it in the cloud.`,
-            workspaceId
+          failCloudStart(
+            db,
+            workspaceId,
+            `GitHub access required — install the Deus GitHub App for ${slug} to run it in the cloud.`
           );
-          invalidate([...WORKSPACE_RESOURCES], {});
           return;
         }
         // The DO map is KNOWN tokenless from birth (nothing baked) — record
@@ -878,23 +769,10 @@ async function provisionInBackground(
       // New branch off the source — the sandbox's whole life happens here.
       checkout: { branch: branch.work, from: branch.source },
     });
-    db.prepare(
-      "UPDATE workspaces SET provider_workspace_id = ?, init_stage = 'creating cloud session', last_inline_mint_at = ? WHERE id = ?"
-    ).run(provider.id, inlineMintStampAtCreate, workspaceId);
-    if (repositoryAuth) markWorkspaceTokenRefreshed(provider.id);
-    invalidate([...WORKSPACE_RESOURCES], {});
+    attachCloudComputer(db, workspaceId, provider.id, inlineMintStampAtCreate, !!repositoryAuth);
 
     const providerSession = await agntCreateSession({ baseUrl, apiKey, workspaceId: provider.id });
-    const sessionId = uuidv7();
-    db.transaction(() => {
-      db.prepare(
-        "INSERT INTO sessions (id, workspace_id, provider_session_id, status, updated_at) VALUES (?, ?, ?, 'idle', datetime('now'))"
-      ).run(sessionId, workspaceId, providerSession.id);
-      db.prepare(
-        "UPDATE workspaces SET current_session_id = ?, init_stage = 'provisioning sandbox' WHERE id = ?"
-      ).run(sessionId, workspaceId);
-    })();
-    invalidate([...WORKSPACE_RESOURCES], {});
+    const sessionId = attachCloudChat(db, workspaceId, providerSession.id);
 
     // Open the session socket now: workspace.state events drive init_stage →
     // 'ready', and the first user send needs the channel anyway. A socket
@@ -912,10 +790,6 @@ async function provisionInBackground(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[CloudInit] provisioning failed for ${workspaceId}: ${message}`);
-    db.prepare(
-      // Keep the failed stage as diagnostic context alongside the specific error.
-      "UPDATE workspaces SET state = 'error', error_message = ? WHERE id = ?"
-    ).run(`Cloud provisioning failed: ${message}`, workspaceId);
-    invalidate([...WORKSPACE_RESOURCES], {});
+    failCloudStart(db, workspaceId, `Cloud provisioning failed: ${message}`);
   }
 }

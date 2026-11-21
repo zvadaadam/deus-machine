@@ -88,6 +88,7 @@ import {
   validateSchedule,
 } from "../../../src/services/automations/service";
 import { summaryToRow, runSummaryToRow } from "../../../src/services/automations/platform";
+import { adoptRunRows } from "../../../src/services/workspace-lifecycle";
 import * as store from "../../../src/services/automations/store";
 import { resetCloudModelListsForTests } from "../../../src/services/agent/cloud/models";
 import { handleAutomationToolRequest } from "../../../src/services/automations/agent-rpc";
@@ -1110,6 +1111,35 @@ describeWithDb("openAutomationRun", () => {
     );
   });
 
+  it("revives an archived owner on adoption and on reopen, with each path's live reads", async () => {
+    const first = await openAutomationRun("run-1");
+    const archive = db.prepare(
+      "UPDATE workspaces SET state = 'archived', current_session_id = NULL WHERE id = ?"
+    );
+    const workspace = db.prepare("SELECT state, current_session_id FROM workspaces WHERE id = ?");
+    const ready = { state: "ready", current_session_id: first.sessionId };
+    expect(workspace.get(first.workspaceId)).toEqual(ready);
+
+    archive.run(first.workspaceId);
+    mockInvalidate.mockClear();
+    expect(await openAutomationRun("run-1")).toEqual(first);
+    expect(workspace.get(first.workspaceId)).toEqual(ready);
+    expect(mockInvalidate).toHaveBeenCalledExactlyOnceWith(["workspaces"]);
+
+    // An unadopted ledger entry may point to the same platform session.
+    db.prepare(
+      "UPDATE automation_runs SET session_id = NULL, workspace_id = NULL WHERE id = 'run-1'"
+    ).run();
+    archive.run(first.workspaceId);
+    mockInvalidate.mockClear();
+    expect(await openAutomationRun("run-1")).toEqual(first);
+    expect(workspace.get(first.workspaceId)).toEqual(ready);
+    expect(mockInvalidate).toHaveBeenCalledExactlyOnceWith(
+      ["workspaces", "sessions", "session", "automations", "automationRuns"],
+      { sessionIds: [first.sessionId] }
+    );
+  });
+
   it("does not adopt a late session after the account changes", async () => {
     sdk.getSession.mockImplementationOnce(async () => {
       mockGetCloudConfig.mockReturnValue({
@@ -1133,7 +1163,7 @@ describeWithDb("openAutomationRun", () => {
   });
 
   it("does not backfill or revive an adopted run after the account changes", async () => {
-    const adopted = store.adoptRunRows({
+    const adopted = adoptRunRows({
       runId: "run-1",
       automationId: "auto-1",
       repositoryId: "r1",

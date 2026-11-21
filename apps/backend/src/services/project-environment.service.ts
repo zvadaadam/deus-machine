@@ -19,7 +19,8 @@ import { processGroupsStopped, trackProcessGroup } from "../lib/process-groups";
 import { cloudAccount, cloudOrg, requireCloudOrg } from "./agent/cloud/config";
 import { getCloudEnvironmentInfo } from "./cloud-environment.service";
 import { createBackendChildEnv } from "@shared/lib/child-env";
-import { SETUP_INTERRUPTED, SETUP_LOG_SUFFIX, setSetupStatus, setupFile } from "./setup-status";
+import { SETUP_INTERRUPTED, SETUP_LOG_SUFFIX, setupFile } from "./setup-status";
+import { setSetupStatus } from "./workspace-lifecycle";
 import type { WorkspaceSetup } from "./agent/workspace-context";
 import type { WorkspaceWithDetailsRow } from "../db";
 

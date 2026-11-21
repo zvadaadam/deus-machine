@@ -469,6 +469,32 @@ describeWithDb("sendMessage", () => {
       vi.spyOn(cloudDriver, "hasLiveCloudSession").mockReturnValue(true);
     });
 
+    it.each([false, true])(
+      "publishes the waking stage and rolls back a refused send (newer status: %s)",
+      async (newer) => {
+        const setStage = db.prepare("UPDATE workspaces SET init_stage = ? WHERE id = 'w1'");
+        setStage.run("paused");
+        const seen: unknown[] = [];
+        mockInvalidate.mockImplementation((resources, scope) => {
+          if (resources.length === 1 && resources[0] === "workspaces") {
+            seen.push([
+              db.prepare("SELECT state, init_stage FROM workspaces WHERE id = 'w1'").get(),
+              scope,
+            ]);
+          }
+        });
+        vi.spyOn(cloudDriver, "startCloudTurn").mockImplementation(async () => {
+          if (newer) setStage.run("stopped");
+          throw new Error("send refused");
+        });
+        await expect(cloudSend("high")).rejects.toThrow("send refused");
+        expect(seen).toEqual([
+          [{ state: "ready", init_stage: "resuming" }, {}],
+          [{ state: "ready", init_stage: newer ? "stopped" : "paused" }, {}],
+        ]);
+      }
+    );
+
     it("hands the driver the turn's harness, model and thinking level, in the platform's vocabulary", async () => {
       const startCloudTurn = vi
         .spyOn(cloudDriver, "startCloudTurn")

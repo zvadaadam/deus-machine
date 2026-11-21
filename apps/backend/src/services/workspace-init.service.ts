@@ -23,25 +23,25 @@
  */
 import fs from "fs";
 import path from "path";
-import { uuidv7 } from "@shared/lib/uuid";
 import type { InitFetchIssue } from "@shared/enums";
 import { getDatabase } from "../lib/database";
-import { ConflictError, NotFoundError } from "../lib/errors";
 import { GitError, runGit } from "../lib/git-process";
 import { processGroupsStopped } from "../lib/process-groups";
-import { computeWorkspacePath } from "../middleware/workspace-loader";
-import { prepareLocalEnvironment } from "./project-environment.service";
-import { SETUP_INTERRUPTED, setSetupStatus } from "./setup-status";
-import { invalidate } from "./query-engine";
+import {
+  advanceLocalStage,
+  failStart,
+  finishLocalStart,
+  recordFetchOutcome,
+} from "./workspace-lifecycle";
 import { generateUniqueName } from "./workspace.service";
 
 const FETCH_TIMEOUT_MS = 30_000;
 const WORKTREE_TIMEOUT_MS = 120_000;
 
-type Stage = "fetch" | "worktree" | "session";
+export type Stage = "fetch" | "worktree" | "session";
 
 /** From these stages on, the folder and branch under the workspace's name are the attempt's own. */
-const OWNS_WORKTREE: ReadonlySet<string> = new Set(["worktree", "session", "setup"]); // Older interrupted starts can be in setup.
+export const OWNS_WORKTREE: ReadonlySet<string> = new Set(["worktree", "session", "setup"]); // Older interrupted starts can be in setup.
 
 export interface InitContext {
   workspaceId: string;
@@ -122,18 +122,6 @@ async function claimName(ctx: InitContext): Promise<InitContext> {
 }
 
 // ─── Stages ─────────────────────────────────────────────────────
-
-function setStage(workspaceId: string, stage: Stage): void {
-  try {
-    getDatabase()
-      .prepare("UPDATE workspaces SET init_stage = ? WHERE id = ?")
-      .run(stage, workspaceId);
-  } catch (err) {
-    // The stage is progress, not state: a locked database must not stop the work.
-    console.warn(`[WORKSPACE] Could not record stage "${stage}" for ${workspaceId}:`, err);
-  }
-  invalidate(["workspaces"]);
-}
 
 /** Why a fetch failed, or null when the failure says nothing is wrong (the branch is only here). */
 export function fetchIssue(error: unknown): InitFetchIssue | null {
@@ -275,34 +263,6 @@ export async function removeWorktree(
   await runGit(["branch", "-D", branchName], { cwd }).catch(() => {});
 }
 
-/**
- * The first chat, under the id minted with the workspace, started by whoever
- * started it; only while the workspace is still starting, in the same
- * transaction: one archived meanwhile stays archived, with no chat. Returns
- * whether it opened.
- */
-function openFirstSession(workspaceId: string): boolean {
-  const db = getDatabase();
-  return db.transaction(() => {
-    const row = db
-      .prepare(
-        "SELECT first_session_id, started_by FROM workspaces WHERE id = ? AND state = 'initializing'"
-      )
-      .get(workspaceId) as
-      | { first_session_id: string | null; started_by: string | null }
-      | undefined;
-    if (!row) return false;
-    const sessionId = row.first_session_id ?? uuidv7();
-    db.prepare(
-      "INSERT INTO sessions (id, workspace_id, status, started_by, updated_at) VALUES (?, ?, 'idle', ?, datetime('now'))"
-    ).run(sessionId, workspaceId, row.started_by);
-    db.prepare(
-      "UPDATE workspaces SET state = 'ready', init_stage = 'done', current_session_id = ?, first_session_id = ? WHERE id = ?"
-    ).run(sessionId, sessionId, workspaceId);
-    return true;
-  })();
-}
-
 // ─── Failure ────────────────────────────────────────────────────
 
 function describeFailure(stage: Stage, error: unknown, ctx: InitContext): Failure {
@@ -343,19 +303,6 @@ function describeFailure(stage: Stage, error: unknown, ctx: InitContext): Failur
   return { message: "Git could not make this workspace's copy of the project.", detail };
 }
 
-function failWorkspace(workspaceId: string, stage: string, failure: Failure): void {
-  getDatabase()
-    .prepare(
-      `UPDATE workspaces
-       SET state = 'error', init_stage = ?, error_message = ?, error_detail = ?
-       WHERE id = ?`
-    )
-    .run(stage, failure.message, failure.detail, workspaceId);
-  invalidate(["workspaces"]);
-}
-
-// ─── Start, retry, delete ───────────────────────────────────────
-
 /** Workspaces this process is starting right now. */
 const starting = new Set<string>();
 
@@ -365,27 +312,19 @@ export async function initializeWorkspace(initial: InitContext): Promise<void> {
   let ctx = initial;
   let stage: Stage = "fetch";
   try {
-    setStage(ctx.workspaceId, stage);
+    advanceLocalStage(ctx.workspaceId, stage);
     const source = await refreshSource(ctx);
-    getDatabase()
-      .prepare("UPDATE workspaces SET init_fetch_issue = ? WHERE id = ?")
-      .run(source.issue, ctx.workspaceId);
+    recordFetchOutcome(ctx.workspaceId, source.issue);
     ctx = await claimName(ctx);
 
     stage = "worktree";
-    setStage(ctx.workspaceId, stage);
+    advanceLocalStage(ctx.workspaceId, stage);
     await createWorktree(ctx, source.base);
 
     if (processGroupsStopped()) return;
     stage = "session";
-    setStage(ctx.workspaceId, stage);
-    if (openFirstSession(ctx.workspaceId)) {
-      // Marks setup running synchronously, before a ready observer can send the first task.
-      void prepareLocalEnvironment(ctx.workspaceId, ctx.workspacePath, ctx.repoOriginUrl).catch(
-        (err) => console.warn(`[WORKSPACE] Setup for ${ctx.workspaceId} failed:`, err)
-      );
-    }
-    invalidate(["workspaces", "sessions"]);
+    advanceLocalStage(ctx.workspaceId, stage);
+    finishLocalStart(ctx);
   } catch (err) {
     // Deus is closing and stopped what this was running: the row stays as it
     // is, and the next start fails it as interrupted (failInterruptedWorkspaces).
@@ -399,124 +338,11 @@ export async function initializeWorkspace(initial: InitContext): Promise<void> {
       );
     }
     try {
-      failWorkspace(ctx.workspaceId, stage, describeFailure(stage, err, ctx));
+      failStart(ctx.workspaceId, stage, describeFailure(stage, err, ctx));
     } catch (e) {
       console.error(`[WORKSPACE] Could not record the failure of ${ctx.workspaceId}:`, e);
     }
   } finally {
     starting.delete(ctx.workspaceId);
   }
-}
-
-interface StartRow {
-  id: string;
-  kind: string;
-  state: string;
-  slug: string | null;
-  git_branch: string | null;
-  git_source_branch: string | null;
-  git_target_branch: string | null;
-  init_stage: string | null;
-  setup_status: string;
-  provider_workspace_id: string | null;
-  current_session_id: string | null;
-  root_path: string | null;
-  git_default_branch: string | null;
-  git_origin_url: string | null;
-}
-
-const START_ROW = `
-  SELECT w.id, w.kind, w.state, w.slug, w.git_branch, w.git_source_branch, w.git_target_branch,
-         w.init_stage, w.setup_status, w.provider_workspace_id, w.current_session_id,
-         r.root_path, r.git_default_branch, r.git_origin_url
-  FROM workspaces w LEFT JOIN repositories r ON r.id = w.repository_id`;
-
-/** Start a failed local workspace again, on the same row. */
-export function retryWorkspaceInit(workspaceId: string): void {
-  const db = getDatabase();
-  const row = db.prepare(`${START_ROW} WHERE w.id = ?`).get(workspaceId) as StartRow | undefined;
-  if (!row || !row.root_path || !row.slug || !row.git_branch)
-    throw new NotFoundError("Workspace not found");
-  // The claim: two clicks, or two devices, start it once.
-  const claimed = db
-    .prepare(
-      `UPDATE workspaces
-       SET state = 'initializing', init_stage = NULL,
-           error_message = NULL, error_detail = NULL, init_fetch_issue = NULL
-       WHERE id = ? AND state = 'error' AND kind = 'worktree'`
-    )
-    .run(workspaceId);
-  if (claimed.changes === 0) throw new ConflictError("This workspace is not waiting for a retry.");
-  if (row.setup_status !== "none") setSetupStatus(workspaceId, "none");
-  invalidate(["workspaces"]);
-  void initializeWorkspace({
-    workspaceId,
-    repoRootPath: row.root_path,
-    workspacePath: computeWorkspacePath(row),
-    branchName: row.git_branch,
-    sourceBranch:
-      row.git_source_branch ?? row.git_target_branch ?? row.git_default_branch ?? "main",
-    repoOriginUrl: row.git_origin_url,
-  });
-}
-
-/**
- * Delete a workspace that never started. One that has been used is archived
- * instead: deleting it would take its chats with it. A cloud workspace whose
- * computer exists is the platform's to remove, so it is archived too.
- */
-export function deleteFailedWorkspace(workspaceId: string): void {
-  const db = getDatabase();
-  const row = db.prepare(`${START_ROW} WHERE w.id = ?`).get(workspaceId) as StartRow | undefined;
-  if (!row) throw new NotFoundError("Workspace not found");
-  if (row.state !== "error")
-    throw new ConflictError("Only a workspace that failed to start can be deleted.");
-  if (row.provider_workspace_id)
-    throw new ConflictError("This workspace has a cloud computer. Archive it instead.");
-  const used = db
-    .prepare("SELECT 1 FROM sessions WHERE workspace_id = ? AND message_count > 0 LIMIT 1")
-    .get(workspaceId);
-  if (used) throw new ConflictError("This workspace has chats. Archive it instead.");
-  // Its sessions go with it (ON DELETE CASCADE). The failed attempt already
-  // removed its folder and branch.
-  db.prepare("DELETE FROM workspaces WHERE id = ? AND state = 'error'").run(workspaceId);
-  invalidate(["workspaces", "sessions"]);
-}
-
-/**
- * At startup: nothing is starting a workspace yet, so a row that says one is
- * being started was abandoned by the process before this one. Fail it, with
- * the folder and branch it may have half made, so it can be retried or deleted
- * instead of spinning forever. A setup script died with that process as well.
- *
- * A cloud workspace with a session is left alone: its computer is provisioned
- * by the platform, which reports through the session's channel.
- */
-export function failInterruptedWorkspaces(): number {
-  const db = getDatabase();
-  const interrupted = db
-    .prepare("SELECT id FROM workspaces WHERE setup_status = 'running'")
-    .all() as { id: string }[];
-  for (const row of interrupted) {
-    setSetupStatus(row.id, "failed", { message: SETUP_INTERRUPTED });
-  }
-  const rows = db.prepare(`${START_ROW} WHERE w.state = 'initializing'`).all() as StartRow[];
-  let failed = 0;
-  for (const row of rows) {
-    const cloud = row.kind === "cloud";
-    if (cloud && row.current_session_id) continue;
-    failWorkspace(row.id, row.init_stage ?? "fetch", {
-      message: cloud
-        ? "Deus closed before the cloud computer was ready."
-        : "Deus closed before this workspace was ready.",
-      detail: null,
-    });
-    failed++;
-    if (!cloud && row.root_path && row.git_branch && OWNS_WORKTREE.has(row.init_stage ?? "")) {
-      void removeWorktree(row.root_path, computeWorkspacePath(row), row.git_branch).catch((err) =>
-        console.warn(`[WORKSPACE] Could not remove what ${row.id} left behind:`, err)
-      );
-    }
-  }
-  return failed;
 }

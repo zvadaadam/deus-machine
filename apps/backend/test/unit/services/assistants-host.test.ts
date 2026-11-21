@@ -91,8 +91,6 @@ vi.mock("../../../src/services/workspace-init.service", () => ({
     return { slug: `new${n}`, branchName: `lab/new${n}` };
   },
   initializeWorkspace: async () => {},
-  deleteFailedWorkspace: () => {},
-  retryWorkspaceInit: async () => {},
 }));
 vi.mock("../../../src/services/settings.service", () => ({ getSetting: () => undefined }));
 vi.mock("../../../src/services/assistants/feedback", () => ({

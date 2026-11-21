@@ -160,7 +160,7 @@ import {
   resetCloudConfigForTests,
   setCloudRuntimeCredentials,
 } from "../../../src/services/agent/cloud/config";
-import { unarchiveWorkspace } from "../../../src/services/workspace-archive.service";
+import { unarchiveWorkspace } from "../../../src/services/workspace-lifecycle";
 import { persistSessionBackToWorking } from "../../../src/services/agent/persistence";
 import { cloudPreviewChanges } from "@shared/api/browser";
 import { sessionEvents } from "@shared/api/sessions";
@@ -1079,6 +1079,34 @@ describe("cloud driver frame → fold contract", () => {
     expect(mockRun).toHaveBeenCalledWith("deus-ws-1");
     expect(mockInvalidate).toHaveBeenCalled();
   });
+
+  it.each(["ready", "archived"])(
+    "publishes the workspace list when a %s computer reports sleep",
+    async (state) => {
+      const db = new Database(":memory:");
+      try {
+        db.exec(SCHEMA_SQL);
+        db.exec("INSERT INTO repositories (id, name) VALUES ('repo', 'Repo')");
+        db.prepare(
+          "INSERT INTO workspaces (id, repository_id, slug, kind, state, init_stage) VALUES ('deus-ws-1', 'repo', 'vm', 'cloud', ?, 'running')"
+        ).run(state);
+        mockInvalidate.mockClear();
+        await mockPrepare.withImplementation(
+          (sql) => db.prepare(sql),
+          () => {
+            capturedOnFrame!({ type: "workspace.state", data: { status: "paused" } });
+          }
+        );
+        expect(db.prepare("SELECT state, init_stage FROM workspaces").get()).toEqual({
+          state,
+          init_stage: state === "ready" ? "paused" : "running",
+        });
+        expect(mockInvalidate).toHaveBeenCalledExactlyOnceWith(["workspaces"], {});
+      } finally {
+        db.close();
+      }
+    }
+  );
 
   it.each([
     { status: "running", expectedState: "ready", expectedStage: null },

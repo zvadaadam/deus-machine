@@ -49,8 +49,6 @@ vi.mock("../../../src/lib/database", () => ({
 vi.mock("../../../src/services/workspace-init.service", () => ({
   initializeWorkspace: (...args: unknown[]) => mockInitializeWorkspace(...args),
   pickWorkspaceName: async () => ({ slug: "europa", branchName: "testuser/europa" }),
-  retryWorkspaceInit: (...args: unknown[]) => mockRetryWorkspaceInit(...args),
-  deleteFailedWorkspace: (...args: unknown[]) => mockDeleteFailedWorkspace(...args),
 }));
 
 vi.mock("../../../src/services/query-engine", () => ({
@@ -59,10 +57,15 @@ vi.mock("../../../src/services/query-engine", () => ({
 
 const cloud = vi.hoisted(() => ({ pause: vi.fn(), wake: vi.fn(), retry: vi.fn() }));
 vi.mock("../../../src/services/cloud-workspace-init.service", () => ({
-  createCloudWorkspace: vi.fn(),
-  retryCloudWorkspace: cloud.retry,
   pauseCloudWorkspace: cloud.pause,
   wakeCloudWorkspaceWithFeedback: cloud.wake,
+}));
+
+vi.mock("../../../src/services/workspace-lifecycle", async (original) => ({
+  ...(await original<typeof import("../../../src/services/workspace-lifecycle")>()),
+  retryWorkspaceInit: mockRetryWorkspaceInit,
+  retryCloudWorkspace: cloud.retry,
+  deleteFailedWorkspace: mockDeleteFailedWorkspace,
 }));
 
 const driver = vi.hoisted(() => ({ ensureCloudSession: vi.fn() }));

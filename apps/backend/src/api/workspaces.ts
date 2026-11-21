@@ -1,30 +1,20 @@
 /** Answers the operations in `shared/api/workspaces.ts`. */
 
-import path from "path";
 import fs from "fs";
 import { stripVTControlCharacters } from "node:util";
 import { setupFile } from "../services/setup-status";
 import * as api from "@shared/api/workspaces";
-import type { ParsedInputOf } from "@shared/api/op";
-import { uuidv7 } from "@shared/lib/uuid";
-import type { Origin } from "@zvada/agent-server/protocol";
 import { getDatabase } from "../lib/database";
-import { AppError, ConflictError, NotFoundError, ValidationError } from "../lib/errors";
+import { AppError, NotFoundError, ValidationError } from "../lib/errors";
 import { groupWorkspacesByRepo, toWorkspace } from "../lib/workspace-grouping";
 import { loadWorkspace } from "../middleware/workspace-loader";
 import {
   getAllRepositorySummaries,
-  getRepositoryById,
   getWorkspaceById,
   getWorkspaceRaw,
   getWorkspacesByRepo,
 } from "../db";
-import { cloudAccount } from "../services/agent/cloud/config";
 import { ensureCloudSession } from "../services/agent/cloud/driver";
-import {
-  createCloudWorkspace,
-  retryCloudWorkspace,
-} from "../services/cloud-workspace-init.service";
 import {
   getGhIdentity,
   ghLoginDone,
@@ -40,15 +30,13 @@ import {
 import { invalidate } from "../services/query-engine";
 import {
   archiveWorkspace,
+  createWorkspace,
+  deleteFailedWorkspace,
+  retryCloudWorkspace,
+  retryWorkspaceInit,
   unarchiveWorkspace,
   wakeWorkspace,
-} from "../services/workspace-archive.service";
-import {
-  deleteFailedWorkspace,
-  initializeWorkspace,
-  pickWorkspaceName,
-  retryWorkspaceInit,
-} from "../services/workspace-init.service";
+} from "../services/workspace-lifecycle";
 import { setWorkspaceStatus } from "../services/workspace-status.service";
 import { handle } from "./registry";
 
@@ -66,102 +54,6 @@ export function readWorkspace(workspaceId: string) {
   const workspace = getWorkspaceById(getDatabase(), workspaceId);
   if (!workspace) throw new NotFoundError("Workspace not found");
   return toWorkspace(workspace);
-}
-
-async function createWorkspace(
-  input: ParsedInputOf<typeof api.createWorkspace>
-): Promise<{ workspaceId: string }> {
-  // Cloud: the row now, the sandbox in the background. Progress arrives as
-  // workspace.state events through the cloud driver.
-  if (input.location === "cloud") {
-    if (!getRepositoryById(getDatabase(), input.repository_id))
-      throw new NotFoundError("Repository not found");
-    // Signed out is a state the person can fix, not a server fault.
-    if (!cloudAccount()) {
-      throw new ValidationError(
-        "Sign in to Deus Cloud to create cloud workspaces (Settings → Cloud)."
-      );
-    }
-    return createCloudWorkspace({
-      repositoryId: input.repository_id,
-      sourceBranch: input.source_branch,
-      organizationId: input.organization_id,
-    });
-  }
-
-  const { workspaceId } = await createLocalWorkspace(input);
-  return { workspaceId };
-}
-
-/**
- * A workspace on this computer: the row now, everything slow in the
- * background. The pipeline (services/workspace-init) fetches origin, makes
- * the worktree and opens the first chat alongside setup, under the id minted
- * here (`first_session_id`); each stage and any failure reaches clients on
- * `workspaces`, and a failure can be retried on this same row. `startedBy`
- * is who started it when not the person; `admit`, run synchronously right
- * before the insert, may refuse it (the operator's host counts its setups).
- */
-export async function createLocalWorkspace(
-  input: {
-    repository_id: string;
-    source_branch?: string;
-    target_branch?: string;
-    pr_title?: string;
-    pr_url?: string;
-    pr_number?: number;
-  },
-  options: { startedBy?: Origin; admit?: () => void } = {}
-): Promise<{ workspaceId: string; firstSessionId: string }> {
-  const db = getDatabase();
-  const repo = getRepositoryById(db, input.repository_id);
-  if (!repo) throw new NotFoundError("Repository not found");
-  const rootPath = repo.root_path;
-  if (!rootPath) {
-    throw new ConflictError(
-      `${repo.name} is not on this computer, so it can only run in the cloud. Turn on Cloud, or open its folder on this Mac first.`
-    );
-  }
-  const sourceBranch = input.source_branch || repo.git_default_branch || "main";
-  const workspaceId = uuidv7();
-  const firstSessionId = uuidv7();
-  const { slug, branchName } = await pickWorkspaceName(rootPath);
-
-  options.admit?.();
-  db.prepare(
-    `INSERT INTO workspaces (
-       id, repository_id, slug, title, git_branch, git_source_branch,
-       git_target_branch, pr_url, pr_number, state, first_session_id, started_by, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'initializing', ?, ?, datetime('now'))`
-  ).run(
-    workspaceId,
-    input.repository_id,
-    slug,
-    input.pr_title || null,
-    branchName,
-    sourceBranch,
-    input.target_branch || repo.git_default_branch || "main",
-    input.pr_url || null,
-    input.pr_number || null,
-    firstSessionId,
-    options.startedBy && options.startedBy.kind !== "person"
-      ? JSON.stringify(options.startedBy)
-      : null
-  );
-
-  // Not awaited, and it never rejects: the pipeline records its own failure.
-  void initializeWorkspace({
-    workspaceId,
-    repoRootPath: rootPath,
-    workspacePath: path.join(rootPath, ".deus", slug),
-    branchName,
-    sourceBranch,
-    repoOriginUrl: repo.git_origin_url,
-  });
-
-  // Clients see the row in `initializing` at once.
-  invalidate(["workspaces"]);
-  return { workspaceId, firstSessionId };
 }
 
 export default [

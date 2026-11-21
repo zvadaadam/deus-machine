@@ -1,8 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  archiveWorkspace,
-  unarchiveWorkspace,
-} from "../../../src/services/workspace-archive.service";
+import { archiveWorkspace, unarchiveWorkspace } from "../../../src/services/workspace-lifecycle";
 
 const mocks = vi.hoisted(() => ({
   workspace: vi.fn(),

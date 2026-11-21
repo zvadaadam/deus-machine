@@ -42,6 +42,7 @@ import {
   pushCloudSessionFacts,
 } from "./cloud/driver";
 import { refreshWorkspaceGithubToken } from "../cloud-workspace-init.service";
+import { beginSendWake, rollbackSendWake } from "../workspace-lifecycle";
 
 // ---- sendMessage ----
 
@@ -283,10 +284,7 @@ async function sendMessageOnce(
         // turn up — announce NOW so the send is never met with silence. The
         // chip flips to "Waking" (init_stage resuming) and the chat shows the
         // env line immediately; real frames replace both within seconds.
-        getDatabase()
-          .prepare("UPDATE workspaces SET init_stage = 'resuming' WHERE id = ?")
-          .run(workspace.id);
-        invalidate(["workspaces"], {});
+        beginSendWake(workspace.id);
         announceCloudEnv(workspace.id, sessionId, {
           status: "resuming",
           step: asleepStage === "stopped" ? "Restarting sandbox" : "Waking sandbox",
@@ -304,10 +302,7 @@ async function sendMessageOnce(
       // the prompt is rolled back, so a stuck Waking chip would promise a
       // recovery nothing is driving. Same honest revert the chip path does.
       if (asleepStage && workspace) {
-        getDatabase()
-          .prepare("UPDATE workspaces SET init_stage = ? WHERE id = ? AND init_stage = 'resuming'")
-          .run(asleepStage, workspace.id);
-        invalidate(["workspaces"], {});
+        rollbackSendWake(workspace.id, asleepStage);
         announceCloudEnv(workspace.id, sessionId, {
           status: asleepStage,
           reason: "wake failed — try again",

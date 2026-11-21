@@ -30,25 +30,27 @@ vi.mock("../../../src/services/workspace-status.service", () => ({
 }));
 
 import {
-  deleteFailedWorkspace,
-  failInterruptedWorkspaces,
   fetchIssue,
   initializeWorkspace,
   pickWorkspaceName,
   removeWorktree,
-  retryWorkspaceInit,
   type InitContext,
 } from "../../../src/services/workspace-init.service";
 import {
   archiveWorkspace,
+  deleteFailedWorkspace,
+  failInterruptedWorkspaces,
+  prepareWorkspaceFixture,
+  retryWorkspaceInit,
+  setSetupStatus,
   unarchiveWorkspace,
-} from "../../../src/services/workspace-archive.service";
+} from "../../../src/services/workspace-lifecycle";
 import {
   prepareLocalEnvironment,
   setupForTurn,
   writeProjectFile,
 } from "../../../src/services/project-environment.service";
-import { setSetupStatus, setupFile } from "../../../src/services/setup-status";
+import { setupFile } from "../../../src/services/setup-status";
 import { buildWorkspaceContext } from "../../../src/services/agent/workspace-context";
 import { GitError, runGit } from "../../../src/lib/git-process";
 import { CELESTIAL_NAMES } from "../../../src/services/workspace.service";
@@ -601,6 +603,24 @@ describe("names", () => {
     expect((await pickWorkspaceName(root)).slug).toBe(CELESTIAL_NAMES[1]);
     random.mockRestore();
   });
+});
+
+it("seeds a ready integration CLI workspace once, without publishing", () => {
+  const insert = prepareWorkspaceFixture(db(), "cli");
+  insert.run("cli", "r");
+  const seeded = row("cli");
+  expect(seeded).toMatchObject({
+    slug: "cli-test",
+    state: "ready",
+    init_stage: null,
+    init_fetch_issue: null,
+    setup_status: "none",
+    error_message: null,
+    error_detail: null,
+  });
+  insert.run("cli", "r");
+  expect(row("cli")).toEqual(seeded);
+  expect(mocks.invalidate).not.toHaveBeenCalled();
 });
 
 describe("why origin's latest was not fetched", () => {

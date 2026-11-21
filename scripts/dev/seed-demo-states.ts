@@ -12,7 +12,8 @@
  * throwaway git repo at .context/demo-repo so git-backed code paths have a
  * real directory to point at.
  */
-import { Database } from "bun:sqlite";
+import { openSqliteDatabase } from "../../apps/backend/src/lib/sqlite";
+import { prepareWorkspaceFixture } from "../../apps/backend/src/services/workspace-lifecycle";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { execSync } from "child_process";
 import path from "path";
@@ -35,7 +36,7 @@ if (!existsSync(path.join(REPO_PATH, ".git"))) {
 
 // Fresh DB every run
 for (const suffix of ["", "-wal", "-shm"]) rmSync(DB_PATH + suffix, { force: true });
-const db = new Database(DB_PATH);
+const db = openSqliteDatabase(DB_PATH);
 db.exec("PRAGMA journal_mode = WAL");
 db.exec(SCHEMA_SQL);
 
@@ -124,13 +125,7 @@ const seeds: SeedWorkspace[] = [
   },
 ];
 
-const insertWorkspace = db.prepare(
-  `INSERT INTO workspaces (
-     id, repository_id, slug, title, git_branch, git_target_branch, state, status,
-     current_session_id, pr_url, pr_number, pr_state, pr_is_draft, pr_review_status,
-     pr_has_conflicts, pr_ci_status, pr_checked_at, setup_status, init_stage, updated_at
-   ) VALUES (?, ?, ?, ?, ?, 'main', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'none', ?, ?)`
-);
+const insertWorkspace = prepareWorkspaceFixture(db, "demo");
 const insertSession = db.prepare(
   `INSERT INTO sessions (id, workspace_id, agent_harness, title, status, message_count, last_user_message_at, updated_at)
    VALUES (?, ?, 'claude-code', ?, ?, 3, ?, ?)`

@@ -40,9 +40,9 @@ vi.mock("@deus-hq/sdk", () => ({
 
 import {
   createCloudWorkspace,
-  clearGithubTokenRefreshFlights,
   retryCloudWorkspace,
-} from "../../../src/services/cloud-workspace-init.service";
+} from "../../../src/services/workspace-lifecycle";
+import { clearGithubTokenRefreshFlights } from "../../../src/services/cloud-workspace-init.service";
 import {
   resetCloudConfigForTests,
   setCloudRuntimeCredentials,
