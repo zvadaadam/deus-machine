@@ -264,6 +264,25 @@ describe(`the backend's database (${engine})`, () => {
     rmSync(backendDir, { recursive: true, force: true });
   });
 
+  it("finds the original workspace for an automation chat or its computer", () => {
+    const database = openSqliteDatabase(process.env.DATABASE_PATH!);
+    try {
+      database
+        .prepare("UPDATE sessions SET provider_session_id = 'cloud-chat' WHERE id = 'session-1'")
+        .run();
+      database
+        .prepare(
+          "INSERT INTO workspaces (id, repository_id, slug, provider_workspace_id) VALUES ('other', 'repo-1', 'other', 'vm')"
+        )
+        .run();
+      expect(store.workspaceForRun("cloud-chat", "vm")).toBe("ws-1");
+      expect(store.workspaceForRun("missing", "vm")).toBe("other");
+      expect(store.workspaceForRun("missing", "missing")).toBeNull();
+    } finally {
+      database.close();
+    }
+  });
+
   it("knows a session that no longer exists from one that does", () => {
     expect(store.sessionExists("session-1")).toBe(true);
     expect(store.sessionExists("deleted-session")).toBe(false);

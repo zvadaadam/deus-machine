@@ -200,13 +200,13 @@ export function sessionExists(sessionId: string): boolean {
 
 /** A reused platform chat belongs to its original workspace, even after archive. */
 export function workspaceForRun(session: string, computer: string): string | null {
-  return getDatabase()
+  const row = getDatabase()
     .prepare(
       `SELECT COALESCE((SELECT workspace_id FROM sessions WHERE provider_session_id = ?),
-        (SELECT id FROM workspaces WHERE provider_workspace_id = ? ORDER BY state = 'archived', updated_at DESC, id LIMIT 1))`
+        (SELECT id FROM workspaces WHERE provider_workspace_id = ? ORDER BY state = 'archived', updated_at DESC, id LIMIT 1)) AS workspace_id`
     )
-    .pluck()
-    .get(session, computer) as string | null;
+    .get(session, computer) as { workspace_id: string | null };
+  return row.workspace_id;
 }
 
 /**
