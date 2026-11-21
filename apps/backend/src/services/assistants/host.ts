@@ -324,9 +324,10 @@ export function createDeusHost(): DeusHost {
       const status = statusOf(row, ended.get(id));
       // The workspace's title and time stand in only for a first chat with no row yet.
       const title = row.session_id ? row.s_title : row.ws_title;
-      const activity =
-        epochMs(row.last_user_message_at) ??
-        epochMs(row.session_id ? row.s_updated_at : row.ws_updated_at);
+      const activity = Math.max(
+        epochMs(row.last_user_message_at) ?? 0,
+        epochMs(row.session_id ? row.s_updated_at : row.ws_updated_at) ?? 0
+      );
       const root = computeWorkspacePath({ root_path: row.root_path, slug: row.slug });
       // Setup and delivery refusals belong to the entry; engine turn errors are in its view.
       const error = !row.session_id

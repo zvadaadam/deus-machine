@@ -798,6 +798,21 @@ describe("each commit re-reads what it depends on, with no await before its writ
 });
 
 describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12, H15, H17)", () => {
+  it("dates equally old prompts by the latest assistant message; parts within a message have no clock", async () => {
+    const host = createDeusHost();
+    const promptTime = new Date(Date.now() - 12 * 60_000).toISOString();
+    const insert = state.db.prepare(
+      "INSERT INTO sessions (id, workspace_id, chat, updated_at, last_user_message_at) VALUES (?, 'w-lead', ?, ?, ?)"
+    );
+    insert.run("silent", 2, promptTime, promptTime);
+    insert.run("busy", 3, promptTime, promptTime);
+    message("busy", "answer", "assistant", "A recent reply.");
+    const entries = await host.list(LEAD as never, {});
+    const ageOf = (id: string) => entries.find((e) => e.id === id)!.lastActivityAt!;
+    expect(ageOf("silent")).toBe(Date.parse(promptTime));
+    expect(ageOf("busy")).toBeGreaterThan(ageOf("silent"));
+  });
+
   it("H7: a stop while the first task is handed to the engine stops it by its minted id", async () => {
     const host = createDeusHost();
     const entry = await host.start!(LEAD as never, startInput({ turnId: "first-7" }));
