@@ -78,7 +78,7 @@ export function ChangesView({
   const canServe = gateStage === null;
 
   // Fetch file change data
-  const { data: fileChangesData } = useFileChanges(
+  const { data: fileChangesData, error } = useFileChanges(
     isReady && canServe ? workspace.id : null,
     workspace.session_status,
     isWatched,
@@ -140,7 +140,7 @@ export function ChangesView({
         </DropdownMenu>
 
         <div className="flex shrink-0 items-center gap-2">
-          {onReview && filteredFileChanges.length > 0 && (
+          {onReview && !error && filteredFileChanges.length > 0 && (
             <button
               type="button"
               onClick={onReview}
@@ -160,6 +160,13 @@ export function ChangesView({
       {/* Content area */}
       {gateStage ? (
         <CloudSandboxGate workspaceId={workspace.id} stage={gateStage} />
+      ) : error ? (
+        <div
+          role="alert"
+          className="text-text-muted flex flex-1 items-center justify-center p-4 text-center text-sm"
+        >
+          {error.message}
+        </div>
       ) : filteredFileChanges.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3">
           <div className="bg-bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
