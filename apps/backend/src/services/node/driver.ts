@@ -1,22 +1,7 @@
 /**
- * NodeDriver — owning-node dispatch for live-probe resources.
- *
- * See `docs/node-mesh-plan.md`, Phase 1. Live-probe resources (a worktree's
- * current diff, its file tree, a file's contents) can't be event-sourced ahead
- * of time; they're fetched per request from the node that owns the workspace.
- * This interface replaces the hand-written `workspace.kind === "cloud"` branches
- * with one dispatch keyed on the owning node: `resolveNode(workspace)` returns a
- * `LocalNodeDriver` (git + fs) or a `RemoteNodeDriver` (the cloud session
- * socket). Routes call `driver.method(...)` and serialize the result — they no
- * longer know which node answered.
- *
- * Covered so far: the **diff** and **fs** families. Streaming resources (pty)
- * and the agent turn are deliberately NOT here — they route through the NRP wire
- * later (Phase 4), not this request/response driver.
- *
- * The driver bodies are a faithful extraction of the previous route branches —
- * each lane's exact computation is preserved, not unified, so behavior is
- * byte-identical.
+ * `resolveNode` routes workspace diff and file requests to the node that owns the workspace.
+ * The local driver reads Git and the filesystem. The remote driver uses the cloud session socket.
+ * See `docs/node-mesh-plan.md`.
  */
 import path from "path";
 import fs from "fs";
@@ -52,12 +37,7 @@ export interface DiffFilesResult {
   files: Array<{ file: string; additions: number; deletions: number }>;
 }
 
-/**
- * A single-file diff outcome. Success carries the four content fields the route
- * serializes; failure carries the exact `{status, body}` the route used to build
- * inline, so the response is unchanged. (Invalid-path is thrown as a
- * `ValidationError` and handled by the error middleware, as before.)
- */
+/** A file diff with available contents. On failure, local reads throw and cloud reads return 502. */
 export type DiffFileOutcome =
   | {
       ok: true;
@@ -66,7 +46,7 @@ export type DiffFileOutcome =
       old_content: string | null;
       new_content: string | null;
     }
-  | { ok: false; status: 500 | 502; body: Record<string, unknown> };
+  | { ok: false; status: 502; body: Record<string, unknown> };
 
 /** A file read: text content, or a 422 "binary" outcome. Bad paths throw. */
 export type FsReadOutcome =

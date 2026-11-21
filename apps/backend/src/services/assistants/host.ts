@@ -208,6 +208,7 @@ export interface DeusHost extends OperatorHost<Caller> {
   act<O extends AnyOp>(caller: Who, op: O, input: InputOf<O>): Promise<OutputOf<O>>;
 }
 
+/** Return the refusal sentence, which OperatorError exposes only in its rendered message. */
 export function refusalSentence(error: OperatorError): string {
   return error.message.split("\n", 1)[0]!.replace(/^refused \([a-z_]+\): /, "");
 }
