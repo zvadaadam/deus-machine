@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/shared/lib/utils";
+import { tempo } from "@/shared/lib/tempo";
 import type { RepositoryItemProps } from "../model/types";
 import { RepositoryItem } from "./RepositoryItem";
 
@@ -25,10 +26,9 @@ export function DraggableRepository({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: repository.repo_id,
     disabled: dragDisabled,
-    // Snappy spring-like transition for neighbors shifting (ease-out-quart 200ms)
     transition: {
-      duration: 200,
-      easing: "cubic-bezier(.165, .84, .44, 1)",
+      duration: tempo.moderate.duration * 1000,
+      easing: "var(--ease-move)",
     },
   });
 

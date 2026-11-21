@@ -15,8 +15,10 @@
 //   - All questions are answered before the response is sent (batch, not streaming).
 //   - The overlay appears inline above MessageInput, same position as PlanApprovalOverlay.
 
+import { tempo } from "@/shared/lib/tempo";
+import { Collapse } from "@/components/ui/collapse";
 import { useState, useCallback, useMemo, useRef } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Check, ChevronRight, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
@@ -36,8 +38,6 @@ export function AgentQuestionOverlay({
   onSubmit,
   onDismiss,
 }: AgentQuestionOverlayProps) {
-  const reduceMotion = useReducedMotion();
-
   // Track answers per question index
   const [answers, setAnswers] = useState<(string | string[] | null)[]>([]);
   // Track which question the user is currently answering
@@ -186,8 +186,8 @@ export function AgentQuestionOverlay({
           key={`agent-question-${request.wsRequestId}-${currentIndex}`}
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 6 }}
-          transition={{ duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }}
+          exit={{ opacity: 0, y: 6, transition: tempo.moderate.exit }}
+          transition={tempo.moderate}
           className="border-border/50 bg-muted/30 mx-4 mb-3 rounded-xl border px-4 py-3 backdrop-blur-sm"
           role="dialog"
           aria-label="Agent question"
@@ -200,7 +200,7 @@ export function AgentQuestionOverlay({
                 <span
                   key={i}
                   className={cn(
-                    "h-1 w-6 origin-left rounded-full transition-transform duration-200",
+                    "h-1 w-6 origin-left rounded-full transition-transform",
                     i < currentIndex
                       ? "bg-primary scale-x-[0.667]"
                       : i === currentIndex
@@ -277,13 +277,7 @@ export function AgentQuestionOverlay({
           {/* Inline text input for custom answers — Enter to submit */}
           <AnimatePresence>
             {isOtherOpen && (
-              <motion.div
-                initial={reduceMotion ? false : { opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
-                transition={{ duration: 0.15, ease: [0.165, 0.84, 0.44, 1] }}
-                className="overflow-hidden"
-              >
+              <Collapse>
                 <input
                   ref={otherInputRef}
                   type="text"
@@ -309,7 +303,7 @@ export function AgentQuestionOverlay({
                   )}
                   aria-label="Custom answer"
                 />
-              </motion.div>
+              </Collapse>
             )}
           </AnimatePresence>
 

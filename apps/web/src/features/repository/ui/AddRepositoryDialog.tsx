@@ -185,7 +185,7 @@ export function AddRepositoryDialog({
                       disabled={busy}
                       onClick={() => choose(repo)}
                       className={cn(
-                        "flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors duration-100",
+                        "flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors",
                         "hover:bg-bg-raised/45 text-text-secondary disabled:cursor-default"
                       )}
                     >
@@ -269,7 +269,7 @@ export function AddRepositoryDialog({
             <button
               type="button"
               onClick={() => setPublicOpen(true)}
-              className="text-text-muted hover:text-text-secondary text-xs transition-colors duration-150"
+              className="text-text-muted hover:text-text-secondary text-xs transition-colors"
             >
               Use a public repository
             </button>
@@ -280,7 +280,7 @@ export function AddRepositoryDialog({
             <button
               type="button"
               onClick={() => void connect()}
-              className="text-text-disabled hover:text-text-muted text-xs transition-colors duration-150"
+              className="text-text-disabled hover:text-text-muted text-xs transition-colors"
             >
               Manage GitHub access
             </button>

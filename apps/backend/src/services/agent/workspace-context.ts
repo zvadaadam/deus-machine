@@ -4,7 +4,7 @@
 // Deus orchestrator, worktree location, and actual project name.
 
 import * as path from "path";
-import { OPERATOR_GUIDANCE } from "@zvada/agent-server/operator";
+import { OPERATOR_GUIDANCE, quote } from "@zvada/agent-server/operator";
 
 /**
  * Derives the project (repo) name from a worktree path.
@@ -23,6 +23,26 @@ export interface Simulator {
   udid: string;
 }
 
+export type WorkspaceSetup =
+  | { state: "running"; command?: string; log: string; statusFile: string }
+  | { state: "failed"; reason: string; detail: string | null };
+
+const shellArg = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
+
+function setupInstructions(setup?: WorkspaceSetup | null): string {
+  if (!setup) return "";
+  if (setup.state === "running") {
+    const action = setup.command
+      ? `Deus is running the workspace setup command\n${quote(setup.command)}`
+      : "Deus is resolving the workspace setup recipe.";
+    return `${action}\nOutput goes to ${shellArg(setup.log)}. Continue work that does not need the dependencies. Do not start another install while setup is running.\n\`cat ${shellArg(setup.statusFile)}\` prints running, completed, none (no script), or failed with an exit code when available (e.g. failed 1).\n`;
+  }
+  const output = setup.detail
+    ? `The last lines the setup script printed were\n${quote(setup.detail)}\n`
+    : "";
+  return `Workspace setup failed.\n${quote(setup.reason)}\n${output}Deus runs setup with the project's environment and checks its required variables. Running it by hand skips that preparation and leaves this status unchanged.\nAfter a repair, ask the person to choose "Run again" on the workspace's start line.\n`;
+}
+
 /** How to drive a simulator: Deus ships agent-device (scripts/runtime/agent-clis.ts), whose own help carries the rest. */
 const AGENT_DEVICE =
   "Drive iOS Simulators and Android emulators with the `agent-device` CLI. " +
@@ -35,7 +55,11 @@ const AGENT_DEVICE =
  * Builds concise workspace context for any agent.
  * Includes project name, worktree path, and orchestrator info.
  */
-export function buildWorkspaceContext(cwd?: string, simulator?: Simulator | null): string {
+export function buildWorkspaceContext(
+  cwd?: string,
+  simulator?: Simulator | null,
+  setup?: WorkspaceSetup | null
+): string {
   if (!cwd) return "";
 
   const projectName = getProjectName(cwd);
@@ -44,6 +68,7 @@ export function buildWorkspaceContext(cwd?: string, simulator?: Simulator | null
     `Project: **${projectName}**. ` +
     `Your working directory is a git worktree at \`${cwd}\` — the directory name is the workspace name, not the project name. ` +
     `You can only edit files within this worktree. Each workspace has a .context directory (gitignored) for cross-agent collaboration.\n` +
+    setupInstructions(setup) +
     `A built-in browser is available for testing UI changes.\n` +
     AGENT_DEVICE +
     (simulator

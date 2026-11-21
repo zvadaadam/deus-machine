@@ -2,6 +2,7 @@
 // Only shows Approve / Reject buttons. Plan content is rendered inline
 // in the chat via ExitPlanModeToolRenderer.
 
+import { tempo } from "@/shared/lib/tempo";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,8 +31,8 @@ export function PlanApprovalOverlay({
           key="plan-approval"
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 6 }}
-          transition={{ duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }}
+          exit={{ opacity: 0, y: 6, transition: tempo.moderate.exit }}
+          transition={tempo.moderate}
           className="border-border/50 bg-muted/30 mx-4 mb-3 flex items-center gap-3 rounded-xl border px-4 py-3 backdrop-blur-sm"
           role="dialog"
           aria-label="Plan approval"

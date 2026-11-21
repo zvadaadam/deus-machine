@@ -17,7 +17,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUp, MousePointer2 } from "lucide-react";
-import { m } from "framer-motion";
 import { InputGroup, InputGroupButton } from "@/components/ui/input-group";
 import { Textarea } from "@/components/ui/textarea";
 import type { ElementSelectedEvent } from "../types";
@@ -205,21 +204,21 @@ export function InspectPromptOverlay({
   const label = labelForEvent(event);
 
   return createPortal(
-    <m.div
+    <div
       key={event.ref ?? event.timestamp}
       role="dialog"
       aria-label="Describe change for selected element"
-      initial={{ opacity: 0, scale: 0.96, y: placement.flippedAbove ? 4 : -4 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      transition={{ duration: 0.18, ease: [0.215, 0.61, 0.355, 1] }}
-      style={{
-        position: "fixed",
-        top: placement.top,
-        left: placement.left,
-        width: placement.width,
-        zIndex: WEBVIEW_OVERLAY_Z + 1,
-      }}
-      className="bg-bg-overlay/90 ring-border-subtle rounded-2xl shadow-lg ring-1 backdrop-blur-xl"
+      style={
+        {
+          "--dropdown-slide-y": placement.flippedAbove ? "4px" : "-4px",
+          position: "fixed",
+          top: placement.top,
+          left: placement.left,
+          width: placement.width,
+          zIndex: WEBVIEW_OVERLAY_Z + 1,
+        } as React.CSSProperties
+      }
+      className="bg-bg-overlay/90 ring-border-subtle animate-[dropdown-enter_var(--tempo-moderate)_var(--tempo-ease)] rounded-2xl shadow-lg ring-1 backdrop-blur-xl"
     >
       {/* Element pill — matches InspectedElementCard's chip style */}
       <div className="flex items-center gap-1.5 px-3 pt-2">
@@ -261,7 +260,7 @@ export function InspectPromptOverlay({
           </InputGroupButton>
         </div>
       </InputGroup>
-    </m.div>,
+    </div>,
     document.body
   );
 }

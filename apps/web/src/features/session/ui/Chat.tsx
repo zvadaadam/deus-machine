@@ -1,3 +1,4 @@
+import { tempo } from "@/shared/lib/tempo";
 import { match } from "ts-pattern";
 import type { Compaction, Message, SessionTurn, SessionStatus } from "@/shared/types";
 import { ACTIVE_TURN_STATUSES, type WorkspaceKind } from "@shared/enums";
@@ -111,7 +112,7 @@ export function Chat({
   const initialMessageCount = useRef(messages.length);
   // Tracks which turns have started their entrance animation. Keeps the CSS
   // class applied across re-renders so streaming updates don't interrupt the
-  // 400ms chatItemEnter animation mid-play (which causes visible jumps).
+  // entrance animation mid-play (which causes visible jumps).
   const animatedTurnsRef = useRef(new Set<number>());
 
   // Track working duration
@@ -181,11 +182,13 @@ export function Chat({
     const newMax = timeline.length - 1;
     if (newMax > maxAnimatedTurnIndex.current) {
       // Mark this turn for animation. The Set ensures the CSS class persists
-      // across re-renders so the 400ms animation isn't interrupted.
+      // across re-renders so the entrance isn't interrupted.
       animatedTurnsRef.current.add(newMax);
       maxAnimatedTurnIndex.current = newMax;
-      // Clean up after animation completes (400ms duration + 100ms buffer).
-      setTimeout(() => animatedTurnsRef.current.delete(newMax), 500);
+      setTimeout(
+        () => animatedTurnsRef.current.delete(newMax),
+        (tempo.moderate.duration + tempo.step) * 1000
+      );
     }
   }, [timeline.length]);
 
@@ -316,7 +319,7 @@ export function Chat({
                   const spacingClass = turnSpacings[turnIndex];
 
                   // Animate new turns only. The counter comparison catches the first
-                  // render; the Set keeps the class applied for 300ms so the 200ms
+                  // render; the Set keeps the class applied so the
                   // CSS animation isn't interrupted by streaming re-renders.
                   // Safe during streaming because animations fire per-TURN (not per-
                   // message) — streaming adds messages to the existing turn without
@@ -392,8 +395,8 @@ export function Chat({
                     key="session-context-lost"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
+                    exit={{ opacity: 0, transition: tempo.moderate.exit }}
+                    transition={tempo.moderate}
                     className="mt-1 mr-auto w-fit max-w-[60%]"
                     role="status"
                     aria-live="polite"
@@ -428,8 +431,8 @@ export function Chat({
                     key="session-error"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
+                    exit={{ opacity: 0, transition: tempo.moderate.exit }}
+                    transition={tempo.moderate}
                     className={cn("mr-auto", "mt-1 w-fit max-w-[min(100%,36rem)]")}
                     role="alert"
                     aria-live="assertive"
@@ -450,8 +453,8 @@ export function Chat({
                     key="working-indicator"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }}
+                    exit={{ opacity: 0, transition: tempo.fast.exit }}
+                    transition={tempo.fast}
                     role="status"
                     aria-live="polite"
                     aria-label={`Working for ${formattedDuration || "0.0s"}`}
@@ -479,7 +482,7 @@ export function Chat({
 
       {/* Scroll to bottom button — floats over the chat scroll area */}
       <div
-        className={`pointer-events-auto absolute right-6 bottom-4 z-10 transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${
+        className={`pointer-events-auto absolute right-6 bottom-4 z-10 transition-[opacity,scale] ${
           showScrollButton
             ? "scale-100 opacity-100"
             : "pointer-events-none scale-90 opacity-0 motion-reduce:scale-100"
@@ -488,7 +491,7 @@ export function Chat({
         <Button
           variant="secondary"
           size="icon"
-          className="rounded-full shadow-lg transition-shadow duration-200 hover:shadow-xl motion-reduce:transition-none"
+          className="rounded-full shadow-lg transition-shadow hover:shadow-xl"
           onClick={handleScrollToBottomClick}
           title="Scroll to bottom"
           aria-label="Scroll to bottom"

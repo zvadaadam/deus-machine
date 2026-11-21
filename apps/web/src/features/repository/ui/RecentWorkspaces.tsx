@@ -6,7 +6,7 @@ import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "@/features/s
 import { getDisplayStatus } from "@/features/sidebar/lib/status";
 import { cn } from "@/shared/lib/utils";
 import { formatTimeAgo } from "@/shared/lib/formatters";
-import { EASE_OUT_QUART } from "@/shared/lib/animation";
+import { tempo } from "@/shared/lib/tempo";
 import type { RepoGroup, Workspace } from "@/shared/types";
 
 const RECENT_WORKSPACE_LIMIT = 14;
@@ -142,8 +142,8 @@ export function RecentWorkspaces({
       key="recent-workspaces"
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 6 }}
-      transition={{ duration: 0.24, delay: 0.1, ease: EASE_OUT_QUART }}
+      exit={{ opacity: 0, y: 6, transition: tempo.slow.exit }}
+      transition={{ ...tempo.slow, delay: 2 * tempo.step }}
       className="mt-5 w-full max-w-[700px] px-4 sm:px-6"
     >
       <div className="flex flex-col gap-5">
@@ -162,7 +162,7 @@ export function RecentWorkspaces({
                     type="button"
                     onClick={() => onWorkspaceClick(workspace)}
                     className={cn(
-                      "group/recent-workspace flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors duration-150",
+                      "group/recent-workspace flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors",
                       "hover:bg-bg-raised/60 focus-visible:ring-primary/35 focus:outline-none focus-visible:ring-2",
                       isActive && "bg-bg-raised/70"
                     )}

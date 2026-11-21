@@ -49,9 +49,10 @@ the same workspaces. It checks, in order:
   bubble it will be; no folder and no branch are left. The chat's composer is
   there on both devices, the phone's as wide as the screen. Nothing else is offered: no new chat, no Create PR, no
   tools pane, no tab bar on the phone.
-- Retry starts the same workspace again: same id and name, each stage reaching
-  both devices over the WebSocket, the kept message sent to the chat it opens,
-  once, and that chat opening with how the workspace started. While it starts,
+- Retry keeps the workspace's id and name. A Git post-checkout hook holds the
+  checkout while both devices show it in progress. Releasing the hook opens the
+  first chat and sends its waiting message once, while the setup script is
+  still running. Releasing the script updates the step in that chat. During checkout,
   a second message typed on its page is refused with a toast and stays in the
   composer; when the chat opens it is in the chat's composer, which has the
   same x, width and bottom. A workspace that started can be neither retried
@@ -73,12 +74,20 @@ the same workspaces. It checks, in order:
   message is still in Home's composer.
 - A message waiting for a workspace whose chat was already spoken to (from
   another window) is not sent: it goes into that chat's composer.
+- A failed setup previews its last output line beside Run again. Its live region
+  contains only the label, even with the details open. The header and transcript
+  open the full log as plain text in a dialog. A pending retry disables both retry
+  buttons. A refusal still appears after switching workspaces. Retrying the repaired
+  recipe keeps the step in place, then folds it into history. The desktop and phone
+  compare the warning’s alignment with a tool call from a fixture turn.
 
 ```sh
 bun run native:node
 bunx playwright install chromium
-bun run test:e2e:workspace-start
+bun run test:e2e
 ```
+
+The default command runs `test:e2e:workspace-start` in a disposable repository and database.
 
 Screenshots and `results.json` land in `.context/workspace-start/`.
 
@@ -543,75 +552,3 @@ The test closes its browser and retains the disposable repository, database and
 screenshots in `.context/project-environment-app` for inspection. Stop that isolated
 dev process after testing to release its terminals. Do not point this harness at the
 user's desktop backend or normal database.
-
-### `e2e-flow.test.cjs`
-
-Comprehensive end-to-end test suite that verifies:
-
-- ✅ Backend health check
-- ✅ Workspace creation (new workspace, not existing)
-- ✅ Message sending
-- ✅ Claude CLI integration
-- ✅ Database persistence
-- ✅ State management
-
-**Run the test:**
-
-```bash
-# Backend must be running first!
-DEUS_VAULT_NO_KEYCHAIN=1 bun run dev:web  # Start in separate terminal
-
-# Then run test (use the backend port from dev:web output)
-export BACKEND_PORT=60068  # Use actual port from backend
-bun run test:e2e
-
-# Or specify port inline
-BACKEND_PORT=60068 bun run test:e2e
-```
-
-**Duration**: ~20-30 seconds
-
-**What it does:**
-
-1. Creates a fresh workspace in the deus-machine repository
-2. Waits for workspace to become ready
-3. Sends a test message to Claude
-4. Verifies Claude responds
-5. Checks database storage
-6. Archives the test workspace (cleanup)
-
-## Requirements
-
-- Backend must be running
-- Database must be accessible at `~/Library/Application Support/com.deus.app/deus.db`
-
-## Test Coverage
-
-- ✅ HTTP API endpoints
-- ✅ Message flow (User → Backend → Claude → Response)
-- ✅ Database storage (sessions, messages, workspaces)
-- ✅ State management (working/idle states)
-- ✅ Cross-repository Claude CLI spawning
-- ⚠️ Socket events (requires `socket.io-client` package)
-
-## Adding New Tests
-
-When creating new tests, follow these patterns:
-
-1. **Name**: `feature-name.test.cjs`
-2. **Structure**: Similar to `e2e-flow.test.cjs`
-3. **Cleanup**: Always clean up test data
-4. **Documentation**: Update this README
-
-## CI/CD
-
-To add tests to CI/CD pipeline:
-
-```json
-{
-  "scripts": {
-    "test": "node tests/e2e-flow.test.cjs",
-    "test:watch": "nodemon tests/e2e-flow.test.cjs"
-  }
-}
-```

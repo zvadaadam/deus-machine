@@ -108,6 +108,7 @@ export function AutomationsListView({
             {(["all", "active", "paused"] as const).map((f) => (
               <button
                 key={f}
+                data-medium-label={f}
                 type="button"
                 onClick={() => setFilter(f)}
                 className={cn(
@@ -153,7 +154,7 @@ export function AutomationsListView({
               <button
                 type="button"
                 onClick={onOpenTemplates}
-                className="text-text-tertiary hover:text-text-secondary text-xs transition-colors duration-150"
+                className="text-text-tertiary hover:text-text-secondary text-xs transition-colors"
               >
                 Browse all templates →
               </button>
@@ -164,7 +165,7 @@ export function AutomationsListView({
                   key={s.id}
                   type="button"
                   onClick={() => onNew(s.prefill)}
-                  className="border-border-subtle bg-bg-elevated hover:border-border-default flex flex-col gap-1.5 rounded-lg border p-3.5 text-left transition-colors duration-150"
+                  className="border-border-subtle bg-bg-elevated hover:border-border-default flex flex-col gap-1.5 rounded-lg border p-3.5 text-left transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     <s.icon className="text-text-secondary h-[15px] w-[15px] shrink-0" />
@@ -206,7 +207,7 @@ function AutomationRow({ automation, onOpen }: { automation: Automation; onOpen:
       tabIndex={0}
       onClick={onOpen}
       onKeyDown={(e) => e.key === "Enter" && onOpen()}
-      className="group hover:bg-foreground/[0.03] flex h-[54px] cursor-pointer items-center gap-3 rounded-lg px-2 transition-colors duration-150"
+      className="group hover:bg-foreground/[0.03] flex h-[54px] cursor-pointer items-center gap-3 rounded-lg px-2 transition-colors"
     >
       <StatusIcon
         className={cn("h-4 w-4 shrink-0", paused ? "text-text-muted" : "text-text-secondary")}

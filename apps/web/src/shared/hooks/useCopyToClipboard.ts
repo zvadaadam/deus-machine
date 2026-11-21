@@ -1,72 +1,34 @@
-/**
- * useCopyToClipboard Hook
- *
- * Centralized hook for copy-to-clipboard functionality with visual feedback.
- * Manages copied state, timer cleanup, and error handling.
- *
- * Usage:
- *   const { copy, copied } = useCopyToClipboard();
- *   <button onClick={() => copy(text)}>
- *     {copied ? 'Copied!' : 'Copy'}
- *   </button>
- */
+import { useCallback, useEffect, useState } from "react";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-
-interface UseCopyToClipboardOptions {
-  resetDelay?: number; // Milliseconds before resetting "copied" state (default: 2000)
+interface ClipboardOptions {
+  resetDelay?: number;
+  onError?: (error: unknown) => void;
 }
 
-interface UseCopyToClipboardReturn {
-  copy: (text: string) => Promise<boolean>;
-  copied: boolean;
-  error: Error | null;
-}
+export function useCopyToClipboard({ resetDelay = 2000, onError }: ClipboardOptions = {}) {
+  const [recentCopies, setRecentCopies] = useState(0);
 
-export function useCopyToClipboard(
-  options: UseCopyToClipboardOptions = {}
-): UseCopyToClipboardReturn {
-  const { resetDelay = 2000 } = options;
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const timerRef = useRef<number | null>(null);
+  // A second success restarts the acknowledgement, even while the check is visible.
+  useEffect(() => {
+    if (!recentCopies) return;
+    const timer = window.setTimeout(() => setRecentCopies(0), resetDelay);
+    return () => window.clearTimeout(timer);
+  }, [recentCopies, resetDelay]);
 
   const copy = useCallback(
-    async (text: string): Promise<boolean> => {
+    async (text: string) => {
       try {
         await navigator.clipboard.writeText(text);
-        setCopied(true);
-        setError(null);
-
-        // Clear existing timer before setting new one
-        if (timerRef.current) {
-          clearTimeout(timerRef.current);
-        }
-
-        // Reset "copied" state after delay
-        timerRef.current = window.setTimeout(() => {
-          setCopied(false);
-        }, resetDelay);
-
+        setRecentCopies((count) => count + 1);
         return true;
-      } catch (err) {
-        const error = err instanceof Error ? err : new Error("Failed to copy to clipboard");
-        setError(error);
+      } catch (error) {
         console.error("Failed to copy:", error);
+        onError?.(error);
         return false;
       }
     },
-    [resetDelay]
+    [onError]
   );
 
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
-    };
-  }, []);
-
-  return { copy, copied, error };
+  return { copy, copied: recentCopies > 0 };
 }

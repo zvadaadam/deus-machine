@@ -14,6 +14,7 @@ import type {
 import type { AgentHarness } from "@shared/enums";
 import type { ThinkingLevel, PermissionMode } from "@shared/protocol";
 import { buildSystemPromptAppend } from "./system-prompt";
+import type { WorkspaceSetup } from "./workspace-context";
 
 /**
  * The composer speaks the canonical `PartInput` vocabulary: a text-only send is
@@ -84,6 +85,7 @@ export interface DeusTurnOptions {
   env?: Record<string, string>;
   /** The device the workspace's Simulator tab shows, named to the agent. */
   simulator?: { udid: string } | null;
+  setup?: WorkspaceSetup | null;
   /** The workspace's agent-device session (`agentDeviceFor`); the chat's id without one. */
   agentDeviceSession?: string;
   /** Who sent the message when not the person: set by the operator's host only, never a client. */
@@ -109,7 +111,7 @@ export function buildTurnStartParams(
       cwd: options.cwd,
       model: options.model,
       thinkingLevel: options.thinkingLevel,
-      systemPromptAppend: buildSystemPromptAppend(options.cwd, options.simulator),
+      systemPromptAppend: buildSystemPromptAppend(options.cwd, options.simulator, options.setup),
       // Deus runs with full access by default, like its cloud runtime.
       // Explicit modes (including the composer's plan mode) stay unchanged.
       permissionMode: options.permissionMode ?? "bypass_permissions",

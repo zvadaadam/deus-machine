@@ -61,7 +61,7 @@ export function MobileTabBar({
             tabIndex={isActive ? 0 : -1}
             onClick={() => onTabChange(tab.id)}
             className={cn(
-              "relative flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors duration-150",
+              "relative flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors",
               isActive ? "text-foreground" : "text-text-muted"
             )}
           >

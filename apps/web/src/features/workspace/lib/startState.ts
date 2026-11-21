@@ -23,12 +23,20 @@ type StartFields = Pick<
   | "current_session_id"
 >;
 
+export interface StartWarning {
+  message: string;
+  preview?: string;
+  /** The script's own last lines, as plain text. */
+  output?: string;
+}
+
 export interface StartStep {
   key: string;
   label: string;
   /** The same step in a narrow place, when the label is too long for one. */
   short?: string;
   state: "done" | "active" | "warning";
+  warning?: StartWarning;
 }
 
 /** The setup script's two states, worded once for every place that shows them. */
@@ -50,8 +58,6 @@ export interface WorkspaceStart {
   brief: string | null;
   /** What ran, in order. Empty for a cloud workspace: its computer tells its own story. */
   steps: StartStep[];
-  /** What went wrong without stopping the start. */
-  warnings: string[];
   failure?: {
     reason: string;
     /** What the tool itself printed. */
@@ -62,16 +68,47 @@ export interface WorkspaceStart {
 }
 
 /** The local pipeline's stages, in order (backend: services/workspace-init). */
-const STAGES = ["fetch", "worktree", "setup", "session"] as const;
+const STAGES = ["fetch", "worktree", "session"] as const;
 
 /** Why the workspace may be behind: it started without the remote's latest. */
 function fetchIssueNotice(issue: InitFetchIssue): string {
   const why = match(issue)
-    .with("offline", () => "Couldn't reach the remote repository")
-    .with("auth", () => "Git couldn't sign in to the remote repository")
-    .with("failed", () => "Couldn't get the latest from the remote repository")
+    .with("offline", () => "We couldn’t reach the remote")
+    .with("auth", () => "Git couldn’t sign in to the remote repository")
+    .with("failed", () => "We couldn’t get the latest changes")
     .exhaustive();
-  return `${why}, so this starts from what is already on this computer. It may be behind.`;
+  return `${why}, so this copy may be out of date.`;
+}
+
+function setupWarning({ state, error_message, error_detail }: StartFields): StartWarning {
+  const reason = error_message
+    ?.trim()
+    .replace(/ (?:View the setup log for details|Run it again)\.$/, "");
+  const code = /^Setup exited with code (\d+)\.$/.exec(reason ?? "")?.[1];
+  const stopped = reason === "Setup was stopped when Deus closed.";
+  const sentence =
+    !reason || reason === "Setup exited with code null." ? "Setup didn’t finish." : reason;
+  const consequence =
+    state === "ready"
+      ? "The agent can see the error, and you can keep working."
+      : "The workspace can still start.";
+  const output = error_detail?.trim() ? error_detail : undefined;
+  const lastLine = output
+    ?.trimEnd()
+    .split(/[\r\n]+/)
+    .at(-1)
+    ?.trim();
+  return {
+    message: `${sentence}${/[.!?]$/.test(sentence) ? "" : "."} ${consequence}`,
+    preview:
+      lastLine ||
+      (code
+        ? `exit code ${code}`
+        : stopped
+          ? "Deus closed"
+          : reason && sentence.replace(/\.$/, "")),
+    output,
+  };
 }
 
 /**
@@ -130,14 +167,15 @@ export function workspaceStart(workspace: StartFields): WorkspaceStart {
         .with("failed", () => "Computer failed")
         .exhaustive(),
       steps: [],
-      warnings: [],
       failure,
     };
   }
 
   // The stage being worked on; everything before it is done. A ready workspace
   // has passed them all, whatever its row says (older rows say "done").
-  const at = phase === "ready" ? STAGES.length : STAGES.indexOf(workspace.init_stage as never);
+  // An older host can still be waiting for setup after making the checkout.
+  const stage = workspace.init_stage === "setup" ? "session" : workspace.init_stage;
+  const at = phase === "ready" ? STAGES.length : STAGES.indexOf(stage as never);
   const reached = (stage: (typeof STAGES)[number]) => at > STAGES.indexOf(stage);
   const working = (stage: (typeof STAGES)[number]) =>
     phase === "starting" && at === STAGES.indexOf(stage);
@@ -153,7 +191,12 @@ export function workspaceStart(workspace: StartFields): WorkspaceStart {
   } else if (reached("fetch")) {
     steps.push(
       workspace.init_fetch_issue
-        ? { key: "fetch", label: "Started without the latest changes", state: "warning" }
+        ? {
+            key: "fetch",
+            label: "Copy may be out of date",
+            state: "warning",
+            warning: { message: fetchIssueNotice(workspace.init_fetch_issue) },
+          }
         : { key: "fetch", label: "Checked for the latest changes", state: "done" }
     );
   }
@@ -171,17 +214,16 @@ export function workspaceStart(workspace: StartFields): WorkspaceStart {
   match(workspace.setup_status)
     .with("running", () => steps.push({ key: "setup", label: SETUP_RUNNING, state: "active" }))
     .with("completed", () => steps.push({ key: "setup", label: "Ran setup", state: "done" }))
-    .with("failed", () => steps.push({ key: "setup", label: SETUP_FAILED, state: "warning" }))
+    .with("failed", () =>
+      steps.push({
+        key: "setup",
+        label: SETUP_FAILED,
+        state: "warning",
+        warning: phase === "failed" ? undefined : setupWarning(workspace),
+      })
+    )
     .with("none", () => undefined)
     .exhaustive();
-
-  const warnings: string[] = [];
-  if (workspace.init_fetch_issue) warnings.push(fetchIssueNotice(workspace.init_fetch_issue));
-  if (phase !== "failed" && workspace.setup_status === "failed") {
-    warnings.push(
-      `The setup script failed, so this workspace started without it.${workspace.error_message ? ` ${workspace.error_message}` : ""}`
-    );
-  }
 
   const active = steps.find((step) => step.state === "active");
   return {
@@ -195,7 +237,7 @@ export function workspaceStart(workspace: StartFields): WorkspaceStart {
     brief: match(phase)
       .with("failed", () => "Failed")
       .with("starting", () => active?.short ?? active?.label ?? "Starting…")
-      // Ready, but its setup script is running again, or failed.
+      // Setup can be running on the first turn or on a later retry.
       .with("ready", () =>
         active
           ? (active.short ?? active.label)
@@ -205,7 +247,6 @@ export function workspaceStart(workspace: StartFields): WorkspaceStart {
       )
       .exhaustive(),
     steps,
-    warnings,
     failure,
   };
 }

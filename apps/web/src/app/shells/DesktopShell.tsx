@@ -12,9 +12,10 @@ import { ErrorBoundary } from "react-error-boundary";
 import { MainLayout } from "../layouts/MainLayout";
 import { DashboardError } from "@/shared/components";
 import { createBoundaryErrorHandler } from "@/shared/utils/errorReporting";
-import { Toaster } from "@/components/ui/sonner";
 import { OnboardingOverlay } from "@/features/onboarding";
 import { useSettings } from "@/features/settings";
+import { reportTheme } from "@/platform/analytics";
+import { useTheme } from "../providers/ThemeProvider";
 import { useAuth, PairGatePage } from "@/features/auth";
 import { native } from "@/platform";
 import { ServerOfflinePage } from "@/features/connection";
@@ -24,7 +25,6 @@ import { useAgentEvents } from "@/features/session/hooks/useAgentEvents";
 import { useQueryProtocol } from "@/shared/hooks/useQueryProtocol";
 import { useBackendRestart } from "@/shared/hooks/useBackendRestart";
 import { useAutoUpdate, useUpdateToast, UpdateProvider } from "@/features/updates";
-import { useAnalyticsConsent } from "@/platform/analytics";
 export function DesktopShell({ reset }: { reset: () => void }) {
   // First, so the socket is already opening when the queries below fire their
   // first requests (they wait for it rather than fail into a retry).
@@ -32,6 +32,8 @@ export function DesktopShell({ reset }: { reset: () => void }) {
 
   const auth = useAuth();
   const settingsQuery = useSettings();
+  const { preference } = useTheme();
+  useEffect(() => reportTheme(preference), [preference]);
   const windowShownRef = useRef(false);
 
   // Request OS notification permission once on mount
@@ -46,10 +48,7 @@ export function DesktopShell({ reset }: { reset: () => void }) {
   // Global listener: backend restart -> update cached port + force WS reconnect
   useBackendRestart();
 
-  // Sync PostHog opt-in/out state with analytics_enabled setting
-  useAnalyticsConsent();
-
-  // Auto-update: check on launch + every 5 min, show toast when ready
+  // Electron owns the update schedule. Its staged update survives renderer reloads.
   const autoUpdate = useAutoUpdate();
   useUpdateToast(autoUpdate);
 
@@ -113,7 +112,6 @@ export function DesktopShell({ reset }: { reset: () => void }) {
           <MainLayout />
         </ErrorBoundary>
       )}
-      <Toaster />
     </UpdateProvider>
   );
 }

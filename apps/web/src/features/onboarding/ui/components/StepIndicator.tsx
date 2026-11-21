@@ -12,14 +12,13 @@ export function StepIndicator({ currentStep, totalSteps }: StepIndicatorProps) {
         <div
           key={i}
           className={cn(
-            "h-1.5 rounded-full transition-[width,background-color] duration-300 motion-reduce:transition-none",
+            "tempo-moderate ease-move h-1.5 rounded-full transition-[width,background-color]",
             i === currentStep
               ? "bg-onboarding-foreground w-6"
               : i < currentStep
                 ? "bg-onboarding-foreground/50 w-1.5"
                 : "bg-onboarding-foreground/20 w-1.5"
           )}
-          style={{ transitionTimingFunction: "cubic-bezier(.215, .61, .355, 1)" }}
         />
       ))}
     </div>

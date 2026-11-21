@@ -1,5 +1,8 @@
 // How a workspace's chat tabs follow its live chat list (app/layouts/chatTabsSync).
-import { describe, expect, it } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
+import { useChatTabs } from "@/app/layouts/useChatTabs";
 import {
   arrivedWhileAway,
   createPendingTab,
@@ -7,6 +10,11 @@ import {
   sessionToTab,
 } from "@/app/layouts/chatTabsSync";
 import type { Session } from "@/features/session/types";
+
+vi.mock("@/features/session/api/session.queries", () => ({
+  useWorkspaceSessions: () => ({ data: [] }),
+  useCreateSession: () => ({}),
+}));
 
 const chat = (id: string, message_count = 1): Session =>
   ({ id, workspace_id: "w", agent_harness: "claude-code", message_count, status: "idle" }) as never;
@@ -78,6 +86,24 @@ describe("tabs that follow the live chat list (H9, H21)", () => {
 });
 
 describe("an open-chat request (H22)", () => {
+  it("choosing a tab cancels a delayed chip navigation, and a later chip still opens", async () => {
+    const { openChat, openChatDone, useOpenChatStore } =
+      await import("@/features/session/lib/openChat");
+    let select!: (id: string) => void;
+    function Tabs() {
+      select = useChatTabs({ workspaceId: "w", activeSessionId: "current" }).handleTabChange;
+      return null;
+    }
+    renderToStaticMarkup(createElement(Tabs));
+    openChat("w", "late");
+    const late = useOpenChatStore.getState().requested.w!;
+    select("tab-current");
+    // The live list now contains the target. Its effect can no longer take this request.
+    expect(openChatDone("w", late.id)).toBe(false);
+    openChat("w", "next");
+    expect(openChatDone("w", useOpenChatStore.getState().requested.w!.id)).toBe(true);
+  });
+
   it("is taken by its identity, once: a newer request for the workspace stays", async () => {
     const { openChat, openChatDone, useOpenChatStore } =
       await import("@/features/session/lib/openChat");

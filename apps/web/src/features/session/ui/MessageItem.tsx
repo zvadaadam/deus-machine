@@ -6,6 +6,7 @@
  * - User messages: iMessage-style bubble with text + images
  */
 
+import { tempo } from "@/shared/lib/tempo";
 import type { Message } from "@/shared/types";
 import { readUserMessageContent } from "../lib/userMessageContent";
 import { PartsRenderer } from "./blocks";
@@ -17,7 +18,7 @@ import { Copy, ChevronDown, ChevronUp } from "lucide-react";
 import { ActionButton } from "./ActionButton";
 import { useCopyToClipboard } from "@/shared/hooks";
 import { useMemo, memo, useState, useRef, useEffect } from "react";
-import { motion } from "framer-motion";
+import { m, useReducedMotion } from "framer-motion";
 
 const COLLAPSE_MAX_HEIGHT = 144;
 
@@ -53,6 +54,7 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
   const { copy, copied } = useCopyToClipboard();
   const [isExpanded, setIsExpanded] = useState(false);
   const [shouldCollapse, setShouldCollapse] = useState(false);
+  const reduced = useReducedMotion();
   const contentRef = useRef<HTMLDivElement>(null);
 
   /**
@@ -77,13 +79,13 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
       <div
         className={cn(
           "max-w-[85%]",
-          "bg-accent hover:bg-accent/80 ml-auto w-fit backdrop-blur-sm transition-colors duration-200 ease-out motion-reduce:transition-none",
+          "bg-accent hover:bg-accent/80 ml-auto w-fit backdrop-blur-sm transition-colors",
           "relative rounded-xl",
           "px-3 py-2",
           "min-w-0"
         )}
       >
-        <div className="pointer-events-none absolute top-1.5 right-1.5 z-10 opacity-0 transition-opacity duration-200 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
+        <div className="pointer-events-none absolute top-1.5 right-1.5 z-10 opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
           <ActionButton
             icon={Copy}
             label={copied ? "Copied" : "Copy"}
@@ -108,7 +110,7 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
         )}
 
         {hasTextContent && (
-          <motion.div
+          <m.div
             ref={contentRef}
             id={`message-content-${message.id}`}
             className="relative min-w-0 overflow-hidden"
@@ -118,7 +120,9 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
                 : { height: "auto" }
             }
             initial={false}
-            transition={{ duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }}
+            transition={
+              reduced ? { type: false } : isExpanded ? tempo.moderate : tempo.moderate.exit
+            }
           >
             {texts.map((text, idx) => (
               <TextBlock key={`${message.id}:text:${idx}`} block={text} role="user" />
@@ -127,14 +131,14 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
             {shouldCollapse && !isExpanded && (
               <div className="from-accent via-accent/60 pointer-events-none absolute right-0 bottom-0 left-0 h-12 bg-gradient-to-t to-transparent" />
             )}
-          </motion.div>
+          </m.div>
         )}
 
         {shouldCollapse && (
           <button
             type="button"
             onClick={() => setIsExpanded(!isExpanded)}
-            className="text-muted-foreground hover:text-foreground mt-2 flex items-center gap-1 text-xs font-normal transition-colors duration-200"
+            className="text-muted-foreground hover:text-foreground mt-2 flex items-center gap-1 text-xs font-normal transition-colors"
             aria-expanded={isExpanded}
             aria-controls={`message-content-${message.id}`}
           >

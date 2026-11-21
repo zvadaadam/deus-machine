@@ -9,10 +9,10 @@
  *   disconnected → amber dot with breathing pulse + "Offline" label
  */
 
-import { AnimatePresence, m, useReducedMotion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { match } from "ts-pattern";
 import { cn } from "@/shared/lib/utils";
-import { EASE_OUT_QUART } from "@/shared/lib/animation";
+import { tempo } from "@/shared/lib/tempo";
 import { useConnectionState, type ConnectionState } from "../hooks/useConnectionState";
 
 function getAriaLabel(state: ConnectionState): string {
@@ -25,11 +25,9 @@ function getAriaLabel(state: ConnectionState): string {
 
 export function ConnectionOrb() {
   const { state } = useConnectionState();
-  const reduceMotion = useReducedMotion();
 
   const isAmber = state === "reconnecting" || state === "disconnected";
   const showLabel = state === "disconnected";
-  const showPulse = isAmber && !reduceMotion;
 
   return (
     <div
@@ -39,13 +37,13 @@ export function ConnectionOrb() {
     >
       <span className="relative flex h-2 w-2 items-center justify-center">
         {/* Breathing pulse ring */}
-        {showPulse && (
+        {isAmber && (
           <span className="bg-accent-gold absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" />
         )}
         {/* Solid dot — CSS transition for color (compositor-friendly) */}
         <span
           className={cn(
-            "relative inline-flex h-2 w-2 rounded-full transition-colors duration-300",
+            "relative inline-flex h-2 w-2 rounded-full transition-colors",
             isAmber ? "bg-accent-gold" : "bg-accent-green"
           )}
         />
@@ -57,10 +55,10 @@ export function ConnectionOrb() {
           <m.span
             key="connection-label"
             className="text-text-muted overflow-hidden text-xs whitespace-nowrap"
-            initial={reduceMotion ? false : { opacity: 0, x: -4 }}
+            initial={{ opacity: 0, x: -4 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -4 }}
-            transition={{ duration: reduceMotion ? 0 : 0.2, ease: EASE_OUT_QUART }}
+            exit={{ opacity: 0, x: -4, transition: tempo.fast.exit }}
+            transition={tempo.fast}
           >
             Offline
           </m.span>

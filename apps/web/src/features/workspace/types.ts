@@ -9,6 +9,4 @@ export type {
   RepoGroup,
   DiffStats,
   FileChange,
-  FileEdit,
-  FileChangeGroup,
 } from "@shared/types/workspace";

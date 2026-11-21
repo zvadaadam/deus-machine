@@ -53,7 +53,7 @@ export function SimulatorDeviceHeader({
 
       <div
         className={cn(
-          "border-border-subtle bg-bg-base flex shrink-0 items-center gap-0.5 rounded-lg border p-0.5 transition-opacity duration-150 ease-[ease]",
+          "border-border-subtle bg-bg-base flex shrink-0 items-center gap-0.5 rounded-lg border p-0.5 transition-opacity",
           controlsDisabled && "opacity-45"
         )}
       >

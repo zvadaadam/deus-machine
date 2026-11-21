@@ -91,7 +91,7 @@ for (const row of rows) {
 }
 await writeFile(
   path.join(directory, "preferences.json"),
-  JSON.stringify({ onboarding_completed: true, analytics_enabled: false })
+  JSON.stringify({ onboarding_completed: true })
 );
 // The platform is the only cloud this backend may reach, and it has no key of its own:
 // every key it holds is one the desktop handed it.

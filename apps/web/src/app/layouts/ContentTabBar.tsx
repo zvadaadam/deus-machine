@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, type SyntheticEvent } from "react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 import { useSettings } from "@/features/settings/api/settings.queries";
@@ -32,31 +32,41 @@ function ContentTabButton({
   onClick: () => void;
 }) {
   const Icon = item.icon;
-  const button = (
-    <button
-      type="button"
-      role="tab"
-      aria-label={item.label}
-      aria-selected={isActive}
-      onClick={onClick}
-      className={cn(
-        "control-interaction relative flex h-7 shrink-0 items-center rounded-lg whitespace-nowrap",
-        isActive
-          ? "bg-bg-raised text-text-secondary gap-1.5 px-3 text-sm font-medium"
-          : "text-text-muted hover:text-text-secondary hover:bg-control-hover active:bg-control-pressed justify-center px-2"
-      )}
-    >
-      <Icon className={isActive ? "h-[13px] w-[13px]" : "h-3.5 w-3.5"} />
-      {isActive && <span>{item.label}</span>}
-      {showDot && <span className="bg-success absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full" />}
-    </button>
-  );
-
-  return isActive ? (
-    button
-  ) : (
-    <Tooltip delayDuration={300}>
-      <TooltipTrigger asChild>{button}</TooltipTrigger>
+  const [open, setOpen] = useState(false);
+  // A shortcut can select this tab while its tooltip is open.
+  if (isActive && open) setOpen(false);
+  const skipActive = isActive ? (event: SyntheticEvent) => event.preventDefault() : undefined;
+  return (
+    <Tooltip delayDuration={300} open={open} onOpenChange={setOpen}>
+      <TooltipTrigger asChild onPointerMove={skipActive} onFocus={skipActive}>
+        <button
+          type="button"
+          role="tab"
+          aria-label={item.label}
+          aria-selected={isActive}
+          onClick={onClick}
+          className={cn(
+            "control-interaction group relative flex h-7 shrink-0 items-center rounded-lg whitespace-nowrap",
+            isActive
+              ? "bg-bg-raised text-text-secondary"
+              : "text-text-muted hover:text-text-secondary hover:bg-control-hover active:bg-control-pressed"
+          )}
+        >
+          {/* The tracks are the leading inset, glyph, label and trailing inset. */}
+          <span
+            aria-hidden="true"
+            className="tempo-moderate ease-move grid grid-cols-[8px_14px_0fr_8px] items-center transition-[grid-template-columns] group-aria-selected:grid-cols-[12px_13px_1fr_12px]"
+          >
+            <Icon className="col-start-2 h-auto w-full" />
+            <span className="ease-move motion-safe:tempo-fast-exit motion-safe:group-aria-selected:tempo-moderate overflow-hidden indent-1.5 text-sm font-medium opacity-0 group-aria-selected:opacity-100 motion-safe:transition-opacity">
+              {item.label}
+            </span>
+          </span>
+          {showDot && (
+            <span className="bg-success absolute -top-0.5 -right-0.5 size-2 rounded-full" />
+          )}
+        </button>
+      </TooltipTrigger>
       <TooltipContent side="bottom" sideOffset={8}>
         <p className="text-xs">{item.label}</p>
       </TooltipContent>

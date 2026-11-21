@@ -6,8 +6,8 @@
  * Save / Cancel buttons are built in.
  */
 
+import { Collapse } from "@/components/ui/collapse";
 import { type ReactNode } from "react";
-import { m, useReducedMotion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 
 interface ConfigItemExpandedProps {
@@ -25,19 +25,8 @@ export function ConfigItemExpanded({
   isSaving = false,
   saveLabel = "Save",
 }: ConfigItemExpandedProps) {
-  const reduced = useReducedMotion();
-  const transition = reduced
-    ? { duration: 0 }
-    : { duration: 0.2, ease: [0.165, 0.84, 0.44, 1] as const };
-
   return (
-    <m.div
-      initial={{ height: 0, opacity: 0 }}
-      animate={{ height: "auto", opacity: 1 }}
-      exit={{ height: 0, opacity: 0 }}
-      transition={transition}
-      className="overflow-hidden"
-    >
+    <Collapse>
       <div className="bg-muted/10 border-border/40 space-y-3 border-b p-4 last:border-b-0">
         {children}
 
@@ -50,6 +39,6 @@ export function ConfigItemExpanded({
           </Button>
         </div>
       </div>
-    </m.div>
+    </Collapse>
   );
 }

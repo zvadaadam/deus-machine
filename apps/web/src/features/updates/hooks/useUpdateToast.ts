@@ -1,26 +1,16 @@
-/**
- * Shows a persistent Sonner toast when an update is ready to install.
- * Never auto-dismiss, "Restart" button.
- */
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { toast } from "sonner";
+import { releaseUrl } from "../releaseUrl";
 import type { UseAutoUpdateReturn } from "./useAutoUpdate";
 
-const TOAST_ID = "update-ready";
-const RELEASES_URL = "https://github.com/zvadaadam/deus-machine/releases";
-
 export function useUpdateToast({ state, install }: UseAutoUpdateReturn) {
-  const shownForVersionRef = useRef<string | null>(null);
+  const version = state.stage === "ready" ? state.version : undefined;
+  const failedVersion = state.stage === "error" ? state.version : undefined;
 
   useEffect(() => {
-    if (state.stage !== "ready" || !state.version) return;
+    if (!version) return;
 
-    // Don't re-show toast for the same version
-    if (shownForVersionRef.current === state.version) return;
-    shownForVersionRef.current = state.version;
-
-    toast(`Update v${state.version} available`, {
-      id: TOAST_ID,
+    const id = toast(`Update v${version} available`, {
       description: "Restart to use the latest version.",
       duration: Number.POSITIVE_INFINITY,
       action: {
@@ -29,8 +19,27 @@ export function useUpdateToast({ state, install }: UseAutoUpdateReturn) {
       },
       cancel: {
         label: "See changes",
-        onClick: () => window.open(RELEASES_URL, "_blank"),
+        onClick: () => window.open(releaseUrl(), "_blank"),
       },
     });
-  }, [state, install]);
+    return () => {
+      toast.dismiss(id);
+    };
+  }, [version, install]);
+
+  useEffect(() => {
+    if (!failedVersion) return;
+    const id = toast.error(`Update v${failedVersion} couldn't be installed`, {
+      description: "Download it and install it by hand.",
+      duration: Number.POSITIVE_INFINITY,
+      closeButton: true,
+      action: {
+        label: "Download",
+        onClick: () => window.open(releaseUrl(failedVersion), "_blank"),
+      },
+    });
+    return () => {
+      toast.dismiss(id);
+    };
+  }, [failedVersion]);
 }

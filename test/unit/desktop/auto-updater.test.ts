@@ -18,9 +18,11 @@ vi.mock("electron-updater", () => ({
 let updater: typeof import("electron-updater").autoUpdater;
 let invoke: (channel: string) => unknown;
 const send = vi.fn();
+const originalPlatform = Object.getOwnPropertyDescriptor(process, "platform")!;
 beforeEach(async () => {
   vi.resetModules();
   vi.useFakeTimers();
+  Object.defineProperty(process, "platform", { value: "linux" });
   vi.stubEnv("APPIMAGE", "/fixture/Deus.AppImage");
   vi.clearAllMocks();
   mocks.check.mockResolvedValue({ isUpdateAvailable: false });
@@ -42,6 +44,7 @@ afterEach(() => {
   vi.clearAllTimers();
   vi.useRealTimers();
   vi.unstubAllEnvs();
+  Object.defineProperty(process, "platform", originalPlatform);
 });
 
 it("offers installation only after the download, and keeps its state across renderer reloads", async () => {
@@ -68,6 +71,19 @@ it("reports the SDK availability flag instead of the truthiness of its result", 
   expect(await invoke("update:check")).toEqual({ supported: true, available: false });
 });
 
+it("retains the version when a staged AppImage cannot be installed", () => {
+  updater.emit("update-downloaded", { version: "0.4.0" });
+  mocks.install.mockImplementationOnce(() => {
+    throw new Error("Install failed");
+  });
+  expect(() => invoke("update:install")).toThrow("Install failed");
+  expect(invoke("update:getState")).toEqual({
+    stage: "error",
+    error: "Install failed",
+    version: "0.4.0",
+  });
+});
+
 it("surfaces a failed background download and permits a new check", async () => {
   let rejectDownload!: (err: Error) => void;
   mocks.check.mockImplementationOnce(async () => {
@@ -82,11 +98,9 @@ it("surfaces a failed background download and permits a new check", async () => 
   await invoke("update:check");
   rejectDownload(new Error("Download interrupted"));
   await Promise.resolve();
-  expect(invoke("update:getState")).toEqual({ stage: "error", error: "Download interrupted" });
-  expect(send).toHaveBeenLastCalledWith("update:state", {
-    stage: "error",
-    error: "Download interrupted",
-  });
+  const failed = { stage: "error", error: "Download interrupted" };
+  expect(invoke("update:getState")).toEqual(failed);
+  expect(send).toHaveBeenLastCalledWith("update:state", failed);
   await invoke("update:check");
   expect(mocks.check).toHaveBeenCalledTimes(3);
 });
@@ -106,15 +120,9 @@ it("rejects failed manual checks and registers only one polling loop", async () 
 });
 
 it("reports unsupported updates for an unpackaged Linux installation", async () => {
-  const descriptor = Object.getOwnPropertyDescriptor(process, "platform")!;
-  try {
-    Object.defineProperty(process, "platform", { value: "linux" });
-    vi.stubEnv("APPIMAGE", undefined);
-    expect(await invoke("update:check")).toMatchObject({ supported: false, available: false });
-    updater.emit("update-downloaded", { version: "0.4.0" });
-    invoke("update:install");
-    expect(mocks.install).not.toHaveBeenCalled();
-  } finally {
-    Object.defineProperty(process, "platform", descriptor);
-  }
+  vi.stubEnv("APPIMAGE", undefined);
+  expect(await invoke("update:check")).toMatchObject({ supported: false, available: false });
+  updater.emit("update-downloaded", { version: "0.4.0" });
+  invoke("update:install");
+  expect(mocks.install).not.toHaveBeenCalled();
 });

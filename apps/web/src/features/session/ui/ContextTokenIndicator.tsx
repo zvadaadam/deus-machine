@@ -63,7 +63,7 @@ export function ContextTokenIndicator({
               strokeWidth="2"
               strokeDasharray={`${(percentage / 100) * 37.7} 37.7`}
               strokeLinecap="round"
-              className="transition-[stroke-dasharray] duration-300 motion-reduce:transition-none"
+              className="tempo-moderate transition-[stroke-dasharray]"
             />
           </svg>
         </button>

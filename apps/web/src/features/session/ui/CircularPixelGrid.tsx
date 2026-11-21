@@ -352,11 +352,11 @@ export function CircularPixelGrid({
     const glowR = dotR * 1.3;
     const glowExtra = dotPx * 0.4;
 
-    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
     const t0 = performance.now();
 
     function draw(now: number) {
-      const t = prefersReduced ? 0 : (now - t0) / 1000;
+      const t = preference.matches ? 0 : (now - t0) / 1000;
       const [cr, cg, cb] = colorRef.current;
 
       ctx!.clearRect(0, 0, size, size);
@@ -408,19 +408,21 @@ export function CircularPixelGrid({
 
       ctx!.restore();
 
-      // Only schedule next frame if animations are enabled
-      if (!prefersReduced) {
+      if (!preference.matches) {
         frameRef.current = requestAnimationFrame(draw);
       }
     }
 
-    if (prefersReduced) {
-      // Render a single static frame
-      draw(t0);
-    } else {
-      frameRef.current = requestAnimationFrame(draw);
+    function restart() {
+      cancelAnimationFrame(frameRef.current);
+      draw(performance.now());
     }
-    return () => cancelAnimationFrame(frameRef.current);
+    restart();
+    preference.addEventListener("change", restart);
+    return () => {
+      preference.removeEventListener("change", restart);
+      cancelAnimationFrame(frameRef.current);
+    };
   }, [variant, size, resolution, gap, dotShape, cells, colorRevision]);
 
   return (

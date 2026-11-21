@@ -18,9 +18,6 @@ electron.vite.config.d.ts
 # TypeScript build info
 *.tsbuildinfo
 
-# Agent-server build artifact (built via `bun run build:agent-server`)
-apps/agent-server/dist/
-
 # CLI build artifacts
 apps/cli/bin/
 apps/cli/dist/

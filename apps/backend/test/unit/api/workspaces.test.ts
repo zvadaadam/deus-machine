@@ -1,4 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
+import fs from "fs";
 import * as api from "@shared/api/workspaces";
 import { operations } from "../../helpers";
 import { ConflictError } from "../../../src/lib/errors";
@@ -88,7 +89,8 @@ vi.mock("child_process", () => ({
   spawn: vi.fn<(...args: any[]) => any>(),
 }));
 
-vi.mock("util", () => ({
+vi.mock("util", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("node:util")>()),
   promisify: () => mockExecFileAsync,
 }));
 
@@ -303,6 +305,19 @@ describe("createWorkspace", () => {
   });
 });
 
+describe("setupLogs", () => {
+  it("removes terminal formatting and preserves literal output and line breaks", async () => {
+    mockStmt.get.mockReturnValueOnce(MOCK_CREATED_WORKSPACE);
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(
+      "Checking tools\n\x1b[31mMissing <b>clang</b>\x1b[0m\n"
+    );
+    await expect(run(api.setupLogs, { workspaceId: MOCK_CREATED_WORKSPACE.id })).resolves.toEqual({
+      logs: "Checking tools\nMissing <b>clang</b>\n",
+    });
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
+  });
+});
+
 describe("retryWorkspaceInit", () => {
   const retry = (workspaceId: string) => run(api.retryWorkspaceInit, { workspaceId });
 
@@ -355,15 +370,18 @@ describe("deleteWorkspace", () => {
 });
 
 describe("updateWorkspace", () => {
-  it("rejects session-only state values like working", async () => {
-    await expect(
-      run(api.updateWorkspace, { workspaceId: "ws-test-uuid", state: "working" as never })
-    ).rejects.toMatchObject({ statusCode: 400 });
-    expect(mockStmt.run).not.toHaveBeenCalled();
-  });
+  it.each(["error", "initializing", "archived", "working", undefined])(
+    "refuses state %s before writing anything",
+    async (state) => {
+      await expect(
+        run(api.updateWorkspace, { workspaceId: "ws-test-uuid", state: state as never })
+      ).rejects.toMatchObject({ statusCode: 400 });
+      expect(mockStmt.run).not.toHaveBeenCalled();
+    }
+  );
 
-  it("accepts canonical workspace state values from shared enums", async () => {
-    mockStmt.get.mockReturnValueOnce({ ...MOCK_CREATED_WORKSPACE, state: "ready" });
+  it("restores an archived workspace, returning a done workspace to in-progress", async () => {
+    mockStmt.get.mockReturnValue({ ...MOCK_CREATED_WORKSPACE, state: "archived", status: "done" });
 
     await run(api.updateWorkspace, { workspaceId: "ws-test-uuid", state: "ready" });
 
@@ -372,8 +390,18 @@ describe("updateWorkspace", () => {
       "UPDATE workspaces SET state = CASE WHEN current_session_id IS NULL THEN 'error' ELSE 'ready' END WHERE id = ?"
     );
     expect(mockStmt.run).toHaveBeenCalledWith("ws-test-uuid");
+    expect(mockStmt.run).toHaveBeenCalledWith("in-progress", "ws-test-uuid");
     expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "sessions"]);
   });
+
+  it.each(["initializing", "ready", "error"])(
+    "leaves a %s workspace alone on restore",
+    async (state) => {
+      mockStmt.get.mockReturnValueOnce({ ...MOCK_CREATED_WORKSPACE, state, status: "done" });
+      await run(api.updateWorkspace, { workspaceId: "ws-test-uuid", state: "ready" });
+      expect(mockStmt.run).not.toHaveBeenCalled();
+    }
+  );
 });
 
 describe("cloud wake and archive ordering", () => {
@@ -399,8 +427,7 @@ describe("cloud wake and archive ordering", () => {
     return () => state;
   }
 
-  const archive = () =>
-    run(api.updateWorkspace, { workspaceId: "ws-test-uuid", state: "archived" });
+  const archive = () => run(api.archiveWorkspace, { workspaceId: "ws-test-uuid" });
   // Settled rather than awaited: one of the two is expected to be refused.
   const wake = () =>
     run(api.wakeCloudWorkspace, { workspaceId: "ws-test-uuid" }).then(

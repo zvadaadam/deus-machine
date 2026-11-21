@@ -228,16 +228,24 @@ exception has its subject already: a workspace on a pull request or branch
 (`GitHubPickerModal`).
 
 Creating a local workspace writes its row and returns. The rest runs in the
-background, in four stages: `fetch` (origin's latest for the branch it starts
-from), `worktree` (`git worktree add` on a new branch), `setup` (the project's
-setup script), `session` (the first chat, and `state = 'ready'`). Each stage
+background, in three stages: `fetch` (origin's latest for the branch it starts
+from), `worktree` (`git worktree add` on a new branch), and `session` (the first
+chat and `state = 'ready'`). Each stage
 writes `init_stage` and pushes the `workspaces` resource, which is the only
 progress channel: the desktop, the web app and a phone all follow it.
 
 - Only `worktree` and `session` are fatal. A fetch that fails still starts the
   workspace, from what is on this computer, and records why
-  (`init_fetch_issue`: `offline`, `auth` or `failed`); a setup script that fails
-  is `setup_status = 'failed'`, with its own retry.
+  (`init_fetch_issue`: `offline`, `auth` or `failed`).
+- Once the checkout exists, the first chat can take its message while the project's
+  setup script runs. A local turn is told the running command, log and status
+  file, or a failure's quoted reason and last log lines. After a repair the
+  person chooses "Run again" on the start line, which runs setup with the project's
+  environment. Completed and unconfigured setups add nothing to the turn.
+  `setSetupStatus` commits the row, then updates the temp status file if it can.
+  Archiving the workspace stops its setup process group. Quitting
+  during setup leaves the checkout and chat ready, with setup marked failed
+  and a reason saying Deus stopped it.
 - A fatal failure removes what the attempt made and leaves `state = 'error'`
   with a plain reason (`error_message`) and the tool's own words
   (`error_detail`). `retryWorkspaceInit` starts the same row again, so whatever
@@ -278,9 +286,9 @@ screen; `session/lib/firstMessage.ts` holds the rules. Where it is kept follows
 the window (`capabilities.singleWindow`): a browser tab keeps its own
 (sessionStorage), so a reload does not lose it and a tab opened beside it does
 not find it and send it too; the desktop app, which is one window, keeps it on the
-device (localStorage), so quitting does not lose it either. Quitting the
-desktop app stops the start, so the reopened app shows a failed start with the
-message still waiting, and Retry sends it. It is sent once: a chat that already
+device (localStorage), so quitting does not lose it either. Quitting before the
+first chat opens stops the start, so the reopened desktop app shows a failed
+start with the message still waiting, and Retry sends it. It is sent once: a chat that already
 has a message, or is answering one, is never sent it again, and a send the
 backend refuses goes into that chat's composer with a toast rather than being
 retried. Send it from anywhere else and two workspaces started in a row lose
@@ -424,13 +432,14 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   between calls: a message to a busy chat is sent within the call if its turn
   ends on its own in time, else nothing is sent and the answer says why. The
   host holds only a new workspace's first task: `start` takes it and sends it
-  as the turn the package minted once setup ends; a setup that took longer
-  than 30 minutes sends nothing, and the chat says so in its error; a stop
+  as the turn the package minted once the first chat is ready. A start that took
+  longer than 30 minutes sends nothing, and the chat says so in its error; a stop
   drops it. At its commit, in one synchronous step, the host refuses
   (`Refused`): a start by an archived chat or into an archived workspace; a
-  fourth workspace agents started while three are set up; an archive whose
-  members are being set up, still working (a stop must be confirmed first) or
-  started chats not archived. Archiving one chat: only a chat an agent or an
+  fourth agent-started local workspace while three are starting or running setup.
+  It also refuses an archive whose members are still starting, still working
+  (a stop must be confirmed first) or started chats not archived.
+  Archiving one chat: only a chat an agent or an
   assistant started, never a workspace's last; it is hidden (`sessions.is_hidden`: the `sessions`
   read leaves it out, the current chat moves to the newest visible one, it
   takes no message and stops counting against its starter). A chat the person
@@ -711,7 +720,7 @@ Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `s
 - All indexes/triggers defined in `shared/schema.ts`
 - Use `sessions.last_user_message_at` instead of correlated subqueries
 - No N+1 queries — batch or denormalize
-- Column changes, pre-launch (now): `shared/schema.ts` is the whole schema, not a migration replay. To add a column, put it in `SCHEMA_SQL` and, if existing databases should keep working, in `ADDITIVE_COLUMNS` (nullable or defaulted); anything else is a reset. At startup the backend compares the database with a fresh copy of `SCHEMA_SQL` (a missing column, a NOT NULL that differs, a leftover column an insert would fail on) and stops with `PRELAUNCH_SCHEMA_RESET_HINT`, naming the table and column.
+- Column changes, pre-launch (now): `shared/schema.ts` is the whole schema, not a migration replay. To add a column, put it in `SCHEMA_SQL` and, if existing databases should keep working, in `ADDITIVE_COLUMNS` (nullable or defaulted); anything else is a reset. At startup the backend compares the database with a fresh copy of `SCHEMA_SQL` (a missing column, a NOT NULL that differs, a leftover column an insert would fail on) and stops on a mismatch. After the backend exits, the desktop offers **Start Fresh**, which moves the database and its SQLite side files to a dated name beside the original. The installed app reopens. Under `bun run dev`, Deus quits and logs how to start it again. The CLI prints `PRELAUNCH_SCHEMA_RESET_HINT` with its fresh data directory option.
 - Column changes, post-launch: the above stops applying. Deprecate by renaming with a `DEPRECATED_` prefix, never drop.
 
 ## Testing
@@ -805,6 +814,15 @@ stale after long editing sessions — save and relaunch Pen to get accurate scre
 component instance resolves its theme once per document, so light-mode sheets are built
 from primitives rather than instances.
 
+## Interface motion
+
+Never write a duration or curve at a UI transition call site. Use the tempo tokens.
+Use `fast` for control feedback, tooltips and command lists you type into, `moderate` for menus and small collapses, and `slow` for dialogs, sheets and layout panels.
+Give a surface and its backdrop the same tier. Use `ease-move` when visible layout moves in place.
+Use one `Glide` for a list of stable choices. Keep per-row hover for transcript items, virtual rows, cards with gutters and rows that move beneath a resting pointer.
+Never follow a row's interactive state (highlight, hover or focus) with `:has()` or `group-has-*`. Style the row directly.
+A state change must leave its neighbours in place. Reserve space for a heavier label or an icon swap. [Motion rules and tests](design/motion.md)
+
 ## Hard Rules
 
 - Never edit outside your worktree directory
@@ -819,14 +837,14 @@ When a Deus tool, command, doc, or API is broken, confusing, or notably good,
 report it (category: tool | skill | prompt | docs | mcp | cli | api | model | ux | other):
 
 ```sh
-npx --yes hivenet@latest --to deus --category <category> --subject "<exact item>" "<specific, actionable feedback>"
+bunx hivenet@latest --to deus --category "<category>" --subject "<exact item>" --message "<specific, actionable feedback>"
 ```
 
 Failed a Deus task after real effort? Report it structured — these become
 Deus's eval suite, so word the task so a stranger could re-run it:
 
 ```sh
-npx --yes hivenet@latest --to deus --category <surface it failed on> --task "<the goal>" --expected "<correct outcome>" --actual "<what happened>" --attempts <n> "<one-line summary>"
+bunx hivenet@latest --to deus --category "<surface it failed on>" --task "<the goal>" --expected "<correct outcome>" --actual "<what happened>" --attempts "<n>" --message "<one-line summary>"
 ```
 
 The response may include an `ask`: a question from the Deus team with a

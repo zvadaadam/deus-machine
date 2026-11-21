@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import { spawn, execFileSync } from "node:child_process";
-import { parseEnv } from "node:util";
+import { finished } from "node:stream/promises";
+import { parseEnv, stripVTControlCharacters } from "node:util";
 import {
   parseProjectEnvironment,
   PROJECT_ENVIRONMENT_PATH,
@@ -19,7 +19,8 @@ import { processGroupsStopped, trackProcessGroup } from "../lib/process-groups";
 import { cloudAccount, cloudOrg, requireCloudOrg } from "./agent/cloud/config";
 import { getCloudEnvironmentInfo } from "./cloud-environment.service";
 import { createBackendChildEnv } from "@shared/lib/child-env";
-import { invalidate } from "./query-engine";
+import { SETUP_INTERRUPTED, SETUP_LOG_SUFFIX, setSetupStatus, setupFile } from "./setup-status";
+import type { WorkspaceSetup } from "./agent/workspace-context";
 import type { WorkspaceWithDetailsRow } from "../db";
 
 function environmentFile(directory: string): string {
@@ -148,54 +149,121 @@ export function localProjectEnv(project: ProjectEnvironment, directory: string):
   return env;
 }
 
+interface SetupRun {
+  controller: AbortController;
+  command?: string;
+  process?: Promise<void>;
+}
+const runs = new Map<string, SetupRun>();
+
+export function setupForTurn(sessionId: string): WorkspaceSetup | null {
+  const row = getDatabase()
+    .prepare<
+      [string],
+      Pick<WorkspaceWithDetailsRow, "id" | "setup_status" | "error_message" | "error_detail">
+    >(
+      `SELECT w.id, w.setup_status, w.error_message, w.error_detail
+    FROM sessions s JOIN workspaces w ON w.id = s.workspace_id
+    WHERE s.id = ? AND w.kind = 'worktree' AND w.setup_status IN ('running', 'failed')`
+    )
+    .get(sessionId);
+  if (!row) return null;
+  if (row.setup_status === "running") {
+    return {
+      state: "running",
+      command: runs.get(row.id)?.command,
+      log: setupFile(row.id, "log"),
+      statusFile: setupFile(row.id, "status"),
+    };
+  }
+  const reason = row.error_message ?? "The setup did not finish.";
+  return {
+    state: "failed",
+    reason: reason.endsWith(SETUP_LOG_SUFFIX) ? reason.slice(0, -SETUP_LOG_SUFFIX.length) : reason,
+    detail: row.error_detail,
+  };
+}
+
+export async function stopWorkspaceSetup(workspaceId: string): Promise<void> {
+  const run = runs.get(workspaceId);
+  if (!run) return;
+  const reason = new Error("Setup was stopped when the workspace was archived.");
+  run.controller.abort(reason);
+  runs.delete(workspaceId);
+  setSetupStatus(workspaceId, "failed", reason);
+  await run.process?.catch(() => {});
+}
+
 /** One setup runner for initial preparation and an explicit retry. No implicit installs or Git resets. */
 export async function prepareLocalEnvironment(
   workspaceId: string,
   directory: string,
   repoUrl?: string | null
 ): Promise<void> {
-  const db = getDatabase();
-  db.prepare(
-    "UPDATE workspaces SET setup_status = 'running', error_message = NULL WHERE id = ?"
-  ).run(workspaceId);
-  invalidate(["workspaces"]);
+  if (runs.has(workspaceId)) return;
+  const run: SetupRun = { controller: new AbortController() };
+  runs.set(workspaceId, run);
+  const { signal } = run.controller;
   try {
+    setSetupStatus(workspaceId, "running");
     const { project } = await readLocalProjectEnvironment(directory, repoUrl);
-    if (!project) {
-      db.prepare("UPDATE workspaces SET setup_status = 'none' WHERE id = ?").run(workspaceId);
-      return;
+    signal.throwIfAborted();
+    if (project) {
+      const recipe = resolveProjectEnvironment(project, "local");
+      const env = localProjectEnv(project, directory);
+      const missing = missingEnvironmentVariables(recipe.requiredEnv, env);
+      if (missing.length)
+        throw new Error(`Add the missing local environment variables: ${missing.join(", ")}`);
+      if (recipe.setup) {
+        run.command = recipe.setup;
+        run.process = runSetupCommand(workspaceId, recipe.setup, directory, env, signal);
+        await run.process;
+      }
     }
-    const recipe = resolveProjectEnvironment(project, "local");
-    const env = localProjectEnv(project, directory);
-    const missing = missingEnvironmentVariables(recipe.requiredEnv, env);
-    if (missing.length)
-      throw new Error(`Add the missing local environment variables: ${missing.join(", ")}`);
-    if (recipe.setup) await runSetupCommand(workspaceId, recipe.setup, directory, env);
-    db.prepare(
-      "UPDATE workspaces SET setup_status = 'completed', error_message = NULL WHERE id = ?"
-    ).run(workspaceId);
+    if (!signal.aborted) setSetupStatus(workspaceId, run.command ? "completed" : "none");
   } catch (error) {
-    db.prepare("UPDATE workspaces SET setup_status = 'failed', error_message = ? WHERE id = ?").run(
-      (error as Error).message,
-      workspaceId
-    );
+    if (!signal.aborted) {
+      runs.delete(workspaceId);
+      setSetupStatus(
+        workspaceId,
+        "failed",
+        processGroupsStopped() ? { message: SETUP_INTERRUPTED } : (error as Error)
+      );
+    }
   } finally {
-    invalidate(["workspaces"]);
+    if (runs.get(workspaceId) === run) runs.delete(workspaceId);
   }
 }
 
-export function runSetupCommand(
+async function setupLogTail(logPath: string): Promise<string | null> {
+  const file = await fs.promises.open(logPath, "r");
+  try {
+    const { size } = await file.stat();
+    const buffer = Buffer.alloc(Math.min(size, 4096));
+    const start = size - buffer.length;
+    const { bytesRead } = await file.read(buffer, 0, buffer.length, start);
+    const lines = stripVTControlCharacters(buffer.toString("utf8", 0, bytesRead)).split(/[\r\n]/);
+    if (start > 0) lines.shift(); // The first line may start before the window.
+    const nonempty = lines.map((line) => line.trim()).filter(Boolean);
+    const tail = nonempty.slice(-2).join("\n").slice(-400);
+    return tail.replace(/^\p{Surrogate}/u, "") || null;
+  } finally {
+    await file.close();
+  }
+}
+
+export async function runSetupCommand(
   workspaceId: string,
   command: string,
   directory: string,
-  env: NodeJS.ProcessEnv
+  env: NodeJS.ProcessEnv,
+  signal?: AbortSignal
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (processGroupsStopped()) {
-      reject(new Error("Deus is closing."));
-      return;
-    }
-    const log = fs.createWriteStream(path.join(os.tmpdir(), `deus-${workspaceId}-setup.log`));
+  if (processGroupsStopped()) throw new Error("Deus is closing.");
+  const logPath = setupFile(workspaceId, "log");
+  type SetupExit = number | null | "timeout";
+  const result = await new Promise<SetupExit>((resolve, reject) => {
+    const log = fs.createWriteStream(logPath);
     const child = spawn("/bin/sh", ["-ec", command], {
       cwd: directory,
       env,
@@ -206,6 +274,7 @@ export function runSetupCommand(
     const untrack = trackProcessGroup(child.pid);
     child.stdout.pipe(log, { end: false });
     child.stderr.pipe(log, { end: false });
+    let drain: NodeJS.Timeout | undefined;
     const killProcessGroup = () => {
       if (child.pid) {
         try {
@@ -214,40 +283,50 @@ export function runSetupCommand(
           // The process group may already have exited.
         }
       }
+      // A helper in another process group can keep the pipes open after the shell exits.
+      drain ??= setTimeout(() => {
+        child.stdout.destroy();
+        child.stderr.destroy();
+      }, 250);
     };
+    signal?.addEventListener("abort", killProcessGroup, { once: true });
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
       killProcessGroup();
     }, 300_000);
-    let finished = false;
-    const finish = (error?: Error) => {
-      if (finished) return;
-      finished = true;
+    let settled = false;
+    const finish = (result: Error | SetupExit) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener("abort", killProcessGroup);
       untrack();
       clearTimeout(timer);
-      if (error) {
-        log.end();
-        reject(error);
-      } else log.end(resolve);
+      if (result instanceof Error) reject(result);
+      else resolve(finished(log).then(() => result));
+      log.end();
     };
     child.once("error", finish);
     log.once("error", (error) => {
       killProcessGroup();
       finish(error);
     });
-    child.once("close", (code) =>
-      finish(
-        code === 0 && !timedOut
-          ? undefined
-          : new Error(
-              processGroupsStopped()
-                ? "Setup was stopped when Deus closed. Run it again."
-                : timedOut
-                  ? "Setup timed out after five minutes."
-                  : `Setup exited with code ${code}. View the setup log for details.`
-            )
-      )
-    );
+    child.once("close", (code) => {
+      clearTimeout(drain);
+      if (signal?.aborted) return finish(signal.reason);
+      if (processGroupsStopped()) return finish(new Error(SETUP_INTERRUPTED));
+      finish(timedOut ? "timeout" : code);
+    });
   });
+  if (result !== 0) {
+    const detail = result === null ? null : await setupLogTail(logPath).catch(() => null);
+    const message =
+      result === "timeout"
+        ? "Setup timed out after five minutes."
+        : `Setup exited with code ${result}.${detail ? "" : SETUP_LOG_SUFFIX}`;
+    throw Object.assign(new Error(message), {
+      detail,
+      exitCode: typeof result === "number" ? result : null,
+    });
+  }
 }

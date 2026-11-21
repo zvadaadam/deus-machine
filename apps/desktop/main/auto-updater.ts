@@ -7,6 +7,7 @@ let updateWindow: BrowserWindow | null = null;
 let handlersRegistered = false;
 let updaterStarted = false;
 let installRequested = false;
+let macArchive: UpdateInfo | undefined;
 
 function isAutoUpdateSupported(): boolean {
   return !(process.platform === "linux" && !process.env.APPIMAGE);
@@ -32,8 +33,23 @@ function sendState(state: UpdateState): void {
 }
 
 function reportError(err: unknown): void {
+  // An archive that failed to stage or install can be installed by hand.
+  const version =
+    macArchive?.version ??
+    (currentState.stage === "ready" || currentState.stage === "error"
+      ? currentState.version
+      : undefined);
   installRequested = false;
-  sendState({ stage: "error", error: err instanceof Error ? err.message : String(err) });
+  macArchive = undefined;
+  sendState({
+    stage: "error",
+    error: err instanceof Error ? err.message : String(err),
+    ...(version && { version }),
+  });
+}
+
+function reportReady(info: UpdateInfo): void {
+  sendState({ stage: "ready", version: info.version, releaseNotes: formatReleaseNotes(info) });
 }
 
 async function checkForUpdates(): Promise<UpdateCheckResult> {
@@ -114,9 +130,19 @@ export function setupAutoUpdater(mainWindow: BrowserWindow): void {
       sendState({ ...currentState, percent: progress.percent });
     }
   });
-  autoUpdater.on("update-downloaded", (info) => {
-    sendState({ stage: "ready", version: info.version, releaseNotes: formatReleaseNotes(info) });
-  });
+  if (process.platform === "darwin") {
+    // electron-updater has the ZIP first. Only the native updater knows when
+    // macOS has verified its signature and staged it for restart.
+    autoUpdater.on("update-downloaded", (info) => {
+      macArchive = info;
+    });
+    nativeAutoUpdater.on("update-downloaded", () => {
+      if (macArchive) reportReady(macArchive);
+      macArchive = undefined;
+    });
+  } else {
+    autoUpdater.on("update-downloaded", reportReady);
+  }
   autoUpdater.on("error", reportError);
 
   const check = () => void checkForUpdates().catch((err) => console.error("[auto-updater]", err));

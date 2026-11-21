@@ -21,6 +21,9 @@ export async function connectBackend(url, { timeoutMs = 30_000, token } = {}) {
     socket.on("message", (raw) => {
       const frame = JSON.parse(String(raw));
       if (frame.type === "connected") return resolve();
+      // The driver can be idle while Chromium loads the app. Stay connected
+      // through the same heartbeat the app answers.
+      if (frame.type === "ping") return socket.send(JSON.stringify({ type: "pong", id: frame.id }));
       const pending = waiting.get(frame.id);
       if (!pending) return;
       waiting.delete(frame.id);

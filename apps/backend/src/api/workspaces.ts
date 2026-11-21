@@ -2,7 +2,8 @@
 
 import path from "path";
 import fs from "fs";
-import os from "os";
+import { stripVTControlCharacters } from "node:util";
+import { setupFile } from "../services/setup-status";
 import * as api from "@shared/api/workspaces";
 import type { ParsedInputOf } from "@shared/api/op";
 import { uuidv7 } from "@shared/lib/uuid";
@@ -48,7 +49,7 @@ import {
   pickWorkspaceName,
   retryWorkspaceInit,
 } from "../services/workspace-init.service";
-import { autoProgressStatus, setWorkspaceStatus } from "../services/workspace-status.service";
+import { setWorkspaceStatus } from "../services/workspace-status.service";
 import { handle } from "./registry";
 
 /** How long `connectCloudWorkspace` waits for the channel to open before answering. */
@@ -95,7 +96,7 @@ async function createWorkspace(
 /**
  * A workspace on this computer: the row now, everything slow in the
  * background. The pipeline (services/workspace-init) fetches origin, makes
- * the worktree, runs setup and opens the first chat, under the id minted
+ * the worktree and opens the first chat alongside setup, under the id minted
  * here (`first_session_id`); each stage and any failure reaches clients on
  * `workspaces`, and a failure can be retried on this same row. `startedBy`
  * is who started it when not the person; `admit`, run synchronously right
@@ -163,26 +164,6 @@ export async function createLocalWorkspace(
   return { workspaceId, firstSessionId };
 }
 
-async function updateWorkspace({
-  workspaceId,
-  state,
-  status,
-}: ParsedInputOf<typeof api.updateWorkspace>): Promise<void> {
-  const db = getDatabase();
-  if (status) setWorkspaceStatus(workspaceId, status);
-  if (state === "archived") await archiveWorkspace(workspaceId);
-  else if (state === "ready") {
-    await unarchiveWorkspace(workspaceId);
-    // A restored workspace that was done is in progress again.
-    if (getWorkspaceRaw(db, workspaceId)?.status === "done") {
-      autoProgressStatus(workspaceId, "in-progress", { force: true });
-    }
-  } else if (state) {
-    db.prepare("UPDATE workspaces SET state = ? WHERE id = ?").run(state, workspaceId);
-  }
-  invalidate(["workspaces", "sessions"]);
-}
-
 export default [
   handle(api.workspaces, ({ state }) => {
     const db = getDatabase();
@@ -200,9 +181,8 @@ export default [
   handle(api.setupLogs, ({ workspaceId }) => {
     const { workspace } = loadWorkspace(workspaceId);
     try {
-      return {
-        logs: fs.readFileSync(path.join(os.tmpdir(), `deus-${workspace.id}-setup.log`), "utf8"),
-      };
+      const logs = fs.readFileSync(setupFile(workspace.id, "log"), "utf8");
+      return { logs: stripVTControlCharacters(logs) };
     } catch {
       return { logs: null };
     }
@@ -228,7 +208,10 @@ export default [
   handle(api.ghLogout, logoutGh),
 
   handle(api.createWorkspace, createWorkspace),
-  handle(api.updateWorkspace, updateWorkspace),
+  handle(api.updateWorkspace, async ({ workspaceId }) => {
+    await unarchiveWorkspace(workspaceId);
+    invalidate(["workspaces", "sessions"]);
+  }),
   handle(api.archiveWorkspace, async ({ workspaceId }) => {
     await archiveWorkspace(workspaceId);
     invalidate(["workspaces"]);
@@ -256,6 +239,8 @@ export default [
     if (workspace.kind === "cloud") {
       throw new ValidationError("Prepare the cloud environment in a new workspace.");
     }
+    if (workspace.state !== "ready")
+      throw new ValidationError("Setup can only be retried in a ready workspace.");
     if (workspace.setup_status !== "failed") {
       throw new ValidationError("Setup is not in a failed state.");
     }

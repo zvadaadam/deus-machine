@@ -143,7 +143,6 @@ await writeFile(
   path.join(directory, "preferences.json"),
   JSON.stringify({
     onboarding_completed: true,
-    analytics_enabled: false,
     remote_access_enabled: false,
     theme: "dark",
     // This computer's own browser is off: the cloud preview must not depend on it.

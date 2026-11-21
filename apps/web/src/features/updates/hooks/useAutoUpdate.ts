@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { capabilities } from "@/platform/capabilities";
 import { getErrorMessage } from "@shared/lib/errors";
-import type { UpdateState } from "@shared/types/updates";
+import type { UpdateCheckResult, UpdateState } from "@shared/types/updates";
 
 export interface UseAutoUpdateReturn {
   state: UpdateState;
-  /** Returns true when the installed version is up to date. */
-  check: () => Promise<boolean>;
+  check: () => Promise<UpdateCheckResult | null>;
   install: () => Promise<void>;
 }
 
@@ -38,18 +37,15 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
     };
   }, []);
 
-  const check = useCallback(async (): Promise<boolean> => {
-    if (!capabilities.autoUpdate) return true;
+  const check = useCallback(async () => {
+    if (!capabilities.autoUpdate) return null;
     try {
-      const result = await window.electronAPI!.checkForUpdates();
-      if (!result.supported) {
-        setState({ stage: "error", error: result.reason });
-        return false;
-      }
-      return !result.available;
+      return await window.electronAPI!.checkForUpdates();
     } catch (err) {
-      setState({ stage: "error", error: getErrorMessage(err) });
-      return false;
+      setState((previous) =>
+        previous.stage === "error" ? previous : { stage: "error", error: getErrorMessage(err) }
+      );
+      return null;
     }
   }, []);
 
@@ -58,7 +54,15 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
     try {
       await window.electronAPI!.installUpdate();
     } catch (err) {
-      setState({ stage: "error", error: getErrorMessage(err) });
+      setState((previous) =>
+        previous.stage === "error"
+          ? previous
+          : {
+              stage: "error",
+              error: getErrorMessage(err),
+              ...(previous.stage === "ready" && { version: previous.version }),
+            }
+      );
     }
   }, []);
 

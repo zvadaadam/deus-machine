@@ -1,3 +1,4 @@
+import { Collapse } from "@/components/ui/collapse";
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
@@ -10,7 +11,7 @@ import { useImageAttachments } from "@/features/session/hooks/useImageAttachment
 import { PastedImageCard } from "@/features/session/ui/PastedImageCard";
 import type { RepoGroup, Workspace } from "@/shared/types";
 import type { Repository } from "../types";
-import { EASE_OUT_QUART } from "@/shared/lib/animation";
+import { tempo } from "@/shared/lib/tempo";
 import { RecentWorkspaces, buildRecentWorkspaceGroups } from "./RecentWorkspaces";
 import { CloudToggle, BranchPickerButton } from "./composer/ComposerControls";
 import { RepoPicker } from "./composer/RepoPicker";
@@ -387,26 +388,18 @@ export function HomeView({
       {/* Top spacer — keeps the input high enough that recent workspaces can breathe below. */}
       <div className="flex-[0_0_14%] shrink-0 sm:flex-[0_0_18%]" />
 
-      <motion.h1
+      <h1
         key={hasRepos ? "has-repos" : "zero-repos"}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, ease: EASE_OUT_QUART }}
-        className="text-text-primary mb-6 w-full max-w-[720px] px-4 text-center text-2xl font-medium tracking-tight sm:px-6"
+        className="enter-step text-text-primary mb-6 w-full max-w-[720px] px-4 text-center text-2xl font-medium tracking-tight [--enter-y:8px] sm:px-6"
       >
         {hasRepos ? "What are we building?" : "Start with a project"}
-      </motion.h1>
+      </h1>
 
       {/* Input Card — the gravitational center */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.06, ease: EASE_OUT_QUART }}
-        className="w-full max-w-[720px] px-4 sm:px-6"
-      >
+      <div className="enter-step w-full max-w-[720px] px-4 [--enter-y:12px] [--step:1] sm:px-6">
         <div
           className={cn(
-            "bg-bg-raised dark:bg-bg-surface relative overflow-visible rounded-2xl p-1 transition-shadow duration-200",
+            "bg-bg-raised dark:bg-bg-surface relative overflow-visible rounded-2xl p-1 transition-shadow",
             isDragging && "ring-primary/25 ring-2"
           )}
           onDragOver={(e) => {
@@ -506,17 +499,11 @@ export function HomeView({
           </div>
 
           {/* Inner card — typing surface (textarea + bottom toolbar) */}
-          <div className="bg-bg-elevated relative overflow-visible rounded-xl transition-shadow duration-200 focus-within:shadow-sm">
+          <div className="bg-bg-elevated relative overflow-visible rounded-xl transition-shadow focus-within:shadow-sm">
             {/* Image previews — shown above textarea when images are pasted/dropped */}
             <AnimatePresence>
               {attachments.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2, ease: EASE_OUT_QUART }}
-                  className="flex gap-2 overflow-x-auto px-3 pt-3"
-                >
+                <Collapse className="flex gap-2 overflow-x-auto px-3 pt-3">
                   <AnimatePresence mode="popLayout">
                     {attachments.map((attachment) => (
                       <PastedImageCard
@@ -528,7 +515,7 @@ export function HomeView({
                       />
                     ))}
                   </AnimatePresence>
-                </motion.div>
+                </Collapse>
               )}
             </AnimatePresence>
 
@@ -589,7 +576,7 @@ export function HomeView({
             </div>
           </div>
         </div>
-      </motion.div>
+      </div>
 
       {/* Quick Prompts — chip row below input card (only when repos exist) */}
       <AnimatePresence>
@@ -598,27 +585,26 @@ export function HomeView({
             key="quick-prompts"
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            transition={{ duration: 0.2, delay: 0.12, ease: EASE_OUT_QUART }}
+            exit={{ opacity: 0, y: 4, transition: tempo.moderate.exit }}
+            transition={{ ...tempo.moderate, delay: 2 * tempo.step }}
             className="mt-3 flex w-full max-w-[720px] flex-wrap gap-2 px-4 sm:px-6"
           >
             {QUICK_PROMPTS.map((prompt, i) => (
-              <motion.button
+              <button
                 key={prompt}
                 type="button"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2, delay: 0.14 + i * 0.04, ease: EASE_OUT_QUART }}
+                style={{ "--step": 2 + i } as React.CSSProperties}
                 onClick={() => handleQuickPrompt(prompt)}
                 disabled={!selectedRepoId || isSubmitting}
                 className={cn(
-                  "bg-bg-raised dark:bg-bg-surface text-text-muted rounded-lg px-3 py-2 text-xs transition-colors duration-150",
+                  "enter-step [--enter-time:var(--tempo-moderate)] [--enter-y:4px]",
+                  "bg-bg-raised dark:bg-bg-surface text-text-muted rounded-lg px-3 py-2 text-xs transition-colors",
                   "hover:bg-bg-muted dark:hover:bg-bg-elevated hover:text-text-secondary",
                   "disabled:pointer-events-none disabled:opacity-40"
                 )}
               >
                 {prompt}
-              </motion.button>
+              </button>
             ))}
           </motion.div>
         )}
@@ -646,8 +632,8 @@ export function HomeView({
               key="zero-state"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 12 }}
-              transition={{ duration: 0.3, delay: 0.15, ease: EASE_OUT_QUART }}
+              exit={{ opacity: 0, y: 12, transition: tempo.slow.exit }}
+              transition={{ ...tempo.slow, delay: 3 * tempo.step }}
               className="mt-6 w-full max-w-[560px] px-4 sm:px-6"
             >
               <p className="text-text-muted mb-4 text-sm">
@@ -664,7 +650,7 @@ export function HomeView({
                       <button
                         type="button"
                         onClick={card.run}
-                        className="hover:bg-bg-raised/40 flex w-full items-start gap-3.5 px-4 py-3.5 text-left transition-colors duration-150"
+                        className="hover:bg-bg-raised/40 flex w-full items-start gap-3.5 px-4 py-3.5 text-left transition-colors"
                       >
                         <div className="bg-bg-muted mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
                           <Icon className="text-text-tertiary h-4 w-4" />
@@ -691,8 +677,8 @@ export function HomeView({
             key="footer"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3, delay: 0.25, ease: EASE_OUT_QUART }}
+            exit={{ opacity: 0, transition: tempo.slow.exit }}
+            transition={{ ...tempo.slow, delay: 4 * tempo.step }}
             className="home-footer-fade pointer-events-none absolute right-0 bottom-0 left-0 z-20 flex w-full justify-center pt-24 pb-6"
           >
             <div className="pointer-events-auto flex items-center gap-3">
@@ -704,7 +690,7 @@ export function HomeView({
                   <button
                     type="button"
                     onClick={addCards[action].run}
-                    className="text-text-disabled hover:text-text-muted text-xs underline-offset-4 transition-colors duration-150 hover:underline"
+                    className="text-text-disabled hover:text-text-muted text-xs underline-offset-4 transition-colors hover:underline"
                   >
                     {addCards[action].link}
                   </button>
@@ -766,47 +752,33 @@ function CloudSessionsHome({
   return (
     <div className="relative flex h-full min-h-0 flex-1 flex-col items-center overflow-hidden">
       <div className="flex-[0_0_14%] shrink-0 sm:flex-[0_0_18%]" />
-      <motion.h1
+      <h1
         key={state}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, ease: EASE_OUT_QUART }}
-        className="text-text-primary mb-2 w-full max-w-[720px] px-4 text-center text-2xl font-medium tracking-tight sm:px-6"
+        className="enter-step text-text-primary mb-2 w-full max-w-[720px] px-4 text-center text-2xl font-medium tracking-tight [--enter-y:8px] sm:px-6"
       >
         {title}
-      </motion.h1>
-      <motion.p
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, delay: 0.06, ease: EASE_OUT_QUART }}
-        className="text-text-muted mb-8 w-full max-w-[560px] px-4 text-center text-sm sm:px-6"
-      >
+      </h1>
+      <p className="enter-step text-text-muted mb-8 w-full max-w-[560px] px-4 text-center text-sm [--enter-y:8px] [--step:1] sm:px-6">
         {state === "error" && error ? error : subtitle}
-      </motion.p>
+      </p>
       {state === "error" && (
-        <motion.button
+        <button
           type="button"
           onClick={() => void queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all })}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.12, ease: EASE_OUT_QUART }}
-          className="control-interaction bg-button-primary text-button-primary-foreground hover:bg-button-primary/90 active:bg-button-primary/80 rounded-lg px-4 py-2 text-sm font-normal"
+          className="enter-step control-interaction bg-button-primary text-button-primary-foreground hover:bg-button-primary/90 active:bg-button-primary/80 rounded-lg px-4 py-2 text-sm font-normal [--enter-time:var(--tempo-moderate)] [--enter-y:8px] [--step:2]"
         >
           Try again
-        </motion.button>
+        </button>
       )}
       {state === "empty" && (
-        <motion.a
+        <a
           href={DESKTOP_DOWNLOAD_URL}
           target="_blank"
           rel="noreferrer"
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.12, ease: EASE_OUT_QUART }}
-          className="control-interaction bg-button-primary text-button-primary-foreground hover:bg-button-primary/90 active:bg-button-primary/80 rounded-lg px-4 py-2 text-sm font-normal"
+          className="enter-step control-interaction bg-button-primary text-button-primary-foreground hover:bg-button-primary/90 active:bg-button-primary/80 rounded-lg px-4 py-2 text-sm font-normal [--enter-time:var(--tempo-moderate)] [--enter-y:8px] [--step:2]"
         >
           Download Deus for macOS
-        </motion.a>
+        </a>
       )}
       <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto pb-32">
         <AnimatePresence>

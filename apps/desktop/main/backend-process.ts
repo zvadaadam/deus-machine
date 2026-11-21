@@ -1,7 +1,8 @@
 import { spawn, type ChildProcess } from "child_process";
 import { pushCloudCredentialsToBackend, setBackendAuthToken } from "./deus-cloud-provision";
 import { existsSync, statSync, writeFileSync } from "fs";
-import { delimiter, join } from "path";
+import { delimiter, join, resolve as resolvePath } from "path";
+import { createInterface } from "node:readline";
 import { app, BrowserWindow } from "electron";
 import crypto from "crypto";
 import { DEUS_DB_FILENAME, PACKAGED_SYSTEM_PATHS } from "../../../shared/runtime";
@@ -11,6 +12,8 @@ import { handleKeepAwakeLine, setKeepAwakeWanted } from "./keep-awake";
 import { getLaunchPath } from "./shell-env";
 import { rendererOrigin } from "./app-protocol";
 import { WEB_ORIGINS_ENV } from "../../../shared/web-origins";
+import { PRELAUNCH_SCHEMA_MISMATCH } from "../../../shared/schema";
+import { OutdatedDatabaseError } from "./database-recovery";
 
 let backendProcess: ChildProcess | null = null;
 let isQuitting = false;
@@ -184,12 +187,14 @@ export async function spawnBackend(hooks: BackendSpawnHooks = {}): Promise<{ por
   // instead of the real userData one (whose schema may not match the branch).
   // A PACKAGED app never honors it: stray shell env must not redirect the
   // real database (same doctrine as BACKEND_CHILD_ENV_DENYLIST).
+  const override = !app.isPackaged && process.env.DATABASE_PATH;
+  // The dev SQLite driver trims filenames. A blank or :memory: filename has no file to recover.
+  const filename = override ? override.trim() : join(app.getPath("userData"), DEUS_DB_FILENAME);
   const dbPath =
-    (!app.isPackaged && process.env.DATABASE_PATH) ||
-    join(app.getPath("userData"), DEUS_DB_FILENAME);
+    filename && filename !== ":memory:" ? resolvePath(runtime.backendCwd, filename) : undefined;
 
   const sharedEnv: NodeJS.ProcessEnv = {
-    DATABASE_PATH: dbPath,
+    DATABASE_PATH: dbPath ?? ":memory:",
     PATH: buildRuntimePath(runtime),
     ...(runtime.resourcesPath
       ? { DEUS_PACKAGED: "1", DEUS_RESOURCES_PATH: runtime.resourcesPath }
@@ -210,6 +215,7 @@ export async function spawnBackend(hooks: BackendSpawnHooks = {}): Promise<{ por
 
   return new Promise((resolve, reject) => {
     let settled = false;
+    let exitedBeforeStart: Error | undefined;
     let stdoutBuffer = "";
 
     const backendArgs = runtime.runtimeExecutable ? ["backend"] : [runtime.backendEntry!];
@@ -246,19 +252,19 @@ export async function spawnBackend(hooks: BackendSpawnHooks = {}): Promise<{ por
 
     const timeout = setTimeout(() => {
       child.kill("SIGTERM");
-      fail(new Error(`Backend startup timeout (${STARTUP_TIMEOUT_MS}ms)`));
+      fail(exitedBeforeStart ?? new Error(`Backend startup timeout (${STARTUP_TIMEOUT_MS}ms)`));
     }, STARTUP_TIMEOUT_MS);
 
     const fail = (error: Error) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
-      void terminateBackend();
+      if (backendProcess === child) void terminateBackend();
       reject(error);
     };
 
     const succeed = (port: number) => {
-      if (settled) return;
+      if (settled || exitedBeforeStart) return;
       settled = true;
       clearTimeout(timeout);
       clearStableTimer();
@@ -291,18 +297,17 @@ export async function spawnBackend(hooks: BackendSpawnHooks = {}): Promise<{ por
       }
     });
 
-    child.stderr?.on("data", (data: Buffer) => {
-      for (const line of data.toString().split("\n")) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        hooks.onStderrLine?.("backend", trimmed);
-        if (!hooks.onStderrLine) console.error("[backend:stderr]", trimmed);
-      }
+    let outdatedDatabase = false;
+    createInterface({ input: child.stderr }).on("line", (line: string) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      if (line === PRELAUNCH_SCHEMA_MISMATCH) outdatedDatabase = true;
+      hooks.onStderrLine?.("backend", trimmed);
+      if (!hooks.onStderrLine) console.error("[backend:stderr]", trimmed);
     });
 
     child.on("exit", (code, signal) => {
       if (backendProcess === child) backendProcess = null;
-      clearTimeout(timeout);
       // It did not stay up: the restarts it causes keep counting.
       clearStableTimer();
       // Its connections went with it; a restarted backend reports them again.
@@ -310,7 +315,12 @@ export async function spawnBackend(hooks: BackendSpawnHooks = {}): Promise<{ por
       hooks.onExit?.("backend", code, signal);
       if (!hooks.onExit) console.log(`[backend] Exited with code=${code} signal=${signal}`);
       if (!settled) {
-        fail(new Error(`Backend exited before starting (code=${code}, signal=${signal})`));
+        const error = new Error(`Backend exited before starting (code=${code}, signal=${signal})`);
+        exitedBeforeStart = error;
+        // exit can precede the last stderr lines. An inherited pipe still has the startup deadline.
+        child.once("close", () =>
+          fail(outdatedDatabase && code && dbPath ? new OutdatedDatabaseError(dbPath) : error)
+        );
         return;
       }
       if (!isQuitting) scheduleRestart(hooks);

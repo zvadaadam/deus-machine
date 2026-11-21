@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useSettings } from "@/features/settings/api/settings.queries";
 import { native } from "@/platform";
+import { tempo } from "@/shared/lib/tempo";
 import { cn } from "@/shared/lib/utils";
 import { track } from "@/platform/analytics";
 import { StepIndicator } from "./components/StepIndicator";
@@ -29,8 +30,8 @@ export function OnboardingOverlay() {
   const { refetch } = useSettings();
 
   const [currentStep, setCurrentStep] = useState<OnboardingStep>(0);
-  const [animClass, setAnimClass] = useState("");
-  const [animating, setAnimating] = useState(false);
+  const [direction, setDirection] = useState<1 | -1>(1);
+  const [phase, setPhase] = useState<"enter" | "exit">();
   const [exiting, setExiting] = useState(false);
   const onboardingStartRef = useRef(0);
 
@@ -48,37 +49,28 @@ export function OnboardingOverlay() {
 
   useEffect(() => {
     if (!exiting) return;
-    const timer = setTimeout(() => void refetch(), 600);
+    const timer = setTimeout(() => void refetch(), tempo.slow.exit.duration * 1000);
     return () => clearTimeout(timer);
   }, [exiting, refetch]);
 
-  const goForward = useCallback(() => {
-    if (animating) return;
-    setAnimating(true);
-    setAnimClass(
-      "animate-[onboarding-step-exit-forward_160ms_cubic-bezier(.215,.61,.355,1)_forwards]"
-    );
-    setTimeout(() => {
-      const nextStep = Math.min(currentStep + 1, TOTAL_STEPS - 1) as OnboardingStep;
-      setCurrentStep(nextStep);
-      track("onboarding_step_viewed", { step: nextStep, step_name: STEP_NAMES[nextStep] });
-      setAnimClass("animate-[onboarding-step-enter-forward_240ms_cubic-bezier(.215,.61,.355,1)]");
-      setAnimating(false);
-    }, 160);
-  }, [animating, currentStep]);
+  function changeStep(by: 1 | -1) {
+    if (phase === "exit") return;
+    setDirection(by);
+    setPhase("exit");
+  }
 
-  const goBack = useCallback(() => {
-    if (animating) return;
-    setAnimating(true);
-    setAnimClass(
-      "animate-[onboarding-step-exit-back_160ms_cubic-bezier(.215,.61,.355,1)_forwards]"
-    );
-    setTimeout(() => {
-      setCurrentStep((prev) => Math.max(prev - 1, 0) as OnboardingStep);
-      setAnimClass("animate-[onboarding-step-enter-back_240ms_cubic-bezier(.215,.61,.355,1)]");
-      setAnimating(false);
-    }, 160);
-  }, [animating]);
+  function finishStepExit(event: React.AnimationEvent) {
+    if (event.target !== event.currentTarget || event.animationName !== "onboarding-step-exit")
+      return;
+    const next = Math.max(0, Math.min(currentStep + direction, TOTAL_STEPS - 1)) as OnboardingStep;
+    setCurrentStep(next);
+    if (direction === 1)
+      track("onboarding_step_viewed", { step: next, step_name: STEP_NAMES[next] });
+    setPhase("enter");
+  }
+
+  const goForward = () => changeStep(1);
+  const goBack = () => changeStep(-1);
 
   const handleComplete = useCallback(() => {
     if (exiting) return;
@@ -91,7 +83,7 @@ export function OnboardingOverlay() {
     <div
       className={cn(
         "fixed inset-0 flex items-center justify-center",
-        exiting && "opacity-0 transition-opacity duration-500 ease-out"
+        exiting && "tempo-slow-exit opacity-0 transition-opacity"
       )}
       style={{ zIndex: 9999 }}
     >
@@ -111,9 +103,8 @@ export function OnboardingOverlay() {
         className={cn(
           "relative z-10 w-full max-w-[560px] px-10",
           currentStep === 0 ? "h-[80vh]" : "",
-          !exiting && "animate-[onboarding-card-enter_420ms_cubic-bezier(.215,.61,.355,1)_forwards]"
+          !exiting && "animate-[onboarding-card-enter_var(--tempo-slow)_var(--tempo-ease)]"
         )}
-        style={{ opacity: exiting ? undefined : 0 }}
       >
         {currentStep !== 0 && (
           <div className="flex justify-center pb-6">
@@ -121,7 +112,18 @@ export function OnboardingOverlay() {
           </div>
         )}
 
-        <div className={cn("w-full", currentStep === 0 ? "h-full" : "", animClass)}>
+        <div
+          onAnimationEnd={finishStepExit}
+          className={cn(
+            "w-full",
+            currentStep === 0 && "h-full",
+            direction === -1 && "[--step-x:-60px]",
+            phase === "exit" &&
+              "animate-[onboarding-step-exit_var(--tempo-slow-exit)_var(--tempo-ease)_forwards]",
+            phase === "enter" &&
+              "animate-[onboarding-step-enter_var(--tempo-slow)_var(--tempo-ease)]"
+          )}
+        >
           {currentStep === 0 && <WelcomeStep onNext={goForward} />}
           {currentStep === 1 && <CloudSignInStep onNext={goForward} onBack={goBack} />}
           {currentStep === 2 && <GitHubSetupStep onNext={goForward} onBack={goBack} />}

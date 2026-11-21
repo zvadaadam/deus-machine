@@ -1,10 +1,10 @@
 /**
- * Workspace Actions Hook — PR bridge, archive, retry, and project commands.
+ * Workspace Actions Hook — PR bridge, archive, and project commands.
  *
  * Extracts all workspace-level action handlers from MainContent, keeping
  * the layout component focused on panel geometry. This hook manages:
  * - PR handler bridge (ChatArea sets handlers, WorkspaceHeader consumes them)
- * - Archive, retry setup, view setup logs
+ * - Archive the workspace
  * - Project command discovery and execution
  * - Target branch selection for PR creation
  */
@@ -13,7 +13,6 @@ import { useState, useCallback } from "react";
 import { toast } from "sonner";
 import {
   useArchiveWorkspace,
-  useRetrySetup,
   useProjectEnvironment,
 } from "@/features/workspace/api/workspace.queries";
 import { api } from "@shared/api";
@@ -81,7 +80,7 @@ export function useWorkspaceActions({
     [sendAgentMessageHandler]
   );
 
-  // --- Archive & retry ---
+  // --- Archive ---
 
   const { mutate: archiveWorkspace } = useArchiveWorkspace();
   const handleArchive = useCallback(() => {
@@ -99,30 +98,6 @@ export function useWorkspaceActions({
       onError: (error) => toast.error(error.message),
     });
   }, [selectedWorkspace, archiveWorkspace]);
-
-  const { mutate: retrySetup } = useRetrySetup();
-  const handleRetrySetup = useCallback(() => {
-    if (!selectedWorkspace) return;
-    retrySetup(selectedWorkspace.id);
-  }, [selectedWorkspace, retrySetup]);
-
-  const handleViewSetupLogs = useCallback(() => {
-    if (!selectedWorkspace) return;
-    call(api.setupLogs, { workspaceId: selectedWorkspace.id })
-      .then(({ logs }) => {
-        if (!logs) {
-          toast.error("No setup logs available.");
-          return;
-        }
-        const blob = new Blob([logs], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        window.open(url, "_blank");
-        setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      })
-      .catch(() => {
-        toast.error("Failed to fetch setup logs.");
-      });
-  }, [selectedWorkspace]);
 
   // --- Project environment commands ---
 
@@ -163,8 +138,6 @@ export function useWorkspaceActions({
     handleCreatePR,
     handleSendAgentMessage,
     handleArchive,
-    handleRetrySetup,
-    handleViewSetupLogs,
     // Project environment
     environmentTasks,
     handleRunTask,

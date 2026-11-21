@@ -7,18 +7,17 @@
  */
 
 import { useState } from "react";
-import { AnimatePresence, m, useReducedMotion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/shared/lib/utils";
-import { EASE_OUT_QUART } from "@/shared/lib/animation";
+import { tempo } from "@/shared/lib/tempo";
 import { useProviderStatuses, type ProviderStatusEntry } from "../api/ai-status.queries";
 import { PROVIDER_REGISTRY, getIndicatorVisuals } from "../lib/providers";
 
 export function AIStatusIndicator() {
   const { statuses, worst } = useProviderStatuses();
   const [open, setOpen] = useState(false);
-  const reduceMotion = useReducedMotion();
 
   const visuals = worst ? getIndicatorVisuals(worst.indicator) : null;
   const affected = worst?.affectedProviders.map((id) => PROVIDER_REGISTRY[id]?.name ?? id);
@@ -30,10 +29,10 @@ export function AIStatusIndicator() {
       {worst && visuals && (
         <m.div
           key="ai-status"
-          initial={reduceMotion ? false : { opacity: 0, scale: 0.8 }}
+          initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
-          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.8 }}
-          transition={{ duration: reduceMotion ? 0 : 0.2, ease: EASE_OUT_QUART }}
+          exit={{ opacity: 0, scale: 0.8, transition: tempo.fast.exit }}
+          transition={tempo.fast}
         >
           <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
@@ -100,7 +99,7 @@ function StatusPopover({ statuses }: { statuses: ProviderStatusEntry[] }) {
               href={config.statusPageUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-text-muted hover:text-text-secondary flex shrink-0 items-center gap-1 text-xs transition-colors duration-150"
+              className="text-text-muted hover:text-text-secondary flex shrink-0 items-center gap-1 text-xs transition-colors"
             >
               {s.isError ? "Unavailable" : visuals.label}
               <ArrowUpRight className="h-3 w-3" />

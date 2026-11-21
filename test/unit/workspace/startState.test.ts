@@ -1,8 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { WorkspaceStartGroup } from "@/features/session/ui/WorkspaceStartGroup";
 
 // Which kind of window this is: a browser tab unless a test says the desktop app.
 const platform = vi.hoisted(() => ({ singleWindow: false }));
 vi.mock("@/platform/capabilities", () => ({ capabilities: platform }));
+vi.mock("@/features/workspace/hooks/useSetupActions", () => ({
+  useSetupActions: (workspaceId: string) => ({ workspaceId, retry: vi.fn(), retrying: false }),
+}));
+vi.mock("@/features/workspace/hooks/useStartRecovery", () => ({ useStartRecovery: vi.fn() }));
 
 import {
   canRecoverStart,
@@ -29,6 +36,8 @@ const local = {
 } as const;
 const labels = (start: ReturnType<typeof workspaceStart>) =>
   start.steps.map((step) => `${step.state}: ${step.label}`);
+const warnings = (start: ReturnType<typeof workspaceStart>) =>
+  start.steps.flatMap((step) => (step.warning ? [step.warning] : []));
 
 describe("a starting workspace", () => {
   it("lists the step in progress under one line, with the ones before it done", () => {
@@ -64,42 +73,119 @@ describe("a starting workspace", () => {
 describe("a workspace that started", () => {
   const ready = { ...local, state: "ready", init_stage: "done", current_session_id: "s" } as const;
 
+  it("renders a running step in the live chat and only the ready title once it finishes", () => {
+    const render = (setup_status: "running" | "completed") =>
+      renderToStaticMarkup(
+        createElement(WorkspaceStartGroup, {
+          workspaceId: "w",
+          start: workspaceStart({ ...ready, setup_status }),
+        })
+      );
+    expect(render("running")).toContain("Running setup…");
+    const settled = render("completed");
+    expect(settled).toContain("Workspace ready");
+    expect(settled).toContain('aria-expanded="false"');
+    expect(settled).not.toMatch(/Running setup|Ran setup|setup finished/i);
+  });
+
+  it("has a usable checkout and chat while its setup step is still running", () => {
+    const workspace = { ...ready, setup_status: "running" } as const;
+    expect(hasCheckout(workspace)).toBe(true);
+    const start = workspaceStart(workspace);
+    expect(start).toMatchObject({
+      phase: "ready",
+      summary: "Workspace ready",
+      brief: "Running setup…",
+    });
+    expect(warnings(start)).toEqual([]);
+    expect(labels(start)).toEqual([
+      "done: Checked for the latest changes",
+      "done: Made a safe copy",
+      "active: Running setup…",
+    ]);
+  });
+
   it("folds its steps under one line, with no setup step when the project has none", () => {
     const start = workspaceStart(ready);
-    expect(start).toMatchObject({ phase: "ready", summary: "Workspace ready", warnings: [] });
+    expect(start).toMatchObject({ phase: "ready", summary: "Workspace ready" });
+    expect(warnings(start)).toEqual([]);
     expect(labels(start)).toEqual([
       "done: Checked for the latest changes",
       "done: Made a safe copy",
     ]);
-    expect(labels(workspaceStart({ ...ready, setup_status: "completed" }))).toContain(
-      "done: Ran setup"
-    );
+    const finished = workspaceStart({ ...ready, setup_status: "completed" });
+    expect(finished.summary).toBe("Workspace ready");
+    expect(finished.brief).toBeNull();
+    expect(warnings(finished)).toEqual([]);
+    expect(labels(finished)).toContain("done: Ran setup");
   });
 
   it("warns that it may be behind when the remote could not be fetched, and says why", () => {
     const start = workspaceStart({ ...ready, init_fetch_issue: "offline" });
-    expect(labels(start)[0]).toBe("warning: Started without the latest changes");
-    expect(start.warnings).toEqual([
-      "Couldn't reach the remote repository, so this starts from what is already on this computer. It may be behind.",
+    expect(labels(start)[0]).toBe("warning: Copy may be out of date");
+    expect(warnings(start)).toEqual([
+      { message: "We couldn’t reach the remote, so this copy may be out of date." },
     ]);
-    expect(workspaceStart({ ...ready, init_fetch_issue: "auth" }).warnings[0]).toContain(
-      "couldn't sign in"
+    expect(warnings(workspaceStart({ ...ready, init_fetch_issue: "auth" }))[0].message).toContain(
+      "couldn’t sign in"
     );
-    expect(workspaceStart({ ...ready, init_fetch_issue: "failed" }).warnings[0]).toContain(
-      "Couldn't get the latest"
+    expect(warnings(workspaceStart({ ...ready, init_fetch_issue: "failed" }))[0].message).toContain(
+      "couldn’t get the latest"
     );
   });
 
-  it("warns when it started without its setup script, with the script's failure", () => {
+  it("previews the exit code when the script printed nothing", () => {
     const start = workspaceStart({
       ...ready,
       setup_status: "failed",
-      error_message: "Setup exited with code 1.",
+      error_message: "Setup exited with code 17. View the setup log for details.",
     });
     expect(start.phase).toBe("ready");
     expect(labels(start)).toContain("warning: Setup failed");
-    expect(start.warnings).toEqual([
-      "The setup script failed, so this workspace started without it. Setup exited with code 1.",
+    expect(warnings(start)).toEqual([
+      {
+        message:
+          "Setup exited with code 17. The agent can see the error, and you can keep working.",
+        preview: "exit code 17",
+      },
+    ]);
+  });
+
+  it("keeps warnings with their own steps and the literal script output apart from the explanation", () => {
+    const start = workspaceStart({
+      ...ready,
+      setup_status: "failed",
+      init_fetch_issue: "offline",
+      error_message: "Setup exited with code 1.",
+      error_detail: "Checking tools\r\nMissing <b>clang</b>\n",
+    });
+    expect(start.steps.filter((step) => step.warning).map((step) => step.key)).toEqual([
+      "fetch",
+      "setup",
+    ]);
+    expect(warnings(start)).toEqual([
+      { message: "We couldn’t reach the remote, so this copy may be out of date." },
+      {
+        message: "Setup exited with code 1. The agent can see the error, and you can keep working.",
+        preview: "Missing <b>clang</b>",
+        output: "Checking tools\r\nMissing <b>clang</b>\n",
+      },
+    ]);
+    expect(start.brief).toBe("Setup failed");
+  });
+
+  it("handles interrupted setup and older rows without an exit code or a tail", () => {
+    const failed = { ...ready, setup_status: "failed" } as const;
+    expect(
+      warnings(
+        workspaceStart({
+          ...failed,
+          error_message: "Setup was stopped when Deus closed. Run it again.",
+        })
+      )[0].preview
+    ).toBe("Deus closed");
+    expect(warnings(workspaceStart(failed))).toEqual([
+      { message: "Setup didn’t finish. The agent can see the error, and you can keep working." },
     ]);
   });
 });
@@ -125,6 +211,7 @@ describe("a start that failed", () => {
       },
     });
     expect(labels(start)).toEqual(["done: Checked for the latest changes"]);
+    expect(warnings(start)).toEqual([]);
   });
 
   it("can be retried or deleted while the row is all there is", () => {
@@ -165,7 +252,7 @@ describe("a start in a few words, for the sidebar row", () => {
     );
   });
 
-  it("says nothing once ready, unless the setup script is running again or failed", () => {
+  it("says nothing once ready, unless the setup script is running or failed", () => {
     expect(workspaceStart(ready).brief).toBeNull();
     expect(workspaceStart({ ...ready, kind: "cloud" }).brief).toBeNull();
     expect(workspaceStart({ ...ready, setup_status: "completed" }).brief).toBeNull();

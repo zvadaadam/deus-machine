@@ -36,7 +36,7 @@ export function ResizeHandle({ handleProps, isDragging, label, className }: Resi
         className={cn(
           "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2",
           "via-border bg-gradient-to-b from-transparent to-transparent",
-          "transition-colors transition-opacity duration-200 ease-out",
+          "transition-opacity",
           isDragging
             ? "via-foreground/25 opacity-100"
             : "group-hover:via-foreground/25 opacity-0 group-hover:opacity-100"

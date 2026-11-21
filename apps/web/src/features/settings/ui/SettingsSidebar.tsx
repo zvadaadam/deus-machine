@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { Glide } from "@/components/ui/glide";
 import { ArrowLeft } from "lucide-react";
 import {
   settingsNavigation,
@@ -61,7 +62,12 @@ export function SettingsSidebar() {
         </button>
       </SidebarHeader>
 
-      <SidebarContent className="px-1.5">
+      <SidebarContent className="relative isolate flex-initial px-1.5">
+        <Glide
+          rows="[data-sidebar=menu-button]"
+          selected="[data-active=true]"
+          className="bg-sidebar-accent rounded-lg"
+        />
         <SidebarMenu className="gap-0.5">
           {visibleItems.map((item) => {
             const isActive = activeSection === item.id;

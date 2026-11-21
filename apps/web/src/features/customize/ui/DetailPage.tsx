@@ -189,7 +189,7 @@ export function PartRow({
     <button
       type="button"
       onClick={onClick}
-      className="hover:bg-foreground/[0.03] -mx-2 flex items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors duration-150"
+      className="hover:bg-foreground/[0.03] -mx-2 flex items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors"
     >
       {icon}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">

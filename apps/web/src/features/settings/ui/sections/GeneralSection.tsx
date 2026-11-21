@@ -17,12 +17,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
 import { RotateCcw, Loader2, RefreshCw, CheckCircle2, AlertCircle, Download } from "lucide-react";
 import { useUIStore } from "@/shared/stores/uiStore";
-import { setAnalyticsEnabled } from "@/platform/analytics";
 import { capabilities } from "@/platform";
-import { useUpdateContext } from "@/features/updates";
+import { releaseUrl, useUpdateContext } from "@/features/updates";
+import type { UpdateCheckResult } from "@shared/types/updates";
 import type { GeneralSectionProps } from "./types";
 
 export function GeneralSection({ settings, saveSetting, theme, setTheme }: GeneralSectionProps) {
@@ -30,7 +29,9 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
   const updateCtx = useUpdateContext();
   const [currentVersion, setCurrentVersion] = useState<string>(__APP_VERSION__);
   const [manualChecking, setManualChecking] = useState(false);
-  const [manualResult, setManualResult] = useState<"up-to-date" | null>(null);
+  const [manualResult, setManualResult] = useState<UpdateCheckResult | null>(null);
+  const upToDate = manualResult?.supported === true && !manualResult.available;
+  const unsupportedReason = manualResult?.supported === false ? manualResult.reason : null;
 
   useEffect(() => {
     if (window.electronAPI) {
@@ -44,20 +45,17 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
   }, []);
 
   useEffect(() => {
-    if (manualResult !== "up-to-date") return;
+    if (!upToDate) return;
     const timer = setTimeout(() => setManualResult(null), 3000);
     return () => clearTimeout(timer);
-  }, [manualResult]);
+  }, [upToDate]);
 
   async function handleCheckForUpdates() {
     if (!updateCtx) return;
     setManualChecking(true);
     setManualResult(null);
     try {
-      const isUpToDate = await updateCtx.check();
-      if (isUpToDate) {
-        setManualResult("up-to-date");
-      }
+      setManualResult(await updateCtx.check());
     } finally {
       setManualChecking(false);
     }
@@ -108,11 +106,10 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
           </SelectContent>
         </Select>
       </Field>
-      <Separator />
-
       {/* Replay onboarding — desktop only (requires Electron window effects) */}
       {capabilities.nativeOnboarding && (
         <>
+          <Separator />
           <div className="flex items-center justify-between gap-4">
             <div>
               <Label className="text-sm">Onboarding</Label>
@@ -130,31 +127,8 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
               Replay
             </Button>
           </div>
-
-          <Separator />
         </>
       )}
-
-      {/* Analytics */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <Label htmlFor="analytics-toggle" className="text-sm">
-            Usage analytics
-          </Label>
-          <p className="text-muted-foreground text-sm">
-            Help improve Deus by sharing anonymous usage data.
-          </p>
-        </div>
-        <Switch
-          id="analytics-toggle"
-          checked={settings.analytics_enabled !== false}
-          onCheckedChange={async (checked) => {
-            setAnalyticsEnabled(checked);
-            const ok = await saveSetting("analytics_enabled", checked);
-            if (!ok) setAnalyticsEnabled(!checked);
-          }}
-        />
-      </div>
 
       {/* Updates — desktop only */}
       {capabilities.autoUpdate && (
@@ -177,7 +151,7 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
             <div>
               <Label className="text-sm">Check for updates</Label>
               <p className="text-muted-foreground text-sm">
-                Updates download automatically in the background.
+                {unsupportedReason ?? "Updates download automatically in the background."}
               </p>
             </div>
             {(() => {
@@ -201,6 +175,7 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
           </div>
 
           {updateCtx &&
+            unsupportedReason === null &&
             match(updateCtx.state)
               .with({ stage: "ready" }, (state) => (
                 <div className="bg-primary/5 border-primary/20 flex items-center justify-between gap-4 rounded-lg border p-3">
@@ -224,13 +199,30 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
               .with({ stage: "error" }, (state) => (
                 <div className="text-destructive flex items-center gap-2 text-sm">
                   <AlertCircle className="size-3.5" />
-                  <span>Update failed: {state.error}</span>
+                  <span title={state.error}>
+                    {state.version ? (
+                      <>
+                        Update v{state.version} couldn't be installed.{" "}
+                        <a
+                          className="underline"
+                          href={releaseUrl(state.version)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Download it from GitHub
+                        </a>
+                        .
+                      </>
+                    ) : (
+                      "Couldn't get the latest update. Deus will try again."
+                    )}
+                  </span>
                 </div>
               ))
               .with({ stage: "idle" }, { stage: "checking" }, () => null)
               .exhaustive()}
 
-          {manualResult === "up-to-date" && (
+          {upToDate && (
             <div className="text-muted-foreground flex items-center gap-2 text-sm">
               <CheckCircle2 className="text-success size-3.5" />
               <span>You're on the latest version.</span>

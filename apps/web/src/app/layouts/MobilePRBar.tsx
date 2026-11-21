@@ -302,7 +302,7 @@ function StatusBar({
         href={prUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-text-muted hover:text-text-secondary flex flex-shrink-0 items-center gap-1 text-xs font-semibold transition-colors duration-200"
+        className="text-text-muted hover:text-text-secondary flex flex-shrink-0 items-center gap-1 text-xs font-semibold transition-colors"
       >
         <GitPullRequestCreate className="h-3 w-3" />#{prNumber}
         <ExternalLink className="h-2.5 w-2.5" />

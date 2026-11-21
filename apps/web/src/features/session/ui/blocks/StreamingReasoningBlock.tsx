@@ -12,7 +12,6 @@
  */
 
 import { useLayoutEffect, useRef } from "react";
-import { motion, useReducedMotion } from "framer-motion";
 
 interface StreamingReasoningBlockProps {
   text: string;
@@ -23,7 +22,6 @@ const PREVIEW_FADE_HEIGHT_PX = 40;
 
 export function StreamingReasoningBlock({ text }: StreamingReasoningBlockProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const reduceMotion = useReducedMotion();
   const previewMask = `linear-gradient(to bottom, var(--mask-transparent) 0, var(--mask-solid) ${PREVIEW_FADE_HEIGHT_PX}px, var(--mask-solid) 100%)`;
 
   // Auto-scroll to bottom as new text arrives
@@ -34,20 +32,7 @@ export function StreamingReasoningBlock({ text }: StreamingReasoningBlockProps) 
 
   const header = (
     <div className="flex items-center gap-2 px-2 py-1">
-      <motion.span
-        className="bg-primary/70 h-1.5 w-1.5 shrink-0 rounded-full"
-        animate={reduceMotion ? undefined : { opacity: [0.45, 1], scale: [0.92, 1] }}
-        transition={
-          reduceMotion
-            ? undefined
-            : {
-                duration: 1,
-                repeat: Infinity,
-                repeatType: "reverse",
-                ease: [0.37, 0, 0.63, 1],
-              }
-        }
-      />
+      <span className="bg-primary/70 h-1.5 w-1.5 shrink-0 rounded-full motion-safe:animate-[reasoning-pulse_1s_cubic-bezier(.37,0,.63,1)_infinite_alternate]" />
       <span className="text-muted-foreground tool-loading-shimmer text-sm font-medium">
         Thinking
       </span>

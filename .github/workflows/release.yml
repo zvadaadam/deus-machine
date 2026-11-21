@@ -246,6 +246,8 @@ jobs:
             found_app=1
             echo "Verifying signature and Gatekeeper for $app_path"
             codesign --verify --deep --strict --verbose=2 "$app_path"
+            # Keychain recognizes Codex by OpenAI's signature.
+            codesign --verify --strict -R='identifier codex and anchor apple generic and certificate leaf[subject.OU] = "2DC432GLL2"' "$app_path/Contents/Resources/bin/codex"
             spctl --assess --type execute --verbose=4 "$app_path"
           done < <(find dist-electron -maxdepth 2 -path '*/Deus.app' -type d | sort)
           if [[ "$found_app" -ne 1 ]]; then

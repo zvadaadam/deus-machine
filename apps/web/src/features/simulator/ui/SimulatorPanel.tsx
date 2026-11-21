@@ -912,7 +912,7 @@ function BuildDrawer({
     >
       {/* Shimmer bar — 2px progress indicator at the top edge of the drawer */}
       <div className="h-0.5 shrink-0 overflow-hidden">
-        <div className="bg-primary/80 h-full w-1/3 animate-[build-shimmer_1.8s_cubic-bezier(.165,.84,.44,1)_infinite]" />
+        <div className="bg-primary/80 h-full w-1/3 motion-safe:animate-[build-shimmer_1.8s_var(--tempo-ease)_infinite]" />
       </div>
 
       {/* Header strip — click to toggle log body. Shows latest line when collapsed. */}
@@ -934,10 +934,7 @@ function BuildDrawer({
         <span className="ml-auto flex items-center gap-2">
           <span className="text-text-muted font-mono text-xs tabular-nums">{formatted}</span>
           <ChevronDown
-            className={cn(
-              "text-text-muted h-3 w-3 transition-transform duration-200",
-              expanded && "rotate-180"
-            )}
+            className={cn("text-text-muted h-3 w-3 transition-transform", expanded && "rotate-180")}
           />
         </span>
       </button>

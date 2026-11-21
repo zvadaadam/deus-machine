@@ -1,3 +1,2 @@
-export { track, setAnalyticsEnabled, identifyUser } from "./track";
-export { useAnalyticsConsent } from "./useAnalyticsConsent";
+export { reportTheme, startAnalytics, track } from "./track";
 export type { AnalyticsEventMap, AnalyticsEvent } from "./events";

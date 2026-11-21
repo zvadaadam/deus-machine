@@ -16,7 +16,7 @@ export function DiffCommentPill({ comment }: DiffCommentPillProps) {
       <TooltipProvider delayDuration={200}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="bg-primary/12 border-primary/20 text-foreground hover:bg-primary/16 inline-flex max-w-full cursor-help items-center gap-1 rounded-md border px-1.5 py-0.5 align-baseline text-xs leading-tight font-medium shadow-[inset_0_1px_0_color-mix(in_oklch,var(--background)_50%,transparent)] transition-colors duration-150">
+            <span className="bg-primary/12 border-primary/20 text-foreground hover:bg-primary/16 inline-flex max-w-full cursor-help items-center gap-1 rounded-md border px-1.5 py-0.5 align-baseline text-xs leading-tight font-medium shadow-[inset_0_1px_0_color-mix(in_oklch,var(--background)_50%,transparent)] transition-colors">
               <FileCode2 className="text-primary inline-block h-3 w-3 shrink-0" />
               <span className="text-foreground/60 text-2xs shrink-0">Diff</span>
               <span className="truncate text-left">{label}</span>

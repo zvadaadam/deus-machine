@@ -4,6 +4,7 @@
  * one). One list, two shells: a dropdown under the trigger on desktop, a bottom
  * sheet with roomier rows on a phone.
  */
+import { tempo } from "@/shared/lib/tempo";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, ChevronDown, FolderGit2, FolderOpen, GitBranch, Search } from "lucide-react";
@@ -138,10 +139,7 @@ export function RepoPicker({
           {selectedRepo?.name ?? (repos.length === 0 ? "Add a project" : "Select repo")}
         </span>
         <ChevronDown
-          className={cn(
-            "text-text-disabled size-3 transition-transform duration-200",
-            open && "rotate-180"
-          )}
+          className={cn("text-text-disabled size-3 transition-transform", open && "rotate-180")}
         />
       </button>
 
@@ -169,8 +167,8 @@ export function RepoPicker({
             <motion.div
               initial={{ opacity: 0, scale: 0.96, y: -4 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: -4 }}
-              transition={{ duration: 0.15, ease: [0.215, 0.61, 0.355, 1] }}
+              exit={{ opacity: 0, scale: 0.96, y: -4, transition: tempo.moderate.exit }}
+              transition={tempo.moderate}
               className={cn(
                 "absolute top-full left-0 z-50 mt-1 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border",
                 "border-border/55 from-bg-overlay/95 to-bg-elevated/94 bg-linear-to-b backdrop-blur-2xl",
@@ -242,7 +240,7 @@ function RepoList({
               type="button"
               onClick={() => onSelect(repo.id)}
               className={cn(
-                "flex w-full items-center justify-between px-3 text-left transition-colors duration-100",
+                "flex w-full items-center justify-between px-3 text-left transition-colors",
                 "hover:bg-bg-raised/45",
                 row,
                 text,
@@ -293,7 +291,7 @@ function RepoList({
             type="button"
             onClick={run}
             className={cn(
-              "text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 transition-colors duration-100",
+              "text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 transition-colors",
               row,
               text
             )}

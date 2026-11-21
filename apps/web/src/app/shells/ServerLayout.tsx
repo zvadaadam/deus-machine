@@ -19,8 +19,9 @@ import { useGlobalSessionNotifications } from "@/features/session/hooks/useGloba
 import { useAgentEvents } from "@/features/session/hooks/useAgentEvents";
 import { useQueryProtocol } from "@/shared/hooks/useQueryProtocol";
 import { useBackendRestart } from "@/shared/hooks/useBackendRestart";
-import { useAnalyticsConsent } from "@/platform/analytics";
 import { useSettings } from "@/features/settings";
+import { reportTheme } from "@/platform/analytics";
+import { useTheme } from "../providers/ThemeProvider";
 import {
   useAuth,
   useMachineMembership,
@@ -116,6 +117,8 @@ function ServerContent() {
   useQueryProtocol();
 
   const settingsQuery = useSettings();
+  const { preference } = useTheme();
+  useEffect(() => reportTheme(preference), [preference]);
 
   // The product shell mounted, so this browser is a user — mark it so the root
   // domain's edge router serves the app (not the landing) at `/` next time.
@@ -129,7 +132,6 @@ function ServerContent() {
   useAgentEvents();
 
   useBackendRestart();
-  useAnalyticsConsent();
 
   // While settings load, show a loading state
   if (settingsQuery.isLoading) {

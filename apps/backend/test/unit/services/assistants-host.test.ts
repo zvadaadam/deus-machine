@@ -184,7 +184,7 @@ function message(sessionId: string, turnId: string, role: string, text: string, 
     .run(`p-${id}`, id, sessionId, JSON.stringify({ id: `p-${id}`, type: "text", text }));
 }
 
-/** Setup ends as the pipeline ends it: the first chat opened under its minted id, the workspace ready. */
+/** Checkout finished and the workspace is ready with its first chat. */
 function ready(entry: { id: string; workspace: { id: string } }) {
   const w = state.db
     .prepare("SELECT started_by FROM workspaces WHERE id = ?")
@@ -322,6 +322,9 @@ describe("sending and starting", () => {
     };
     const entry = await host.start!(LEAD as never, input as never);
     expect(entry).toMatchObject({ status: "setting_up", startedBy: LEAD });
+    state.db
+      .prepare("UPDATE workspaces SET setup_status = 'running' WHERE id = ?")
+      .run(entry.workspace.id);
     ready(entry);
     await vi.waitFor(() => expect(state.sent.map((s) => s.input.turnId)).toEqual(["first-1"]));
 
@@ -331,7 +334,7 @@ describe("sending and starting", () => {
     expect(state.sent).toHaveLength(1);
   });
 
-  it("a fourth workspace agents started is refused at the commit while three are set up", async () => {
+  it("counts both starting workspaces and ready ones running setup against the agent's cap", async () => {
     const host = createDeusHost();
     const input = {
       turnId: "x",
@@ -339,15 +342,22 @@ describe("sending and starting", () => {
       message: "go",
       origin: LEAD,
     };
-    for (let i = 0; i < 3; i++)
-      await host.start!(LEAD as never, { ...input, turnId: `x${i}` } as never);
-    await expect(host.start!(LEAD as never, input as never)).rejects.toMatchObject({
-      refusal: { code: "limit_setting_up" },
-    });
+    const start = (turnId: string) => host.start!(LEAD as never, { ...input, turnId } as never);
+    const first = await start("first");
+    await start("second");
+    await start("third");
+    const limit = { refusal: { code: "limit_setting_up" } };
+    await expect(start("fourth")).rejects.toMatchObject(limit);
+    const status = state.db.prepare("UPDATE workspaces SET setup_status = ? WHERE id = ?");
+    status.run("running", first.workspace.id);
+    ready(first);
+    await expect(start("fourth")).rejects.toMatchObject(limit);
     // The person's own start is not an agent's.
     await expect(
       host.start!(LOCAL_CALLER as never, { ...input, origin: { kind: "person" } } as never)
     ).resolves.toMatchObject({ status: "setting_up" });
+    status.run("completed", first.workspace.id);
+    await expect(start("fourth")).resolves.toMatchObject({ status: "setting_up" });
   });
 
   it("a start by an archived starter, or into an archived workspace, is refused at the commit", async () => {

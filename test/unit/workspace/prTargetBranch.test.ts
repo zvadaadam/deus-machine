@@ -23,7 +23,6 @@ vi.mock("react", async (importOriginal) => ({
 }));
 vi.mock("@/features/workspace/api/workspace.queries", () => ({
   useArchiveWorkspace: () => ({ mutate: vi.fn() }),
-  useRetrySetup: () => ({ mutate: vi.fn() }),
   useProjectEnvironment: () => ({ data: undefined }),
 }));
 vi.mock("@/platform/ws", () => ({ call: vi.fn() }));

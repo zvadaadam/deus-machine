@@ -17,6 +17,7 @@ import {
 } from "@dnd-kit/sortable";
 import { Blocks, ClockFading, Cloud, FolderOpen, SquarePen, type LucideIcon } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { Glide } from "@/components/ui/glide";
 import { Sidebar, SidebarContent, SidebarMenu, useSidebar } from "@/components/ui/sidebar";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
@@ -26,6 +27,14 @@ import { DraggableRepository } from "./DraggableRepository";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarRow, SidebarRowMain } from "./SidebarRow";
+
+const sidebarGlide = (
+  <Glide
+    rows="[data-sidebar-row]"
+    selected="[data-active]"
+    className="bg-foreground/[0.04] rounded-lg"
+  />
+);
 
 export function AppSidebar({
   repositories,
@@ -50,6 +59,7 @@ export function AppSidebar({
   places,
 }: AppSidebarProps) {
   const { state, hoverOpen, toggleSidebar, isMobile, setOpenMobile } = useSidebar();
+  const [dragging, setDragging] = React.useState(false);
   const openSettings = useUIStore((s) => s.openSettings);
   const collapsedRepos = useSidebarStore((s) => s.collapsedRepos);
   const toggleRepoCollapse = useSidebarStore((s) => s.toggleRepoCollapse);
@@ -93,6 +103,7 @@ export function AppSidebar({
    * Handle drag end - reorder repositories
    */
   function handleDragEnd(event: DragEndEvent) {
+    setDragging(false);
     const { active, over } = event;
 
     if (!over || active.id === over.id) {
@@ -127,7 +138,8 @@ export function AppSidebar({
       {/* App-level nav — sits under the header, above the repo list. The first
           row is Home: where a workspace starts, or on web-direct (which cannot
           start one) the list of cloud sessions. */}
-      <div className="flex flex-col gap-px px-1.5 pb-1">
+      <div className="relative isolate flex flex-col gap-px px-1.5 pb-1">
+        {sidebarGlide}
         <AppNavRow
           icon={webDirect ? Cloud : SquarePen}
           label={webDirect ? "Cloud sessions" : "New workspace"}
@@ -189,32 +201,43 @@ export function AppSidebar({
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
+            onDragStart={() => setDragging(true)}
+            onDragCancel={() => setDragging(false)}
             onDragEnd={handleDragEnd}
           >
             <SortableContext
               items={orderedRepositories.map((r) => r.repo_id)}
               strategy={verticalListSortingStrategy}
             >
-              <SidebarMenu className="gap-1 px-1.5 py-2">
-                {orderedRepositories.map((repo) => (
-                  <DraggableRepository
-                    key={repo.repo_id}
-                    repository={repo}
-                    isCollapsed={collapsedRepos.has(repo.repo_id)}
-                    selectedWorkspaceId={selectedWorkspaceId}
-                    onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
-                    onWorkspaceClick={handleWorkspaceClick}
-                    onNewWorkspace={onNewWorkspace}
-                    onNewWorkspaceFromGitHub={onNewWorkspaceFromGitHub}
-                    windowLocation={places.location}
-                    onArchive={onArchive}
-                    onStatusChange={onStatusChange}
-                    diffStatsMap={diffStatsMap}
-                    sidebarExpanded={isExpanded}
-                    dragDisabled={!isExpanded}
-                  />
-                ))}
-              </SidebarMenu>
+              {/* Only drag start, drop and cancel change the fill's visibility. */}
+              <div
+                className={cn(
+                  "relative isolate shrink-0",
+                  dragging && "[&>[data-slot=glide]]:invisible"
+                )}
+              >
+                {sidebarGlide}
+                <SidebarMenu className="gap-1 px-1.5 py-2">
+                  {orderedRepositories.map((repo) => (
+                    <DraggableRepository
+                      key={repo.repo_id}
+                      repository={repo}
+                      isCollapsed={collapsedRepos.has(repo.repo_id)}
+                      selectedWorkspaceId={selectedWorkspaceId}
+                      onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
+                      onWorkspaceClick={handleWorkspaceClick}
+                      onNewWorkspace={onNewWorkspace}
+                      onNewWorkspaceFromGitHub={onNewWorkspaceFromGitHub}
+                      windowLocation={places.location}
+                      onArchive={onArchive}
+                      onStatusChange={onStatusChange}
+                      diffStatsMap={diffStatsMap}
+                      sidebarExpanded={isExpanded}
+                      dragDisabled={!isExpanded}
+                    />
+                  ))}
+                </SidebarMenu>
+              </div>
             </SortableContext>
           </DndContext>
         </SidebarContent>

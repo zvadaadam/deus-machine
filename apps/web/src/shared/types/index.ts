@@ -6,8 +6,6 @@ export type {
   RepoGroup,
   DiffStats,
   FileChange,
-  FileEdit,
-  FileChangeGroup,
   Compaction,
   Message,
   MessageRole,

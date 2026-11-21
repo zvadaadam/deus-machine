@@ -13,9 +13,10 @@
  * - Backward compatible with existing tool renderers
  */
 
+import { Collapse } from "@/components/ui/collapse";
 import { useCallback, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronRight, X } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
 import type { ToolUseBlock, ToolResultBlock } from "../types";
 import { ToolError } from "./ToolError";
@@ -38,8 +39,6 @@ export interface BaseToolRendererProps {
   renderContent?: (props: { toolUse: ToolUseBlock; toolResult?: ToolResultBlock }) => ReactNode; // OLD API
   renderSummary?: () => ReactNode; // Persistent context shown in header
 }
-
-const expandTransition = { duration: 0.15, ease: [0.165, 0.84, 0.44, 1] as const };
 
 export function BaseToolRenderer({
   toolName,
@@ -84,7 +83,7 @@ export function BaseToolRenderer({
         className={cn(
           "group flex items-center gap-2 px-2 py-1.5 text-sm",
           "w-full cursor-pointer text-left",
-          "transition-opacity duration-150 ease-out",
+          "transition-opacity",
           "opacity-80 hover:opacity-100",
           "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
         )}
@@ -98,7 +97,7 @@ export function BaseToolRenderer({
             {/* Tool icon or error X — default state (hides on hover or when expanded) */}
             <div
               className={cn(
-                "absolute top-0 left-0 transition-opacity duration-150 ease-out",
+                "absolute top-0 left-0 transition-opacity",
                 isExpanded ? "opacity-0" : "opacity-100 group-hover:opacity-0"
               )}
             >
@@ -112,7 +111,7 @@ export function BaseToolRenderer({
             {/* Chevron - shows on hover or when expanded */}
             <ChevronRight
               className={cn(
-                "text-muted-foreground/50 absolute top-0 left-0 h-3.5 w-3.5 transition-[transform,opacity] duration-150 ease-out",
+                "text-muted-foreground/50 absolute top-0 left-0 h-3.5 w-3.5 transition-[rotate,opacity]",
                 isExpanded && "rotate-90",
                 isExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
               )}
@@ -140,14 +139,7 @@ export function BaseToolRenderer({
       {/* Expanded content — AnimatePresence for smooth height + opacity transition. */}
       <AnimatePresence initial={false}>
         {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={expandTransition}
-            style={{ overflow: "hidden" }}
-            className="mt-0.5 w-full min-w-0"
-          >
+          <Collapse className="mt-0.5 w-full min-w-0">
             {isError && toolResult && !showContentOnError ? (
               <ToolError content={toolResult.content} />
             ) : (
@@ -156,7 +148,7 @@ export function BaseToolRenderer({
                 {!children && renderContent && renderContent({ toolUse, toolResult })}
               </>
             )}
-          </motion.div>
+          </Collapse>
         )}
       </AnimatePresence>
     </div>

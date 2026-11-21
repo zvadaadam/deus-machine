@@ -26,6 +26,7 @@ const {
   mockAbortTurn,
   mockGetDatabase,
   mockInvalidate,
+  mockSetupForTurn,
 } = vi.hoisted(() => ({
   mockOpen: vi.fn(),
   mockLinkStartTurn: vi.fn(),
@@ -33,6 +34,7 @@ const {
   mockAbortTurn: vi.fn(),
   mockGetDatabase: vi.fn(),
   mockInvalidate: vi.fn(),
+  mockSetupForTurn: vi.fn(),
 }));
 
 vi.mock("../../../src/lib/database", () => ({
@@ -40,6 +42,9 @@ vi.mock("../../../src/lib/database", () => ({
   DB_PATH: "/tmp/deus-service-turn-test.db",
 }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
+vi.mock("../../../src/services/project-environment.service", () => ({
+  setupForTurn: mockSetupForTurn,
+}));
 vi.mock("../../../src/services/simulator-context", () => ({
   agentDeviceFor: (sessionId: string) => ({ session: sessionId, udid: null }),
 }));
@@ -70,6 +75,7 @@ describe("agentService.startTurn", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "log").mockImplementation(() => {});
+    mockSetupForTurn.mockReturnValue(null);
     mockOpen.mockResolvedValue({
       startTurn: mockLinkStartTurn,
       getAgents: () => [],
@@ -108,6 +114,26 @@ describe("agentService.startTurn", () => {
 
     expect(mockAbortTurn).not.toHaveBeenCalled();
   });
+
+  it.each(["claude-code", "codex-app-server"] as const)(
+    "passes setup as it stands at the start of each %s turn",
+    async (harness) => {
+      mockSetupForTurn.mockReturnValueOnce({
+        state: "running",
+        command: "bun install",
+        log: "/tmp/setup.log",
+        statusFile: "/tmp/setup.status",
+      });
+      mockLinkStartTurn.mockResolvedValue({});
+      const cwd = "/tmp/nonexistent-ws";
+      for (const id of ["first", "next"])
+        await agentService.startTurn(SESSION, id, harness, "hello", { cwd });
+      expect(mockSetupForTurn.mock.calls).toEqual([[SESSION], [SESSION]]);
+      const [first, next] = mockLinkStartTurn.mock.calls;
+      expect(first![0].config.systemPromptAppend).toContain("cat '/tmp/setup.status'");
+      expect(next![0].config.systemPromptAppend).not.toContain("/tmp/setup.status");
+    }
+  );
 
   it("does NOT roll back a turn it never registered", async () => {
     // beginTurn said no: the session already holds a live turn locally. The

@@ -261,7 +261,6 @@ export function createStack({ root, agnt, directory }) {
       path.join(dir, "preferences.json"),
       JSON.stringify({
         onboarding_completed: true,
-        analytics_enabled: false,
         remote_access_enabled: true,
         server_name: name,
       })

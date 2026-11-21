@@ -7,6 +7,7 @@
  * dropdowns, focus-mode chat bar) layer above it via plain CSS — no native
  * hide/show IPC dance like the old WebContentsView path required.
  */
+import { cn } from "@/shared/lib/utils";
 import {
   useCallback,
   useEffect,
@@ -772,12 +773,12 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       {/* Top loading bar */}
       {visible && (tab.loading || completingLoad) && (
         <div
-          className="bg-primary pointer-events-none absolute inset-x-0 top-0 z-20 h-[2px] origin-left"
-          style={{
-            animation: tab.loading
-              ? "browser-loading 8s cubic-bezier(.19,1,.22,1) forwards"
-              : "browser-loading-complete 0.4s ease-out forwards",
-          }}
+          className={cn(
+            "bg-primary pointer-events-none absolute inset-x-0 top-0 z-20 h-[2px] origin-left",
+            tab.loading
+              ? "motion-safe:animate-[browser-loading_8s_cubic-bezier(.19,1,.22,1)_forwards]"
+              : "motion-safe:animate-[browser-loading-complete_0.4s_ease-out_forwards] motion-reduce:animate-[fadeOut_var(--tempo-fast-exit)_var(--tempo-ease)_forwards]"
+          )}
         />
       )}
 

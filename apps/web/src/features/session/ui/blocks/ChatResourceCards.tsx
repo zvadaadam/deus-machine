@@ -76,7 +76,7 @@ function ResourceCard({
     <div
       className={cn(
         "border-border/70 bg-card/80 flex min-h-14 max-w-full items-center gap-3 rounded-lg border px-3 py-2 shadow-xs",
-        "hover:bg-card transition-[background-color,border-color] duration-150 ease-out"
+        "hover:bg-card transition-[background-color,border-color]"
       )}
     >
       <div className="bg-muted/70 text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-md">

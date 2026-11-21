@@ -20,6 +20,7 @@ vi.mock("../../../src/services/cloud-environment.service", () => ({
   getCloudEnvironmentInfo: mocks.saved,
 }));
 import { initializeWorkspace } from "../../../src/services/workspace-init.service";
+import { setupFile } from "../../../src/services/setup-status";
 import {
   readLocalProjectEnvironment,
   prepareLocalEnvironment,
@@ -28,12 +29,14 @@ import {
   localProjectEnv,
   projectEnvironmentResponse,
   runSetupCommand,
+  stopWorkspaceSetup,
 } from "../../../src/services/project-environment.service";
 
 let root: string;
 const git = (...args: string[]) =>
   execFileSync("git", args, { cwd: root, stdio: "pipe" }).toString().trim();
 const workspaceId = "environment-test";
+const statusFile = () => fs.readFileSync(setupFile(workspaceId, "status"), "utf8");
 function project(recipe: ProjectEnvironment) {
   writeProjectFile(root, recipe);
 }
@@ -43,7 +46,7 @@ function row() {
     unknown
   >;
 }
-async function initialize() {
+async function initialize(waitForSetup = true) {
   git("add", ".");
   git(
     "-c",
@@ -63,12 +66,14 @@ async function initialize() {
     sourceBranch: "main",
     repoOriginUrl: "https://github.com/test/app",
   });
+  if (waitForSetup) await vi.waitFor(() => expect(row().setup_status).not.toBe("running"));
   return directory;
 }
 beforeEach(() => {
   fs.mkdirSync(".context", { recursive: true });
   root = fs.mkdtempSync(path.resolve(".context/environment-test-"));
   git("init", "-b", "main");
+  vi.stubEnv("TMPDIR", path.join(root, ".git"));
   fs.writeFileSync(path.join(root, "tracked.txt"), "original\n");
   fs.writeFileSync(
     path.join(root, ".gitignore"),
@@ -83,6 +88,7 @@ beforeEach(() => {
   mocks.db.prepare("INSERT INTO workspaces (id) VALUES (?)").run(workspaceId);
 });
 afterEach(() => {
+  vi.unstubAllEnvs();
   mocks.db?.close();
   fs.rmSync(root, { recursive: true, force: true });
 });
@@ -100,6 +106,7 @@ describe("local project environment journey", () => {
     fs.writeFileSync(path.join(root, ".env"), "APP_SECRET=local-test-value\n");
     const directory = await initialize();
     expect(row()).toMatchObject({ state: "ready", setup_status: "completed", init_stage: "done" });
+    expect(statusFile()).toBe("completed\n");
     expect(fs.readFileSync(path.join(directory, "proof.txt"), "utf8")).toBe("local-test-value");
     expect(fs.readFileSync(path.join(directory, "tracked.txt"), "utf8")).toBe(
       "original\nsetup edit\n"
@@ -113,7 +120,12 @@ describe("local project environment journey", () => {
       .db!.prepare("UPDATE workspaces SET first_session_id = 'chat-1', started_by = ? WHERE id = ?")
       .run(startedBy, workspaceId);
     await initialize();
-    expect(row()).toMatchObject({ state: "ready", current_session_id: "chat-1" });
+    expect(row()).toMatchObject({
+      state: "ready",
+      current_session_id: "chat-1",
+      setup_status: "none",
+    });
+    expect(statusFile()).toBe("none\n");
     expect(mocks.db!.prepare("SELECT id, started_by FROM sessions").all()).toEqual([
       { id: "chat-1", started_by: startedBy },
     ]);
@@ -138,6 +150,24 @@ describe("local project environment journey", () => {
     expect(
       (await readLocalProjectEnvironment(directory, "https://github.com/test/app")).project
     ).toEqual({ version: 1 });
+  });
+  it("opens the chat during a saved recipe lookup and never starts its script after an archive", async () => {
+    mocks.cloud.mockReturnValue({ baseUrl: "https://cloud.test", apiKey: "key" });
+    let answer!: (value: unknown) => void;
+    mocks.saved.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    const directory = await initialize(false);
+    expect(row()).toMatchObject({ state: "ready", setup_status: "running" });
+    expect(statusFile()).toBe("running\n");
+    expect(mocks.saved).toHaveBeenCalledTimes(1);
+    await stopWorkspaceSetup(workspaceId);
+    answer({ configured: true, project: { version: 1, setup: "touch unexpected" } });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(row()).toMatchObject({
+      setup_status: "failed",
+      error_message: "Setup was stopped when the workspace was archived.",
+    });
+    expect(statusFile()).toBe("failed\n");
+    expect(fs.existsSync(path.join(directory, "unexpected"))).toBe(false);
   });
   it("reports invalid files, allows repair and an explicit retry, and never falls back on an error", async () => {
     fs.mkdirSync(path.join(root, ".deus"));
@@ -186,6 +216,109 @@ describe("local project environment journey", () => {
     expect(fs.readFileSync(path.join(directory, "nested/proof.txt"), "utf8")).toBe("done");
     expect(fs.existsSync(path.join(directory, "nested/unexpected.txt"))).toBe(false);
   });
+  it.each([1, 2])(
+    "keeps the last two non-empty setup lines from fd %i on a failed exit",
+    async (fd) => {
+      project({
+        version: 1,
+        setup: `printf 'earlier step\\n  compiling  \\r\\n\\n\\033[31mmissing <tool>\\033[0m\\n    \\n\\033[0m' >&${fd}\nexit 1`,
+      });
+      const directory = await initialize();
+      expect(row()).toMatchObject({
+        state: "ready",
+        setup_status: "failed",
+        error_message: "Setup exited with code 1.",
+        error_detail: "compiling\nmissing <tool>",
+      });
+      expect(statusFile()).toBe("failed 1\n");
+      writeProjectFile(directory, { version: 1, setup: "exit 1" });
+      await prepareLocalEnvironment(workspaceId, directory);
+      expect(row()).toMatchObject({
+        setup_status: "failed",
+        error_message: "Setup exited with code 1. View the setup log for details.",
+        error_detail: null,
+      });
+    }
+  );
+  it("clips a complete line within the window without splitting a Unicode character", async () => {
+    const suffix = "x".repeat(392) + " failed";
+    const output = "x".repeat(600) + "🛠" + suffix;
+    project({ version: 1, setup: `printf '%s\\n' '${output}'\nexit 1` });
+    await prepareLocalEnvironment(workspaceId, root);
+    expect(row().error_detail).toBe(suffix);
+    project({ version: 1, setup: "true" });
+    await prepareLocalEnvironment(workspaceId, root);
+    expect(row()).toMatchObject({
+      setup_status: "completed",
+      error_message: null,
+      error_detail: null,
+    });
+  });
+  it("drops the cut first line of a log window and keeps the complete diagnostic", async () => {
+    project({ version: 1, setup: "printf '%05000d\\nMissing compiler' 0\nexit 1" });
+    await prepareLocalEnvironment(workspaceId, root);
+    expect(row().error_detail).toBe("Missing compiler");
+  });
+  it("uses the plain sentence for one 16 KB line ending in 6,000 spaces", async () => {
+    project({ version: 1, setup: "printf '%010000d failed%6000s' 0 ''\nexit 1" });
+    await prepareLocalEnvironment(workspaceId, root);
+    expect(row()).toMatchObject({
+      error_message: "Setup exited with code 1. View the setup log for details.",
+      error_detail: null,
+    });
+  });
+  it("uses the plain sentence when the finished log cannot be read", async () => {
+    project({ version: 1, setup: "echo 'Missing compiler'\nexit 1" });
+    vi.spyOn(fs.promises, "open").mockRejectedValueOnce(new Error("log was removed"));
+    await prepareLocalEnvironment(workspaceId, root);
+    expect(row()).toMatchObject({
+      error_message: "Setup exited with code 1. View the setup log for details.",
+      error_detail: null,
+    });
+  });
+  it.each(["timeout", "archive"])(
+    "settles a setup on %s while a detached helper holds its pipes",
+    async (end) => {
+      project({
+        version: 1,
+        setup: `printf 'earlier\\ninstalling\\n\\033[31mMissing compiler\\033[0m\\n'
+      exec node -e 'const helper = require("node:child_process").spawn("sleep", ["30"], { detached: true, stdio: "inherit" });
+        require("node:fs").writeFileSync("helper-pid", String(helper.pid));'`,
+      });
+      const pidFile = path.join(root, "helper-pid");
+      if (end === "timeout") vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const setup = prepareLocalEnvironment(workspaceId, root);
+      try {
+        await vi.waitFor(() => expect(fs.existsSync(pidFile)).toBe(true));
+        expect(row().setup_status).toBe("running");
+        expect(statusFile()).toBe("running\n");
+        const settled = vi.fn();
+        void (end === "archive" ? stopWorkspaceSetup(workspaceId) : setup).then(settled);
+        if (end === "timeout") vi.advanceTimersByTime(300_000);
+        await vi.waitFor(() => expect(settled).toHaveBeenCalledOnce(), { timeout: 2000 });
+        process.kill(Number(fs.readFileSync(pidFile, "utf8")), 0); // The helper still holds both pipes.
+        expect(row()).toMatchObject({
+          setup_status: "failed",
+          error_message:
+            end === "timeout"
+              ? "Setup timed out after five minutes."
+              : "Setup was stopped when the workspace was archived.",
+          error_detail: end === "timeout" ? "installing\nMissing compiler" : null,
+        });
+        expect(statusFile()).toBe("failed\n");
+      } finally {
+        vi.useRealTimers();
+        const stopped = stopWorkspaceSetup(workspaceId);
+        if (fs.existsSync(pidFile)) {
+          const helper = Number(fs.readFileSync(pidFile, "utf8"));
+          process.kill(helper, "SIGKILL");
+          await vi.waitFor(() => expect(() => process.kill(helper, 0)).toThrow());
+        }
+        await stopped;
+        await setup;
+      }
+    }
+  );
   it("stops the setup shell and its descendant when the log stream fails", async () => {
     let shellPid: number | undefined;
     let childPid: number | undefined;
@@ -257,6 +390,15 @@ describe("local project environment journey", () => {
     await expect(
       environment.runSetupCommand(workspaceId, "true", root, process.env)
     ).rejects.toThrow("Deus is closing.");
+    // A recipe that resolves after shutdown cannot spawn; its durable status still explains the stop.
+    project({ version: 1, setup: "touch unexpected" });
+    await environment.prepareLocalEnvironment(workspaceId, root);
+    expect(row()).toMatchObject({
+      setup_status: "failed",
+      error_message: "Setup was stopped when Deus closed. Run it again.",
+    });
+    expect(statusFile()).toBe("failed\n");
+    expect(fs.existsSync(path.join(root, "unexpected"))).toBe(false);
   });
   it("makes a saved recipe publishable while retaining ignored workspace data", () => {
     fs.writeFileSync(path.join(root, ".gitignore"), ".deus/\n");

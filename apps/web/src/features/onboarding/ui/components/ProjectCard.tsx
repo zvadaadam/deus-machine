@@ -36,7 +36,7 @@ export const ProjectCard = memo(function ProjectCard({
     >
       <div
         className={cn(
-          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors",
           selected ? "bg-onboarding-foreground/15" : "bg-onboarding-foreground/5"
         )}
       >

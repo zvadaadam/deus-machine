@@ -18,6 +18,12 @@ import { homedir } from "os";
 import { is } from "@electron-toolkit/utils";
 import { spawnBackend, stopBackend } from "./backend-process";
 import {
+  databaseRecoveryMessage,
+  datedBackupPath,
+  OutdatedDatabaseError,
+  startFresh,
+} from "./database-recovery";
+import {
   APP_URL,
   originOf,
   registerAppScheme,
@@ -81,9 +87,10 @@ let mainWindow: BrowserWindow | null = null;
 
 // The window's origin: Vite's in dev, app://deus otherwise (the one the
 // backend was told to trust, backend-process.ts).
+const devRendererUrl = is.dev ? process.env.ELECTRON_RENDERER_URL : undefined;
 const windowOrigin = rendererOrigin({
   isDev: is.dev,
-  rendererUrl: process.env.ELECTRON_RENDERER_URL,
+  rendererUrl: devRendererUrl,
 });
 
 /** The window's own page: not a Browser-tab guest, nor a frame inside the window. */
@@ -283,8 +290,8 @@ async function createWindow(): Promise<void> {
   });
 
   // Dev: load Vite dev server. Prod: the built files, at app://deus.
-  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
-    mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
+  if (devRendererUrl) {
+    mainWindow.loadURL(devRendererUrl);
   } else {
     serveRenderer(join(__dirname, "../renderer"));
     mainWindow.loadURL(APP_URL);
@@ -364,17 +371,32 @@ app.whenReady().then(async () => {
     // A Quit while the backend was starting stopped it; that is not a failure.
     if (quitState !== "running") return;
     const { dialog } = await import("electron");
+    const database = err instanceof OutdatedDatabaseError ? err.databasePath : undefined;
+    const backup = database && datedBackupPath(database);
     const { response } = await dialog.showMessageBox({
       type: "error",
-      buttons: ["Show Logs", "OK"],
       defaultId: 1,
       cancelId: 1,
       noLink: true,
-      message: "Failed to Start",
-      detail: formatStartupFailureDetail(err),
+      ...(backup
+        ? databaseRecoveryMessage(backup, devRendererUrl)
+        : {
+            message: "Failed to Start",
+            detail: formatStartupFailureDetail(err),
+            buttons: ["Show Logs", "OK"],
+          }),
     });
     if (response === 0) {
       shell.showItemInFolder(getMainLogPath());
+    } else if (response === 2 && database && backup) {
+      try {
+        startFresh(database, backup, devRendererUrl);
+      } catch (error) {
+        dialog.showErrorBox(
+          "Couldn't start fresh",
+          error instanceof Error ? error.message : String(error)
+        );
+      }
     }
     app.quit();
     return;

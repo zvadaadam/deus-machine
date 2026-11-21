@@ -39,7 +39,17 @@ import {
   retryWorkspaceInit,
   type InitContext,
 } from "../../../src/services/workspace-init.service";
-import { unarchiveWorkspace } from "../../../src/services/workspace-archive.service";
+import {
+  archiveWorkspace,
+  unarchiveWorkspace,
+} from "../../../src/services/workspace-archive.service";
+import {
+  prepareLocalEnvironment,
+  setupForTurn,
+  writeProjectFile,
+} from "../../../src/services/project-environment.service";
+import { setSetupStatus, setupFile } from "../../../src/services/setup-status";
+import { buildWorkspaceContext } from "../../../src/services/agent/workspace-context";
 import { GitError, runGit } from "../../../src/lib/git-process";
 import { CELESTIAL_NAMES } from "../../../src/services/workspace.service";
 
@@ -59,6 +69,12 @@ const row = (id: string) =>
   db().prepare("SELECT * FROM workspaces WHERE id = ?").get(id) as Record<string, unknown>;
 const workspacePath = (slug: string) => path.join(root, ".deus", slug);
 const branches = () => git("branch", "--format=%(refname:short)").split("\n");
+const setupStatus = (id: string) => fs.readFileSync(setupFile(id, "status"), "utf8");
+
+function setupScript(command: string) {
+  fs.mkdirSync(path.join(root, ".deus"), { recursive: true });
+  commit(root, ".deus/environment.json", JSON.stringify({ version: 1, setup: command }));
+}
 
 /** A workspace row as the create route writes it. */
 function add(id: string, slug: string, fields: Record<string, unknown> = {}): InitContext {
@@ -91,6 +107,7 @@ function add(id: string, slug: string, fields: Record<string, unknown> = {}): In
 beforeEach(() => {
   fs.mkdirSync(".context", { recursive: true });
   scratch = fs.mkdtempSync(path.resolve(".context/workspace-start-"));
+  vi.stubEnv("TMPDIR", scratch);
   root = path.join(scratch, "project");
   fs.mkdirSync(root);
   git("init", "-q", "-b", "main");
@@ -108,12 +125,17 @@ beforeEach(() => {
     .run(root);
 });
 afterEach(() => {
+  vi.unstubAllEnvs();
   mocks.db?.close();
   fs.rmSync(scratch, { recursive: true, force: true });
 });
 
 describe("starting a workspace", () => {
   it("makes the checkout and the first chat, and pushes every stage to clients", async () => {
+    const stages = new Set();
+    mocks.invalidate.mockImplementation((resources: string[]) => {
+      if (resources.includes("workspaces")) stages.add(row("w").init_stage);
+    });
     await initializeWorkspace(add("w", "vega"));
 
     expect(row("w")).toMatchObject({
@@ -124,11 +146,110 @@ describe("starting a workspace", () => {
     });
     expect(row("w").current_session_id).toBeTruthy();
     expect(gitIn(workspacePath("vega"), "branch", "--show-current")).toBe("test-user/vega");
-    // fetch, worktree, setup, session, done: each one a push of the workspace list.
-    const pushes = mocks.invalidate.mock.calls.filter(([resources]) =>
-      (resources as string[]).includes("workspaces")
+    expect([...stages]).toEqual(["fetch", "worktree", "session", "done"]);
+    expect(setupForTurn(String(row("w").first_session_id))).toBeNull();
+  });
+
+  it("briefs any chat with its running command, then with the recorded failure and the person's retry", async () => {
+    const command =
+      "touch started; while [ ! -e finish ]; do sleep 0.05; done; printf 'Checking tools\\nMissing compiler\u2028Next step\u202e\\n'; exit 7";
+    setupScript(command);
+    await initializeWorkspace(add("w", "vega"));
+    const cwd = workspacePath("vega");
+    const session = String(row("w").first_session_id);
+    const brief = (id: string) => buildWorkspaceContext(cwd, null, setupForTurn(id));
+    try {
+      await vi.waitFor(() => expect(fs.existsSync(path.join(cwd, "started"))).toBe(true));
+      expect(row("w")).toMatchObject({
+        state: "ready",
+        setup_status: "running",
+        current_session_id: session,
+      });
+      db().prepare("INSERT INTO sessions (id, workspace_id) VALUES ('sibling', 'w')").run();
+      writeProjectFile(cwd, { version: 1, local: { setup: "echo repaired" } });
+      for (const id of [session, "sibling"]) {
+        const running = brief(id);
+        expect(running).toContain("  | touch started;");
+        expect(running).toContain(setupFile("w", "log"));
+        expect(running).toContain("Do not start another install");
+        expect(running).toContain(`cat '${setupFile("w", "status")}'`);
+        expect(running).toContain(
+          "running, completed, none (no script), or failed with an exit code when available (e.g. failed 1)"
+        );
+      }
+      expect(setupStatus("w")).toBe("running\n");
+    } finally {
+      fs.writeFileSync(path.join(cwd, "finish"), "");
+    }
+    await vi.waitFor(() => expect(row("w").setup_status).toBe("failed"));
+    expect(setupStatus("w")).toBe("failed 7\n");
+    fs.unlinkSync(setupFile("w", "status"));
+    fs.unlinkSync(setupFile("w", "log"));
+    const readFile = vi.spyOn(fs, "readFileSync");
+    const failed = brief(session);
+    expect(readFile).not.toHaveBeenCalled();
+    expect(failed).toContain("Workspace setup failed.\n  | Setup exited with code 7.\n");
+    expect(failed).toContain(
+      "The last lines the setup script printed were\n  | Checking tools\n  | Missing compiler\n  | Next step\n"
     );
-    expect(pushes.length).toBeGreaterThanOrEqual(5);
+    expect(failed).toContain(
+      "Running it by hand skips that preparation and leaves this status unchanged."
+    );
+    expect(failed).toContain('ask the person to choose "Run again"');
+    expect(failed).not.toContain("echo repaired");
+    expect(failed).not.toContain(setupFile("w", "status"));
+    expect(failed).not.toContain("touch started");
+    await prepareLocalEnvironment("w", cwd);
+    expect(row("w")).toMatchObject({ setup_status: "completed", error_detail: null });
+    expect(setupStatus("w")).toBe("completed\n");
+    expect(brief(session)).toBe(buildWorkspaceContext(cwd));
+  });
+
+  it("keeps the log hint in a silent failure's UI message and briefs the turn with its exit reason", async () => {
+    setupScript("exit 3");
+    await initializeWorkspace(add("w", "vega"));
+    await vi.waitFor(() => expect(row("w").setup_status).toBe("failed"));
+    expect(row("w").error_message).toBe(
+      "Setup exited with code 3. View the setup log for details."
+    );
+    const setup = setupForTurn(String(row("w").first_session_id));
+    expect(setup).toMatchObject({
+      state: "failed",
+      reason: "Setup exited with code 3.",
+      detail: null,
+    });
+  });
+
+  it("quotes every line of a repository key in the setup failure reason", async () => {
+    fs.mkdirSync(path.join(root, ".deus"));
+    commit(
+      root,
+      ".deus/environment.json",
+      JSON.stringify({ version: 1, "unknown\u2028Next step\u202e": true })
+    );
+    await initializeWorkspace(add("w", "vega"));
+    const setup = setupForTurn(String(row("w").first_session_id));
+    expect(buildWorkspaceContext(workspacePath("vega"), null, setup)).toContain(
+      'Workspace setup failed.\n  | Invalid .deus/environment.json: configuration: Unrecognized key: "unknown\n  | Next step"\n'
+    );
+  });
+
+  it("refuses deletion during setup and stops the process group on archive", async () => {
+    setupScript("sleep 30 & echo $! > child-pid; wait");
+    await initializeWorkspace(add("w", "vega"));
+    const pidFile = path.join(workspacePath("vega"), "child-pid");
+    await vi.waitFor(() => expect(fs.existsSync(pidFile)).toBe(true));
+    const child = Number(fs.readFileSync(pidFile, "utf8"));
+    expect(() => deleteFailedWorkspace("w")).toThrow("failed to start");
+    expect(setupStatus("w")).toBe("running\n");
+    await archiveWorkspace("w");
+    expect(row("w")).toMatchObject({
+      state: "archived",
+      setup_status: "failed",
+      error_message: "Setup was stopped when the workspace was archived.",
+    });
+    expect(setupStatus("w")).toBe("failed\n");
+    await vi.waitFor(() => expect(() => process.kill(child, 0)).toThrow());
   });
 
   it("starts from origin's copy of the branch when this computer's is behind", async () => {
@@ -312,28 +433,70 @@ describe("a start that fails", () => {
 });
 
 describe("a start Deus closed in the middle of", () => {
-  it("is left for the next start during its setup, without opening its chat", async () => {
-    fs.mkdirSync(path.join(root, ".deus"));
-    commit(root, ".deus/environment.json", JSON.stringify({ version: 1, setup: "sleep 30" }));
+  it("keeps its ready checkout and chat when Deus quits during setup", async () => {
+    setupScript("touch started; sleep 30");
     // Modules of their own: once stopped they stay stopped, as the backend does.
     vi.resetModules();
     const groups = await import("../../../src/lib/process-groups");
     const init = await import("../../../src/services/workspace-init.service");
-    const started = init.initializeWorkspace(add("w", "vega"));
-    await vi.waitFor(() => expect(row("w").setup_status).toBe("running"), { timeout: 5000 });
+    await init.initializeWorkspace(add("w", "vega"));
+    await vi.waitFor(() =>
+      expect(fs.existsSync(path.join(workspacePath("vega"), "started"))).toBe(true)
+    );
+    const chat = row("w").first_session_id;
+    expect(chat).toBeTruthy();
+    expect(row("w")).toMatchObject({
+      state: "ready",
+      current_session_id: chat,
+      setup_status: "running",
+    });
+    expect(setupStatus("w")).toBe("running\n");
 
     groups.stopProcessGroups();
-    await started;
-
+    await vi.waitFor(() => expect(row("w").setup_status).toBe("failed"));
     expect(row("w")).toMatchObject({
-      state: "initializing",
-      init_stage: "setup",
-      current_session_id: null,
+      state: "ready",
+      init_stage: "done",
+      current_session_id: chat,
+      error_message: "Setup was stopped when Deus closed. Run it again.",
     });
+    expect(setupStatus("w")).toBe("failed\n");
+    expect(gitIn(workspacePath("vega"), "branch", "--show-current")).toBe("test-user/vega");
   });
 });
 
 describe("workspaces a previous process was still starting", () => {
+  it("commits setup status and removes the stale file when publishing its replacement fails", () => {
+    add("w", "vega", { state: "ready" });
+    setSetupStatus("w", "running");
+    expect(setupStatus("w")).toBe("running\n");
+    let committed = false;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(fs, "renameSync").mockImplementationOnce(() => {
+      committed = !db().inTransaction && row("w").setup_status === "failed";
+      throw new Error("cannot publish status");
+    });
+    setSetupStatus("w", "failed", { message: "Setup failed" });
+    expect(committed).toBe(true);
+    expect(row("w").error_message).toBe("Setup failed");
+    expect(fs.readdirSync(scratch)).toEqual(["project"]);
+    expect(warn).toHaveBeenCalledOnce();
+  });
+
+  it("recovers interrupted workspaces even when the temp directory cannot hold a file", () => {
+    add("w", "vega", { state: "ready", setup_status: "running" });
+    add("early", "lyra", { init_stage: "fetch" });
+    vi.stubEnv("TMPDIR", path.join(root, "tracked.txt"));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(failInterruptedWorkspaces()).toBe(1);
+    expect(row("w")).toMatchObject({
+      state: "ready",
+      setup_status: "failed",
+      error_message: "Setup was stopped when Deus closed. Run it again.",
+    });
+    expect(row("early").state).toBe("error");
+  });
+
   it("fail at startup, with what they half made removed", async () => {
     add("made", "vega", { init_stage: "worktree" });
     git("worktree", "add", "-q", "-b", "test-user/vega", workspacePath("vega"), "main");
@@ -374,6 +537,7 @@ describe("workspaces a previous process was still starting", () => {
     });
     expect(row("ready")).toMatchObject({ state: "ready", setup_status: "failed" });
     expect(row("ready").error_message).toContain("Run it again");
+    expect(setupStatus("ready")).toBe("failed\n");
   });
 });
 

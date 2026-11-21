@@ -178,7 +178,7 @@ export function AutomationDetail({
             <button
               type="button"
               onClick={onEdit}
-              className="border-border-subtle bg-bg-elevated hover:border-border-default rounded-lg border p-3 text-left transition-colors duration-150"
+              className="border-border-subtle bg-bg-elevated hover:border-border-default rounded-lg border p-3 text-left transition-colors"
             >
               <p className="text-text-secondary text-sm leading-relaxed whitespace-pre-wrap">
                 {automation.prompt}

@@ -1,7 +1,7 @@
 /** Workspaces: the list, one workspace's facts, its diff and its lifecycle. */
 
 import { z } from "zod";
-import { WorkspaceStateSchema, WorkspaceStatusSchema } from "../enums";
+import { WorkspaceStatusSchema } from "../enums";
 import type { GhCliStatus, PRStatus } from "../types/github";
 import type { ProjectEnvironmentResponse, TaskRunResponse } from "../types/project-environment";
 import type { DiffStats, FileChange, RepoGroup, Workspace } from "../types/workspace";
@@ -99,13 +99,10 @@ export const createWorkspace = write({
   output: out<{ workspaceId: string }>(),
 });
 
-/** Change a workspace's state (archive, restore) or its workflow status. */
+/** Restore an archived workspace. */
 export const updateWorkspace = write({
   name: "updateWorkspace",
-  input: workspaceId.extend({
-    state: WorkspaceStateSchema.optional(),
-    status: WorkspaceStatusSchema.optional(),
-  }),
+  input: workspaceId.extend({ state: z.literal("ready") }),
   output: out<void>(),
 });
 

@@ -10,7 +10,6 @@ import {
   RotateCw,
   ScrollText,
   Sparkles,
-  Copy,
   Check,
   Cloud as CloudIcon,
   CloudOff,
@@ -26,6 +25,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/shared/lib/utils";
+import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
+import { CopyIcon } from "@/components/ui/copy-icon";
 import { SETUP_FAILED, SETUP_RUNNING } from "../lib/startState";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { native } from "@/platform";
@@ -35,6 +36,8 @@ import type { SetupStatus } from "@/shared/types";
 import type { WorkspaceKind, WorkspaceStatus } from "@shared/enums";
 import type { ProjectTask } from "@shared/types/project-environment";
 import { HeaderRunButton } from "./HeaderRunButton";
+import { SetupLogDialog } from "./SetupLogDialog";
+import { useSetupActions } from "../hooks/useSetupActions";
 import { WorkflowStatusIcon } from "@/features/sidebar/ui/WorkflowStatusIcon";
 import { WorkspaceStatusMenu } from "@/features/sidebar/ui/WorkspaceStatusMenu";
 import { AppIcon, groupAppsByCategory } from "@/shared/lib/appIcons";
@@ -43,6 +46,7 @@ import { fixSetupErrorPrompt } from "@/features/session/lib/sessionPrompts";
 import { uiActions } from "@/shared/stores/uiStore";
 
 interface WorkspaceHeaderProps {
+  workspaceId: string;
   repositoryId: string;
   trailingActions?: ReactNode;
   title?: string;
@@ -53,8 +57,6 @@ interface WorkspaceHeaderProps {
   setupStatus?: SetupStatus;
   setupError?: string | null;
   onSendAgentMessage?: (text: string) => void;
-  onRetrySetup?: () => void;
-  onViewSetupLogs?: () => void;
   workspaceStatus?: WorkspaceStatus;
   onStatusChange?: (status: WorkspaceStatus) => void;
   tasks?: ProjectTask[];
@@ -78,6 +80,7 @@ interface WorkspaceHeaderProps {
  * The 44px bar keeps Open, run and layout actions beside the workspace identity.
  */
 export function WorkspaceHeader({
+  workspaceId,
   repositoryId,
   trailingActions,
   title,
@@ -87,8 +90,6 @@ export function WorkspaceHeader({
   setupStatus,
   setupError,
   onSendAgentMessage,
-  onRetrySetup,
-  onViewSetupLogs,
   workspaceStatus,
   onStatusChange,
   tasks,
@@ -101,6 +102,7 @@ export function WorkspaceHeader({
   onOpenAutomation,
 }: WorkspaceHeaderProps) {
   const { state: sidebarState, toggleSidebar } = useSidebar();
+  const { retry, retrying } = useSetupActions(workspaceId);
   const sidebarCollapsed = sidebarState === "collapsed";
   const showSidebarToggle = sidebarCollapsed || mobile;
 
@@ -279,22 +281,22 @@ export function WorkspaceHeader({
               <AlertTriangle className="h-3 w-3" />
               <span>{SETUP_FAILED}</span>
             </span>
-            {onViewSetupLogs && (
-              <Tooltip delayDuration={200}>
+            <Tooltip delayDuration={200}>
+              <SetupLogDialog workspaceId={workspaceId}>
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    onClick={onViewSetupLogs}
+                    aria-label="View setup logs"
                     className="control-interaction text-text-muted hover:text-text-secondary rounded-lg px-1.5 py-0.5 text-sm"
                   >
                     <ScrollText className="h-3 w-3" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p className="text-xs">View setup logs</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+              </SetupLogDialog>
+              <TooltipContent side="bottom">
+                <p className="text-xs">View setup logs</p>
+              </TooltipContent>
+            </Tooltip>
             {onSendAgentMessage && (
               <Tooltip delayDuration={200}>
                 <TooltipTrigger asChild>
@@ -311,22 +313,22 @@ export function WorkspaceHeader({
                 </TooltipContent>
               </Tooltip>
             )}
-            {onRetrySetup && (
-              <Tooltip delayDuration={200}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={onRetrySetup}
-                    className="control-interaction text-text-muted hover:text-text-secondary rounded-lg px-1.5 py-0.5 text-sm"
-                  >
-                    <RotateCw className="h-3 w-3" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p className="text-xs">Retry setup</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+            <Tooltip delayDuration={200}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Retry setup"
+                  disabled={retrying}
+                  onClick={retry}
+                  className="control-interaction text-text-muted hover:text-text-secondary rounded-lg px-1.5 py-0.5 text-sm"
+                >
+                  <RotateCw className="h-3 w-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p className="text-xs">Retry setup</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
         )}
       </div>
@@ -360,7 +362,7 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
   const [apps, setApps] = useState<InstalledApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const { copy, copied } = useCopyToClipboard();
   const [lastAppId, setLastAppId] = useLastOpenInApp();
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const isHoveringRef = useRef(false);
@@ -398,15 +400,7 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
   }
 
   function handleCopyPath() {
-    navigator.clipboard
-      .writeText(workspacePath)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      })
-      .catch((err) => {
-        console.warn("[WorkspaceHeader] Failed to copy path to clipboard:", err);
-      });
+    void copy(workspacePath);
     setOpen(false);
   }
 
@@ -439,6 +433,10 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
   return (
     <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
       <div className="border-border-strong flex h-7 shrink-0 items-center rounded-lg border">
+        {/* Copy path closes the menu before the clipboard answers. */}
+        <span role="status" className="sr-only">
+          {copied && "Copied"}
+        </span>
         {/* Left: quick-open action */}
         <Tooltip delayDuration={200}>
           <TooltipTrigger asChild>
@@ -522,11 +520,9 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
           onClick={handleCopyPath}
           className="text-text-muted cursor-pointer gap-2 py-1 text-xs"
         >
-          {copied ? (
-            <Check className="h-3.5 w-3.5 flex-shrink-0" />
-          ) : (
-            <Copy className="h-3.5 w-3.5 flex-shrink-0" />
-          )}
+          <span className="contents" aria-hidden="true">
+            <CopyIcon copied={copied} className="size-4" />
+          </span>
           {copied ? "Copied!" : "Copy path"}
         </DropdownMenuItem>
       </DropdownMenuContent>

@@ -14,6 +14,7 @@
  * the main inset like Automations does.
  */
 
+import { Skeleton } from "@/components/ui/skeleton";
 import { useMemo, useState, type ReactNode } from "react";
 import { BookOpen, Check, Loader2, Package, Plus, Search, Server } from "lucide-react";
 import { SidebarInset, SidebarMobileBar } from "@/components/ui/sidebar";
@@ -183,7 +184,7 @@ export function CustomizePage() {
             </header>
 
             <div className="flex flex-col gap-3">
-              <label className="border-border-subtle bg-bg-elevated focus-within:border-border-default flex h-9 items-center gap-2 rounded-lg border px-3 transition-colors duration-150">
+              <label className="border-border-subtle bg-bg-elevated focus-within:border-border-default flex h-9 items-center gap-2 rounded-lg border px-3 transition-colors">
                 <Search className="text-text-muted h-3.5 w-3.5 shrink-0" />
                 <input
                   value={query}
@@ -208,9 +209,10 @@ export function CustomizePage() {
                           : "text-text-tertiary hover:text-text-secondary"
                       )}
                     >
-                      {t.label}
+                      <span data-medium-label={t.label}>{t.label}</span>
                       {counts[t.id] > 0 && (
                         <span
+                          data-medium-label={counts[t.id]}
                           className={cn(
                             "text-2xs",
                             tab === t.id ? "text-text-tertiary" : "text-text-disabled"
@@ -611,7 +613,7 @@ function Row({
   onOpen?: () => void;
 }) {
   return (
-    <div className="group hover:bg-foreground/[0.03] relative flex items-center gap-3 rounded-lg px-2 py-2 transition-colors duration-150">
+    <div className="group hover:bg-foreground/[0.03] relative flex items-center gap-3 rounded-lg px-2 py-2 transition-colors">
       {onOpen && (
         <button
           type="button"
@@ -673,10 +675,10 @@ function LoadingGrid() {
     <div className="grid grid-cols-1 gap-x-4 gap-y-1 md:grid-cols-2">
       {Array.from({ length: 10 }, (_, i) => (
         <div key={i} className="flex items-center gap-3 px-2 py-2">
-          <div className="bg-bg-elevated h-9 w-9 animate-pulse rounded-lg" />
+          <Skeleton className="bg-bg-elevated size-9" />
           <div className="flex flex-1 flex-col gap-1.5">
-            <div className="bg-bg-elevated h-3 w-24 animate-pulse rounded" />
-            <div className="bg-bg-elevated h-2.5 w-48 animate-pulse rounded" />
+            <Skeleton className="bg-bg-elevated h-3 w-24 rounded" />
+            <Skeleton className="bg-bg-elevated h-2.5 w-48 rounded" />
           </div>
         </div>
       ))}

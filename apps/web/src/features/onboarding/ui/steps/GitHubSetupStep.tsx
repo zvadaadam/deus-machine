@@ -71,7 +71,7 @@ export function GitHubSetupStep({ onNext, onBack }: GitHubSetupStepProps) {
           target="_blank"
           rel="noopener noreferrer"
           title={`Open @${login} on GitHub`}
-          className="bg-onboarding-foreground/5 hover:bg-onboarding-foreground/[0.07] flex items-center gap-3 rounded-xl px-4 py-3 transition-colors duration-150"
+          className="bg-onboarding-foreground/5 hover:bg-onboarding-foreground/[0.07] flex items-center gap-3 rounded-xl px-4 py-3 transition-colors"
         >
           <div className="relative shrink-0">
             <Avatar className="size-10">

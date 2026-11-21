@@ -22,16 +22,18 @@
  * ```
  */
 
-import { isValidElement, useMemo, useRef, useState } from "react";
+import { isValidElement, useMemo, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { cn } from "@/shared/lib/utils";
+import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
+import { CopyIcon } from "@/components/ui/copy-icon";
 import { ShikiCodeBlock } from "./ShikiCodeBlock";
 import { LazyMermaidDiagram } from "./LazyMermaidDiagram";
 import { HtmlPreviewBlock } from "./HtmlPreviewBlock";
-import { ArrowUpRight, Check, Copy, FileText, Globe } from "lucide-react";
+import { ArrowUpRight, FileText, Globe } from "lucide-react";
 
 export interface MarkdownFileLink {
   path: string;
@@ -58,25 +60,15 @@ interface MarkdownRendererProps {
  * Copy button for code blocks - Icon-only, subtle, Jony Ive style
  */
 function CopyButton({ getText }: { getText: () => string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    const text = getText();
-    if (!text) return;
-
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    } catch (err) {
-      console.error("Failed to copy:", err);
-    }
-  };
+  const { copy, copied } = useCopyToClipboard({ resetDelay: 1200 });
 
   return (
     <button
       type="button"
-      onClick={handleCopy}
+      onClick={() => {
+        const text = getText();
+        if (text) void copy(text);
+      }}
       className={cn(
         // Proper alignment: pre has 8px top + 12px right padding
         // Button positioned at: 12px top (8+4 breathing), 16px right (12+4 breathing)
@@ -87,9 +79,9 @@ function CopyButton({ getText }: { getText: () => string }) {
         "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
         copied && "text-success"
       )}
-      aria-label="Copy code"
+      aria-label={copied ? "Copied" : "Copy code"}
     >
-      {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+      <CopyIcon copied={copied} className="size-3.5" />
     </button>
   );
 }

@@ -10,7 +10,8 @@ import { BaseToolRenderer } from "../components";
 import { uiActions } from "@/shared/stores/uiStore";
 import type { Automation } from "@/shared/types";
 import { humanizeSchedule } from "@/features/automations/lib/schedule";
-import { extractText, ICON_CLS, OutputBlock } from "./shared";
+import { OutputBlock } from "@/components/ui/output-block";
+import { extractText, ICON_CLS } from "./shared";
 import type { ToolRendererProps } from "../../chat-types";
 
 const MODE_LABELS: Record<string, string> = {

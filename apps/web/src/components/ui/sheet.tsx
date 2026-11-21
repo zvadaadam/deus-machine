@@ -2,6 +2,7 @@ import * as React from "react";
 import * as SheetPrimitive from "@radix-ui/react-dialog";
 import { XIcon } from "lucide-react";
 
+import { DialogOverlay } from "./dialog";
 import { cn } from "@/shared/lib/utils";
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
@@ -20,23 +21,11 @@ function SheetPortal({ ...props }: React.ComponentProps<typeof SheetPrimitive.Po
   return <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />;
 }
 
-function SheetOverlay({
-  className,
-  ...props
-}: React.ComponentProps<typeof SheetPrimitive.Overlay>) {
-  return (
-    <SheetPrimitive.Overlay
-      data-slot="sheet-overlay"
-      className={cn(
-        "fixed inset-0 z-50 bg-black/50 will-change-[opacity]",
-        "data-[state=open]:animate-[overlay-enter_200ms_cubic-bezier(.215,.61,.355,1)]",
-        "data-[state=closed]:animate-[overlay-exit_150ms_cubic-bezier(.215,.61,.355,1)]",
-        className
-      )}
-      {...props}
-    />
-  );
-}
+const SheetOverlay = React.forwardRef<
+  React.ComponentRef<typeof DialogOverlay>,
+  React.ComponentPropsWithoutRef<typeof DialogOverlay>
+>((props, ref) => <DialogOverlay data-slot="sheet-overlay" {...props} ref={ref} />);
+SheetOverlay.displayName = "SheetOverlay";
 
 function SheetContent({
   className,
@@ -53,14 +42,15 @@ function SheetContent({
         data-slot="sheet-content"
         className={cn(
           "bg-background fixed z-50 flex flex-col gap-4 shadow-lg will-change-[transform]",
+          "data-[state=open]:animate-[sheet-enter_var(--tempo-slow)_var(--tempo-ease)]",
+          "data-[state=closed]:animate-[sheet-exit_var(--tempo-slow-exit)_var(--tempo-ease)]",
           side === "right" &&
-            "inset-y-0 right-0 h-full w-3/4 border-l data-[state=closed]:animate-[sheet-exit-right_200ms_cubic-bezier(.215,.61,.355,1)] data-[state=open]:animate-[sheet-enter-right_250ms_cubic-bezier(.215,.61,.355,1)] sm:max-w-sm",
+            "inset-y-0 right-0 h-full w-3/4 border-l [--sheet-offset:translateX(100%)] sm:max-w-sm",
           side === "left" &&
-            "inset-y-0 left-0 h-full w-3/4 border-r data-[state=closed]:animate-[sheet-exit-left_200ms_cubic-bezier(.215,.61,.355,1)] data-[state=open]:animate-[sheet-enter-left_250ms_cubic-bezier(.215,.61,.355,1)] sm:max-w-sm",
-          side === "top" &&
-            "inset-x-0 top-0 h-auto border-b data-[state=closed]:animate-[sheet-exit-top_200ms_cubic-bezier(.215,.61,.355,1)] data-[state=open]:animate-[sheet-enter-top_250ms_cubic-bezier(.215,.61,.355,1)]",
+            "inset-y-0 left-0 h-full w-3/4 border-r [--sheet-offset:translateX(-100%)] sm:max-w-sm",
+          side === "top" && "inset-x-0 top-0 h-auto border-b [--sheet-offset:translateY(-100%)]",
           side === "bottom" &&
-            "inset-x-0 bottom-0 h-auto border-t data-[state=closed]:animate-[sheet-exit-bottom_200ms_cubic-bezier(.215,.61,.355,1)] data-[state=open]:animate-[sheet-enter-bottom_250ms_cubic-bezier(.215,.61,.355,1)]",
+            "inset-x-0 bottom-0 h-auto border-t [--sheet-offset:translateY(100%)]",
           className
         )}
         {...props}

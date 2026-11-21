@@ -23,8 +23,10 @@
  * is a reset: at startup the backend compares the database with SCHEMA_SQL and
  * stops with PRELAUNCH_SCHEMA_RESET_HINT, naming the table and column.
  */
+export const PRELAUNCH_SCHEMA_MISMATCH =
+  "Database schema is out of date for this pre-launch build.";
 export const PRELAUNCH_SCHEMA_RESET_HINT =
-  "This local database was created with an older pre-launch schema. Reset it by deleting deus.db (or point DATABASE_PATH at a fresh file), then restart Deus.";
+  "This database uses an older pre-launch schema. To start fresh and keep your old chats, run `deus start --data-dir /path/to/a/new/folder`. If you run the backend directly, set DATABASE_PATH to a fresh file.";
 
 /** Columns ALTERed into an existing database that lacks them (each is in SCHEMA_SQL too). */
 export const ADDITIVE_COLUMNS: Record<string, Record<string, string>> = {

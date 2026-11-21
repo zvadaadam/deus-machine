@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef, type CSSProperties } from "react";
-import { Copy, Check, Plus, X, MessageSquarePlus, ArrowRight } from "lucide-react";
+import { Plus, X, MessageSquarePlus, ArrowRight } from "lucide-react";
+import { CopyIcon } from "@/components/ui/copy-icon";
+import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { FileDiff } from "@pierre/diffs/react";
@@ -68,7 +70,7 @@ export function DiffViewer({
   embedded = false,
   workspaceId,
 }: DiffViewerProps) {
-  const [copied, setCopied] = useState(false);
+  const { copy, copied } = useCopyToClipboard();
   const [comments, setComments] = useState<DiffComment[]>([]);
   const [draftComment, setDraftComment] = useState<DiffCommentDraft | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -80,16 +82,6 @@ export function DiffViewer({
   const lastEnteredLineRef = useRef<{ lineNumber: number; side: CommentSide } | null>(null);
 
   const baseDiffOptions = useDiffOptions<DiffCommentMeta>();
-
-  const handleCopyDiff = async () => {
-    try {
-      await navigator.clipboard.writeText(diff);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      console.error("Failed to copy diff:", error);
-    }
-  };
 
   const diffIsEmpty = diff.trim().length === 0;
   const hasContent = !isLoading && !errorProp && !diffIsEmpty;
@@ -425,10 +417,10 @@ export function DiffViewer({
       <button
         type="button"
         className="diff-header-icon"
-        onClick={handleCopyDiff}
+        onClick={() => void copy(diff)}
         title={copied ? "Copied" : "Copy diff"}
       >
-        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+        <CopyIcon copied={copied} className="size-3.5" />
       </button>
       {onClose && (
         <button type="button" className="diff-header-icon" onClick={onClose} title="Close diff">
