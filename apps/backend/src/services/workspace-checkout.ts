@@ -333,12 +333,9 @@ async function checkout(ctx: InitContext, signal: AbortSignal) {
     if (processGroupsStopped()) return;
     return async () => {
       if (OWNS_WORKTREE.has(stage)) {
-        try {
-          await removeWorktree(ctx.repoRootPath, ctx.workspacePath, ctx.branchName);
-        } catch (error) {
-          console.warn(`[WORKSPACE] Could not remove what ${ctx.workspaceId} left behind:`, error);
-          return; // Keep the stage so startup recovery can finish.
-        }
+        await removeWorktree(ctx.repoRootPath, ctx.workspacePath, ctx.branchName).catch((error) =>
+          console.warn(`[WORKSPACE] Could not remove what ${ctx.workspaceId} left behind:`, error)
+        );
       }
       if (signal.aborted || processGroupsStopped()) return;
       try {

@@ -151,11 +151,11 @@ export function failInterruptedWorkspaces(): number {
     if (!cloud && row.root_path && row.git_branch && OWNS_WORKTREE.has(row.init_stage ?? "")) {
       const { root_path, git_branch } = row;
       void changeWorkspaceState(row.id, async () => {
-        await removeWorktree(root_path, computeWorkspacePath(row), git_branch);
+        await removeWorktree(root_path, computeWorkspacePath(row), git_branch).catch((err) =>
+          console.warn(`[WORKSPACE] Could not remove what ${row.id} left behind:`, err)
+        );
         fail();
-      }).catch((err) =>
-        console.warn(`[WORKSPACE] Could not remove what ${row.id} left behind:`, err)
-      );
+      }).catch((err) => console.warn(`[WORKSPACE] Recovery failed for ${row.id}:`, err));
     } else fail();
     failed++;
   }

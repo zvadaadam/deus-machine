@@ -240,6 +240,7 @@ It starts the local job in `workspace-checkout.ts`. The lifecycle owner
 (`workspace-lifecycle.ts`) holds the per-workspace queue, deletes failed starts,
 and writes `state`,
 `init_stage`, `setup_status`, `init_fetch_issue`, `error_message` and `error_detail`.
+The owner also records `archived_at` and `archived_by` when a workspace is archived.
 `workspace-lifecycle-fence.test.ts` checks the owner's imports and checks backend
 SQL and the integration CLI for lifecycle writes. Each local start has an
 in-memory attempt token. Archiving aborts that checkout and waits for its git
@@ -283,6 +284,7 @@ progress channel: the desktop, the web app and a phone all follow it.
 - Cloud workspaces provision through `cloud-workspace-init.service.ts`. They
   share the `error` state, and the same retry and delete while no cloud
   computer exists for them; once one does, waking it is the way back.
+  During allocation or startup, Archive tells the person to try again once the computer is ready.
 
 In the app a start is told in the transcript, by the line cloud provisioning
 uses (`session/ui/EnvGroup`): `workspaceStart(workspace)`

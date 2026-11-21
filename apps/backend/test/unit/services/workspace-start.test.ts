@@ -532,6 +532,22 @@ describe("workspaces a previous process was still starting", () => {
     }
   );
 
+  it("ends an interrupted start in error when removal throws at startup", async () => {
+    add("w", "vega", { init_stage: "session" });
+    const error = new Error("cannot remove checkout");
+    vi.spyOn(fs.promises, "rm").mockRejectedValueOnce(error);
+    const warn = vi.spyOn(console, "warn");
+    expect(failInterruptedWorkspaces()).toBe(1);
+    await lifecycle.changeWorkspaceState("w", async () => {});
+    expect(warn).toHaveBeenCalledWith("[WORKSPACE] Could not remove what w left behind:", error);
+    expect(row("w")).toMatchObject({
+      state: "error",
+      init_stage: "session",
+      error_message: "Deus closed before this workspace was ready.",
+      error_detail: null,
+    });
+  });
+
   it("leave a cloud workspace alone once its session can report, and fail a setup nobody runs", () => {
     add("ready", "vega", { state: "ready", setup_status: "running" });
     add("cloud-live", "lyra", { kind: "cloud", provider_workspace_id: "vm" });
@@ -658,6 +674,12 @@ describe("why origin's latest was not fetched", () => {
 });
 
 describe("an attempt owns its checkout", () => {
+  function refuseChatInsert() {
+    db().exec(
+      "CREATE TRIGGER refuse_chat BEFORE INSERT ON sessions BEGIN SELECT RAISE(ABORT,'chat refused'); END"
+    );
+  }
+
   it.each(["fetch", "worktree"])(
     "archive stops the %s process group and reaps the checkout before returning",
     async (stage) => {
@@ -803,12 +825,14 @@ exec "$REAL_GIT" "$@"
   });
 
   it("recovers the durable session stage if first-chat cleanup is interrupted", async () => {
+    // Stop only this checkout's process groups. Recovery uses the next backend's live groups.
+    vi.resetModules();
+    const groups = await import("../../../src/lib/process-groups");
+    const checkout = await import("../../../src/services/workspace-checkout");
     const ctx = add("w", "vega");
-    db().exec(
-      "CREATE TRIGGER refuse_chat BEFORE INSERT ON sessions BEGIN SELECT RAISE(ABORT,'chat refused'); END"
-    );
-    vi.spyOn(fs.promises, "rm").mockRejectedValueOnce(new Error("cleanup interrupted"));
-    await initializeWorkspace(ctx);
+    refuseChatInsert();
+    vi.spyOn(fs.promises, "rm").mockImplementationOnce(async () => groups.stopProcessGroups());
+    await checkout.initializeWorkspace(ctx);
     expect(row("w")).toMatchObject({
       state: "initializing",
       init_stage: "session",
@@ -824,6 +848,33 @@ exec "$REAL_GIT" "$@"
     expect(branches()).toEqual(["main"]);
   });
 
+  it.each(["Retry", "Delete"])(
+    "keeps the chat failure and allows %s when removal throws",
+    async (action) => {
+      refuseChatInsert();
+      const error = new Error("cannot remove checkout");
+      vi.spyOn(fs.promises, "rm").mockRejectedValueOnce(error);
+      const warn = vi.spyOn(console, "warn");
+
+      await initializeWorkspace(add("w", "vega"));
+      expect(warn).toHaveBeenCalledWith("[WORKSPACE] Could not remove what w left behind:", error);
+      expect(row("w")).toMatchObject({
+        state: "error",
+        init_stage: "session",
+        error_message: "The workspace was created, but its chat could not be opened.",
+        error_detail: "chat refused",
+      });
+      if (action === "Delete") {
+        deleteFailedWorkspace("w");
+        expect(row("w")).toBeUndefined();
+      } else {
+        db().exec("DROP TRIGGER refuse_chat");
+        await retryWorkspaceInit("w");
+        await vi.waitFor(() => expect(row("w").state).toBe("ready"), { timeout: 5000 });
+      }
+    }
+  );
+
   it.each(["worktree", "setup", "session", "failed first chat"])(
     "queues two immediate retries behind %s cleanup",
     async (stage) => {
@@ -832,10 +883,7 @@ exec "$REAL_GIT" "$@"
         init_stage: stage,
         git_source_branch: "main",
       });
-      if (failed)
-        db().exec(
-          "CREATE TRIGGER refuse_chat BEFORE INSERT ON sessions BEGIN SELECT RAISE(ABORT,'chat refused'); END"
-        );
+      if (failed) refuseChatInsert();
       else git("worktree", "add", "-q", "-b", "test-user/vega", workspacePath("vega"), "main");
       const removing = Promise.withResolvers<void>();
       const release = Promise.withResolvers<void>();
