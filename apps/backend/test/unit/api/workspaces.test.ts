@@ -422,7 +422,7 @@ describe("cloud wake and archive ordering", () => {
       state,
     }));
     mockDb.prepare.mockImplementation((sql: string) => {
-      if (sql === "UPDATE workspaces SET state = 'archived' WHERE id = ?") {
+      if (sql.startsWith("UPDATE workspaces SET state = 'archived'")) {
         return {
           run: () => {
             state = "archived";

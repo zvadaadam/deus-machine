@@ -229,7 +229,7 @@ export function adoptRunRows(input: {
   /** The automation's organization: the run's workspace is in it. */
   organizationId: string | null;
   newWorkspaceSlug: () => string;
-}): { workspaceId: string; sessionId: string } {
+}) {
   const db = getDatabase();
   const adopt = db.transaction(() => {
     let session = db
@@ -237,9 +237,8 @@ export function adoptRunRows(input: {
       .get(input.providerSessionId) as { id: string; workspace_id: string } | undefined;
 
     const { workspaceId } = input;
-    if (db.prepare("SELECT 1 FROM workspaces WHERE id = ?").get(workspaceId)) {
-      markAdoptedWorkspaceReady(db, workspaceId);
-    } else {
+    const revived = markAdoptedWorkspaceReady(db, workspaceId);
+    if (!revived && !db.prepare("SELECT 1 FROM workspaces WHERE id = ?").get(workspaceId)) {
       insertAdoptedWorkspace(db, {
         id: workspaceId,
         repository_id: input.repositoryId,
@@ -268,7 +267,7 @@ export function adoptRunRows(input: {
       workspaceId,
       input.automationId
     );
-    return { workspaceId, sessionId: session.id };
+    return { workspaceId, sessionId: session.id, revived };
   });
   return adopt();
 }

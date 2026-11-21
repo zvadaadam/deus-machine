@@ -5,6 +5,8 @@
  * Route handlers call these functions instead of inline SQL.
  */
 import type Database from "better-sqlite3";
+import type { ArchivedWorkspace } from "@shared/types/workspace";
+import { NotFoundError } from "../lib/errors";
 import {
   ReportedOriginSchema,
   decodePart,
@@ -83,6 +85,28 @@ export function getWorkspacesByRepo(
   `
     )
     .all(...stateParams) as WorkspaceWithDetailsRow[];
+}
+
+export function getArchivedWorkspaces(
+  db: Database.Database,
+  repositoryId: string
+): ArchivedWorkspace[] {
+  // The left join distinguishes an empty project from one that no longer exists.
+  const rows = db
+    .prepare(
+      `SELECT w.id, w.slug, w.title, w.git_branch, w.kind, w.organization_id,
+      COALESCE(w.archived_at, w.updated_at) AS archived_at, w.archived_by
+    FROM repositories r LEFT JOIN workspaces w ON w.repository_id = r.id AND w.state = 'archived'
+    WHERE r.id = ? ORDER BY archived_at DESC, w.id DESC`
+    )
+    .all(repositoryId) as (
+    | (Omit<ArchivedWorkspace, "archived_by"> & { archived_by: string | null })
+    | { id: null }
+  )[];
+  if (!rows.length) throw new NotFoundError("Repository not found");
+  return rows.flatMap((row) =>
+    row.id === null ? [] : [{ ...row, archived_by: readOrigin(row.archived_by) }]
+  );
 }
 
 export function getWorkspaceById(
@@ -400,6 +424,7 @@ export function getAllRepositories(db: Database.Database): RepositoryWithCountsR
 
 /** Lightweight repo list for backfilling empty groups in by-repo queries. */
 export interface RepositorySummaryRow {
+  archived_count: number;
   id: string;
   name: string;
   sort_order: number;
@@ -410,7 +435,10 @@ export interface RepositorySummaryRow {
 export function getAllRepositorySummaries(db: Database.Database): RepositorySummaryRow[] {
   return db
     .prepare(
-      "SELECT id, name, sort_order, git_origin_url, root_path FROM repositories ORDER BY sort_order, name"
+      `SELECT r.id, r.name, r.sort_order, r.git_origin_url, r.root_path,
+        COUNT(CASE WHEN w.state = 'archived' THEN 1 END) AS archived_count
+       FROM repositories r LEFT JOIN workspaces w ON w.repository_id = r.id
+       GROUP BY r.id ORDER BY r.sort_order, r.name`
     )
     .all() as RepositorySummaryRow[];
 }

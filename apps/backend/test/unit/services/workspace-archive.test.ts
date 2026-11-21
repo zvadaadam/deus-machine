@@ -55,7 +55,7 @@ describe("workspace archive", () => {
     expect(mocks.run).not.toHaveBeenCalled();
     resume();
     await archiving;
-    expect(mocks.run).toHaveBeenCalledWith("workspace");
+    expect(mocks.run).toHaveBeenCalledWith(null, "workspace");
     expect(mocks.status).toHaveBeenCalledWith("workspace", "done", { force: true });
   });
 

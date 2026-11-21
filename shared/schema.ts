@@ -30,7 +30,7 @@ export const PRELAUNCH_SCHEMA_RESET_HINT =
 
 /** Columns ALTERed into an existing database that lacks them (each is in SCHEMA_SQL too). */
 export const ADDITIVE_COLUMNS: Record<string, Record<string, string>> = {
-  workspaces: { started_by: "TEXT", first_session_id: "TEXT" },
+  workspaces: { started_by: "TEXT", first_session_id: "TEXT", archived_by: "TEXT" },
   sessions: { started_by: "TEXT", chat: "INTEGER" },
   turns: { cancelled_by: "TEXT", end_seq: "INTEGER" },
   messages: { origin: "TEXT" },
@@ -72,6 +72,7 @@ export const SCHEMA_SQL = `
     pr_checked_at TEXT,
     archive_commit TEXT,
     archived_at TEXT,
+    archived_by TEXT,
     setup_status TEXT NOT NULL DEFAULT 'none',
     init_stage TEXT,
     error_message TEXT,

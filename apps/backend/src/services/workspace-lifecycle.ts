@@ -1,4 +1,5 @@
 /** Workspace row transitions, their live reads and the per-workspace queue. */
+import type { Origin } from "@shared/types/workspace";
 import type { InitFetchIssue, SetupStatus } from "@shared/enums";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getWorkspaceRaw, type WorkspaceRow } from "../db";
@@ -553,9 +554,17 @@ export function changeWorkspaceState<T>(workspaceId: string, change: () => Promi
 }
 
 /** The API and assistants' host publish after archiveWorkspace finishes the pause, write, workflow update, setup stop and checkout cleanup. */
-export function markArchived(db: Database, workspaceId: string, check?: () => void) {
+export function markArchived(
+  db: Database,
+  workspaceId: string,
+  check?: () => void,
+  by: Origin | null = null
+) {
+  const archivedBy = by && by.kind !== "person" ? JSON.stringify(by) : null;
   check?.();
-  db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
+  db.prepare(
+    "UPDATE workspaces SET state = 'archived', archived_at = datetime('now'), archived_by = ? WHERE id = ?"
+  ).run(archivedBy, workspaceId);
   const attempt = attempts.get(workspaceId);
   attempt?.controller.abort();
   return attempt?.settle();

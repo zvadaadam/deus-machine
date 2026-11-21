@@ -10,6 +10,7 @@ import { groupWorkspacesByRepo, toWorkspace } from "../lib/workspace-grouping";
 import { loadWorkspace } from "../middleware/workspace-loader";
 import {
   getAllRepositorySummaries,
+  getArchivedWorkspaces,
   getWorkspaceById,
   getWorkspaceRaw,
   getWorkspacesByRepo,
@@ -64,6 +65,9 @@ export default [
       getAllRepositorySummaries(db)
     );
   }),
+  handle(api.archivedWorkspaces, ({ repositoryId }) =>
+    getArchivedWorkspaces(getDatabase(), repositoryId)
+  ),
   handle(api.workspace, ({ workspaceId }) => readWorkspace(workspaceId)),
   handle(api.workspaceEnvironment, ({ workspaceId }) => {
     const { workspace, workspacePath } = loadWorkspace(workspaceId);

@@ -752,6 +752,29 @@ describe("each commit re-reads what it depends on, with no await before its writ
     ]);
   });
 
+  it.each(["assistant", "chat"])(
+    "records the %s that archived a workspace through the host",
+    async (kind) => {
+      state.stored.claude = "operate";
+      const by =
+        kind === "chat" ? LEAD : { kind: "assistant", id: "assistant:claude", name: "Claude" };
+      insertWorkspace("w-close", "close", { startedBy: by });
+      insertChat("s-close", "w-close", by);
+      await createDeusHost().archive!(kind === "chat" ? (LEAD as never) : assistantWho(), {
+        kind: "workspace",
+        id: "w-close",
+      });
+      const archived = state.db
+        .prepare("SELECT state,archived_by,archived_at FROM workspaces WHERE id='w-close'")
+        .get();
+      expect(archived).toEqual({
+        state: "archived",
+        archived_by: JSON.stringify(by),
+        archived_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2} /),
+      });
+    }
+  );
+
   it("H4: a child started after the archive was asked, before its queued update, stops it", async () => {
     const host = createDeusHost();
     insertWorkspace("w-p", "parent", { startedBy: LEAD });

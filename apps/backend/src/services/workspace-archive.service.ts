@@ -1,3 +1,4 @@
+import type { Origin } from "@shared/types/workspace";
 import { getWorkspaceRaw } from "../db";
 import { getDatabase } from "../lib/database";
 import { NotFoundError, ValidationError } from "../lib/errors";
@@ -23,31 +24,33 @@ import { autoProgressStatus } from "./workspace-status.service";
  * no await between, and may refuse it (the operator's host re-reads its
  * archive eligibility there).
  */
-async function performArchive(workspaceId: string, check?: () => void): Promise<void> {
-  const db = getDatabase();
-  const workspace = getWorkspaceRaw(db, workspaceId);
-  if (!workspace) throw new NotFoundError("Workspace not found");
-  if (workspace.kind === "cloud" && workspace.provider_workspace_id) {
-    // Confirm suspension before advertising the workspace as closed.
-    await pauseCloudWorkspace({
-      ...workspace,
-      provider_workspace_id: workspace.provider_workspace_id,
-    });
-  }
+export function archiveWorkspace(
+  workspaceId: string,
+  check?: () => void,
+  by?: Origin | null
+): Promise<void> {
+  return changeWorkspaceState(workspaceId, async () => {
+    const db = getDatabase();
+    const workspace = getWorkspaceRaw(db, workspaceId);
+    if (!workspace) throw new NotFoundError("Workspace not found");
+    if (workspace.kind === "cloud" && workspace.provider_workspace_id) {
+      // Confirm suspension before advertising the workspace as closed.
+      await pauseCloudWorkspace({
+        ...workspace,
+        provider_workspace_id: workspace.provider_workspace_id,
+      });
+    }
 
-  const checkout = markArchived(db, workspaceId, check);
-  try {
-    stopStream(workspaceId);
-    const stopped = stopWorkspaceSetup(workspaceId);
-    autoProgressStatus(workspaceId, "done", { force: true });
-    await stopped;
-  } finally {
-    await checkout;
-  }
-}
-
-export function archiveWorkspace(workspaceId: string, check?: () => void): Promise<void> {
-  return changeWorkspaceState(workspaceId, () => performArchive(workspaceId, check));
+    const checkout = markArchived(db, workspaceId, check, by);
+    try {
+      stopStream(workspaceId);
+      const stopped = stopWorkspaceSetup(workspaceId);
+      autoProgressStatus(workspaceId, "done", { force: true });
+      await stopped;
+    } finally {
+      await checkout;
+    }
+  });
 }
 
 export function wakeWorkspace(workspaceId: string) {

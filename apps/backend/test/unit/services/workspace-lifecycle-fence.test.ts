@@ -15,6 +15,8 @@ const protectedColumns = new Set([
   "init_fetch_issue",
   "error_message",
   "error_detail",
+  "archived_at",
+  "archived_by",
 ]);
 
 // Let SQLite parse the assignments, including tuple SETs and ON CONFLICT.
@@ -281,6 +283,8 @@ it("checks assembled statements and distinguishes assignment targets from reads"
     'const upsert = "INSERT INTO workspaces (id, title) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET ";',
     'db.prepare(upsert + "status = excluded.status WHERE state = ?");',
     'db.prepare(upsert + "error_message = excluded.title"); // reject',
+    'db.prepare(head + "archived_at = CURRENT_TIMESTAMP"); // reject',
+    'db.prepare(upsert + "archived_by = excluded.title"); // reject',
     'db.exec("UPDATE workspaces SET title = ?; DELETE /* cleanup */ FROM workspaces"); // reject',
     "db.prepare(`UPDATE workspaces SET title = ? WHERE state IN (${placeholders})`);",
     'db.prepare("UPDATE automation_runs SET error_message = ?");',

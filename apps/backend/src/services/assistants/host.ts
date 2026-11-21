@@ -852,7 +852,11 @@ export function createDeusHost(): DeusHost {
             return { note: "Its start had failed, so it was removed." };
           }
           // Eligibility read again inside the app's queue, right before the update.
-          await archiveWorkspace(target.id, () => mayArchive(caller, members(), everything()));
+          await archiveWorkspace(
+            target.id,
+            () => mayArchive(caller, members(), everything()),
+            originOf(caller)
+          );
           invalidate(["workspaces"]);
           return {
             note: `Its branch${w.git_branch ? ` ${JSON.stringify(w.git_branch)}` : ""} and changes are kept.`,

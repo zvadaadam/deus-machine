@@ -1142,7 +1142,7 @@ describeWithDb("openAutomationRun", () => {
     expect(workspace.get(first.workspaceId)).toEqual(ready);
     expect(mockInvalidate).toHaveBeenCalledExactlyOnceWith(
       ["workspaces", "sessions", "session", "automations", "automationRuns"],
-      { sessionIds: [first.sessionId] }
+      undefined
     );
   });
 

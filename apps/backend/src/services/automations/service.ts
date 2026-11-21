@@ -640,7 +640,7 @@ export async function openAutomationRun(
     const workspaceId = store.workspaceForRun(providerSessionId, providerWorkspaceId) ?? uuidv7();
     return changeWorkspaceState(workspaceId, async () => {
       assertCurrentAccount(identity);
-      const { sessionId } = store.adoptRunRows({
+      const { sessionId, revived } = store.adoptRunRows({
         workspaceId,
         runId,
         automationId: automation.id,
@@ -662,9 +662,10 @@ export async function openAutomationRun(
         // Rows no event of the chat announced: whoever has its transcript open reads it again.
         resetSubscribers(sessionEvents, { sessionId });
       }
-      invalidate(["workspaces", "sessions", "session", ...AUTOMATION_RESOURCES], {
-        sessionIds: [sessionId],
-      });
+      invalidate(
+        ["workspaces", "sessions", "session", ...AUTOMATION_RESOURCES],
+        revived ? undefined : { sessionIds: [sessionId] }
+      );
 
       // Attach the live session channel (call-time import: the driver sits in the
       // agent service graph, which imports this module through the tool dispatch).

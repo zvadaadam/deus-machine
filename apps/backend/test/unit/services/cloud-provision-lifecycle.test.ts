@@ -176,8 +176,13 @@ it.each(["before allocation", "allocation", "chat"] as const)(
     held.mockReturnValueOnce(gate.promise);
     const { workspaceId } = createCloudWorkspace({ repositoryId: "r" });
     await vi.waitFor(() => expect(held).toHaveBeenCalledOnce());
-    const closing = archiveWorkspace(workspaceId);
+    const by = { kind: "session", sessionId: "archiver" } as const;
+    const closing = archiveWorkspace(workspaceId, undefined, by);
     await vi.waitFor(() => expect(row(workspaceId)).toMatchObject({ state: "archived" }));
+    const archivedAt = db
+      .prepare("SELECT archived_at FROM workspaces WHERE id = ?")
+      .pluck()
+      .get(workspaceId);
     mock.invalidate.mockClear();
     gate.resolve(
       stage === "before allocation" ? true : { id: stage === "allocation" ? "vm" : "platform-chat" }
@@ -186,12 +191,15 @@ it.each(["before allocation", "allocation", "chat"] as const)(
     await nextTurn();
     const hasVM = stage !== "before allocation";
     expect(row(workspaceId)).toMatchObject({
+      archived_at: archivedAt,
+      archived_by: JSON.stringify(by),
       state: "archived",
       current_session_id: null,
       error_message: null,
       provider_workspace_id: hasVM ? "vm" : null,
       init_stage: stage === "chat" ? "creating cloud session" : "creating cloud workspace",
     });
+    expect(archivedAt).toEqual(expect.any(String));
     expect(mock.allocate).toHaveBeenCalledTimes(hasVM ? 1 : 0);
     expect(mock.pause).toHaveBeenCalledTimes(hasVM ? 1 : 0);
     expect(mock.createSession).toHaveBeenCalledTimes(stage === "chat" ? 1 : 0);
