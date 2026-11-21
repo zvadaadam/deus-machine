@@ -68,14 +68,7 @@ import {
 import { LOCAL_CALLER, type Caller } from "../../api/registry";
 import { createLocalWorkspace } from "../../api/workspaces";
 import { archiveWorkspace } from "../workspace-archive.service";
-import {
-  attachParts,
-  getMessages,
-  getSessionRaw,
-  getTurn,
-  hasOlderMessages,
-  saveTurn,
-} from "../../db";
+import { attachParts, getMessages, getSessionRaw, hasOlderMessages } from "../../db";
 import { getDatabase } from "../../lib/database";
 import { AppError, ChatBusyError } from "../../lib/errors";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
@@ -255,6 +248,9 @@ const AGENT_NAMES = Object.entries(HARNESS_LABELS)
   .map(([id, label]) => `${JSON.stringify(id)} (${label})`)
   .join(" and ");
 
+/** What a chat the host could not deliver its first task to says, the reason kept safe. */
+const NOT_DELIVERED = "Its first task could not be delivered.";
+
 export function createDeusHost(): DeusHost {
   /** First tasks held for workspaces being set up, by the chat's id. */
   const firsts = new Map<string, Held>();
@@ -329,7 +325,7 @@ export function createDeusHost(): DeusHost {
         epochMs(row.session_id ? row.s_updated_at : row.ws_updated_at) ?? 0
       );
       const root = computeWorkspacePath({ root_path: row.root_path, slug: row.slug });
-      // Setup and delivery refusals belong to the entry; engine turn errors are in its view.
+      // Why: a failed start, or a first task that could not be delivered (no messages yet).
       const error = !row.session_id
         ? row.error_message
         : status === "error" && !row.message_count
@@ -465,7 +461,6 @@ export function createDeusHost(): DeusHost {
    * its entry and view show.
    */
   async function sendFirst(caller: Who, sessionId: string, input: StartInput) {
-    let attempted = false;
     try {
       const settings = settingsFor(input);
       mayTouch(caller, sessionId);
@@ -481,7 +476,6 @@ export function createDeusHost(): DeusHost {
           "UPDATE workspaces SET title = ? WHERE first_session_id = ? AND title IS NULL"
         ).run(input.title, sessionId);
       }
-      attempted = true;
       await sendMessage(
         { sessionId, content: input.message, turnId: input.turnId, ...settings },
         input.origin
@@ -493,36 +487,17 @@ export function createDeusHost(): DeusHost {
         why = said.message.split("\n")[0]!.replace(/^refused \([a-z_]+\): /, "");
       else if (said instanceof Refused && said.refusal.code === "archived")
         why = "The chat was archived.";
-      else if (!attempted) why = "Deus could not prepare the task in this chat.";
-      undelivered(sessionId, input.turnId, why);
+      undelivered(sessionId, why);
     }
   }
 
-  /** Record this task's outcome even if a different sender got to the new chat first. */
-  function undelivered(sessionId: string, turnId: string, why?: string) {
-    const db = getDatabase();
-    const session = getSessionRaw(db, sessionId);
-    const running = liveTurnId(sessionId);
-    const own = getTurn(db, sessionId, turnId);
-    if (
-      !session ||
-      running === turnId ||
-      own?.startedAt !== undefined ||
-      own?.endedAt !== undefined
-    )
-      return;
-    const message = why
-      ? `Its first task could not be delivered. ${why}`
-      : "Its first task has no delivery confirmation. Check the chat before sending it again.";
-    const error = { category: "internal" as const, message };
-    db.transaction(() => {
-      saveTurn(db, sessionId, { turnId, endedAt: Date.now(), stopReason: "error", error });
-      if (!running && !ACTIVE_TURN_STATUSES.includes(session.status)) {
-        db.prepare(
-          "UPDATE sessions SET status = 'error', error_message = ?, error_category = ? WHERE id = ?"
-        ).run(error.message, error.category, sessionId);
-      }
-    })();
+  /** The chat's first task was not delivered: its error says so, and why. */
+  function undelivered(sessionId: string, why?: string) {
+    getDatabase()
+      .prepare(
+        "UPDATE sessions SET status = 'error', error_message = ? WHERE id = ? AND message_count = 0"
+      )
+      .run(`${NOT_DELIVERED}${why ? ` ${why}` : ""}`, sessionId);
     invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
   }
 
@@ -550,7 +525,7 @@ export function createDeusHost(): DeusHost {
       else if (w.state === "ready" && w.current_session_id === sessionId) {
         if (Date.now() - entry.since > SETUP_LIMIT_MS) {
           drop(sessionId);
-          undelivered(sessionId, held.input.turnId, "Setup took longer than 30 minutes.");
+          undelivered(sessionId, "Setup took longer than 30 minutes.");
           return;
         }
         entry.unwatch();

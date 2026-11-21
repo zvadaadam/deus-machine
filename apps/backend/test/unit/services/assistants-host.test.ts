@@ -1133,14 +1133,11 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     state.db.exec(`CREATE TEMP TRIGGER hide_first_chat AFTER INSERT ON sessions
        BEGIN UPDATE sessions SET is_hidden = 1 WHERE id = NEW.id; END`);
     ready(entry);
-    const view = await host.view(LEAD as never, entry.id, {});
-    expect(view.turns).toContainEqual(
-      expect.objectContaining({
-        turnId: "held",
-        outcome: "failed",
-        error: expect.stringMatching(/could not be delivered.*archived/i),
-      })
-    );
+    expect(
+      state.db.prepare("SELECT error_message FROM sessions WHERE id = ?").get(entry.id)
+    ).toMatchObject({
+      error_message: expect.stringMatching(/could not be delivered.*archived/i),
+    });
     expect(state.sent).toHaveLength(0);
   });
 
@@ -1155,46 +1152,21 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
       status: "error",
       error: expect.stringContaining("Restart Deus"),
     });
-    expect(await host.turn(LEAD as never, entry.id, "delivery")).toMatchObject({
-      state: "ended",
-      outcome: "failed",
-    });
-    const view = await host.view(LEAD as never, entry.id, {});
-    expect(view.turns).toEqual([
-      expect.objectContaining({
-        turnId: "delivery",
-        outcome: "failed",
-        error: entry.error,
-        messages: [],
-      }),
-    ]);
-    message(entry.id, "later", "user", "follow-up");
-    const listed = (await host.list(LEAD as never, {})).find((e) => e.id === entry.id);
-    expect(listed?.error).toBeUndefined();
-    expect((await host.view(LEAD as never, entry.id, {})).turns).toContainEqual(
-      expect.objectContaining({ turnId: "delivery", error: entry.error })
-    );
+    expect(await host.turn(LEAD as never, entry.id, "delivery")).toEqual({ state: "unknown" });
   });
 
-  it("records the refused first task even when a different sender has a live turn", async () => {
+  it("keeps an unknown send failure on the new session without ending an engine turn", async () => {
     const host = createDeusHost();
-    const entry = await host.start!(LEAD as never, startInput({ turnId: "first" }));
-    state.sendRefusal = new ChatBusyError("Another turn is working.");
-    ready(entry);
-    message(entry.id, "other", "user", "my own turn");
-    state.live.set(entry.id, "other");
-    state.db.prepare("UPDATE sessions SET status = 'working' WHERE id = ?").run(entry.id);
-    await vi.waitFor(async () => {
-      const view = await host.view(LEAD as never, entry.id, {});
-      expect(view).toMatchObject({ status: "working", running: "other" });
-      expect(view.turns).toContainEqual(
-        expect.objectContaining({
-          turnId: "first",
-          outcome: "failed",
-          error: expect.stringContaining("Another turn is working."),
-        })
-      );
-    });
+    state.sendRefusal = new Error("lost reply");
+    const entry = await host.start!(
+      LEAD as never,
+      startInput({
+        workspace: { id: "w-lead", name: "lead" },
+        turnId: "unknown-delivery",
+      })
+    );
+    expect(entry.error).toBe("Its first task could not be delivered.");
+    expect((await host.view(LEAD as never, entry.id, {})).turns).toEqual([]);
   });
 
   it("H17: a read after the last message sees a later cancel; a turn with no messages is shown", async () => {
