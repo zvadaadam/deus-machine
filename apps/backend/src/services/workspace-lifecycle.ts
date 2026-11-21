@@ -470,9 +470,6 @@ function projectCloudStatus(data: CloudReport, row: { archived: boolean; hasChat
 }
 
 type WakeReport = { outcome?: { ok: boolean; status: string; error?: string } };
-export function cloudIsWakingOrRunning(status: string): boolean {
-  return ["running", "provisioning", "resuming"].includes(status);
-}
 export type LatestCloudReport = () => WakeReport | undefined;
 const wakes = new Map<string, { report?: WakeReport }>();
 
@@ -509,7 +506,7 @@ export function applyCloudStatus(
     if (wake && data.status)
       wake.report = {
         outcome: {
-          ok: cloudIsWakingOrRunning(data.status),
+          ok: ["running", "provisioning", "resuming"].includes(data.status),
           status: data.status,
           error: fields[2] ?? undefined,
         },

@@ -387,6 +387,16 @@ it("answers a successful wake without overwriting a report received during resum
   expect(row(workspaceId)).toMatchObject({ state: "ready", init_stage: "stopped" });
 });
 
+it("keeps Restore archived when the status read said running but resume failed and no chat is serving", async () => {
+  const { workspaceId } = createCloudWorkspace({ repositoryId: "r" });
+  await vi.waitFor(() => expect(mock.connect).toHaveBeenCalledOnce());
+  await archiveWorkspace(workspaceId);
+  mock.status.mockResolvedValue({ status: "running" });
+  mock.resume.mockRejectedValueOnce(new Error("resume unavailable"));
+  await expect(unarchiveWorkspace(workspaceId)).rejects.toThrow("resume unavailable");
+  expect(row(workspaceId)).toMatchObject({ state: "archived" });
+});
+
 it.each([
   ["running", "ready", null, true],
   ["provisioning", "initializing", "provisioning", true],

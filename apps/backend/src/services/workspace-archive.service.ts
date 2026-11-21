@@ -91,7 +91,8 @@ export function unarchiveWorkspace(workspaceId: string): Promise<void> {
           },
           latest
         );
-        if (!result.ok) {
+        // A failed status refresh can still leave the computer serving.
+        if (!result.ok && result.status !== "running") {
           throw new Error(result.error || "Could not wake the cloud machine. Try again.");
         }
       } catch (err) {

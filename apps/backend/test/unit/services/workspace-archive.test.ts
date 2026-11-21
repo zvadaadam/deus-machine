@@ -126,7 +126,7 @@ describe("workspace unarchive", () => {
     expect(mocks.run).toHaveBeenCalledTimes(2);
   });
 
-  it("restores archived membership when wake fails; a retry can succeed", async () => {
+  it("rolls back a failed wake and restores on retry when the computer is still serving", async () => {
     mocks.workspace.mockReturnValue({
       id: "workspace",
       state: "archived",
@@ -136,6 +136,7 @@ describe("workspace unarchive", () => {
     mocks.wake.mockResolvedValueOnce({ ok: false, status: "paused" });
     await expect(unarchiveWorkspace("workspace")).rejects.toThrow("Could not wake");
     expect(mocks.run).toHaveBeenCalledTimes(2);
+    mocks.wake.mockResolvedValueOnce({ ok: false, status: "running" });
     await unarchiveWorkspace("workspace");
     expect(mocks.run).toHaveBeenCalledTimes(3);
   });

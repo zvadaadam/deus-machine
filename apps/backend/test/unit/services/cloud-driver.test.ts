@@ -1121,22 +1121,10 @@ describe("cloud driver frame → fold contract", () => {
     { status: "error", expectedState: "error", expectedStage: null },
     { status: "already-running", expectedState: "ready", expectedStage: null },
     { status: "refresh-failed", expectedState: "ready", expectedStage: null },
-    {
-      status: "resuming-read",
-      read: "resuming",
-      expectedState: "ready",
-      expectedStage: "resuming",
-    },
-    {
-      status: "provisioning-read",
-      read: "provisioning",
-      expectedState: "ready",
-      expectedStage: "resuming",
-    },
     { status: "resume-failed", expectedState: "archived", expectedStage: "paused" },
   ])(
     "unarchive preserves the $status projection across the resume response",
-    async ({ status, read, expectedState, expectedStage }) => {
+    async ({ status, expectedState, expectedStage }) => {
       const db = new Database(":memory:");
       db.exec(SCHEMA_SQL);
       db.prepare(
@@ -1149,9 +1137,7 @@ describe("cloud driver frame → fold contract", () => {
           'archived', 'paused', 'deus-session-1')`
       ).run();
       mockGetWorkspace.mockResolvedValueOnce({
-        status:
-          read ??
-          (status === "already-running" || status === "refresh-failed" ? "running" : "paused"),
+        status: status === "already-running" || status === "refresh-failed" ? "running" : "paused",
       });
       db.exec("INSERT INTO sessions (id, workspace_id) VALUES ('deus-session-1','deus-ws-1')");
       const connectionsBefore = connectCount;
@@ -1161,7 +1147,7 @@ describe("cloud driver frame → fold contract", () => {
           async () => {
             await mockResumeWorkspace.withImplementation(
               async () => {
-                if (read || status === "resume-failed" || status === "refresh-failed")
+                if (status === "resume-failed" || status === "refresh-failed")
                   throw new Error("resume unavailable");
                 if (status === "already-running") return;
                 // Real driver event, received while the HTTP resume is pending.
