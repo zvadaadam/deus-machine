@@ -1,15 +1,20 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { RuntimeClient } from "@/platform/ws/runtime-client";
+import { queryKeys } from "@/shared/api/queryKeys";
 import { useSessionComposer } from "@/features/session/hooks/useSessionComposer";
 import {
+  attachImageFiles,
+  composerStore,
+  composerTarget,
   emptyComposer,
   sessionComposerActions as actions,
   useSessionComposerStore as store,
 } from "@/features/session/store/sessionComposerStore";
 import type { ImageAttachment } from "@/features/session/lib/imageAttachments";
 
-beforeEach(() => store.setState({ composers: {}, pendingContent: {} }));
+beforeEach(() => composerStore().setState({ composers: {}, pendingContent: {} }));
 
 const model = "codex-app-server:gpt-6-astra";
 const element = { ref: "button-1", tagName: "button", path: "body > button", innerText: "Send" };
@@ -19,6 +24,171 @@ const screenshot: ImageAttachment = {
   preview: "data:image/png;base64,c2NyZWVuc2hvdA==",
   type: "image/png",
 };
+
+function memoryStorage(quota = Infinity) {
+  const data = new Map<string, string>();
+  return {
+    getItem: (key: string) => data.get(key) ?? null,
+    setItem: vi.fn((key: string, value: string) => {
+      if (value.length > quota) throw new DOMException("Storage full", "QuotaExceededError");
+      data.set(key, value);
+    }),
+    removeItem: (key: string) => data.delete(key),
+  };
+}
+
+// A new renderer gets fresh module state and reads the same window storage.
+async function reopen() {
+  vi.resetModules();
+  return (await import("@/features/session/store/sessionComposerStore")).composerStore();
+}
+
+describe("draft storage", () => {
+  let storage: ReturnType<typeof memoryStorage>;
+  beforeEach(() => {
+    storage = memoryStorage();
+    vi.stubGlobal("sessionStorage", storage);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("scopes drafts only by the runtime's host and account", () => {
+    const cache = (host: string, account: string, grant: string) =>
+      new RuntimeClient({ host, account, grant }, { open: vi.fn() }).queryClient;
+    const desktop = cache("electron", "electron", "first");
+    const local = composerStore(desktop);
+    actions.setDraft(composerTarget("home", local), "My Mac");
+    desktop.setQueryData(queryKeys.deusCloud.session, { accountId: "cloud-person" });
+    expect(composerStore(desktop)).toBe(local);
+    desktop.setQueryData(queryKeys.deusCloud.session, { accountId: null });
+    expect(composerStore(desktop).getState().pendingContent.home.draft).toBe("My Mac");
+    expect(composerStore(cache("electron", "electron", "next"))).toBe(local);
+    expect(storage.getItem('composer-drafts:["electron","electron"]')).toContain("My Mac");
+
+    const relay = composerStore(cache("one", "A", "first"));
+    actions.setDraft(composerTarget("home", relay), "Account A on one");
+    expect(composerStore(cache("one", "A", "renewed"))).toBe(relay);
+    expect(composerStore(cache("two", "A", "first")).getState().pendingContent).toEqual({});
+    expect(composerStore(cache("one", "B", "first")).getState().pendingContent).toEqual({});
+    expect(storage.getItem('composer-drafts:["one","A"]')).toContain("Account A on one");
+    const cloud = composerStore(cache("web-direct", "web-direct", "first"));
+    actions.setDraft(composerTarget("hosted-chat", cloud), "Resume here");
+    expect(storage.getItem('composer-drafts:["web-direct","web-direct"]')).toContain("Resume here");
+  });
+
+  it("restores plain content and lets chat history seed the settings", async () => {
+    const target = composerTarget("chat", await reopen());
+    actions.seedIfAbsent(target, { ...emptyComposer(model, "high"), planModeEnabled: true });
+    actions.setDraft(target, "Please review");
+    actions.addPastedText(target, "Notes from the clipboard");
+    actions.addFileMention(target, { path: "src/ui.ts", name: "ui.ts" });
+    actions.addSkillMention(target, { name: "review" });
+    actions.addInspectedElement(target, element);
+    const { draft, pastedTexts, fileMentions, skillMentions, inspectedElements } =
+      target.store.getState().composers.chat;
+    const restored = composerTarget("chat", await reopen());
+    expect(restored.store.getState().composers).toEqual({});
+    const settings = emptyComposer("claude-code:opus", "low");
+    actions.seedIfAbsent(restored, settings);
+    expect(restored.store.getState().composers.chat).toEqual({
+      ...settings,
+      draft,
+      pastedTexts,
+      fileMentions,
+      skillMentions,
+      inspectedElements,
+    });
+  });
+
+  it("writes when draft content changes, including a keystroke, and skips model and plan changes", async () => {
+    const target = composerTarget("chat", await reopen());
+    actions.seedIfAbsent(target, emptyComposer(model, "high"));
+    actions.setDraft(target, "A".repeat(64 * 1024));
+    actions.setThinkingLevel(target, "low");
+    actions.togglePlanMode(target);
+    expect(storage.setItem).toHaveBeenCalledTimes(1);
+    actions.setDraft(target, "A".repeat(64 * 1024) + "B");
+    expect(storage.setItem).toHaveBeenCalledTimes(2);
+  });
+
+  it("saves only a picture count, and keeps the warning through another save", async () => {
+    let target = composerTarget("chat", await reopen());
+    actions.addImageAttachments(target, [screenshot, { ...screenshot, id: "another" }]);
+    const raw = storage.setItem.mock.lastCall![1];
+    expect(raw).not.toContain(screenshot.file.name);
+    expect(raw).not.toContain(screenshot.preview);
+    target = composerTarget("chat", await reopen());
+    expect(target.store.getState().pendingContent.chat).toMatchObject({
+      imageAttachments: [],
+      missingPictures: 2,
+    });
+    actions.setDraft(target, "Slight edit");
+    target = composerTarget("chat", await reopen());
+    expect(target.store.getState().pendingContent.chat.missingPictures).toBe(2);
+    actions.addImageAttachments(target, [screenshot]);
+    expect(target.store.getState().pendingContent.chat.missingPictures).toBe(0);
+    expect((await reopen()).getState().pendingContent.chat.missingPictures).toBe(1);
+  });
+
+  it.each([
+    ["First and another thought", " and another thought"],
+    ["A new draft", "A new draft"],
+  ])("on acknowledgement keeps new text and attachments (%s)", async (typed, remaining) => {
+    const target = composerTarget("chat", await reopen());
+    actions.setDraft(target, "First");
+    actions.addPastedText(target, "Sent paste");
+    actions.addFileMention(target, { name: "sent", path: "sent" });
+    actions.addImageAttachments(target, [screenshot]);
+    const sent = target.store.getState().pendingContent.chat;
+    actions.setDraft(target, typed);
+    actions.addPastedText(target, "Later paste");
+    actions.addFileMention(target, { name: "later", path: "later" });
+    const later = { ...screenshot, id: "later-picture" };
+    actions.addImageAttachments(target, [later]);
+    actions.clearSent(target, sent);
+    expect(target.store.getState().pendingContent.chat.imageAttachments).toEqual([later]);
+    expect((await reopen()).getState().pendingContent.chat).toMatchObject({
+      draft: remaining,
+      pastedTexts: [{ content: "Later paste" }],
+      fileMentions: [{ name: "later" }],
+      missingPictures: 1,
+    });
+  });
+
+  it("keeps an oversized edit in memory while smaller writes and removals reach storage", async () => {
+    const quota = memoryStorage(1400);
+    vi.stubGlobal("sessionStorage", quota);
+    const drafts = await reopen();
+    const large = composerTarget("large", drafts);
+    const small = composerTarget("small", drafts);
+    const sent = composerTarget("sent", drafts);
+    actions.setDraft(large, "Last saved");
+    actions.setDraft(small, "Small");
+    actions.setDraft(sent, "Sending");
+    const paste = "x".repeat(3000);
+    drafts.setState((state) => {
+      state.pendingContent.large.pastedTexts.push({ id: "paste", content: paste });
+      state.pendingContent.small.draft = "Edited in the same update";
+    });
+    const rejected = () => quota.setItem.mock.results.filter((r) => r.type === "throw").length;
+    const failures = rejected();
+    expect(failures).toBeGreaterThan(0);
+    expect((await reopen()).getState().pendingContent.small.draft).toBe(
+      "Edited in the same update"
+    );
+    actions.setDraft(small, "Small edit");
+    actions.clearSent(sent, drafts.getState().pendingContent.sent);
+    const saved = (await reopen()).getState().pendingContent;
+    expect(saved.large).toMatchObject({ draft: "Last saved", pastedTexts: [] });
+    expect(saved.small.draft).toBe("Small edit");
+    expect(saved.sent).toBeUndefined();
+    const staged = drafts.getState().pendingContent.large.pastedTexts[0];
+    expect(staged.content).toBe(paste);
+    expect(rejected()).toBe(failures);
+    actions.removePastedText(large, staged.id);
+    actions.setDraft(large, "Fits again");
+    expect((await reopen()).getState().pendingContent.large.draft).toBe("Fits again");
+  });
+});
 
 describe("cross-panel staged content", () => {
   it("keeps prompts sent before mount and uses the session's model when it mounts", () => {
@@ -81,13 +251,14 @@ describe("cross-panel staged content", () => {
     actions.addSkillMention("session", { name: "code-review" });
     actions.addImageAttachments("session", [screenshot]);
 
-    actions.clearContent("session");
+    const { composers, pendingContent } = store.getState();
+    actions.clearSent("session", composers.session ?? pendingContent.session);
     actions.seedIfAbsent("session", initial);
     expect(store.getState().composers.session).toEqual(initial);
     expect(store.getState().pendingContent).toEqual({});
   });
 
-  it("discards queued content when its tab is closed", () => {
+  it("discards queued content on explicit discard", () => {
     actions.appendDraft("closed", "Must not come back");
     actions.addInspectedElement("closed", element);
     actions.addImageAttachments("closed", [screenshot]);
@@ -99,6 +270,37 @@ describe("cross-panel staged content", () => {
 });
 
 describe("move: a workspace's start composer hands over to its first chat", () => {
+  it.each(["move", "discard"])(
+    "handles a file read still in progress during %s",
+    async (action) => {
+      let finish!: () => void;
+      vi.stubGlobal(
+        "FileReader",
+        class {
+          onload!: (event: { target: { result: string } }) => void;
+          readAsDataURL() {
+            finish = () => this.onload({ target: { result: screenshot.preview } });
+          }
+        }
+      );
+      try {
+        actions.seedIfAbsent("workspace", emptyComposer(model, "high"));
+        const reading = attachImageFiles("workspace", [screenshot.file]);
+        if (action === "move") actions.move("workspace", "chat");
+        else actions.discard("workspace");
+        finish();
+        await reading;
+        expect(store.getState().composers.workspace).toBeUndefined();
+        expect(store.getState().pendingContent.workspace).toBeUndefined();
+        expect(store.getState().composers.chat?.imageAttachments.length ?? 0).toBe(
+          action === "move" ? 1 : 0
+        );
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    }
+  );
+
   it("does nothing when the start page had no composer", () => {
     const chat = { ...emptyComposer(model, "high"), draft: "Mine" };
     actions.seedIfAbsent("chat", chat);

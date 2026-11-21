@@ -7,8 +7,7 @@
  *      every piece of staged content.
  *   2. Provide session-derived props (sending, context tokens, manifest
  *      status, etc.) that need React Query hooks.
- *   3. Own the send path via `useSessionActions`; clear staged content
- *      on successful send.
+ *   3. Return the send result from `useSessionActions` to the input.
  *   4. Expose a narrow imperative ref for the home-screen welcome flow
  *      (which dispatches before a composer is mounted) and for parents
  *      that forward stop/compact/createPR callbacks.
@@ -31,7 +30,7 @@ import {
   getModelForSession,
   getThinkingForSession,
 } from "@/shared/agents";
-import { sessionComposerActions, useSessionComposerStore } from "../store/sessionComposerStore";
+import { useSessionComposerStore } from "../store/sessionComposerStore";
 
 export interface SessionComposerRef {
   /** Send a message bypassing the UI event path (header actions that ask
@@ -139,10 +138,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
       sessionId,
       workspaceId: workspaceId ?? undefined,
       targetBranch: targetBranch ?? "main",
-      onMessageSent: () => {
-        sessionComposerActions.clearContent(sessionId);
-        onSendComplete?.();
-      },
+      onMessageSent: onSendComplete,
     });
 
     useImperativeHandle(

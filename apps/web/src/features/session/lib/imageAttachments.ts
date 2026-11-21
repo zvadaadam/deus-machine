@@ -1,7 +1,5 @@
 /**
- * Pure image-attachment utilities — shared between the session-scoped
- * composer store and the home-screen composer (which has its own local
- * state because no session exists yet).
+ * Image attachments shared by the Home, workspace and chat composers.
  *
  * No React, no state. Just:
  *   - processImageFiles: File[] → ImageAttachment[] (FileReader → base64 preview)

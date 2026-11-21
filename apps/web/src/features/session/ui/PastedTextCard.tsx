@@ -19,7 +19,8 @@ export function PastedTextCard({ content, onRemove }: PastedTextCardProps) {
       className="group bg-muted/50 border-border/60 relative flex h-[80px] w-44 shrink-0 flex-col rounded-md border p-2"
     >
       <p className="text-foreground/60 text-2xs line-clamp-3 min-h-0 flex-1 font-mono leading-snug">
-        {content}
+        {/* Only three lines fit. Keep a multi-megabyte paste out of the DOM. */}
+        {content.slice(0, 512)}
       </p>
       <div className="mt-1">
         <Badge

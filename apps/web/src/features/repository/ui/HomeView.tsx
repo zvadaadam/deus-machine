@@ -1,14 +1,21 @@
 import { Collapse } from "@/components/ui/collapse";
-import { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import { useState, useCallback, useRef, useMemo, useLayoutEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
-import { ArrowUp, FolderGit2, FolderOpen, GitBranch, Upload } from "lucide-react";
+import { ArrowUp, FolderGit2, FolderOpen, GitBranch } from "lucide-react";
 import { capabilities } from "@/platform/capabilities";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { cn } from "@/shared/lib/utils";
-import { useImageAttachments } from "@/features/session/hooks/useImageAttachments";
-import { PastedImageCard } from "@/features/session/ui/PastedImageCard";
+import { useSessionComposer } from "@/features/session/hooks/useSessionComposer";
+import {
+  extractImagesFromClipboard,
+  buildMessageContent,
+} from "@/features/session/lib/imageAttachments";
+import { attachImageFiles } from "@/features/session/store/sessionComposerStore";
+import { returnContentToComposer } from "@/features/session/lib/returnToComposer";
+import { ImageDropTarget } from "@/features/session/ui/ImageDropTarget";
+import { MissingPictures, PastedImageCard } from "@/features/session/ui/PastedImageCard";
 import type { RepoGroup, Workspace } from "@/shared/types";
 import type { Repository } from "../types";
 import { tempo } from "@/shared/lib/tempo";
@@ -119,38 +126,24 @@ export function HomeView({
   const request = useUIStore((s) => s.newWorkspaceRequest);
 
   // ── Input state ─────────────────────────────────────────────────
-  const [message, setMessage] = useState(() => request?.draft ?? "");
-  const [isDragging, setIsDragging] = useState(false);
+  const {
+    draft: message,
+    setDraft: setMessage,
+    imageAttachments: attachments,
+    removeImageAttachment: removeAttachment,
+    missingPictures,
+    dismissMissingPictures,
+    clearSent,
+  } = useSessionComposer("home");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Image attachments (shared hook with MessageInput)
-  const {
-    attachments,
-    processFiles,
-    removeAttachment,
-    clearAttachments,
-    extractImagesFromClipboard,
-    buildMessageContent,
-  } = useImageAttachments();
-
-  const handlePaste = useCallback(
-    (e: React.ClipboardEvent) => {
-      const imageFiles = extractImagesFromClipboard(e);
-      if (imageFiles.length > 0) {
-        e.preventDefault();
-        processFiles(imageFiles);
-      }
-    },
-    [extractImagesFromClipboard, processFiles]
-  );
-
-  // Build content in the canonical PartInput vocabulary (text-only stays a
-  // bare string; attachments promote it to a JSON-encoded PartInput[]).
-  const buildCombinedContent = useCallback(
-    () => buildMessageContent(message.trim()),
-    [message, buildMessageContent]
-  );
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const files = extractImagesFromClipboard(e);
+    if (!files.length) return;
+    e.preventDefault();
+    await attachImageFiles("home", files);
+  };
 
   // ── Repo selection ──────────────────────────────────────────────
   // User-chosen repo ID — null means "use derived default"
@@ -169,10 +162,10 @@ export function HomeView({
   if (request && request.id !== takenRequestId) {
     setTakenRequestId(request.id);
     if (request.repoId) setUserRepoId(request.repoId);
-    if (request.draft !== undefined) setMessage(request.draft);
   }
-  useEffect(() => {
-    if (!request) return;
+  useLayoutEffect(() => {
+    if (!request || useUIStore.getState().newWorkspaceRequest?.id !== request.id) return;
+    if (request.draft) void returnContentToComposer("home", request.draft);
     if (request.repoId) setStoredRepoId(request.repoId);
     // Not cancelled on cleanup: clearing the request runs this effect again.
     setTimeout(() => textareaRef.current?.focus(), 50);
@@ -289,7 +282,7 @@ export function HomeView({
       toast.error(sendBlock);
       return;
     }
-    const content = buildCombinedContent();
+    const content = buildMessageContent(message.trim(), attachments);
     if (!content) return;
     setIsSubmitting(true);
     try {
@@ -305,8 +298,7 @@ export function HomeView({
         cloudOrganizationId
       );
       if (!started) return;
-      clearAttachments();
-      setMessage("");
+      clearSent();
     } finally {
       setIsSubmitting(false);
     }
@@ -314,14 +306,15 @@ export function HomeView({
     canSend,
     selectedRepoId,
     sendBlock,
-    buildCombinedContent,
+    message,
+    attachments,
     selection.model,
     selection.sentThinkingLevel,
     selectedBranch,
     location,
     cloudOrganizationId,
     onSendMessage,
-    clearAttachments,
+    clearSent,
   ]);
 
   const handleKeyDown = useCallback(
@@ -356,16 +349,19 @@ export function HomeView({
         }
       }, 10);
     },
-    [selectedRepoId, isSubmitting]
+    [selectedRepoId, isSubmitting, setMessage]
   );
 
   // Auto-resize textarea
-  const handleTextareaChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setMessage(e.target.value);
-    const ta = e.target;
-    ta.style.height = "auto";
-    ta.style.height = `${Math.min(ta.scrollHeight, 192)}px`;
-  }, []);
+  const handleTextareaChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setMessage(e.target.value);
+      const ta = e.target;
+      ta.style.height = "auto";
+      ta.style.height = `${Math.min(ta.scrollHeight, 192)}px`;
+    },
+    [setMessage]
+  );
 
   // Fully Mac-closed web: there is no local project to start from — the home
   // is the user's cloud sessions (the sidebar's rows, surfaced) or an honest
@@ -397,51 +393,11 @@ export function HomeView({
 
       {/* Input Card — the gravitational center */}
       <div className="enter-step w-full max-w-[720px] px-4 [--enter-y:12px] [--step:1] sm:px-6">
-        <div
-          className={cn(
-            "bg-bg-raised dark:bg-bg-surface relative overflow-visible rounded-2xl p-1 transition-shadow",
-            isDragging && "ring-primary/25 ring-2"
-          )}
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (!hasRepos || isSubmitting) return;
-            if (!isDragging) setIsDragging(true);
-          }}
-          onDragLeave={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (!hasRepos || isSubmitting) {
-              setIsDragging(false);
-              return;
-            }
-            // Only dismiss when cursor truly leaves the card bounds
-            const rect = e.currentTarget.getBoundingClientRect();
-            if (
-              e.clientX < rect.left ||
-              e.clientX >= rect.right ||
-              e.clientY < rect.top ||
-              e.clientY >= rect.bottom
-            ) {
-              setIsDragging(false);
-            }
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setIsDragging(false);
-            if (!hasRepos || isSubmitting) return;
-            const files = Array.from(e.dataTransfer.files);
-            if (files.length > 0) processFiles(files);
-          }}
+        <ImageDropTarget
+          composerId="home"
+          disabled={!hasRepos || isSubmitting}
+          className="bg-bg-raised dark:bg-bg-surface overflow-visible rounded-2xl p-1 transition-shadow"
         >
-          {/* Drop overlay */}
-          {isDragging && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center gap-2 rounded-2xl bg-black/30 backdrop-blur-[2px]">
-              <Upload className="h-4 w-4 text-white/70" />
-              <p className="text-sm font-medium text-white/70">Drop images here</p>
-            </div>
-          )}
           {/* Context bar — repo + branch grouped left, cloud toggle right */}
           <div className="flex items-center justify-between px-1 py-0.5">
             <div className="flex min-w-0 items-center">
@@ -500,6 +456,7 @@ export function HomeView({
 
           {/* Inner card — typing surface (textarea + bottom toolbar) */}
           <div className="bg-bg-elevated relative overflow-visible rounded-xl transition-shadow focus-within:shadow-sm">
+            <MissingPictures count={missingPictures} onDismiss={dismissMissingPictures} />
             {/* Image previews — shown above textarea when images are pasted/dropped */}
             <AnimatePresence>
               {attachments.length > 0 && (
@@ -575,7 +532,7 @@ export function HomeView({
               </button>
             </div>
           </div>
-        </div>
+        </ImageDropTarget>
       </div>
 
       {/* Quick Prompts — chip row below input card (only when repos exist) */}
@@ -718,7 +675,7 @@ const CLOUD_HOME_COPY = {
   error: ["Couldn't load your cloud sessions", "Discovery failed."],
   sessions: [
     "Your cloud sessions",
-    "Pick up any conversation from here. New sessions start from the Deus desktop app and show up the moment they exist.",
+    "Start a session in the Deus desktop app. This list refreshes every minute and when you return to this tab.",
   ],
   empty: [
     "No cloud sessions yet",

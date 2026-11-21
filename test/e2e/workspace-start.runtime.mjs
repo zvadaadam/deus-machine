@@ -404,11 +404,15 @@ try {
     status(panel(b), "Making a safe copy…").waitFor(),
   ]);
   await waiting.getByText("Add a dark mode toggle to the settings page").waitFor();
-  // One message waits per workspace: a second is refused in words and stays in the box.
+  // One message waits per workspace: Send stays disabled and Enter keeps the follow-up in the box.
   const draft = "Then make it follow the system theme";
   await startComposer(a).locator("textarea").fill(draft);
   await startComposer(a).locator("textarea").press("Enter");
-  await toast(a, "A message is already waiting for this workspace").waitFor();
+  await startComposer(a).getByText("You can send this draft when the chat opens.").waitFor();
+  assert.equal(
+    await startComposer(a).getByRole("button", { name: "Send message" }).isDisabled(),
+    true
+  );
   assert.equal(await startComposer(a).locator("textarea").inputValue(), draft);
   assert.equal(await waiting.count(), 1);
   await waiting.getByText("Add a dark mode toggle to the settings page").waitFor();
