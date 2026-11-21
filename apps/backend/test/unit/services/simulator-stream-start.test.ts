@@ -4,7 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 // A stream start whose helper says it is ready and then exits before the
 // session is registered: the start fails, and nothing announces the stream.
 
-const helper = vi.hoisted(() => ({ child: null as null | EventEmitter }));
+const helper = vi.hoisted(() => ({
+  child: null as null | (EventEmitter & { kill: ReturnType<typeof vi.fn> }),
+  onConnect: () => {},
+}));
 
 vi.mock("device-use/engine", () => ({
   simulatorEnv: (base: NodeJS.ProcessEnv) => base,
@@ -43,7 +46,7 @@ vi.mock("ws", async () => {
     constructor() {
       super();
       setImmediate(() => {
-        helper.child!.emit("exit", 1);
+        helper.onConnect();
         this.emit("open");
       });
     }
@@ -56,14 +59,35 @@ vi.mock("../../../src/services/streams", () => ({
   publish: (_stream: unknown, _scope: unknown, event: unknown) => published.push(event),
 }));
 
-import { getContextForWorkspace, startStream } from "../../../src/services/simulator-context";
+import {
+  getContextForWorkspace,
+  startStream,
+  stopStream,
+} from "../../../src/services/simulator-context";
 
 describe("a stream whose helper exits between ready and registration", () => {
   it("fails the start and never announces the stream", async () => {
+    helper.onConnect = () => {
+      helper.child!.emit("exit", 1);
+    };
     await expect(startStream("ws-1", "UDID-1", true)).rejects.toThrow(
       "stopped while it was starting"
     );
     expect(published).not.toContainEqual(expect.objectContaining({ type: "streamReady" }));
     expect(getContextForWorkspace("ws-1")).toBeNull();
   });
+});
+
+it("lets an archive stop a simulator before its session is registered", async () => {
+  helper.onConnect = () => stopStream("archived");
+  await expect(startStream("archived", "UDID-2", true)).rejects.toThrow(
+    "stopped while it was starting"
+  );
+  expect(getContextForWorkspace("archived")).toBeNull();
+  expect(published).not.toContainEqual(expect.objectContaining({ type: "streamReady" }));
+  expect(helper.child!.kill).toHaveBeenCalledWith("SIGTERM");
+  helper.onConnect = () => {};
+  await startStream("other", "UDID-2", true);
+  expect(getContextForWorkspace("other")?.udid).toBe("UDID-2");
+  stopStream("other");
 });
