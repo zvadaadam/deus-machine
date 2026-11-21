@@ -248,9 +248,9 @@ it("ignores another token even while the new start is initializing", async () =>
   const effect = vi.fn();
   mock.invalidate.mockClear();
   try {
-    attachCloudComputer(db, workspaceId, "other-vm", 10, effect, stale);
-    attachCloudChat(db, workspaceId, "other-chat", stale);
-    failCloudStart(db, workspaceId, "other failure", stale);
+    attachCloudComputer(workspaceId, "other-vm", 10, effect, stale);
+    attachCloudChat(workspaceId, "other-chat", stale);
+    failCloudStart(workspaceId, "other failure", stale);
     expect(row(workspaceId)).toEqual(before);
     expect(mock.invalidate).not.toHaveBeenCalled();
     expect(effect).not.toHaveBeenCalled();

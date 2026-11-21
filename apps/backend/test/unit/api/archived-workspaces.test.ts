@@ -111,10 +111,6 @@ it("reads one project's archived rows newest first with parsed origins and legac
   ]);
   db.exec("INSERT INTO repositories (id,name) VALUES ('empty','Empty')");
   expect(await read("empty")).toEqual([]);
-  await expect(read("missing")).rejects.toMatchObject({
-    statusCode: 404,
-    message: "Repository not found",
-  });
 });
 
 it("sends the new archived count in the next sidebar snapshot, including when the last workspace closes", async () => {

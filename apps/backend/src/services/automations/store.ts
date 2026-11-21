@@ -229,7 +229,7 @@ export function adoptRunRows(input: {
         .get(input.providerWorkspaceId) as { id: string } | undefined;
       const workspaceId = workspace?.id ?? uuidv7();
       if (!workspace) {
-        insertAdoptedWorkspace(db, {
+        insertAdoptedWorkspace({
           id: workspaceId,
           repository_id: input.repositoryId,
           slug: input.newWorkspaceSlug(),
@@ -247,7 +247,7 @@ export function adoptRunRows(input: {
     }
 
     const workspaceId = session.workspace_id;
-    attachAdoptedSession(db, workspaceId, session.id, input.organizationId);
+    attachAdoptedSession(workspaceId, session.id, input.organizationId);
     db.prepare("UPDATE automation_runs SET session_id = ?, workspace_id = ? WHERE id = ?").run(
       session.id,
       workspaceId,

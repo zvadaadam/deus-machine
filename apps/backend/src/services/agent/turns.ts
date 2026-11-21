@@ -42,7 +42,7 @@ import {
   pushCloudSessionFacts,
 } from "./cloud/driver";
 import { refreshWorkspaceGithubToken } from "../cloud-workspace-init.service";
-import { beginSendWake, rollbackSendWake } from "../workspace-lifecycle";
+import { rollbackSendWake, setCloudWakeStage } from "../workspace-lifecycle";
 
 // ---- sendMessage ----
 
@@ -284,7 +284,7 @@ async function sendMessageOnce(
         // turn up — announce NOW so the send is never met with silence. The
         // chip flips to "Waking" (init_stage resuming) and the chat shows the
         // env line immediately; real frames replace both within seconds.
-        beginSendWake(workspace.id);
+        setCloudWakeStage(workspace.id, "resuming");
         announceCloudEnv(workspace.id, sessionId, {
           status: "resuming",
           step: asleepStage === "stopped" ? "Restarting sandbox" : "Waking sandbox",

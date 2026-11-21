@@ -42,7 +42,7 @@ it.each([
     operation: "local creation",
     initial: false,
     expected: { state: "initializing" },
-    write: (step: () => void) => insertLocalWorkspace(db, local, step),
+    write: (step: () => void) => insertLocalWorkspace(local, step),
     notification: [["workspaces"]],
   },
   {
@@ -59,7 +59,7 @@ it.each([
     expected: { provider_workspace_id: "vm", init_stage: "creating cloud session" },
     write: (step: () => void) =>
       runWorkspaceAttempt("w", async (token) => {
-        attachCloudComputer(db, "w", "vm", 42, step, token);
+        attachCloudComputer("w", "vm", 42, step, token);
       }),
     notification: [["workspaces", "sessions", "session"], {}],
   },
@@ -104,13 +104,13 @@ it("checks archive admission immediately before writing the row", () => {
   const workspace = { id: "w", kind: "worktree", provider_workspace_id: null } as const;
   const refused = new Error("archive refused");
   expect(() =>
-    markArchived(db, workspace, () => {
+    markArchived(workspace, () => {
       throw refused;
     })
   ).toThrow(refused);
   expect(state.get()).toBe("ready");
 
-  markArchived(db, workspace, () => expect(state.get()).toBe("ready"));
+  markArchived(workspace, () => expect(state.get()).toBe("ready"));
   expect(state.get()).toBe("archived");
   expect(invalidate).not.toHaveBeenCalled();
 });

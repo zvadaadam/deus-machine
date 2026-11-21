@@ -4,7 +4,6 @@
  */
 
 import type { ReportedOrigin } from "../protocol-types";
-export type { Origin } from "@zvada/agent-server/protocol";
 import type { SessionStatus } from "./session";
 
 // Canonical enum types — defined as Zod schemas in shared/enums.ts,
@@ -16,6 +15,7 @@ import type {
   SetupStatus,
   WorkspaceStatus,
 } from "../enums";
+export type { Origin } from "@zvada/agent-server/protocol";
 export type { WorkspaceState, SetupStatus, WorkspaceStatus };
 
 /**

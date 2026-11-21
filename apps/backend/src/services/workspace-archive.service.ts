@@ -29,8 +29,7 @@ export function archiveWorkspace(
   by?: Origin | null
 ): Promise<boolean> {
   return changeWorkspaceState(workspaceId, async () => {
-    const db = getDatabase();
-    const workspace = getWorkspaceRaw(db, workspaceId);
+    const workspace = getWorkspaceRaw(getDatabase(), workspaceId);
     if (!workspace) throw new NotFoundError("Workspace not found");
     if (workspace.state === "archived") {
       check?.();
@@ -44,7 +43,7 @@ export function archiveWorkspace(
       });
     }
 
-    const checkout = markArchived(db, workspace, check, by);
+    const checkout = markArchived(workspace, check, by);
     try {
       stopStream(workspaceId);
       const stopped = stopWorkspaceSetup(workspaceId);
@@ -79,8 +78,7 @@ export function wakeWorkspace(workspaceId: string) {
 
 export function unarchiveWorkspace(workspaceId: string): Promise<void> {
   return queueCloudWake(workspaceId, async (latest) => {
-    const db = getDatabase();
-    const workspace = markRestored(db, workspaceId);
+    const workspace = markRestored(workspaceId);
     if (!workspace) return;
     if (workspace.kind === "cloud" && workspace.provider_workspace_id) {
       try {
@@ -96,11 +94,11 @@ export function unarchiveWorkspace(workspaceId: string): Promise<void> {
           throw new Error(result.error || "Could not wake the cloud machine. Try again.");
         }
       } catch (err) {
-        rollbackCloudRestore(db, workspaceId);
+        rollbackCloudRestore(workspaceId);
         throw err;
       }
     }
-    if (getWorkspaceRaw(db, workspaceId)?.status === "done") {
+    if (getWorkspaceRaw(getDatabase(), workspaceId)?.status === "done") {
       autoProgressStatus(workspaceId, "in-progress", { force: true });
     }
   });

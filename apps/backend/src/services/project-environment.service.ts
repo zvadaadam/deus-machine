@@ -20,7 +20,7 @@ import { cloudAccount, cloudOrg, requireCloudOrg } from "./agent/cloud/config";
 import { getCloudEnvironmentInfo } from "./cloud-environment.service";
 import { createBackendChildEnv } from "@shared/lib/child-env";
 import { SETUP_INTERRUPTED, SETUP_LOG_SUFFIX, setupFile } from "./setup-status";
-import { finishSetupRun, setSetupStatus } from "./workspace-lifecycle";
+import { setSetupStatus } from "./workspace-lifecycle";
 import type { WorkspaceSetup } from "./agent/workspace-context";
 import type { WorkspaceWithDetailsRow } from "../db";
 
@@ -222,15 +222,17 @@ export async function prepareLocalEnvironment(
         await run.process;
       }
     }
-    finishSetupRun(workspaceId, run.command ? "completed" : "none", current);
+    if (current()) setSetupStatus(workspaceId, run.command ? "completed" : "none");
   } catch (error) {
-    finishSetupRun(
-      workspaceId,
-      "failed",
+    if (current()) {
       // Release the failed run before publishing so Run again can take its place.
-      () => current() && runs.delete(workspaceId),
-      processGroupsStopped() ? { message: SETUP_INTERRUPTED } : (error as Error)
-    );
+      runs.delete(workspaceId);
+      setSetupStatus(
+        workspaceId,
+        "failed",
+        processGroupsStopped() ? { message: SETUP_INTERRUPTED } : (error as Error)
+      );
+    }
   } finally {
     if (current()) runs.delete(workspaceId);
   }

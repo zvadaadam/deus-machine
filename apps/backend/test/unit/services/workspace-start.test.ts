@@ -987,7 +987,7 @@ describe("only a failed start can be retried or deleted", () => {
                 let accepted = true;
                 try {
                   if (operation === "delete") deleteFailedWorkspace(id);
-                  else if (kind === "cloud") lifecycle.claimCloudRetry(db(), id);
+                  else if (kind === "cloud") lifecycle.claimCloudRetry(id);
                   else lifecycle.claimLocalRetry(id);
                 } catch (error) {
                   expect(error).toMatchObject({ statusCode: 409 });

@@ -6,7 +6,6 @@
  */
 import type Database from "better-sqlite3";
 import type { ArchivedWorkspace } from "@shared/types/workspace";
-import { NotFoundError } from "../lib/errors";
 import {
   ReportedOriginSchema,
   decodePart,
@@ -91,22 +90,17 @@ export function getArchivedWorkspaces(
   db: Database.Database,
   repositoryId: string
 ): ArchivedWorkspace[] {
-  // The left join distinguishes an empty project from one that no longer exists.
   const rows = db
     .prepare(
-      `SELECT w.id, w.slug, w.title, w.git_branch, w.kind, w.organization_id,
-      COALESCE(w.archived_at, w.updated_at) AS archived_at, w.archived_by
-    FROM repositories r LEFT JOIN workspaces w ON w.repository_id = r.id AND w.state = 'archived'
-    WHERE r.id = ? ORDER BY archived_at DESC, w.id DESC`
+      `SELECT id, slug, title, git_branch, kind, organization_id,
+              COALESCE(archived_at, updated_at) AS archived_at, archived_by
+       FROM workspaces WHERE repository_id = ? AND state = 'archived'
+       ORDER BY archived_at DESC, id DESC`
     )
-    .all(repositoryId) as (
-    | (Omit<ArchivedWorkspace, "archived_by"> & { archived_by: string | null })
-    | { id: null }
-  )[];
-  if (!rows.length) throw new NotFoundError("Repository not found");
-  return rows.flatMap((row) =>
-    row.id === null ? [] : [{ ...row, archived_by: readOrigin(row.archived_by) }]
-  );
+    .all(repositoryId) as (Omit<ArchivedWorkspace, "archived_by"> & {
+    archived_by: string | null;
+  })[];
+  return rows.map((row) => ({ ...row, archived_by: readOrigin(row.archived_by) }));
 }
 
 export function getWorkspaceById(
@@ -424,12 +418,12 @@ export function getAllRepositories(db: Database.Database): RepositoryWithCountsR
 
 /** Lightweight repo list for backfilling empty groups in by-repo queries. */
 export interface RepositorySummaryRow {
-  archived_count: number;
   id: string;
   name: string;
   sort_order: number;
   git_origin_url: string | null;
   root_path: string | null;
+  archived_count: number;
 }
 
 export function getAllRepositorySummaries(db: Database.Database): RepositorySummaryRow[] {

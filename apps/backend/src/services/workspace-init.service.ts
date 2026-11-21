@@ -1,9 +1,9 @@
 /** Admit and restart workspaces. The local checkout runs in the background. */
 import path from "node:path";
-import type { Origin } from "@zvada/agent-server/protocol";
 import type { ParsedInputOf } from "@shared/api/op";
 import type * as api from "@shared/api/workspaces";
 import { uuidv7 } from "@shared/lib/uuid";
+import type { Origin } from "@shared/types/workspace";
 import { getRepositoryById } from "../db";
 import { getDatabase } from "../lib/database";
 import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
@@ -63,8 +63,7 @@ export async function createLocalWorkspace(
   input: Omit<CreateWorkspaceInput, "location" | "organization_id">,
   options: { startedBy?: Origin; admit?: () => void } = {}
 ): Promise<{ workspaceId: string; firstSessionId: string }> {
-  const db = getDatabase();
-  const repo = getRepositoryById(db, input.repository_id);
+  const repo = getRepositoryById(getDatabase(), input.repository_id);
   if (!repo) throw new NotFoundError("Repository not found");
   const rootPath = repo.root_path;
   if (!rootPath) {
@@ -79,7 +78,6 @@ export async function createLocalWorkspace(
 
   options.admit?.();
   insertLocalWorkspace(
-    db,
     {
       id: workspaceId,
       repository_id: input.repository_id,
