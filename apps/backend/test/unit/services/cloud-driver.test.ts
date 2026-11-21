@@ -1118,7 +1118,7 @@ describe("cloud driver frame → fold contract", () => {
   it.each([
     { status: "running", expectedState: "ready", expectedStage: null },
     { status: "provisioning", expectedState: "initializing", expectedStage: "restoring" },
-    { status: "error", expectedState: "archived", expectedStage: null },
+    { status: "error", expectedState: "error", expectedStage: null },
     { status: "already-running", expectedState: "ready", expectedStage: null },
     { status: "refresh-failed", expectedState: "ready", expectedStage: null },
     {
@@ -1173,9 +1173,7 @@ describe("cloud driver frame → fold contract", () => {
               async () => {
                 const opening = unarchiveWorkspace("deus-ws-1");
                 if (expectedState === "archived")
-                  await expect(opening).rejects.toThrow(
-                    status === "error" ? "restoring" : "resume unavailable"
-                  );
+                  await expect(opening).rejects.toThrow("resume unavailable");
                 else await opening;
               }
             );

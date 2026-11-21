@@ -548,6 +548,38 @@ describe("workspaces a previous process was still starting", () => {
     });
   });
 
+  it.each(["resolves", "rejects"])(
+    "leaves the stage for the next launch if Deus quits while startup cleanup %s",
+    async (result) => {
+      add("w", "vega", { init_stage: "worktree" });
+      git("worktree", "add", "-q", "-b", "test-user/vega", workspacePath("vega"), "main");
+      vi.resetModules();
+      const groups = await import("../../../src/lib/process-groups");
+      const init = await import("../../../src/services/workspace-init.service");
+      const queue = await import("../../../src/services/workspace-lifecycle");
+      vi.spyOn(fs.promises, "rm").mockImplementationOnce(async () => {
+        groups.stopProcessGroups();
+        if (result === "rejects") throw new Error("cannot remove checkout");
+      });
+      expect(init.failInterruptedWorkspaces()).toBe(1);
+      await queue.changeWorkspaceState("w", async () => {});
+      expect(row("w")).toMatchObject({
+        state: "initializing",
+        init_stage: "worktree",
+        error_message: null,
+      });
+      expect(branches()).toContain("test-user/vega");
+
+      expect(failInterruptedWorkspaces()).toBe(1);
+      await lifecycle.changeWorkspaceState("w", async () => {});
+      expect(row("w")).toMatchObject({
+        state: "error",
+        error_message: "Deus closed before this workspace was ready.",
+      });
+      expect(branches()).toEqual(["main"]);
+    }
+  );
+
   it("leave a cloud workspace alone once its session can report, and fail a setup nobody runs", () => {
     add("ready", "vega", { state: "ready", setup_status: "running" });
     add("cloud-live", "lyra", { kind: "cloud", provider_workspace_id: "vm" });

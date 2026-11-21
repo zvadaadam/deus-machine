@@ -525,7 +525,7 @@ export async function wakeCloudWorkspaceWithFeedback(
   if (sessionId !== workspace.current_session_id && status === "running" && !latest())
     applyCloudStatus(workspace.id, { status });
   else invalidate(["workspaces"], {});
-  return latest()?.outcome ?? { ok: true, status: status === "running" ? "running" : "resuming" };
+  return { ok: true, status: status === "running" ? "running" : "resuming" };
 }
 
 /** Release an explicit pause and resume the retained VM. */

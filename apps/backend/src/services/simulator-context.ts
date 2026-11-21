@@ -21,7 +21,7 @@ import WebSocket from "ws";
 import { createBackendChildEnv } from "@shared/lib/child-env";
 import { getDatabase } from "../lib/database";
 import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
-import { getSessionRaw } from "../db/queries";
+import { getSessionRaw, getWorkspaceRaw } from "../db/queries";
 import { simulatorEvents, type SimulatorEvent } from "@shared/api/simulator";
 import { publish } from "./streams";
 import type {
@@ -481,6 +481,10 @@ export async function startStream(
   udid: string,
   skipBootCheck = false
 ): Promise<void> {
+  if (getWorkspaceRaw(getDatabase(), workspaceId)?.state === "archived")
+    throw new ConflictError(
+      "This workspace is archived. Restore it before starting the simulator."
+    );
   const claim = claimStartingUdid(workspaceId, udid);
 
   const previousSession = sessions.get(workspaceId);

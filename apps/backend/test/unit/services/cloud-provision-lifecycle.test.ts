@@ -378,10 +378,25 @@ it("joins the initial chat request when a wake arrives before its answer", async
   ]);
 });
 
-it.each(["running", "provisioning", "resuming", "paused", "stopped", "error"])(
-  "uses the newest %s report to settle Restore after either resume outcome",
-  async (status) => {
-    const comingUp = ["running", "provisioning", "resuming"].includes(status);
+it("answers a successful wake without overwriting a report received during resume", async () => {
+  const { workspaceId } = createCloudWorkspace({ repositoryId: "r" });
+  await vi.waitFor(() => expect(mock.connect).toHaveBeenCalledOnce());
+  mock.status.mockResolvedValue({ status: "paused" });
+  mock.resume.mockImplementationOnce(async () => report(workspaceId, "stopped"));
+  expect(await wakeWorkspace(workspaceId)).toEqual({ ok: true, status: "resuming" });
+  expect(row(workspaceId)).toMatchObject({ state: "ready", init_stage: "stopped" });
+});
+
+it.each([
+  ["running", "ready", null, true],
+  ["provisioning", "initializing", "provisioning", true],
+  ["resuming", "ready", "resuming", true],
+  ["paused", "ready", "paused", false],
+  ["stopped", "ready", "stopped", false],
+  ["error", "error", null, false],
+] as const)(
+  "restores after a successful resume and uses the %s report to settle a failed resume",
+  async (status, state, stage, comingUp) => {
     for (const fails of [false, true]) {
       const { workspaceId } = createCloudWorkspace({ repositoryId: "r" });
       await vi.waitFor(() =>
@@ -397,12 +412,16 @@ it.each(["running", "provisioning", "resuming", "paused", "stopped", "error"])(
         () => true,
         () => false
       );
-      expect.soft(restored).toBe(comingUp);
+      expect.soft(restored).toBe(!fails || comingUp);
       expect.soft(row(workspaceId)).toMatchObject({
-        state: comingUp ? (status === "provisioning" ? "initializing" : "ready") : "archived",
+        state: fails && !comingUp ? "archived" : state,
+        init_stage: stage,
         current_session_id: expect.any(String),
       });
-      if (!comingUp && !restored) {
+      if (!fails) {
+        report(workspaceId, "running");
+        expect.soft(row(workspaceId)).toMatchObject({ state: "ready", init_stage: null });
+      } else if (!comingUp && !restored) {
         mock.resume.mockImplementationOnce(async () => report(workspaceId, "running"));
         await unarchiveWorkspace(workspaceId);
         expect.soft(row(workspaceId)).toMatchObject({ state: "ready" });

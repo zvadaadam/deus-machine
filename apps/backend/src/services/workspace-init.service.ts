@@ -7,6 +7,7 @@ import { uuidv7 } from "@shared/lib/uuid";
 import { getRepositoryById } from "../db";
 import { getDatabase } from "../lib/database";
 import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
+import { processGroupsStopped } from "../lib/process-groups";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
 import { cloudAccount } from "./agent/cloud/config";
 import { createCloudWorkspace } from "./cloud-workspace-init.service";
@@ -154,7 +155,7 @@ export function failInterruptedWorkspaces(): number {
         await removeWorktree(root_path, computeWorkspacePath(row), git_branch).catch((err) =>
           console.warn(`[WORKSPACE] Could not remove what ${row.id} left behind:`, err)
         );
-        fail();
+        if (!processGroupsStopped()) fail();
       }).catch((err) => console.warn(`[WORKSPACE] Recovery failed for ${row.id}:`, err));
     } else fail();
     failed++;
