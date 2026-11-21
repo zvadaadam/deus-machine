@@ -393,6 +393,12 @@ describe("a start that fails", () => {
     await removeWorktree(root, workspacePath("vega"), "test-user/vega");
   });
 
+  it("runs git with a fixed locale for classifying its errors", async () => {
+    vi.stubEnv("LC_ALL", "de_DE.UTF-8");
+    const locale = await runGit(["-c", "alias.locale=!printenv LC_ALL", "locale"], { cwd: root });
+    expect(locale.trim()).toBe("C");
+  });
+
   it("stops a command that runs too long, with everything it started", async () => {
     const started = Date.now();
     const pidFile = path.join(scratch, "pid");

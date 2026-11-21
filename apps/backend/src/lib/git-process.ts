@@ -59,7 +59,7 @@ export function runGit(
       detached: true,
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
-      env: createBackendChildEnv({ GIT_TERMINAL_PROMPT: "0" }),
+      env: createBackendChildEnv({ GIT_TERMINAL_PROMPT: "0", LC_ALL: "C" }),
     });
     const untrack = trackProcessGroup(child.pid);
     let stdout = "";
