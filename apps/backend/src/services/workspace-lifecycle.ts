@@ -468,7 +468,7 @@ function projectCloudStatus(data: CloudReport, row: { archived: boolean; hasChat
   }
 }
 
-type WakeReport = { status?: string; error?: string };
+type WakeReport = { outcome?: { ok: boolean; status: string; error?: string } };
 export type LatestCloudReport = () => WakeReport | undefined;
 const wakes = new Map<string, { report?: WakeReport }>();
 
@@ -502,7 +502,14 @@ export function applyCloudStatus(
     db.prepare(
       "UPDATE workspaces SET state = ?, init_stage = ?, error_message = ?, error_detail = ? WHERE id = ?"
     ).run(...fields, workspaceId);
-    if (wake) wake.report = { status: data.status, error: fields[2] ?? undefined };
+    if (wake && data.status)
+      wake.report = {
+        outcome: {
+          ok: ["running", "provisioning", "resuming"].includes(data.status),
+          status: data.status,
+          error: fields[2] ?? undefined,
+        },
+      };
   }
   try {
     effects?.beforePublish();

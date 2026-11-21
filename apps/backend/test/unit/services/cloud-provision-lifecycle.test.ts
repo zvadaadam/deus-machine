@@ -261,7 +261,7 @@ it("ignores another token even while the new start is initializing", async () =>
   }
 });
 
-it("repairs a failed first chat through restore then wake on the original computer", async () => {
+it("keeps a failed chat repair archived and retries Restore on the same computer", async () => {
   mock.createSession
     .mockRejectedValueOnce(new Error("first refusal"))
     .mockRejectedValueOnce(new Error("second refusal"));
@@ -274,11 +274,11 @@ it("repairs a failed first chat through restore then wake on the original comput
     "The cloud computer exists, but its chat did not open."
   );
   expect(row(workspaceId)).toMatchObject({
-    state: "error",
+    state: "archived",
     current_session_id: null,
     error_detail: "second refusal",
   });
-  expect(await wakeWorkspace(workspaceId)).toMatchObject({ ok: true });
+  await unarchiveWorkspace(workspaceId);
   expect(mock.createSession).toHaveBeenCalledTimes(3);
   expect(mock.createSession.mock.calls.every(([request]) => request.workspaceId === "vm")).toBe(
     true
@@ -378,15 +378,50 @@ it("joins the initial chat request when a wake arrives before its answer", async
   ]);
 });
 
-it("keeps a running report that arrives before restore's failed resume response", async () => {
+it.each(["running", "provisioning", "resuming", "paused", "stopped", "error"])(
+  "uses the newest %s report to settle Restore after either resume outcome",
+  async (status) => {
+    const comingUp = ["running", "provisioning", "resuming"].includes(status);
+    for (const fails of [false, true]) {
+      const { workspaceId } = createCloudWorkspace({ repositoryId: "r" });
+      await vi.waitFor(() =>
+        expect(row(workspaceId)).toMatchObject({ current_session_id: expect.any(String) })
+      );
+      await archiveWorkspace(workspaceId);
+      mock.status.mockResolvedValue({ status: "paused" });
+      mock.resume.mockImplementationOnce(async () => {
+        report(workspaceId, status);
+        if (fails) throw new Error("superseded resume failure");
+      });
+      const restored = await unarchiveWorkspace(workspaceId).then(
+        () => true,
+        () => false
+      );
+      expect.soft(restored).toBe(comingUp);
+      expect
+        .soft(row(workspaceId))
+        .toMatchObject({
+          state: comingUp ? (status === "provisioning" ? "initializing" : "ready") : "archived",
+          current_session_id: expect.any(String),
+        });
+      if (!comingUp && !restored) {
+        mock.resume.mockImplementationOnce(async () => report(workspaceId, "running"));
+        await unarchiveWorkspace(workspaceId);
+        expect.soft(row(workspaceId)).toMatchObject({ state: "ready" });
+      }
+    }
+  }
+);
+
+it("repairs an unarchived failed chat through an explicit wake", async () => {
+  mock.createSession.mockRejectedValueOnce(new Error("chat refused"));
   const { workspaceId } = createCloudWorkspace({ repositoryId: "r" });
-  await vi.waitFor(() => expect(mock.connect).toHaveBeenCalledOnce());
-  await archiveWorkspace(workspaceId);
-  mock.status.mockResolvedValue({ status: "paused" });
-  mock.resume.mockImplementation(async () => {
-    report(workspaceId, "running");
-    throw new Error("resume failed");
+  await vi.waitFor(() => expect(row(workspaceId)).toMatchObject({ state: "error" }));
+  expect(await wakeWorkspace(workspaceId)).toMatchObject({ ok: true });
+  expect(row(workspaceId)).toMatchObject({
+    state: "ready",
+    provider_workspace_id: "vm",
+    current_session_id: expect.any(String),
   });
-  await unarchiveWorkspace(workspaceId);
-  expect(row(workspaceId)).toMatchObject({ state: "ready", init_stage: null, error_message: null });
+  expect(mock.allocate.mock.calls.filter(([call]) => !call.workspaceId)).toHaveLength(1);
 });

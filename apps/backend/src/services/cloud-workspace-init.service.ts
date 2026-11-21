@@ -502,13 +502,7 @@ export async function wakeCloudWorkspaceWithFeedback(
     await resumeCloudWorkspace(workspace);
   } catch (err) {
     const news = latest();
-    if (news?.status) {
-      return {
-        ok: ["running", "resuming", "provisioning"].includes(news.status),
-        status: news.status,
-        error: news.error,
-      };
-    }
+    if (news?.outcome) return news.outcome;
     console.warn(`[WORKSPACE] cloud wake failed: ${err}`);
     if (refreshing && isServing()) return { ok: false, status: "running" };
     const failedStatus = status === "paused" || status === "stopped" ? status : "error";
@@ -526,7 +520,7 @@ export async function wakeCloudWorkspaceWithFeedback(
   if (sessionId !== workspace.current_session_id && status === "running" && !latest())
     applyCloudStatus(workspace.id, { status });
   else invalidate(["workspaces"], {});
-  return { ok: true, status: status === "running" ? "running" : "resuming" };
+  return latest()?.outcome ?? { ok: true, status: status === "running" ? "running" : "resuming" };
 }
 
 /** Release an explicit pause and resume the retained VM. */
@@ -814,7 +808,7 @@ async function openCloudChat(
   }
 }
 
-export class CloudChatError extends Error {}
+class CloudChatError extends Error {}
 
 async function provisionCloudWorkspace(
   workspaceId: string,

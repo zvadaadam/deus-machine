@@ -3,7 +3,6 @@ import { getWorkspaceRaw } from "../db";
 import { getDatabase } from "../lib/database";
 import { NotFoundError, ValidationError } from "../lib/errors";
 import {
-  CloudChatError,
   pauseCloudWorkspace,
   wakeCloudWorkspaceWithFeedback,
 } from "./cloud-workspace-init.service";
@@ -87,12 +86,11 @@ export function unarchiveWorkspace(workspaceId: string): Promise<void> {
           },
           latest
         );
-        // A failed status refresh can still leave the computer serving.
-        if (!result.ok && result.status !== "running") {
-          throw new Error("Could not wake the cloud machine. Try again.");
+        if (!result.ok) {
+          throw new Error(result.error || "Could not wake the cloud machine. Try again.");
         }
       } catch (err) {
-        if (!latest() && !(err instanceof CloudChatError)) rollbackCloudRestore(db, workspaceId);
+        rollbackCloudRestore(db, workspaceId);
         throw err;
       }
     }

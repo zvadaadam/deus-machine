@@ -18,7 +18,6 @@ vi.mock("../../../src/lib/database", () => ({
   getDatabase: () => ({ prepare: () => ({ run: mocks.run, get: () => ({ chat: "chat" }) }) }),
 }));
 vi.mock("../../../src/services/cloud-workspace-init.service", () => ({
-  CloudChatError: class extends Error {},
   pauseCloudWorkspace: mocks.pause,
   wakeCloudWorkspaceWithFeedback: mocks.wake,
 }));
