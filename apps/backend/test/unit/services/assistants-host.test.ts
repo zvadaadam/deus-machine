@@ -853,7 +853,11 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
         LEAD as never,
         startInput({ workspace: { id: "w-lead", name: "lead" }, harness: "acp" })
       )
-    ).rejects.toMatchObject({ code: "invalid_input" });
+    ).rejects.toMatchObject({
+      code: "invalid_input",
+      message: expect.stringContaining('"acp" does not run here'),
+    });
+    expect(state.sent).toHaveLength(0);
     expect((state.db.prepare("SELECT COUNT(*) AS n FROM sessions").get() as { n: number }).n).toBe(
       before
     );
@@ -1106,6 +1110,23 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     state.listeners.add((resources, ctx) => told.push([resources, ctx?.sessionIds]));
     await host.archive!(LEAD as never, { kind: "session", id: "s-second" });
     expect(told).toContainEqual([["session"], ["s-second"]]);
+  });
+
+  it("records the archived chat as the reason its held first task was never sent", async () => {
+    const host = createDeusHost();
+    const entry = await host.start!(LEAD as never, startInput({ turnId: "held" }));
+    state.db.exec(`CREATE TEMP TRIGGER hide_first_chat AFTER INSERT ON sessions
+       BEGIN UPDATE sessions SET is_hidden = 1 WHERE id = NEW.id; END`);
+    ready(entry);
+    const view = await host.view(LEAD as never, entry.id, {});
+    expect(view.turns).toContainEqual(
+      expect.objectContaining({
+        turnId: "held",
+        outcome: "failed",
+        error: expect.stringMatching(/could not be delivered.*archived/i),
+      })
+    );
+    expect(state.sent).toHaveLength(0);
   });
 
   it("H15: a first task refused after the chat was made is that chat's error, not a refusal", async () => {

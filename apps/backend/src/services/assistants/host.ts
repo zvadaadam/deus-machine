@@ -221,18 +221,16 @@ export interface DeusHost extends OperatorHost<Caller> {
  * before it (`authorize`): its sentence, then this computer's.
  */
 function appRefusal(error: unknown): unknown {
-  const why = admissionRefusal(error);
-  if (why) return new OperatorError("unsupported", why);
-  if (!(error instanceof AppError) || error.statusCode >= 500) return error;
+  if (!(error instanceof AppError)) return error;
+  if (error.statusCode === 503)
+    return new OperatorError(
+      "unsupported",
+      "The agent engine is not running on this computer. Nothing was sent or started. Restart Deus before sending the task again."
+    );
+  if (error.statusCode >= 500) return error;
   return error.statusCode === 403
     ? refuse.access(error.message)
     : new OperatorError("unsupported", `${error.message} Nothing was done.`);
-}
-
-/** The disconnected guard runs before the engine receives the turn. */
-function admissionRefusal(error: unknown): string | undefined {
-  if (error instanceof AppError && error.statusCode === 503)
-    return "The agent engine is not running on this computer. Nothing was sent or started. Restart Deus before sending the task again.";
 }
 
 /** Run `work`, its app refusals said as refusals. */
@@ -466,6 +464,7 @@ export function createDeusHost(): DeusHost {
    * its entry and view show.
    */
   async function sendFirst(caller: Who, sessionId: string, input: StartInput) {
+    let attempted = false;
     try {
       const settings = settingsFor(input);
       mayTouch(caller, sessionId);
@@ -481,15 +480,19 @@ export function createDeusHost(): DeusHost {
           "UPDATE workspaces SET title = ? WHERE first_session_id = ? AND title IS NULL"
         ).run(input.title, sessionId);
       }
+      attempted = true;
       await sendMessage(
         { sessionId, content: input.message, turnId: input.turnId, ...settings },
         input.origin
       );
     } catch (error) {
-      const why =
-        error instanceof AppError && error.statusCode < 500
-          ? error.message
-          : admissionRefusal(error);
+      const said = appRefusal(error);
+      let why: string | undefined;
+      if (said instanceof OperatorError)
+        why = said.message.split("\n")[0]!.replace(/^refused \([a-z_]+\): /, "");
+      else if (said instanceof Refused && said.refusal.code === "archived")
+        why = "The chat was archived.";
+      else if (!attempted) why = "Deus could not prepare the task in this chat.";
       undelivered(sessionId, input.turnId, why);
     }
   }
