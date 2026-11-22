@@ -361,7 +361,7 @@ describe("sending and starting", () => {
     ).rejects.toMatchObject({
       code: "unsupported",
       message: expect.stringContaining(
-        `("${why}"). Ask the person to install or sign in to the agent in Settings → AI. Nothing was started.`
+        `("${why}"). Ask the person to install or sign in to the agent in Settings → AI Providers. Nothing was started.`
       ),
     });
     expect(state.db.prepare("SELECT id FROM sessions").all()).toEqual(sessionsBefore);
@@ -846,7 +846,9 @@ describe("through MCP and as a chat's own tools", () => {
         )
       ).rejects.toMatchObject({
         code: "unsupported",
-        message: expect.stringMatching(/Sign-in required.*Settings → AI.*Nothing was started/),
+        message: expect.stringMatching(
+          /Sign-in required.*Settings → AI Providers.*Nothing was started/
+        ),
       });
       expect(state.db.prepare("SELECT id FROM sessions").all()).toEqual(before);
       expect(state.sent).toHaveLength(0);

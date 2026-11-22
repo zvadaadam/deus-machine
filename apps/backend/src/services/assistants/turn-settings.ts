@@ -47,7 +47,7 @@ async function chooseModel(harness: AgentHarness, input: StartInput) {
   if (!fallback) {
     const why = own?.error ? ` (${JSON.stringify(own.error)})` : "";
     return {
-      reason: `${harness} offered no models${why}. Ask the person to install or sign in to the agent in Settings → AI.`,
+      reason: `${harness} offered no models${why}. Ask the person to install or sign in to the agent in Settings → AI Providers.`,
     };
   }
   const model = input.model ?? fallback;

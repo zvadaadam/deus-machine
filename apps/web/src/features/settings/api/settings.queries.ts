@@ -63,7 +63,7 @@ function withProgress(answer: AgentAuthAnswer, progress: HarnessCliProgress): Ag
 }
 
 /**
- * The thinking level a new chat starts on: the user's (Settings → AI), else
+ * The thinking level a new chat starts on: the user's (Settings → AI Providers), else
  * Deus's.
  */
 export function useDefaultThinkingLevel(): ThinkingLevel {

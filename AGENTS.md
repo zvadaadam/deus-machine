@@ -93,9 +93,10 @@ When debugging agent-server behavior (event shapes, turn admission, cancel seman
 - Deus keeps no list of models. A local picker reads this computer's CLIs for its login (`models/list` through `agentModels`). A cloud picker reads the platform (`cloudModels`). While a list is pending or the CLI is missing, the picker uses the engine's catalog. A read installs nothing. The picker asks again after installation. `shared/models.ts` selects the starting model and thinking level from those lists.
 
 **Gemini** runs locally through Antigravity's `agy`. The engine downloads its pinned CLI on first use.
-Google's terms do not grant redistribution. The person signs in with their own Antigravity account
-in Settings → AI or onboarding. The engine’s catalog has no Gemini models. Its picker tab stays empty
-until `agy` is installed and signed in, then lists the models that account can run.
+Google's terms do not grant redistribution. The engine's catalog has no Gemini models.
+For a first Gemini chat, the person installs `agy` and signs in to their own Antigravity account
+in Settings → AI Providers or during onboarding. The picker then lists the models that account can run.
+A model already chosen or recorded stays visible while the list is unavailable.
 Its chats have no Plan toggle. Deus declines a question from its question form. Deus tool cards
 show the call's input and status without result text. Gemini takes instructions once per conversation.
 

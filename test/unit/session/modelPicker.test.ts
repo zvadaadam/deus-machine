@@ -49,7 +49,7 @@ it("shows the same model read in the picker and on Send, and offers Settings onl
     expect(menu).toContain(message);
     expect(menu).toContain("Thinking");
     expect(menu).not.toContain("has no thinking control.");
-    expect(menu?.includes("Open AI Settings")).toBe(offersSettings);
+    expect(menu?.includes("Open AI Providers")).toBe(offersSettings);
     const send = html.match(/<button[^>]*aria-label="Send message"[^>]*>/)?.[0];
     expect(send).toContain('disabled=""');
     expect(send).toContain(`title="${message}"`);
@@ -88,7 +88,7 @@ it("shows the same model read in the picker and on Send, and offers Settings onl
   });
   const ready = render();
   expect(ready).toContain("Gemini 4 Neon has no thinking control.");
-  expect(ready).not.toContain("Open AI Settings");
+  expect(ready).not.toContain("Open AI Providers");
   expect(ready).toContain('title="Send message (Enter)"');
   client.clear();
 });
@@ -108,7 +108,7 @@ it("keeps the chat's Thinking column beside an empty model list", () => {
     })
   );
   expect(html).toContain("Sign in to see models.");
-  expect(html).toContain("Open AI Settings");
+  expect(html).toContain("Open AI Providers");
   expect(html).toContain("Thinking");
   expect(html).not.toContain("has no thinking control.");
 });

@@ -143,7 +143,7 @@ export function ModelPicker({
                 </DropdownMenuLabel>
                 {shownGroup.empty.openSettings && (
                   <DropdownMenuItem onSelect={uiActions.openAISettings}>
-                    Open AI Settings
+                    Open AI Providers
                   </DropdownMenuItem>
                 )}
               </>
