@@ -13,6 +13,7 @@ import {
   findModel,
   latestTurnExecution,
   defaultModelId,
+  modelForSession,
   type HarnessModels,
 } from "@shared/models";
 import { readThinkingLevel, type ThinkingLevel } from "@shared/protocol";
@@ -92,14 +93,14 @@ export function continuedSettings(
   harness: AgentHarness,
   turns: readonly SessionTurn[]
 ): TurnSettings {
-  const latest = latestTurnExecution(harness, turns);
-  // The fallback comes from the catalog because a send cannot wait for the composer's account default.
-  const model = latest?.model ?? defaultModelId(CATALOG_MODEL_LISTS, harness);
+  // The operator does not pass its cutoff, so a send falls back to the catalog, the only list that needs no read.
+  const model = modelForSession(harness, turns, CATALOG_MODEL_LISTS);
   if (!model)
     throw new OperatorError(
       "unsupported",
       `send_message: this chat has no recorded model. Ask the person to choose a model for ${HARNESSES[harness].label} in the chat, or use start_session with a model. Nothing was sent.`
     );
+  const latest = latestTurnExecution(harness, turns);
   return {
     agentHarness: harness,
     model,
