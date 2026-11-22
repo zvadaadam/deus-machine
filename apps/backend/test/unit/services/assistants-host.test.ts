@@ -777,7 +777,7 @@ describe("through MCP and as a chat's own tools", () => {
 
   it("lists catalog models and uses the catalog default for starts and sends when the engine is down", async () => {
     state.ops.agentModels = () => {
-      throw new Error("Agent server not connected");
+      throw new AgentServerDisconnectedError();
     };
     const { text, isError } = await call(LOCAL_CALLER, "list_models", {});
     expect(isError).toBe(false);

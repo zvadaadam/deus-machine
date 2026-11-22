@@ -61,7 +61,7 @@ const agents = vi.hoisted(() => ({
 vi.mock("../../../src/services/agent", () => ({
   isConnected: () => agents.connected,
   getLocalAgents: () => {
-    if (!agents.connected) throw new Error("Agent server not connected");
+    if (!agents.connected) throw new AgentServerDisconnectedError();
     return agents;
   },
 }));
@@ -364,7 +364,7 @@ describe("agentAuth", () => {
       auth: [],
       clis: [],
       logins: [],
-      error: "Agent server not connected",
+      error: "Agent server is disconnected",
     });
 
     agents.connected = true;
@@ -538,6 +538,6 @@ describe("the local agents' CLIs and logins", () => {
     agents.connected = false;
     await expect(
       run(api.agentSignIn, { harness: "claude-code", method: "claudeai" })
-    ).rejects.toThrow("Agent server not connected");
+    ).rejects.toBeInstanceOf(AgentServerDisconnectedError);
   });
 });

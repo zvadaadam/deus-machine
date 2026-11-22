@@ -126,11 +126,11 @@ describe("signInLocalAgent", () => {
   });
 
   it("closes the tab and says why when the sign-in does not start", async () => {
-    call.mockRejectedValue(new Error("Agent server not connected"));
+    call.mockRejectedValue(new Error("Agent server is disconnected"));
     await signInLocalAgent("claude-code", signedOut);
     expect(page.cancel).toHaveBeenCalledOnce();
     expect(page.open).not.toHaveBeenCalled();
-    expect(toast.error).toHaveBeenCalledWith("Agent server not connected");
+    expect(toast.error).toHaveBeenCalledWith("Agent server is disconnected");
   });
 });
 

@@ -51,7 +51,7 @@ const knownFailure = (name, holds, why, evidence) => {
 };
 /** Model lists come from the engine (`agentModels`), which this agentless backend does not run. */
 const NO_ENGINE_MODELS =
-  'needs the engine\'s model lists: without the engine `agentModels` throws "Agent server not connected", so the tool answers refused (failed)';
+  "needs the engine's live model list. This agentless host has only the catalog.";
 
 // The computer's words (services/assistants/sentences.ts), which the operator
 // package says after its own refusal and Deus Cloud passes on unchanged.

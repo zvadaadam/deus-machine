@@ -63,9 +63,10 @@ import {
   closeAll as closeAllWs,
 } from "../../src/services/ws.service";
 import { api } from "@shared/api";
+import { AgentServerDisconnectedError } from "../../src/lib/errors";
 import { publish } from "../../src/services/streams";
 import * as queries from "../../src/db";
-import { handleFrame, invalidate } from "../../src/services/query-engine";
+import { handleFrame, invalidate, runAsThisComputer } from "../../src/services/query-engine";
 import { restoreCloudSnapshot } from "../../src/services/agent/cloud/snapshot";
 
 // ---- Constants ----
@@ -266,6 +267,29 @@ afterAll(() => {
 // ============================================================================
 
 describe("q:request → q:response", () => {
+  it("treats a model read without an engine as an expected disconnect", async () => {
+    captureException.mockClear();
+    const { ws } = await connectAndAuth();
+    try {
+      const res = await sendAndReceive(
+        ws,
+        { type: "q:request", id: "models", resource: api.agentModels.name },
+        "q:error"
+      );
+      expect(res).toMatchObject({
+        id: "models",
+        code: "QUERY_ERROR",
+        message: "Agent server is disconnected",
+      });
+      expect(captureException).not.toHaveBeenCalled();
+      await expect(runAsThisComputer(api.agentModels, {})).rejects.toBeInstanceOf(
+        AgentServerDisconnectedError
+      );
+    } finally {
+      ws.close();
+    }
+  });
+
   it("fetches workspaces as RepoGroup[]", async () => {
     const { ws } = await connectAndAuth();
     try {

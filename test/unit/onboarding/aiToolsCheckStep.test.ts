@@ -119,7 +119,7 @@ describe("onboarding Claude account status", () => {
         logins: [],
       };
       if (failure === "request") auth.isError = true;
-      if (failure === "envelope") auth.data.error = "Agent server not connected";
+      if (failure === "envelope") auth.data.error = "Agent server is disconnected";
       if (failure === "unknown") auth.data.auth[0] = claude({ state: "unknown" });
       const html = render();
       expect(html).toContain("Couldn’t check account");

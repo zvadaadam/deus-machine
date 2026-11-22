@@ -120,7 +120,7 @@ describe("local agent status", () => {
     (failure) => {
       state.data = { auth: [claude({}), codex], clis: ready, logins: [] };
       if (failure === "request") state.isError = true;
-      if (failure === "envelope") state.data.error = "Agent server not connected";
+      if (failure === "envelope") state.data.error = "Agent server is disconnected";
       if (failure === "unknown")
         state.data.auth[0] = claude({ state: "unknown", error: "timed out" });
       const html = render();
