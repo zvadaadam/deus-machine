@@ -2,7 +2,7 @@
 // The harnesses Deus runs and what it chooses for each.
 
 import type { AgentHarness as EngineHarness } from "@zvada/agent-server/protocol";
-import type { AgentHarness, WorkspaceKind } from "./enums";
+import type { WorkspaceKind } from "./enums";
 import type { ProviderId } from "./types/provider-account";
 
 interface Harness {
@@ -64,8 +64,11 @@ export const LOCAL_HARNESSES = Object.keys(HARNESSES) as readonly (keyof typeof 
 export const CLOUD_HARNESSES = LOCAL_HARNESSES.filter((id) => HARNESSES[id].cloudProvider !== null);
 
 /** Cloud turns run with full access. A local chat can plan when its harness supports it. */
-export function canPlan(harness: AgentHarness, workspaceKind?: WorkspaceKind | null): boolean {
-  return workspaceKind !== "cloud" && HARNESSES[harness].supportsPlanMode;
+export function canPlan(
+  harness: string | undefined,
+  workspaceKind?: WorkspaceKind | null
+): boolean {
+  return workspaceKind !== "cloud" && !!harness && !!harnessInfo(harness)?.supportsPlanMode;
 }
 
 /** Settings and model lists can come from a build that knows other harnesses. */

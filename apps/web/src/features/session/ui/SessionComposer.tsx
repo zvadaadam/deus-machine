@@ -110,7 +110,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     const needsHistory =
       (!session || turns === undefined) && (!selection.picked || (loadFailed && !initialModel));
     useEffect(() => {
-      onAgentHarnessChange?.(agentHarness);
+      if (agentHarness) onAgentHarnessChange?.(agentHarness);
     }, [agentHarness, onAgentHarnessChange]);
 
     const { sendMessage, stopSession, compactConversation, createPR, sending } = useSessionActions({

@@ -1,9 +1,7 @@
-import type { AgentHarness } from "@/shared/agents";
-
 interface BaseChatTab {
   id: string;
   label: string;
-  agentHarness: AgentHarness;
+  agentHarness: string;
   hasStarted: boolean;
   initialModel?: string;
 }
@@ -23,7 +21,7 @@ export interface ClosedSessionTab {
   id: string;
   label: string;
   sessionId: string;
-  agentHarness: AgentHarness;
+  agentHarness: string;
   hasStarted: boolean;
   initialModel?: string;
   closedAt: number;

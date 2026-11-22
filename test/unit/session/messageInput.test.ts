@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useChatModel } from "@/shared/hooks/useModelLists";
 import { queryKeys } from "@/shared/api/queryKeys";
+import { SessionComposer } from "@/features/session/ui/SessionComposer";
 import { MessageInput } from "@/features/session/ui/MessageInput";
 import {
   composerStore,
@@ -16,6 +17,7 @@ import type { SessionStatus } from "@shared/enums";
 // Render the actual composer and toolbar; unrelated provider pickers don't
 // need a live settings connection to verify whether a user can stop a turn.
 vi.mock("@/features/session/ui/ModelPicker", () => ({ ModelPicker: () => null }));
+vi.mock("@/shared/hooks/useQuerySubscription", () => ({ useQuerySubscription: () => {} }));
 // A cloud chat's `/` menu reads Customize's live state: none unless a test sets some.
 const cloudSkills = vi.hoisted(() => ({
   items: [] as { name: string; description: string; kind: "skill" }[],
@@ -100,6 +102,54 @@ it("keeps a draft while there is no model, explains Send and enables it when a l
   } finally {
     snapshot.mockRestore();
     sessionComposerActions.discard(sessionId);
+  }
+});
+
+it("opens a chat from another build with its draft editable and Send disabled", () => {
+  const id = "unknown-agent-session";
+  const harness = "future-agent";
+  client.setQueryData(queryKeys.sessions.detail(id), {
+    id,
+    workspace_kind: "worktree",
+    agent_harness: harness,
+    status: "idle",
+  });
+  client.setQueryData(queryKeys.sessions.messages(id), {
+    messages: [{ id: "earlier", role: "user" }],
+    compactions: [],
+    turns: [{ turnId: "t", execution: { harness, model: "recorded-model" } }],
+    has_older: false,
+    has_newer: false,
+  });
+  const store = composerStore();
+  sessionComposerActions.seedIfAbsent(id, emptyComposer(undefined, "high"));
+  sessionComposerActions.setDraft(id, "Keep this draft");
+  const snapshot = vi.spyOn(store, "getInitialState").mockImplementation(store.getState);
+  try {
+    for (const initialModel of [undefined, "claude-code:opus"]) {
+      const html = renderToStaticMarkup(
+        createElement(
+          QueryClientProvider,
+          { client },
+          createElement(
+            TooltipProvider,
+            null,
+            createElement(SessionComposer, { sessionId: id, initialModel })
+          )
+        )
+      );
+      expect(html).toContain("future-agent");
+      expect(html).toContain("is not one this version of Deus runs.");
+      expect(html.match(/<button[^>]*aria-label="Send message"[^>]*>/)?.[0]).toContain(
+        ' disabled=""'
+      );
+      expect(html.match(/<textarea[^>]*>/)?.[0]).not.toContain(' disabled=""');
+      expect(html).toContain("Keep this draft</textarea>");
+      expect(html).not.toContain('aria-label="Plan mode"');
+    }
+  } finally {
+    snapshot.mockRestore();
+    sessionComposerActions.discard(id);
   }
 });
 

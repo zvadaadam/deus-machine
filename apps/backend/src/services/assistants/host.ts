@@ -54,7 +54,7 @@ import * as sessions from "@shared/api/sessions";
 import { agentModels } from "@shared/api/settings";
 import { uuidv7 } from "@shared/lib/uuid";
 import * as workspaces from "@shared/api/workspaces";
-import { ACTIVE_TURN_STATUSES, type AgentHarness } from "@shared/enums";
+import { ACTIVE_TURN_STATUSES, AgentHarnessSchema } from "@shared/enums";
 import { HARNESSES } from "@shared/harnesses";
 import { githubRepoSlug } from "@shared/git-origin";
 import {
@@ -350,7 +350,7 @@ export function createDeusHost(): DeusHost {
           current: row.current_session_id ? row.current_session_id === id : chat === 1,
           status,
           startedBy: readOrigin(row.s_started_by ?? (row.session_id ? null : row.ws_started_by)),
-          ...(row.agent_harness ? { harness: row.agent_harness as AgentHarness } : {}),
+          harness: AgentHarnessSchema.safeParse(row.agent_harness).data,
           ...(title ? { title } : {}),
           ...(activity ? { lastActivityAt: activity } : {}),
           ...(status === "error" && error ? { error } : {}),
@@ -704,14 +704,16 @@ export function createDeusHost(): DeusHost {
         const session = getSessionRaw(getDatabase(), sessionId);
         if (!session)
           throw new OperatorError("not_found", "That session is gone. Nothing was sent.");
+        const harness = AgentHarnessSchema.safeParse(session.agent_harness).data;
+        if (!harness)
+          throw new OperatorError(
+            "unsupported",
+            `send_message: this chat's agent ${JSON.stringify(session.agent_harness)} does not run here. Nothing was sent.`
+          );
         if (firsts.has(sessionId))
           throw new Refused({ code: "busy", sessions: [sessionId], state: "setting_up" });
         const { turns } = await run(sessions.messages, { sessionId, limit: 50 });
-        const settings = await continuedSettings(
-          session.agent_harness,
-          turns,
-          session.workspace_id
-        );
+        const settings = await continuedSettings(harness, turns, session.workspace_id);
         mayTouch(caller, sessionId);
         try {
           await sendMessage({ sessionId, content: message, turnId, ...settings }, origin);

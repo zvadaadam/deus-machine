@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { uiActions } from "@/shared/stores/uiStore";
 import { PROVIDER_ACCOUNT_CATEGORY } from "@shared/lib/send-refusal";
 
-import { getAgentLabel, type AgentHarness } from "@/shared/agents";
+import { AgentHarnessSchema, type AgentHarness } from "@shared/enums";
+import { getAgentLabel } from "@/shared/agents";
 import { useAgentAuth, useAgentAuthEvents } from "@/features/settings/api/settings.queries";
 import {
   localSignIn,
@@ -32,7 +33,7 @@ interface SessionErrorCardProps {
   message: string;
   /** Structured error category (e.g. "auth", "rate_limit", "_provider_account"). */
   category?: string;
-  agentHarness?: AgentHarness | null;
+  agentHarness?: string | null;
   cloud?: boolean;
   onRetryInNewChat?: () => void;
 }
@@ -55,8 +56,9 @@ export function SessionErrorCard({
     .otherwise(() => (agentHarness ? `${getAgentLabel(agentHarness)} Error` : "Error"));
 
   let action;
-  if (category === "auth" && !cloud && agentHarness) {
-    action = <LoginAction harness={agentHarness} />;
+  if (category === "auth" && !cloud) {
+    const harness = AgentHarnessSchema.safeParse(agentHarness).data;
+    action = harness ? <LoginAction harness={harness} /> : <AIProvidersButton />;
   } else if (category === "auth" || category === PROVIDER_ACCOUNT_CATEGORY) {
     action = <AIProvidersButton />;
   } else if (onRetryInNewChat) {

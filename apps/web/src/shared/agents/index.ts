@@ -55,7 +55,7 @@ export function getModelId(model: string): string {
 
 /** Reopen on the last recorded thinking level; a chat with none uses `fallback`. */
 export function getThinkingForSession(
-  agentHarness: AgentHarness,
+  agentHarness: string,
   turns: readonly SessionTurn[],
   fallback: ThinkingLevel
 ): ThinkingLevel {

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@shared/api";
 import { CLOUD_HARNESSES, LOCAL_HARNESSES } from "@shared/harnesses";
-import type { AgentHarness } from "@shared/enums";
+import { AgentHarnessSchema, type AgentHarness } from "@shared/enums";
 import type { SessionTurn } from "@shared/types/session";
 import type { ThinkingLevel } from "@shared/protocol";
 import { call } from "@/platform/ws";
@@ -27,7 +27,7 @@ interface ModelListsState {
 }
 
 export interface ChatModelSelection extends ModelListsState {
-  agentHarness: AgentHarness;
+  agentHarness?: AgentHarness;
   model?: string;
   picked?: string;
   thinkingLevels: readonly ThinkingLevel[];
@@ -37,15 +37,22 @@ export interface ChatModelSelection extends ModelListsState {
 /** A pick belongs to its lane. Without one the chat follows its history and its harness's list. */
 export function useChatModel({
   picked,
-  harness = DEFAULT_AGENT_HARNESS,
+  harness: storedHarness = DEFAULT_AGENT_HARNESS,
   turns = [],
   ...scope
 }: ModelScope & {
   picked?: string;
-  harness?: AgentHarness;
+  harness?: string;
   turns?: readonly SessionTurn[];
 }): ChatModelSelection {
   const state = useModelListsState(scope);
+  const harness = AgentHarnessSchema.safeParse(storedHarness).data;
+  if (!harness)
+    return {
+      ...state,
+      thinkingLevels: [],
+      unavailable: `This chat's agent, "${storedHarness}", is not one this version of Deus runs.`,
+    };
   const selection = picked ? parseModelValue(picked) : undefined;
   const eligible = selection && state.lists.some((list) => list.harness === selection.harness);
   const agentHarness = eligible ? selection.harness : harness;

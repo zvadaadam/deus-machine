@@ -23,7 +23,7 @@ import { uiActions } from "@/shared/stores/uiStore";
 
 interface ModelPickerProps {
   model: string | undefined;
-  agentHarness: AgentHarness;
+  agentHarness?: AgentHarness;
   /** The models to offer (useModelLists). */
   lists: readonly HarnessModels[];
   /** The level the chat runs, and the ones its model offers; none for a model with no thinking control. */
@@ -64,10 +64,11 @@ export function ModelPicker({
   onOpenNewTab,
   side = "top",
 }: ModelPickerProps) {
-  const { groups, selected } = modelPickerView(lists, model);
-  const modelLabel = selected?.label ?? model ?? getAgentLabel(currentAgent);
   // The agent whose models are shown: the chat's own until another is looked at.
   const [lookedAt, setLookedAt] = useState<AgentHarness | null>(null);
+  if (!currentAgent) return null;
+  const { groups, selected } = modelPickerView(lists, model);
+  const modelLabel = selected?.label ?? model ?? getAgentLabel(currentAgent);
   const shownAgent = lookedAt ?? currentAgent;
   const shownGroup = groups.find((group) => group.agentHarness === shownAgent) ?? groups[0];
   // A started chat keeps its agent (the engine binds a session to one runtime):

@@ -377,7 +377,8 @@ export function MessageInput({
   // A level the model lacks runs as the nearest it has: once the model list is
   // live, that is the one shown, and the chat keeps it, so what the picker shows
   // is what a send carries. Against the catalog alone the chat keeps its own.
-  const fitTo = model && listIsLive(agentHarness) ? selection.thinkingLevels : undefined;
+  const fitTo =
+    model && agentHarness && listIsLive(agentHarness) ? selection.thinkingLevels : undefined;
   const shownThinking = composerThinking(thinkingLevel, fitTo, defaultThinking);
   const live = fitTo !== undefined;
   const { setThinkingLevel } = composer;

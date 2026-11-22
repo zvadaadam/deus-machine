@@ -40,7 +40,7 @@ vi.mock("../../../src/services/query-engine", () => ({
   runAsThisComputer: async (op: AnyOp, input: Record<string, unknown>) => {
     const answer = state.ops[op.name];
     if (!answer) throw new Error(`no stand-in for ${op.name}`);
-    return answer(input ?? {});
+    return answer(op.input.parse(input ?? {}));
   },
   onInvalidate: (listener: (resources: readonly string[]) => void) => {
     state.listeners.add(listener);
@@ -341,7 +341,7 @@ describe("sending and starting", () => {
     const host = createDeusHost();
     const why = "The fixture CLI is signed out.";
     const read = vi.fn(() => ({
-      lists: ["codex-app-server", "fixture-agent"].map((harness) => ({
+      lists: ["codex-app-server", "gemini"].map((harness) => ({
         harness,
         models: [],
         source: "catalog",
@@ -368,9 +368,7 @@ describe("sending and starting", () => {
       ),
     });
     expect(state.db.prepare("SELECT id FROM sessions").all()).toEqual(sessionsBefore);
-    state.db
-      .prepare("UPDATE sessions SET agent_harness = 'fixture-agent' WHERE id = 's-lead'")
-      .run();
+    state.db.prepare("UPDATE sessions SET agent_harness = 'gemini' WHERE id = 's-lead'").run();
     await expect(
       host.send(LEAD as never, "s-lead", { turnId: "t", message: "continue", origin: LEAD })
     ).rejects.toMatchObject({
@@ -382,8 +380,33 @@ describe("sending and starting", () => {
     expect(read.mock.calls).toEqual([
       [{ harness: "codex-app-server", workspaceId: undefined }],
       [{ harness: "codex-app-server", workspaceId: "w-lead" }],
-      [{ harness: "fixture-agent", workspaceId: "w-lead" }],
+      [{ harness: "gemini", workspaceId: "w-lead" }],
     ]);
+    expect(state.sent).toHaveLength(0);
+  });
+
+  it("refuses to deliver to an unknown stored agent before reading settings or sending", async () => {
+    state.db
+      .prepare("UPDATE sessions SET agent_harness = 'future-agent' WHERE id = 's-lead'")
+      .run();
+    const host = createDeusHost();
+    const read = vi.fn(state.ops.agentModels);
+    state.ops.agentModels = read;
+    const history = vi.fn(state.ops.messages);
+    state.ops.messages = history;
+    await expect(
+      createOperator(host).call(
+        "send_message",
+        { session: "lead:1", message: "continue", wait: 0 },
+        assistantWho()
+      )
+    ).rejects.toMatchObject({
+      code: "unsupported",
+      message: expect.stringContaining('"future-agent" does not run here. Nothing was sent.'),
+    });
+    // The operator views the chat at preflight. The host's settings read asks for its last 50.
+    expect(history).not.toHaveBeenCalledWith(expect.objectContaining({ limit: 50 }));
+    expect(read).not.toHaveBeenCalled();
     expect(state.sent).toHaveLength(0);
   });
 
