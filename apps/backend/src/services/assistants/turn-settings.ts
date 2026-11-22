@@ -47,7 +47,7 @@ async function chooseModel(harness: AgentHarness, input: StartInput) {
   if (!fallback) {
     const why = own?.error ? ` (${JSON.stringify(own.error)})` : "";
     return {
-      reason: `${harness} offered no models${why}. Ask the person to install or sign in to the agent in Settings → AI Providers.`,
+      reason: `no models are available to choose for ${HARNESSES[harness].label}${why}. Ask the person to check the agent in Settings → AI Providers.`,
     };
   }
   const model = input.model ?? fallback;
@@ -93,12 +93,12 @@ export function continuedSettings(
   turns: readonly SessionTurn[]
 ): TurnSettings {
   const latest = latestTurnExecution(harness, turns);
-  // A fresh chat takes the catalog default because a send cannot wait for the account default its composer shows.
+  // The fallback comes from the catalog because a send cannot wait for the composer's account default.
   const model = latest?.model ?? defaultModelId(CATALOG_MODEL_LISTS, harness);
   if (!model)
     throw new OperatorError(
       "unsupported",
-      `send_message: this chat has not run a turn yet. Ask the person to choose a model for ${HARNESSES[harness].label} in the chat, or use start_session with a model. Nothing was sent.`
+      `send_message: this chat has no recorded model. Ask the person to choose a model for ${HARNESSES[harness].label} in the chat, or use start_session with a model. Nothing was sent.`
     );
   return {
     agentHarness: harness,

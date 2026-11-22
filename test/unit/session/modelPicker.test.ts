@@ -2,6 +2,7 @@ import { createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { expect, it, vi } from "vitest";
+import { modelThinkingLevels, type HarnessModels } from "@shared/models";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { MessageInput } from "@/features/session/ui/MessageInput";
 import { ModelPicker } from "@/features/session/ui/ModelPicker";
@@ -114,31 +115,33 @@ it("keeps the chat's Thinking column beside an empty model list", () => {
   expect(html).toContain("Sign in to see models.");
   expect(html).toContain("Open AI Providers");
   expect(html).toContain("Thinking");
+  expect(html).not.toContain('aria-label="Thinking effort"');
   expect(html).not.toContain("has no thinking control.");
 });
 
-it("keeps a remembered model in the picker without offering another model's thinking levels", () => {
+it("offers the harness's thinking levels for a chat on an unlisted model", () => {
+  const harness = "codex-app-server";
+  const lists: HarnessModels[] = [
+    {
+      harness,
+      source: "live",
+      models: [{ harness, id: "current", label: "Current", thinking: { levels: ["low", "high"] } }],
+    },
+  ];
   const html = renderToStaticMarkup(
     createElement(ModelPicker, {
-      agentHarness: "gemini",
-      model: "gemini:remembered",
-      lists: [
-        {
-          harness: "gemini",
-          source: "live",
-          models: [
-            { harness: "gemini", id: "other", label: "Other", thinking: { levels: ["high"] } },
-          ],
-        },
-      ],
+      agentHarness: harness,
+      model: "codex-app-server:older-model",
+      lists,
       thinkingLevel: "high",
-      thinkingLevels: ["high"],
+      thinkingLevels: modelThinkingLevels(lists, harness, "older-model"),
       hasMessages: true,
       onThinkingLevelChange: () => {},
     })
   );
-  expect(html).toContain("remembered");
-  expect(html).toContain("Thinking");
-  expect(html).not.toContain('aria-label="Thinking effort"');
+  expect(html).toContain("older-model");
+  const controls = html.match(/aria-label="Thinking effort">(.*?)<\/div>/s)?.[1];
+  expect(controls).toContain(">Low</span>");
+  expect(controls).toContain(">High</span>");
   expect(html).not.toContain("has no thinking control.");
 });

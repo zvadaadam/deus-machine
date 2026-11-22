@@ -184,10 +184,10 @@ export function ModelPicker({
             <DropdownMenuLabel className="text-text-muted text-xs font-normal">
               Thinking
             </DropdownMenuLabel>
-            {listedLevels?.length ? (
+            {hasThinking ? (
               // Rows like the models': the name under the title, the mark on the right.
               <div role="group" aria-label="Thinking effort">
-                {listedLevels.map((level) => {
+                {thinkingLevels.map((level) => {
                   const isSelected = level === thinkingLevel;
                   return (
                     <DropdownMenuItem
@@ -204,7 +204,7 @@ export function ModelPicker({
                 })}
               </div>
             ) : (
-              listedLevels && (
+              listedLevels?.length === 0 && (
                 <p className="text-text-muted px-2 py-1.5 text-xs text-pretty">
                   {modelLabel} has no thinking control.
                 </p>

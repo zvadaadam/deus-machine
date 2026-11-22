@@ -3,7 +3,7 @@
  * TanStack Query hooks for settings management
  */
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { produce } from "immer";
 import { toast } from "sonner";
 import type { AgentAuthAnswer, HarnessCliProgress } from "@shared/agent-auth";
@@ -79,14 +79,15 @@ export function useDefaultThinkingLevel(): ThinkingLevel {
 export function useAgentAuthEvents(): void {
   const queryClient = useQueryClient();
   const filter = isCloudDirectWebMode() ? null : {};
-  const readLogin = () =>
-    void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentAuth });
-  const readLoginAndModels = async () => {
-    readLogin();
-    const models = { queryKey: queryKeys.settings.agentModels };
-    // Invalidation alone reuses a first read that was started before the login changed.
-    await queryClient.cancelQueries(models);
-    await queryClient.invalidateQueries(models);
+  const readAgain = async (queryKey: QueryKey) => {
+    const filters = { queryKey };
+    // Invalidation alone can reuse a first read started before the login or CLI changed.
+    await queryClient.cancelQueries(filters);
+    await queryClient.invalidateQueries(filters);
+  };
+  const readLoginAndModels = () => {
+    void readAgain(queryKeys.settings.agentAuth);
+    void readAgain(queryKeys.settings.agentModels);
   };
   useStream(
     api.agentCliProgress,
@@ -95,8 +96,8 @@ export function useAgentAuthEvents(): void {
       queryClient.setQueryData<AgentAuthAnswer>(queryKeys.settings.agentAuth, (answer) =>
         answer ? withProgress(answer, progress) : answer
       );
-      if (progress.phase === "ready") void readLoginAndModels();
-      if (progress.phase === "failed") readLogin();
+      if (progress.phase === "ready") readLoginAndModels();
+      if (progress.phase === "failed") void readAgain(queryKeys.settings.agentAuth);
     },
     readLoginAndModels
   );
@@ -104,7 +105,7 @@ export function useAgentAuthEvents(): void {
     api.agentAuthChanges,
     filter,
     ({ login }) => {
-      void readLoginAndModels();
+      readLoginAndModels();
       if (login && (login.outcome === "failed" || login.outcome === "expired")) {
         toast.error(login.error ?? "The sign-in didn’t finish");
       }

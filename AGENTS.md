@@ -503,8 +503,11 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   host mutation re-reads what it depends on in the same synchronous step as
   its write (`mayStart`, `mayTouch`, `mayArchive`; a workspace's archive
   inside the app's archive queue). A chat's number is stored when it is
-  made (`sessions.chat`, a trigger) and never moves. A message continues the chat as its
-  composer would (`turn-settings.ts`). A project only in the cloud is refused
+  made (`sessions.chat`, a trigger) and never moves. A follow-up uses the chat's recorded
+  model as its composer would (`turn-settings.ts`). Without a recorded model, the host
+  uses the agent's default in the engine catalog (which can differ from the composer's
+  account default because a send does not wait for a model list) or refuses the
+  follow-up if the catalog has none. A project only in the cloud is refused
   at start with the `add_project` call that puts it here.
   `add_project(repository)` (`services/assistants/add-project.ts`, a write)
   takes a GitHub `owner/name` or an https or ssh address and nothing else. It

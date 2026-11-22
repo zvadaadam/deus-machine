@@ -341,7 +341,7 @@ describe("sending and starting", () => {
 
   it("quotes an empty list before creating a workspace or a chat", async () => {
     const host = createDeusHost();
-    const why = "The fixture CLI is signed out.";
+    const why = "The CLI timed out while reading models.";
     const read = vi.fn(() => ({
       lists: [{ harness: "codex-app-server", models: [], source: "catalog", error: why }],
     }));
@@ -361,7 +361,7 @@ describe("sending and starting", () => {
     ).rejects.toMatchObject({
       code: "unsupported",
       message: expect.stringContaining(
-        `("${why}"). Ask the person to install or sign in to the agent in Settings → AI Providers. Nothing was started.`
+        `no models are available to choose for Codex ("${why}"). Ask the person to check the agent in Settings → AI Providers. Nothing was started.`
       ),
     });
     expect(state.db.prepare("SELECT id FROM sessions").all()).toEqual(sessionsBefore);
@@ -411,7 +411,7 @@ describe("sending and starting", () => {
     ).rejects.toMatchObject({
       code: "unsupported",
       message: expect.stringMatching(
-        /has not run a turn yet.*choose a model for Gemini in the chat.*start_session with a model.*Nothing was sent/
+        /has no recorded model.*choose a model for Gemini in the chat.*start_session with a model.*Nothing was sent/
       ),
     });
     expect(read).not.toHaveBeenCalled();

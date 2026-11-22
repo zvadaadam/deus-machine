@@ -19,7 +19,6 @@ function observe(direct = false) {
   vi.mocked(useStream).mockClear();
   const client = new QueryClient();
   client.setQueryData(models, { lists: [] });
-  client.setQueryData(queryKeys.settings.agentAuth, { clis: [] });
   function Shell() {
     useAgentAuthEvents();
     return null;
@@ -40,11 +39,14 @@ it.each([api.agentCliProgress, api.agentAuthChanges])(
   "reads login and workspace models again after a missed $name event",
   async (stream) => {
     const client = observe();
+    client.setQueryData(queryKeys.settings.agentAuth, { clis: [] });
     const subscription = vi.mocked(useStream).mock.calls.find(([s]) => s === stream)!;
     expect(subscription[1]).toEqual({});
     subscription[3]!();
-    expect(client.getQueryState(queryKeys.settings.agentAuth)?.isInvalidated).toBe(true);
-    await vi.waitFor(() => expect(client.getQueryState(models)?.isInvalidated).toBe(true));
+    await vi.waitFor(() => {
+      expect(client.getQueryState(queryKeys.settings.agentAuth)?.isInvalidated).toBe(true);
+      expect(client.getQueryState(models)?.isInvalidated).toBe(true);
+    });
   }
 );
 
@@ -91,6 +93,36 @@ it("discards a cold model read when sign-in finishes, including in a workspace w
   }
 });
 
+it("replaces the first login read when an install finishes before it answers", async () => {
+  const client = observe();
+  const key = queryKeys.settings.agentAuth;
+  const installing: AgentAuthAnswer = {
+    clis: [{ harness: "gemini", state: "installing" }],
+    auth: [{ harness: "gemini", state: "unknown", methods: [] }],
+    logins: [],
+  };
+  const ready: AgentAuthAnswer = {
+    clis: [{ harness: "gemini", state: "ready" }],
+    auth: [{ harness: "gemini", state: "signed_out", methods: [] }],
+    logins: [],
+  };
+  const first = Promise.withResolvers<AgentAuthAnswer>();
+  const read = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValue(ready);
+  const close = new QueryObserver(client, { queryKey: key, queryFn: read }).subscribe(() => {});
+  try {
+    expect(read).toHaveBeenCalledOnce();
+    expect(client.getQueryData(key)).toBeUndefined();
+    const [cli] = vi.mocked(useStream).mock.calls;
+    cli![2]({ harness: "gemini", phase: "ready", version: "1.5.14", receivedBytes: 100 });
+    first.resolve(installing);
+    await vi.waitFor(() => expect(client.getQueryData(key)).toEqual(ready));
+    expect(read).toHaveBeenCalledTimes(2);
+  } finally {
+    close();
+    client.clear();
+  }
+});
+
 it("checks the newly installed agent's login when Settings reopens and then offers Sign in", async () => {
   const client = observe();
   const key = queryKeys.settings.agentAuth;
@@ -115,7 +147,7 @@ it("checks the newly installed agent's login when Settings reopens and then offe
 
   const close = settings.subscribe(() => {});
   try {
-    expect(read).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
     expect(readLocalAgent(settings.getCurrentResult(), "gemini").status).toBe("checking");
     expect(readLocalAgent(settings.getCurrentResult(), "claude-code").status).toBe("signed-in");
     const auth: HarnessAuth = {
