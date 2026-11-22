@@ -646,6 +646,7 @@ export async function openAutomationRun(
   }
 
   const { workspaceId, sessionId } = rows;
+  // Opening the run resurfaces its workspace even if it was archived during transcript backfill.
   await changeWorkspaceState(workspaceId, async () => {
     assertCurrentAccount(identity);
     reviveAdoptedWorkspace(workspaceId, sessionId);

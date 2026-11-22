@@ -1205,6 +1205,31 @@ describeWithDb("openAutomationRun", () => {
     }
   );
 
+  it("resurfaces the selected run when Archive completes during its transcript read", async () => {
+    const first = await openAutomationRun("run-1");
+    store.upsertRuns([runSummaryToRow(runFixture({ id: "run-2", sessionId: "run-2" }))]);
+    const second = await openAutomationRun("run-2");
+    const transcript = Promise.withResolvers<{ workspaceId: string; messages: [] }>();
+    sdk.getSession.mockClear().mockReturnValueOnce(transcript.promise);
+    const opening = openAutomationRun("run-1");
+    const workspace = db.prepare("SELECT state, current_session_id FROM workspaces WHERE id = ?");
+    try {
+      expect(sdk.getSession).toHaveBeenCalledExactlyOnceWith("run-1", AUTH);
+      await archiveWorkspace(first.workspaceId);
+      expect(workspace.get(first.workspaceId)).toEqual({
+        state: "archived",
+        current_session_id: second.sessionId,
+      });
+    } finally {
+      transcript.resolve({ workspaceId: "agnt-ws-1", messages: [] });
+      await opening;
+    }
+    expect(workspace.get(first.workspaceId)).toEqual({
+      state: "ready",
+      current_session_id: first.sessionId,
+    });
+  });
+
   it("sends a new selection to both subscribed devices and stays quiet on a second open", async () => {
     const first = await openAutomationRun("run-1");
     store.upsertRuns([runSummaryToRow(runFixture({ id: "run-2", sessionId: "run-2" }))]);
