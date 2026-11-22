@@ -188,18 +188,38 @@ test("Changes keeps the missing checkout error until a read succeeds", async (t)
 
 for (const project of ["local", "remote", "offline", "upstream"]) {
   test(`start details for ${project}`, async (t) => {
-    const page = await tab(t);
-    const ws = await start({ local, remote, offline, upstream }[project], project + " start");
-    await page.goto(`${baseUrl}/w/${ws.id}`);
-    await row(page, ws).waitFor();
-    // This client saw the checkout finish. Resume that start story in its real chat.
-    await page.evaluate(async ({ id, current_session_id }) => {
-      const { markStartedIn } = await import(
-        `${window.location.origin}/src/features/workspace/store/workspaceStartStore.ts`
-      );
-      markStartedIn(id, current_session_id);
-    }, ws);
-    const group = page.locator('[data-slot="env-group"]');
+    const page = await tab(t, "desktop");
+    await page.goto(baseUrl);
+    await page.getByRole("button", { name: `New workspace in ${project}`, exact: true }).click();
+    const composer = page.getByLabel("Message to start a new workspace");
+    await composer.fill(`Start in ${project}`);
+    const appearances = await page.evaluateHandle(() => {
+      const seen = [];
+      new window.MutationObserver(() => {
+        const header = document.querySelector('[data-slot="workspace-tool-header"]');
+        if (!header?.innerText.split("\n").includes("Create PR")) return;
+        const phase = document.querySelector('[data-slot="workspace-start-state"]')
+          ? "starting"
+          : "ready";
+        if (seen.at(-1) !== phase) seen.push(phase);
+      }).observe(document.body, { subtree: true, childList: true, characterData: true });
+      return seen;
+    });
+    // Hold git before it creates the worktree, so the window sees a start without a checkout.
+    const repo = { local, remote, offline, upstream }[project];
+    const hooks = path.join(repo.root_path, ".git", "hooks");
+    execFileSync("git", ["config", "core.hooksPath", hooks], { cwd: repo.root_path });
+    const gate = path.join(hooks, "reference-transaction");
+    await writeFile(gate, '#!/bin/sh\nwhile test ! -f "$0.release"; do sleep 0.05; done\n', {
+      mode: 0o755,
+    });
+    try {
+      await composer.press("Enter");
+      await page.locator('[data-slot="workspace-start-state"][data-state="starting"]').waitFor();
+    } finally {
+      await writeFile(gate + ".release", "");
+    }
+    const group = page.locator('#chat-messages [data-slot="env-group"]');
     const expand = group.getByRole("button", { name: "Workspace ready" });
     if ((await expand.getAttribute("aria-expanded")) === "false") await expand.click();
     await group.getByText("Made a safe copy").waitFor();
@@ -207,8 +227,14 @@ for (const project of ["local", "remote", "offline", "upstream"]) {
       (await group.getByText("Copy may be out of date", { exact: true }).count()) > 0,
       project === "offline"
     );
-    if (project === "upstream")
+    if (project === "local") {
+      const selected = page.locator('[data-workspace-id][aria-current="page"]');
+      await waitForPRRead(page, await selected.getAttribute("data-workspace-id"), false);
+      assert.deepEqual(await appearances.jsonValue(), []);
+    } else if (project === "remote" || project === "upstream") {
       await page.getByRole("button", { name: "Create PR", exact: true }).waitFor();
+      assert.deepEqual(await appearances.jsonValue(), ["ready"]);
+    }
     assert.equal(
       await group.getByText("No origin to check", { exact: true }).count(),
       project === "local" || project === "upstream" ? 1 : 0,

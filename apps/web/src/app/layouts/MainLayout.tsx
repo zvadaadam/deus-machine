@@ -35,6 +35,7 @@ import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { useWorkspaceStore, workspaceLayoutActions } from "@/features/workspace/store";
 import { openNewWorkspace } from "@/features/workspace/lib/newWorkspace";
 import { derivePRActionState } from "@/features/workspace/lib/prState";
+import { hasCheckout } from "@/features/workspace/lib/startState";
 import { pendingFirstMessages } from "@/features/workspace/store/workspaceStartStore";
 import { useFirstMessageDelivery } from "@/features/session/hooks/useFirstMessageDelivery";
 import { simulatorStoreActions } from "@/features/simulator/store";
@@ -198,8 +199,9 @@ export function MainLayout() {
     avatarUrl: ghIdentity?.avatarUrl ?? null,
   };
 
-  // PR status query — gated on GitHub auth, polls while agent is working
-  const prStatusQuery = usePRStatus(selectedWorkspace?.id || null, {
+  const prWorkspaceId =
+    selectedWorkspace && hasCheckout(selectedWorkspace) ? selectedWorkspace.id : null;
+  const prStatusQuery = usePRStatus(prWorkspaceId, {
     ghInstalled: ghStatusQuery.data?.isInstalled,
     ghAuthenticated: ghStatusQuery.data?.isAuthenticated,
     sessionStatus: selectedWorkspace?.session_status ?? undefined,
@@ -405,7 +407,7 @@ export function MainLayout() {
   useKeyboardShortcuts({
     onRefresh: async () => {
       workspacesQuery.refetch();
-      if (selectedWorkspace) {
+      if (prWorkspaceId) {
         prStatusQuery.refetch();
       }
     },
