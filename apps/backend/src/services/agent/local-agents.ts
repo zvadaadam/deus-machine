@@ -15,7 +15,8 @@ import {
   type ModelList,
 } from "@zvada/agent-server/protocol";
 import type { AgentAuthAnswer, AgentSignInAnswer } from "@shared/agent-auth";
-import { LOCAL_HARNESSES, type AgentHarness } from "@shared/enums";
+import type { AgentHarness } from "@shared/enums";
+import { LOCAL_HARNESSES } from "@shared/harnesses";
 import { agentAuthChanges, agentCliProgress } from "@shared/api/settings";
 import { ValidationError } from "../../lib/errors";
 import { publish } from "../streams";

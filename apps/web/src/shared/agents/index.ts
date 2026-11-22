@@ -14,7 +14,7 @@ import {
   parseModelValue,
 } from "@shared/models";
 import type { AgentHarness } from "@shared/enums";
-import { HARNESSES } from "@shared/harnesses";
+import { harnessInfo } from "@shared/harnesses";
 import type { ThinkingLevel } from "@shared/protocol";
 import type { SessionTurn } from "@shared/types/session";
 
@@ -33,8 +33,8 @@ export {
 export type { AgentHarness } from "@shared/enums";
 export type { ThinkingLevel } from "@shared/protocol";
 
-export function getAgentLabel(agentHarness: AgentHarness): string {
-  return HARNESSES[agentHarness]?.label;
+export function getAgentLabel(agentHarness: string): string {
+  return harnessInfo(agentHarness)?.label ?? agentHarness;
 }
 
 /** The picker value a stored one names today; undefined when it names no harness Deus runs. */

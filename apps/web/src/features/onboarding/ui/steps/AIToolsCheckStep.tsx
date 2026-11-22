@@ -9,8 +9,8 @@ import {
   type LocalAgentState,
 } from "@/features/settings/lib/local-agent-login";
 import { LoginCodeForm } from "@/features/settings/ui/sections/LoginCodeForm";
-import { LOCAL_HARNESSES, type AgentHarness } from "@shared/enums";
-import { HARNESSES } from "@shared/harnesses";
+import type { AgentHarness } from "@shared/enums";
+import { HARNESSES, LOCAL_HARNESSES } from "@shared/harnesses";
 
 const agentNames = new Intl.ListFormat("en", { type: "disjunction" }).format(
   LOCAL_HARNESSES.map((harness) => HARNESSES[harness].label)

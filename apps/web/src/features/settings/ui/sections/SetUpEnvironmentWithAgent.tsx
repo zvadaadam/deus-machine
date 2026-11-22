@@ -46,8 +46,8 @@ export function SetUpEnvironmentWithAgent({
     if (providers.isError) return "Couldn't check your AI accounts. Try again in AI Providers.";
     if (providers.isPending) return "Checking your AI accounts…";
     if (defaultProviderAccount(providers.data, provider)?.status === "connected") return null;
-    const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
-    return `Connect a ${providerName} account in AI Providers to use ${label}.`;
+    const definition = providers.data.providers.find((entry) => entry.id === provider);
+    return `Connect ${definition ? `a ${definition.name}` : "an"} account in AI Providers to use ${label}.`;
   }
   const blocked = setupProblem();
   return (

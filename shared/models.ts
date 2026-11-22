@@ -19,8 +19,8 @@ import {
   type ModelList,
   type ThinkingLevel,
 } from "@zvada/agent-server/protocol";
-import { AgentHarnessSchema, LOCAL_HARNESSES, type AgentHarness } from "./enums";
-import { HARNESSES, harnessInfo } from "./harnesses";
+import { AgentHarnessSchema, type AgentHarness } from "./enums";
+import { HARNESSES, LOCAL_HARNESSES, harnessInfo } from "./harnesses";
 import type { SessionTurn } from "./types/session";
 
 export type { ModelDescriptor, ModelList };

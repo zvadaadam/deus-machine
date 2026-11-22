@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { useAgentAuth, useAgentAuthEvents } from "../../api/settings.queries";
 import type { SettingsSectionProps } from "./types";
 import { readThinkingLevel } from "@shared/protocol";
-import { LOCAL_HARNESSES } from "@shared/enums";
+import { LOCAL_HARNESSES } from "@shared/harnesses";
 import { DEFAULT_THINKING_LEVEL } from "@/shared/agents";
 import { ProviderAccounts } from "./ProviderAccounts";
 import { LocalAgentRow } from "./LocalAgentRow";

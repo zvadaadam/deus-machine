@@ -7,7 +7,7 @@
 // Both are exported from this file.
 
 import { z } from "zod";
-import { HARNESSES } from "./harnesses";
+import { LOCAL_HARNESSES } from "./harnesses";
 
 // ── Session ──────────────────────────────────────────────────────────────
 
@@ -80,9 +80,6 @@ export const STATUS_RANK: Record<WorkspaceStatus, number> = {
 };
 
 // ── Agent ────────────────────────────────────────────────────────────────
-
-export const LOCAL_HARNESSES = Object.keys(HARNESSES) as readonly (keyof typeof HARNESSES)[];
-export const CLOUD_HARNESSES = LOCAL_HARNESSES.filter((id) => HARNESSES[id].cloudProvider !== null);
 
 /**
  * The agent harness bound to a session: the SDK/CLI wrapper that owns the

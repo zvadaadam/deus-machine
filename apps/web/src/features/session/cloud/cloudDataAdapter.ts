@@ -15,12 +15,8 @@
 import type { RepoGroup, Workspace } from "@shared/types/workspace";
 import type { Session } from "@shared/types/session";
 import type { CloudOrganizations } from "@shared/types/environment-secrets";
-import {
-  CLOUD_HARNESSES,
-  type AgentHarness,
-  type SessionStatus,
-  type WorkspaceState,
-} from "@shared/enums";
+import type { AgentHarness, SessionStatus, WorkspaceState } from "@shared/enums";
+import { CLOUD_HARNESSES } from "@shared/harnesses";
 import { toast } from "sonner";
 import { setQueryRequestInterceptor } from "@/platform/ws";
 import { getRuntimeClient, onRuntimeChange } from "@/platform/ws/query-protocol-client";

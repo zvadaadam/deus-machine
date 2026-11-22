@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@shared/api";
-import { CLOUD_HARNESSES, LOCAL_HARNESSES } from "@shared/enums";
+import { CLOUD_HARNESSES, LOCAL_HARNESSES } from "@shared/harnesses";
 import { call } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";

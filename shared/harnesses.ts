@@ -1,3 +1,6 @@
+// shared/harnesses.ts
+// The harnesses Deus runs and what it chooses for each.
+
 import type { AgentHarness as EngineHarness } from "@zvada/agent-server/protocol";
 import type { ProviderId } from "./types/provider-account";
 
@@ -6,9 +9,11 @@ interface Harness {
   vendor: string;
   /** Vendor aliases in order of preference for a new chat. With no match, use the harness's default. */
   preferredModels: readonly string[];
+  /** How a turn names an installed app's MCP server. */
   appServers: { prefix: string } | { reserved: readonly string[] };
   /** The provider account a cloud turn needs. A harness with none runs only on this computer. */
   cloudProvider: ProviderId | null;
+  /** Whether the harness accepts thinking level `off` when a model's list omits it. */
   acceptsUnlistedOff: boolean;
 }
 
@@ -37,6 +42,12 @@ export const HARNESSES = {
     acceptsUnlistedOff: false,
   },
 } as const satisfies Partial<Record<EngineHarness, Harness>>;
+
+/** The harness ids Deus offers on this computer, in picker order. */
+export const LOCAL_HARNESSES = Object.keys(HARNESSES) as readonly (keyof typeof HARNESSES)[];
+
+/** A harness runs in Deus Cloud when it names a provider account there. */
+export const CLOUD_HARNESSES = LOCAL_HARNESSES.filter((id) => HARNESSES[id].cloudProvider !== null);
 
 /** Settings and model lists can come from a build that knows other harnesses. */
 export function harnessInfo(id: string): Harness | undefined {

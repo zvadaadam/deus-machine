@@ -4,7 +4,7 @@
 // (`hostTools`), and deus's Claude embed-tier options (tool policy, checkpoint hooks).
 
 import { AgentRuntime, createAgentRegistry, type AgentRegistry } from "@zvada/agent-server/core";
-import { LOCAL_HARNESSES } from "@shared/enums";
+import { LOCAL_HARNESSES } from "@shared/harnesses";
 import { deusTools } from "../deus-tools";
 import { chatTools } from "../../host-link";
 import { trackedSessions } from "../../session-tracker";

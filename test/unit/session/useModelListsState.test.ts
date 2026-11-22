@@ -4,6 +4,7 @@ vi.mock("@shared/harnesses", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@shared/harnesses")>();
   return {
     ...actual,
+    LOCAL_HARNESSES: [...actual.LOCAL_HARNESSES, "scripted"],
     HARNESSES: {
       ...actual.HARNESSES,
       scripted: { ...actual.HARNESSES["claude-code"], label: "Local fixture", cloudProvider: null },
