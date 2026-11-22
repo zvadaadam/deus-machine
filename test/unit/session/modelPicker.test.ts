@@ -26,24 +26,25 @@ vi.mock("@/components/ui/dropdown-menu", () => {
 it("shows the same model read in the picker and on Send, and offers Settings only for an empty answer", async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retryOnMount: false } } });
   const queryKey = [...queryKeys.settings.agentModels, null];
-  function Composer() {
+  function Composer({ sendDisabledReason }: { sendDisabledReason?: string }) {
     const selection = useChatModel({ cloud: false, harness: "gemini" });
     return createElement(MessageInput, {
       sessionId: "cold",
       sending: false,
+      sendDisabledReason,
       selection,
       onSend: () => true,
     });
   }
-  const render = () =>
+  const render = (sendDisabledReason?: string) =>
     renderToStaticMarkup(
       createElement(
         QueryClientProvider,
         { client },
-        createElement(TooltipProvider, null, createElement(Composer))
+        createElement(TooltipProvider, null, createElement(Composer, { sendDisabledReason }))
       )
     );
-  function expectNotice(message: string, offersSettings: boolean) {
+  function expectNotice(message: string, offersSettings: boolean, inline = true) {
     const html = render();
     const menu = html.match(/<section>.*?<\/section>/s)?.[0];
     expect(menu).toContain(message);
@@ -53,9 +54,12 @@ it("shows the same model read in the picker and on Send, and offers Settings onl
     const send = html.match(/<button[^>]*aria-label="Send message"[^>]*>/)?.[0];
     expect(send).toContain('disabled=""');
     expect(send).toContain(`title="${message}"`);
+    expect(html.includes(`>${message}</p>`)).toBe(inline);
   }
 
-  expectNotice("Reading models…", false);
+  expectNotice("Reading models…", false, false);
+  const waiting = "You can send this draft when the chat opens.";
+  expect(render(waiting)).toContain(`>${waiting}</p>`);
   await expect(
     client.fetchQuery({
       queryKey,

@@ -436,9 +436,11 @@ export function MessageInput({
           pastedTexts={composer.missingPastedTexts}
           onDismiss={composer.dismissMissingAttachments}
         />
-        {disabledReason && (
-          <p className="text-text-muted w-full px-4 pt-2 text-xs">{disabledReason}</p>
-        )}
+        {disabledReason &&
+          (sendDisabledReason ||
+            modelLists.find((list) => list.harness === agentHarness)?.unanswered !== "pending") && (
+            <p className="text-text-muted w-full px-4 pt-2 text-xs">{disabledReason}</p>
+          )}
         <ComposerStagedContent
           skillMentions={skillMentions}
           inspectedElements={inspectedElements}
