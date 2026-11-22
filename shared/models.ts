@@ -31,10 +31,6 @@ export interface HarnessModels extends Pick<ModelList, "source" | "error"> {
   readonly models: readonly ModelDescriptor[];
 }
 
-export function noModelsReason(list: HarnessModels | undefined): string {
-  return list?.error || "No models available.";
-}
-
 /** `q:request agentModels`: each local harness's list, as the engine has it. */
 export interface AgentModelsAnswer {
   lists: ModelList[];

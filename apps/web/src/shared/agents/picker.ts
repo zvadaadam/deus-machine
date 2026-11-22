@@ -6,13 +6,24 @@
 import {
   modelLabel,
   modelValue,
-  noModelsReason,
   parseModelValue,
   pickerModels,
   type HarnessModels,
 } from "@shared/models";
 import { AgentHarnessSchema, type AgentHarness } from "@shared/enums";
 import { HARNESSES } from "@shared/harnesses";
+
+export interface PickerModelList extends HarnessModels {
+  /** The query's state when the engine has supplied no list for this agent. */
+  unanswered?: "pending" | "unavailable";
+}
+
+export function emptyModelList(list?: PickerModelList) {
+  if (list?.unanswered === "pending") return { message: "Reading models…", openSettings: false };
+  if (!list || list.unanswered === "unavailable")
+    return { message: "Could not read the model list.", openSettings: false };
+  return { message: list.error || "No models available.", openSettings: true };
+}
 
 export interface PickerOption {
   /** The picker value: `harness:model`. */
@@ -27,7 +38,7 @@ export interface PickerGroup {
   agentHarness: AgentHarness;
   label: string;
   options: PickerOption[];
-  emptyReason?: string;
+  empty?: ReturnType<typeof emptyModelList>;
 }
 
 export interface ModelPickerView {
@@ -37,7 +48,7 @@ export interface ModelPickerView {
 }
 
 export function modelPickerView(
-  lists: readonly HarnessModels[],
+  lists: readonly PickerModelList[],
   model: string | undefined
 ): ModelPickerView {
   const current = model ? parseModelValue(model) : undefined;
@@ -54,7 +65,7 @@ export function modelPickerView(
         agentHarness,
       })
     );
-    const emptyReason = options.length ? undefined : noModelsReason(list);
+    const empty = options.length ? undefined : emptyModelList(list);
     if (current?.harness === agentHarness) {
       selected = options.find((option) => option.value === modelValue(agentHarness, current.model));
       if (!selected) {
@@ -66,7 +77,7 @@ export function modelPickerView(
         options.unshift(selected);
       }
     }
-    return [{ agentHarness, label: HARNESSES[agentHarness].label, options, emptyReason }];
+    return [{ agentHarness, label: HARNESSES[agentHarness].label, options, empty }];
   });
   return { groups, selected };
 }

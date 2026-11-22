@@ -15,17 +15,16 @@ import {
   getAgentLabel,
   thinkingLevelLabel,
   type AgentHarness,
-  type HarnessModels,
   type ThinkingLevel,
 } from "@/shared/agents";
-import { modelPickerView } from "@/shared/agents/picker";
+import { modelPickerView, type PickerModelList } from "@/shared/agents/picker";
 import { uiActions } from "@/shared/stores/uiStore";
 
 interface ModelPickerProps {
   model: string | undefined;
   agentHarness?: AgentHarness;
-  /** The models to offer (useModelLists). */
-  lists: readonly HarnessModels[];
+  /** The models to offer and the status of an unanswered read. */
+  lists: readonly PickerModelList[];
   /** The level the chat runs, and the ones its model offers; none for a model with no thinking control. */
   thinkingLevel: ThinkingLevel;
   thinkingLevels: readonly ThinkingLevel[];
@@ -137,14 +136,16 @@ export function ModelPicker({
         <div className="flex min-h-0 flex-1">
           <div className="relative isolate min-w-0 flex-1 overflow-y-auto p-1">
             <DropdownMenuGlide />
-            {shownGroup?.emptyReason ? (
+            {shownGroup?.empty ? (
               <>
                 <DropdownMenuLabel className="text-text-muted text-xs font-normal break-words">
-                  {shownGroup.emptyReason}
+                  {shownGroup.empty.message}
                 </DropdownMenuLabel>
-                <DropdownMenuItem onSelect={uiActions.openAISettings}>
-                  Open AI Settings
-                </DropdownMenuItem>
+                {shownGroup.empty.openSettings && (
+                  <DropdownMenuItem onSelect={uiActions.openAISettings}>
+                    Open AI Settings
+                  </DropdownMenuItem>
+                )}
               </>
             ) : (
               otherAgent && (

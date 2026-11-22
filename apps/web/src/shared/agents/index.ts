@@ -27,7 +27,6 @@ export {
   modelValue,
   pickerModels,
   thinkingLevelLabel,
-  type HarnessModels,
 } from "@shared/models";
 export type { AgentHarness } from "@shared/enums";
 export type { ThinkingLevel } from "@shared/protocol";

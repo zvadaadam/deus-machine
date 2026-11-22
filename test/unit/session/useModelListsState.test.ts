@@ -52,7 +52,7 @@ describe("the harnesses a picker offers", () => {
     );
     for (const model of ["claude-code:opus", "gemini:previous"]) {
       expect(modelPickerView(lists, model).groups).toContainEqual(
-        expect.objectContaining({ label: "Gemini", emptyReason: error })
+        expect.objectContaining({ label: "Gemini", empty: { message: error, openSettings: true } })
       );
     }
   });

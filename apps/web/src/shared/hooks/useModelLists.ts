@@ -7,22 +7,21 @@ import type { ThinkingLevel } from "@shared/protocol";
 import { call } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
+import { emptyModelList, type PickerModelList } from "@/shared/agents/picker";
 import {
   CATALOG_MODEL_LISTS,
   DEFAULT_AGENT_HARNESS,
   modelForSession,
   modelThinkingLevels,
   modelValue,
-  noModelsReason,
   parseModelValue,
-  type HarnessModels,
 } from "@shared/models";
 import { useCloudModels } from "./useCloudModels";
 
 type ModelScope = { cloud: boolean; workspaceId?: string | null };
 
 interface ModelListsState {
-  lists: readonly HarnessModels[];
+  lists: readonly PickerModelList[];
   live: (harness: string) => boolean;
 }
 
@@ -66,7 +65,7 @@ export function useChatModel({
     thinkingLevels: id ? modelThinkingLevels(state.lists, agentHarness, id) : [],
     unavailable: id
       ? undefined
-      : noModelsReason(state.lists.find((list) => list.harness === agentHarness)),
+      : emptyModelList(state.lists.find((list) => list.harness === agentHarness)).message,
   };
 }
 
@@ -93,18 +92,21 @@ export function useModelListsState(chat: ModelScope): ModelListsState {
   const cloud = useCloudModels({ enabled: chat.cloud });
 
   const harnesses = chat.cloud ? CLOUD_HARNESSES : LOCAL_HARNESSES;
-  const answer = chat.cloud ? cloud.data?.lists : local.data?.lists;
-  const source = answer?.length ? answer : CATALOG_MODEL_LISTS;
+  const query = chat.cloud ? cloud : local;
+  const answer = query.data?.lists;
+  const catalog = answer?.length ? [] : CATALOG_MODEL_LISTS;
   return {
     // A partial answer keeps the missing harness's tab, including a saved selection in it.
-    lists: harnesses.map(
-      (harness) =>
-        source.find((list) => list.harness === harness) ?? {
-          harness,
-          source: "catalog",
-          models: [],
-        }
-    ),
+    lists: harnesses.map((harness) => {
+      const list = answer?.find((entry) => entry.harness === harness);
+      if (list) return list;
+      return {
+        harness,
+        source: "catalog",
+        models: catalog.find((entry) => entry.harness === harness)?.models ?? [],
+        unanswered: query.isPending && query.isEnabled ? "pending" : "unavailable",
+      };
+    }),
     live: (harness) => {
       const list = answer?.find((entry) => entry.harness === harness);
       // A platform row is authoritative whatever its source.
