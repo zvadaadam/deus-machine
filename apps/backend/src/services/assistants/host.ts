@@ -228,7 +228,13 @@ function appRefusal(error: unknown): unknown {
   if (error instanceof AgentServerDisconnectedError)
     return new OperatorError(
       "unsupported",
-      "The agent engine is not running on this computer. Nothing was sent or started. Restart Deus before sending the task again."
+      [
+        "The agent engine is not running on this computer.",
+        error.reason,
+        "Nothing was sent or started. Restart Deus before sending the task again.",
+      ]
+        .filter(Boolean)
+        .join(" ")
     );
   if (!(error instanceof AppError) || error.statusCode >= 500) return error;
   return error.statusCode === 403

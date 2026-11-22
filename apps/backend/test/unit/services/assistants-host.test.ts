@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WireRequestError } from "@zvada/agent-server/client";
 import { createOperator } from "@zvada/agent-server/operator";
 import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
-import { CATALOG_MODEL_LISTS } from "@shared/models";
+import { CATALOG_MODEL_LISTS, defaultModelId } from "@shared/models";
 import type { AnyOp } from "@shared/api/op";
 import { SCHEMA_SQL } from "@shared/schema";
 
@@ -742,10 +742,9 @@ describe("through MCP and as a chat's own tools", () => {
     expect(text).not.toContain("Restart Deus");
   });
 
-  it("lists the catalog when a read fails, but refuses a start or model-less send before delivery", async () => {
-    const failure = new Error("Agent server not connected");
+  it("lists catalog models and uses the catalog default for starts and sends when the engine is down", async () => {
     state.ops.agentModels = () => {
-      throw failure;
+      throw new Error("Agent server not connected");
     };
     const { text, isError } = await call(LOCAL_CALLER, "list_models", {});
     expect(isError).toBe(false);
@@ -757,16 +756,65 @@ describe("through MCP and as a chat's own tools", () => {
       expect(text).toContain(harness);
       expect(text).toContain(first.id);
     }
-    const host = createDeusHost();
-    for (const choice of [{}, { model: "opus" }, { thinkingLevel: "high" }]) {
-      await expect(host.start!(LEAD as never, startInput(choice))).rejects.toBe(failure);
-    }
-    expect(state.created).toBe(0);
-    await expect(
-      host.send(LEAD as never, "s-lead", { turnId: "t", message: "go", origin: LEAD })
-    ).rejects.toBe(failure);
-    expect(state.sent).toHaveLength(0);
+    const operator = createOperator(createDeusHost());
+    const who = assistantWho();
+    expect(
+      await operator.call(
+        "start_session",
+        { project: "demo-shop", workspace: "lead", message: "go", wait: 0 },
+        who
+      )
+    ).toContain('started "lead:');
+    await operator.call("send_message", { session: "lead:1", message: "continue", wait: 0 }, who);
+    const model = defaultModelId(CATALOG_MODEL_LISTS, "claude-code");
+    expect(state.sent.map((s) => s.input.model)).toEqual([model, model]);
   });
+
+  it.each([{ model: "opus" }, { thinking: "high" }])(
+    "refuses an explicit choice it could not check: %o",
+    async (choice) => {
+      state.ops.agentModels = () => {
+        throw new Error("Agent server not connected");
+      };
+      const before = state.db.prepare("SELECT id FROM sessions").all();
+      await expect(
+        createOperator(createDeusHost()).call(
+          "start_session",
+          { project: "demo-shop", workspace: "lead", message: "go", ...choice },
+          assistantWho()
+        )
+      ).rejects.toMatchObject({
+        code: "unsupported",
+        message: expect.stringMatching(
+          /models? could not be checked right now.*Nothing was (sent or )?started/i
+        ),
+      });
+      expect(state.db.prepare("SELECT id FROM sessions").all()).toEqual(before);
+      expect(state.sent).toHaveLength(0);
+    }
+  );
+
+  it.each([{}, { model: "gemini-4-neon" }])(
+    "explains an empty agent list before judging the requested model: %o",
+    async (choice) => {
+      state.ops.agentModels = () => ({
+        lists: [{ harness: "gemini", source: "catalog", models: [], error: "Sign-in required." }],
+      });
+      const before = state.db.prepare("SELECT id FROM sessions").all();
+      await expect(
+        createOperator(createDeusHost()).call(
+          "start_session",
+          { project: "demo-shop", workspace: "lead", agent: "Gemini", message: "go", ...choice },
+          assistantWho()
+        )
+      ).rejects.toMatchObject({
+        code: "unsupported",
+        message: expect.stringMatching(/Sign-in required.*Settings → AI.*Nothing was started/),
+      });
+      expect(state.db.prepare("SELECT id FROM sessions").all()).toEqual(before);
+      expect(state.sent).toHaveLength(0);
+    }
+  );
 
   it("retains the unknown outcome of unclassified wire errors", async () => {
     const args = { session: "lead:1", message: "go", wait: 1 };
