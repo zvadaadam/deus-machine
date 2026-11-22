@@ -36,7 +36,7 @@ export function useSessionComposer(
       setDraft: (v: string) => actions.setDraft(target, v),
       setModel: (v: string, levels: readonly ThinkingLevel[] | undefined) =>
         actions.setModel(target, v, levels, defaultThinking),
-      setThinkingLevel: (v: string) => actions.setThinkingLevel(target, v as ThinkingLevel),
+      setThinkingLevel: (level: ThinkingLevel) => actions.setThinkingLevel(target, level),
       togglePlanMode: () => actions.togglePlanMode(target),
       addPastedText: (text: string) => actions.addPastedText(target, text),
       removePastedText: (id: string) => actions.removePastedText(target, id),
@@ -48,7 +48,7 @@ export function useSessionComposer(
       removeSkillMention: (id: string) => actions.removeSkillMention(target, id),
       removeInspectedElement: (id: string) => actions.removeInspectedElement(target, id),
       removeImageAttachment: (id: string) => actions.removeImageAttachment(target, id),
-      dismissMissingPictures: () => actions.dismissMissingPictures(target),
+      dismissMissingAttachments: () => actions.dismissMissingAttachments(target),
     }),
     [target, defaultThinking]
   );

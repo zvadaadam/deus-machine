@@ -46,6 +46,16 @@ window.addEventListener("focus", () =>
 );
 window.addEventListener("blur", () => document.documentElement.classList.add("window-inactive"));
 
+// Outside a drop target the browser would open the file over the current page.
+function preventFileNavigation(event: DragEvent) {
+  if (event.defaultPrevented || !event.dataTransfer?.types.includes("Files")) return;
+  if (event.target instanceof HTMLInputElement && event.target.type === "file") return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "none";
+}
+window.addEventListener("dragover", preventFileNavigation);
+window.addEventListener("drop", preventFileNavigation);
+
 const w = window as Window & { __deusErrorHandlers__?: boolean };
 if (!w.__deusErrorHandlers__) {
   w.__deusErrorHandlers__ = true;

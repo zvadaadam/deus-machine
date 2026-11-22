@@ -12,10 +12,11 @@ import {
   extractImagesFromClipboard,
   buildMessageContent,
 } from "@/features/session/lib/imageAttachments";
-import { attachImageFiles } from "@/features/session/store/sessionComposerStore";
+import { attachImageFiles, HOME_COMPOSER_ID } from "@/features/session/store/sessionComposerStore";
 import { returnContentToComposer } from "@/features/session/lib/returnToComposer";
 import { ImageDropTarget } from "@/features/session/ui/ImageDropTarget";
-import { MissingPictures, PastedImageCard } from "@/features/session/ui/PastedImageCard";
+import { MissingAttachments } from "@/features/session/ui/MissingAttachments";
+import { PastedImageCard } from "@/features/session/ui/PastedImageCard";
 import type { RepoGroup, Workspace } from "@/shared/types";
 import type { Repository } from "../types";
 import { tempo } from "@/shared/lib/tempo";
@@ -132,9 +133,10 @@ export function HomeView({
     imageAttachments: attachments,
     removeImageAttachment: removeAttachment,
     missingPictures,
-    dismissMissingPictures,
+    missingPastedTexts,
+    dismissMissingAttachments,
     clearSent,
-  } = useSessionComposer("home");
+  } = useSessionComposer(HOME_COMPOSER_ID);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -142,7 +144,7 @@ export function HomeView({
     const files = extractImagesFromClipboard(e);
     if (!files.length) return;
     e.preventDefault();
-    await attachImageFiles("home", files);
+    await attachImageFiles(HOME_COMPOSER_ID, files);
   };
 
   // ── Repo selection ──────────────────────────────────────────────
@@ -155,17 +157,11 @@ export function HomeView({
     () => request?.repoId ?? null
   );
 
-  // A request that arrives while Home is already showing: take it during
-  // render, so the composer never paints the old project first. Text already
-  // typed stays unless the request brings a draft of its own.
-  const [takenRequestId, setTakenRequestId] = useState(request?.id ?? null);
-  if (request && request.id !== takenRequestId) {
-    setTakenRequestId(request.id);
-    if (request.repoId) setUserRepoId(request.repoId);
-  }
+  if (request?.repoId && request.repoId !== userRepoId) setUserRepoId(request.repoId);
   useLayoutEffect(() => {
     if (!request || useUIStore.getState().newWorkspaceRequest?.id !== request.id) return;
-    if (request.draft) void returnContentToComposer("home", request.draft);
+    // A deleted start can hand Home its waiting message, including pictures.
+    if (request.draft) void returnContentToComposer(HOME_COMPOSER_ID, request.draft);
     if (request.repoId) setStoredRepoId(request.repoId);
     // Not cancelled on cleanup: clearing the request runs this effect again.
     setTimeout(() => textareaRef.current?.focus(), 50);
@@ -394,7 +390,7 @@ export function HomeView({
       {/* Input Card — the gravitational center */}
       <div className="enter-step w-full max-w-[720px] px-4 [--enter-y:12px] [--step:1] sm:px-6">
         <ImageDropTarget
-          composerId="home"
+          composerId={HOME_COMPOSER_ID}
           disabled={!hasRepos || isSubmitting}
           className="bg-bg-raised dark:bg-bg-surface overflow-visible rounded-2xl p-1 transition-shadow"
         >
@@ -456,7 +452,11 @@ export function HomeView({
 
           {/* Inner card — typing surface (textarea + bottom toolbar) */}
           <div className="bg-bg-elevated relative overflow-visible rounded-xl transition-shadow focus-within:shadow-sm">
-            <MissingPictures count={missingPictures} onDismiss={dismissMissingPictures} />
+            <MissingAttachments
+              pictures={missingPictures}
+              pastedTexts={missingPastedTexts}
+              onDismiss={dismissMissingAttachments}
+            />
             {/* Image previews — shown above textarea when images are pasted/dropped */}
             <AnimatePresence>
               {attachments.length > 0 && (

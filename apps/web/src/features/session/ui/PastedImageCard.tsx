@@ -11,27 +11,6 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/shared/lib/utils";
 
-export function MissingPictures({ count, onDismiss }: { count: number; onDismiss: () => void }) {
-  if (!count) return null;
-  return (
-    <div className="text-text-muted flex w-full items-center gap-1 px-4 pt-2 text-xs">
-      <span>
-        {count === 1
-          ? "1 picture was not kept. Add it again."
-          : `${count} pictures were not kept. Add them again.`}
-      </span>
-      <button
-        type="button"
-        onClick={onDismiss}
-        aria-label="Dismiss missing pictures"
-        className="control-interaction hover:bg-control-hover rounded-sm p-1"
-      >
-        <X aria-hidden="true" className="size-3" />
-      </button>
-    </div>
-  );
-}
-
 const SIZE_CLASSES = {
   sm: "h-14 w-14 rounded-md",
   md: "h-[80px] w-[80px] rounded-lg",

@@ -47,7 +47,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 import { PastedTextCard } from "./PastedTextCard";
-import { MissingPictures, PastedImageCard } from "./PastedImageCard";
+import { MissingAttachments } from "./MissingAttachments";
+import { PastedImageCard } from "./PastedImageCard";
 import { InspectedElementCard } from "./InspectedElementCard";
 import { FileMentionCard } from "./FileMentionCard";
 import { SkillMentionCard } from "./SkillMentionCard";
@@ -442,9 +443,10 @@ export function MessageInput({
         data-no-ring={true}
         className="bg-bg-muted/75 ring-border-subtle relative overflow-visible rounded-2xl border-0 shadow-sm ring-1 backdrop-blur-xl"
       >
-        <MissingPictures
-          count={composer.missingPictures}
-          onDismiss={composer.dismissMissingPictures}
+        <MissingAttachments
+          pictures={composer.missingPictures}
+          pastedTexts={composer.missingPastedTexts}
+          onDismiss={composer.dismissMissingAttachments}
         />
         {sendDisabledReason && (
           <p className="text-text-muted w-full px-4 pt-2 text-xs">{sendDisabledReason}</p>

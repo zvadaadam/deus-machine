@@ -3,8 +3,6 @@ import { Upload } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { attachImageFiles } from "../store/sessionComposerStore";
 
-/** One drop surface for Home, the workspace start page and the whole chat panel.
- * The overlay is decoration: Chromium must keep hit-testing the original target. */
 export function ImageDropTarget({
   composerId,
   disabled,
@@ -27,7 +25,11 @@ export function ImageDropTarget({
         setOver(!disabled);
       }}
       onDragLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOver(false);
+        if (
+          !(event.relatedTarget instanceof Node) ||
+          !event.currentTarget.contains(event.relatedTarget)
+        )
+          setOver(false);
       }}
       onDrop={async (event) => {
         if (!event.dataTransfer.types.includes("Files")) return;
@@ -38,6 +40,7 @@ export function ImageDropTarget({
       }}
     >
       {children}
+      {/* The overlay ignores pointer events so the browser keeps hit-testing the drop surface underneath. */}
       {over && (
         <div
           aria-hidden="true"

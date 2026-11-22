@@ -1,13 +1,3 @@
-/**
- * Image attachments shared by the Home, workspace and chat composers.
- *
- * No React, no state. Just:
- *   - processImageFiles: File[] → ImageAttachment[] (FileReader → base64 preview)
- *   - extractImagesFromClipboard: clipboard event → File[]
- *   - buildImageParts: ImageAttachment[] → canonical ImagePartInput[] | null
- *   - buildMessageContent: text + attachments → the `content` the composer sends
- */
-
 import type { ImagePartInput, PartInput } from "@shared/protocol-types";
 
 /** Anthropic API only supports these image formats for vision. */

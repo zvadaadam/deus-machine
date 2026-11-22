@@ -9,7 +9,7 @@ import {
   resolveBackendEndpoints,
 } from "@/shared/config/backend.config";
 import { queryClient, setActiveQueryClient } from "@/shared/api/queryClient";
-import { CLOUD_SESSION_KEY, readRelayAccount } from "./cloud-session";
+import { CLOUD_SESSION_KEY, cloudSessionClaims, readRelayAccount } from "./cloud-session";
 import { getStoredToken, onDeviceAuthChange, signOut, needsRemoteAuth } from "./device-auth";
 import {
   expireRelayAccount,
@@ -65,12 +65,12 @@ export function selectRuntime(serverId?: string): RuntimeClient {
   const grantHost = relay ? host : "standalone";
   // Through the relay a runtime belongs to one account: its tickets and grant.
   const relayAccount = relay ? readRelayAccount() : null;
-  const account = relay ? (relayAccount?.accountId ?? null) : mode;
-  const token = deviceAuth
-    ? getStoredToken(grantHost, relay ? account : undefined)
-    : mode === "web-direct"
-      ? cloudCredential()
-      : null;
+  // The hosted bearer still identifies its account after expiry.
+  const hostedBearer = mode === "web-direct" ? cloudCredential() : null;
+  let account: string | null = mode;
+  if (relay) account = relayAccount?.accountId ?? null;
+  else if (mode === "web-direct") account = cloudSessionClaims(hostedBearer)?.sub ?? null;
+  const token = deviceAuth ? getStoredToken(grantHost, relay ? account : undefined) : hostedBearer;
   if (
     active &&
     !["disposed", "revoked"].includes(active.getState()) &&

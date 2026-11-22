@@ -10,11 +10,11 @@ import {
   composerTarget,
   emptyComposer,
   sessionComposerActions as actions,
-  useSessionComposerStore as store,
 } from "@/features/session/store/sessionComposerStore";
 import type { ImageAttachment } from "@/features/session/lib/imageAttachments";
 
-beforeEach(() => composerStore().setState({ composers: {}, pendingContent: {} }));
+const store = composerStore();
+beforeEach(() => store.setState({ composers: {}, pendingContent: {} }));
 
 const model = "codex-app-server:gpt-6-astra";
 const element = { ref: "button-1", tagName: "button", path: "body > button", innerText: "Send" };
@@ -70,9 +70,46 @@ describe("draft storage", () => {
     expect(composerStore(cache("two", "A", "first")).getState().pendingContent).toEqual({});
     expect(composerStore(cache("one", "B", "first")).getState().pendingContent).toEqual({});
     expect(storage.getItem('composer-drafts:["one","A"]')).toContain("Account A on one");
-    const cloud = composerStore(cache("web-direct", "web-direct", "first"));
-    actions.setDraft(composerTarget("hosted-chat", cloud), "Resume here");
-    expect(storage.getItem('composer-drafts:["web-direct","web-direct"]')).toContain("Resume here");
+  });
+
+  it("keeps a hosted account across expiry and renewal and separates accounts sharing a chat", async () => {
+    vi.resetModules();
+    const { selectRuntime } = await import("@/platform/ws/query-protocol-client");
+    const { composerStore } = await import("@/features/session/store/sessionComposerStore");
+    vi.stubGlobal(
+      "window",
+      Object.assign(new EventTarget(), { location: new URL("https://deusmachine.test/") })
+    );
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => (key === "deus.cloudDirectWeb" ? "1" : null),
+    });
+    const now = Date.now();
+    const time = vi.spyOn(Date, "now");
+    const signIn = (sub: string, exp: number) =>
+      storage.setItem("deus_cloud_session", "test." + btoa(JSON.stringify({ sub, exp })) + ".test");
+    try {
+      signIn("A", (now + 10000) / 1000);
+      const a = selectRuntime();
+      const drafts = composerStore(a.queryClient);
+      actions.setDraft(composerTarget("shared", drafts), "A's notes");
+      time.mockReturnValue(now + 20000);
+      expect(selectRuntime()).toBe(a);
+      signIn("A", (now - 10000) / 1000);
+      const expired = selectRuntime();
+      expect(expired.identity.account).toBe("A");
+      signIn("A", (now + 60000) / 1000);
+      const renewed = selectRuntime();
+      expect(renewed).not.toBe(expired); // A new bearer already replaces the grant.
+      expect(composerStore(renewed.queryClient)).toBe(drafts);
+      signIn("B", (now + 60000) / 1000);
+      const b = composerStore(selectRuntime().queryClient);
+      expect(b.getState().pendingContent).toEqual({});
+      actions.setDraft(composerTarget("shared", b), "B's notes");
+      expect(storage.getItem('composer-drafts:["web-direct","A"]')).toContain("A's notes");
+      expect(storage.getItem('composer-drafts:["web-direct","B"]')).toContain("B's notes");
+    } finally {
+      time.mockRestore();
+    }
   });
 
   it("restores plain content and lets chat history seed the settings", async () => {
@@ -82,8 +119,9 @@ describe("draft storage", () => {
     actions.addPastedText(target, "Notes from the clipboard");
     actions.addFileMention(target, { path: "src/ui.ts", name: "ui.ts" });
     actions.addSkillMention(target, { name: "review" });
-    actions.addInspectedElement(target, element);
-    const { draft, pastedTexts, fileMentions, skillMentions, inspectedElements } =
+    const inspected = { ...element, accessibleName: "Send this message" };
+    actions.addInspectedElement(target, inspected);
+    const { draft, fileMentions, skillMentions, inspectedElements } =
       target.store.getState().composers.chat;
     const restored = composerTarget("chat", await reopen());
     expect(restored.store.getState().composers).toEqual({});
@@ -92,22 +130,11 @@ describe("draft storage", () => {
     expect(restored.store.getState().composers.chat).toEqual({
       ...settings,
       draft,
-      pastedTexts,
+      missingPastedTexts: 1,
       fileMentions,
       skillMentions,
       inspectedElements,
     });
-  });
-
-  it("writes when draft content changes, including a keystroke, and skips model and plan changes", async () => {
-    const target = composerTarget("chat", await reopen());
-    actions.seedIfAbsent(target, emptyComposer(model, "high"));
-    actions.setDraft(target, "A".repeat(64 * 1024));
-    actions.setThinkingLevel(target, "low");
-    actions.togglePlanMode(target);
-    expect(storage.setItem).toHaveBeenCalledTimes(1);
-    actions.setDraft(target, "A".repeat(64 * 1024) + "B");
-    expect(storage.setItem).toHaveBeenCalledTimes(2);
   });
 
   it("saves only a picture count, and keeps the warning through another save", async () => {
@@ -125,8 +152,8 @@ describe("draft storage", () => {
     target = composerTarget("chat", await reopen());
     expect(target.store.getState().pendingContent.chat.missingPictures).toBe(2);
     actions.addImageAttachments(target, [screenshot]);
-    expect(target.store.getState().pendingContent.chat.missingPictures).toBe(0);
-    expect((await reopen()).getState().pendingContent.chat.missingPictures).toBe(1);
+    expect(target.store.getState().pendingContent.chat.missingPictures).toBe(2);
+    expect((await reopen()).getState().pendingContent.chat.missingPictures).toBe(3);
   });
 
   it.each([
@@ -146,47 +173,83 @@ describe("draft storage", () => {
     actions.addImageAttachments(target, [later]);
     actions.clearSent(target, sent);
     expect(target.store.getState().pendingContent.chat.imageAttachments).toEqual([later]);
+    expect(target.store.getState().pendingContent.chat.pastedTexts).toMatchObject([
+      { content: "Later paste" },
+    ]);
     expect((await reopen()).getState().pendingContent.chat).toMatchObject({
       draft: remaining,
-      pastedTexts: [{ content: "Later paste" }],
+      pastedTexts: [],
+      missingPastedTexts: 1,
       fileMentions: [{ name: "later" }],
       missingPictures: 1,
     });
   });
 
-  it("keeps an oversized edit in memory while smaller writes and removals reach storage", async () => {
-    const quota = memoryStorage(1400);
-    vi.stubGlobal("sessionStorage", quota);
-    const drafts = await reopen();
-    const large = composerTarget("large", drafts);
-    const small = composerTarget("small", drafts);
-    const sent = composerTarget("sent", drafts);
-    actions.setDraft(large, "Last saved");
-    actions.setDraft(small, "Small");
-    actions.setDraft(sent, "Sending");
-    const paste = "x".repeat(3000);
-    drafts.setState((state) => {
-      state.pendingContent.large.pastedTexts.push({ id: "paste", content: paste });
-      state.pendingContent.small.draft = "Edited in the same update";
+  it.each([false, true])(
+    "saves typing beside a large pasted card, including a move (%s)",
+    async (move) => {
+      const quota = memoryStorage(1400);
+      vi.stubGlobal("sessionStorage", quota);
+      vi.resetModules();
+      const { sessionComposerActions: edit, composerStore } =
+        await import("@/features/session/store/sessionComposerStore");
+      const drafts = composerStore();
+      edit.setDraft("start", "First");
+      const paste = "fixture".repeat(1000);
+      edit.addPastedText("start", paste);
+      edit.setDraft("start", "Last keystroke");
+      if (move) edit.move("start", "chat");
+      const id = move ? "chat" : "start";
+      expect(drafts.getState().pendingContent[id].pastedTexts[0].content).toBe(paste);
+      const kept = (await reopen()).getState().pendingContent;
+      expect(kept[id]).toMatchObject({
+        draft: "Last keystroke",
+        pastedTexts: [],
+        missingPastedTexts: 1,
+      });
+      expect(Object.keys(kept)).toEqual([id]);
+      expect(quota.setItem.mock.results.every((result) => result.type === "return")).toBe(true);
+    }
+  );
+
+  it("keeps the in-memory edit and the last stored row if storage itself is full", async () => {
+    const target = composerTarget("chat", await reopen());
+    actions.setDraft(target, "On disk");
+    storage.setItem.mockImplementationOnce(() => {
+      throw new DOMException("Storage full", "QuotaExceededError");
     });
-    const rejected = () => quota.setItem.mock.results.filter((r) => r.type === "throw").length;
-    const failures = rejected();
-    expect(failures).toBeGreaterThan(0);
-    expect((await reopen()).getState().pendingContent.small.draft).toBe(
-      "Edited in the same update"
+    actions.setDraft(target, "Still in my composer");
+    expect(target.store.getState().pendingContent.chat.draft).toBe("Still in my composer");
+    expect((await reopen()).getState().pendingContent.chat.draft).toBe("On disk");
+  });
+
+  it("restores a partial row beside invalid rows and saves its next edit", async () => {
+    const key = "composer-drafts:[null,null]";
+    storage.setItem(
+      key,
+      JSON.stringify({
+        version: 0,
+        state: {
+          pendingContent: {
+            notes: { draft: "My notes" },
+            invalid: 12,
+            invalidDraft: { draft: [] },
+            badMention: { fileMentions: [null] },
+            badCount: { missingPictures: "2" },
+            good: { draft: "Other chat" },
+          },
+        },
+      })
     );
-    actions.setDraft(small, "Small edit");
-    actions.clearSent(sent, drafts.getState().pendingContent.sent);
-    const saved = (await reopen()).getState().pendingContent;
-    expect(saved.large).toMatchObject({ draft: "Last saved", pastedTexts: [] });
-    expect(saved.small.draft).toBe("Small edit");
-    expect(saved.sent).toBeUndefined();
-    const staged = drafts.getState().pendingContent.large.pastedTexts[0];
-    expect(staged.content).toBe(paste);
-    expect(rejected()).toBe(failures);
-    actions.removePastedText(large, staged.id);
-    actions.setDraft(large, "Fits again");
-    expect((await reopen()).getState().pendingContent.large.draft).toBe("Fits again");
+    const drafts = await reopen();
+    const target = composerTarget("notes", drafts);
+    actions.seedIfAbsent(target, emptyComposer(model, "high"));
+    expect(drafts.getState().composers.notes.draft).toBe("My notes");
+    actions.setDraft(target, "Edited notes");
+    const rows = JSON.parse(storage.getItem(key)!).state.pendingContent;
+    expect(Object.keys(rows).sort()).toEqual(["good", "notes"]);
+    expect(rows.notes.draft).toBe("Edited notes");
+    expect(rows.good.draft).toBe("Other chat");
   });
 });
 

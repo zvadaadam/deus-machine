@@ -1,12 +1,4 @@
-/**
- * The chat's composer, on a workspace that has no chat yet. Keyed by the
- * workspace (there is no session to key it by): what is typed here moves to
- * the first chat's composer when it opens (useFirstMessageDelivery).
- *
- * Sending makes the content the message that waits for the workspace. One
- * waits per workspace: while one does, the follow-up stays in the box until
- * the chat opens.
- */
+/** This workspace has no chat yet. Its draft moves to the first chat when it opens. */
 import type { Workspace } from "@/shared/types";
 import { DEFAULT_MODEL } from "@/shared/agents";
 import { useDefaultThinkingLevel } from "@/features/settings/api";
@@ -15,7 +7,7 @@ import {
   pendingFirstMessages,
   useWorkspaceStartStore,
 } from "@/features/workspace/store/workspaceStartStore";
-import { useSessionComposerStore } from "../store/sessionComposerStore";
+import { composerStore } from "../store/sessionComposerStore";
 import { ImageDropTarget } from "./ImageDropTarget";
 import { MessageInput } from "./MessageInput";
 
@@ -24,7 +16,7 @@ export function WorkspaceStartComposer({ workspace }: { workspace: Workspace }) 
   const defaultThinking = useDefaultThinkingLevel();
 
   const handleSend = (message: string) => {
-    const composer = useSessionComposerStore.getState().composers[workspace.id];
+    const composer = composerStore().getState().composers[workspace.id];
     if (!composer || pendingFirstMessages.get(workspace.id)) return false;
     pendingFirstMessages.set(workspace.id, {
       message,

@@ -1,10 +1,7 @@
-/**
- * To survive reload and relaunch, drafts keep plain content and picture counts in this
- * window's storage under the runtime's host and account, while pictures stay in memory.
- */
-import { createStore, useStore } from "zustand";
-import { shallow } from "zustand/shallow";
-import { createJSONStorage, persist, type PersistStorage } from "zustand/middleware";
+/** Typed drafts and notes survive reload under the runtime's host and account, while pictures and pasted cards stay in memory. */
+import { createStore } from "zustand";
+import { z } from "zod";
+import { createJSONStorage, persist } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import type { QueryClient } from "@tanstack/react-query";
 import { capabilities } from "@/platform/capabilities";
@@ -16,22 +13,31 @@ import type { FileMention } from "../ui/FileMentionCard";
 import type { SkillMention } from "../ui/SkillMentionCard";
 import { processImageFiles, type ImageAttachment } from "../lib/imageAttachments";
 
-export interface PastedText {
-  id: string;
-  content: string;
+function storedObjects<T extends object>() {
+  return z
+    .array(z.custom<T>((item) => item !== null && typeof item === "object" && !Array.isArray(item)))
+    .default([]);
 }
-
-interface StagedContent {
-  draft: string;
-  pastedTexts: PastedText[];
-  inspectedElements: InspectedElement[];
-  fileMentions: FileMention[];
-  skillMentions: SkillMention[];
+const count = z.number().int().nonnegative().default(0);
+const storedRow = z.object({
+  draft: z.string().default(""),
+  fileMentions: storedObjects<FileMention>(),
+  skillMentions: storedObjects<SkillMention>(),
+  inspectedElements: storedObjects<InspectedElement>(),
+  missingPictures: count,
+  missingPastedTexts: count,
+});
+type KeptDraft = z.infer<typeof storedRow>;
+interface StagedContent extends KeptDraft {
+  pastedTexts: { id: string; content: string }[];
   imageAttachments: ImageAttachment[];
-  missingPictures: number;
 }
 
-export interface ComposerState extends StagedContent {
+function stagedContent(row: KeptDraft = storedRow.parse({})): StagedContent {
+  return { ...row, pastedTexts: [], imageAttachments: [] };
+}
+
+interface ComposerState extends StagedContent {
   model: string;
   thinkingLevel: ThinkingLevel;
   planModeEnabled: boolean;
@@ -43,107 +49,61 @@ interface State {
   pendingContent: Record<string, StagedContent>;
 }
 
-const emptyContent = (): StagedContent => ({
-  draft: "",
-  pastedTexts: [],
-  inspectedElements: [],
-  fileMentions: [],
-  skillMentions: [],
-  imageAttachments: [],
-  missingPictures: 0,
+export function emptyComposer(model: string, thinkingLevel: ThinkingLevel): ComposerState {
+  return { ...stagedContent(), model, thinkingLevel, planModeEnabled: false };
+}
+
+function hasDraft(row: KeptDraft) {
+  const notes = row.fileMentions.length + row.skillMentions.length + row.inspectedElements.length;
+  return Boolean(row.draft || notes || row.missingPictures || row.missingPastedTexts);
+}
+
+const storedRows = z.object({
+  pendingContent: z.record(z.string(), storedRow.optional().catch(undefined)),
 });
 
-export function emptyComposer(model: string, thinkingLevel: ThinkingLevel): ComposerState {
-  return { ...emptyContent(), model, thinkingLevel, planModeEnabled: false };
-}
-
-const NO_PICTURES: ImageAttachment[] = [];
-
-function keptDrafts({ composers, pendingContent }: State): Pick<State, "pendingContent"> {
-  const drafts: Record<string, StagedContent> = {};
-  for (const [id, content] of Object.entries({ ...pendingContent, ...composers })) {
-    const {
-      draft,
-      pastedTexts,
-      inspectedElements,
-      fileMentions,
-      skillMentions,
-      imageAttachments,
-      missingPictures,
-    } = content;
-    if (
-      draft ||
-      pastedTexts.length ||
-      inspectedElements.length ||
-      fileMentions.length ||
-      skillMentions.length ||
-      imageAttachments.length ||
-      missingPictures
-    ) {
-      drafts[id] = {
-        draft,
-        pastedTexts,
-        inspectedElements,
-        fileMentions,
-        skillMentions,
-        imageAttachments: NO_PICTURES,
-        missingPictures: missingPictures + imageAttachments.length,
-      };
-    }
-  }
-  return { pendingContent: drafts };
-}
-
 function createDraftStore(name: string) {
-  type Kept = ReturnType<typeof keptDrafts>;
-  const json = createJSONStorage<Kept>(() =>
+  const json = createJSONStorage<unknown>(() =>
     capabilities.singleWindow ? localStorage : sessionStorage
   );
-  let durable: State["pendingContent"] = {};
-  let previous = durable;
-  const storage: PersistStorage<Kept> = {
-    getItem: (key) => json?.getItem(key) ?? null,
-    removeItem: (key) => json?.removeItem(key),
-    setItem(key, { state: { pendingContent }, version }) {
-      function write(drafts: State["pendingContent"]) {
-        try {
-          json?.setItem(key, { state: { pendingContent: drafts }, version });
-          durable = drafts;
-          return true;
-        } catch {
-          return false;
-        }
-      }
-      // Compose the next write from the last versions that fit and the edits
-      // made now. Typing elsewhere must not serialize a rejected paste again.
-      const edits = Object.entries(pendingContent).filter(
-        ([id, draft]) => !shallow(previous[id], draft)
-      );
-      const removed = Object.keys(durable).filter((id) => !(id in pendingContent));
-      previous = pendingContent;
-      if (!edits.length && !removed.length) return;
-      const kept = { ...durable };
-      for (const id of removed) delete kept[id];
-      if (write({ ...kept, ...Object.fromEntries(edits) }) || !edits.length) return;
-      // If a combined update exceeded quota, still save its removals and
-      // any smaller edits, leaving the oversized content in memory.
-      if (removed.length) write(kept);
-      if (edits.length > 1) {
-        for (const [id, draft] of edits) write({ ...durable, [id]: draft });
-      }
-    },
-  };
   return createStore<State>()(
     persist(
-      immer(() => ({ composers: {}, pendingContent: {} })),
+      immer((): State => ({ composers: {}, pendingContent: {} })),
       {
         name,
-        storage,
-        partialize: keptDrafts,
-        merge: (saved, state) => {
-          durable = (saved as Kept | undefined)?.pendingContent ?? {};
-          previous = durable;
-          return { ...state, pendingContent: durable };
+        storage: {
+          getItem: (key) => json?.getItem(key) ?? null,
+          removeItem: (key) => json?.removeItem(key),
+          setItem(key, value) {
+            try {
+              json?.setItem(key, value);
+            } catch {
+              /* Storage may be full. The renderer still holds the entire draft. */
+            }
+          },
+        },
+        partialize({ composers, pendingContent }) {
+          const rows: Record<string, KeptDraft> = {};
+          for (const [id, content] of Object.entries({ ...pendingContent, ...composers })) {
+            const row = {
+              draft: content.draft,
+              fileMentions: content.fileMentions,
+              skillMentions: content.skillMentions,
+              inspectedElements: content.inspectedElements,
+              missingPictures: content.missingPictures + content.imageAttachments.length,
+              missingPastedTexts: content.missingPastedTexts + content.pastedTexts.length,
+            };
+            if (hasDraft(row)) rows[id] = row;
+          }
+          return { pendingContent: rows };
+        },
+        merge(saved, state) {
+          const pendingContent: State["pendingContent"] = {};
+          const rows = storedRows.safeParse(saved);
+          for (const [id, row] of Object.entries(rows.data?.pendingContent ?? {})) {
+            if (row && hasDraft(row)) pendingContent[id] = stagedContent(row);
+          }
+          return { ...state, pendingContent };
         },
       }
     )
@@ -151,6 +111,7 @@ function createDraftStore(name: string) {
 }
 
 export type DraftStore = ReturnType<typeof createDraftStore>;
+export const HOME_COMPOSER_ID = "home";
 const scopes = new Map<string, DraftStore>();
 export function composerStore(cache: QueryClient = queryClient): DraftStore {
   const identity = runtimeForQueryClient(cache)?.identity;
@@ -162,11 +123,6 @@ export function composerStore(cache: QueryClient = queryClient): DraftStore {
   }
   return store;
 }
-
-export function useSessionComposerStore<T>(select: (state: State) => T): T {
-  return useStore(composerStore(), select);
-}
-useSessionComposerStore.getState = () => composerStore().getState();
 
 /** Capture the owner before a send or file read can outlive the current host. */
 export const composerTarget = (id: string, store = composerStore()) => ({ id, store });
@@ -190,7 +146,7 @@ export async function attachImageFiles(target: Target, files: File[]): Promise<v
 function edit(target: Target, recipe: (c: StagedContent) => void) {
   const { id, store } = resolve(target);
   store.setState((s) => {
-    const content = s.composers[id] ?? (s.pendingContent[id] ??= emptyContent());
+    const content = s.composers[id] ?? (s.pendingContent[id] ??= stagedContent());
     recipe(content);
   });
 }
@@ -212,6 +168,7 @@ function withContent<T extends StagedContent>(base: T, extra: StagedContent): T 
     skillMentions: [...base.skillMentions, ...extra.skillMentions],
     imageAttachments: [...base.imageAttachments, ...extra.imageAttachments],
     missingPictures: base.missingPictures + extra.missingPictures,
+    missingPastedTexts: base.missingPastedTexts + extra.missingPastedTexts,
   };
 }
 function unsent<T extends { id: string }>(current: T[], sent: T[]): T[] {
@@ -251,7 +208,7 @@ export const sessionComposerActions = {
           : s.composers[from];
         delete s.pendingContent[to];
       } else {
-        s.pendingContent[to] = withContent(s.pendingContent[to] ?? emptyContent(), source);
+        s.pendingContent[to] = withContent(s.pendingContent[to] ?? stagedContent(), source);
       }
       delete s.composers[from];
       delete s.pendingContent[from];
@@ -326,16 +283,16 @@ export const sessionComposerActions = {
     if (attachments.length)
       edit(key, (c) => {
         c.imageAttachments.push(...attachments);
-        c.missingPictures = 0;
       });
   },
   removeImageAttachment: (key: Target, id: string) =>
     edit(key, (c) => {
       c.imageAttachments = c.imageAttachments.filter((p) => p.id !== id);
     }),
-  dismissMissingPictures: (key: Target) =>
+  dismissMissingAttachments: (key: Target) =>
     edit(key, (c) => {
       c.missingPictures = 0;
+      c.missingPastedTexts = 0;
     }),
 
   clearSent: (key: Target, sent: StagedContent) =>
@@ -347,6 +304,7 @@ export const sessionComposerActions = {
       c.inspectedElements = unsent(c.inspectedElements, sent.inspectedElements);
       c.imageAttachments = unsent(c.imageAttachments, sent.imageAttachments);
       c.missingPictures = Math.max(0, c.missingPictures - sent.missingPictures);
+      c.missingPastedTexts = Math.max(0, c.missingPastedTexts - sent.missingPastedTexts);
     }),
 
   discard(id: string) {

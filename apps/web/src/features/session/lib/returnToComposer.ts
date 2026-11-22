@@ -22,13 +22,12 @@ import {
 
 /** Put a message into the chat's composer: text and images, ahead of anything
  *  typed there since (it was written first), which is kept. */
-export async function returnMessageToComposer(
+async function returnMessageToComposer(
   sessionId: string,
   message: Pick<Message, "parts">,
-  store: DraftStore = composerStore()
+  store: DraftStore
 ): Promise<void> {
   const { texts, images } = readUserMessageContent(message);
-  // Typed there already, whether the chat's composer exists yet or not.
   const target = composerTarget(sessionId, store);
   const { composers, pendingContent } = store.getState();
   const typed = (composers[sessionId] ?? pendingContent[sessionId])?.draft ?? "";
@@ -46,7 +45,7 @@ export async function returnMessageToComposer(
   await attachImageFiles(target, files);
 }
 
-/** A first message handed back from a failed start may contain pictures too. */
+// A saved prompt can encode image parts, so read it through the same message decoder as a refused send.
 export function returnContentToComposer(
   id: string,
   content: string,

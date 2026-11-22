@@ -21,7 +21,7 @@ import { connect, isConnected } from "@/platform/ws";
 import { track } from "@/platform/analytics";
 import { getAgentHarnessForModel, getModelId } from "@/shared/agents";
 import { COMPACT_CONVERSATION, createPRPrompt } from "../lib/sessionPrompts";
-import { useSessionComposerStore } from "../store/sessionComposerStore";
+import { composerStore } from "../store/sessionComposerStore";
 
 interface UseSessionActionsProps {
   sessionId: string;
@@ -57,7 +57,7 @@ export function useSessionActions({
     async (customContent?: string) => {
       if (sendMessageMutation.isPending) return false;
 
-      const composer = useSessionComposerStore.getState().composers[sessionId];
+      const composer = composerStore().getState().composers[sessionId];
       if (!composer) return false;
 
       const content = customContent || composer.draft.trim();
