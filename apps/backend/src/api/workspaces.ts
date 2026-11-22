@@ -103,13 +103,8 @@ export default [
   handle(api.ghLogout, logoutGh),
 
   handle(api.createWorkspace, createWorkspace),
-  handle(api.updateWorkspace, async ({ workspaceId }) => {
-    await unarchiveWorkspace(workspaceId);
-    invalidate(["workspaces", "sessions"]);
-  }),
-  handle(api.archiveWorkspace, async ({ workspaceId }) => {
-    if (await archiveWorkspace(workspaceId)) invalidate(["workspaces"]);
-  }),
+  handle(api.updateWorkspace, ({ workspaceId }) => unarchiveWorkspace(workspaceId)),
+  handle(api.archiveWorkspace, ({ workspaceId }) => archiveWorkspace(workspaceId)),
   handle(api.updateWorkspaceTitle, ({ workspaceId, title }) => {
     const db = getDatabase();
     if (!getWorkspaceRaw(db, workspaceId)) throw new NotFoundError("Workspace not found");

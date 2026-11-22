@@ -509,7 +509,7 @@ export function changeWorkspaceState<T>(workspaceId: string, change: () => Promi
 export const CLOUD_STILL_STARTING =
   "This cloud workspace is still starting. Archive it once it is ready.";
 
-/** The API and assistants' host publish after the confirmed pause, archive, local effects and checkout cleanup. */
+/** archiveWorkspace publishes after the confirmed pause, archive, local effects and checkout cleanup. */
 export function markArchived(
   workspace: Pick<WorkspaceRow, "id" | "kind" | "provider_workspace_id">,
   by: Origin | null = null
@@ -530,7 +530,7 @@ export function markArchived(
   else return attempt?.settle();
 }
 
-/** The updateWorkspace API publishes after unarchiveWorkspace finishes wake and the workflow update. */
+/** unarchiveWorkspace publishes after the wake and workflow update succeed. */
 export function markRestored(workspaceId: string) {
   const db = getDatabase();
   const row = getWorkspaceRaw(db, workspaceId);

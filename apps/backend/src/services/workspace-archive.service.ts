@@ -14,6 +14,7 @@ import {
   queueCloudWake,
 } from "./workspace-lifecycle";
 import { stopWorkspaceSetup } from "./project-environment.service";
+import { invalidate } from "./query-engine";
 import { stopStream } from "./simulator-context";
 import { autoProgressStatus } from "./workspace-status.service";
 
@@ -27,13 +28,13 @@ export function archiveWorkspace(
   workspaceId: string,
   check?: () => void,
   by?: Origin | null
-): Promise<boolean> {
+): Promise<void> {
   return changeWorkspaceState(workspaceId, async () => {
     const workspace = getWorkspaceRaw(getDatabase(), workspaceId);
     if (!workspace) throw new NotFoundError("Workspace not found");
     if (workspace.state === "archived") {
       check?.();
-      return false;
+      return;
     }
     if (workspace.kind === "cloud" && workspace.provider_workspace_id) {
       // Confirm suspension before advertising the workspace as closed.
@@ -53,7 +54,7 @@ export function archiveWorkspace(
     } finally {
       await checkout;
     }
-    return true;
+    invalidate(["workspaces"]);
   });
 }
 
@@ -102,5 +103,6 @@ export function unarchiveWorkspace(workspaceId: string): Promise<void> {
     if (getWorkspaceRaw(getDatabase(), workspaceId)?.status === "done") {
       autoProgressStatus(workspaceId, "in-progress", { force: true });
     }
+    invalidate(["workspaces", "sessions"]);
   });
 }

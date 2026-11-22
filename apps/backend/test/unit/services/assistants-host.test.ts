@@ -775,6 +775,24 @@ describe("each commit re-reads what it depends on, with no await before its writ
     }
   );
 
+  it("publishes one archive when two assistant requests reach the same workspace", async () => {
+    state.stored.claude = "operate";
+    const caller = assistantWho();
+    insertWorkspace("w-close", "close", { startedBy: caller });
+    insertChat("s-close", "w-close", caller);
+    const host = createDeusHost();
+    const changed = vi.fn();
+    state.listeners.add(changed);
+    const target = { kind: "workspace", id: "w-close" } as const;
+    await Promise.all([host.archive!(caller, target), host.archive!(caller, target)]);
+    expect(
+      changed.mock.calls.filter(([resources]) => resources.includes("workspaces"))
+    ).toHaveLength(1);
+    expect(state.db.prepare("SELECT state FROM workspaces WHERE id='w-close'").get()).toEqual({
+      state: "archived",
+    });
+  });
+
   it("H4: a child started after the archive was asked, before its queued update, stops it", async () => {
     const host = createDeusHost();
     insertWorkspace("w-p", "parent", { startedBy: LEAD });
