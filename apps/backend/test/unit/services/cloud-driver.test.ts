@@ -159,6 +159,7 @@ import {
   readCloudPreviewTemplate,
   getCloudIdentityGeneration,
 } from "../../../src/services/agent/cloud/driver";
+import * as simulator from "../../../src/services/agent/cloud/simulator";
 import { getCloudPreviewTemplate } from "../../../src/services/agent/cloud/preview";
 import {
   resetCloudConfigForTests,
@@ -1082,6 +1083,45 @@ describe("cloud driver frame → fold contract", () => {
     capturedOnFrame!({ type: "workspace.state", data: { status: "running" } });
     expect(mockRun).toHaveBeenCalledWith("ready", null, null, null, "deus-ws-1");
     expect(mockInvalidate).toHaveBeenCalled();
+  });
+
+  it.each([
+    ["ready", [["ready", "paused", null, null, "deus-ws-1"]]],
+    ["archived", []],
+  ] as const)("publishes a %s row even when parking its simulator fails", (state, writes) => {
+    mockGet.mockReturnValueOnce({ state, chat: "deus-session-1" });
+    mockRun.mockClear();
+    mockInvalidate.mockClear();
+    const park = vi.spyOn(simulator, "parkCloudSimulator").mockImplementationOnce(() => {
+      expect(mockRun.mock.calls).toEqual(writes);
+      expect(mockInvalidate).not.toHaveBeenCalled();
+      throw new Error("could not park simulator");
+    });
+    try {
+      expect(() =>
+        capturedOnFrame!({ type: "workspace.state", data: { status: "paused" } })
+      ).toThrow("could not park simulator");
+      expect(mockInvalidate).toHaveBeenCalledExactlyOnceWith(["workspaces"], {});
+    } finally {
+      park.mockRestore();
+    }
+  });
+
+  it("skips parking and workspace publication for a missing row", async () => {
+    const park = vi.spyOn(simulator, "parkCloudSimulator");
+    mockInvalidate.mockClear();
+    try {
+      await mockPrepare.withImplementation(
+        () => ({ get: () => undefined, run: mockRun }),
+        () => {
+          capturedOnFrame!({ type: "workspace.state", data: { status: "paused" } });
+        }
+      );
+      expect(park).not.toHaveBeenCalled();
+      expect(mockInvalidate).not.toHaveBeenCalled();
+    } finally {
+      park.mockRestore();
+    }
   });
 
   it.each(["ready", "archived"])(

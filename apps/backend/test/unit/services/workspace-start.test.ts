@@ -918,12 +918,11 @@ exec "$REAL_GIT" "$@"
           await removing.promise;
           db().exec("DROP TRIGGER refuse_chat");
         }
-        const requests = Promise.allSettled([1, 2].map(async () => retryWorkspaceInit("w")));
+        const requests = Promise.allSettled([retryWorkspaceInit("w"), retryWorkspaceInit("w")]);
         await removing.promise;
         const stateDuringCleanup = row("w").state;
         const branchDuringCleanup = branches();
-        if (stateDuringCleanup === "initializing")
-          expect(() => deleteFailedWorkspace("w")).toThrow();
+        expect(() => deleteFailedWorkspace("w")).toThrow();
 
         release.resolve();
         const results = await requests;

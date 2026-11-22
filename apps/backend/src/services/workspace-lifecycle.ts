@@ -212,7 +212,6 @@ export function claimLocalRetry(workspaceId: string) {
   const db = getDatabase();
   const row = db.prepare(`${START_ROW} WHERE w.id = ?`).get(workspaceId) as StartRow | undefined;
   if (!hasLocalStartInputs(row)) throw new NotFoundError("Workspace not found");
-  // The claim: two clicks, or two devices, start it once.
   const claimed = db
     .prepare(
       `UPDATE workspaces
@@ -264,13 +263,11 @@ export function interruptedStarts() {
   );
 }
 
-type SetupFailure = { message: string; detail?: string | null; exitCode?: number | null };
-
 /** The row is the app's status; the file lets a turn already running check it with cat. */
 export function setSetupStatus(
   workspaceId: string,
   status: SetupStatus,
-  failure?: SetupFailure
+  failure?: { message: string; detail?: string | null; exitCode?: number | null }
 ): boolean {
   const update = getDatabase()
     .prepare(
@@ -310,7 +307,6 @@ export function insertCloudWorkspace(
 }
 
 export function claimCloudRetry(workspaceId: string): boolean {
-  // The claim: two clicks, or two devices, provision it once.
   const claimed = getDatabase()
     .prepare(
       `UPDATE workspaces
@@ -519,7 +515,7 @@ export function markRestored(workspaceId: string) {
   if (row.kind === "cloud" && row.provider_workspace_id) {
     // Open the row before waking so the driver can apply an early platform report.
     db.prepare("UPDATE workspaces SET state = ? WHERE id = ?").run(
-      cloudWorkspaceChat(workspaceId)?.chat ? "ready" : "initializing",
+      selectedWorkspaceChat(workspaceId) ? "ready" : "initializing",
       workspaceId
     );
   } else {

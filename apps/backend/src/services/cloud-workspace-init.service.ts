@@ -336,7 +336,7 @@ export async function refreshWorkspaceGithubToken(
         ? { type: "secret" }
         : undefined,
   });
-  setInlineMintStamp(workspace, mint.token ? Date.now() : 0);
+  setInlineMintStamp(workspace.provider_workspace_id, mint.token ? Date.now() : 0);
   if (generationAtStart === getCloudIdentityGeneration()) {
     markWorkspaceTokenRefreshed(workspace.provider_workspace_id);
   }
@@ -438,14 +438,10 @@ function getInlineMintStamp(workspace: { provider_workspace_id?: string | null }
   return row?.last_inline_mint_at ?? null;
 }
 
-function setInlineMintStamp(
-  workspace: { provider_workspace_id?: string | null },
-  stamp: number | null
-): void {
-  if (!workspace.provider_workspace_id) return;
+function setInlineMintStamp(providerWorkspaceId: string, stamp: number | null): void {
   getDatabase()
     .prepare("UPDATE workspaces SET last_inline_mint_at = ? WHERE provider_workspace_id = ?")
-    .run(stamp, workspace.provider_workspace_id);
+    .run(stamp, providerWorkspaceId);
 }
 
 const githubTokenRefreshes = new Map<string, Promise<RepositoryAuth | null>>();
@@ -940,7 +936,7 @@ async function provisionCloudWorkspace(
     });
     if (!attachCloudComputer(workspaceId, provider.id, token)) return;
     try {
-      setInlineMintStamp({ provider_workspace_id: provider.id }, inlineMintStampAtCreate);
+      setInlineMintStamp(provider.id, inlineMintStampAtCreate);
       if (repositoryAuth) markWorkspaceTokenRefreshed(provider.id);
     } finally {
       invalidate(["workspaces", "sessions", "session"], {});

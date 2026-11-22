@@ -204,7 +204,7 @@ export function shutdownCloudDriver(): void {
 
 // ---- Workspace row effects ----
 
-export function recordWorkspaceStatus(
+function recordWorkspaceStatus(
   workspaceId: string,
   data: { status?: string; step?: string }
 ): void {

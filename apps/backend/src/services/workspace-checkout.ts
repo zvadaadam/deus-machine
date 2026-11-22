@@ -38,11 +38,6 @@ export interface InitContext {
   repoOriginUrl?: string | null;
 }
 
-interface Failure {
-  message: string;
-  detail: string | null;
-}
-
 const succeeds = (command: Promise<unknown>): Promise<boolean> =>
   command.then(
     () => true,
@@ -261,7 +256,7 @@ export async function removeWorktree(
 
 // ─── Failure ────────────────────────────────────────────────────
 
-function describeFailure(stage: Stage, error: unknown, ctx: InitContext): Failure {
+function describeFailure(stage: Stage, error: unknown, ctx: InitContext) {
   const detail = error instanceof Error ? error.message : String(error);
   if (!fs.existsSync(ctx.repoRootPath))
     return {
