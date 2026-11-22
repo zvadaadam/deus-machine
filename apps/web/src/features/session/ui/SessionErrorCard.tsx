@@ -15,7 +15,7 @@ import { getAgentLabel } from "@/shared/agents";
 import type { LocalHarness } from "@shared/agent-auth";
 import { useAgentAuth, useAgentAuthEvents } from "@/features/settings/api/settings.queries";
 import {
-  canSignIn,
+  localSignIn,
   readLocalAgent,
   signInLocalAgent,
 } from "@/features/settings/lib/local-agent-login";
@@ -62,6 +62,24 @@ export function SessionErrorCard({
     .with(PROVIDER_ACCOUNT_CATEGORY, () => "AI account needed")
     .otherwise(() => (agentHarness ? `${getAgentLabel(agentHarness)} Error` : "Error"));
 
+  let action;
+  if (category === "auth" && !cloud && agentHarness) {
+    action = <LoginAction harness={agentHarness} />;
+  } else if (category === "auth" || category === PROVIDER_ACCOUNT_CATEGORY) {
+    action = <AIProvidersButton />;
+  } else if (onRetryInNewChat) {
+    action = (
+      <Button
+        variant={category === "context_limit" ? "outline" : "ghost"}
+        size="xs"
+        onClick={onRetryInNewChat}
+      >
+        <MessageSquarePlus className="mr-1.5 size-3.5" />
+        {category === "context_limit" ? "New session" : "New chat"}
+      </Button>
+    );
+  }
+
   return (
     <div className="border-destructive/20 border-l-destructive bg-destructive/5 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-l-2 px-3 py-2.5">
       <div className="min-w-[min(100%,16rem)] flex-1">
@@ -76,22 +94,7 @@ export function SessionErrorCard({
           </p>
         )}
       </div>
-      {category === "auth" && !cloud && agentHarness ? (
-        <LoginAction harness={agentHarness} />
-      ) : category === "auth" || category === PROVIDER_ACCOUNT_CATEGORY ? (
-        <AIProvidersButton />
-      ) : (
-        onRetryInNewChat && (
-          <Button
-            variant={category === "context_limit" ? "outline" : "ghost"}
-            size="xs"
-            onClick={onRetryInNewChat}
-          >
-            <MessageSquarePlus className="mr-1.5 size-3.5" />
-            {category === "context_limit" ? "New session" : "New chat"}
-          </Button>
-        )
-      )}
+      {action}
     </div>
   );
 }
@@ -100,26 +103,22 @@ export function SessionErrorCard({
 function LoginAction({ harness }: { harness: LocalHarness }) {
   const auth = useAgentAuth();
   useAgentAuthEvents();
-  const state = readLocalAgent(auth, harness);
   const [busy, setBusy] = useState(false);
-  if (state.status === "signed-out") {
-    if (state.login?.codeUrl && !state.login.url)
-      return <LoginCodeForm loginId={state.login.loginId} />;
-    if (!state.login && canSignIn(state.auth))
-      return (
-        <Button
-          variant="outline"
-          size="xs"
-          disabled={busy}
-          onClick={() => {
-            setBusy(true);
-            void signInLocalAgent(harness, state.auth).finally(() => setBusy(false));
-          }}
-        >
-          <LogIn className="mr-1.5 size-3.5" />
-          Sign in
-        </Button>
-      );
-  }
-  return <AIProvidersButton />;
+  const signIn = localSignIn(readLocalAgent(auth, harness));
+  if (!signIn) return <AIProvidersButton />;
+  if (signIn.kind === "code") return <LoginCodeForm loginId={signIn.loginId} />;
+  return (
+    <Button
+      variant="outline"
+      size="xs"
+      disabled={busy}
+      onClick={() => {
+        setBusy(true);
+        void signInLocalAgent(harness, signIn.auth).finally(() => setBusy(false));
+      }}
+    >
+      <LogIn className="mr-1.5 size-3.5" />
+      Sign in
+    </Button>
+  );
 }

@@ -17,25 +17,15 @@
  *   2. It projects only the fields the selectors read: id, turn, role, parent
  *      tool call, parts. Per-turn accounting is rendered separately from
  *      the turn records and does not affect message grouping.
- *
- * The selector view synthesizes active/ended state from `sessions.status`
- * for the loaded messages. It is not the persisted turn history: empty
- * outcomes and attribution are joined by `chatTimeline` afterward.
  */
 
 import type { ConversationMessage, ConversationState } from "@shared/protocol-types";
 import type { Message, SessionTurn } from "../types";
 
-/**
- * Project rows into the state the selectors read.
- *
- * `working` marks the last turn active. Without it every turn reads as ended
- * and `agentActivity` can only answer "idle" — the indicator would never move.
- */
 export function conversationView(
   messages: Message[],
   working: boolean,
-  latest?: SessionTurn
+  records: readonly SessionTurn[] = []
 ): ConversationState {
   const timeline: ConversationMessage[] = messages.map((message) => ({
     kind: "message",
@@ -50,23 +40,20 @@ export function conversationView(
     startedAt: message.sent_at ? Date.parse(message.sent_at) : 0,
   }));
 
-  // A start can precede its first message, and an end can precede the session's idle status.
-  const latestEnded = latest?.endedAt !== undefined || !!latest?.stopReason;
-  const lastTurnId = latest && !latestEnded ? latest.turnId : timeline.at(-1)?.turnId;
-  const active = working && !(latestEnded && latest?.turnId === lastTurnId);
+  // A later turn settles its predecessor even if its end never arrived.
+  const latest = records.at(-1);
+  const messageTurnId = messages.at(-1)?.turn_id;
+  let open: SessionTurn | undefined;
+  if (latest && latest.endedAt === undefined && !latest.stopReason) {
+    open = latest;
+  } else if (working && messageTurnId && !records.some((turn) => turn.turnId === messageTurnId)) {
+    open = { turnId: messageTurnId };
+  }
   return {
     timeline,
-    turns:
-      lastTurnId === undefined
-        ? []
-        : [
-            {
-              turnId: lastTurnId,
-              status: active ? "active" : "ended",
-              errors: [],
-              startedAt: 0,
-            },
-          ],
+    turns: open
+      ? [{ turnId: open.turnId, startedAt: open.startedAt ?? 0, status: "active", errors: [] }]
+      : [],
     permissions: [],
     elicitations: [],
     totals: { input: 0, output: 0 },

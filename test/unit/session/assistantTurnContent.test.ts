@@ -2,17 +2,27 @@ import { expect, it } from "vitest";
 import { assistantTurnContent } from "@/features/session/lib/assistantTurnContent";
 import type { Part, ToolPart } from "@shared/protocol-types";
 
-const text = (id: string): Part => ({ type: "text", id, text: id, state: "done" });
+const message = { sessionId: "session", messageId: "reply" };
+const time = { start: 1, end: 2 };
+const done = { status: "completed", input: {}, output: "", time } as const;
+const text = (id: string): Part => ({ ...message, type: "text", id, text: id, state: "done" });
 const tool = (id: string, overrides: Partial<ToolPart> = {}): ToolPart => ({
+  ...message,
   type: "tool",
   id,
   toolCallId: id,
   toolName: "Bash",
   kind: "execute",
-  state: { status: "completed", title: "Run checks", content: [] },
+  state: done,
   ...overrides,
 });
-const reasoning: Part = { id: "think", type: "reasoning", text: "Tracing the call", state: "done" };
+const reasoning: Part = {
+  ...message,
+  id: "think",
+  type: "reasoning",
+  text: "Tracing the call",
+  state: "done",
+};
 const shape = (blocks: ReturnType<typeof assistantTurnContent>) =>
   blocks.map((block) =>
     block.type === "activity" ? block.parts.map((part) => part.id) : block.id
@@ -35,8 +45,8 @@ it("a reasoning or tool run keeps its first part's identity when more parts arri
 });
 
 it("keeps failed tools, questions, plans, screenshots and media visible when activity is collapsed", () => {
-  const visible = [
-    tool("failed", { state: { status: "failed", error: "Command failed" } }),
+  const visible: Part[] = [
+    tool("failed", { state: { status: "failed", input: {}, time, error: "Command failed" } }),
     tool("question", { toolName: "AskUserQuestion" }),
     tool("plan", { toolName: "ExitPlanMode" }),
     tool("mode", { kind: "switch_mode" }),
@@ -53,16 +63,17 @@ it("keeps failed tools, questions, plans, screenshots and media visible when act
     tool("old-codex-recording", { toolName: "deus_chat_tools.recording_stop" }),
     tool("image-output", {
       state: {
-        status: "completed",
+        ...done,
         content: [{ type: "image", data: "sample", mimeType: "image/png" }],
       },
     }),
     {
+      ...message,
       type: "image",
       id: "image",
       url: "https://example.test/image.png",
       mimeType: "image/png",
-    } as Part,
+    },
   ];
   for (const card of visible) {
     expect(shape(assistantTurnContent([reasoning, card, tool("after")]))).toEqual([

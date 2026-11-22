@@ -91,9 +91,10 @@ export function Chat({
   // Chat owns its scroll behavior entirely — refs, hook, and button.
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  // "New chat" opens a fresh tab through the Mac backend; web-direct
-  // has no such lane, so the offer hides rather than failing on click.
-  const retryInNewChat = isCloudDirectWebMode() ? undefined : onRetryInNewChat;
+  const directWeb = isCloudDirectWebMode();
+  // A new chat opens a tab through the Mac backend, which the hosted web cannot reach.
+  const retryInNewChat = directWeb ? undefined : onRetryInNewChat;
+  const working = ACTIVE_TURN_STATUSES.includes(sessionStatus);
 
   // --- Message entrance animation tracking ---
   // Counter-based: only the turn at index > maxAnimatedTurnIndex gets the
@@ -131,16 +132,8 @@ export function Chat({
     activity,
     lastRole,
   } = useMemo(
-    () =>
-      buildChatTimeline(
-        messages,
-        compactions,
-        ACTIVE_TURN_STATUSES.includes(sessionStatus),
-        cloudEnvEntries,
-        turns,
-        workspaceStart
-      ),
-    [messages, compactions, sessionStatus, cloudEnvEntries, turns, workspaceStart]
+    () => buildChatTimeline(messages, compactions, working, cloudEnvEntries, turns, workspaceStart),
+    [messages, compactions, working, cloudEnvEntries, turns, workspaceStart]
   );
 
   /**
@@ -244,8 +237,7 @@ export function Chat({
   // The working indicator sits tighter under a user message than under a
   // finished assistant turn.
   const indicatorMarginClass = lastRole === "user" ? "mt-0" : "mt-1";
-  const showSessionError =
-    !!errorMessage && (sessionStatus === "error" || ACTIVE_TURN_STATUSES.includes(sessionStatus));
+  const showSessionError = !!errorMessage && (sessionStatus === "error" || working);
 
   return (
     <div className={cn("relative min-h-0 flex-1", className)}>
@@ -360,8 +352,8 @@ export function Chat({
                             <AssistantTurn
                               messages={t.messages}
                               turn={t.record}
-                              isLatest={t.isLatest}
-                              isWorking={ACTIVE_TURN_STATUSES.includes(sessionStatus)}
+                              isOpen={t.isOpen}
+                              isStreaming={t.isOpen && t.isLatest && working}
                               startedAt={t.startedAt}
                             />
                           ))
@@ -434,7 +426,7 @@ export function Chat({
                       message={errorMessage}
                       category={errorCategory}
                       agentHarness={agentHarness}
-                      cloud={workspaceKind === "cloud" || isCloudDirectWebMode()}
+                      cloud={workspaceKind === "cloud" || directWeb}
                       onRetryInNewChat={retryInNewChat}
                     />
                   </m.div>

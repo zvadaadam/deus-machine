@@ -25,6 +25,7 @@ export type AssistantTurnData = {
   messages: Message[];
   firstMessageIndex: number;
   isLatest: boolean;
+  isOpen: boolean;
   startedAt: string | null;
 };
 
@@ -70,10 +71,6 @@ export interface ChatTimeline {
  * Rows → the timeline, in the four steps the component used to hold:
  * filter what renders, read it back as the engine's conversation, group it
  * into turns, splice the compactions in and pre-compute the spacing.
- *
- * `working` is deus's, not the stream's: it comes from `sessions.status`, and
- * `conversationView` needs it to mark the last turn active — without it every
- * turn reads as ended and `agentActivity` can only ever answer "idle".
  */
 export function buildChatTimeline(
   messages: Message[],
@@ -84,10 +81,10 @@ export function buildChatTimeline(
   start?: WorkspaceStart
 ): ChatTimeline {
   const rendered = renderableMessages(messages);
-  const conversation = conversationView(rendered, working, records.at(-1));
-  const grouped = groupTurns(conversation, rendered, records);
-  const active = conversation.turns.find((turn) => turn.status === "active");
-  const items = insertCloudEnv(insertCompactions(grouped, compactions, active?.turnId), envEntries);
+  const conversation = conversationView(rendered, working, records);
+  const openTurnId = conversation.turns.find((turn) => turn.status === "active")?.turnId;
+  const grouped = groupTurns(conversation, rendered, records, openTurnId);
+  const items = insertCloudEnv(insertCompactions(grouped, compactions, openTurnId), envEntries);
   // The message that asked for the workspace, then how the workspace started.
   if (start) {
     const asked = items[0]?.type === "user" ? 1 : 0;
@@ -154,7 +151,8 @@ export function turnStopNotice(reason: string | null | undefined): string | null
 function groupTurns(
   conversation: ConversationState,
   rendered: Message[],
-  records: readonly SessionTurn[]
+  records: readonly SessionTurn[],
+  openTurnId?: string
 ): Turn[] {
   const byId = new Map(records.map((record) => [record.turnId, record]));
   const turns: Turn[] = [];
@@ -183,6 +181,7 @@ function groupTurns(
       messages: slice,
       firstMessageIndex: start,
       isLatest: group.isLatest,
+      isOpen: group.turnId === openTurnId,
       // The clock starts when the user asked, which is the turn before this.
       startedAt: latestUserSentAt,
     });
@@ -211,6 +210,7 @@ function groupTurns(
       messages: [],
       firstMessageIndex: -1,
       isLatest: false,
+      isOpen: false,
       startedAt:
         user?.type === "user"
           ? (user.message.sent_at ?? null)

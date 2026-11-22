@@ -4,9 +4,9 @@ import { Button } from "@/components/ui/button";
 import { openExternal } from "@/platform/native/window";
 import type { LocalHarness } from "@shared/agent-auth";
 import {
-  canSignIn,
   cancelLocalSignIn,
   installLocalAgents,
+  localSignIn,
   signInLocalAgent,
   signOutLocalAgent,
   type LocalAgentState,
@@ -78,6 +78,7 @@ export function LocalAgentRow({
   };
   const login = state.status === "signed-out" ? state.login : undefined;
   const loginPage = login?.url ?? login?.codeUrl;
+  const signIn = localSignIn(state);
 
   return (
     <div className="border-border-subtle space-y-3 rounded-lg border p-4">
@@ -101,12 +102,12 @@ export function LocalAgentRow({
               {state.error ? "Try again" : "Install"}
             </Button>
           )}
-          {state.status === "signed-out" && !login && canSignIn(state.auth) && (
+          {signIn?.kind === "start" && (
             <Button
               variant="outline"
               size="xs"
               disabled={busy}
-              onClick={() => run(() => signInLocalAgent(harness, state.auth))}
+              onClick={() => run(() => signInLocalAgent(harness, signIn.auth))}
             >
               Sign in
             </Button>
@@ -145,7 +146,7 @@ export function LocalAgentRow({
           )}
         </div>
       </div>
-      {login?.codeUrl && !login.url && <LoginCodeForm loginId={login.loginId} />}
+      {signIn?.kind === "code" && <LoginCodeForm loginId={signIn.loginId} />}
     </div>
   );
 }

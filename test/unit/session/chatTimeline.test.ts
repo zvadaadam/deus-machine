@@ -41,6 +41,7 @@ function assistantTurn(turnId: string, sentAt: string): Turn {
     messages: [message({ id: `a-${turnId}`, turn_id: turnId, sent_at: sentAt })],
     firstMessageIndex: 0,
     isLatest: false,
+    isOpen: false,
     startedAt: sentAt,
   };
 }
@@ -220,7 +221,7 @@ describe("buildChatTimeline", () => {
           text: "hi",
           state: "done",
         },
-      ] as Message["parts"],
+      ],
       ...over,
     });
 
@@ -234,6 +235,30 @@ describe("buildChatTimeline", () => {
     sent_at: "2026-08-14T10:00:00.000Z",
   });
   const reply = withText({ id: "a-1", turn_id: "turn-1", sent_at: "2026-08-14T10:00:05.000Z" });
+
+  it("shows the earlier turn's footer and divider after a later turn settles without reading its activity", () => {
+    const later = withText({ id: "a-2", turn_id: "turn-2" });
+    const marker = compaction({ turn_id: "turn-1" });
+    const timeline = buildChatTimeline(
+      [reply, later],
+      [marker],
+      true,
+      [],
+      [
+        { turnId: "turn-1", startedAt: 1 },
+        { turnId: "no-output", startedAt: 2 },
+        { turnId: "turn-2", endedAt: 3 },
+      ]
+    );
+    expect(timeline).toMatchObject({
+      activity: "idle",
+      items: [
+        { type: "assistant", turnId: "turn-1", isOpen: false },
+        { type: "compaction", compaction: marker },
+        { type: "assistant", turnId: "turn-2", isOpen: false },
+      ],
+    });
+  });
 
   it("tells how the workspace started under the message that asked for it", () => {
     const start = {
@@ -450,7 +475,16 @@ it("holds only the active turn's completed compactions until success or stop", (
     message({
       id: turn_id,
       turn_id,
-      parts: [{ id: turn_id, type: "text", text: turn_id, state: "done" }],
+      parts: [
+        {
+          id: turn_id,
+          type: "text",
+          sessionId: "session-1",
+          messageId: turn_id,
+          text: turn_id,
+          state: "done",
+        },
+      ],
     })
   );
   const markers = [

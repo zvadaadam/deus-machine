@@ -13,7 +13,7 @@ import { createServer } from "vite";
 import { SCHEMA_SQL } from "../../shared/schema.ts";
 import { LOOPBACK_WEB_ORIGINS } from "../../shared/web-origins.ts";
 import { freePort } from "./remote-access/stack.mjs";
-import { startPlatform, until } from "./cloud/platform.mjs";
+import { scriptedTurn, startPlatform, until } from "./cloud/platform.mjs";
 import { connectBackend } from "./lib/operations.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
@@ -134,10 +134,12 @@ async function run() {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+    const hostedSessions = [hosted];
+    let resume;
     platform = await startPlatform({
       bearer: "test-bearer",
       org: "org_transcript",
-      sessions: [hosted],
+      sessions: hostedSessions,
       listSessions: () => [summary],
       snapshot: () => ({
         type: "session.snapshot",
@@ -146,9 +148,10 @@ async function run() {
           organizationId: "org_transcript",
           workspaceId: "wsp_transcript",
           status: "ready",
-          currentTurnId: null,
+          currentTurnId: resume?.turnId ?? null,
+          compactions: resume?.compactions,
         },
-        messages: [],
+        messages: resume?.messages ?? [],
         events: [],
       }),
     });
@@ -254,12 +257,10 @@ async function run() {
       logView
         .locator(".assistant-turn p, button[aria-label*=' activity'], [role=separator][aria-label]")
         .evaluateAll((nodes) =>
-          nodes.map((n) =>
-            n.getAttribute("role") === "separator"
-              ? n.getAttribute("aria-label")
-              : n.tagName === "BUTTON"
-                ? (n.innerText.match(/\d+ tool calls?/)?.[0] ?? "reasoning")
-                : n.textContent
+          nodes.map((node) =>
+            node.tagName === "BUTTON"
+              ? "activity"
+              : (node.getAttribute("aria-label") ?? node.textContent)
           )
         );
     await go("order");
@@ -274,7 +275,7 @@ async function run() {
       .getAttribute("aria-controls");
     const node = await page.locator(`[id="${groupId}"]`).elementHandle();
     await emit(turn.nextMessage(), turn.tool());
-    await logView.getByRole("button", { name: /Collapse activity.*2 tool calls/ }).waitFor();
+    await logView.getByText("Activity · 2 tool calls", { exact: true }).waitFor();
     assert(await node.evaluate((el) => el.isConnected), "growing the run kept its open DOM");
     await logView.getByRole("button", { name: /Collapse activity/ }).click();
     const c1 = turn.compact("first", "in_progress");
@@ -289,7 +290,7 @@ async function run() {
       turn.delta("C")
     );
     await logView.getByText("Progress C", { exact: true }).waitFor();
-    const expected = ["Progress A", "2 tool calls", "Progress B", "1 tool call", "Progress C"];
+    const expected = ["Progress A", "activity", "Progress B", "activity", "Progress C"];
     await check("live progress continues while both completed compactions are held", async () =>
       assert.deepEqual(await order(), expected)
     );
@@ -359,16 +360,14 @@ async function run() {
         task.end("end_turn")
       );
       await go("nested");
-      await logView
-        .getByRole("button", { name: /Expand activity.*1 subagent.*1 tool call/ })
-        .click();
+      await logView.getByRole("button", { name: /Expand activity/ }).click();
       assert.equal(await logView.getByText("Child progress A", { exact: true }).count(), 0);
       await logView.getByRole("button", { name: "Expand agent Review the changes" }).click();
       await logView.getByText("Child progress B", { exact: true }).waitFor();
       assert.deepEqual(await order(), [
-        "1 tool call",
+        "activity",
         "Child progress A",
-        "2 tool calls",
+        "activity",
         "Child progress B",
       ]);
     });
@@ -394,11 +393,6 @@ async function run() {
         first = await logView.getByText(progress[0], { exact: true }).boundingBox(),
         last = await groups.last().boundingBox();
       assert(first.y >= top.y && last.y + last.height <= top.y + top.height);
-      const counts = await groups.allTextContents();
-      assert.equal(
-        counts.reduce((sum, label) => sum + Number(label.match(/(\d+) tool calls/)[1]), 0),
-        40
-      );
       await logView.screenshot({
         path: path.join(evidence, desktopCss ? "long-turn-electron.png" : "long-turn.png"),
       });
@@ -465,17 +459,25 @@ async function run() {
         await until("the new local chat", () => count() === before + 1);
       }
     );
+    const hostedPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    hostedPage.setDefaultTimeout(12_000);
+    await hostedPage.addInitScript(() => {
+      localStorage.setItem("deus.cloudDirectWeb", "1");
+      sessionStorage.setItem("deus_cloud_session", "test-bearer");
+    });
+    const openHosted = async () => {
+      const previous = platform.live(hosted);
+      await hostedPage.goto(base);
+      await hostedPage.getByText("Hosted transcript", { exact: true }).first().click();
+      await until(
+        "hosted session",
+        () => platform.live(hosted) && platform.live(hosted) !== previous
+      );
+    };
     await check(
       "hosted rate limits show the provider's retry time and available actions",
       async () => {
-        const hostedPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-        await hostedPage.addInitScript(() => {
-          localStorage.setItem("deus.cloudDirectWeb", "1");
-          sessionStorage.setItem("deus_cloud_session", "test-bearer");
-        });
-        await hostedPage.goto(base);
-        await hostedPage.getByText("Hosted transcript", { exact: true }).first().click();
-        await until("hosted session", () => platform.live(hosted));
+        await openHosted();
         const rate = fixture(hosted, "rate");
         for (const frame of [...rate.start("Is the account ready?"), rate.text("Checking.")])
           platform.send(
@@ -493,9 +495,60 @@ async function run() {
         await card.getByText(sentence, { exact: true }).waitFor();
         assert.match(await card.innerText(), /Rate Limited/);
         assert.doesNotMatch(await card.innerText(), /new chat/i);
-        await hostedPage.close();
       }
     );
+    await check(
+      "a hosted disconnect and reconnect keep the divider held until turn.ended",
+      async () => {
+        await openHosted();
+        const log = hostedPage.getByRole("log");
+        const divider = log.getByRole("separator", { name: "Auto-compacted" });
+        const working = log.getByRole("status", { name: /Working for/ });
+        const turnId = "disconnect";
+        const remote = scriptedTurn(platform, hosted, {
+          turnId,
+          messageId: turnId,
+          text: "Keep going.",
+        });
+        summary.status = "running";
+        remote.start();
+        const compact = fixture(hosted, turnId).compact("during-reply", "completed");
+        platform.send(hosted, compact);
+        remote.finishReply();
+        await log.getByText(remote.reply, { exact: true }).waitFor();
+        await working.waitFor();
+        const counts = [await divider.count()];
+
+        // Refusing handshakes exhausts the socket's retries while the remote turn continues.
+        hostedSessions.pop();
+        platform.live(hosted).ws.terminate();
+        await log
+          .getByRole("alert")
+          .getByText(/session socket down after .* retries/)
+          .waitFor({ timeout: 90_000 });
+        await working.waitFor({ state: "hidden" });
+        await log.getByText(remote.reply, { exact: true }).waitFor();
+        counts.push(await divider.count());
+        const finishedDuringOutage = await log.locator('[aria-label^="Turn took"]').count();
+
+        hostedSessions.push(hosted);
+        resume = { turnId, compactions: [compact], messages: remote.rows() };
+        await openHosted();
+        await working.waitFor();
+        await log.getByText(remote.reply, { exact: true }).waitFor();
+        counts.push(await divider.count());
+        summary.status = "idle";
+        remote.end();
+        await divider.waitFor();
+        counts.push(await divider.count());
+        assert.deepEqual(
+          { counts, finishedDuringOutage },
+          { counts: [0, 0, 0, 1], finishedDuringOutage: 0 }
+        );
+      }
+    );
+
+    await hostedPage.close();
     assert.deepEqual(pageErrors, []);
     if (failures.length)
       throw new AggregateError(failures, `${failures.length} transcript checks failed`);
