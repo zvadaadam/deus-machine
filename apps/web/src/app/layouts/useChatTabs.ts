@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
+import { getErrorMessage } from "@shared/lib/errors";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useCreateSession, useWorkspaceSessions } from "@/features/session/api/session.queries";
 import { getAgentHarnessForModel, type AgentHarness } from "@/shared/agents";
@@ -367,7 +368,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
         setActiveMainTabId(newTab.id);
       } catch (error) {
         console.error("[useChatTabs] Failed to create new session:", error);
-        toast.error("Failed to create new chat session");
+        toast.error(getErrorMessage(error));
       }
     },
     [workspaceId, createSessionMutation]

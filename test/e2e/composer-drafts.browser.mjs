@@ -250,6 +250,7 @@ try {
     );
   const tabs = page.getByRole("tablist", { name: "Session tabs" }).getByRole("tab");
   const data = [];
+  let heldUpdates;
   let refusedId,
     refusal,
     lostId,
@@ -259,8 +260,10 @@ try {
   await page.routeWebSocket(/\/ws$/, (socket) => {
     connections++;
     const server = socket.connectToServer();
-    server.onMessage((raw) => {
+    server.onMessage(async (raw) => {
       const frame = JSON.parse(String(raw));
+      if (heldUpdates && (frame.type === "q:snapshot" || frame.type === "q:delta"))
+        await heldUpdates.promise;
       if (frame.type === "q:mutate_result" && frame.id === refusedId) refusal = frame;
       if (frame.type === "q:mutate_result" && frame.id === lostId) {
         lostReply = frame;
@@ -369,6 +372,24 @@ try {
       await pasted.waitFor();
     }
   );
+  await check("New chat shows the reason after another client archives the workspace", async () => {
+    await page.goto(url(tabsWorkspace));
+    const newChat = page.getByRole("button", { name: "New chat tab", exact: true });
+    await newChat.waitFor();
+    heldUpdates = Promise.withResolvers();
+    try {
+      await host.write("archiveWorkspace", { workspaceId: tabsWorkspace });
+      await newChat.click();
+      const toast = page.locator('[data-sonner-toast][data-type="error"]');
+      assert.equal(
+        await toast.innerText(),
+        "This workspace is archived. Restore it first to open a chat."
+      );
+    } finally {
+      heldUpdates.resolve();
+      heldUpdates = undefined;
+    }
+  });
   const largePaste = "A line of the oversized paste.\n".repeat(210000);
   {
     await page.goto(url(chatWorkspace));
