@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import { makeCloudFrameHandler } from "@/features/session/cloud/cloudFrameHandler";
+import { buildChatTimeline } from "@/features/session/lib/chatTimeline";
 import {
   flushDeltas,
   messagesKey,
@@ -455,19 +456,27 @@ describe("makeCloudFrameHandler", () => {
     expect(page.has_older).toBe(false);
   });
 
-  it("unrolls a snapshot's state.compactions into the page's compactions list", () => {
+  it("keeps a snapshot's running reply open and its compaction held through earlier end-only records", () => {
     const SESSION = "sess-snap-compaction";
     const qc = new QueryClient();
-    seedEmptyPage(qc, SESSION);
     const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
+    const items = () => {
+      const { messages, compactions, turns } = qc.getQueryData<PaginatedMessages>(
+        messagesKey(SESSION)
+      )!;
+      return buildChatTimeline(messages, compactions, true, [], turns).items;
+    };
 
     onFrame({
       type: "session.snapshot",
       state: {
         sessionId: SESSION,
         status: "ready",
-        currentTurnId: null,
-        turns: [],
+        currentTurnId: "t1",
+        turns: [
+          { turnId: "old", endedAt: T - 1, stopReason: "end_turn" },
+          { turnId: "Old", endedAt: T - 1, stopReason: "end_turn" },
+        ],
         compactions: [
           {
             compactionId: "c1",
@@ -488,27 +497,38 @@ describe("makeCloudFrameHandler", () => {
           sessionId: SESSION,
           turnId: "t1",
           outputIndex: 1,
-          role: "user",
+          role: "assistant",
           createdAt: T,
-          parts: [textPart("p1", SESSION, "m1", "a question")],
+          parts: [{ ...textPart("p1", SESSION, "m1", "Still working"), state: "streaming" }],
         },
       ],
       events: [],
-    } as Record<string, unknown>);
-
-    const page = qc.getQueryData<PaginatedMessages>(messagesKey(SESSION))!;
-    expect(page.compactions).toHaveLength(1);
-    expect(page.compactions[0]).toMatchObject({
-      compaction_id: "c1",
-      session_id: SESSION,
-      turn_id: "t1",
-      status: "completed",
-      trigger: "auto",
-      pre_tokens: 100_000,
-      post_tokens: 20_000,
-      summary: "summarized the context",
-      created_at: new Date(T).toISOString(),
     });
+    const history = [
+      { type: "assistant", turnId: "Old" },
+      { type: "assistant", turnId: "old" },
+    ];
+    expect(items()).toMatchObject([...history, { type: "assistant", turnId: "t1", isOpen: true }]);
+
+    onFrame({ type: "turn.ended", turnId: "t1", stopReason: "end_turn", timestamp: Date.now() });
+    expect(items()).toMatchObject([
+      ...history,
+      { type: "assistant", turnId: "t1", isOpen: false },
+      {
+        type: "compaction",
+        compaction: {
+          compaction_id: "c1",
+          session_id: SESSION,
+          turn_id: "t1",
+          status: "completed",
+          trigger: "auto",
+          pre_tokens: 100_000,
+          post_tokens: 20_000,
+          summary: "summarized the context",
+          created_at: new Date(T).toISOString(),
+        },
+      },
+    ]);
   });
 
   it("projects a LIVE session.compaction into the page (not just a refetch)", () => {

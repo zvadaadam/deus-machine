@@ -469,6 +469,14 @@ function writeTurn(
     const turns = [...page.turns];
     if (index === -1) turns.push(record);
     else turns[index] = record;
+    // Match ORDER BY COALESCE(started_at, ended_at), turn_id in apps/backend/src/db/turns.ts.
+    // Snapshot order assumes this client's live start is later than the platform's finished turns.
+    turns.sort((a, b) => {
+      const aTime = a.startedAt ?? a.endedAt ?? -Infinity;
+      const bTime = b.startedAt ?? b.endedAt ?? -Infinity;
+      if (aTime !== bTime) return aTime - bTime;
+      return a.turnId < b.turnId ? -1 : 1;
+    });
     return { ...page, turns };
   });
 }

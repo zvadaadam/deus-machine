@@ -134,7 +134,7 @@ function App() {
           <button onClick={() => setPhase(p => p + 1)}>Advance turn</button>
           <button onClick={() => setLaterTool(true)}>Run another tool</button>
           <SessionProvider sessionStatus={phase === 1 ? "idle" : "working"} workspaceId="workspace" subagentMessages={new Map()}>
-            <AssistantTurn messages={messages as any} isOpen={phase === 0} isWorking={phase !== 1} turn={phase ? {turnId: "turn", stopReason: "end_turn", endedAt: 1} : undefined} />
+            <AssistantTurn messages={messages as any} isOpen={phase === 0} isStreaming={phase === 0} turn={phase ? {turnId: "turn", stopReason: "end_turn", endedAt: 1} : undefined} />
           </SessionProvider>
         </>}
       </main>
@@ -500,6 +500,7 @@ try {
     window.activityNode = document.getElementById(id);
   }, activityId);
   await page.getByRole("button", { name: "Run another tool" }).click();
+  await page.getByText("Build project · 1 tool call", { exact: true }).waitFor();
   await page.waitForFunction(() => document.querySelector(".assistant-turn .opacity-60") === null);
   for (let i = 0; i < 2; i++) {
     await page.getByRole("button", { name: "Advance turn" }).click();

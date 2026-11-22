@@ -245,8 +245,8 @@ describe("buildChatTimeline", () => {
       true,
       [],
       [
-        { turnId: "turn-1", startedAt: 1 },
-        { turnId: "no-output", startedAt: 2 },
+        { turnId: "no-output", startedAt: 1 },
+        { turnId: "turn-1", startedAt: 2 },
         { turnId: "turn-2", endedAt: 3 },
       ]
     );
@@ -470,7 +470,7 @@ describe("turnStopNotice", () => {
   });
 });
 
-it("holds only the active turn's completed compactions until success or stop", () => {
+it("holds the active turn's completed compactions through a disconnect until success or stop", () => {
   const rows = ["earlier", "active"].map((turn_id) =>
     message({
       id: turn_id,
@@ -502,6 +502,14 @@ it("holds only the active turn's completed compactions until success or stop", (
     "compaction:running",
     "compaction:failed",
   ]);
+  const disconnected = buildChatTimeline(
+    rows,
+    markers,
+    false,
+    [],
+    [{ turnId: "active", startedAt: 1 }]
+  );
+  expect(shape(disconnected.items)).toEqual(shape(result.items));
   for (const stopReason of ["end_turn", "cancelled"]) {
     const settled = buildChatTimeline(rows, markers, true, [], [{ turnId: "active", stopReason }]);
     expect(shape(settled.items).slice(3)).toEqual([
