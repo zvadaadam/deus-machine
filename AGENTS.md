@@ -252,7 +252,8 @@ SQL and the integration CLI for lifecycle writes. Each local start has an
 in-memory attempt token. Archiving aborts that checkout and waits for its git
 processes and cleanup. Retry waits for startup recovery and refuses a checkout
 whose cleanup is still running. Retry and Delete both
-require an error row with no chat, current chat pointer or cloud computer.
+require an error row with no chat, current chat pointer or cloud computer. The
+row carries that verdict to the window as `start_recoverable`.
 
 Opening a project's Archived line reads `archivedWorkspaces` and shows the rows
 in the sidebar's place. The open list reads again when the live group's

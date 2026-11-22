@@ -125,6 +125,7 @@ import {
   ConflictError,
 } from "../../../src/lib/errors";
 import { persistSessionTitle } from "../../../src/services/agent/persistence";
+import { deleteFailedWorkspace } from "../../../src/services/workspace-lifecycle";
 import { createDeusHost } from "../../../src/services/assistants/host";
 import { _resetOperator, withSessionTools } from "../../../src/services/assistants/operator";
 import { READ_ONLY } from "../../../src/services/assistants/sentences";
@@ -774,6 +775,17 @@ describe("each commit re-reads what it depends on, with no await before its writ
       });
     }
   );
+
+  it("an assistant archives a failed workspace that still has an unselected chat", async () => {
+    insertWorkspace("w-close", "close", { state: "error" });
+    insertChat("s-close", "w-close", undefined, false);
+    state.ops.deleteWorkspace = ({ workspaceId }) => deleteFailedWorkspace(String(workspaceId));
+
+    await createDeusHost().archive!(assistantWho(), { kind: "workspace", id: "w-close" });
+    expect(state.db.prepare("SELECT state FROM workspaces WHERE id='w-close'").pluck().get()).toBe(
+      "archived"
+    );
+  });
 
   it("publishes one archive when two assistant requests reach the same workspace", async () => {
     state.stored.claude = "operate";

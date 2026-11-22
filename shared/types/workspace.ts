@@ -35,6 +35,8 @@ export interface Workspace {
   /** The cloud organization a cloud workspace runs in (null for local, or not yet known). */
   organization_id: string | null;
   state: WorkspaceState;
+  /** The backend can retry or delete this start. Hosted rows have no local start to recover. */
+  start_recoverable?: boolean;
   status: WorkspaceStatus;
   current_session_id: string | null;
   session_status: SessionStatus | null;

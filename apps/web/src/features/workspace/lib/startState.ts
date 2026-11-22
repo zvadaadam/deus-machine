@@ -19,8 +19,7 @@ type StartFields = Pick<
   | "setup_status"
   | "error_message"
   | "error_detail"
-  | "provider_workspace_id"
-  | "current_session_id"
+  | "start_recoverable"
 >;
 
 export interface StartWarning {
@@ -132,17 +131,9 @@ export function failedToStart(workspace: Pick<Workspace, "state" | "current_sess
   return workspace.state === "error" && !hasCheckout(workspace);
 }
 
-/**
- * A failed start can be retried or deleted while the row is all there is: no
- * chat, and no cloud computer (that one is the platform's to wake or remove).
- * The backend applies the same rule.
- */
-export function canRecoverStart(
-  workspace: Pick<Workspace, "state" | "kind" | "provider_workspace_id" | "current_session_id">
-): boolean {
-  return (
-    failedToStart(workspace) && (workspace.kind !== "cloud" || !workspace.provider_workspace_id)
-  );
+/** The backend computes this verdict with START_RECOVERABLE in apps/backend/src/db/queries.ts. */
+export function canRecoverStart(workspace: Pick<Workspace, "start_recoverable">): boolean {
+  return workspace.start_recoverable === true;
 }
 
 export function workspaceStart(workspace: StartFields): WorkspaceStart {

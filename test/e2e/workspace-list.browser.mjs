@@ -606,6 +606,7 @@ for (const loseReply of [false, true]) {
 test("a start that never got a chat offers Delete and stays out of the archive", async (t) => {
   const page = await tab(t, "desktop");
   const ws = await start(local, "Never started", "missing");
+  assert.equal(ws.start_recoverable, true);
   await page.goto(`${baseUrl}/w/${ws.id}`);
   await row(page, ws).waitFor();
   assert.equal(await archiveButton(page, ws).count(), 0);
@@ -616,6 +617,29 @@ test("a start that never got a chat offers Delete and stays out of the archive",
   await page.getByText("Workspace deleted", { exact: true }).waitFor();
   const groups = await backend.read("workspaces", { state: "archived" });
   assert.ok(!groups.some((g) => g.workspaces.some((w) => w.id === ws.id)));
+});
+
+test("a failed workspace with a chat and an empty pointer can only be archived", async (t) => {
+  const ws = await start(local, "Failed with a chat", "missing");
+  db.prepare("INSERT INTO sessions (id, workspace_id) VALUES (?, ?)").run(
+    crypto.randomUUID(),
+    ws.id
+  );
+  const page = await tab(t);
+  await page.goto(`${baseUrl}/w/${ws.id}`);
+  const failure = page.locator('[data-slot="workspace-start-state"]');
+  await failure.getByText("Workspace didn't start", { exact: true }).waitFor();
+  assert.deepEqual(
+    {
+      retry: await failure.getByRole("button", { name: "Retry" }).count(),
+      delete: await failure.getByRole("button", { name: "Delete" }).count(),
+      archive: await archiveButton(page, ws).count(),
+    },
+    { retry: 0, delete: 0, archive: 1 }
+  );
+  assert.equal((await backend.read("workspace", { workspaceId: ws.id })).start_recoverable, false);
+  await archiveButton(page, ws).click();
+  await page.getByText("Workspace archived", { exact: true }).waitFor();
 });
 
 async function observeArchiveReads(page, allowRestore) {

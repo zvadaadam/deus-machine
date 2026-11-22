@@ -5,7 +5,7 @@
  */
 import type { InitFetchIssue, SetupStatus } from "@shared/enums";
 import { uuidv7 } from "@shared/lib/uuid";
-import { getWorkspaceRaw, type WorkspaceRow } from "../db";
+import { getWorkspaceRaw, START_RECOVERABLE, type WorkspaceRow } from "../db";
 import { getDatabase } from "../lib/database";
 import { ConflictError, NotFoundError } from "../lib/errors";
 import { invalidate } from "./query-engine";
@@ -198,8 +198,6 @@ function hasLocalStartInputs(
   return !!(row?.root_path && row.slug && row.git_branch);
 }
 
-const FAILED_TO_START = `state = 'error' AND current_session_id IS NULL AND provider_workspace_id IS NULL
-  AND NOT EXISTS (SELECT 1 FROM sessions WHERE workspace_id = workspaces.id)`;
 const NOT_WAITING_FOR_RETRY = "This workspace is not waiting for a retry.";
 
 export function claimLocalRetry(workspaceId: string) {
@@ -212,7 +210,7 @@ export function claimLocalRetry(workspaceId: string) {
       `UPDATE workspaces
        SET state = 'initializing', init_stage = NULL,
            error_message = NULL, error_detail = NULL, init_fetch_issue = NULL
-       WHERE id = ? AND kind = 'worktree' AND ${FAILED_TO_START}`
+       WHERE id = ? AND kind = 'worktree' AND ${START_RECOVERABLE("workspaces")}`
     )
     .run(workspaceId);
   if (claimed.changes === 0) throw new ConflictError(NOT_WAITING_FOR_RETRY);
@@ -235,7 +233,7 @@ export function deleteFailedWorkspace(workspaceId: string): void {
   if (row.provider_workspace_id)
     throw new ConflictError("This workspace has a cloud computer. Archive it instead.");
   const deleted = db
-    .prepare(`DELETE FROM workspaces WHERE id = ? AND ${FAILED_TO_START}`)
+    .prepare(`DELETE FROM workspaces WHERE id = ? AND ${START_RECOVERABLE("workspaces")}`)
     .run(workspaceId);
   if (!deleted.changes) throw new ConflictError("This workspace has chats. Archive it instead.");
   cloudReports.delete(workspaceId);
@@ -306,7 +304,7 @@ export function claimCloudRetry(workspaceId: string): void {
       `UPDATE workspaces
        SET state = 'initializing', init_stage = 'creating cloud workspace',
            error_message = NULL, error_detail = NULL
-       WHERE id = ? AND ${FAILED_TO_START}`
+       WHERE id = ? AND ${START_RECOVERABLE("workspaces")}`
     )
     .run(workspaceId);
   if (claimed.changes === 0) throw new ConflictError(NOT_WAITING_FOR_RETRY);

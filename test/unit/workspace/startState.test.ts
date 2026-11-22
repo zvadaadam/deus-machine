@@ -31,7 +31,7 @@ const local = {
   setup_status: "none",
   error_message: null,
   error_detail: null,
-  provider_workspace_id: null,
+  start_recoverable: false,
   current_session_id: null,
 } as const;
 const labels = (start: ReturnType<typeof workspaceStart>) =>
@@ -200,6 +200,7 @@ describe("a start that failed", () => {
   const failed = {
     ...local,
     state: "error",
+    start_recoverable: true,
     init_stage: "worktree",
     error_message: 'The branch "develop" does not exist in this project.',
     error_detail: "fatal: invalid reference: develop",
@@ -220,19 +221,11 @@ describe("a start that failed", () => {
     expect(warnings(start)).toEqual([]);
   });
 
-  it("can be retried or deleted while the row is all there is", () => {
-    expect(canRecoverStart(failed)).toBe(true);
-    expect(canRecoverStart({ ...failed, kind: "cloud" })).toBe(true);
-  });
-
-  it("cannot once it has a chat, a cloud computer, or is not a failure", () => {
-    expect(canRecoverStart({ ...failed, current_session_id: "s" })).toBe(false);
-    expect(canRecoverStart({ ...failed, kind: "cloud", provider_workspace_id: "vm" })).toBe(false);
-    expect(canRecoverStart({ ...failed, state: "initializing" })).toBe(false);
-    expect(canRecoverStart({ ...failed, state: "ready" })).toBe(false);
-    expect(
-      workspaceStart({ ...failed, kind: "cloud", provider_workspace_id: "vm" }).failure?.recoverable
-    ).toBe(false);
+  it("offers recovery only when the backend allows it", () => {
+    expect(workspaceStart({ ...failed, start_recoverable: false }).failure?.recoverable).toBe(
+      false
+    );
+    expect(canRecoverStart({})).toBe(false);
   });
 });
 

@@ -68,7 +68,14 @@ import {
 import { LOCAL_CALLER, type Caller } from "../../api/registry";
 import { archiveWorkspace } from "../workspace-archive.service";
 import { createLocalWorkspace } from "../workspace-init.service";
-import { attachParts, encodeOrigin, getMessages, getSessionRaw, hasOlderMessages } from "../../db";
+import {
+  attachParts,
+  encodeOrigin,
+  getMessages,
+  getSessionRaw,
+  hasOlderMessages,
+  START_RECOVERABLE,
+} from "../../db";
 import { getDatabase } from "../../lib/database";
 import { AgentServerDisconnectedError, AppError, ChatBusyError } from "../../lib/errors";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
@@ -834,14 +841,15 @@ export function createDeusHost(): DeusHost {
           const members = () =>
             everything().filter((e) => e.workspace.id === target.id && e.status !== "archived");
           const w = db
-            .prepare("SELECT state, git_branch, current_session_id FROM workspaces WHERE id = ?")
-            .get(target.id) as
-            | { state: string; git_branch: string | null; current_session_id: string | null }
-            | undefined;
+            .prepare<[string], { git_branch: string | null; start_recoverable: 0 | 1 }>(
+              `SELECT git_branch, ${START_RECOVERABLE("workspaces")} AS start_recoverable
+               FROM workspaces WHERE id = ?`
+            )
+            .get(target.id);
           if (!w)
             throw new OperatorError("not_found", "That workspace is gone. Nothing was archived.");
-          // A start that failed has no chat, branch or changes to keep: it is removed, as the app does.
-          if (w.state === "error" && !w.current_session_id) {
+          // A recoverable start has no chat or computer to keep.
+          if (w.start_recoverable) {
             mayArchive(caller, members(), everything());
             await act(caller, workspaces.deleteWorkspace, { workspaceId: target.id });
             return { note: "Its start had failed, so it was removed." };
