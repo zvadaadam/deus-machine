@@ -14,11 +14,9 @@ const external = [
   "ws",
   // Sentry uses native crash-reporter hooks.
   "@sentry/node",
-  // The agent engine's: the Claude SDK resolves its platform package at
-  // runtime; the ACP SDK is an optional peer deus never registers; device-use
-  // and its canvas are native/platform-specific.
+  // The Claude SDK resolves its platform package at runtime. Device-use and
+  // its canvas load native code.
   "@anthropic-ai/claude-agent-sdk",
-  "@agentclientprotocol/sdk",
   "@napi-rs/canvas",
   "@napi-rs/canvas-darwin-arm64",
   "@napi-rs/canvas-darwin-x64",
