@@ -19,8 +19,8 @@ import {
   type ModelList,
   type ThinkingLevel,
 } from "@zvada/agent-server/protocol";
-import { AgentHarnessSchema, type AgentHarness } from "./enums";
-import { HARNESSES, LOCAL_HARNESSES, harnessInfo } from "./harnesses";
+import type { AgentHarness } from "./enums";
+import { HARNESSES, LOCAL_HARNESSES, harnessInfo, knownHarness } from "./harnesses";
 import type { SessionTurn } from "./types/session";
 
 export type { ModelDescriptor, ModelList };
@@ -218,8 +218,8 @@ export function parseModelValue(
     const fallback = defaultModelId(CATALOG_MODEL_LISTS, "codex-app-server");
     return fallback ? { harness: "codex-app-server", model: fallback } : undefined;
   }
-  const harness = AgentHarnessSchema.safeParse(prefix);
-  return harness.success ? { harness: harness.data, model } : undefined;
+  const harness = knownHarness(prefix);
+  return harness ? { harness, model } : undefined;
 }
 
 /** An unbound chat starts on Claude, which ships model rows in the engine's catalog. */

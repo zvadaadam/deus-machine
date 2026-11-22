@@ -17,6 +17,7 @@ import type { Session } from "@shared/types/session";
 import type { CloudOrganizations } from "@shared/types/environment-secrets";
 import type { AgentHarness, SessionStatus, WorkspaceState } from "@shared/enums";
 import { CLOUD_HARNESSES } from "@shared/harnesses";
+import { DEFAULT_AGENT_HARNESS } from "@shared/models";
 import { toast } from "sonner";
 import { setQueryRequestInterceptor } from "@/platform/ws";
 import { getRuntimeClient, onRuntimeChange } from "@/platform/ws/query-protocol-client";
@@ -53,7 +54,7 @@ interface AgntSession {
 
 /** Discovery defaults to Claude for a cloud row without a recognized harness. */
 function mapHarness(harness: string | null | undefined): AgentHarness {
-  return CLOUD_HARNESSES.find((id) => id === harness) ?? "claude-code";
+  return CLOUD_HARNESSES.find((id) => id === harness) ?? DEFAULT_AGENT_HARNESS;
 }
 
 /** A 401 from agnt — the deus_cloud_session lapsed; the caller re-triggers login. */

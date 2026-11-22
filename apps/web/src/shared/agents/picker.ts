@@ -11,8 +11,8 @@ import {
   pickerModels,
   type HarnessModels,
 } from "@shared/models";
-import { AgentHarnessSchema, type AgentHarness } from "@shared/enums";
-import { HARNESSES } from "@shared/harnesses";
+import type { AgentHarness } from "@shared/enums";
+import { HARNESSES, knownHarness } from "@shared/harnesses";
 import type { ThinkingLevel } from "@shared/protocol";
 
 export interface PickerModelList extends HarnessModels {
@@ -58,9 +58,8 @@ export function modelPickerView(
   const current = model ? parseModelValue(model) : undefined;
   let selected: PickerOption | undefined;
   const groups = lists.flatMap((list): PickerGroup[] => {
-    const parsed = AgentHarnessSchema.safeParse(list.harness);
-    if (!parsed.success) return [];
-    const agentHarness = parsed.data;
+    const agentHarness = knownHarness(list.harness);
+    if (!agentHarness) return [];
     const options = pickerModels(lists, agentHarness).map(
       (row): PickerOption => ({
         value: modelValue(agentHarness, row.id),

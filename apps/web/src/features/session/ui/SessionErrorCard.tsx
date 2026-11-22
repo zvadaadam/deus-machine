@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { uiActions } from "@/shared/stores/uiStore";
 import { PROVIDER_ACCOUNT_CATEGORY } from "@shared/lib/send-refusal";
 
-import { AgentHarnessSchema, type AgentHarness } from "@shared/enums";
+import type { AgentHarness } from "@shared/enums";
+import { knownHarness } from "@shared/harnesses";
 import { getAgentLabel } from "@/shared/agents";
 import { useAgentAuth } from "@/features/settings/api/settings.queries";
 import {
@@ -57,7 +58,7 @@ export function SessionErrorCard({
 
   let action;
   if (category === "auth" && !cloud) {
-    const harness = AgentHarnessSchema.safeParse(agentHarness).data;
+    const harness = knownHarness(agentHarness);
     action = harness ? <LoginAction harness={harness} /> : <AIProvidersButton />;
   } else if (category === "auth" || category === PROVIDER_ACCOUNT_CATEGORY) {
     action = <AIProvidersButton />;

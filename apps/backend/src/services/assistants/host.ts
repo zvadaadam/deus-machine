@@ -54,8 +54,8 @@ import * as sessions from "@shared/api/sessions";
 import { agentModels } from "@shared/api/settings";
 import { uuidv7 } from "@shared/lib/uuid";
 import * as workspaces from "@shared/api/workspaces";
-import { ACTIVE_TURN_STATUSES, AgentHarnessSchema } from "@shared/enums";
-import { HARNESSES } from "@shared/harnesses";
+import { ACTIVE_TURN_STATUSES } from "@shared/enums";
+import { HARNESSES, knownHarness } from "@shared/harnesses";
 import { githubRepoSlug } from "@shared/git-origin";
 import {
   CATALOG_MODEL_LISTS,
@@ -350,7 +350,7 @@ export function createDeusHost(): DeusHost {
           current: row.current_session_id ? row.current_session_id === id : chat === 1,
           status,
           startedBy: readOrigin(row.s_started_by ?? (row.session_id ? null : row.ws_started_by)),
-          harness: AgentHarnessSchema.safeParse(row.agent_harness).data,
+          harness: knownHarness(row.agent_harness),
           ...(title ? { title } : {}),
           ...(activity ? { lastActivityAt: activity } : {}),
           ...(status === "error" && error ? { error } : {}),
@@ -704,7 +704,7 @@ export function createDeusHost(): DeusHost {
         const session = getSessionRaw(getDatabase(), sessionId);
         if (!session)
           throw new OperatorError("not_found", "That session is gone. Nothing was sent.");
-        const harness = AgentHarnessSchema.safeParse(session.agent_harness).data;
+        const harness = knownHarness(session.agent_harness);
         if (!harness)
           throw new OperatorError(
             "unsupported",

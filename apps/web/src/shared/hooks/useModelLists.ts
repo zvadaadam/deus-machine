@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@shared/api";
-import { CLOUD_HARNESSES, LOCAL_HARNESSES } from "@shared/harnesses";
-import { AgentHarnessSchema, type AgentHarness } from "@shared/enums";
+import { CLOUD_HARNESSES, LOCAL_HARNESSES, knownHarness } from "@shared/harnesses";
+import type { AgentHarness } from "@shared/enums";
 import type { SessionTurn } from "@shared/types/session";
 import type { ThinkingLevel } from "@shared/protocol";
 import { call } from "@/platform/ws";
@@ -45,7 +45,7 @@ export function useChatModel({
   turns?: readonly SessionTurn[];
 }): ChatModelSelection {
   const state = useModelListsState(scope);
-  const harness = AgentHarnessSchema.safeParse(storedHarness).data;
+  const harness = knownHarness(storedHarness);
   if (!harness)
     return {
       ...state,
@@ -78,7 +78,7 @@ export function useChatModel({
  * Local lists sit under one key prefix, which a login change invalidates
  * (useAgentAuthEvents); the engine reads the CLI again after one.
  */
-export function useModelListsState(chat: ModelScope): ModelListsState {
+function useModelListsState(chat: ModelScope): ModelListsState {
   const workspaceId = chat.workspaceId ?? null;
   const local = useQuery({
     queryKey: [...queryKeys.settings.agentModels, workspaceId],

@@ -77,6 +77,13 @@ export function canPlan(
 }
 
 /** Settings and model lists can come from a build that knows other harnesses. */
+export function knownHarness(id: string | null | undefined) {
+  return typeof id === "string" && Object.hasOwn(HARNESSES, id)
+    ? (id as keyof typeof HARNESSES)
+    : undefined;
+}
+
 export function harnessInfo(id: string): Harness | undefined {
-  return Object.hasOwn(HARNESSES, id) ? HARNESSES[id as keyof typeof HARNESSES] : undefined;
+  const harness = knownHarness(id);
+  return harness ? HARNESSES[harness] : undefined;
 }

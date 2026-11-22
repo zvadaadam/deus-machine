@@ -14,7 +14,7 @@ import type {
   TurnStartParams,
 } from "@zvada/agent-server/protocol";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
-import { AgentHarnessSchema } from "@shared/enums";
+import { knownHarness } from "@shared/harnesses";
 import type { AgentInfo } from "@shared/agent-info";
 import {
   beforeCancel,
@@ -151,7 +151,7 @@ export class AgentLink {
  */
 function toAgentInfos(result: InitializeResult): AgentInfo[] {
   return Object.entries(result.harnesses).flatMap(([harness, capabilities]) => {
-    const parsed = AgentHarnessSchema.safeParse(harness);
-    return parsed.success ? [{ type: parsed.data, capabilities }] : [];
+    const type = knownHarness(harness);
+    return type ? [{ type, capabilities }] : [];
   });
 }

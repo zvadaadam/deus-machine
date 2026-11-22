@@ -7,6 +7,7 @@
 // can change; another harness needs a new chat.
 
 import {
+  DEFAULT_AGENT_HARNESS,
   continuedThinkingLevel,
   latestTurnExecution,
   modelValue,
@@ -42,7 +43,7 @@ export function resolveModelSelection(model: string): string | undefined {
 }
 
 export function getAgentHarnessForModel(model: string): AgentHarness {
-  return parseModelValue(model)?.harness ?? "claude-code";
+  return parseModelValue(model)?.harness ?? DEFAULT_AGENT_HARNESS;
 }
 
 /** The model id a picker value sends to the engine. Throws on a value that names no harness. */

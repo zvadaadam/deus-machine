@@ -12,7 +12,7 @@ vi.mock("@/platform/ws", () => ({ call: vi.fn() }));
 vi.mock("@/shared/config/webDirectMode", () => ({ isCloudDirectWebMode: () => false }));
 vi.mock("@/features/settings/api", () => ({ useDefaultThinkingLevel: () => "high" }));
 
-const { useChatModel, useModelListsState } = await import("@/shared/hooks/useModelLists");
+const { useChatModel } = await import("@/shared/hooks/useModelLists");
 const { modelPickerView } = await import("@/shared/agents/picker");
 const { useNewChatSelection } =
   await import("@/features/repository/ui/composer/useNewChatSelection");
@@ -21,7 +21,7 @@ const { setStoredModel } = await import("@/features/session/lib/modelPreference"
 describe("whether a chat's model list is live", () => {
   it("is per harness for a cloud chat: a Claude-only answer leaves Codex provisional", () => {
     state.cloud = { lists: [{ harness: "claude-code", source: "catalog", models: [] }] };
-    const { live } = useModelListsState({ cloud: true });
+    const { live } = useChatModel({ cloud: true });
     // The platform's own row is authoritative, whatever its source.
     expect(live("claude-code")).toBe(true);
     expect(live("codex-app-server")).toBe(false);
@@ -34,11 +34,11 @@ describe("whether a chat's model list is live", () => {
         { harness: "codex-app-server", source: "catalog", models: [] },
       ],
     };
-    const { live } = useModelListsState({ cloud: false });
+    const { live } = useChatModel({ cloud: false });
     expect(live("claude-code")).toBe(true);
     expect(live("codex-app-server")).toBe(false);
     state.local = {};
-    expect(useModelListsState({ cloud: false }).live("claude-code")).toBe(false);
+    expect(useChatModel({ cloud: false }).live("claude-code")).toBe(false);
   });
 });
 
@@ -64,7 +64,7 @@ describe("the harnesses a picker offers", () => {
   it("shows the reason from the empty harness even when a chat remembers one of its models", () => {
     const error = "The CLI is not installed yet.";
     state.local = { lists: [{ harness: "gemini", source: "catalog", models: [], error }] };
-    const { lists } = useModelListsState({ cloud: false });
+    const { lists } = useChatModel({ cloud: false });
     expect(lists).toContainEqual(
       expect.objectContaining({ harness: "gemini", source: "catalog", error })
     );
@@ -130,8 +130,8 @@ describe("the harnesses a picker offers", () => {
         { harness: "gemini", source: "live", models: [] },
       ];
       state.local = state.cloud = source === "answer" ? { lists } : undefined;
-      const local = useModelListsState({ cloud: false });
-      const cloud = useModelListsState({ cloud: true });
+      const local = useChatModel({ cloud: false });
+      const cloud = useChatModel({ cloud: true });
       const current = "gemini:sample";
       expect(modelPickerView(local.lists, current).selected?.value).toBe(current);
       const view = modelPickerView(cloud.lists, current);
