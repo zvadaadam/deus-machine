@@ -94,18 +94,15 @@ export async function createLocalWorkspace(
         ? JSON.stringify(options.startedBy)
         : null,
   });
-  try {
-    void initializeWorkspace({
-      workspaceId,
-      repoRootPath: rootPath,
-      workspacePath: path.join(rootPath, ".deus", slug),
-      branchName,
-      sourceBranch,
-      repoOriginUrl: repo.git_origin_url,
-    });
-  } finally {
-    invalidate(["workspaces"]);
-  }
+  void initializeWorkspace({
+    workspaceId,
+    repoRootPath: rootPath,
+    workspacePath: path.join(rootPath, ".deus", slug),
+    branchName,
+    sourceBranch,
+    repoOriginUrl: repo.git_origin_url,
+  });
+  invalidate(["workspaces"]);
   return { workspaceId, firstSessionId };
 }
 

@@ -1085,28 +1085,6 @@ describe("cloud driver frame → fold contract", () => {
     expect(mockInvalidate).toHaveBeenCalled();
   });
 
-  it.each([
-    ["ready", [["ready", "paused", null, null, "deus-ws-1"]]],
-    ["archived", []],
-  ] as const)("publishes a %s row even when parking its simulator fails", (state, writes) => {
-    mockGet.mockReturnValueOnce({ state, chat: "deus-session-1" });
-    mockRun.mockClear();
-    mockInvalidate.mockClear();
-    const park = vi.spyOn(simulator, "parkCloudSimulator").mockImplementationOnce(() => {
-      expect(mockRun.mock.calls).toEqual(writes);
-      expect(mockInvalidate).not.toHaveBeenCalled();
-      throw new Error("could not park simulator");
-    });
-    try {
-      expect(() =>
-        capturedOnFrame!({ type: "workspace.state", data: { status: "paused" } })
-      ).toThrow("could not park simulator");
-      expect(mockInvalidate).toHaveBeenCalledExactlyOnceWith(["workspaces"], {});
-    } finally {
-      park.mockRestore();
-    }
-  });
-
   it("parks and publishes a paused report even when its workspace row is gone", async () => {
     const park = vi.spyOn(simulator, "parkCloudSimulator");
     mockInvalidate.mockClear();
@@ -1124,36 +1102,40 @@ describe("cloud driver frame → fold contract", () => {
     }
   });
 
-  it.each(["ready", "archived"])(
-    "publishes the workspace list when a %s computer reports sleep",
-    async (state) => {
-      const db = new Database(":memory:");
-      try {
-        db.exec(SCHEMA_SQL);
-        db.exec("INSERT INTO repositories (id, name) VALUES ('repo', 'Repo')");
-        db.prepare(
-          "INSERT INTO workspaces (id, repository_id, slug, kind, state, init_stage) VALUES ('deus-ws-1', 'repo', 'vm', 'cloud', ?, 'running')"
-        ).run(state);
-        db.exec(
-          "INSERT INTO sessions (id, workspace_id) VALUES ('chat','deus-ws-1'); UPDATE workspaces SET current_session_id='chat'"
-        );
-        mockInvalidate.mockClear();
-        await mockPrepare.withImplementation(
-          (sql) => db.prepare(sql),
-          () => {
-            capturedOnFrame!({ type: "workspace.state", data: { status: "paused" } });
-          }
-        );
-        expect(db.prepare("SELECT state, init_stage FROM workspaces").get()).toEqual({
-          state,
-          init_stage: state === "ready" ? "paused" : "running",
-        });
-        expect(mockInvalidate).toHaveBeenCalledExactlyOnceWith(["workspaces"], {});
-      } finally {
-        db.close();
-      }
+  it.each([
+    ["ready", "paused"],
+    ["archived", "running"],
+  ])("parks the simulator before publishing a %s computer's sleep report", async (state, stage) => {
+    const db = new Database(":memory:");
+    const park = vi.spyOn(simulator, "parkCloudSimulator");
+    try {
+      db.exec(SCHEMA_SQL);
+      db.exec("INSERT INTO repositories (id, name) VALUES ('repo', 'Repo')");
+      db.prepare(
+        "INSERT INTO workspaces (id, repository_id, slug, kind, state, init_stage) VALUES ('deus-ws-1', 'repo', 'vm', 'cloud', ?, 'running')"
+      ).run(state);
+      db.exec(
+        "INSERT INTO sessions (id, workspace_id) VALUES ('chat','deus-ws-1'); UPDATE workspaces SET current_session_id='chat'"
+      );
+      mockInvalidate.mockClear();
+      await mockPrepare.withImplementation(
+        (sql) => db.prepare(sql),
+        () => {
+          capturedOnFrame!({ type: "workspace.state", data: { status: "paused" } });
+        }
+      );
+      expect(db.prepare("SELECT state, init_stage FROM workspaces").get()).toEqual({
+        state,
+        init_stage: stage,
+      });
+      expect(park).toHaveBeenCalledExactlyOnceWith("deus-ws-1");
+      expect(park).toHaveBeenCalledBefore(mockInvalidate);
+      expect(mockInvalidate).toHaveBeenCalledExactlyOnceWith(["workspaces"], {});
+    } finally {
+      park.mockRestore();
+      db.close();
     }
-  );
+  });
 
   it.each([
     { status: "running", expectedState: "ready", expectedStage: null },

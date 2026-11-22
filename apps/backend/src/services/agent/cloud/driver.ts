@@ -209,13 +209,10 @@ function recordWorkspaceStatus(
   data: { status?: string; step?: string }
 ): void {
   applyCloudStatus(workspaceId, data);
-  try {
-    // A dropped sandbox socket may never deliver the device's own stopped event.
-    if (data.status === "stopped" || data.status === "paused" || data.status === "error")
-      parkCloudSimulator(workspaceId);
-  } finally {
-    invalidate(["workspaces"], {});
-  }
+  // A dropped sandbox socket may never deliver the device's own stopped event.
+  if (data.status === "stopped" || data.status === "paused" || data.status === "error")
+    parkCloudSimulator(workspaceId);
+  invalidate(["workspaces"], {});
 }
 
 /** Tell the clients following a workspace's environment (`cloudEnvironment`).

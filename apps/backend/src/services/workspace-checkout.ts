@@ -334,11 +334,8 @@ async function checkout(ctx: InitContext, signal: AbortSignal) {
     }
     return;
   }
-  try {
-    void prepareLocalEnvironment(ctx.workspaceId, ctx.workspacePath, ctx.repoOriginUrl).catch(
-      (err) => console.warn(`[WORKSPACE] Setup for ${ctx.workspaceId} failed:`, err)
-    );
-  } finally {
-    invalidate(["workspaces", "sessions"]);
-  }
+  void prepareLocalEnvironment(ctx.workspaceId, ctx.workspacePath, ctx.repoOriginUrl).catch((err) =>
+    console.warn(`[WORKSPACE] Setup for ${ctx.workspaceId} failed:`, err)
+  );
+  invalidate(["workspaces", "sessions"]);
 }
