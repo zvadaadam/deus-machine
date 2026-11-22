@@ -28,7 +28,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { SessionErrorEventSchema } from "@deus-hq/api";
-import { readSendRefusal } from "@shared/lib/send-refusal";
+import { isGenericTurnFailure, readSendRefusal } from "@shared/lib/send-refusal";
 import {
   flushDeltas,
   patchSessionDetail,
@@ -604,7 +604,7 @@ export function useCloudDirectSession(
           (pendingTurnActive() ? pendingTurn?.turnId : undefined);
         if (recoverable || (turnId !== undefined && live !== undefined && turnId !== live)) return;
         setStatus("error");
-        setError(error.message, error.code === "AGENT_EXECUTION_FAILED" ? "internal" : error.code);
+        setError(error.message, isGenericTurnFailure(error.code) ? "internal" : error.code);
         return;
       }
       foldFrame(frame);

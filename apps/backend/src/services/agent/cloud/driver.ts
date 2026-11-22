@@ -33,7 +33,7 @@ import {
 } from "@shared/agent-asks";
 import { isLiveOnlyEvent, type DecodedWireEventEnvelope } from "@shared/protocol-types";
 import type { CloudTurnSelection } from "@shared/cloud-models";
-import { readSendRefusal } from "@shared/lib/send-refusal";
+import { isGenericTurnFailure, readSendRefusal } from "@shared/lib/send-refusal";
 import {
   CloudEnvStateSchema,
   type CloudEnvEvent,
@@ -577,7 +577,7 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       // generic failure wrapper is the only one the fold should deduplicate.
       pushToFold(session, {
         type: "error",
-        category: error.code === "AGENT_EXECUTION_FAILED" ? "internal" : error.code,
+        category: isGenericTurnFailure(error.code) ? "internal" : error.code,
         message: error.message,
         turnId,
         recoverable,

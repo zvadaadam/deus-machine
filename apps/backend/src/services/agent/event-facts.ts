@@ -19,6 +19,7 @@
 import { match } from "ts-pattern";
 import { classifyError } from "@zvada/agent-server/protocol";
 import type { ConversationState, ConversationTurn } from "@zvada/agent-server/protocol";
+import { isGenericTurnFailure } from "@shared/lib/send-refusal";
 import { isUnknownEvent, type AnyLifecycleEvent } from "@shared/protocol-types";
 import {
   persistAgentSessionId,
@@ -166,7 +167,7 @@ export function applySessionFacts(
       // a watchdog or workspace failure's terminal ErrorInfo.
       const turn = conversation.turns.find((turn) => turn.turnId === e.turnId);
       if (
-        e._meta?.cloudErrorCode === "AGENT_EXECUTION_FAILED" &&
+        isGenericTurnFailure(e._meta?.cloudErrorCode) &&
         turn?.status === "ended" &&
         turn.stopReason === "error" &&
         turn.error

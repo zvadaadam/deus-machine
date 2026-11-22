@@ -54,3 +54,8 @@ export function readSendRefusal(code: unknown, message: unknown): SendRefusal {
       inner !== null && PROVIDER_ACCOUNT_CODES.has(inner) ? PROVIDER_ACCOUNT_CATEGORY : "internal",
   };
 }
+
+/** The platform wraps turn failures with this code even when the engine reports a specific cause. */
+export function isGenericTurnFailure(code: unknown): boolean {
+  return code === "AGENT_EXECUTION_FAILED";
+}

@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { SessionErrorCard } from "@/features/session/ui/SessionErrorCard";
-import { readSendRefusal } from "@shared/lib/send-refusal";
+import { isGenericTurnFailure, readSendRefusal } from "@shared/lib/send-refusal";
 
 const REFUSED =
   "PROVIDER_ACCOUNT_RECONNECT_REQUIRED: Your default Claude account must be reconnected in Settings → AI Providers, or choose another default.";
@@ -18,6 +18,12 @@ const render = (code: unknown, message: unknown) => {
     })
   );
 };
+
+it("recognizes the platform's generic turn failure wrapper", () => {
+  expect(isGenericTurnFailure("AGENT_EXECUTION_FAILED")).toBe(true);
+  expect(isGenericTurnFailure("internal")).toBe(false);
+  expect(isGenericTurnFailure(undefined)).toBe(false);
+});
 
 describe("a send the cloud refused", () => {
   it("reads the platform's sentence, never its codes", () => {
