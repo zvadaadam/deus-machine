@@ -60,7 +60,10 @@ import {
   workspaceLayoutActions,
   useWorkspaceLayoutStore,
 } from "@/features/workspace/store/workspaceLayoutStore";
-import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
+import {
+  composerTarget,
+  sessionComposerActions,
+} from "@/features/session/store/sessionComposerStore";
 import { attachScreenshotToComposer } from "../lib/attachScreenshotToComposer";
 import { useBrowserWindowStore, browserWindowActions } from "../store/browserWindowStore";
 import { native } from "@/platform";
@@ -566,12 +569,13 @@ export function BrowserPanel({
         //    when the padded rect extends past the viewport.
         const handle = tabRefs.current.get(tabId);
         if (handle?.captureScreenshot) {
+          const target = composerTarget(sid);
           try {
             await handle.setInspectOverlaysVisible?.(false);
             const dataUrl = await handle.captureScreenshot(
               getInspectionScreenshotRect(element.rect)
             );
-            await attachScreenshotToComposer(sid, dataUrl, `element-${event.ref ?? "region"}`);
+            await attachScreenshotToComposer(target, dataUrl, `element-${event.ref ?? "region"}`);
           } finally {
             await handle.setInspectOverlaysVisible?.(true);
           }
@@ -655,8 +659,9 @@ export function BrowserPanel({
     if (!sid) return;
     const handle = tabRefs.current.get(activeTab.id);
     if (!handle?.captureScreenshot) return;
+    const target = composerTarget(sid);
     const dataUrl = await handle.captureScreenshot();
-    await attachScreenshotToComposer(sid, dataUrl, "full-page");
+    await attachScreenshotToComposer(target, dataUrl, "full-page");
   }, [activeTab, workspaceId]);
 
   /** Toggle between desktop (webview fills panel) and mobile preview

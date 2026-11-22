@@ -2,28 +2,45 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RuntimeClient } from "@/platform/ws/runtime-client";
+import { queryClient, setActiveQueryClient } from "@/shared/api/queryClient";
 import { queryKeys } from "@/shared/api/queryKeys";
+import { attachScreenshotToComposer } from "@/features/browser/lib/attachScreenshotToComposer";
 import { useSessionComposer } from "@/features/session/hooks/useSessionComposer";
 import {
   attachImageFiles,
   composerStore,
   composerTarget,
   emptyComposer,
+  HOME_COMPOSER_ID,
   sessionComposerActions as actions,
 } from "@/features/session/store/sessionComposerStore";
-import type { ImageAttachment } from "@/features/session/lib/imageAttachments";
 
 const store = composerStore();
-beforeEach(() => store.setState({ composers: {}, pendingContent: {} }));
+beforeEach(() => {
+  store.setState({ composers: {}, pendingContent: {} });
+  stubFileReader();
+});
+afterEach(() => vi.unstubAllGlobals());
 
 const model = "codex-app-server:gpt-6-astra";
 const element = { ref: "button-1", tagName: "button", path: "body > button", innerText: "Send" };
-const screenshot: ImageAttachment = {
-  id: "screenshot",
+const screenshot = {
   file: new File(["screenshot"], "screenshot.png", { type: "image/png" }),
   preview: "data:image/png;base64,c2NyZWVuc2hvdA==",
   type: "image/png",
 };
+
+function stubFileReader(read: (done: () => void) => void = (done) => done()) {
+  vi.stubGlobal(
+    "FileReader",
+    class {
+      onload!: (event: { target: { result: string } }) => void;
+      readAsDataURL() {
+        read(() => this.onload({ target: { result: screenshot.preview } }));
+      }
+    }
+  );
+}
 
 function memoryStorage(quota = Infinity) {
   const data = new Map<string, string>();
@@ -49,7 +66,6 @@ describe("draft storage", () => {
     storage = memoryStorage();
     vi.stubGlobal("sessionStorage", storage);
   });
-  afterEach(() => vi.unstubAllGlobals());
 
   it("scopes drafts only by the runtime's host and account", () => {
     const cache = (host: string, account: string, grant: string) =>
@@ -139,7 +155,7 @@ describe("draft storage", () => {
 
   it("saves only a picture count, and keeps the warning through another save", async () => {
     let target = composerTarget("chat", await reopen());
-    actions.addImageAttachments(target, [screenshot, { ...screenshot, id: "another" }]);
+    await attachImageFiles(target, [screenshot.file, screenshot.file]);
     const raw = storage.setItem.mock.lastCall![1];
     expect(raw).not.toContain(screenshot.file.name);
     expect(raw).not.toContain(screenshot.preview);
@@ -151,7 +167,7 @@ describe("draft storage", () => {
     actions.setDraft(target, "Slight edit");
     target = composerTarget("chat", await reopen());
     expect(target.store.getState().pendingContent.chat.missingPictures).toBe(2);
-    actions.addImageAttachments(target, [screenshot]);
+    await attachImageFiles(target, [screenshot.file]);
     expect(target.store.getState().pendingContent.chat.missingPictures).toBe(2);
     expect((await reopen()).getState().pendingContent.chat.missingPictures).toBe(3);
   });
@@ -164,15 +180,17 @@ describe("draft storage", () => {
     actions.setDraft(target, "First");
     actions.addPastedText(target, "Sent paste");
     actions.addFileMention(target, { name: "sent", path: "sent" });
-    actions.addImageAttachments(target, [screenshot]);
+    await attachImageFiles(target, [screenshot.file]);
     const sent = target.store.getState().pendingContent.chat;
     actions.setDraft(target, typed);
     actions.addPastedText(target, "Later paste");
     actions.addFileMention(target, { name: "later", path: "later" });
-    const later = { ...screenshot, id: "later-picture" };
-    actions.addImageAttachments(target, [later]);
+    const later = new File(["later"], "later.png", { type: "image/png" });
+    await attachImageFiles(target, [later]);
     actions.clearSent(target, sent);
-    expect(target.store.getState().pendingContent.chat.imageAttachments).toEqual([later]);
+    expect(
+      target.store.getState().pendingContent.chat.imageAttachments.map((a) => a.file.name)
+    ).toEqual([later.name]);
     expect(target.store.getState().pendingContent.chat.pastedTexts).toMatchObject([
       { content: "Later paste" },
     ]);
@@ -223,6 +241,28 @@ describe("draft storage", () => {
     expect((await reopen()).getState().pendingContent.chat.draft).toBe("On disk");
   });
 
+  it("saves the latest chat edit when the Home textarea holds more than the quota", async () => {
+    vi.stubGlobal("sessionStorage", memoryStorage(150_000));
+    const drafts = await reopen();
+    const home = composerTarget(HOME_COMPOSER_ID, drafts);
+    const chat = composerTarget("chat", drafts);
+    const longPrompt = "x".repeat(100_000);
+    actions.seedIfAbsent(home, emptyComposer(model, "high"));
+    actions.setDraft(home, longPrompt);
+    actions.setDraft(chat, "Earlier note");
+    expect((await reopen()).getState().pendingContent[HOME_COMPOSER_ID].draft.length).toBe(
+      longPrompt.length
+    );
+
+    const paste = longPrompt.repeat(2);
+    actions.setDraft(home, paste);
+    actions.setDraft(chat, "Latest note");
+    expect(drafts.getState().composers[HOME_COMPOSER_ID].draft).toBe(paste);
+    const restored = (await reopen()).getState().pendingContent;
+    expect(restored.chat.draft).toBe("Latest note");
+    expect(restored[HOME_COMPOSER_ID]).toMatchObject({ draft: "", missingPastedTexts: 1 });
+  });
+
   it("restores a partial row beside invalid rows and saves its next edit", async () => {
     const key = "composer-drafts:[null,null]";
     storage.setItem(
@@ -270,10 +310,10 @@ describe("cross-panel staged content", () => {
     expect(store.getState().composers.session.model).toBe(initial.model);
   });
 
-  it("keeps an inspection's prompt, target, and screenshot until history seeds the model", () => {
+  it("keeps an inspection's prompt, target, and screenshot until history seeds the model", async () => {
     actions.appendDraft("session", "Fix this button");
     actions.addInspectedElement("session", element);
-    actions.addImageAttachments("session", [screenshot]);
+    await attachImageFiles("session", [screenshot.file]);
     expect(store.getState().composers.session).toBeUndefined();
 
     const initial = emptyComposer(model, "xhigh");
@@ -304,7 +344,7 @@ describe("cross-panel staged content", () => {
     expect(store.getState().composers.unmounted).toBeUndefined();
   });
 
-  it.each([false, true])("clears every kind of staged content (seeded: %s)", (seeded) => {
+  it.each([false, true])("clears every kind of staged content (seeded: %s)", async (seeded) => {
     const initial = { ...emptyComposer(model, "xhigh"), planModeEnabled: true };
     if (seeded) actions.seedIfAbsent("session", initial);
     actions.setDraft("session", "A draft");
@@ -312,7 +352,7 @@ describe("cross-panel staged content", () => {
     actions.addInspectedElement("session", element);
     actions.addFileMention("session", { path: "README.md", name: "README.md" });
     actions.addSkillMention("session", { name: "code-review" });
-    actions.addImageAttachments("session", [screenshot]);
+    await attachImageFiles("session", [screenshot.file]);
 
     const { composers, pendingContent } = store.getState();
     actions.clearSent("session", composers.session ?? pendingContent.session);
@@ -321,10 +361,10 @@ describe("cross-panel staged content", () => {
     expect(store.getState().pendingContent).toEqual({});
   });
 
-  it("discards queued content on explicit discard", () => {
+  it("discards queued content on explicit discard", async () => {
     actions.appendDraft("closed", "Must not come back");
     actions.addInspectedElement("closed", element);
-    actions.addImageAttachments("closed", [screenshot]);
+    await attachImageFiles("closed", [screenshot.file]);
     actions.discard("closed");
     actions.seedIfAbsent("closed", emptyComposer(model, "high"));
     expect(store.getState().composers.closed).toEqual(emptyComposer(model, "high"));
@@ -332,38 +372,49 @@ describe("cross-panel staged content", () => {
   });
 });
 
-describe("move: a workspace's start composer hands over to its first chat", () => {
-  it.each(["move", "discard"])(
-    "handles a file read still in progress during %s",
-    async (action) => {
-      let finish!: () => void;
-      vi.stubGlobal(
-        "FileReader",
-        class {
-          onload!: (event: { target: { result: string } }) => void;
-          readAsDataURL() {
-            finish = () => this.onload({ target: { result: screenshot.preview } });
-          }
-        }
-      );
-      try {
-        actions.seedIfAbsent("workspace", emptyComposer(model, "high"));
-        const reading = attachImageFiles("workspace", [screenshot.file]);
-        if (action === "move") actions.move("workspace", "chat");
-        else actions.discard("workspace");
-        finish();
-        await reading;
-        expect(store.getState().composers.workspace).toBeUndefined();
-        expect(store.getState().pendingContent.workspace).toBeUndefined();
-        expect(store.getState().composers.chat?.imageAttachments.length ?? 0).toBe(
-          action === "move" ? 1 : 0
-        );
-      } finally {
-        vi.unstubAllGlobals();
-      }
-    }
-  );
+describe("browser screenshots", () => {
+  const previous = queryClient;
+  afterEach(() => setActiveQueryClient(previous));
 
+  function switchHost(host: string) {
+    const other = new RuntimeClient({ host, account: "A", grant: "next" }, { open: vi.fn() });
+    setActiveQueryClient(other.queryClient);
+  }
+
+  it("attaches to the requesting chat when the host switches during capture", async () => {
+    const target = composerTarget("chat");
+    const capture = Promise.withResolvers<string>();
+    const attaching = capture.promise.then((url) => attachScreenshotToComposer(target, url));
+    switchHost("during-capture");
+    capture.resolve(screenshot.preview);
+    expect(await attaching).toBe(true);
+    expect(composerStore().getState().pendingContent).toEqual({});
+    expect(store.getState().pendingContent.chat.imageAttachments).toHaveLength(1);
+  });
+
+  it.each(["move", "discard"])("finishes on the original host after %s", async (action) => {
+    let finish!: () => void;
+    stubFileReader((done) => {
+      finish = done;
+    });
+    actions.seedIfAbsent("workspace", emptyComposer(model, "high"));
+    const reading = attachScreenshotToComposer(composerTarget("workspace"), screenshot.preview);
+    if (action === "move") actions.move("workspace", "chat");
+    else actions.discard("workspace");
+    switchHost("other-" + action);
+    finish();
+    const attached = await reading;
+    expect(composerStore().getState().pendingContent).toEqual({});
+    expect(attached).toBe(action === "move");
+    expect(store.getState().composers.workspace).toBeUndefined();
+    expect(store.getState().pendingContent.workspace).toBeUndefined();
+    expect(store.getState().composers.chat?.imageAttachments.length ?? 0).toBe(
+      action === "move" ? 1 : 0
+    );
+  });
+});
+
+describe("move: a workspace's start composer hands over to its first chat", () => {
   it("does nothing when the start page had no composer", () => {
     const chat = { ...emptyComposer(model, "high"), draft: "Mine" };
     actions.seedIfAbsent("chat", chat);
@@ -372,11 +423,11 @@ describe("move: a workspace's start composer hands over to its first chat", () =
     expect(store.getState().composers.workspace).toBeUndefined();
   });
 
-  it("gives a chat with no composer the start composer's whole state", () => {
+  it("gives a chat with no composer the start composer's whole state", async () => {
     actions.seedIfAbsent("workspace", emptyComposer(model, "xhigh"));
     actions.togglePlanMode("workspace");
     actions.setDraft("workspace", "Also add tests");
-    actions.addImageAttachments("workspace", [screenshot]);
+    await attachImageFiles("workspace", [screenshot.file]);
     actions.move("workspace", "chat");
     expect(store.getState().composers.chat).toMatchObject({
       model,

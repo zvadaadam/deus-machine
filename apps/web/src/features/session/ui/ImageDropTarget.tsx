@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Upload } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { isUnclaimedFileDrag } from "../lib/imageAttachments";
 import { attachImageFiles } from "../store/sessionComposerStore";
 
 export function ImageDropTarget({
@@ -19,10 +20,11 @@ export function ImageDropTarget({
     <div
       className={cn("relative", className)}
       onDragOver={(event) => {
-        if (!event.dataTransfer.types.includes("Files")) return;
+        const unclaimed = isUnclaimedFileDrag(event);
+        setOver(unclaimed && !disabled);
+        if (!unclaimed) return;
         event.preventDefault();
         event.dataTransfer.dropEffect = disabled ? "none" : "copy";
-        setOver(!disabled);
       }}
       onDragLeave={(event) => {
         if (
@@ -32,9 +34,9 @@ export function ImageDropTarget({
           setOver(false);
       }}
       onDrop={async (event) => {
-        if (!event.dataTransfer.types.includes("Files")) return;
-        event.preventDefault();
         setOver(false);
+        if (!isUnclaimedFileDrag(event)) return;
+        event.preventDefault();
         if (disabled) return;
         await attachImageFiles(composerId, Array.from(event.dataTransfer.files));
       }}

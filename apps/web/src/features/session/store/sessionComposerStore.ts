@@ -1,4 +1,4 @@
-/** Typed drafts and notes survive reload under the runtime's host and account, while pictures and pasted cards stay in memory. */
+/** Drafts and notes survive reload under the runtime's host and account, while pictures, pasted cards and oversized text stay in memory. */
 import { createStore } from "zustand";
 import { z } from "zod";
 import { createJSONStorage, persist } from "zustand/middleware";
@@ -12,6 +12,9 @@ import type { InspectedElement } from "../ui/InspectedElementCard";
 import type { FileMention } from "../ui/FileMentionCard";
 import type { SkillMention } from "../ui/SkillMentionCard";
 import { processImageFiles, type ImageAttachment } from "../lib/imageAttachments";
+
+// Home pastes into its textarea. One pasted document must leave room for other chats to save.
+const MAX_STORED_DRAFT_LENGTH = 100_000;
 
 function storedObjects<T extends object>() {
   return z
@@ -85,13 +88,15 @@ function createDraftStore(name: string) {
         partialize({ composers, pendingContent }) {
           const rows: Record<string, KeptDraft> = {};
           for (const [id, content] of Object.entries({ ...pendingContent, ...composers })) {
+            const oversized = content.draft.length > MAX_STORED_DRAFT_LENGTH;
             const row = {
-              draft: content.draft,
+              draft: oversized ? "" : content.draft,
               fileMentions: content.fileMentions,
               skillMentions: content.skillMentions,
               inspectedElements: content.inspectedElements,
               missingPictures: content.missingPictures + content.imageAttachments.length,
-              missingPastedTexts: content.missingPastedTexts + content.pastedTexts.length,
+              missingPastedTexts:
+                content.missingPastedTexts + content.pastedTexts.length + (oversized ? 1 : 0),
             };
             if (hasDraft(row)) rows[id] = row;
           }
@@ -126,18 +131,23 @@ export function composerStore(cache: QueryClient = queryClient): DraftStore {
 
 /** Capture the owner before a send or file read can outlive the current host. */
 export const composerTarget = (id: string, store = composerStore()) => ({ id, store });
-type Target = string | ReturnType<typeof composerTarget>;
+export type ComposerTarget = ReturnType<typeof composerTarget>;
+type Target = string | ComposerTarget;
 const resolve = (target: Target) => (typeof target === "string" ? composerTarget(target) : target);
 
 // A start can finish while FileReader converts a dropped screenshot. The
 // existing move also hands these reads to the chat. Discard cancels them.
-const readingFiles = new Set<ReturnType<typeof composerTarget>>();
-export async function attachImageFiles(target: Target, files: File[]): Promise<void> {
+const readingFiles = new Set<ComposerTarget>();
+export async function attachImageFiles(target: Target, files: File[]): Promise<boolean> {
   const read = { ...resolve(target) };
   readingFiles.add(read);
   try {
     const attachments = await processImageFiles(files);
-    if (readingFiles.has(read)) sessionComposerActions.addImageAttachments(read, attachments);
+    if (!attachments.length || !readingFiles.has(read)) return false;
+    edit(read, (content) => {
+      content.imageAttachments.push(...attachments);
+    });
+    return true;
   } finally {
     readingFiles.delete(read);
   }
@@ -279,12 +289,6 @@ export const sessionComposerActions = {
       c.skillMentions = c.skillMentions.filter((p) => p.id !== id);
     }),
 
-  addImageAttachments: (key: Target, attachments: ImageAttachment[]) => {
-    if (attachments.length)
-      edit(key, (c) => {
-        c.imageAttachments.push(...attachments);
-      });
-  },
   removeImageAttachment: (key: Target, id: string) =>
     edit(key, (c) => {
       c.imageAttachments = c.imageAttachments.filter((p) => p.id !== id);

@@ -16,6 +16,12 @@ export interface ImageAttachment {
   type: string;
 }
 
+export function isUnclaimedFileDrag(
+  event: Pick<DragEvent, "dataTransfer" | "defaultPrevented">
+): event is { dataTransfer: DataTransfer; defaultPrevented: false } {
+  return !event.defaultPrevented && !!event.dataTransfer?.types.includes("Files");
+}
+
 /** Convert image Files to base64 preview attachments via FileReader.
  *  Non-image files are silently filtered out. */
 export async function processImageFiles(files: File[]): Promise<ImageAttachment[]> {

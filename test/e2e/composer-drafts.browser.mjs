@@ -8,6 +8,7 @@ import Database from "better-sqlite3";
 import { chromium } from "playwright";
 import { createServer } from "vite";
 import { scriptedTurn, startPlatform } from "./cloud/platform.mjs";
+import { seedToolTurn } from "./lib/setup-warning.mjs";
 import { SCHEMA_SQL } from "../../shared/schema.ts";
 import { createStack, freePort, until } from "./remote-access/stack.mjs";
 
@@ -52,6 +53,7 @@ for (const [workspace, chat, slug] of [
     "INSERT INTO sessions (id, workspace_id, agent_harness, status, message_count) VALUES (?, ?, 'claude-code', 'idle', 1)"
   ).run(chat, workspace);
 }
+for (let i = 0; i < 12; i++) seedToolTurn(db, firstChat);
 db.prepare(
   "INSERT INTO workspaces (id, repository_id, title, slug, state, git_target_branch, git_source_branch, git_branch) VALUES (?, ?, 'Waiting workspace', 'waiting', 'error', 'main', 'main', 'test/waiting')"
 ).run(startWorkspace, repo);
@@ -112,8 +114,7 @@ async function dropPicture(page, input, surface) {
     await cdp.detach();
   }
 }
-// Mount the actual start composer next to the actual chat in the same document.
-// Both React roots share the window's runtime, cache and composer store.
+// The start composer sits inside the chat's drop surface so the same file bubbles through both.
 const neighbor = path.join(directory, "neighbor.tsx");
 await writeFile(
   neighbor,
@@ -127,7 +128,7 @@ import {WorkspaceStartComposer} from "@/features/session/ui/WorkspaceStartCompos
 const host = document.createElement("div");
 host.id = "neighbor";
 host.style.cssText = "position:fixed;right:10px;top:70px;width:420px;z-index:9999";
-document.body.append(host);
+document.getElementById("chat-messages").after(host);
 const root = createRoot(host);
 root.render(<QueryClientProvider client={queryClient}><TooltipProvider><WorkspaceStartComposer workspace={{id:"neighbor",kind:"worktree"}} /></TooltipProvider></QueryClientProvider>);
 export const unmount = () => {root.unmount();host.remove()};
@@ -371,13 +372,14 @@ try {
   const largePaste = "A line of the oversized paste.\n".repeat(210000);
   {
     await page.goto(url(chatWorkspace));
-    await input.waitFor();
+    const transcript = page.locator("#chat-messages");
+    await transcript.locator("[data-message-id]").first().waitFor();
+    const first = await center(main(page).getByPlaceholder(/^Ask a follow-up/));
     const fixture = "/@fs" + neighbor;
     await page.evaluate((entry) => import(entry), fixture);
     const other = page.locator("#neighbor");
     const next = other.locator("textarea");
     await next.waitFor();
-    const first = await center(input);
     const last = await center(next);
     assert(
       await next.evaluate((el, p) => el === document.elementFromPoint(p.x, p.y), last),
@@ -388,6 +390,13 @@ try {
     const overlay = page.getByText("Drop images here", { exact: true });
     try {
       await check("A drag across two mounted composers attaches only at the last", async () => {
+        assert(
+          await transcript.evaluate((el) => {
+            el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;
+            return el.scrollTop > 0 && el.scrollTop + el.clientHeight < el.scrollHeight;
+          }),
+          "Transcript scrolled into its history"
+        );
         const before = await preview(page).count();
         await drag("dragEnter", first);
         await drag("dragOver", first);

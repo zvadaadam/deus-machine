@@ -21,8 +21,11 @@ import { useSimulatorStatusStore, simulatorStoreActions } from "../store";
 import { hasStream } from "../machine";
 import type { SimPhase } from "../store";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
-import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
-import { processImageFiles } from "@/features/session/lib/imageAttachments";
+import {
+  attachImageFiles,
+  composerTarget,
+  sessionComposerActions,
+} from "@/features/session/store/sessionComposerStore";
 import type { InspectorNode, InspectorSnapshot, SimulatorInfo } from "../types";
 import { SimulatorStreamViewer } from "./SimulatorStreamViewer";
 import { SimulatorAppBar } from "./SimulatorAppBar";
@@ -554,12 +557,12 @@ export function SimulatorPanel({ workspaceId, toolbarAction }: SimulatorPanelPro
     try {
       const sid = workspaceLayoutActions.getLayout(workspaceId).activeChatTabSessionId;
       if (!sid) return;
+      const target = composerTarget(sid);
       const { bytes } = await call(api.simScreenshot, { workspaceId });
       const file = new File([new Uint8Array(bytes)], `simulator-screenshot-${Date.now()}.jpg`, {
         type: "image/jpeg",
       });
-      const processed = await processImageFiles([file]);
-      if (processed.length) sessionComposerActions.addImageAttachments(sid, processed);
+      await attachImageFiles(target, [file]);
     } catch (e) {
       console.error("Screenshot failed:", e);
     }
