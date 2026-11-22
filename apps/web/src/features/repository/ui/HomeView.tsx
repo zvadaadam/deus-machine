@@ -159,14 +159,15 @@ export function HomeView({
 
   if (request?.repoId && request.repoId !== userRepoId) setUserRepoId(request.repoId);
   useLayoutEffect(() => {
-    if (!request || useUIStore.getState().newWorkspaceRequest?.id !== request.id) return;
-    // A deleted start can hand Home its waiting message, including pictures.
-    if (request.draft) void returnContentToComposer(HOME_COMPOSER_ID, request.draft);
+    if (!request || useUIStore.getState().newWorkspaceRequest !== request) return;
+    if (request.draft !== undefined) setMessage(request.draft);
+    if (request.returnedMessage !== undefined)
+      void returnContentToComposer(HOME_COMPOSER_ID, request.returnedMessage);
     if (request.repoId) setStoredRepoId(request.repoId);
     // Not cancelled on cleanup: clearing the request runs this effect again.
     setTimeout(() => textareaRef.current?.focus(), 50);
     uiActions.clearNewWorkspaceRequest();
-  }, [request]);
+  }, [request, setMessage]);
 
   // Where the new workspace runs: local worktree (default) or agnt cloud
   // sandbox. Starts from the window's place (cloud only when ready there) and

@@ -343,6 +343,22 @@ try {
       }
     }
   );
+  const automationPrompt = "Create a scheduled automation for this repo. It should: ";
+  const takeAutomationPrompt = async () => {
+    await page.getByRole("button", { name: "Automations", exact: true }).click();
+    await page.getByRole("button", { name: "New automation", expanded: false }).click();
+    await page.getByRole("menuitem", { name: "Create with AI" }).click();
+    return homeInput(page).inputValue();
+  };
+  await check("Requesting the automation prompt twice leaves it once", async () => {
+    await homeInput(page).fill("");
+    assert.equal(await takeAutomationPrompt(), automationPrompt);
+    assert.equal(await takeAutomationPrompt(), automationPrompt);
+  });
+  await check("An automation prompt replaces existing Home text", async () => {
+    await homeInput(page).fill("My earlier draft");
+    assert.equal(await takeAutomationPrompt(), automationPrompt);
+  });
   await page.goto(url(chatWorkspace));
   await check("Chat file drop", () => dropPicture(page, input, "Chat"));
   await check(
@@ -589,18 +605,19 @@ try {
       assert.equal(data.filter((f) => f.content === "first waiting message").length, 1);
     }
   );
-  async function checkFreshChat(name, test) {
+  async function checkFreshChat(workspace, name, test) {
     await check(name, async () => {
       const p = await context.newPage();
       try {
-        await p.goto(url(chatWorkspace));
-        await test(p, chatInput(p));
+        await p.goto(url(workspace));
+        await test(p, main(p).getByPlaceholder(/^Ask a follow-up/));
       } finally {
         await p.close();
       }
     });
   }
   await checkFreshChat(
+    chatWorkspace,
     "Typing after a 6.51 MB paste in the same chat survives reload",
     async (p, field) => {
       await field.fill("Before paste");
@@ -617,11 +634,14 @@ try {
     }
   );
   await checkFreshChat(
-    "A full browser store keeps the live edit and the last saved draft",
+    cloudWorkspace,
+    "A full browser store keeps a live edit and a reload leaves the sent draft empty",
     async (p, field) => {
       const errors = [];
       p.on("pageerror", (error) => errors.push(error.message));
-      await field.fill("Last saved draft");
+      const sent = "Send this once";
+      await field.fill(sent);
+      await openHome(p);
       await p.evaluate(() => {
         const block = "x".repeat(64 * 1024);
         try {
@@ -631,12 +651,22 @@ try {
         }
       });
       const live = "Still typing ".repeat(7000);
-      await field.fill(live);
+      await homeInput(p).fill(live);
+      await main(p)
+        .getByRole("button", { name: /Cloud fixture/ })
+        .click();
+      await value(field, sent);
+      await field.press("Enter");
+      await until(() =>
+        platform.commands(cloudChat).some((c) => c.type === "message.send" && c.text === sent)
+      );
+      await value(field, "");
       await openHome(p);
-      await openWorkspace(chatWorkspace, p);
-      await value(field, live);
-      await p.reload();
-      await value(field, "Last saved draft");
+      await value(homeInput(p), live);
+      await p.goto(url(cloudWorkspace));
+      await field.press("End");
+      await field.press("x");
+      assert.equal(await field.inputValue(), "x");
       assert.deepEqual(errors, []);
     }
   );
@@ -742,6 +772,26 @@ try {
           await openWorkspace(chatWorkspace, p);
           await value(chatInput(p), "Typed after the cloud answered");
         }
+      }
+    );
+    await check(
+      "Deleting a start puts its waiting text and picture ahead of Home's typed text",
+      async () => {
+        await openHome(p);
+        await homeInput(p).fill("Already on Home");
+        await openWorkspace(failed.workspaceId, p);
+        const first = chatInput(p);
+        await first.fill("See my picture");
+        await dropPicture(p, first, "Start");
+        await first.press("Enter");
+        await p.locator('[data-slot="waiting-message"]').getByText("See my picture").waitFor();
+        await p.getByRole("button", { name: "Delete", exact: true }).click();
+        await value(homeInput(p), "See my picture\n\nAlready on Home");
+        const picture = p.getByRole("button", { name: /^Preview image / }).getByRole("img");
+        assert.equal(
+          await picture.getAttribute("src"),
+          "data:image/png;base64," + (await readFile(png, "base64"))
+        );
       }
     );
   } finally {

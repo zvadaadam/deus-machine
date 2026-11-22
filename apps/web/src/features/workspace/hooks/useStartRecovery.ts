@@ -41,19 +41,15 @@ export function useStartRecovery(workspaceId: string, repoId?: string) {
       toast("Workspace deleted");
       return;
     }
-    // The message it was waiting to send goes to Home's composer, to start
-    // again from there: not into a toast that expires.
+    const returnToHome = () => openNewWorkspace({ repoId, returnedMessage: pending.message });
     if (onScreen) {
-      openNewWorkspace({ draft: pending.message, repoId });
+      returnToHome();
       toast("Workspace deleted", { description: "Your message is back on Home." });
       return;
     }
     toast("Workspace deleted", {
       description: "Your message was not sent.",
-      action: {
-        label: "Start again",
-        onClick: () => openNewWorkspace({ draft: pending.message, repoId }),
-      },
+      action: { label: "Start again", onClick: returnToHome },
     });
   }, [remove, workspaceId, repoId]);
 

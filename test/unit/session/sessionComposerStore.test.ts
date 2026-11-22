@@ -230,15 +230,21 @@ describe("draft storage", () => {
     }
   );
 
-  it("keeps the in-memory edit and the last stored row if storage itself is full", async () => {
+  it("drops only the stale draft when saving an acknowledged send fails", async () => {
+    const { pendingFirstMessages } = await import("@/features/workspace/store/workspaceStartStore");
+    const waiting = { message: "Still waiting", model };
+    pendingFirstMessages.set("starting", waiting);
+    actions.setDraft(composerTarget("chat", await reopen()), "Ready to send");
     const target = composerTarget("chat", await reopen());
-    actions.setDraft(target, "On disk");
+    const sent = target.store.getState().pendingContent.chat;
+    expect(sent.draft).toBe("Ready to send");
     storage.setItem.mockImplementationOnce(() => {
       throw new DOMException("Storage full", "QuotaExceededError");
     });
-    actions.setDraft(target, "Still in my composer");
-    expect(target.store.getState().pendingContent.chat.draft).toBe("Still in my composer");
-    expect((await reopen()).getState().pendingContent.chat.draft).toBe("On disk");
+    actions.clearSent(target, sent);
+    expect((await reopen()).getState().pendingContent.chat).toBeUndefined();
+    const restored = await import("@/features/workspace/store/workspaceStartStore");
+    expect(restored.pendingFirstMessages.get("starting")).toEqual(waiting);
   });
 
   it("saves the latest chat edit when the Home textarea holds more than the quota", async () => {

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import type { QueryClient } from "@tanstack/react-query";
-import { capabilities } from "@/platform/capabilities";
+import { windowStorage } from "@/shared/stores/windowStorage";
 import { runtimeForQueryClient } from "@/platform/ws/runtime-client";
 import { queryClient } from "@/shared/api/queryClient";
 import { fitThinkingLevel, type ThinkingLevel } from "@/shared/agents";
@@ -66,25 +66,12 @@ const storedRows = z.object({
 });
 
 function createDraftStore(name: string) {
-  const json = createJSONStorage<unknown>(() =>
-    capabilities.singleWindow ? localStorage : sessionStorage
-  );
   return createStore<State>()(
     persist(
       immer((): State => ({ composers: {}, pendingContent: {} })),
       {
         name,
-        storage: {
-          getItem: (key) => json?.getItem(key) ?? null,
-          removeItem: (key) => json?.removeItem(key),
-          setItem(key, value) {
-            try {
-              json?.setItem(key, value);
-            } catch {
-              /* Storage may be full. The renderer still holds the entire draft. */
-            }
-          },
-        },
+        storage: createJSONStorage(() => windowStorage),
         partialize({ composers, pendingContent }) {
           const rows: Record<string, KeptDraft> = {};
           for (const [id, content] of Object.entries({ ...pendingContent, ...composers })) {
