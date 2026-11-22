@@ -161,8 +161,7 @@ it("keeps the allocated computer and last stage when chat creation fails", async
 });
 
 const row = (id: string) => db.prepare("SELECT * FROM workspaces WHERE id = ?").get(id);
-const report = (id: string, status: string) =>
-  applyCloudStatus(id, { status }, { beforePublish() {} });
+const report = (id: string, status: string) => applyCloudStatus(id, { status });
 const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 const windowArchive = (workspaceId: string) =>
@@ -245,15 +244,13 @@ it("ignores another token even while the new start is initializing", async () =>
   const { workspaceId } = createCloudWorkspace({ repositoryId: "r" });
   const before = row(workspaceId);
   const stale = new AbortController().signal;
-  const effect = vi.fn();
   mock.invalidate.mockClear();
   try {
-    attachCloudComputer(workspaceId, "other-vm", 10, effect, stale);
+    expect(attachCloudComputer(workspaceId, "other-vm", 10, stale)).toBe(false);
     attachCloudChat(workspaceId, "other-chat", stale);
     failCloudStart(workspaceId, "other failure", stale);
     expect(row(workspaceId)).toEqual(before);
     expect(mock.invalidate).not.toHaveBeenCalled();
-    expect(effect).not.toHaveBeenCalled();
     expect(db.prepare("SELECT id FROM sessions").all()).toEqual([]);
   } finally {
     reply.resolve(true);

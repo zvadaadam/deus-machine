@@ -519,7 +519,7 @@ export async function wakeCloudWorkspaceWithFeedback(
   // An already-running VM need not emit another frame for its newly repaired chat.
   if (sessionId !== workspace.current_session_id && status === "running" && !latest())
     applyCloudStatus(workspace.id, { status });
-  else invalidate(["workspaces"], {});
+  invalidate(["workspaces"], {});
   return { ok: true, status: status === "running" ? "running" : "resuming" };
 }
 
@@ -911,16 +911,12 @@ async function provisionCloudWorkspace(
       // New branch off the source — the sandbox's whole life happens here.
       checkout: { branch: branch.work, from: branch.source },
     });
-    const attached = attachCloudComputer(
-      workspaceId,
-      provider.id,
-      inlineMintStampAtCreate,
-      () => {
-        if (repositoryAuth) markWorkspaceTokenRefreshed(provider.id);
-      },
-      token
-    );
-    if (!attached) return;
+    if (!attachCloudComputer(workspaceId, provider.id, inlineMintStampAtCreate, token)) return;
+    try {
+      if (repositoryAuth) markWorkspaceTokenRefreshed(provider.id);
+    } finally {
+      invalidate(["workspaces", "sessions", "session"], {});
+    }
     const sessionId = await openCloudChat(workspaceId, provider.id, () => org, token);
     if (!sessionId || token.aborted) return;
 

@@ -16,6 +16,7 @@ import {
   type Stage,
 } from "./workspace-lifecycle";
 import { prepareLocalEnvironment } from "./project-environment.service";
+import { invalidate } from "./query-engine";
 import { generateUniqueName } from "./workspace.service";
 
 const FETCH_TIMEOUT_MS = 30_000;
@@ -318,15 +319,15 @@ async function checkout(ctx: InitContext, signal: AbortSignal) {
     signal.throwIfAborted();
     stage = "session";
     advanceLocalStage(ctx.workspaceId, stage, signal);
-    finishLocalStart(
-      ctx.workspaceId,
-      () => {
+    if (finishLocalStart(ctx.workspaceId, signal)) {
+      try {
         void prepareLocalEnvironment(ctx.workspaceId, ctx.workspacePath, ctx.repoOriginUrl).catch(
           (err) => console.warn(`[WORKSPACE] Setup for ${ctx.workspaceId} failed:`, err)
         );
-      },
-      signal
-    );
+      } finally {
+        invalidate(["workspaces", "sessions"]);
+      }
+    }
     signal.throwIfAborted();
   } catch (err) {
     // Shutdown leaves the durable stage for startup recovery.

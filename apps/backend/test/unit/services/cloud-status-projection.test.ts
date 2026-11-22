@@ -68,7 +68,7 @@ it.each(cases)("projects %s for each row shape", (_name, data, projected) => {
           "UPDATE workspaces SET state=?, init_stage='old step', error_message='old reason', error_detail='old detail', current_session_id=?, provider_workspace_id=? WHERE id='w'"
         ).run(state, pointer, vm);
         const before = read.get();
-        applyCloudStatus("w", data, { beforePublish() {} });
+        applyCloudStatus("w", data);
         expect
           .soft(read.get(), JSON.stringify({ state, pointer, vm }))
           .toEqual(state === "archived" || pointer !== "chat" || !projected ? before : projected);

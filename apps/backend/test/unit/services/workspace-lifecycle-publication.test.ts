@@ -1,116 +1,87 @@
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { SCHEMA_SQL } from "@shared/schema";
-import {
-  applyCloudStatus,
-  attachCloudComputer,
-  finishLocalStart,
-  insertLocalWorkspace,
-  markArchived,
-  runWorkspaceAttempt,
-} from "../../../src/services/workspace-lifecycle";
+import { createLocalWorkspace } from "../../../src/services/workspace-init.service";
+import { archiveWorkspace } from "../../../src/services/workspace-archive.service";
+import { recordWorkspaceStatus } from "../../../src/services/agent/cloud/driver";
 
 let db: Database.Database;
-const { invalidate } = vi.hoisted(() => ({ invalidate: vi.fn() }));
+const { invalidate, start, park } = vi.hoisted(() => ({
+  invalidate: vi.fn(),
+  start: vi.fn(),
+  park: vi.fn(),
+}));
 vi.mock("../../../src/lib/database", () => ({ getDatabase: () => db }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate }));
+vi.mock("../../../src/services/workspace-checkout", () => ({
+  pickWorkspaceName: async () => ({ slug: "work", branchName: "user/work" }),
+  initializeWorkspace: start,
+}));
+vi.mock("../../../src/services/agent/cloud/simulator", async (original) => ({
+  ...(await original<typeof import("../../../src/services/agent/cloud/simulator")>()),
+  parkCloudSimulator: park,
+}));
 
 beforeEach(() => {
-  invalidate.mockReset();
+  vi.resetAllMocks();
   db = new Database(":memory:");
   db.exec(SCHEMA_SQL);
-  db.exec("INSERT INTO repositories (id, name) VALUES ('r', 'repo')");
+  db.exec("INSERT INTO repositories (id, name, root_path) VALUES ('r', 'repo', '/project')");
 });
 afterEach(() => db.close());
 
-const local = {
-  id: "w",
-  repository_id: "r",
-  slug: "work",
-  git_branch: "user/work",
-  git_source_branch: "main",
-  git_target_branch: "main",
-  title: null,
-  pr_url: null,
-  pr_number: null,
-  first_session_id: "first",
-  started_by: null,
-};
+it("publishes the committed local workspace even when starting its checkout throws", async () => {
+  start.mockImplementation(() => {
+    expect(db.prepare("SELECT state FROM workspaces").get()).toEqual({ state: "initializing" });
+    expect(invalidate).not.toHaveBeenCalled();
+    throw new Error("could not launch checkout");
+  });
+  await expect(createLocalWorkspace({ repository_id: "r" })).rejects.toThrow(
+    "could not launch checkout"
+  );
+  expect(invalidate).toHaveBeenCalledExactlyOnceWith(["workspaces"]);
+});
 
 it.each([
-  {
-    operation: "local creation",
-    initial: false,
-    expected: { state: "initializing" },
-    write: (step: () => void) => insertLocalWorkspace(local, step),
-    notification: [["workspaces"]],
-  },
-  {
-    operation: "opening the first chat",
-    initial: true,
-    expected: { state: "ready", current_session_id: "first" },
-    write: (step: () => void) =>
-      runWorkspaceAttempt("w", async (token) => finishLocalStart("w", step, token)),
-    notification: [["workspaces", "sessions"]],
-  },
-  {
-    operation: "attaching a cloud computer",
-    initial: true,
-    expected: { provider_workspace_id: "vm", init_stage: "creating cloud session" },
-    write: (step: () => void) =>
-      runWorkspaceAttempt("w", async (token) => {
-        attachCloudComputer("w", "vm", 42, step, token);
-      }),
-    notification: [["workspaces", "sessions", "session"], {}],
-  },
-  {
-    operation: "applying cloud status",
-    initial: true,
-    expected: { init_stage: "paused" },
-    write: (step: () => void) =>
-      applyCloudStatus("w", { status: "paused" }, { beforePublish: step }),
-    notification: [["workspaces"], {}],
-  },
-])(
-  "publishes the committed row when an effect throws during $operation",
-  async ({ operation, initial, expected, write, notification }) => {
-    if (initial)
-      db.exec(
-        "INSERT INTO workspaces (id, repository_id, slug, first_session_id) VALUES ('w', 'r', 'work', 'first')"
-      );
-    if (operation === "applying cloud status")
-      db.exec(
-        "INSERT INTO sessions (id, workspace_id) VALUES ('chat', 'w'); UPDATE workspaces SET current_session_id = 'chat' WHERE id = 'w'"
-      );
-    const read = () => db.prepare("SELECT * FROM workspaces WHERE id = 'w'").get();
-    const error = new Error("intervening effect failed");
-    const observed = vi.fn(() => {
-      expect(read()).toMatchObject(expected);
-      expect(invalidate).not.toHaveBeenCalled();
-      throw error;
+  { state: "archived", stage: "running" },
+  { state: "ready", stage: "paused" },
+])("parks a $state computer before publishing even if parking throws", ({ state, stage }) => {
+  db.prepare(
+    "INSERT INTO workspaces (id, repository_id, slug, state, init_stage, current_session_id) VALUES ('w', 'r', 'work', ?, 'running', 'chat')"
+  ).run(state);
+  db.exec("INSERT INTO sessions (id, workspace_id) VALUES ('chat', 'w')");
+  park.mockImplementation(() => {
+    expect(db.prepare("SELECT state, init_stage FROM workspaces").get()).toEqual({
+      state,
+      init_stage: stage,
     });
-    await expect(Promise.resolve().then(() => write(observed))).rejects.toThrow(error);
-    expect(observed).toHaveBeenCalledOnce();
-    expect(invalidate.mock.calls).toEqual([notification]);
-    expect(read()).toMatchObject(expected);
-  }
-);
+    expect(invalidate).not.toHaveBeenCalled();
+    throw new Error("could not park simulator");
+  });
+  expect(() => recordWorkspaceStatus("w", { status: "paused" })).toThrow(
+    "could not park simulator"
+  );
+  expect(invalidate).toHaveBeenCalledExactlyOnceWith(["workspaces"], {});
+});
 
-it("checks archive admission immediately before writing the row", () => {
+it("ignores a status report for a missing workspace", () => {
+  recordWorkspaceStatus("missing", { status: "paused" });
+  expect(park).not.toHaveBeenCalled();
+  expect(invalidate).not.toHaveBeenCalled();
+});
+
+it("checks archive admission immediately before writing the row", async () => {
   db.exec(
     "INSERT INTO workspaces (id, repository_id, slug, state) VALUES ('w', 'r', 'work', 'ready')"
   );
   const state = db.prepare("SELECT state FROM workspaces WHERE id = 'w'").pluck();
-  const workspace = { id: "w", kind: "worktree", provider_workspace_id: null } as const;
-  const refused = new Error("archive refused");
-  expect(() =>
-    markArchived(workspace, () => {
-      throw refused;
+  await expect(
+    archiveWorkspace("w", () => {
+      throw new Error("archive refused");
     })
-  ).toThrow(refused);
+  ).rejects.toThrow("archive refused");
   expect(state.get()).toBe("ready");
-
-  markArchived(workspace, () => expect(state.get()).toBe("ready"));
-  expect(state.get()).toBe("archived");
   expect(invalidate).not.toHaveBeenCalled();
+  await archiveWorkspace("w", () => expect(state.get()).toBe("ready"));
+  expect(state.get()).toBe("archived");
 });

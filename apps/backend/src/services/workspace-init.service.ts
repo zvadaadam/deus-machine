@@ -9,6 +9,7 @@ import { getDatabase } from "../lib/database";
 import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 import { processGroupsStopped } from "../lib/process-groups";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
+import { invalidate } from "./query-engine";
 import { cloudAccount } from "./agent/cloud/config";
 import { createCloudWorkspace } from "./cloud-workspace-init.service";
 import { SETUP_INTERRUPTED } from "./setup-status";
@@ -77,25 +78,24 @@ export async function createLocalWorkspace(
   const { slug, branchName } = await pickWorkspaceName(rootPath);
 
   options.admit?.();
-  insertLocalWorkspace(
-    {
-      id: workspaceId,
-      repository_id: input.repository_id,
-      slug,
-      title: input.pr_title || null,
-      git_branch: branchName,
-      git_source_branch: sourceBranch,
-      git_target_branch: input.target_branch || repo.git_default_branch || "main",
-      pr_url: input.pr_url || null,
-      pr_number: input.pr_number || null,
-      first_session_id: firstSessionId,
-      started_by:
-        options.startedBy && options.startedBy.kind !== "person"
-          ? JSON.stringify(options.startedBy)
-          : null,
-    },
-    () => {
-      // Starts the fetch stage synchronously, before publishing the new workspace.
+  const inserted = insertLocalWorkspace({
+    id: workspaceId,
+    repository_id: input.repository_id,
+    slug,
+    title: input.pr_title || null,
+    git_branch: branchName,
+    git_source_branch: sourceBranch,
+    git_target_branch: input.target_branch || repo.git_default_branch || "main",
+    pr_url: input.pr_url || null,
+    pr_number: input.pr_number || null,
+    first_session_id: firstSessionId,
+    started_by:
+      options.startedBy && options.startedBy.kind !== "person"
+        ? JSON.stringify(options.startedBy)
+        : null,
+  });
+  if (inserted) {
+    try {
       void initializeWorkspace({
         workspaceId,
         repoRootPath: rootPath,
@@ -104,8 +104,10 @@ export async function createLocalWorkspace(
         sourceBranch,
         repoOriginUrl: repo.git_origin_url,
       });
+    } finally {
+      invalidate(["workspaces"]);
     }
-  );
+  }
   return { workspaceId, firstSessionId };
 }
 

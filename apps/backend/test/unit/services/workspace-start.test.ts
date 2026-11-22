@@ -816,7 +816,7 @@ exec "$REAL_GIT" "$@"
         const n = mocks.invalidate.mock.calls.length;
         lifecycle.advanceLocalStage("w", "session", original);
         lifecycle.recordFetchOutcome("w", "offline", original);
-        lifecycle.finishLocalStart("w", () => {}, original);
+        lifecycle.finishLocalStart("w", original);
         lifecycle.failStart("w", "session", { message: "old failure", detail: null }, original);
         after = row("w");
         publishes = mocks.invalidate.mock.calls.length - n;
@@ -843,7 +843,7 @@ exec "$REAL_GIT" "$@"
           const n = mocks.invalidate.mock.calls.length;
           advance(id, step, token);
           lifecycle.recordFetchOutcome(id, "offline", token);
-          lifecycle.finishLocalStart(id, () => {}, token);
+          lifecycle.finishLocalStart(id, token);
           lifecycle.failStart(id, step, { message: "late", detail: null }, token);
           observations.push([before, row(id), mocks.invalidate.mock.calls.length - n]);
         }

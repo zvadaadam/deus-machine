@@ -25,31 +25,30 @@ type LocalStart = StartBranches &
     started_by: string | null;
   };
 
-export function insertLocalWorkspace(row: LocalStart, beforePublish: () => void): void {
+/** createLocalWorkspace publishes after starting the checkout. */
+export function insertLocalWorkspace(row: LocalStart): boolean {
   const db = getDatabase();
-  db.prepare(
-    `INSERT INTO workspaces (
+  const write = db
+    .prepare(
+      `INSERT INTO workspaces (
        id, repository_id, slug, title, git_branch, git_source_branch,
        git_target_branch, pr_url, pr_number, state, first_session_id, started_by, updated_at
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'initializing', ?, ?, datetime('now'))`
-  ).run(
-    row.id,
-    row.repository_id,
-    row.slug,
-    row.title,
-    row.git_branch,
-    row.git_source_branch,
-    row.git_target_branch,
-    row.pr_url,
-    row.pr_number,
-    row.first_session_id,
-    row.started_by
-  );
-  try {
-    beforePublish();
-  } finally {
-    invalidate(["workspaces"]);
-  }
+    )
+    .run(
+      row.id,
+      row.repository_id,
+      row.slug,
+      row.title,
+      row.git_branch,
+      row.git_source_branch,
+      row.git_target_branch,
+      row.pr_url,
+      row.pr_number,
+      row.first_session_id,
+      row.started_by
+    );
+  return write.changes > 0;
 }
 
 type Cleanup = () => Promise<void>;
@@ -112,17 +111,9 @@ export function recordFetchOutcome(
     .run(issue, workspaceId);
 }
 
-/**
- * The first chat, under the id minted with the workspace, started by whoever
- * started it; only while the workspace is still starting, in the same
- * transaction. Setup is marked running before a ready observer can send.
- */
-export function finishLocalStart(
-  workspaceId: string,
-  beforePublish: () => void,
-  token: AbortSignal
-): void {
-  if (!ownsAttempt(workspaceId, token)) return;
+/** The checkout publishes after starting setup so the first turn sees its status. */
+export function finishLocalStart(workspaceId: string, token: AbortSignal): boolean {
+  if (!ownsAttempt(workspaceId, token)) return false;
   const db = getDatabase();
   const opened = db.transaction(() => {
     const row = db
@@ -142,13 +133,8 @@ export function finishLocalStart(
     ).run(sessionId, sessionId, workspaceId);
     return true;
   })();
-  if (!opened) return;
-  attempts.delete(workspaceId); // The checkout now belongs to the chat.
-  try {
-    beforePublish();
-  } finally {
-    invalidate(["workspaces", "sessions"]);
-  }
+  if (opened) attempts.delete(workspaceId); // The chat owns its checkout.
+  return opened;
 }
 
 type StartFailure = { message: string; detail: string | null };
@@ -345,11 +331,11 @@ export function failCloudStart(
   invalidate([...WORKSPACE_RESOURCES], {});
 }
 
+/** Cloud provisioning publishes after recording the token refresh for the computer. */
 export function attachCloudComputer(
   id: string,
   providerId: string,
   mintedAt: number | null,
-  beforePublish: () => void,
   token: AbortSignal
 ): boolean {
   if (!ownsAttempt(id, token)) return false;
@@ -358,13 +344,7 @@ export function attachCloudComputer(
       "UPDATE workspaces SET provider_workspace_id = ?, init_stage = 'creating cloud session', last_inline_mint_at = ? WHERE id = ? AND state = 'initializing'"
     )
     .run(providerId, mintedAt, id);
-  if (!attached.changes) return false;
-  try {
-    beforePublish();
-  } finally {
-    invalidate([...WORKSPACE_RESOURCES], {});
-  }
-  return true;
+  return attached.changes > 0;
 }
 
 export function attachCloudChat(
@@ -469,11 +449,8 @@ export function queueCloudWake<T>(id: string, wake: (latest: LatestCloudReport) 
   });
 }
 
-export function applyCloudStatus(
-  workspaceId: string,
-  data: CloudReport,
-  effects?: { beforePublish: () => void }
-): void {
+/** The driver parks a sleeping computer's simulator before publishing. Undefined means the row is gone. */
+export function applyCloudStatus(workspaceId: string, data: CloudReport): boolean | undefined {
   const wake = wakes.get(workspaceId);
   if (wake) wake.report ??= {}; // Even an unrecognized report supersedes tentative stage writes.
   const row = cloudWorkspaceChat(workspaceId);
@@ -497,11 +474,7 @@ export function applyCloudStatus(
         },
       };
   }
-  try {
-    effects?.beforePublish();
-  } finally {
-    invalidate(["workspaces"], {});
-  }
+  return !!fields;
 }
 
 export function setCloudWakeStage(workspaceId: string, stage: string | null): void {
@@ -539,7 +512,6 @@ export const CLOUD_STILL_STARTING =
 /** The API and assistants' host publish after the confirmed pause, archive, local effects and checkout cleanup. */
 export function markArchived(
   workspace: Pick<WorkspaceRow, "id" | "kind" | "provider_workspace_id">,
-  check?: () => void,
   by: Origin | null = null
 ) {
   const { id, kind, provider_workspace_id } = workspace;
@@ -547,7 +519,6 @@ export function markArchived(
   if (kind === "cloud" && attempt && !provider_workspace_id)
     throw new ConflictError(CLOUD_STILL_STARTING);
   const archivedBy = by && by.kind !== "person" ? JSON.stringify(by) : null;
-  check?.();
   getDatabase()
     .prepare(
       "UPDATE workspaces SET state = 'archived', archived_at = datetime('now'), archived_by = ? WHERE id = ? AND state != 'archived'"
