@@ -113,14 +113,17 @@ export default [
   }),
 
   handle(api.agentAuth, readAgentAuth),
-  handle(api.agentModels, async ({ workspaceId }) => {
+  handle(api.agentModels, async ({ workspaceId, harness }) => {
     const workspace = workspaceId
       ? getWorkspaceForMiddleware(getDatabase(), workspaceId)
       : undefined;
     const folder = workspace ? computeWorkspacePath(workspace) : "";
     // A cloud workspace, or one whose folder is gone, is asked for with no folder.
     return {
-      lists: await getLocalAgents().models(folder && existsSync(folder) ? folder : undefined),
+      lists: await getLocalAgents().models(
+        folder && existsSync(folder) ? folder : undefined,
+        harness
+      ),
     };
   }),
   handle(api.cloudModels, async () => {

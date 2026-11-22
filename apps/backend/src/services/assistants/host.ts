@@ -51,12 +51,19 @@ import {
 import type { Origin } from "@zvada/agent-server/protocol";
 import type { AnyOp, InputOf, OutputOf } from "@shared/api/op";
 import * as sessions from "@shared/api/sessions";
+import { agentModels } from "@shared/api/settings";
 import { uuidv7 } from "@shared/lib/uuid";
 import * as workspaces from "@shared/api/workspaces";
 import { ACTIVE_TURN_STATUSES, type AgentHarness } from "@shared/enums";
 import { HARNESSES } from "@shared/harnesses";
 import { githubRepoSlug } from "@shared/git-origin";
-import { DEFAULT_AGENT_HARNESS, defaultModelId, harnessNamed, pickerModels } from "@shared/models";
+import {
+  CATALOG_MODEL_LISTS,
+  DEFAULT_AGENT_HARNESS,
+  defaultModelId,
+  harnessNamed,
+  pickerModels,
+} from "@shared/models";
 import { LOCAL_CALLER, type Caller } from "../../api/registry";
 import { archiveWorkspace } from "../workspace-archive.service";
 import { createLocalWorkspace } from "../workspace-init.service";
@@ -77,7 +84,7 @@ import { sendMessage, stopSession } from "../agent/turns";
 import { invalidate, onInvalidate, runAsThisComputer as run } from "../query-engine";
 import { getServerName } from "../server-name";
 import { assertMayWrite, refusalFor, storedAccess } from "./access";
-import { operatorModelLists, turnSettings, type TurnSettings } from "./turn-settings";
+import { continuedSettings, startSettings, type TurnSettings } from "./turn-settings";
 import { replyFor, waitingOf } from "./waiting";
 
 /** How long a first task waits for its workspace to be ready. */
@@ -699,9 +706,12 @@ export function createDeusHost(): DeusHost {
           throw new OperatorError("not_found", "That session is gone. Nothing was sent.");
         if (firsts.has(sessionId))
           throw new Refused({ code: "busy", sessions: [sessionId], state: "setting_up" });
-        // As the chat's composer would continue it: its latest turn's model and thinking.
         const { turns } = await run(sessions.messages, { sessionId, limit: 50 });
-        const settings = await turnSettings(session.agent_harness, turns, session.workspace_id);
+        const settings = await continuedSettings(
+          session.agent_harness,
+          turns,
+          session.workspace_id
+        );
         mayTouch(caller, sessionId);
         try {
           await sendMessage({ sessionId, content: message, turnId, ...settings }, origin);
@@ -739,7 +749,7 @@ export function createDeusHost(): DeusHost {
             "invalid_input",
             `start_session: agent: ${JSON.stringify(input.harness)} does not run here; the agents are ${AGENT_NAMES}. Nothing was started.`
           );
-        const settings = await turnSettings(harness, [], input.workspace?.id, input);
+        const settings = await startSettings(harness, input);
         if (input.workspace) {
           const workspaceId = input.workspace.id;
           const sessionId = uuidv7();
@@ -858,7 +868,10 @@ export function createDeusHost(): DeusHost {
       }),
 
     async models() {
-      const lists = await operatorModelLists();
+      const lists = await run(agentModels, {}).then(
+        (answer) => answer.lists,
+        () => CATALOG_MODEL_LISTS
+      );
       return lists.flatMap((list) =>
         pickerModels(lists, list.harness).map(
           (m): ModelEntry => ({

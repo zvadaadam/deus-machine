@@ -379,15 +379,15 @@ describe("agentModels", () => {
 
   it("answers what this computer's CLIs list", async () => {
     expect(await run(api.agentModels)).toEqual({ lists: LISTS });
-    expect(agents.models).toHaveBeenCalledWith(undefined);
+    expect(agents.models).toHaveBeenCalledWith(undefined, undefined);
   });
 
-  it("asks for a workspace's own folder, whose settings can narrow the list", async () => {
+  it("asks the named harness for a workspace's own folder", async () => {
     agents.workspace.mockReturnValue({ kind: "worktree", root_path: "/repo", slug: "berlin" });
     agents.folders.add("/repo/.deus/berlin");
-    await run(api.agentModels, { workspaceId: "ws-1" });
+    await run(api.agentModels, { workspaceId: "ws-1", harness: "claude-code" });
     expect(agents.workspace).toHaveBeenCalledWith(expect.anything(), "ws-1");
-    expect(agents.models).toHaveBeenCalledWith("/repo/.deus/berlin");
+    expect(agents.models).toHaveBeenCalledWith("/repo/.deus/berlin", "claude-code");
   });
 
   it("asks for no folder when the workspace has none on this computer", async () => {
@@ -399,7 +399,7 @@ describe("agentModels", () => {
     ]) {
       agents.workspace.mockReturnValue(workspace);
       await run(api.agentModels, { workspaceId: "ws-1" });
-      expect(agents.models).toHaveBeenLastCalledWith(undefined);
+      expect(agents.models).toHaveBeenLastCalledWith(undefined, undefined);
     }
   });
 });

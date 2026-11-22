@@ -62,9 +62,10 @@ export class LocalAgents {
    * when a login changes). A CLI that does not answer gets the engine's own
    * catalog, with the reason. No `env`, as for `status`.
    */
-  models(cwd?: string): Promise<ModelList[]> {
+  models(cwd?: string, harness?: AgentHarness): Promise<ModelList[]> {
+    const harnesses = harness ? [harness] : LOCAL_HARNESSES;
     return Promise.all(
-      LOCAL_HARNESSES.map((harness) => this.client.listModels({ harness, ...(cwd && { cwd }) }))
+      harnesses.map((id) => this.client.listModels({ harness: id, ...(cwd && { cwd }) }))
     );
   }
 

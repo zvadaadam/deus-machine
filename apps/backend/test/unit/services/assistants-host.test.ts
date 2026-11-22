@@ -326,7 +326,7 @@ describe("sending and starting", () => {
     const read = vi.fn(() => ({ lists }));
     state.ops.agentModels = read;
     const entry = await host.start!(LEAD as never, startInput({ harness }));
-    expect(read).toHaveBeenCalledOnce();
+    expect(read).toHaveBeenCalledExactlyOnceWith({ harness, workspaceId: undefined });
     ready(entry);
     await vi.waitFor(() => expect(state.sent).toHaveLength(1));
     expect(read).toHaveBeenCalledOnce();
@@ -380,9 +380,9 @@ describe("sending and starting", () => {
       ),
     });
     expect(read.mock.calls).toEqual([
-      [{ workspaceId: undefined }],
-      [{ workspaceId: "w-lead" }],
-      [{ workspaceId: "w-lead" }],
+      [{ harness: "codex-app-server", workspaceId: undefined }],
+      [{ harness: "codex-app-server", workspaceId: "w-lead" }],
+      [{ harness: "fixture-agent", workspaceId: "w-lead" }],
     ]);
     expect(state.sent).toHaveLength(0);
   });
@@ -719,9 +719,10 @@ describe("through MCP and as a chat's own tools", () => {
     expect(text).not.toContain("Restart Deus");
   });
 
-  it("lists and defaults to the engine's catalog when no list can be read", async () => {
+  it("lists the catalog when a read fails, but refuses a start or model-less send before delivery", async () => {
+    const failure = new Error("Agent server not connected");
     state.ops.agentModels = () => {
-      throw new Error("Agent server not connected");
+      throw failure;
     };
     const { text, isError } = await call(LOCAL_CALLER, "list_models", {});
     expect(isError).toBe(false);
@@ -733,12 +734,15 @@ describe("through MCP and as a chat's own tools", () => {
       expect(text).toContain(harness);
       expect(text).toContain(first.id);
     }
-    await createDeusHost().send(LEAD as never, "s-lead", {
-      turnId: "t",
-      message: "go",
-      origin: LEAD,
-    });
-    expect(state.sent[0].input).toMatchObject({ agentHarness: "claude-code", model: "opus" });
+    const host = createDeusHost();
+    for (const choice of [{}, { model: "opus" }, { thinkingLevel: "high" }]) {
+      await expect(host.start!(LEAD as never, startInput(choice))).rejects.toBe(failure);
+    }
+    expect(state.created).toBe(0);
+    await expect(
+      host.send(LEAD as never, "s-lead", { turnId: "t", message: "go", origin: LEAD })
+    ).rejects.toBe(failure);
+    expect(state.sent).toHaveLength(0);
   });
 
   it("retains the unknown outcome of unclassified wire errors", async () => {

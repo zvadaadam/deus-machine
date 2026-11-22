@@ -97,6 +97,16 @@ describe("LocalAgents", () => {
     expect(client.listModels).toHaveBeenLastCalledWith({ harness: "codex-app-server" });
   });
 
+  it("reads only the named CLI when a start needs its model", async () => {
+    const { logins, client } = engine(signedIn);
+    const cwd = "/repo/.deus/berlin";
+    const harness = "claude-code";
+    await expect(logins.models(cwd, harness)).resolves.toEqual([
+      expect.objectContaining({ harness }),
+    ]);
+    expect(client.listModels).toHaveBeenCalledExactlyOnceWith({ harness, cwd });
+  });
+
   it("picks up a login this computer already has, and opens nothing", async () => {
     const { logins, client } = engine(signedIn);
     await expect(logins.signIn("claude-code", "claudeai")).resolves.toEqual({ already: signedIn });

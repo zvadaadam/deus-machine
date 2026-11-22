@@ -117,12 +117,12 @@ export const deleteAgentConfig = write({
 export const agentAuth = read({ name: "agentAuth", output: out<AgentAuthAnswer>() });
 
 /**
- * The models each local agent offers for this computer's login. A workspace
- * asks for its own folder, whose settings can narrow the list.
+ * The models a local agent offers for this computer's login, or all agents'
+ * lists when no harness is named. A workspace asks for its own folder.
  */
 export const agentModels = read({
   name: "agentModels",
-  input: z.object({ workspaceId: z.string().optional() }),
+  input: z.object({ workspaceId: z.string().optional(), harness: AgentHarnessSchema.optional() }),
   output: out<AgentModelsAnswer>(),
 });
 

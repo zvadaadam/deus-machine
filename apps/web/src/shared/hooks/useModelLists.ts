@@ -3,6 +3,7 @@ import { api } from "@shared/api";
 import { CLOUD_HARNESSES, LOCAL_HARNESSES } from "@shared/harnesses";
 import type { AgentHarness } from "@shared/enums";
 import type { SessionTurn } from "@shared/types/session";
+import type { ThinkingLevel } from "@shared/protocol";
 import { call } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
@@ -20,13 +21,30 @@ import { useCloudModels } from "./useCloudModels";
 
 type ModelScope = { cloud: boolean; workspaceId?: string | null };
 
+interface ModelListsState {
+  lists: readonly HarnessModels[];
+  live: (harness: string) => boolean;
+}
+
+export interface ChatModelSelection extends ModelListsState {
+  agentHarness: AgentHarness;
+  model?: string;
+  picked?: string;
+  thinkingLevels: readonly ThinkingLevel[];
+  unavailable?: string;
+}
+
 /** A pick belongs to its lane. Without one the chat follows its history and its harness's list. */
 export function useChatModel({
   picked,
   harness = DEFAULT_AGENT_HARNESS,
   turns = [],
   ...scope
-}: ModelScope & { picked?: string; harness?: AgentHarness; turns?: readonly SessionTurn[] }) {
+}: ModelScope & {
+  picked?: string;
+  harness?: AgentHarness;
+  turns?: readonly SessionTurn[];
+}): ChatModelSelection {
   const state = useModelListsState(scope);
   const selection = picked ? parseModelValue(picked) : undefined;
   const eligible = selection && state.lists.some((list) => list.harness === selection.harness);
@@ -63,10 +81,7 @@ export function useModelLists(chat: ModelScope): readonly HarnessModels[] {
  * for it (the platform's, for a cloud chat). Until then it is the catalog,
  * which a chat's choices must not be fitted to for good.
  */
-export function useModelListsState(chat: ModelScope): {
-  lists: readonly HarnessModels[];
-  live: (harness: string) => boolean;
-} {
+export function useModelListsState(chat: ModelScope): ModelListsState {
   const workspaceId = chat.workspaceId ?? null;
   const local = useQuery({
     queryKey: [...queryKeys.settings.agentModels, workspaceId],

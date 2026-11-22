@@ -79,6 +79,10 @@ it("keeps a draft while there is no model, explains Send and enables it when a l
     expect(html.match(sendButton)?.[0]).toContain(`title="${error}"`);
     expect(html.match(/<textarea[^>]*>/)?.[0]).not.toContain(' disabled=""');
     expect(html).toContain("Keep my draft</textarea>");
+    const pending = "You can send this draft when the chat opens.";
+    const waiting = renderInput({ sessionId, sendDisabledReason: pending });
+    expect(waiting).toContain(`>${pending}</p>`);
+    expect(waiting.match(sendButton)?.[0]).toContain(`title="${pending}"`);
     client.setQueryData(key, {
       lists: [
         {

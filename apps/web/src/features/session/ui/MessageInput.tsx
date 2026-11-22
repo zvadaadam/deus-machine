@@ -58,7 +58,7 @@ import {
   modelThinkingLevels as thinkingLevelsOf,
   type ThinkingLevel,
 } from "@/shared/agents";
-import type { useChatModel } from "@/shared/hooks/useModelLists";
+import type { ChatModelSelection } from "@/shared/hooks/useModelLists";
 import { ModelPicker } from "./ModelPicker";
 import { PlanModeToggle } from "./PlanModeToggle";
 import { ContextTokenIndicator } from "./ContextTokenIndicator";
@@ -75,7 +75,7 @@ interface MessageInputProps {
   workspacePath?: string | null;
   /** Cloud sessions hide plan mode because the sidecar runs bypass. */
   workspaceKind?: WorkspaceKind | null;
-  selection: ReturnType<typeof useChatModel>;
+  selection: ChatModelSelection;
 
   sending: boolean;
   sessionStatus?: SessionStatus;
@@ -223,7 +223,7 @@ export function MessageInput({
   environmentUnconfigured = false,
   showCompactButton = false,
   onSend,
-  sendDisabledReason = selection.unavailable,
+  sendDisabledReason,
   onCompact,
   onStop,
   onOpenNewTab,
@@ -296,7 +296,8 @@ export function MessageInput({
     fileMentions.length > 0 ||
     skillMentions.length > 0;
 
-  const canSend = hasContent && !sending && !sendDisabledReason;
+  const disabledReason = sendDisabledReason || selection.unavailable;
+  const canSend = hasContent && !sending && !disabledReason;
   const handleSend = async () => {
     if (!canSend) return;
     const combined = buildCombinedContent();
@@ -434,8 +435,8 @@ export function MessageInput({
           pastedTexts={composer.missingPastedTexts}
           onDismiss={composer.dismissMissingAttachments}
         />
-        {sendDisabledReason && (
-          <p className="text-text-muted w-full px-4 pt-2 text-xs">{sendDisabledReason}</p>
+        {disabledReason && (
+          <p className="text-text-muted w-full px-4 pt-2 text-xs">{disabledReason}</p>
         )}
         <ComposerStagedContent
           skillMentions={skillMentions}
@@ -566,7 +567,7 @@ export function MessageInput({
               disabled={!canSend}
               variant={hasContent ? "default" : "outline"}
               size="icon-sm"
-              title={sendDisabledReason ?? "Send message (Enter)"}
+              title={disabledReason ?? "Send message (Enter)"}
               aria-label="Send message"
               className="rounded-full"
             >
