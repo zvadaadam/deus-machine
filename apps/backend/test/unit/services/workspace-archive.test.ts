@@ -28,6 +28,7 @@ vi.mock("../../../src/services/workspace-status.service", () => ({
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.run.mockReturnValue({ changes: 1 });
   mocks.workspace.mockReturnValue({
     id: "workspace",
     kind: "cloud",

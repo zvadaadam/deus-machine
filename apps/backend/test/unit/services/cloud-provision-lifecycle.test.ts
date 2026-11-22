@@ -98,7 +98,7 @@ it("publishes the committed row at create, refusal, retry, computer attachment a
   await vi.waitFor(() => expect(observed).toHaveLength(2));
   mock.publicRepo.mockResolvedValue(true);
   mock.createSession.mockResolvedValue({ id: "platform-chat" });
-  retryCloudWorkspace(workspaceId);
+  await retryCloudWorkspace(workspaceId);
   await vi.waitFor(() => expect(mock.connect).toHaveBeenCalledOnce());
 
   const creating = {
@@ -156,7 +156,7 @@ it("keeps the allocated computer and last stage when chat creation fails", async
   expect(mock.invalidate.mock.calls).toEqual(
     Array(3).fill([["workspaces", "sessions", "session"], {}])
   );
-  expect(() => retryCloudWorkspace(workspaceId)).toThrow("not waiting for a retry");
+  await expect(retryCloudWorkspace(workspaceId)).rejects.toThrow("not waiting for a retry");
   expect(mock.invalidate).toHaveBeenCalledTimes(3);
 });
 
@@ -436,6 +436,26 @@ it.each([
     }
   }
 );
+
+it("records a credentials failure when waking a computer whose chat never opened", async () => {
+  mock.createSession.mockRejectedValueOnce(new Error("chat refused"));
+  const { workspaceId } = createCloudWorkspace({ repositoryId: "r" });
+  await vi.waitFor(() => expect(row(workspaceId)).toMatchObject({ state: "error" }));
+  const config = await import("../../../src/services/agent/cloud/config");
+  vi.spyOn(config, "requireCloudOrg").mockImplementationOnce(() => {
+    throw new Error("This cloud organization is not set up on this computer.");
+  });
+  await expect(wakeWorkspace(workspaceId)).rejects.toThrow(
+    "The cloud computer exists, but its chat did not open."
+  );
+  expect(row(workspaceId)).toMatchObject({
+    state: "error",
+    provider_workspace_id: "vm",
+    error_message: "The cloud computer exists, but its chat did not open.",
+    error_detail: "This cloud organization is not set up on this computer.",
+  });
+  expect(mock.allocate).toHaveBeenCalledOnce();
+});
 
 it("repairs an unarchived failed chat through an explicit wake", async () => {
   mock.createSession.mockRejectedValueOnce(new Error("chat refused"));

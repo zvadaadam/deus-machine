@@ -51,33 +51,35 @@ export function insertLocalWorkspace(row: LocalStart): boolean {
   return write.changes > 0;
 }
 
-type Cleanup = () => Promise<void>;
-const attempts = new Map<string, { controller: AbortController; settle: Cleanup }>();
+const attempts = new Map<string, { controller: AbortController; done: Promise<void> }>();
 
-/** A failed checkout hands its cleanup to the queue. Archive can abort and settle
- * the same work from inside that queue without waiting on a task queued behind it. */
 export async function runWorkspaceAttempt(
   workspaceId: string,
-  start: (signal: AbortSignal) => Promise<Cleanup | void>
+  start: (signal: AbortSignal) => Promise<void>
 ): Promise<void> {
-  if (attempts.has(workspaceId)) return;
+  const existing = attempts.get(workspaceId);
+  if (existing) return existing.done;
   const controller = new AbortController();
-  const stopped = Promise.withResolvers<Cleanup | void>();
-  let settling: Promise<void> | undefined;
-  const settle = () => (settling ??= stopped.promise.then((cleanup) => cleanup?.()));
-  attempts.set(workspaceId, { controller, settle });
+  const done = Promise.withResolvers<void>();
+  attempts.set(workspaceId, { controller, done: done.promise });
   try {
-    const cleanup = await start(controller.signal);
-    if (attempts.get(workspaceId)?.controller !== controller) return; // A ready chat owns its checkout.
-    stopped.resolve(cleanup);
-    if (cleanup) {
-      if (controller.signal.aborted) await settle();
-      else await changeWorkspaceState(workspaceId, settle);
-    }
+    await start(controller.signal);
   } finally {
-    stopped.resolve(); // Also release an archive if checkout threw before returning its cleanup.
     if (attempts.get(workspaceId)?.controller === controller) attempts.delete(workspaceId);
+    done.resolve();
   }
+}
+
+export function workspaceAttemptDone(id: string) {
+  return attempts.get(id)?.done;
+}
+
+export function retireWorkspaceAttempt(id: string) {
+  const attempt = attempts.get(id);
+  if (!attempt) return;
+  attempts.delete(id);
+  attempt.controller.abort();
+  return attempt.done;
 }
 
 function ownsAttempt(id: string, token: AbortSignal): boolean {
@@ -115,7 +117,7 @@ export function recordFetchOutcome(
 export function finishLocalStart(workspaceId: string, token: AbortSignal): boolean {
   if (!ownsAttempt(workspaceId, token)) return false;
   const db = getDatabase();
-  const opened = db.transaction(() => {
+  return db.transaction(() => {
     const row = db
       .prepare(
         "SELECT first_session_id, started_by FROM workspaces WHERE id = ? AND state = 'initializing'"
@@ -133,8 +135,6 @@ export function finishLocalStart(workspaceId: string, token: AbortSignal): boole
     ).run(sessionId, sessionId, workspaceId);
     return true;
   })();
-  if (opened) attempts.delete(workspaceId); // The chat owns its checkout.
-  return opened;
 }
 
 type StartFailure = { message: string; detail: string | null };
@@ -165,7 +165,6 @@ function writeStartFailure(workspaceId: string, stage: string, failure: StartFai
     )
     .run(stage, failure.message, failure.detail, workspaceId);
   if (!update.changes) return false;
-  attempts.delete(workspaceId);
   invalidate(["workspaces"]);
   return true;
 }
@@ -327,7 +326,6 @@ export function failCloudStart(
     )
     .run(message, detail, id);
   if (!updated.changes) return;
-  attempts.delete(id);
   invalidate([...WORKSPACE_RESOURCES], {});
 }
 
@@ -381,30 +379,20 @@ function cloudWorkspaceChat(id: string) {
     .get(id) as { state: string; chat: string | null } | undefined;
 }
 
-export async function ensureWorkspaceChat(
-  id: string,
-  open: (token: AbortSignal) => Promise<unknown>
-) {
-  const selected = () => cloudWorkspaceChat(id)?.chat;
-  const existing = selected();
-  if (existing) return existing;
-  // A wake can arrive between allocation and the original chat response.
-  await attempts.get(id)?.settle();
-  const attached = selected();
-  if (attached) return attached;
-  await runWorkspaceAttempt(id, async (token) => {
-    const repairing = getDatabase()
-      .prepare(
-        "UPDATE workspaces SET state = 'initializing', init_stage = 'creating cloud session', error_message = NULL, error_detail = NULL WHERE id = ? AND state != 'archived'"
-      )
-      .run(id);
-    if (!repairing.changes) return;
-    invalidate([...WORKSPACE_RESOURCES], {});
-    await open(token);
-  });
-  const sessionId = selected();
-  if (!sessionId) throw new ConflictError("The workspace has no chat to wake.");
-  return sessionId;
+export function selectedWorkspaceChat(id: string) {
+  return cloudWorkspaceChat(id)?.chat;
+}
+
+export function claimCloudChatRepair(id: string, token: AbortSignal): boolean {
+  if (!ownsAttempt(id, token)) return false;
+  const repairing = getDatabase()
+    .prepare(
+      "UPDATE workspaces SET state = 'initializing', init_stage = 'creating cloud session', error_message = NULL, error_detail = NULL WHERE id = ? AND state != 'archived'"
+    )
+    .run(id);
+  if (!repairing.changes) return false;
+  invalidate([...WORKSPACE_RESOURCES], {});
+  return true;
 }
 
 type CloudReport = { status?: string; step?: string; errorMessage?: string; reason?: string };
@@ -515,19 +503,15 @@ export function markArchived(
   by: Origin | null = null
 ) {
   const { id, kind, provider_workspace_id } = workspace;
-  const attempt = attempts.get(id);
-  if (kind === "cloud" && attempt && !provider_workspace_id)
+  if (kind === "cloud" && attempts.has(id) && !provider_workspace_id)
     throw new ConflictError(CLOUD_STILL_STARTING);
   const archivedBy = by && by.kind !== "person" ? JSON.stringify(by) : null;
-  getDatabase()
+  const write = getDatabase()
     .prepare(
       "UPDATE workspaces SET state = 'archived', archived_at = datetime('now'), archived_by = ? WHERE id = ? AND state != 'archived'"
     )
     .run(archivedBy, id);
-  attempt?.controller.abort();
-  if (kind === "cloud")
-    attempts.delete(id); // A late chat from the paused computer no longer owns this row.
-  else return attempt?.settle();
+  return write.changes > 0;
 }
 
 /** unarchiveWorkspace publishes after the wake and workflow update succeed. */

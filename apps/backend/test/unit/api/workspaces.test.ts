@@ -426,6 +426,7 @@ describe("cloud wake and archive ordering", () => {
         return {
           run: () => {
             state = "archived";
+            return { changes: 1 };
           },
         };
       }

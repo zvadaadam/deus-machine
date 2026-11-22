@@ -10,6 +10,7 @@ import {
   changeWorkspaceState,
   markArchived,
   markRestored,
+  retireWorkspaceAttempt,
   rollbackCloudRestore,
   queueCloudWake,
 } from "./workspace-lifecycle";
@@ -45,14 +46,15 @@ export function archiveWorkspace(
     }
 
     check?.();
-    const checkout = markArchived(workspace, by);
+    if (!markArchived(workspace, by)) return;
+    const done = retireWorkspaceAttempt(workspaceId);
     try {
       stopStream(workspaceId);
       const stopped = stopWorkspaceSetup(workspaceId);
       autoProgressStatus(workspaceId, "done", { force: true });
       await stopped;
     } finally {
-      await checkout;
+      if (workspace.kind !== "cloud") await done;
     }
     invalidate(["workspaces"]);
   });

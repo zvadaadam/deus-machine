@@ -40,7 +40,10 @@ import {
   claimCloudRetry,
   setCloudWakeStage,
   runWorkspaceAttempt,
-  ensureWorkspaceChat,
+  claimCloudChatRepair,
+  selectedWorkspaceChat,
+  workspaceAttemptDone,
+  changeWorkspaceState,
 } from "./workspace-lifecycle";
 import {
   cloudAccount,
@@ -135,35 +138,39 @@ export function createCloudWorkspace(params: CreateCloudWorkspaceParams): {
  * for one (GitHub access, project settings, the request itself) is safe to
  * repeat. Once a computer exists, waking it is the way back.
  */
-export function retryCloudWorkspace(workspaceId: string): void {
-  if (!cloudAccount())
-    throw new ValidationError("Sign in to Deus Cloud to try this workspace again.");
-  const db = getDatabase();
-  const workspace = db
-    .prepare(
-      "SELECT repository_id, git_branch, git_target_branch, organization_id FROM workspaces WHERE id = ? AND kind = 'cloud'"
-    )
-    .get(workspaceId) as
-    | {
-        repository_id: string;
-        git_branch: string | null;
-        git_target_branch: string | null;
-        organization_id: string | null;
-      }
-    | undefined;
-  const repo = workspace && getRepositoryById(db, workspace.repository_id);
-  if (!workspace?.git_branch || !repo?.git_origin_url)
-    throw new NotFoundError("Workspace not found");
-  const org = requireCloudOrg(workspace.organization_id);
-  claimCloudRetry(workspaceId);
-  const origin = httpsOrigin(repo.git_origin_url);
-  const branch = {
-    source: workspace.git_target_branch || repo.git_default_branch || "main",
-    work: workspace.git_branch,
-  };
-  void runWorkspaceAttempt(workspaceId, (token) =>
-    provisionCloudWorkspace(workspaceId, token, origin, branch, org)
-  );
+export function retryCloudWorkspace(workspaceId: string): Promise<void> {
+  return changeWorkspaceState(workspaceId, async () => {
+    if (!cloudAccount())
+      throw new ValidationError("Sign in to Deus Cloud to try this workspace again.");
+    const db = getDatabase();
+    const workspace = db
+      .prepare(
+        "SELECT state, repository_id, git_branch, git_target_branch, organization_id FROM workspaces WHERE id = ? AND kind = 'cloud'"
+      )
+      .get(workspaceId) as
+      | {
+          state: string;
+          repository_id: string;
+          git_branch: string | null;
+          git_target_branch: string | null;
+          organization_id: string | null;
+        }
+      | undefined;
+    const repo = workspace && getRepositoryById(db, workspace.repository_id);
+    if (!workspace?.git_branch || !repo?.git_origin_url)
+      throw new NotFoundError("Workspace not found");
+    if (workspace.state === "error") await workspaceAttemptDone(workspaceId);
+    const org = requireCloudOrg(workspace.organization_id);
+    claimCloudRetry(workspaceId);
+    const origin = httpsOrigin(repo.git_origin_url);
+    const branch = {
+      source: workspace.git_target_branch || repo.git_default_branch || "main",
+      work: workspace.git_branch,
+    };
+    void runWorkspaceAttempt(workspaceId, (token) =>
+      provisionCloudWorkspace(workspaceId, token, origin, branch, org)
+    );
+  });
 }
 
 /** Archive suspends the VM and keeps both its filesystem and remote backups. */
@@ -455,14 +462,8 @@ export async function wakeCloudWorkspaceWithFeedback(
   latest: LatestCloudReport
 ): Promise<{ ok: boolean; status: string; error?: string }> {
   const db = getDatabase();
-  const sessionId = await ensureWorkspaceChat(workspace.id, (token) =>
-    openCloudChat(
-      workspace.id,
-      workspace.provider_workspace_id,
-      () => requireCloudOrg(workspace.organization_id),
-      token
-    )
-  );
+  const sessionId = await ensureWorkspaceChat(workspace);
+  if (!sessionId) throw new ConflictError(CHAT_OPEN_FAILED);
   const announce = (data: Record<string, unknown>) => {
     announceCloudEnv(workspace.id, sessionId, data);
   };
@@ -779,6 +780,32 @@ async function connectCloudChat(sessionId: string) {
   }
 }
 
+const CHAT_OPEN_FAILED = "The cloud computer exists, but its chat did not open.";
+
+async function ensureWorkspaceChat(
+  workspace: CloudWorkspaceRef & { id: string; provider_workspace_id: string }
+) {
+  const { id } = workspace;
+  const selected = selectedWorkspaceChat(id);
+  if (selected) return selected;
+  // A wake may arrive while the allocation's original chat request is still in flight.
+  await workspaceAttemptDone(id);
+  const attached = selectedWorkspaceChat(id);
+  if (attached) return attached;
+  let sessionId: string | null = null;
+  await runWorkspaceAttempt(id, async (token) => {
+    if (claimCloudChatRepair(id, token)) {
+      sessionId = await openCloudChat(
+        id,
+        workspace.provider_workspace_id,
+        () => requireCloudOrg(workspace.organization_id),
+        token
+      );
+    }
+  });
+  return sessionId;
+}
+
 /** A room retry on this computer reuses the id of its first platform request. */
 async function openCloudChat(
   workspaceId: string,
@@ -796,13 +823,15 @@ async function openCloudChat(
     });
     return attachCloudChat(workspaceId, session.id, token);
   } catch (err) {
-    const message = "The cloud computer exists, but its chat did not open.";
-    failCloudStart(workspaceId, message, token, err instanceof Error ? err.message : String(err));
-    throw new CloudChatError(message);
+    failCloudStart(
+      workspaceId,
+      CHAT_OPEN_FAILED,
+      token,
+      err instanceof Error ? err.message : String(err)
+    );
+    return null;
   }
 }
-
-class CloudChatError extends Error {}
 
 async function provisionCloudWorkspace(
   workspaceId: string,
@@ -923,7 +952,7 @@ async function provisionCloudWorkspace(
     await connectCloudChat(sessionId);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    if (token.aborted || err instanceof CloudChatError) return;
+    if (token.aborted) return;
     console.error(`[CloudInit] provisioning failed for ${workspaceId}: ${message}`);
     failCloudStart(workspaceId, `Cloud provisioning failed: ${message}`, token);
   }

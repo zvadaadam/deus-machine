@@ -13,6 +13,8 @@ import {
   finishLocalStart,
   recordFetchOutcome,
   runWorkspaceAttempt,
+  changeWorkspaceState,
+  workspaceAttemptDone,
   type Stage,
 } from "./workspace-lifecycle";
 import { prepareLocalEnvironment } from "./project-environment.service";
@@ -319,32 +321,35 @@ async function checkout(ctx: InitContext, signal: AbortSignal) {
     signal.throwIfAborted();
     stage = "session";
     advanceLocalStage(ctx.workspaceId, stage, signal);
-    if (finishLocalStart(ctx.workspaceId, signal)) {
-      try {
-        void prepareLocalEnvironment(ctx.workspaceId, ctx.workspacePath, ctx.repoOriginUrl).catch(
-          (err) => console.warn(`[WORKSPACE] Setup for ${ctx.workspaceId} failed:`, err)
-        );
-      } finally {
-        invalidate(["workspaces", "sessions"]);
-      }
-    }
+    const ready = finishLocalStart(ctx.workspaceId, signal);
     signal.throwIfAborted();
+    if (!ready) return;
   } catch (err) {
     // Shutdown leaves the durable stage for startup recovery.
     if (processGroupsStopped()) return;
-    return async () => {
-      if (OWNS_WORKTREE.has(stage)) {
-        await removeWorktree(ctx.repoRootPath, ctx.workspacePath, ctx.branchName).catch((error) =>
-          console.warn(`[WORKSPACE] Could not remove what ${ctx.workspaceId} left behind:`, error)
-        );
-      }
-      if (signal.aborted || processGroupsStopped()) return;
-      try {
-        if (failStart(ctx.workspaceId, stage, describeFailure(stage, err, ctx), signal))
-          console.error(`[WORKSPACE] Stage "${stage}" failed for ${ctx.workspaceId}:`, err);
-      } catch (error) {
-        console.error(`[WORKSPACE] Could not record the failure of ${ctx.workspaceId}:`, error);
-      }
-    };
+    // A Retry arriving during removal waits for this attempt. Removal must also
+    // finish when Archive already holds the queue and is waiting for us.
+    const done = workspaceAttemptDone(ctx.workspaceId);
+    if (done) void changeWorkspaceState(ctx.workspaceId, () => done);
+    if (OWNS_WORKTREE.has(stage)) {
+      await removeWorktree(ctx.repoRootPath, ctx.workspacePath, ctx.branchName).catch((error) =>
+        console.warn(`[WORKSPACE] Could not remove what ${ctx.workspaceId} left behind:`, error)
+      );
+    }
+    if (signal.aborted || processGroupsStopped()) return;
+    try {
+      if (failStart(ctx.workspaceId, stage, describeFailure(stage, err, ctx), signal))
+        console.error(`[WORKSPACE] Stage "${stage}" failed for ${ctx.workspaceId}:`, err);
+    } catch (error) {
+      console.error(`[WORKSPACE] Could not record the failure of ${ctx.workspaceId}:`, error);
+    }
+    return;
+  }
+  try {
+    void prepareLocalEnvironment(ctx.workspaceId, ctx.workspacePath, ctx.repoOriginUrl).catch(
+      (err) => console.warn(`[WORKSPACE] Setup for ${ctx.workspaceId} failed:`, err)
+    );
+  } finally {
+    invalidate(["workspaces", "sessions"]);
   }
 }
