@@ -460,6 +460,15 @@ export function setCloudWakeStage(workspaceId: string, stage: string | null): vo
   invalidate(["workspaces"], {});
 }
 
+export function rollbackSendWake(workspaceId: string, asleepStage: "paused" | "stopped"): boolean {
+  const update = getDatabase()
+    .prepare("UPDATE workspaces SET init_stage = ? WHERE id = ? AND init_stage = 'resuming'")
+    .run(asleepStage, workspaceId);
+  if (!update.changes) return false;
+  invalidate(["workspaces"], {});
+  return true;
+}
+
 // State changes for each workspace run in the order they are requested.
 const changes = new Map<string, Promise<unknown>>();
 

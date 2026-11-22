@@ -42,7 +42,7 @@ import {
   pushCloudSessionFacts,
 } from "./cloud/driver";
 import { refreshWorkspaceGithubToken } from "../cloud-workspace-init.service";
-import { setCloudWakeStage, watchCloudReports } from "../workspace-lifecycle";
+import { rollbackSendWake, setCloudWakeStage, watchCloudReports } from "../workspace-lifecycle";
 
 // ---- sendMessage ----
 
@@ -299,11 +299,8 @@ async function sendMessageOnce(
       // resume is agnt-internal) — the harness, model and thinking DO travel.
       await startCloudTurn(sessionId, turnId, content, cloudSelection);
     } catch (err) {
-      // The optimistic "Waking" flip above must not outlive a failed wake:
-      // the prompt is rolled back, so a stuck Waking chip would promise a
-      // recovery nothing is driving. Same honest revert the chip path does.
-      if (asleepStage && workspace && !latest?.()) {
-        setCloudWakeStage(workspace.id, asleepStage);
+      // A report can confirm resuming. A wake on another device can clear it without a report.
+      if (asleepStage && workspace && !latest?.() && rollbackSendWake(workspace.id, asleepStage)) {
         announceCloudEnv(workspace.id, sessionId, {
           status: asleepStage,
           reason: "wake failed — try again",

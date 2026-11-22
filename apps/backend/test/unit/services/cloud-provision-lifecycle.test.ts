@@ -4,6 +4,7 @@ import workspaceOperations from "../../../src/api/workspaces";
 import * as api from "@shared/api/workspaces";
 import { operations } from "../../helpers";
 import { DeusError } from "@deus-hq/sdk";
+import { sendMessage } from "../../../src/services/agent/turns";
 import {
   archiveWorkspace,
   unarchiveWorkspace,
@@ -32,6 +33,8 @@ const mock = vi.hoisted(() => ({
   status: vi.fn(),
   createSession: vi.fn(),
   connect: vi.fn(),
+  send: vi.fn(),
+  announce: vi.fn(),
 }));
 vi.mock("../../../src/lib/database", () => ({ getDatabase: () => db }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mock.invalidate }));
@@ -56,7 +59,8 @@ vi.mock("../../../src/services/cloud-environment.service", () => ({
 }));
 vi.mock("../../../src/services/agent/cloud/driver", () => ({
   ensureCloudSession: mock.connect,
-  announceCloudEnv: vi.fn(),
+  announceCloudEnv: mock.announce,
+  startCloudTurn: mock.send,
   hasLiveCloudSession: () => false,
   getCloudIdentityGeneration: () => 0,
 }));
@@ -373,6 +377,42 @@ it("answers a successful wake without overwriting a report received during resum
   mock.resume.mockImplementationOnce(async () => report(workspaceId, "stopped"));
   expect(await wakeWorkspace(workspaceId)).toEqual({ ok: true, status: "resuming" });
   expect(row(workspaceId)).toMatchObject({ state: "ready", init_stage: "stopped" });
+});
+
+it("keeps a computer running when an older send fails after an explicit wake", async () => {
+  db.exec(`
+    INSERT INTO workspaces (id, repository_id, slug, kind, state, init_stage, provider_workspace_id, current_session_id)
+    VALUES ('w', 'r', 'work', 'cloud', 'ready', 'paused', 'vm', 'chat');
+    INSERT INTO sessions (id, workspace_id, provider_session_id) VALUES ('chat', 'w', 'platform-chat');
+  `);
+  const held = Promise.withResolvers<void>();
+  mock.send.mockReturnValueOnce(held.promise);
+  const send = expect(
+    sendMessage({
+      sessionId: "chat",
+      content: "hello",
+      agentHarness: "claude-code",
+      model: "opus",
+      thinkingLevel: "high",
+    })
+  ).rejects.toThrow("send refused");
+  try {
+    await vi.waitFor(() => expect(mock.send).toHaveBeenCalledOnce());
+    expect(row("w")).toMatchObject({ init_stage: "resuming" });
+    mock.status.mockResolvedValueOnce({ status: "running" });
+    expect(await wakeWorkspace("w")).toEqual({ ok: true, status: "running" });
+    expect(row("w")).toMatchObject({ init_stage: null });
+    mock.invalidate.mockClear();
+  } finally {
+    held.reject(new Error("send refused"));
+    await send;
+  }
+  expect.soft(row("w")).toMatchObject({ state: "ready", init_stage: null });
+  expect.soft(mock.announce).toHaveBeenCalledExactlyOnceWith("w", "chat", {
+    status: "resuming",
+    step: "Waking sandbox",
+  });
+  expect(mock.invalidate).not.toHaveBeenCalledWith(["workspaces"], {});
 });
 
 it("keeps Restore archived when the status read said running but resume failed and no chat is serving", async () => {
