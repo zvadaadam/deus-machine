@@ -15,6 +15,7 @@ vi.mock("../../../src/lib/database", () => ({
   }),
 }));
 vi.mock("../../../src/db", () => ({
+  getWorkspaceRaw: mocks.get,
   getRepositoryById: () => ({
     git_origin_url: "https://gitlab.com/team/app",
     git_default_branch: "main",
@@ -117,6 +118,7 @@ it("stops creation when the human switches accounts during preparation", async (
 
 it("provisions a failed cloud workspace again on the same row, on its own branch", async () => {
   mocks.get.mockReturnValue({
+    kind: "cloud",
     repository_id: "repo",
     git_branch: "test-branch",
     git_target_branch: "release",
@@ -133,6 +135,7 @@ it("provisions a failed cloud workspace again on the same row, on its own branch
 
 it("does not provision twice, or over a computer that exists", async () => {
   mocks.get.mockReturnValue({
+    kind: "cloud",
     repository_id: "repo",
     git_branch: "test-branch",
     git_target_branch: "main",

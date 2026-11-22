@@ -26,7 +26,7 @@ import { githubRepoSlug, httpsOrigin } from "@shared/git-origin";
 import type { CloudRepoAccess, CloudRepoAccessStatus } from "@shared/types/cloud-access";
 import { getDatabase } from "../lib/database";
 import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
-import { getRepositoryById } from "../db";
+import { getRepositoryById, getWorkspaceRaw } from "../db";
 import { invalidate } from "./query-engine";
 import { generateUniqueName } from "./workspace.service";
 import {
@@ -143,20 +143,9 @@ export function retryCloudWorkspace(workspaceId: string): Promise<void> {
     if (!cloudAccount())
       throw new ValidationError("Sign in to Deus Cloud to try this workspace again.");
     const db = getDatabase();
-    const workspace = db
-      .prepare(
-        "SELECT state, repository_id, git_branch, git_target_branch, organization_id FROM workspaces WHERE id = ? AND kind = 'cloud'"
-      )
-      .get(workspaceId) as
-      | {
-          state: string;
-          repository_id: string;
-          git_branch: string | null;
-          git_target_branch: string | null;
-          organization_id: string | null;
-        }
-      | undefined;
-    const repo = workspace && getRepositoryById(db, workspace.repository_id);
+    const workspace = getWorkspaceRaw(db, workspaceId);
+    const repo =
+      workspace?.kind === "cloud" ? getRepositoryById(db, workspace.repository_id) : undefined;
     if (!workspace?.git_branch || !repo?.git_origin_url)
       throw new NotFoundError("Workspace not found");
     if (workspace.state === "error") await workspaceAttemptDone(workspaceId);
@@ -819,9 +808,8 @@ async function openCloudChat(
   } catch (err) {
     failCloudStart(
       workspaceId,
-      CHAT_OPEN_FAILED,
-      token,
-      err instanceof Error ? err.message : String(err)
+      { message: CHAT_OPEN_FAILED, detail: err instanceof Error ? err.message : String(err) },
+      token
     );
     return null;
   }
@@ -912,7 +900,10 @@ async function provisionCloudWorkspace(
         if (slug && (await classifyRepoAccess(slug, mint, org.orgId)) === "needs_grant") {
           failCloudStart(
             workspaceId,
-            `GitHub access required — install the Deus GitHub App for ${slug} to run it in the cloud.`,
+            {
+              message: `GitHub access required — install the Deus GitHub App for ${slug} to run it in the cloud.`,
+              detail: null,
+            },
             token
           );
           return;
@@ -949,6 +940,10 @@ async function provisionCloudWorkspace(
     const message = err instanceof Error ? err.message : String(err);
     if (token.aborted) return;
     console.error(`[CloudInit] provisioning failed for ${workspaceId}: ${message}`);
-    failCloudStart(workspaceId, `Cloud provisioning failed: ${message}`, token);
+    failCloudStart(
+      workspaceId,
+      { message: `Cloud provisioning failed: ${message}`, detail: null },
+      token
+    );
   }
 }

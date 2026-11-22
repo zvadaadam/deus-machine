@@ -980,7 +980,8 @@ describe("only a failed start can be retried or deleted", () => {
     add("w", "vega", { kind });
     const release = Promise.withResolvers<void>();
     const attempt = lifecycle.runWorkspaceAttempt("w", async (token) => {
-      if (kind === "cloud") lifecycle.failCloudStart("w", "allocation failed", token);
+      if (kind === "cloud")
+        lifecycle.failCloudStart("w", { message: "allocation failed", detail: null }, token);
       else lifecycle.failStart("w", "session", { message: "chat failed", detail: null }, token);
       await release.promise;
     });

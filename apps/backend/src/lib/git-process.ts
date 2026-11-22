@@ -70,13 +70,13 @@ export function runGit(
       onStderr?.(chunk);
     });
 
-    const signalGroup = (signal: NodeJS.Signals) => {
+    const signalGroup = (killSignal: NodeJS.Signals) => {
       if (!child.pid) return;
       try {
-        process.kill(-child.pid, signal);
+        process.kill(-child.pid, killSignal);
       } catch {
         // The group is gone, or this platform has none: stop the one process.
-        child.kill(signal);
+        child.kill(killSignal);
       }
     };
     const abort = () => signalGroup("SIGKILL");

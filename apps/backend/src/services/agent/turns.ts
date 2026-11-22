@@ -24,7 +24,7 @@ import {
   NotFoundError,
   ValidationError,
 } from "../../lib/errors";
-import { getSessionRaw, getTurn, getWorkspaceForMiddleware } from "../../db";
+import { encodeOrigin, getSessionRaw, getTurn, getWorkspaceForMiddleware } from "../../db";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
 import {
   persistLastUserMessageAt,
@@ -47,10 +47,6 @@ import { rollbackSendWake, setCloudWakeStage, watchCloudReports } from "../works
 // ---- sendMessage ----
 
 const digest = (text: string) => createHash("sha256").update(text).digest("hex");
-
-/** Who sent a request, as the echo stores it: none for the person. */
-const originKey = (origin?: Origin) =>
-  origin && origin.kind !== "person" ? JSON.stringify(origin) : null;
 
 /** The sends of a turn id this process has asked the engine for, per database, by session and turn, for a while. */
 type Admission = { content: string; origin: string | null; done: Promise<{ turnId: string }> };
@@ -90,7 +86,7 @@ export async function sendMessage(
   if (!turnId) return sendMessageOnce(input, origin);
   const key = `${input.sessionId}\0${turnId}`;
   // Its text kept as a digest: a send with images would otherwise sit in memory for minutes.
-  const request = { content: digest(input.content), origin: originKey(origin) };
+  const request = { content: digest(input.content), origin: encodeOrigin(origin) };
   const different = () =>
     new ConflictError("A different message was already sent as this turn. Nothing was sent.");
   const db = getDatabase();

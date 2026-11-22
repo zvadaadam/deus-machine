@@ -13,7 +13,10 @@ const mocks = vi.hoisted(() => ({
   status: vi.fn(),
 }));
 vi.mock("../../../src/services/simulator-context", () => ({ stopStream: mocks.release }));
-vi.mock("../../../src/db", () => ({ getWorkspaceRaw: mocks.workspace }));
+vi.mock("../../../src/db", async (original) => ({
+  ...(await original<typeof import("../../../src/db")>()),
+  getWorkspaceRaw: mocks.workspace,
+}));
 vi.mock("../../../src/lib/database", () => ({
   getDatabase: () => ({ prepare: () => ({ run: mocks.run, get: () => ({ chat: "chat" }) }) }),
 }));

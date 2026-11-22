@@ -1,5 +1,5 @@
-import type { Origin } from "@shared/types/workspace";
-import { getWorkspaceRaw } from "../db";
+import type { Origin } from "@zvada/agent-server/protocol";
+import { encodeOrigin, getWorkspaceRaw } from "../db";
 import { getDatabase } from "../lib/database";
 import { NotFoundError, ValidationError } from "../lib/errors";
 import {
@@ -45,7 +45,7 @@ export function archiveWorkspace(
     }
 
     check?.();
-    if (!markArchived(workspace, by)) return;
+    if (!markArchived(workspace, encodeOrigin(by))) return;
     const done = retireWorkspaceAttempt(workspaceId);
     try {
       stopStream(workspaceId);

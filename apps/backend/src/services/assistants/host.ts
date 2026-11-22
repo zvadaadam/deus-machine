@@ -41,7 +41,6 @@ import {
   type Entry,
   type ModelEntry,
   type OperatorHost,
-  type Origin,
   type SessionStatus,
   type SessionView,
   type StartInput,
@@ -49,6 +48,7 @@ import {
   type TurnFact,
   type ViewTurn,
 } from "@zvada/agent-server/operator";
+import type { Origin } from "@zvada/agent-server/protocol";
 import type { AnyOp, InputOf, OutputOf } from "@shared/api/op";
 import * as sessions from "@shared/api/sessions";
 import { agentModels } from "@shared/api/settings";
@@ -68,7 +68,7 @@ import {
 import { LOCAL_CALLER, type Caller } from "../../api/registry";
 import { archiveWorkspace } from "../workspace-archive.service";
 import { createLocalWorkspace } from "../workspace-init.service";
-import { attachParts, getMessages, getSessionRaw, hasOlderMessages } from "../../db";
+import { attachParts, encodeOrigin, getMessages, getSessionRaw, hasOlderMessages } from "../../db";
 import { getDatabase } from "../../lib/database";
 import { AgentServerDisconnectedError, AppError, ChatBusyError } from "../../lib/errors";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
@@ -782,12 +782,7 @@ export function createDeusHost(): DeusHost {
           db.transaction(() => {
             db.prepare(
               "INSERT INTO sessions (id, workspace_id, status, agent_harness, started_by, updated_at) VALUES (?, ?, 'idle', ?, ?, datetime('now'))"
-            ).run(
-              sessionId,
-              workspaceId,
-              agentHarness,
-              input.origin.kind === "person" ? null : JSON.stringify(input.origin)
-            );
+            ).run(sessionId, workspaceId, agentHarness, encodeOrigin(input.origin));
             db.prepare("UPDATE workspaces SET current_session_id = ? WHERE id = ?").run(
               sessionId,
               workspaceId

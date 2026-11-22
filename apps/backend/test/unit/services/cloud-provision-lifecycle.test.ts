@@ -263,7 +263,7 @@ it("ignores another token even while the new start is initializing", async () =>
   try {
     expect(attachCloudComputer(workspaceId, "other-vm", stale)).toBe(false);
     attachCloudChat(workspaceId, "other-chat", stale);
-    failCloudStart(workspaceId, "other failure", stale);
+    failCloudStart(workspaceId, { message: "other failure", detail: null }, stale);
     expect(row(workspaceId)).toEqual(before);
     expect(mock.invalidate).not.toHaveBeenCalled();
     expect(db.prepare("SELECT id FROM sessions").all()).toEqual([]);

@@ -9,6 +9,7 @@ import type { ArchivedWorkspace } from "@shared/types/workspace";
 import {
   ReportedOriginSchema,
   decodePart,
+  type Origin,
   type ReportedOrigin,
 } from "@zvada/agent-server/protocol";
 import type { Part, UnknownPart } from "@shared/protocol-types";
@@ -357,6 +358,10 @@ function readOrigin(stored: string | null): ReportedOrigin | null {
   } catch {
     return null;
   }
+}
+
+export function encodeOrigin(origin?: Origin | null): string | null {
+  return origin && origin.kind !== "person" ? JSON.stringify(origin) : null;
 }
 
 export function attachParts(db: Database.Database, messages: MessageRow[]): MessageRowWithParts[] {

@@ -15,7 +15,6 @@ import type {
   SetupStatus,
   WorkspaceStatus,
 } from "../enums";
-export type { Origin } from "@zvada/agent-server/protocol";
 export type { WorkspaceState, SetupStatus, WorkspaceStatus };
 
 /**

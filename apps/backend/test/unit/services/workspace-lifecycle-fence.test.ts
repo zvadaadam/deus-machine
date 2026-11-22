@@ -328,14 +328,9 @@ function forbiddenImports(source: string, mirror = false): string[] {
     const allowed = mirror
       ? ["node:fs", "node:os", "node:path"].includes(spec) ||
         (spec === "@shared/enums" && ts.isImportDeclaration(node) && node.importClause?.isTypeOnly)
-      : [
-          "../db",
-          "../lib/database",
-          "../lib/errors",
-          "@shared/enums",
-          "@shared/lib/uuid",
-          "@shared/types/workspace",
-        ].includes(spec);
+      : ["../db", "../lib/database", "../lib/errors", "@shared/enums", "@shared/lib/uuid"].includes(
+          spec
+        );
     if (allowed) return;
     const binding =
       spec === "./query-engine"

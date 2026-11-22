@@ -3,8 +3,8 @@ import path from "node:path";
 import type { ParsedInputOf } from "@shared/api/op";
 import type * as api from "@shared/api/workspaces";
 import { uuidv7 } from "@shared/lib/uuid";
-import type { Origin } from "@shared/types/workspace";
-import { getRepositoryById } from "../db";
+import type { Origin } from "@zvada/agent-server/protocol";
+import { encodeOrigin, getRepositoryById } from "../db";
 import { getDatabase } from "../lib/database";
 import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 import { processGroupsStopped } from "../lib/process-groups";
@@ -89,10 +89,7 @@ export async function createLocalWorkspace(
     pr_url: input.pr_url || null,
     pr_number: input.pr_number || null,
     first_session_id: firstSessionId,
-    started_by:
-      options.startedBy && options.startedBy.kind !== "person"
-        ? JSON.stringify(options.startedBy)
-        : null,
+    started_by: encodeOrigin(options.startedBy),
   });
   void initializeWorkspace({
     workspaceId,

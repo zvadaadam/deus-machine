@@ -3,7 +3,6 @@
  * A transition that leaves publication to its caller names the sequence that caller finishes.
  * Only changeWorkspaceState and runWorkspaceAttempt run caller-supplied code.
  */
-import type { Origin } from "@shared/types/workspace";
 import type { InitFetchIssue, SetupStatus } from "@shared/enums";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getWorkspaceRaw, type WorkspaceRow } from "../db";
@@ -314,18 +313,13 @@ export function claimCloudRetry(workspaceId: string): void {
   invalidate([...WORKSPACE_RESOURCES], {});
 }
 
-export function failCloudStart(
-  id: string,
-  message: string,
-  token: AbortSignal,
-  detail: string | null = null
-): void {
+export function failCloudStart(id: string, failure: StartFailure, token: AbortSignal): void {
   if (!ownsAttempt(id, token)) return;
   const updated = getDatabase()
     .prepare(
       "UPDATE workspaces SET state = 'error', error_message = ?, error_detail = ? WHERE id = ? AND state = 'initializing'"
     )
-    .run(message, detail, id);
+    .run(failure.message, failure.detail, id);
   if (updated.changes) invalidate([...WORKSPACE_RESOURCES], {});
 }
 
@@ -391,27 +385,35 @@ export function claimCloudChatRepair(id: string, token: AbortSignal): boolean {
 }
 
 type CloudReport = { status?: string; step?: string; errorMessage?: string; reason?: string };
-function projectCloudStatus(data: CloudReport, row: { archived: boolean; hasChat: boolean }) {
+function projectCloudStatus(
+  data: CloudReport,
+  row: { archived: boolean; hasChat: boolean }
+): Pick<WorkspaceRow, "state" | "init_stage" | "error_message" | "error_detail"> | undefined {
   if (row.archived || !row.hasChat) return;
   switch (data.status) {
     case "running":
-      return ["ready", null, null, null] as const;
+      return { state: "ready", init_stage: null, error_message: null, error_detail: null };
     case "provisioning":
-      return [
-        "initializing",
-        typeof data.step === "string" ? data.step : "provisioning",
-        null,
-        null,
-      ] as const;
+      return {
+        state: "initializing",
+        init_stage: typeof data.step === "string" ? data.step : "provisioning",
+        error_message: null,
+        error_detail: null,
+      };
     case "paused":
     case "stopped":
     case "resuming":
-      return ["ready", data.status, null, null] as const;
+      return { state: "ready", init_stage: data.status, error_message: null, error_detail: null };
     case "error": {
       const message = [data.errorMessage, data.reason, data.step].find(
         (s) => typeof s === "string" && s.trim()
       );
-      return ["error", null, message ?? "The cloud computer reported an error.", null] as const;
+      return {
+        state: "error",
+        init_stage: null,
+        error_message: message ?? "The cloud computer reported an error.",
+        error_detail: null,
+      };
     }
   }
 }
@@ -449,13 +451,13 @@ export function applyCloudStatus(workspaceId: string, data: CloudReport): void {
       .prepare(
         "UPDATE workspaces SET state = ?, init_stage = ?, error_message = ?, error_detail = ? WHERE id = ?"
       )
-      .run(...fields, workspaceId);
+      .run(fields.state, fields.init_stage, fields.error_message, fields.error_detail, workspaceId);
     lastWrite = {
       number: count,
       outcome: {
         ok: ["running", "provisioning", "resuming"].includes(data.status),
         status: data.status,
-        error: fields[2] ?? undefined,
+        error: fields.error_message ?? undefined,
       },
     };
   }
@@ -499,12 +501,11 @@ export const CLOUD_STILL_STARTING =
 /** archiveWorkspace publishes after the confirmed pause, archive, local effects and checkout cleanup. */
 export function markArchived(
   workspace: Pick<WorkspaceRow, "id" | "kind" | "provider_workspace_id">,
-  by: Origin | null = null
+  archivedBy: string | null
 ) {
   const { id, kind, provider_workspace_id } = workspace;
   if (kind === "cloud" && attempts.has(id) && !provider_workspace_id)
     throw new ConflictError(CLOUD_STILL_STARTING);
-  const archivedBy = by && by.kind !== "person" ? JSON.stringify(by) : null;
   const write = getDatabase()
     .prepare(
       "UPDATE workspaces SET state = 'archived', archived_at = datetime('now'), archived_by = ? WHERE id = ? AND state != 'archived'"
