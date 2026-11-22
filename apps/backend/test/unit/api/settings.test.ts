@@ -1,5 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import * as api from "@shared/api/settings";
+import { ConnectionClosedError } from "@zvada/agent-server/client";
+import { AgentServerDisconnectedError } from "../../../src/lib/errors";
 import { operations } from "../../helpers";
 
 vi.mock("../../../src/services/settings.service", () => ({
@@ -57,6 +59,7 @@ const agents = vi.hoisted(() => ({
   folders: new Set<string>(),
 }));
 vi.mock("../../../src/services/agent", () => ({
+  isConnected: () => agents.connected,
   getLocalAgents: () => {
     if (!agents.connected) throw new Error("Agent server not connected");
     return agents;
@@ -381,6 +384,33 @@ describe("agentModels", () => {
     expect(await run(api.agentModels)).toEqual({ lists: LISTS });
     expect(agents.models).toHaveBeenCalledWith(undefined, undefined);
   });
+
+  it("answers pending Home and workspace reads with a disconnect when the engine shuts down", async () => {
+    const pending = Promise.withResolvers<never>();
+    agents.models.mockReturnValue(pending.promise);
+    const home = run(api.agentModels);
+    const chat = run(api.agentModels, { workspaceId: "ws-1" });
+    expect(agents.models).toHaveBeenCalledTimes(2);
+    agents.connected = false;
+    pending.reject(new ConnectionClosedError("client closed"));
+    await Promise.all([
+      expect(home).rejects.toBeInstanceOf(AgentServerDisconnectedError),
+      expect(chat).rejects.toBeInstanceOf(AgentServerDisconnectedError),
+    ]);
+  });
+
+  it.each([
+    [true, new ConnectionClosedError("not connected")],
+    [false, new Error("Invalid model list")],
+  ] as const)(
+    "keeps the cause of any other failed read (connected: %s)",
+    async (connected, error) => {
+      agents.models.mockRejectedValue(error);
+      const answer = run(api.agentModels);
+      agents.connected = connected;
+      await expect(answer).rejects.toBe(error);
+    }
+  );
 
   it("asks the named harness for a workspace's own folder", async () => {
     agents.workspace.mockReturnValue({ kind: "worktree", root_path: "/repo", slug: "berlin" });

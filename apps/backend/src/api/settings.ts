@@ -1,6 +1,7 @@
 /** Answers the operations in `shared/api/settings.ts`. */
 
 import { existsSync } from "node:fs";
+import { ConnectionClosedError } from "@zvada/agent-server/client";
 import { match } from "ts-pattern";
 import * as api from "@shared/api/settings";
 import type { ParsedInputOf } from "@shared/api/op";
@@ -8,9 +9,14 @@ import type { AgentAuthAnswer } from "@shared/agent-auth";
 import type { AgentConfigBySection, AgentConfigSection } from "@shared/types/agent-config";
 import { getWorkspaceForMiddleware } from "../db";
 import { getDatabase } from "../lib/database";
-import { AppError, NotFoundError, ValidationError } from "../lib/errors";
+import {
+  AgentServerDisconnectedError,
+  AppError,
+  NotFoundError,
+  ValidationError,
+} from "../lib/errors";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
-import { getLocalAgents } from "../services/agent";
+import { getLocalAgents, isConnected } from "../services/agent";
 import { getCloudModelLists } from "../services/agent/cloud/models";
 import { getCloudOrganizations } from "../services/cloud-settings.service";
 import {
@@ -119,12 +125,16 @@ export default [
       : undefined;
     const folder = workspace ? computeWorkspacePath(workspace) : "";
     // A cloud workspace, or one whose folder is gone, is asked for with no folder.
-    return {
-      lists: await getLocalAgents().models(
-        folder && existsSync(folder) ? folder : undefined,
-        harness
-      ),
-    };
+    const cwd = folder && existsSync(folder) ? folder : undefined;
+    try {
+      return { lists: await getLocalAgents().models(cwd, harness) };
+    } catch (error) {
+      // Shutdown detaches the engine before closing its outstanding reads.
+      if (error instanceof ConnectionClosedError && !isConnected()) {
+        throw new AgentServerDisconnectedError();
+      }
+      throw error;
+    }
   }),
   handle(api.cloudModels, async () => {
     const lists = await getCloudModelLists().catch((error: unknown) => {
