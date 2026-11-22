@@ -2,16 +2,20 @@ import { app, autoUpdater as nativeAutoUpdater, type BrowserWindow, ipcMain } fr
 import { autoUpdater, type UpdateInfo } from "electron-updater";
 import type { UpdateCheckResult, UpdateState } from "../../../shared/types/updates";
 
-let currentState: UpdateState = { stage: "idle" };
+function initialState(): UpdateState {
+  if (process.platform === "linux" && !process.env.APPIMAGE)
+    return { stage: "unsupported", reason: "Linux auto-update requires the AppImage build." };
+  if (!app.isPackaged)
+    return { stage: "unsupported", reason: "Development builds do not download updates." };
+  return { stage: "idle" };
+}
+
+let currentState = initialState();
 let updateWindow: BrowserWindow | null = null;
 let handlersRegistered = false;
 let updaterStarted = false;
 let installRequested = false;
 let macArchive: UpdateInfo | undefined;
-
-function isAutoUpdateSupported(): boolean {
-  return !(process.platform === "linux" && !process.env.APPIMAGE);
-}
 
 function formatReleaseNotes(info: UpdateInfo): string | undefined {
   if (typeof info.releaseNotes === "string") return info.releaseNotes;
@@ -53,12 +57,8 @@ function reportReady(info: UpdateInfo): void {
 }
 
 async function checkForUpdates(): Promise<UpdateCheckResult> {
-  if (!isAutoUpdateSupported()) {
-    return {
-      supported: false,
-      available: false,
-      reason: "Linux auto-update requires the AppImage build",
-    };
+  if (currentState.stage === "unsupported") {
+    return { supported: false, available: false, reason: currentState.reason };
   }
   // A renderer remount or manual check must not discard an in-flight/staged update.
   if (currentState.stage === "downloading" || currentState.stage === "ready") {
@@ -102,7 +102,7 @@ export function registerUpdateHandlers(quitAfterStopping: (quit: () => void) => 
   ipcMain.handle("update:check", checkForUpdates);
   ipcMain.handle("update:getState", () => currentState);
   ipcMain.handle("update:install", () => {
-    if (!isAutoUpdateSupported() || currentState.stage !== "ready" || installRequested) return;
+    if (currentState.stage !== "ready" || installRequested) return;
     installRequested = true;
     try {
       autoUpdater.quitAndInstall(false, true);
@@ -115,7 +115,7 @@ export function registerUpdateHandlers(quitAfterStopping: (quit: () => void) => 
 
 export function setupAutoUpdater(mainWindow: BrowserWindow): void {
   updateWindow = mainWindow;
-  if (!isAutoUpdateSupported() || updaterStarted) return;
+  if (currentState.stage === "unsupported" || updaterStarted) return;
   updaterStarted = true;
 
   autoUpdater.autoDownload = true;

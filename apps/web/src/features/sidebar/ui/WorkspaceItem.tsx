@@ -14,7 +14,7 @@ import { useAutomationForWorkspace } from "@/features/automations";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
 import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
 import { prefetchWorkspace } from "@/features/workspace/api/prefetch";
-import { workspaceStart } from "@/features/workspace/lib/startState";
+import { canRecoverStart, workspaceStart } from "@/features/workspace/lib/startState";
 import { getDisplayStatus } from "../lib/status";
 import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "../lib/utils";
 import type { WorkspaceItemProps } from "../model/types";
@@ -188,7 +188,8 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
     onArchive?.(workspace.id);
   };
 
-  const canArchive = !isInitializing && workspace.state !== "archived" && !!onArchive;
+  const canArchive =
+    !isInitializing && !canRecoverStart(workspace) && workspace.state !== "archived" && !!onArchive;
 
   const row = (
     <SidebarRow
@@ -313,7 +314,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         )}
       </div>
 
-      {/* Archive button — revealed on hover or keyboard focus */}
+      {/* On touch, Archive has its own space beside the row's status. */}
       {canArchive && (
         <button
           type="button"
@@ -321,8 +322,8 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
           aria-label={`Archive workspace ${displayName}`}
           title="Archive workspace"
           className={cn(
-            "control-interaction text-text-muted hover:text-text-secondary flex h-7 w-7 items-center justify-center rounded-lg",
-            "absolute top-1/2 right-1 -translate-y-1/2 opacity-0",
+            "control-interaction text-text-muted hover:text-text-secondary flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
+            "absolute inset-y-0 right-1 my-auto opacity-0 pointer-coarse:static pointer-coarse:opacity-100",
             "group-hover/sidebar-row:opacity-100 focus-visible:opacity-100"
           )}
         >

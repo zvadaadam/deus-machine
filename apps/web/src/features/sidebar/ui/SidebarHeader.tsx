@@ -142,7 +142,7 @@ export function SidebarHeader({
               activity={places.activity[row.key] ?? null}
               profile={profile}
               showShortcut={isMac}
-              onChoose={places.onChoose}
+              onChoose={places.choose}
             />
           ))}
           {!capabilities.isDesktop && (

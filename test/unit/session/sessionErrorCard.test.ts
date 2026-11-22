@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { SessionErrorCard } from "@/features/session/ui/SessionErrorCard";
-import { readSendRefusal } from "@shared/lib/send-refusal";
+import { isGenericTurnFailure, readSendRefusal } from "@shared/lib/send-refusal";
 
 const REFUSED =
   "PROVIDER_ACCOUNT_RECONNECT_REQUIRED: Your default Claude account must be reconnected in Settings → AI Providers, or choose another default.";
@@ -18,6 +18,12 @@ const render = (code: unknown, message: unknown) => {
     })
   );
 };
+
+it("recognizes the platform's generic turn failure wrapper", () => {
+  expect(isGenericTurnFailure("AGENT_EXECUTION_FAILED")).toBe(true);
+  expect(isGenericTurnFailure("internal")).toBe(false);
+  expect(isGenericTurnFailure(undefined)).toBe(false);
+});
 
 describe("a send the cloud refused", () => {
   it("reads the platform's sentence, never its codes", () => {
@@ -62,4 +68,18 @@ describe("a send the cloud refused", () => {
     expect(html).toContain("flex-wrap");
     expect(html).toMatch(/min-w-\[min\(100%,16rem\)\]/);
   });
+});
+
+it("only offers starting a chat when the action is available", () => {
+  for (const onRetryInNewChat of [undefined, vi.fn()]) {
+    const html = renderToStaticMarkup(
+      createElement(SessionErrorCard, {
+        message: "Usage limit reached",
+        category: "rate_limit",
+        onRetryInNewChat,
+      })
+    );
+    expect(html.includes("Start a new chat")).toBe(!!onRetryInNewChat);
+    expect(html.includes("New chat")).toBe(!!onRetryInNewChat);
+  }
 });

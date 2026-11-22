@@ -11,10 +11,12 @@ export interface RelayAccount {
   bearer: string;
 }
 
-function claims(bearer: string): { sub?: unknown; exp?: unknown } | null {
+export function cloudSessionClaims(bearer: string | null): { sub: string; exp?: unknown } | null {
+  if (!bearer) return null;
   try {
     const payload = bearer.split(".")[1] ?? "";
-    return JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    const claims = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    return typeof claims?.sub === "string" && claims.sub ? claims : null;
   } catch {
     return null;
   }
@@ -29,8 +31,8 @@ export function readRelayAccount(): RelayAccount | null {
     return null;
   }
   if (!bearer) return null;
-  const payload = claims(bearer);
-  if (typeof payload?.sub !== "string" || !payload.sub) return null;
+  const payload = cloudSessionClaims(bearer);
+  if (!payload) return null;
   if (typeof payload.exp === "number" && payload.exp * 1000 <= Date.now()) return null;
   return { accountId: payload.sub, bearer };
 }

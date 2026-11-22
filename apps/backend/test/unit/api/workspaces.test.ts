@@ -170,6 +170,7 @@ const MOCK_CREATED_WORKSPACE = {
   git_branch: "testuser/europa",
   git_target_branch: "main",
   state: "initializing",
+  start_recoverable: 0,
   current_session_id: null,
   init_stage: null,
   repo_name: "my-project",

@@ -1,6 +1,6 @@
 // Cloud workspaces in two organizations of one account, on one Mac. The real backend
 // holds one key per organization (what the desktop app hands it) and the platform's
-// session sockets; only the platform is scripted (./platform.mjs), and it refuses an
+// session sockets. The scripted platform (./platform.mjs) refuses an
 // organization-scoped request that carries another organization's key.
 // No browser: the backend is driven over its own socket (test/e2e/lib/operations.mjs).
 // Run: bun run test:e2e:cloud   (or node --import tsx test/e2e/cloud/organizations.runtime.mjs)
@@ -111,6 +111,8 @@ const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/serv
     GIT_CEILING_DIRECTORIES: directory,
     TSX_TSCONFIG_PATH: path.join(root, "apps/backend/tsconfig.json"),
     AGNT_BASE_URL: platform.url,
+    DEUS_GITHUB_API_URL: `${platform.url}/github`,
+    DEUS_BUNDLED_BIN_DIR: path.join(root, "test/e2e/fixtures/github"),
     DEUS_CLOUD_AGNT_URL: platform.url,
     // As the desktop starts it: the spawn token is the first line on its stdin.
     DEUS_STOP_ON_STDIN_END: "1",

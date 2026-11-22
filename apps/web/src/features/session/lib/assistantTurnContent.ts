@@ -1,6 +1,5 @@
-import type { Message } from "@/shared/types";
 import { toolCardName } from "@shared/mcp-servers";
-import type { Part } from "@shared/protocol-types";
+import type { Part, UnknownPart } from "@shared/protocol-types";
 
 // These renderers expose an answer/action or media that must stay visible.
 const VISIBLE_TOOLS = new Set([
@@ -20,28 +19,20 @@ function isActivity(part: Part): boolean {
   );
 }
 
-/** A turn owns activity grouping; SDK message boundaries are not UI groups. */
-export function assistantTurnContent(messages: Message[]) {
-  const parts = messages
-    .flatMap((message) => message.parts ?? [])
-    .filter((part): part is Part => !("raw" in part));
-  const activity: Part[] = [];
-  const content: Part[] = [];
-  let currentActivity: string | undefined;
+type TurnBlock = Part | { type: "activity"; id: string; parts: Part[] };
+
+/** Both the live fold and the saved page supply parts in transcript order. */
+export function assistantTurnContent(parts: readonly (Part | UnknownPart)[]): TurnBlock[] {
+  const blocks: TurnBlock[] = [];
   for (const part of parts) {
-    (isActivity(part) ? activity : content).push(part);
-    if (part.type === "reasoning" && part.state === "streaming") currentActivity = "Thinking";
-    if (
-      part.type === "tool" &&
-      (part.state.status === "pending" || part.state.status === "in_progress")
-    ) {
-      currentActivity =
-        part.title ||
-        (part.state.status === "in_progress" && part.state.title) ||
-        toolCardName(part);
+    if ("raw" in part) continue;
+    if (isActivity(part)) {
+      const previous = blocks.at(-1);
+      if (previous?.type === "activity") previous.parts.push(part);
+      else blocks.push({ type: "activity", id: part.id, parts: [part] });
+    } else {
+      blocks.push(part);
     }
   }
-  // All prose stays visible: a turn can end with a tool-only message, and
-  // the wire does not label which text is the final answer.
-  return { parts, activity, content, currentActivity };
+  return blocks;
 }

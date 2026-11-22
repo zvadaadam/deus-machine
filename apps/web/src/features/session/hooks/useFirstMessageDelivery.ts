@@ -34,23 +34,19 @@ import {
   missedFirstMessages,
   type FirstMessageDelivery,
 } from "../lib/firstMessage";
-import { createOptimisticUserMessage } from "../lib/optimisticMessage";
 import { openChat } from "../lib/openChat";
-import { returnMessageToComposer } from "../lib/returnToComposer";
-import { emptyComposer, sessionComposerActions } from "../store/sessionComposerStore";
-
-/** Put a message that could not be sent into the chat's composer. */
-function returnToComposer(sessionId: string, content: string): Promise<void> {
-  return returnMessageToComposer(
-    sessionId,
-    createOptimisticUserMessage({ sessionId, turnId: newTurnId(), content })
-  );
-}
+import { returnContentToComposer } from "../lib/returnToComposer";
+import {
+  composerStore,
+  emptyComposer,
+  sessionComposerActions,
+} from "../store/sessionComposerStore";
 
 export function useFirstMessageDelivery(repoGroups: RepoGroup[], loaded: boolean): void {
   const pending = useWorkspaceStartStore((state) => state.pending);
   const { mutateAsync: send } = useSendMessage();
   const defaultThinking = useDefaultThinkingLevel();
+  const store = composerStore();
   const sending = useRef(new Set<string>());
 
   useEffect(() => {
@@ -80,7 +76,7 @@ export function useFirstMessageDelivery(repoGroups: RepoGroup[], loaded: boolean
     for (const missed of missedFirstMessages(workspaces, pending)) {
       if (sending.current.has(missed.workspaceId)) continue;
       pendingFirstMessages.clear(missed.workspaceId);
-      void returnToComposer(missed.sessionId, missed.first.message).catch(() => {});
+      void returnContentToComposer(missed.sessionId, missed.first.message, store).catch(() => {});
     }
 
     const deliver = async ({ workspaceId, sessionId, first }: FirstMessageDelivery) => {
@@ -103,7 +99,7 @@ export function useFirstMessageDelivery(repoGroups: RepoGroup[], loaded: boolean
         pendingFirstMessages.clear(workspaceId);
       } catch (error) {
         pendingFirstMessages.clear(workspaceId);
-        await returnToComposer(sessionId, first.message).catch(() => {});
+        await returnContentToComposer(sessionId, first.message, store).catch(() => {});
         const open = () => openChat(workspaceId, sessionId);
         toast.error(getErrorMessage(error), {
           description: "Your message is in that chat's composer.",
@@ -119,5 +115,5 @@ export function useFirstMessageDelivery(repoGroups: RepoGroup[], loaded: boolean
       sending.current.add(due.workspaceId);
       void deliver(due);
     }
-  }, [repoGroups, loaded, pending, send, defaultThinking]);
+  }, [repoGroups, loaded, pending, send, defaultThinking, store]);
 }

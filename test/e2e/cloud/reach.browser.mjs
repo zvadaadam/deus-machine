@@ -167,6 +167,8 @@ const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/serv
     DEUS_WEB_ORIGINS: LOOPBACK_WEB_ORIGINS,
     TSX_TSCONFIG_PATH: path.join(root, "apps/backend/tsconfig.json"),
     AGNT_BASE_URL: platform.url,
+    DEUS_GITHUB_API_URL: `${platform.url}/github`,
+    DEUS_BUNDLED_BIN_DIR: path.join(root, "test/e2e/fixtures/github"),
     DEUS_CLOUD_AGNT_URL: platform.url,
     AGNT_API_KEY: "agnt_sk_reach",
     DEUS_CLOUD_AGNT_API_KEY: "agnt_sk_reach",

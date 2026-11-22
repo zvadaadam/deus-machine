@@ -34,8 +34,11 @@ import { SidebarProvider, useSidebar } from "@/components/ui";
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { useWorkspaceStore, workspaceLayoutActions } from "@/features/workspace/store";
 import { openNewWorkspace } from "@/features/workspace/lib/newWorkspace";
+import { derivePRActionState } from "@/features/workspace/lib/prState";
+import { hasCheckout } from "@/features/workspace/lib/startState";
 import { pendingFirstMessages } from "@/features/workspace/store/workspaceStartStore";
 import { useFirstMessageDelivery } from "@/features/session/hooks/useFirstMessageDelivery";
+import { simulatorStoreActions } from "@/features/simulator/store";
 import { useSidebarStore } from "@/features/sidebar/store";
 import { useWindowPlace } from "@/features/sidebar/hooks/useWindowPlace";
 import { offersNewFromBranch } from "@/features/sidebar/lib/location";
@@ -44,6 +47,7 @@ import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
 import { wokeUp, type OpenCloudWorkspace } from "@/features/workspace/lib/diffStats";
 import { uiActions, useUIStore } from "@/shared/stores/uiStore";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
+import { tempo } from "@/shared/lib/tempo";
 import type { Workspace } from "@/shared/types";
 import { unreadActions } from "@/features/session/store/unreadStore";
 import { native } from "@/platform";
@@ -138,11 +142,6 @@ export function MainLayout() {
 
   const webDirect = isCloudDirectWebMode();
 
-  const selectedWorkspaceIdRef = useRef(selectedWorkspaceId);
-  useEffect(() => {
-    selectedWorkspaceIdRef.current = selectedWorkspaceId;
-  });
-
   // Opening a cloud workspace attaches its session channel (Durable Object
   // side — does NOT wake the VM). The snapshot that comes back is how deus
   // learns an old sandbox is paused: the row updates and the chat shows
@@ -200,8 +199,9 @@ export function MainLayout() {
     avatarUrl: ghIdentity?.avatarUrl ?? null,
   };
 
-  // PR status query — gated on GitHub auth, polls while agent is working
-  const prStatusQuery = usePRStatus(selectedWorkspace?.id || null, {
+  const prWorkspaceId =
+    selectedWorkspace && hasCheckout(selectedWorkspace) ? selectedWorkspace.id : null;
+  const prStatusQuery = usePRStatus(prWorkspaceId, {
     ghInstalled: ghStatusQuery.data?.isInstalled,
     ghAuthenticated: ghStatusQuery.data?.isAuthenticated,
     sessionStatus: selectedWorkspace?.session_status ?? undefined,
@@ -288,86 +288,45 @@ export function MainLayout() {
     return group?.repo_name ?? "";
   }, [githubPickerRepoId, repoGroups]);
 
-  // --- Archive with undo (ref-stable for memoized sidebar items) ---
-
-  const archiveWorkspaceMutation = useArchiveWorkspace();
-  const unarchiveMutation = useUnarchiveWorkspace();
-
-  // Ref-stable archive handler: archiveWorkspaceMutation and selectedWorkspace
-  // change frequently (every render / every workspace click), so we capture
-  // them in refs to keep the callback identity stable. This matters because
-  // onArchive flows through the entire sidebar tree to every memoized WorkspaceItem.
-  const archiveMutationRef = useRef(archiveWorkspaceMutation);
-  const unarchiveMutationRef = useRef(unarchiveMutation);
-  const selectedWorkspaceRef = useRef(selectedWorkspace);
-  useEffect(() => {
-    archiveMutationRef.current = archiveWorkspaceMutation;
-    unarchiveMutationRef.current = unarchiveMutation;
-    selectedWorkspaceRef.current = selectedWorkspace;
-  });
-
+  const { mutateAsync: archive } = useArchiveWorkspace();
+  const { mutate: restore } = useUnarchiveWorkspace();
   const archiveWorkspace = useCallback(
     async (workspaceId: string) => {
-      // Said at once, though a cloud workspace's archive waits for its computer
-      // to pause. Undo waits for the archive too, and undoes only one that
-      // happened: a failed archive has nothing to restore (it is reported below).
-      const archiving = archiveMutationRef.current.mutateAsync(workspaceId);
-      const archived = toast("Workspace archived", {
-        duration: 5000,
-        action: {
-          label: "Undo",
-          onClick: () => {
-            void archiving.then(
-              () =>
-                unarchiveMutationRef.current.mutateAsync(workspaceId).catch((error) => {
-                  toast.error(getErrorMessage(error));
-                }),
-              () => {}
-            );
-          },
-        },
-      });
+      let toastId: ReturnType<typeof toast.loading> | undefined;
+      // A local archive usually finishes before a progress message can be read.
+      const pending = setTimeout(() => {
+        toastId = toast.loading("Archiving…");
+      }, tempo.moderate.duration * 1000);
       try {
-        await archiving;
-        if (selectedWorkspaceRef.current?.id === workspaceId) {
-          selectWorkspace(null);
-        }
+        await archive(workspaceId);
+        simulatorStoreActions.clearWorkspaceSession(workspaceId);
+        if (useWorkspaceStore.getState().selectedWorkspaceId === workspaceId) selectWorkspace(null);
+        toast.success("Workspace archived", {
+          id: toastId,
+          duration: 5000,
+          action: {
+            label: "Undo",
+            onClick: () => restore(workspaceId),
+          },
+        });
       } catch (error) {
-        toast.dismiss(archived);
-        console.error("Error archiving workspace:", error);
-        toast.error(
-          isCloudDirectWebMode()
-            ? "Archiving is done from the desktop app for now"
-            : getErrorMessage(error)
-        );
+        toast.error(getErrorMessage(error), { id: toastId });
+      } finally {
+        clearTimeout(pending);
       }
     },
-    [selectWorkspace]
+    [archive, restore, selectWorkspace]
   );
 
-  // --- Workflow status change (ref-stable like archive) ---
-
-  const statusMutation = useUpdateWorkspaceStatus();
-  const statusMutationRef = useRef(statusMutation);
-  useEffect(() => {
-    statusMutationRef.current = statusMutation;
-  });
-
+  const { mutate: updateStatus } = useUpdateWorkspaceStatus();
   const handleStatusChange = useCallback(
     (workspaceId: string, status: import("@shared/enums").WorkspaceStatus) => {
-      statusMutationRef.current.mutate(
+      updateStatus(
         { workspaceId, status },
-        {
-          onError: (error) =>
-            toast.error(
-              isCloudDirectWebMode()
-                ? "Workflow status is set from the desktop app for now"
-                : getErrorMessage(error)
-            ),
-        }
+        { onError: (error) => toast.error(getErrorMessage(error)) }
       );
     },
-    []
+    [updateStatus]
   );
 
   // --- Global hooks ---
@@ -425,21 +384,14 @@ export function MainLayout() {
 
   // Where this window's workspaces run: this computer, or the cloud (by organization).
   // The sidebar lists that place; the rest of the app reads the full list.
-  const {
-    place: windowPlace,
-    rows: placeRows,
-    current: currentPlace,
-    activity: activityByPlace,
-    choose: choosePlace,
-    chooseIndex: choosePlaceAt,
-    repositories: placeRepositories,
-  } = useWindowPlace({
+  const places = useWindowPlace({
     repoGroups,
     selectedWorkspaceId,
     selectedWorkspace,
     openWorkspace: handleWorkspaceClick,
     selectWorkspace,
   });
+  const { place: windowPlace } = places;
   // Adding a project follows the window's place: a folder on this computer, a
   // GitHub repository (no clone) in the cloud, in the window's organization.
   const folderPicker = { nativeFolderPicker: capabilities.nativeFolderPicker };
@@ -450,27 +402,17 @@ export function MainLayout() {
       openAddFromGitHub(organizationId !== undefined ? organizationId : windowPlace.organizationId),
     [openAddFromGitHub, windowPlace.organizationId]
   );
-  const sidebarPlaces = useMemo(
-    () => ({
-      rows: placeRows,
-      current: currentPlace,
-      location: windowPlace.location,
-      activity: activityByPlace,
-      onChoose: choosePlace,
-    }),
-    [placeRows, currentPlace, windowPlace.location, activityByPlace, choosePlace]
-  );
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
     onRefresh: async () => {
       workspacesQuery.refetch();
-      if (selectedWorkspace) {
+      if (prWorkspaceId) {
         prStatusQuery.refetch();
       }
     },
     onOpenInApp: canOpenInApp ? openInLastApp : undefined,
-    onSwitchPlace: choosePlaceAt,
+    onSwitchPlace: places.chooseIndex,
   });
 
   return (
@@ -491,8 +433,7 @@ export function MainLayout() {
         <SidebarSkeleton />
       ) : (
         <AppSidebar
-          repositories={placeRepositories}
-          places={sidebarPlaces}
+          places={places}
           selectedWorkspaceId={selectedWorkspace?.id || null}
           diffStatsMap={bulkDiffStatsQuery.data}
           onWorkspaceClick={handleWorkspaceClick}
@@ -504,9 +445,7 @@ export function MainLayout() {
           onStartNewProject={() => repoActions.setShowStartNewModal(true)}
           onAddFromGitHub={() => handleAddFromGitHub()}
           addActions={addActions}
-          // Archive + workflow status are Mac-backend mutations; web-direct has no
-          // transport for them, so the sidebar gets no handlers and never renders the
-          // hover archive button or the status menu (the toasts above stay as a net).
+          // The connected computer handles archive and workflow changes.
           onArchive={webDirect ? undefined : archiveWorkspace}
           onStatusChange={webDirect ? undefined : handleStatusChange}
           onOpenAutomations={openAutomations}
@@ -530,8 +469,12 @@ export function MainLayout() {
       ) : (
         <MainContent
           selectedWorkspace={selectedWorkspace}
-          prStatus={prStatusQuery.data ?? null}
-          ghStatus={ghStatusQuery.data}
+          onArchive={
+            selectedWorkspace && !webDirect
+              ? () => archiveWorkspace(selectedWorkspace.id)
+              : undefined
+          }
+          prState={derivePRActionState(prStatusQuery, ghIdentity)}
           onOpenProject={repoActions.handleOpenProject}
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
           onStartNewProject={() => repoActions.setShowStartNewModal(true)}

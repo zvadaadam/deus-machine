@@ -1,13 +1,4 @@
-/**
- * The chat's composer, on a workspace that has no chat yet. Keyed by the
- * workspace (there is no session to key it by): what is typed here moves to
- * the first chat's composer when it opens (useFirstMessageDelivery).
- *
- * Sending makes the content the message that waits for the workspace. One
- * waits per workspace: while one does, a second is refused in words and stays
- * in the box, as the chat refuses a send while its agent is busy.
- */
-import { toast } from "sonner";
+/** This workspace has no chat yet. Its draft moves to the first chat when it opens. */
 import type { Workspace } from "@/shared/types";
 import { DEFAULT_MODEL } from "@/shared/agents";
 import { useDefaultThinkingLevel } from "@/features/settings/api";
@@ -16,7 +7,8 @@ import {
   pendingFirstMessages,
   useWorkspaceStartStore,
 } from "@/features/workspace/store/workspaceStartStore";
-import { sessionComposerActions, useSessionComposerStore } from "../store/sessionComposerStore";
+import { composerStore } from "../store/sessionComposerStore";
+import { ImageDropTarget } from "./ImageDropTarget";
 import { MessageInput } from "./MessageInput";
 
 export function WorkspaceStartComposer({ workspace }: { workspace: Workspace }) {
@@ -24,40 +16,37 @@ export function WorkspaceStartComposer({ workspace }: { workspace: Workspace }) 
   const defaultThinking = useDefaultThinkingLevel();
 
   const handleSend = (message: string) => {
-    if (pendingFirstMessages.get(workspace.id)) {
-      toast("A message is already waiting for this workspace", {
-        description: "What you typed stays here, and moves to the chat when it opens.",
-      });
-      return;
-    }
-    const composer = useSessionComposerStore.getState().composers[workspace.id];
-    if (!composer) return;
+    const composer = composerStore().getState().composers[workspace.id];
+    if (!composer || pendingFirstMessages.get(workspace.id)) return false;
     pendingFirstMessages.set(workspace.id, {
       message,
       model: composer.model,
       thinkingLevel: composer.thinkingLevel,
       planMode: composer.planModeEnabled,
     });
-    sessionComposerActions.clearContent(workspace.id);
+    return true;
   };
 
   return (
-    <MessageInput
-      sessionId={workspace.id}
-      workspaceId={workspace.id}
-      // No checkout yet: no files to list, and only the skills every project has.
-      fileMentionsEnabled={false}
-      workspacePath={null}
-      workspaceKind={workspace.kind}
-      // It opens with what the waiting message was sent with.
-      initialModel={pending?.model ?? DEFAULT_MODEL}
-      defaultThinking={pending?.thinkingLevel ?? defaultThinking}
-      sending={false}
-      // While a message waits, the agent the chat will have is decided.
-      hasMessages={!!pending}
-      environmentUnconfigured={false}
-      placeholder={pending ? "Ask a follow-up…" : FIRST_MESSAGE_PLACEHOLDER}
-      onSend={handleSend}
-    />
+    <ImageDropTarget composerId={workspace.id}>
+      <MessageInput
+        sessionId={workspace.id}
+        workspaceId={workspace.id}
+        // No checkout yet: no files to list, and only the skills every project has.
+        fileMentionsEnabled={false}
+        workspacePath={null}
+        workspaceKind={workspace.kind}
+        // It opens with what the waiting message was sent with.
+        initialModel={pending?.model ?? DEFAULT_MODEL}
+        defaultThinking={pending?.thinkingLevel ?? defaultThinking}
+        sending={false}
+        // While a message waits, the agent the chat will have is decided.
+        hasMessages={!!pending}
+        environmentUnconfigured={false}
+        placeholder={pending ? "Draft a follow-up…" : FIRST_MESSAGE_PLACEHOLDER}
+        sendDisabledReason={pending ? "You can send this draft when the chat opens." : undefined}
+        onSend={handleSend}
+      />
+    </ImageDropTarget>
   );
 }

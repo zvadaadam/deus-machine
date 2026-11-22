@@ -29,6 +29,7 @@ import {
   placeRows,
   visiblePlace,
   workspaceToRestore,
+  type Organizations,
   type Place,
   type PlaceActivity,
   type PlaceRow,
@@ -42,6 +43,7 @@ import {
 
 export interface WindowPlace {
   place: Place;
+  organizations: Organizations;
   /** The menu's rows, and the key of the one the window is in. */
   rows: PlaceRow[];
   current: string;
@@ -240,5 +242,5 @@ export function useWindowPlace({
     finishCloudSignIn({ organizations, cloudRow, organizationRow, here: where }, switchTo);
   }, [pending, organizations, cloudRow, organizationRow, where, switchTo]);
 
-  return { place, rows, current, activity, repositories, choose, chooseIndex };
+  return { place, organizations, rows, current, activity, repositories, choose, chooseIndex };
 }

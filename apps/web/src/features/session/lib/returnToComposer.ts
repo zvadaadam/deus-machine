@@ -10,23 +10,29 @@
  */
 import type { QueryClient } from "@tanstack/react-query";
 import type { Message } from "../types";
-import { processImageFiles } from "./imageAttachments";
-import { dropOptimisticMessage } from "./optimisticMessage";
+import { createOptimisticUserMessage, dropOptimisticMessage } from "./optimisticMessage";
 import { readUserMessageContent } from "./userMessageContent";
-import { sessionComposerActions, useSessionComposerStore } from "../store/sessionComposerStore";
+import {
+  attachImageFiles,
+  composerStore,
+  composerTarget,
+  sessionComposerActions,
+  type DraftStore,
+} from "../store/sessionComposerStore";
 
 /** Put a message into the chat's composer: text and images, ahead of anything
  *  typed there since (it was written first), which is kept. */
-export async function returnMessageToComposer(
+async function returnMessageToComposer(
   sessionId: string,
-  message: Pick<Message, "parts">
+  message: Pick<Message, "parts">,
+  store: DraftStore
 ): Promise<void> {
   const { texts, images } = readUserMessageContent(message);
-  // Typed there already, whether the chat's composer exists yet or not.
-  const { composers, pendingContent } = useSessionComposerStore.getState();
+  const target = composerTarget(sessionId, store);
+  const { composers, pendingContent } = store.getState();
   const typed = (composers[sessionId] ?? pendingContent[sessionId])?.draft ?? "";
   sessionComposerActions.setDraft(
-    sessionId,
+    target,
     [...texts, ...(typed.trim() ? [typed] : [])].join("\n\n")
   );
   if (images.length === 0) return;
@@ -36,7 +42,20 @@ export async function returnMessageToComposer(
       return new File([blob], `image-${index + 1}`, { type: blob.type });
     })
   );
-  sessionComposerActions.addImageAttachments(sessionId, await processImageFiles(files));
+  await attachImageFiles(target, files);
+}
+
+// A saved prompt can encode image parts, so read it through the same message decoder as a refused send.
+export function returnContentToComposer(
+  id: string,
+  content: string,
+  store: DraftStore = composerStore()
+): Promise<void> {
+  return returnMessageToComposer(
+    id,
+    createOptimisticUserMessage({ sessionId: id, turnId: crypto.randomUUID(), content }),
+    store
+  );
 }
 
 /**
@@ -50,5 +69,6 @@ export function returnRefusedMessage(
   turnId: string
 ): void {
   const refused = dropOptimisticMessage(queryClient, sessionId, turnId);
-  if (refused) void returnMessageToComposer(sessionId, refused).catch(() => {});
+  if (refused)
+    void returnMessageToComposer(sessionId, refused, composerStore(queryClient)).catch(() => {});
 }

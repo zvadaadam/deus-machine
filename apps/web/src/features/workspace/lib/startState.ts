@@ -19,8 +19,7 @@ type StartFields = Pick<
   | "setup_status"
   | "error_message"
   | "error_detail"
-  | "provider_workspace_id"
-  | "current_session_id"
+  | "start_recoverable"
 >;
 
 export interface StartWarning {
@@ -70,14 +69,20 @@ export interface WorkspaceStart {
 /** The local pipeline's stages, in order (backend: services/workspace-init). */
 const STAGES = ["fetch", "worktree", "session"] as const;
 
-/** Why the workspace may be behind: it started without the remote's latest. */
-function fetchIssueNotice(issue: InitFetchIssue): string {
+function completedFetch(issue: InitFetchIssue | null | undefined): StartStep {
+  if (!issue) return { key: "fetch", label: "Checked for the latest changes", state: "done" };
+  if (issue === "no_origin") return { key: "fetch", label: "No origin to check", state: "done" };
   const why = match(issue)
     .with("offline", () => "We couldn’t reach the remote")
     .with("auth", () => "Git couldn’t sign in to the remote repository")
     .with("failed", () => "We couldn’t get the latest changes")
     .exhaustive();
-  return `${why}, so this copy may be out of date.`;
+  return {
+    key: "fetch",
+    label: "Copy may be out of date",
+    state: "warning",
+    warning: { message: `${why}, so this copy may be out of date.` },
+  };
 }
 
 function setupWarning({ state, error_message, error_detail }: StartFields): StartWarning {
@@ -126,17 +131,9 @@ export function failedToStart(workspace: Pick<Workspace, "state" | "current_sess
   return workspace.state === "error" && !hasCheckout(workspace);
 }
 
-/**
- * A failed start can be retried or deleted while the row is all there is: no
- * chat, and no cloud computer (that one is the platform's to wake or remove).
- * The backend applies the same rule.
- */
-export function canRecoverStart(
-  workspace: Pick<Workspace, "state" | "kind" | "provider_workspace_id" | "current_session_id">
-): boolean {
-  return (
-    failedToStart(workspace) && (workspace.kind !== "cloud" || !workspace.provider_workspace_id)
-  );
+/** The backend computes this verdict with START_RECOVERABLE in apps/backend/src/db/queries.ts. */
+export function canRecoverStart(workspace: Pick<Workspace, "start_recoverable">): boolean {
+  return workspace.start_recoverable === true;
 }
 
 export function workspaceStart(workspace: StartFields): WorkspaceStart {
@@ -189,16 +186,7 @@ export function workspaceStart(workspace: StartFields): WorkspaceStart {
       state: "active",
     });
   } else if (reached("fetch")) {
-    steps.push(
-      workspace.init_fetch_issue
-        ? {
-            key: "fetch",
-            label: "Copy may be out of date",
-            state: "warning",
-            warning: { message: fetchIssueNotice(workspace.init_fetch_issue) },
-          }
-        : { key: "fetch", label: "Checked for the latest changes", state: "done" }
-    );
+    steps.push(completedFetch(workspace.init_fetch_issue));
   }
   if (working("worktree")) {
     steps.push({

@@ -156,6 +156,8 @@ async function refreshSource(
         `[WORKSPACE] Could not fetch origin/${ctx.sourceBranch} (${issue ?? "not on origin"}): ${err instanceof Error ? err.message : err}`
       );
     }
+  } else {
+    issue = "no_origin";
   }
   const onOrigin = await succeeds(
     runGit(["show-ref", "--verify", "--quiet", `refs/remotes/origin/${ctx.sourceBranch}`], {

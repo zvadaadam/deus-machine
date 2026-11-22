@@ -32,8 +32,8 @@ import {
 } from "../../../apps/web/src/features/session/lib/agentEventFold";
 import { createOptimisticUserMessage } from "../../../apps/web/src/features/session/lib/optimisticMessage";
 import {
+  composerStore,
   sessionComposerActions,
-  useSessionComposerStore,
 } from "../../../apps/web/src/features/session/store/sessionComposerStore";
 import type { PaginatedMessages } from "@shared/types/session";
 import type { Message } from "../../../shared/types/session";
@@ -578,15 +578,16 @@ describe("restored cloud conversations", () => {
     } as LifecycleEvent;
     h.feed(refusal);
     expect(h.page()?.messages).toEqual([]);
+    const composer = composerStore(h.qc);
     await vi.waitFor(() =>
-      expect(useSessionComposerStore.getState().pendingContent[SESSION]?.draft).toBe(
+      expect(composer.getState().pendingContent[SESSION]?.draft).toBe(
         "Reply with one word\n\nand then this"
       )
     );
     // Replayed: no bubble to retire, nothing returned twice.
     h.feed(refusal);
     await Promise.resolve();
-    expect(useSessionComposerStore.getState().pendingContent[SESSION]?.draft).toBe(
+    expect(composer.getState().pendingContent[SESSION]?.draft).toBe(
       "Reply with one word\n\nand then this"
     );
   });

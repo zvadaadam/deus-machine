@@ -7,16 +7,17 @@
  * Pure function. No React. Trivially testable.
  */
 
+import type { UseQueryResult } from "@tanstack/react-query";
 import type { PRStatus, GhCliStatus, CheckDetail, Workspace } from "@/shared/types";
 
 /**
  * Discriminated union of all possible PR action states.
  * Each variant carries only the data its rendering path needs.
  *
- * Priority order (highest to lowest):
+ * Priority after the first lookup (highest to lowest):
  *   1. GitHub integration unavailable (blocks PR actions)
  *   2. error (GitHub unreachable — timeout or network failure)
- *   3. no PR (initial state)
+ *   3. no remote, or offer Create PR when there is no known PR
  *   4. merged (terminal)
  *   5. closed (terminal — not merged)
  *   6. conflicts (must resolve before anything else)
@@ -27,9 +28,11 @@ import type { PRStatus, GhCliStatus, CheckDetail, Workspace } from "@/shared/typ
  *  11. awaiting review (CI passed, needs review)
  */
 export type PRActionState =
+  | { type: "checking" }
   | { type: "gh_unavailable"; reason: "not_installed" | "not_authenticated" }
   | { type: "error"; reason: "timeout" | "network" }
-  | { type: "no_pr" }
+  | { type: "no_remote" }
+  | { type: "create_pr" }
   | { type: "merged"; prNumber: number; prUrl: string }
   | { type: "closed"; prNumber: number; prUrl: string }
   | { type: "conflicts"; prNumber: number; prUrl: string }
@@ -43,7 +46,7 @@ export type PRActionState =
     }
   | { type: "changes_requested"; prNumber: number; prUrl: string }
   | { type: "ci_pending"; prNumber: number; prUrl: string; checksDone: number; checksTotal: number }
-  | { type: "ready_to_merge"; prNumber: number; prUrl: string; targetBranch: string }
+  | { type: "ready_to_merge"; prNumber: number; prUrl: string }
   | { type: "awaiting_review"; prNumber: number; prUrl: string };
 
 /**
@@ -52,10 +55,13 @@ export type PRActionState =
  * (e.g., conflicts + CI failing), only the highest-priority state wins.
  */
 export function derivePRActionState(
-  prStatus: PRStatus | null,
-  ghStatus: GhCliStatus | null | undefined,
-  targetBranch: string
+  lookup: Pick<UseQueryResult<PRStatus | null>, "data" | "isLoading" | "isFetched" | "isEnabled">,
+  ghStatus: GhCliStatus | null | undefined
 ): PRActionState {
+  // A refresh after a rejected read can be loading again with no data.
+  if (lookup.isEnabled && lookup.isLoading && !lookup.isFetched) return { type: "checking" };
+  const prStatus = lookup.data;
+
   // GitHub integration gates PR actions.
   if (ghStatus && !ghStatus.isInstalled) {
     return { type: "gh_unavailable", reason: "not_installed" };
@@ -82,9 +88,8 @@ export function derivePRActionState(
     return { type: "error", reason: "network" };
   }
 
-  // No PR exists yet
   if (!prStatus?.has_pr || !prStatus.pr_number) {
-    return { type: "no_pr" };
+    return { type: prStatus?.no_remote ? "no_remote" : "create_pr" };
   }
 
   const prNumber = prStatus.pr_number;
@@ -123,7 +128,7 @@ export function derivePRActionState(
     prStatus.merge_status === "ready" ||
     (prStatus.ci_status === "passing" && !prStatus.has_conflicts)
   ) {
-    return { type: "ready_to_merge", prNumber, prUrl, targetBranch };
+    return { type: "ready_to_merge", prNumber, prUrl };
   }
 
   // Fallback: unknown CI, draft PRs, or any other open PR state

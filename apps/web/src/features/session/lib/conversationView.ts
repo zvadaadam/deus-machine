@@ -17,22 +17,21 @@
  *   2. It projects only the fields the selectors read: id, turn, role, parent
  *      tool call, parts. Per-turn accounting is rendered separately from
  *      the turn records and does not affect message grouping.
- *
- * The selector view synthesizes active/ended state from `sessions.status`
- * for the loaded messages. It is not the persisted turn history: empty
- * outcomes and attribution are joined by `chatTimeline` afterward.
  */
 
 import type { ConversationMessage, ConversationState } from "@shared/protocol-types";
-import type { Message } from "../types";
+import type { Message, SessionTurn } from "../types";
 
-/**
- * Project rows into the state the selectors read.
- *
- * `working` marks the last turn active. Without it every turn reads as ended
- * and `agentActivity` can only answer "idle" — the indicator would never move.
- */
-export function conversationView(messages: Message[], working: boolean): ConversationState {
+function isUnfinished(turn: SessionTurn): boolean {
+  return turn.endedAt === undefined && !turn.stopReason;
+}
+
+export function conversationView(
+  messages: Message[],
+  working: boolean,
+  records: readonly SessionTurn[] = [],
+  newestTurnId = messages.at(-1)?.turn_id
+): ConversationState {
   const timeline: ConversationMessage[] = messages.map((message) => ({
     kind: "message",
     messageId: message.id,
@@ -46,20 +45,19 @@ export function conversationView(messages: Message[], working: boolean): Convers
     startedAt: message.sent_at ? Date.parse(message.sent_at) : 0,
   }));
 
-  const lastTurnId = timeline[timeline.length - 1]?.turnId;
+  // An unfinished last record wins. A replay can append an older end, so otherwise use the
+  // newest message's record, or the chat's working status until that record arrives.
+  const last = records.at(-1);
+  const record =
+    last && isUnfinished(last) ? last : records.find((turn) => turn.turnId === newestTurnId);
+  const turnId = record?.turnId ?? newestTurnId;
+  const open = record ? isUnfinished(record) : working;
   return {
     timeline,
     turns:
-      lastTurnId === undefined
-        ? []
-        : [
-            {
-              turnId: lastTurnId,
-              status: working ? "active" : "ended",
-              errors: [],
-              startedAt: 0,
-            },
-          ],
+      turnId && open
+        ? [{ turnId, startedAt: record?.startedAt ?? 0, status: "active", errors: [] }]
+        : [],
     permissions: [],
     elicitations: [],
     totals: { input: 0, output: 0 },

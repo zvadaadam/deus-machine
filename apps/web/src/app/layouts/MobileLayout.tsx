@@ -21,7 +21,8 @@ import { useCloudSimulatorStore } from "@/features/simulator/cloud/cloudSimulato
 import { isTabVisible, tabsFor } from "./content-tabs";
 import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
-import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
+import type { Workspace } from "@/shared/types";
+import type { PRActionState } from "@/features/workspace/lib/prState";
 import type { WorkspaceStatus } from "@shared/enums";
 import type { ProjectTask } from "@shared/types/project-environment";
 import { cn } from "@/shared/lib/utils";
@@ -46,8 +47,7 @@ interface MobileLayoutProps {
   cloudPresence?: CloudPresence;
   onCloudWake?: () => void;
   // PR actions
-  prStatus: PRStatus | null;
-  ghStatus?: GhCliStatus | null;
+  prState: PRActionState;
   onCreatePR?: () => void;
   onArchive?: () => void;
   targetBranch: string;
@@ -66,8 +66,7 @@ export function MobileLayout({
   onStatusChange,
   cloudPresence,
   onCloudWake,
-  prStatus,
-  ghStatus,
+  prState,
   onCreatePR,
   onArchive,
   targetBranch,
@@ -119,8 +118,7 @@ export function MobileLayout({
 
   // Shared PR bar props -- avoids repeating the same prop bag twice.
   const prBarProps = {
-    prStatus,
-    ghStatus,
+    state: prState,
     onCreatePR,
     onSendAgentMessage: sendAgentMessageHandler ? handleSendAgentMessage : undefined,
     onArchive,

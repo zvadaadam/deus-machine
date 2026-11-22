@@ -28,6 +28,21 @@ import type {
 
 // ─── Workspace Queries ───────────────────────────────────────
 
+/** The list's CASE skips the chat lookup when any of the first three checks fails. */
+export const START_RECOVERABLE = (table: "w" | "workspaces") =>
+  `${table}.state = 'error' AND ${table}.current_session_id IS NULL AND ${table}.provider_workspace_id IS NULL
+   AND NOT EXISTS (SELECT 1 FROM sessions WHERE workspace_id = ${table}.id)`;
+
+const START_RECOVERABLE_COLUMN = `CASE WHEN ${START_RECOVERABLE("w")} THEN 1 ELSE 0 END AS start_recoverable`;
+
+type WorkspaceResult = Omit<WorkspaceWithDetailsRow, "start_recoverable"> & {
+  start_recoverable: 0 | 1;
+};
+
+function readWorkspaceRow(row: WorkspaceResult): WorkspaceWithDetailsRow {
+  return { ...row, start_recoverable: Boolean(row.start_recoverable) };
+}
+
 /**
  * Canonical workspace + repo + session column list and JOIN.
  * Single source of truth — reused by list, get-by-id, and by-repo queries
@@ -37,6 +52,7 @@ const WORKSPACE_ROW_COLUMNS = `
     w.id, w.repository_id, w.slug, w.title, w.git_branch,
     w.git_target_branch, w.kind, w.provider_workspace_id, w.organization_id,
     w.state, w.status, w.current_session_id,
+    ${START_RECOVERABLE_COLUMN},
     w.pr_url, w.pr_number,
     w.pr_state, w.pr_is_draft, w.pr_review_status, w.pr_has_conflicts, w.pr_ci_status, w.pr_checked_at,
     w.setup_status, w.error_message, w.error_detail, w.init_stage, w.init_fetch_issue,
@@ -57,10 +73,9 @@ const WORKSPACE_JOINS = `
   LEFT JOIN sessions fs ON w.first_session_id = fs.id
 `;
 
-const WORKSPACE_DETAILS_SELECT = `
-  SELECT ${WORKSPACE_ROW_COLUMNS}
-  ${WORKSPACE_JOINS}
-`;
+const GROUPED_WORKSPACE_SELECT = `
+  SELECT ${WORKSPACE_ROW_COLUMNS}, r.sort_order AS repo_sort_order
+  ${WORKSPACE_JOINS}`;
 
 export function getWorkspacesByRepo(
   db: Database.Database,
@@ -75,16 +90,11 @@ export function getWorkspacesByRepo(
     stateParams = states;
   }
   return db
-    .prepare(
-      `
-    SELECT ${WORKSPACE_ROW_COLUMNS},
-      r.sort_order as repo_sort_order
-    ${WORKSPACE_JOINS}
-    ${stateFilter}
-    ORDER BY r.sort_order, r.name, w.updated_at DESC
-  `
+    .prepare<string[], WorkspaceResult>(
+      `${GROUPED_WORKSPACE_SELECT} ${stateFilter} ORDER BY r.sort_order, r.name, w.updated_at DESC`
     )
-    .all(...stateParams) as WorkspaceWithDetailsRow[];
+    .all(...stateParams)
+    .map(readWorkspaceRow);
 }
 
 export function getArchivedWorkspaces(
@@ -108,14 +118,14 @@ export function getWorkspaceById(
   db: Database.Database,
   id: string
 ): WorkspaceWithDetailsRow | undefined {
-  return db
-    .prepare(
-      `
-    ${WORKSPACE_DETAILS_SELECT}
-    WHERE w.id = ?
-  `
+  const row = db
+    .prepare<[string], WorkspaceResult>(
+      `SELECT ${WORKSPACE_ROW_COLUMNS}
+       ${WORKSPACE_JOINS}
+       WHERE w.id = ?`
     )
-    .get(id) as WorkspaceWithDetailsRow | undefined;
+    .get(id);
+  return row && readWorkspaceRow(row);
 }
 
 /** Used by withWorkspace middleware — lighter query without session JOIN. */
@@ -123,16 +133,18 @@ export function getWorkspaceForMiddleware(
   db: Database.Database,
   id: string
 ): WorkspaceWithDetailsRow | undefined {
-  return db
-    .prepare(
+  const row = db
+    .prepare<[string], WorkspaceResult>(
       `
-    SELECT w.*, r.root_path, r.git_default_branch, r.git_origin_url, r.name as repo_name
+    SELECT w.*, ${START_RECOVERABLE_COLUMN},
+      r.root_path, r.git_default_branch, r.git_origin_url, r.name as repo_name
     FROM workspaces w
     LEFT JOIN repositories r ON w.repository_id = r.id
     WHERE w.id = ?
   `
     )
-    .get(id) as WorkspaceWithDetailsRow | undefined;
+    .get(id);
+  return row && readWorkspaceRow(row);
 }
 
 export function getWorkspaceRaw(db: Database.Database, id: string): WorkspaceRow | undefined {
@@ -151,33 +163,11 @@ export function getWorkspacesBySessionIds(
   if (sessionIds.length === 0) return [];
   const placeholders = sessionIds.map(() => "?").join(",");
   return db
-    .prepare(
-      `
-    SELECT
-      w.id, w.repository_id, w.slug, w.title, w.git_branch,
-      w.git_target_branch, w.kind, w.provider_workspace_id, w.organization_id,
-      w.state, w.status, w.current_session_id,
-      w.pr_url, w.pr_number,
-      w.pr_state, w.pr_is_draft, w.pr_review_status, w.pr_has_conflicts, w.pr_ci_status, w.pr_checked_at,
-      w.setup_status, w.error_message, w.error_detail, w.init_stage, w.init_fetch_issue,
-      w.updated_at,
-      r.name as repo_name, r.sort_order as repo_sort_order, r.root_path,
-      r.git_default_branch, r.git_origin_url,
-      s.status as session_status,
-      s.error_category as session_error_category,
-      s.error_message as session_error_message,
-      s.last_user_message_at as latest_message_sent_at,
-      w.first_session_id,
-      fs.status as first_session_status,
-      fs.last_user_message_at as first_session_last_message_at
-    FROM workspaces w
-    LEFT JOIN repositories r ON w.repository_id = r.id
-    LEFT JOIN sessions s ON w.current_session_id = s.id
-    LEFT JOIN sessions fs ON w.first_session_id = fs.id
-    WHERE w.current_session_id IN (${placeholders})
-  `
+    .prepare<string[], WorkspaceResult>(
+      `${GROUPED_WORKSPACE_SELECT} WHERE w.current_session_id IN (${placeholders})`
     )
-    .all(...sessionIds) as WorkspaceWithDetailsRow[];
+    .all(...sessionIds)
+    .map(readWorkspaceRow);
 }
 
 // ─── Session Queries ─────────────────────────────────────────

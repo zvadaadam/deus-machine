@@ -167,7 +167,7 @@ export function ChangesView({
         >
           {error.message}
         </div>
-      ) : filteredFileChanges.length === 0 ? (
+      ) : !fileChangesData ? null : filteredFileChanges.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3">
           <div className="bg-bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
             <GitBranch className="text-text-muted/50 h-5 w-5" aria-hidden="true" />

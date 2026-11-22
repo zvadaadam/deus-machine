@@ -24,7 +24,8 @@ import { useSettings } from "@/features/settings/api/settings.queries";
 import { SidebarInset, useSidebar } from "@/components/ui";
 import { cn } from "@/shared/lib/utils";
 import { PanelLeft } from "lucide-react";
-import type { Workspace, RepoGroup, PRStatus, GhCliStatus } from "@/shared/types";
+import type { Workspace, RepoGroup } from "@/shared/types";
+import type { PRActionState } from "@/features/workspace/lib/prState";
 import { useUpdateWorkspaceStatus } from "@/features/workspace/api";
 import { REVIEW_CODE } from "@/features/session/lib/sessionPrompts";
 import { track } from "@/platform/analytics";
@@ -43,8 +44,8 @@ import { usePanelShortcuts } from "./hooks/usePanelShortcuts";
 
 interface MainContentProps {
   selectedWorkspace: Workspace | null;
-  prStatus: PRStatus | null;
-  ghStatus?: GhCliStatus | null;
+  onArchive?: () => void;
+  prState: PRActionState;
   onOpenProject: () => void;
   onCloneRepository: () => void;
   onStartNewProject: () => void;
@@ -78,8 +79,8 @@ interface MainContentProps {
 
 export function MainContent({
   selectedWorkspace,
-  prStatus,
-  ghStatus,
+  onArchive,
+  prState,
   onOpenProject,
   onCloneRepository,
   onStartNewProject,
@@ -142,7 +143,6 @@ export function MainContent({
     setSelectedTargetBranch,
     handleCreatePR,
     handleSendAgentMessage,
-    handleArchive,
     environmentTasks,
     handleRunTask,
   } = useWorkspaceActions({
@@ -209,11 +209,10 @@ export function MainContent({
   // A pull request needs a branch, and a branch needs the checkout.
   const prActions = selectedWorkspace && hasCheckout(selectedWorkspace) && (
     <PRActions
-      prStatus={prStatus}
-      ghStatus={ghStatus}
+      state={prState}
       onCreatePR={createPRHandler ? handleCreatePR : undefined}
       onSendAgentMessage={sendAgentMessageHandler ? handleSendAgentMessage : undefined}
-      onArchive={handleArchive}
+      onArchive={onArchive}
       targetBranch={selectedTargetBranch}
       onTargetBranchChange={setSelectedTargetBranch}
       repoId={selectedWorkspace.repository_id}
@@ -276,10 +275,9 @@ export function MainContent({
               }
               cloudPresence={cloudState}
               onCloudWake={isCloudDirectWebMode() ? undefined : handleCloudWake}
-              prStatus={prStatus}
-              ghStatus={ghStatus}
+              prState={prState}
               onCreatePR={createPRHandler ? handleCreatePR : undefined}
-              onArchive={handleArchive}
+              onArchive={onArchive}
               targetBranch={selectedTargetBranch}
               onTargetBranchChange={setSelectedTargetBranch}
             />

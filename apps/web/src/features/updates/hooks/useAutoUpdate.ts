@@ -4,14 +4,14 @@ import { getErrorMessage } from "@shared/lib/errors";
 import type { UpdateCheckResult, UpdateState } from "@shared/types/updates";
 
 export interface UseAutoUpdateReturn {
-  state: UpdateState;
+  state: UpdateState | null;
   check: () => Promise<UpdateCheckResult | null>;
   install: () => Promise<void>;
 }
 
 /** Project Electron's update state; the renderer never owns a download. */
 export function useAutoUpdate(): UseAutoUpdateReturn {
-  const [state, setState] = useState<UpdateState>({ stage: "idle" });
+  const [state, setState] = useState<UpdateState | null>(null);
 
   useEffect(() => {
     if (!capabilities.autoUpdate) return;
@@ -43,7 +43,7 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
       return await window.electronAPI!.checkForUpdates();
     } catch (err) {
       setState((previous) =>
-        previous.stage === "error" ? previous : { stage: "error", error: getErrorMessage(err) }
+        previous?.stage === "error" ? previous : { stage: "error", error: getErrorMessage(err) }
       );
       return null;
     }
@@ -55,12 +55,12 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
       await window.electronAPI!.installUpdate();
     } catch (err) {
       setState((previous) =>
-        previous.stage === "error"
+        previous?.stage === "error"
           ? previous
           : {
               stage: "error",
               error: getErrorMessage(err),
-              ...(previous.stage === "ready" && { version: previous.version }),
+              ...(previous?.stage === "ready" && { version: previous.version }),
             }
       );
     }

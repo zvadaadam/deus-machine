@@ -1,15 +1,3 @@
-/**
- * Pure image-attachment utilities — shared between the session-scoped
- * composer store and the home-screen composer (which has its own local
- * state because no session exists yet).
- *
- * No React, no state. Just:
- *   - processImageFiles: File[] → ImageAttachment[] (FileReader → base64 preview)
- *   - extractImagesFromClipboard: clipboard event → File[]
- *   - buildImageParts: ImageAttachment[] → canonical ImagePartInput[] | null
- *   - buildMessageContent: text + attachments → the `content` the composer sends
- */
-
 import type { ImagePartInput, PartInput } from "@shared/protocol-types";
 
 /** Anthropic API only supports these image formats for vision. */
@@ -26,6 +14,12 @@ export interface ImageAttachment {
   /** base64 data-URL for preview + for the API request body. */
   preview: string;
   type: string;
+}
+
+export function isUnclaimedFileDrag(
+  event: Pick<DragEvent, "dataTransfer" | "defaultPrevented">
+): event is { dataTransfer: DataTransfer; defaultPrevented: false } {
+  return !event.defaultPrevented && !!event.dataTransfer?.types.includes("Files");
 }
 
 /** Convert image Files to base64 preview attachments via FileReader.

@@ -18,6 +18,8 @@ export interface PRStatus {
   has_pr: boolean;
   /** True when GitHub was actually queried — `has_pr: false` without it means "couldn't check". */
   conclusive?: boolean;
+  /** Set only when `git remote` lists no remotes for the local checkout. */
+  no_remote?: true;
   pr_number?: number;
   pr_title?: string;
   pr_url?: string;

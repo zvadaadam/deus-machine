@@ -12,7 +12,6 @@
  * No redundant chips. The button IS the status indicator.
  */
 
-import { useState, useEffect } from "react";
 import {
   GitMerge,
   GitPullRequestCreate,
@@ -37,16 +36,14 @@ import {
   ADDRESS_REVIEW,
   MERGE_PR,
 } from "@/features/session/lib/sessionPrompts";
-import { derivePRActionState, type PRActionState } from "../lib/prState";
-import type { PRStatus, GhCliStatus } from "@/shared/types";
+import type { PRActionState } from "../lib/prState";
 
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
 interface PRActionsProps {
-  prStatus: PRStatus | null;
-  ghStatus?: GhCliStatus | null;
+  state: PRActionState;
   onCreatePR?: () => void;
   onSendAgentMessage?: (text: string) => void;
   onArchive?: () => void;
@@ -61,27 +58,16 @@ interface PRActionsProps {
 // ---------------------------------------------------------------------------
 
 export function PRActions({
-  prStatus,
-  ghStatus,
+  state,
   onCreatePR,
   onSendAgentMessage,
   onArchive,
-  targetBranch: targetBranchProp = "main",
+  targetBranch,
   onTargetBranchChange,
   workspaceId,
   repoId,
 }: PRActionsProps) {
-  const [localTargetBranch, setLocalTargetBranch] = useState(targetBranchProp);
-  useEffect(() => {
-    setLocalTargetBranch(targetBranchProp);
-  }, [targetBranchProp]);
-
-  const handleBranchSelect = (name: string) => {
-    setLocalTargetBranch(name);
-    onTargetBranchChange(name);
-  };
-
-  const state = derivePRActionState(prStatus, ghStatus, localTargetBranch);
+  if (state.type === "checking" || state.type === "no_remote") return null;
 
   return (
     <div className="flex items-center gap-1.5">
@@ -92,11 +78,11 @@ export function PRActions({
       {match(state)
         .with({ type: "gh_unavailable" }, (s) => <GhWarning reason={s.reason} />)
         .with({ type: "error" }, (s) => <ErrorWarning reason={s.reason} />)
-        .with({ type: "no_pr" }, () => (
+        .with({ type: "create_pr" }, () => (
           <CreatePRButton
-            targetBranch={localTargetBranch}
+            targetBranch={targetBranch}
             repoId={repoId}
-            onBranchSelect={handleBranchSelect}
+            onBranchSelect={onTargetBranchChange}
             onCreatePR={onCreatePR}
           />
         ))
@@ -147,7 +133,7 @@ export function PRActions({
         .with({ type: "ready_to_merge" }, (s) => (
           <ActionButton
             icon={<GitMerge className="h-2.5 w-2.5" />}
-            label={`Merge into ${s.targetBranch}`}
+            label={`Merge into ${targetBranch}`}
             variant="success"
             onClick={() => {
               if (workspaceId) {
@@ -178,8 +164,7 @@ export function PRActions({
 // ---------------------------------------------------------------------------
 
 function PRLink({ state }: { state: PRActionState }) {
-  if (state.type === "gh_unavailable" || state.type === "no_pr" || state.type === "error")
-    return null;
+  if (!("prNumber" in state)) return null;
 
   return (
     <Tooltip delayDuration={200}>
@@ -345,7 +330,7 @@ function ActionButton({
 }
 
 // ---------------------------------------------------------------------------
-// CreatePRButton -- split button with branch selector (only for no-PR state)
+// CreatePRButton -- split button with branch selector
 // ---------------------------------------------------------------------------
 
 function CreatePRButton({

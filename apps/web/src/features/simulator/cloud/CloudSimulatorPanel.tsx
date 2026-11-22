@@ -21,8 +21,12 @@ import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { call } from "@/platform/ws";
 import type { Workspace } from "@/shared/types";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
-import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
-import { processImageFiles } from "@/features/session/lib/imageAttachments";
+import {
+  attachImageFiles,
+  composerTarget,
+  sessionComposerActions,
+  type ComposerTarget,
+} from "@/features/session/store/sessionComposerStore";
 import { openExternal } from "@/platform/native/window";
 import {
   COMMAND_TIMEOUT_MS,
@@ -77,7 +81,7 @@ interface ScreenshotRequest {
   platform: CloudSimPlatform | null;
   /** The chat active when the button was pressed — the attachment's target,
    *  whatever chat is active when the capture lands. */
-  sessionId: string | null;
+  target: ComposerTarget | null;
   /** Set once the platform has answered the exec: its capture precedes the
    *  answer, so nothing that arrived before the answer is proven wrong, and
    *  nothing is attached before it. */
@@ -96,11 +100,10 @@ function activeChatSessionId(workspaceId: string): string | null {
 
 /** A platform screenshot (base64 PNG) → a composer image attachment, the
  *  same path the local panel's screenshot button takes. */
-async function attachScreenshot(sessionId: string, base64: string): Promise<void> {
+async function attachScreenshot(target: ComposerTarget, base64: string): Promise<void> {
   const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
   const file = new File([bytes], `cloud-simulator-${Date.now()}.png`, { type: "image/png" });
-  const processed = await processImageFiles([file]);
-  if (processed.length) sessionComposerActions.addImageAttachments(sessionId, processed);
+  await attachImageFiles(target, [file]);
 }
 
 export function CloudSimulatorPanel({
@@ -230,17 +233,18 @@ export function CloudSimulatorPanel({
       : entry?.lastScreenshot;
     if (!capture || capture.at < request.askedAt) return;
     screenshotRequest.current = null;
-    if (!request.sessionId) return;
-    attachScreenshot(request.sessionId, capture.base64).catch((e) => {
+    if (!request.target) return;
+    attachScreenshot(request.target, capture.base64).catch((e) => {
       setSendError(`Could not attach the screenshot: ${getErrorMessage(e)}`);
     });
   }, [workspaceId]);
   const handleScreenshot = useCallback(() => {
     setSendError(null);
+    const sessionId = activeChatSessionId(workspaceId);
     const request: ScreenshotRequest = {
       askedAt: Date.now(),
       platform: platform ?? null,
-      sessionId: activeChatSessionId(workspaceId),
+      target: sessionId ? composerTarget(sessionId) : null,
       answered: false,
     };
     screenshotRequest.current = request;

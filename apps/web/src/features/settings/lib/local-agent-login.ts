@@ -69,8 +69,12 @@ function browserSignIn(auth: HarnessAuth) {
   );
 }
 
-export function canSignIn(auth: HarnessAuth): boolean {
-  return browserSignIn(auth) !== undefined;
+export function localSignIn(state: LocalAgentState) {
+  if (state.status !== "signed-out") return undefined;
+  const { auth, login } = state;
+  if (login?.codeUrl && !login.url) return { kind: "code", loginId: login.loginId } as const;
+  if (!login && browserSignIn(auth)) return { kind: "start", auth } as const;
+  return undefined;
 }
 
 /**

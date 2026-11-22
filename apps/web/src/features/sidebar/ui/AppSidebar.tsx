@@ -37,7 +37,6 @@ const sidebarGlide = (
 );
 
 export function AppSidebar({
-  repositories,
   selectedWorkspaceId,
   onWorkspaceClick,
   onNewWorkspace,
@@ -72,6 +71,7 @@ export function AppSidebar({
   // Mac backend): the Automations row hides and the empty state points at the
   // desktop app instead of a project picker that isn't there.
   const webDirect = isCloudDirectWebMode();
+  const { repositories, place, organizations } = places;
 
   // On mobile, close the sidebar sheet after selecting a workspace
   const handleWorkspaceClick = React.useCallback(
@@ -81,6 +81,13 @@ export function AppSidebar({
     },
     [onWorkspaceClick, isMobile, setOpenMobile]
   );
+  const archiveFromSidebar =
+    isMobile && onArchive
+      ? (id: string) => {
+          setOpenMobile(false);
+          onArchive(id);
+        }
+      : onArchive;
 
   // User's drag-drop order is the final word.
   // Status is shown visually (badges, colors) — not by re-sorting after drag.
@@ -228,8 +235,9 @@ export function AppSidebar({
                       onWorkspaceClick={handleWorkspaceClick}
                       onNewWorkspace={onNewWorkspace}
                       onNewWorkspaceFromGitHub={onNewWorkspaceFromGitHub}
-                      windowLocation={places.location}
-                      onArchive={onArchive}
+                      place={place}
+                      organizations={organizations}
+                      onArchive={archiveFromSidebar}
                       onStatusChange={onStatusChange}
                       diffStatsMap={diffStatsMap}
                       sidebarExpanded={isExpanded}

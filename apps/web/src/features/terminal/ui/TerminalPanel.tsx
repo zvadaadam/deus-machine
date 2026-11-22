@@ -184,30 +184,6 @@ export function TerminalPanel({
     );
   }, [pendingTask, workspaceId]);
 
-  // Watch for pending terminal commands from the layout store (e.g. "claude login" from chat error)
-  const pendingCommand = useWorkspaceLayoutStore(
-    (s) => s.layouts[workspaceId]?.pendingTerminalCommand ?? null
-  );
-
-  useEffect(() => {
-    if (!pendingCommand) return;
-
-    // Clear immediately to prevent duplicate tabs from rapid clicks
-    const cmd = pendingCommand;
-    workspaceLayoutActions.setPendingTerminalCommand(workspaceId, null);
-
-    // Read fresh state to avoid stale closure over render-time values
-    const { terminalTabs, nextTerminalNum: num } = workspaceLayoutActions.getLayout(workspaceId);
-    const id = `terminal-${crypto.randomUUID()}`;
-    initialCommandsRef.current.set(id, cmd);
-    workspaceLayoutActions.setTerminalTabState(
-      workspaceId,
-      [...terminalTabs, { id, title: "Login" }],
-      id,
-      num + 1
-    );
-  }, [pendingCommand, workspaceId]);
-
   function addTerminal() {
     const id = `terminal-${crypto.randomUUID()}`;
     updateTabs([...tabs, { id, title: `Terminal ${nextTerminalNum}` }], id, nextTerminalNum + 1);

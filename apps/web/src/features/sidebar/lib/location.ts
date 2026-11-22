@@ -89,7 +89,13 @@ export function placeOf(workspace: CloudWorkspace, organizations: Organizations)
   };
 }
 
-const samePlace = (a: Place, b: Place) => placeKey(a) === placeKey(b);
+export function workspaceInPlace(
+  workspace: CloudWorkspace,
+  place: Place,
+  organizations: Organizations
+): boolean {
+  return placeKey(placeOf(workspace, organizations)) === placeKey(place);
+}
 
 /**
  * Where the window is: the stored place, except that a cloud this backend cannot
@@ -319,7 +325,7 @@ export function filterByPlace(
   organizations: Organizations
 ): RepoGroup[] {
   return groups.flatMap((group) => {
-    const workspaces = group.workspaces.filter((w) => samePlace(placeOf(w, organizations), place));
+    const workspaces = group.workspaces.filter((w) => workspaceInPlace(w, place, organizations));
     if (workspaces.length === 0 && !projectRunsIn(group, place.location)) return [];
     return [workspaces.length === group.workspaces.length ? group : { ...group, workspaces }];
   });
@@ -366,7 +372,7 @@ export function workspaceToRestore(
   if (!id) return null;
   const listed = groups.some((group) =>
     group.workspaces.some(
-      (w) => w.id === id && w.state !== "archived" && samePlace(placeOf(w, organizations), target)
+      (w) => w.id === id && w.state !== "archived" && workspaceInPlace(w, target, organizations)
     )
   );
   return listed ? id : null;

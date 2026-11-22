@@ -14,9 +14,8 @@
  *   - textarea cursor / focus / scroll (implicit in DOM)
  * These are per-interaction UI ephemera — they shouldn't cross surfaces.
  *
- * The only thing the parent still owns is the *send path*: we call
- * `onSend(combinedContent)` and the parent (SessionComposer) wires it
- * into the session mutation + clears store content on success.
+ * The parent submits the message. Its acknowledgement clears this input’s
+ * submitted snapshot, even if more was staged in the meantime.
  */
 
 import { tempo } from "@/shared/lib/tempo";
@@ -33,15 +32,12 @@ import { Minimize2, ArrowUp, Square, Wrench } from "lucide-react";
 import { useFileMention } from "../hooks/useFileMention";
 import { useCloudSlashItems } from "../hooks/useCloudSlashItems";
 import { useSlashCommand } from "../hooks/useSlashCommand";
+import { attachImageFiles } from "../store/sessionComposerStore";
 import { useSessionComposer } from "../hooks/useSessionComposer";
 import { FileMentionPopover } from "./FileMentionPopover";
 import { SlashCommandPopover } from "./SlashCommandPopover";
 import { setupEnvironmentPrompt } from "../lib/sessionPrompts";
-import {
-  extractImagesFromClipboard,
-  processImageFiles,
-  buildMessageContent,
-} from "../lib/imageAttachments";
+import { extractImagesFromClipboard, buildMessageContent } from "../lib/imageAttachments";
 import {
   InputGroup,
   InputGroupAddon,
@@ -51,6 +47,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 import { PastedTextCard } from "./PastedTextCard";
+import { MissingAttachments } from "./MissingAttachments";
 import { PastedImageCard } from "./PastedImageCard";
 import { InspectedElementCard } from "./InspectedElementCard";
 import { FileMentionCard } from "./FileMentionCard";
@@ -97,7 +94,9 @@ interface MessageInputProps {
   environmentUnconfigured?: boolean;
   showCompactButton?: boolean;
 
-  onSend: (content: string) => void;
+  onSend: (content: string) => boolean | Promise<boolean>;
+  /** The draft can still be edited while its workspace starts. */
+  sendDisabledReason?: string;
   onCompact?: () => void;
   onStop?: () => void;
   onOpenNewTab?: (initialModel?: string) => void;
@@ -231,6 +230,7 @@ export function MessageInput({
   environmentUnconfigured = false,
   showCompactButton = false,
   onSend,
+  sendDisabledReason,
   onCompact,
   onStop,
   onOpenNewTab,
@@ -310,12 +310,11 @@ export function MessageInput({
     fileMentions.length > 0 ||
     skillMentions.length > 0;
 
-  const handleSend = () => {
-    if (sending || !hasContent) return;
+  const canSend = hasContent && !sending && !sendDisabledReason;
+  const handleSend = async () => {
+    if (!canSend) return;
     const combined = buildCombinedContent();
-    if (combined) onSend(combined);
-    // Parent clears store content on successful send (see SessionComposer
-    // onMessageSent → composer.clearContent).
+    if (combined && (await onSend(combined))) composer.clearSent();
   };
 
   // @ file mention popover — local UI-ephemeral state (open/close, query,
@@ -373,8 +372,7 @@ export function MessageInput({
     const imageFiles = extractImagesFromClipboard(e);
     if (imageFiles.length > 0) {
       e.preventDefault();
-      const processed = await processImageFiles(imageFiles);
-      if (processed.length) composer.addImageAttachments(processed);
+      await attachImageFiles(sessionId, imageFiles);
       return;
     }
     // Long text paste: preventDefault + stash as a card. Short pastes fall
@@ -445,6 +443,14 @@ export function MessageInput({
         data-no-ring={true}
         className="bg-bg-muted/75 ring-border-subtle relative overflow-visible rounded-2xl border-0 shadow-sm ring-1 backdrop-blur-xl"
       >
+        <MissingAttachments
+          pictures={composer.missingPictures}
+          pastedTexts={composer.missingPastedTexts}
+          onDismiss={composer.dismissMissingAttachments}
+        />
+        {sendDisabledReason && (
+          <p className="text-text-muted w-full px-4 pt-2 text-xs">{sendDisabledReason}</p>
+        )}
         <ComposerStagedContent
           skillMentions={skillMentions}
           inspectedElements={inspectedElements}
@@ -570,10 +576,10 @@ export function MessageInput({
 
             <InputGroupButton
               onClick={handleSend}
-              disabled={sending || !hasContent}
+              disabled={!canSend}
               variant={hasContent ? "default" : "outline"}
               size="icon-sm"
-              title="Send message (Enter)"
+              title={sendDisabledReason ?? "Send message (Enter)"}
               aria-label="Send message"
               className="rounded-full"
             >

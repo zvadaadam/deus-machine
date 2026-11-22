@@ -8,6 +8,7 @@ import { createServer } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import svgr from "vite-plugin-svgr";
 import { chromium } from "playwright";
+import { freePort } from "./remote-access/stack.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const artifacts = path.join(root, ".context/workspace-layout-ui");
@@ -42,7 +43,7 @@ function App() {
  window.setCloudStage = state => setCurrent({...workspace,kind:"cloud",state,init_stage:state === "initializing" ? "resuming" : null,cloud_status: state === "ready" ? "running" : "paused"});
  return <QueryClientProvider client={client}><TooltipProvider><SidebarProvider>
    <aside data-fixture-sidebar className="bg-bg-base h-screen w-64 shrink-0 p-4">Deus</aside>
-   <MainContent selectedWorkspace={current as any} prStatus={null} ghStatus={{isInstalled:true,isAuthenticated:true} as any} workspaceChatPanelRef={chatRef}
+   <MainContent selectedWorkspace={current as any} prState={{type:"create_pr"}} workspaceChatPanelRef={chatRef}
      repos={[]} repoGroups={[]} onCreateWorkspace={()=>{}} onOpenProject={()=>{}} onCloneRepository={()=>{}} onStartNewProject={()=>{}} onStartWorkspace={()=>{}} onWorkspaceClick={()=>{}} />
    <div hidden data-custom-icons><Check className="stroke-[2.5]" /><ConnectionIllustration /></div>
  </SidebarProvider></TooltipProvider></QueryClientProvider>;
@@ -150,7 +151,7 @@ const server = await createServer({
       },
     },
   ],
-  server: { host: "127.0.0.1", port: 0 },
+  server: { host: "127.0.0.1", port: await freePort(), strictPort: true, watch: null },
 });
 let browser, page;
 try {
@@ -179,6 +180,7 @@ try {
   };
   const click = (name) => page.getByRole("button", { name, exact: true }).click();
   const tabs = page.getByRole("tablist", { name: "Content panel" });
+  const createPR = page.getByRole("button", { name: "Create PR", exact: true });
   const tab = (name) => tabs.getByRole("tab", { name, exact: true }).click();
   const composer = page.locator('[data-slot="workspace-chat-pane"] textarea');
   await composer.fill("Keep this draft while I inspect the workspace.");
@@ -187,6 +189,7 @@ try {
     window.originalContent = document.querySelector('[data-slot="workspace-content-pane"]');
   });
   await tabs.getByRole("tab", { name: "Simulator", exact: true }).waitFor();
+  assert.ok(await createPR.isVisible(), "the header shows the available PR action");
   assert.deepEqual(
     await tabs.getByRole("tab").evaluateAll((es) => es.map((e) => e.getAttribute("aria-label"))),
     ["Changes", "Files", "Terminal", "Browser", "Simulator", "Agent"]
@@ -345,6 +348,7 @@ try {
     .getByRole("button", { name: "Hide workspace", exact: true })
     .waitFor({ state: "hidden" });
   assert.equal(await page.locator("[data-workspace-view]").count(), 0);
+  assert.ok(await createPR.isVisible(), "the phone shows the available PR action");
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   // Hosted web has no content tools; even a saved focused mode must leave chat usable.
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -355,6 +359,7 @@ try {
   });
   await view("chat");
   assert.equal(await page.locator("#workspace-content").count(), 0);
+  assert.equal(await createPR.count(), 0, "the hosted chat-only header has no PR controls");
   assert.equal(await page.getByRole("button", { name: "Show workspace", exact: true }).count(), 0);
   assert.deepEqual(errors, []);
   console.log(

@@ -10,6 +10,7 @@ import {
   ensureWebCloudSession,
 } from "@/features/session/cloud/webCloudDirectConfig";
 import { installCloudDataAdapter } from "@/features/session/cloud/cloudDataAdapter";
+import { isUnclaimedFileDrag } from "@/features/session/lib/imageAttachments";
 
 // Initialize Sentry before anything else.
 // DSN is a public, write-only ingest token — safe to hardcode.
@@ -45,6 +46,16 @@ window.addEventListener("focus", () =>
   document.documentElement.classList.remove("window-inactive")
 );
 window.addEventListener("blur", () => document.documentElement.classList.add("window-inactive"));
+
+// Outside a drop target the browser would open the file over the current page.
+function preventFileNavigation(event: DragEvent) {
+  if (!isUnclaimedFileDrag(event)) return;
+  if (event.target instanceof HTMLInputElement && event.target.type === "file") return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "none";
+}
+window.addEventListener("dragover", preventFileNavigation);
+window.addEventListener("drop", preventFileNavigation);
 
 const w = window as Window & { __deusErrorHandlers__?: boolean };
 if (!w.__deusErrorHandlers__) {

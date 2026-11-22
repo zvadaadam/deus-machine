@@ -21,17 +21,15 @@ import { RotateCcw, Loader2, RefreshCw, CheckCircle2, AlertCircle, Download } fr
 import { useUIStore } from "@/shared/stores/uiStore";
 import { capabilities } from "@/platform";
 import { releaseUrl, useUpdateContext } from "@/features/updates";
-import type { UpdateCheckResult } from "@shared/types/updates";
 import type { GeneralSectionProps } from "./types";
 
 export function GeneralSection({ settings, saveSetting, theme, setTheme }: GeneralSectionProps) {
   const closeSettings = useUIStore((s) => s.closeSettings);
   const updateCtx = useUpdateContext();
   const [currentVersion, setCurrentVersion] = useState<string>(__APP_VERSION__);
-  const [manualChecking, setManualChecking] = useState(false);
-  const [manualResult, setManualResult] = useState<UpdateCheckResult | null>(null);
-  const upToDate = manualResult?.supported === true && !manualResult.available;
-  const unsupportedReason = manualResult?.supported === false ? manualResult.reason : null;
+  const [manualCheck, setManualCheck] = useState<"idle" | "checking" | "up-to-date">("idle");
+  const update = updateCtx?.state;
+  const isChecking = manualCheck === "checking" || update?.stage === "checking";
 
   useEffect(() => {
     if (window.electronAPI) {
@@ -45,20 +43,16 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
   }, []);
 
   useEffect(() => {
-    if (!upToDate) return;
-    const timer = setTimeout(() => setManualResult(null), 3000);
+    if (manualCheck !== "up-to-date") return;
+    const timer = setTimeout(() => setManualCheck("idle"), 3000);
     return () => clearTimeout(timer);
-  }, [upToDate]);
+  }, [manualCheck]);
 
   async function handleCheckForUpdates() {
     if (!updateCtx) return;
-    setManualChecking(true);
-    setManualResult(null);
-    try {
-      setManualResult(await updateCtx.check());
-    } finally {
-      setManualChecking(false);
-    }
+    setManualCheck("checking");
+    const result = await updateCtx.check();
+    setManualCheck(result?.supported && !result.available ? "up-to-date" : "idle");
   }
 
   return (
@@ -150,33 +144,36 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
           <div className="flex items-center justify-between gap-4">
             <div>
               <Label className="text-sm">Check for updates</Label>
-              <p className="text-muted-foreground text-sm">
-                {unsupportedReason ?? "Updates download automatically in the background."}
-              </p>
+              {update && update.stage !== "error" && (
+                <p className="text-muted-foreground text-sm">
+                  {update.stage === "unsupported"
+                    ? update.reason
+                    : "Updates download automatically in the background."}
+                </p>
+              )}
             </div>
-            {(() => {
-              const isChecking = manualChecking || updateCtx?.state.stage === "checking";
-              return (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCheckForUpdates}
-                  disabled={isChecking || updateCtx?.state.stage === "downloading"}
-                >
-                  {isChecking ? (
-                    <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="mr-1.5 size-3.5" />
-                  )}
-                  {isChecking ? "Checking..." : "Check now"}
-                </Button>
-              );
-            })()}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCheckForUpdates}
+              disabled={
+                !update ||
+                isChecking ||
+                update.stage === "downloading" ||
+                update.stage === "unsupported"
+              }
+            >
+              {isChecking ? (
+                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-1.5 size-3.5" />
+              )}
+              {isChecking ? "Checking..." : "Check now"}
+            </Button>
           </div>
 
-          {updateCtx &&
-            unsupportedReason === null &&
-            match(updateCtx.state)
+          {update &&
+            match(update)
               .with({ stage: "ready" }, (state) => (
                 <div className="bg-primary/5 border-primary/20 flex items-center justify-between gap-4 rounded-lg border p-3">
                   <div className="flex items-center gap-2">
@@ -219,10 +216,10 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
                   </span>
                 </div>
               ))
-              .with({ stage: "idle" }, { stage: "checking" }, () => null)
+              .with({ stage: "idle" }, { stage: "checking" }, { stage: "unsupported" }, () => null)
               .exhaustive()}
 
-          {upToDate && (
+          {manualCheck === "up-to-date" && (
             <div className="text-muted-foreground flex items-center gap-2 text-sm">
               <CheckCircle2 className="text-success size-3.5" />
               <span>You're on the latest version.</span>

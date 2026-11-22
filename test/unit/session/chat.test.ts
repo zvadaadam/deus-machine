@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { Chat } from "@/features/session/ui/Chat";
+import { SessionProvider } from "@/features/session/context";
 import type { SessionStatus } from "@shared/enums";
 import type { Message, SessionTurn } from "@shared/types/session";
 
@@ -12,10 +13,8 @@ vi.mock("@tanstack/react-virtual", async (importOriginal) => {
   const original = await importOriginal<typeof import("@tanstack/react-virtual")>();
   return {
     ...original,
-    useVirtualizer: (options: Parameters<typeof original.useVirtualizer>[0]) => {
-      virtualization(options);
-      return original.useVirtualizer(options);
-    },
+    useVirtualizer: (options: Parameters<typeof original.useVirtualizer>[0]) =>
+      original.useVirtualizer({ ...options, initialRect: virtualization(options) }),
   };
 });
 vi.mock("@/features/session/hooks/useAutoScroll", () => ({
@@ -65,6 +64,60 @@ describe("session alert visibility", () => {
     }
   });
 });
+
+it.each(["needs_response", "needs_plan_response"] as const)(
+  "%s keeps the last turn open without presenting it as streaming",
+  (sessionStatus) => {
+    // The request can reach the chat before its turn record or the next part update.
+    const part = { sessionId: "session-1", messageId: "reply" };
+    const reply: Message = {
+      ...messages[0],
+      id: part.messageId,
+      role: "assistant",
+      seq: 1,
+      parts: [
+        { ...part, type: "text", id: "text", text: "See [notes](README.md).", state: "done" },
+        { ...part, type: "reasoning", id: "thought", text: "Checking options", state: "streaming" },
+      ],
+    };
+    const client = new QueryClient();
+    try {
+      virtualization.mockReturnValueOnce({ width: 800, height: 600 });
+      const chat = createElement(Chat, {
+        messages: [...messages, reply],
+        sessionStatus,
+        loading: false,
+        compactions: [
+          {
+            compaction_id: "compact",
+            session_id: "session-1",
+            turn_id: "turn-1",
+            status: "completed",
+            trigger: "auto",
+            created_at: "2026-09-09T10:01:00.000Z",
+          },
+        ],
+      });
+      const html = renderToStaticMarkup(
+        createElement(
+          QueryClientProvider,
+          { client },
+          createElement(SessionProvider, {
+            sessionStatus,
+            subagentMessages: new Map(),
+            children: chat,
+          })
+        )
+      );
+      expect(html).toContain('aria-label="Expand activity, Reasoning"');
+      expect(html).toContain(">README.md<");
+      expect(html).not.toContain("Copy response");
+      expect(html).not.toContain("Auto-compacted");
+    } finally {
+      client.clear();
+    }
+  }
+);
 
 it("keeps separate assistant groups distinct when older messages have no turn ID", () => {
   const client = new QueryClient();
@@ -136,6 +189,28 @@ it("notifies scrolling for appended messages within a turn and empty outcomes, b
     const prepended = render([{ ...messages[0], id: "older", turn_id: "older" }, ...rows]);
     expect(prepended.contentCount).toBeGreaterThan(initial.contentCount);
     expect(prepended.lastContentId).toBe(initial.lastContentId);
+  } finally {
+    client.clear();
+  }
+});
+
+it("keeps a first-send refusal in an otherwise empty chat", () => {
+  const client = new QueryClient();
+  try {
+    const html = renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(Chat, {
+          messages: [],
+          loading: false,
+          sessionStatus: "error",
+          errorMessage: "The engine refused this send.",
+        })
+      )
+    );
+    expect(html).toContain("The engine refused this send.");
+    expect(html).not.toContain("What would you like to work on?");
   } finally {
     client.clear();
   }

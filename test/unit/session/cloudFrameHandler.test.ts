@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import { makeCloudFrameHandler } from "@/features/session/cloud/cloudFrameHandler";
+import { buildChatTimeline } from "@/features/session/lib/chatTimeline";
 import {
   flushDeltas,
   messagesKey,
@@ -455,19 +456,28 @@ describe("makeCloudFrameHandler", () => {
     expect(page.has_older).toBe(false);
   });
 
-  it("unrolls a snapshot's state.compactions into the page's compactions list", () => {
+  it("holds each running reply's compaction through end-only history and delayed live frames", () => {
     const SESSION = "sess-snap-compaction";
     const qc = new QueryClient();
-    seedEmptyPage(qc, SESSION);
     const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
+    const base = Date.now() - 1100;
+    const items = () => {
+      const { messages, compactions, turns } = qc.getQueryData<PaginatedMessages>(
+        messagesKey(SESSION)
+      )!;
+      return buildChatTimeline(messages, compactions, true, [], turns).items;
+    };
 
     onFrame({
       type: "session.snapshot",
       state: {
         sessionId: SESSION,
         status: "ready",
-        currentTurnId: null,
-        turns: [],
+        currentTurnId: "t1",
+        turns: [
+          { turnId: "old", endedAt: base, stopReason: "end_turn" },
+          { turnId: "Old", endedAt: base, stopReason: "end_turn" },
+        ],
         compactions: [
           {
             compactionId: "c1",
@@ -477,7 +487,7 @@ describe("makeCloudFrameHandler", () => {
             preTokens: 100_000,
             postTokens: 20_000,
             summary: "summarized the context",
-            timestamp: T,
+            timestamp: base + 400,
           },
         ],
       },
@@ -488,27 +498,68 @@ describe("makeCloudFrameHandler", () => {
           sessionId: SESSION,
           turnId: "t1",
           outputIndex: 1,
-          role: "user",
-          createdAt: T,
-          parts: [textPart("p1", SESSION, "m1", "a question")],
+          role: "assistant",
+          createdAt: base + 350,
+          parts: [{ ...textPart("p1", SESSION, "m1", "Still working"), state: "streaming" }],
         },
       ],
       events: [],
-    } as Record<string, unknown>);
+    });
+    const closed = { type: "assistant", isOpen: false };
+    expect(items()).toMatchObject([
+      closed,
+      closed,
+      { type: "assistant", turnId: "t1", isOpen: true },
+    ]);
 
-    const page = qc.getQueryData<PaginatedMessages>(messagesKey(SESSION))!;
-    expect(page.compactions).toHaveLength(1);
-    expect(page.compactions[0]).toMatchObject({
-      compaction_id: "c1",
-      session_id: SESSION,
-      turn_id: "t1",
+    onFrame({ type: "turn.ended", turnId: "t1", stopReason: "end_turn", timestamp: base + 650 });
+    const history = [
+      closed,
+      closed,
+      { type: "assistant", turnId: "t1", isOpen: false },
+      {
+        type: "compaction",
+        compaction: {
+          compaction_id: "c1",
+          session_id: SESSION,
+          turn_id: "t1",
+          status: "completed",
+          trigger: "auto",
+          pre_tokens: 100_000,
+          post_tokens: 20_000,
+          summary: "summarized the context",
+          created_at: new Date(base + 400).toISOString(),
+        },
+      },
+    ];
+    expect(items()).toMatchObject(history);
+
+    onFrame({ type: "turn.started", turnId: "t2", timestamp: base + 750 });
+    const reply = { turnId: "t2", messageId: "m2", outputIndex: 1, timestamp: base + 800 };
+    onFrame({ type: "message.started", ...reply, role: "assistant" });
+    onFrame({
+      type: "message.part",
+      ...reply,
+      partIndex: 0,
+      part: { ...textPart("p2", SESSION, "m2", "Next reply"), state: "streaming" },
+    });
+    onFrame({
+      type: "session.compaction",
+      turnId: "t2",
+      compactionId: "c2",
       status: "completed",
       trigger: "auto",
-      pre_tokens: 100_000,
-      post_tokens: 20_000,
-      summary: "summarized the context",
-      created_at: new Date(T).toISOString(),
+      timestamp: base + 850,
     });
+    expect(items()).toMatchObject([...history, { type: "assistant", turnId: "t2", isOpen: true }]);
+    onFrame({ type: "turn.ended", turnId: "t2", stopReason: "end_turn", timestamp: base + 950 });
+    expect(items()).toMatchObject([
+      ...history,
+      { type: "assistant", turnId: "t2", isOpen: false },
+      { type: "compaction", compaction: { compaction_id: "c2" } },
+    ]);
+    const page = qc.getQueryData<PaginatedMessages>(messagesKey(SESSION))!;
+    expect(page.turns.map((turn) => turn.turnId)).toEqual(["t1", "old", "Old", "t2"]);
   });
 
   it("projects a LIVE session.compaction into the page (not just a refetch)", () => {

@@ -9,6 +9,7 @@ import tailwindcss from "@tailwindcss/vite";
 import svgr from "vite-plugin-svgr";
 import { chromium } from "playwright";
 import { WebSocketServer } from "ws";
+import { freePort } from "./remote-access/stack.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const artifacts = path.join(root, ".context/workspace-usability-ui");
@@ -26,7 +27,7 @@ import { OnboardingOverlay } from "@/features/onboarding/ui/OnboardingOverlay";
 import { AssistantTurn } from "@/features/session/ui/AssistantTurn";
 import { SessionComposer } from "@/features/session/ui/SessionComposer";
 import { SessionPanel } from "@/features/session/ui/SessionPanel";
-import { emptyComposer, sessionComposerActions, useSessionComposerStore } from "@/features/session/store/sessionComposerStore";
+import { composerStore, emptyComposer, sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import { useFirstMessageDelivery } from "@/features/session/hooks/useFirstMessageDelivery";
 import { pendingFirstMessages } from "@/features/workspace/store/workspaceStartStore";
 import { makeCloudFrameHandler } from "@/features/session/cloud/cloudFrameHandler";
@@ -35,11 +36,12 @@ import { FileBrowserPanel } from "@/features/file-browser/ui/FileBrowserPanel";
 import { useChatTabs } from "@/app/layouts/useChatTabs";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { queryKeys } from "@/shared/api/queryKeys";
+import { selectRuntime } from "@/platform/ws";
 import { Toaster } from "@/components/ui/sonner";
 import "@/global.css";
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 window.welcomeCommands = [];
-window.composerForSession = sessionId => useSessionComposerStore.getState().composers[sessionId];
+window.composerForSession = sessionId => composerStore().getState().composers[sessionId];
 window.deliverWelcomeHistory = () => client.setQueryData(queryKeys.sessions.messages("history-session"), {
   messages: [{id: "saved-message", session_id: "history-session", turn_id: "saved-turn", role: "user", seq: 1, parts: [{type: "text", id: "saved-text", text: "Earlier recorded prompt", state: "done"}]}],
   compactions: [], has_older: false, has_newer: false,
@@ -50,6 +52,7 @@ window.deliverWelcomeHistory = () => client.setQueryData(queryKeys.sessions.mess
 const welcomeWorkspace = {id: "welcome-workspace", state: "ready", current_session_id: "history-session", latest_message_sent_at: null, session_status: "idle"};
 const welcomeGroups = [{repo_id: "repo", repo_name: "repo", sort_order: 0, git_origin_url: null, workspaces: [welcomeWorkspace]}];
 if (location.search.startsWith("?welcome")) {
+  selectRuntime();
   pendingFirstMessages.set("welcome-workspace", {
     message: "Start from home",
     model: "codex-app-server:gpt-6-astra",
@@ -131,7 +134,7 @@ function App() {
           <button onClick={() => setPhase(p => p + 1)}>Advance turn</button>
           <button onClick={() => setLaterTool(true)}>Run another tool</button>
           <SessionProvider sessionStatus={phase === 1 ? "idle" : "working"} workspaceId="workspace" subagentMessages={new Map()}>
-            <AssistantTurn messages={messages as any} isLatest={phase < 2} isWorking={phase !== 1} turn={phase ? {turnId: "turn", stopReason: "end_turn", endedAt: 1} : undefined} />
+            <AssistantTurn messages={messages as any} isOpen={phase === 0} isStreaming={phase === 0} turn={phase ? {turnId: "turn", stopReason: "end_turn", endedAt: 1} : undefined} />
           </SessionProvider>
         </>}
       </main>
@@ -401,7 +404,7 @@ const server = await createServer({
       },
     },
   ],
-  server: { host: "127.0.0.1", port: 0, watch: null, hmr: false },
+  server: { host: "127.0.0.1", port: await freePort(), strictPort: true, watch: null, hmr: false },
 });
 // Real browser socket and reconnect loop, with failures at the server boundary.
 const directServer = new WebSocketServer({ noServer: true });
@@ -445,9 +448,14 @@ let page;
 try {
   await server.listen();
   browser = await chromium.launch({ headless: true });
-  page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+    reducedMotion: "reduce",
+  });
+  page = await context.newPage();
   const errors = [];
-  page.on("pageerror", (err) => {
+  context.on("weberror", (event) => {
+    const err = event.error();
     errors.push(err.message);
     console.error(err.stack);
   });
@@ -492,6 +500,7 @@ try {
     window.activityNode = document.getElementById(id);
   }, activityId);
   await page.getByRole("button", { name: "Run another tool" }).click();
+  await page.getByText("Build project · 1 tool call", { exact: true }).waitFor();
   await page.waitForFunction(() => document.querySelector(".assistant-turn .opacity-60") === null);
   for (let i = 0; i < 2; i++) {
     await page.getByRole("button", { name: "Advance turn" }).click();
@@ -560,8 +569,7 @@ try {
     assert.equal(await labels.getAttribute("data-model"), "", "Started chats restore from history");
     assert.equal(await labels.getAttribute("data-harness"), "claude-code");
   }
-  // A send ACK can mark a tab started before turn history records its model.
-  // Closing discards composer state, so restore must snapshot the current pick.
+  // A send ACK can precede history. The kept composer still owns its model while the tab is closed.
   await page.getByRole("button", { name: "Open Codex chat", exact: true }).click();
   await page.locator('output[data-model="codex-app-server:gpt-6-astra"]').waitFor();
   for (const model of ["gpt-5.6-sol", "gpt-6-astra"]) {
@@ -577,14 +585,19 @@ try {
     }
     await page.getByRole("button", { name: "Close active chat", exact: true }).click();
     assert.equal(
-      await page.evaluate((sid) => window.composerForSession(sid), sessionId),
-      undefined
+      await page.evaluate((sid) => window.composerForSession(sid).model, sessionId),
+      `codex-app-server:${model}`
     );
     await page.getByRole("button", { name: "Restore original chat", exact: true }).click();
+    assert.equal(await labels.getAttribute("data-session"), sessionId);
     assert.equal(
       await labels.getAttribute("data-model"),
-      `codex-app-server:${model}`,
-      "Restore keeps the latest composer model before history arrives"
+      "",
+      "A restored started tab needs no model seed"
+    );
+    assert.equal(
+      await page.evaluate((sid) => window.composerForSession(sid).model, sessionId),
+      `codex-app-server:${model}`
     );
   }
 
@@ -610,13 +623,15 @@ try {
     ["?welcome-existing", "medium"],
     ["?welcome-picked", "low"],
   ]) {
+    // Each start reuses the fixture chat id and needs its own draft storage.
+    const welcome = await context.newPage();
     const existing = query === "?welcome-existing";
     delayWelcomeHistory = true;
-    await page.goto(server.resolvedUrls.local[0] + query);
+    await welcome.goto(server.resolvedUrls.local[0] + query);
     // Still held: the session and its history cannot have arrived.
-    await page.waitForFunction(() => window.welcomeCommands.length > 0);
-    await page.waitForFunction(() => !window.firstMessageWaiting());
-    const commands = await page.evaluate(() => window.welcomeCommands);
+    await welcome.waitForFunction(() => window.welcomeCommands.length > 0);
+    await welcome.waitForFunction(() => !window.firstMessageWaiting());
+    const commands = await welcome.evaluate(() => window.welcomeCommands);
     assert.equal(commands.length, 1);
     assert.equal(commands[0].name, "sendMessage");
     assert.equal(commands[0].params.content, "Start from home");
@@ -626,25 +641,26 @@ try {
     assert.equal(commands[0].params.permissionMode, existing ? "plan" : undefined);
     delayWelcomeHistory = false;
     for (const respond of pendingWelcomeHistory.splice(0)) respond();
-    await page.getByRole("textbox").waitFor();
-    await page.evaluate(() => window.deliverWelcomeHistory());
-    await page.getByText("Earlier recorded prompt", { exact: true }).waitFor();
-    await page.getByRole("button", { name: /^Select model, currently GPT-6-Astra\b/ }).waitFor();
+    await welcome.getByRole("textbox").waitFor();
+    await welcome.evaluate(() => window.deliverWelcomeHistory());
+    await welcome.getByText("Earlier recorded prompt", { exact: true }).waitFor();
+    await welcome.getByRole("button", { name: /^Select model, currently GPT-6-Astra\b/ }).waitFor();
     assert.equal(
-      await page.evaluate(() => window.welcomeCommands.length),
+      await welcome.evaluate(() => window.welcomeCommands.length),
       1,
       "Resolving history must not send the first message again"
     );
-    const composer = await page.evaluate(() => window.composerForSession("history-session"));
+    const composer = await welcome.evaluate(() => window.composerForSession("history-session"));
     assert.equal(composer.model, "codex-app-server:gpt-6-astra");
     assert.equal(composer.thinkingLevel, level);
     assert.equal(composer.planModeEnabled, existing);
     assert.equal(composer.draft, existing ? "Then add tests" : "");
     assert.equal(
-      await page.evaluate(() => window.composerForSession("welcome-workspace")),
+      await welcome.evaluate(() => window.composerForSession("welcome-workspace")),
       undefined,
       "What was typed on the start page lives in the chat's composer now"
     );
+    await welcome.close();
   }
   // Exercise the real query retry: failed history must not seed the default model.
   failHistory = true;

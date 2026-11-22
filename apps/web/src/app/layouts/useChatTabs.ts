@@ -8,14 +8,11 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
+import { getErrorMessage } from "@shared/lib/errors";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useCreateSession, useWorkspaceSessions } from "@/features/session/api/session.queries";
 import { getAgentHarnessForModel, type AgentHarness } from "@/shared/agents";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
-import {
-  sessionComposerActions,
-  useSessionComposerStore,
-} from "@/features/session/store/sessionComposerStore";
 import type { Session } from "@/features/session/types";
 import type { ChatTab, ClosedSessionTab, SessionChatTab } from "@/features/session/ui/tabs";
 import { getChatTabSessionId, isSessionChatTab } from "@/features/session/ui/tabs";
@@ -322,10 +319,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
           sessionId: closingTab.sessionId,
           agentHarness: closingTab.agentHarness,
           hasStarted: closingTab.hasStarted,
-          // Preserve the current pick even when the send ACK precedes turn history.
-          initialModel:
-            useSessionComposerStore.getState().composers[closingTab.sessionId]?.model ??
-            closingTab.initialModel,
+          initialModel: closingTab.initialModel,
           closedAt: Date.now(),
         };
         setClosedTabs((prevClosed) =>
@@ -338,7 +332,6 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
             ),
           ].slice(0, MAX_CLOSED_TABS)
         );
-        sessionComposerActions.discard(closingTab.sessionId);
       }
 
       if (tabId === activeMainTabId && newTabs.length > 0) {
@@ -375,7 +368,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
         setActiveMainTabId(newTab.id);
       } catch (error) {
         console.error("[useChatTabs] Failed to create new session:", error);
-        toast.error("Failed to create new chat session");
+        toast.error(getErrorMessage(error));
       }
     },
     [workspaceId, createSessionMutation]

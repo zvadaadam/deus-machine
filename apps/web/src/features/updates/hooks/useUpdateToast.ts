@@ -4,8 +4,8 @@ import { releaseUrl } from "../releaseUrl";
 import type { UseAutoUpdateReturn } from "./useAutoUpdate";
 
 export function useUpdateToast({ state, install }: UseAutoUpdateReturn) {
-  const version = state.stage === "ready" ? state.version : undefined;
-  const failedVersion = state.stage === "error" ? state.version : undefined;
+  const version = state?.stage === "ready" ? state.version : undefined;
+  const failedVersion = state?.stage === "error" ? state.version : undefined;
 
   useEffect(() => {
     if (!version) return;

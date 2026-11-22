@@ -17,6 +17,7 @@ import type { RepositoryItemProps } from "../model/types";
 import type { Workspace, DiffStats, RepoGroup } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
 import { WorkspaceItem } from "./WorkspaceItem";
+import { ArchivedWorkspaces } from "./ArchivedWorkspaces";
 
 import { SidebarRow, SidebarRowMain, SidebarRowIconSlot, SidebarRowRight } from "./SidebarRow";
 import { DeusRepositoryBanner } from "./DeusRepositoryBanner";
@@ -36,7 +37,8 @@ export function RepositoryItem({
   onWorkspaceClick,
   onNewWorkspace,
   onNewWorkspaceFromGitHub,
-  windowLocation,
+  place,
+  organizations,
   onArchive,
   onStatusChange,
   diffStatsMap,
@@ -103,7 +105,7 @@ export function RepositoryItem({
             {sidebarExpanded && canCreate && (
               <SidebarRowRight className="gap-2 opacity-0 transition-opacity group-focus-within/repository-item:opacity-100 group-hover/repository-item:opacity-100">
                 {/* A workspace on a pull request or branch is a local one. */}
-                {offersNewFromBranch(windowLocation, repository) && onNewWorkspaceFromGitHub && (
+                {offersNewFromBranch(place.location, repository) && onNewWorkspaceFromGitHub && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
@@ -145,8 +147,8 @@ export function RepositoryItem({
       <AnimatePresence initial={false}>
         {!isCollapsed && (
           <Collapse key="workspace-list" className="min-w-0 pt-1 pb-2">
-            <ul className="flex min-w-0 flex-col">
-              {sidebarExpanded && (
+            {sidebarExpanded && (
+              <ul className="flex min-w-0 flex-col">
                 <RepositoryWorkspaceList
                   repository={repository}
                   isDeus={isDeus}
@@ -158,8 +160,13 @@ export function RepositoryItem({
                   onArchive={onArchive}
                   onStatusChange={onStatusChange}
                 />
-              )}
-            </ul>
+                <ArchivedWorkspaces
+                  repository={repository}
+                  place={place}
+                  organizations={organizations}
+                />
+              </ul>
+            )}
           </Collapse>
         )}
       </AnimatePresence>

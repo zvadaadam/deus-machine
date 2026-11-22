@@ -1,8 +1,8 @@
 // A project that is not on this computer, on the Mac lane: the real web app against the
-// real backend, with two organizations set up (Acme, Beta). Only the platform is
-// scripted (./platform.mjs): it lists each organization's reachable GitHub repositories,
+// real backend, with two organizations set up (Acme, Beta). The scripted platform
+// (./platform.mjs) lists each organization's reachable GitHub repositories,
 // mints Acme's GitHub App token, and serves a scripted GitHub API (a repository's default
-// branch and its branches, paged), which DEUS_GITHUB_API_URL points the backend at. No
+// branch and its branches, paged). The scripted gh answers the pull-request lookup. No
 // clone, no sandbox, no model call, nothing reaches the real GitHub.
 // Run: bun run test:e2e:cloud   (or node --import tsx test/e2e/cloud/cloud-project.browser.mjs)
 import assert from "node:assert/strict";
@@ -139,6 +139,7 @@ const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/serv
     DEUS_CLOUD_AGNT_URL: platform.url,
     DEUS_CLOUD_URL: platform.url,
     DEUS_GITHUB_API_URL: `${platform.url}/github`,
+    DEUS_BUNDLED_BIN_DIR: path.join(root, "test/e2e/fixtures/github"),
     // As the desktop starts it: the spawn token is the first line on its stdin.
     DEUS_STOP_ON_STDIN_END: "1",
   },

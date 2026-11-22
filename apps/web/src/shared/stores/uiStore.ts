@@ -7,14 +7,10 @@ import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import type { SettingsSection } from "@shared/types/settings";
 
-/** What the Home composer should start with: a project, a draft, or neither. */
-export interface NewWorkspaceRequest {
-  /** Never reused, so Home can tell a new request from the one it already took. */
-  id: number;
-  repoId?: string;
-  draft?: string;
-}
-let nextNewWorkspaceRequestId = 1;
+export type NewWorkspaceRequest = { repoId?: string } & (
+  | { draft?: string; returnedMessage?: never }
+  | { returnedMessage: string; draft?: never }
+);
 
 export interface EnvironmentSetupRequest {
   repoId: string;
@@ -52,7 +48,7 @@ interface UIState {
   pendingEnvSetup: EnvironmentSetupRequest | null;
 
   /** Leave whatever full page is open and hand Home what to start with. */
-  requestNewWorkspace: (request?: { repoId?: string; draft?: string }) => void;
+  requestNewWorkspace: (request?: NewWorkspaceRequest) => void;
   clearNewWorkspaceRequest: () => void;
 
   // Actions - Command palette
@@ -94,10 +90,10 @@ export const useUIStore = create<UIState>()(
       customizeOpen: false,
       pendingEnvSetup: null,
 
-      requestNewWorkspace: (request = {}) =>
+      requestNewWorkspace: (request) =>
         set(
           {
-            newWorkspaceRequest: { ...request, id: nextNewWorkspaceRequestId++ },
+            newWorkspaceRequest: { ...request },
             settingsOpen: false,
             environmentSettingsTarget: null,
             automationsOpen: false,
@@ -218,7 +214,7 @@ export const useUIStore = create<UIState>()(
  * - You don't need to subscribe to state changes
  */
 export const uiActions = {
-  requestNewWorkspace: (request?: { repoId?: string; draft?: string }) =>
+  requestNewWorkspace: (request?: NewWorkspaceRequest) =>
     useUIStore.getState().requestNewWorkspace(request),
   clearNewWorkspaceRequest: () => useUIStore.getState().clearNewWorkspaceRequest(),
   openSettings: () => useUIStore.getState().openSettings(),

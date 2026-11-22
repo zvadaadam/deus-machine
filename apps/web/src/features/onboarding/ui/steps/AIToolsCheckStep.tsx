@@ -2,8 +2,8 @@ import { match } from "ts-pattern";
 import { CliStatusRow } from "../components/CliStatusRow";
 import { useAgentAuth, useAgentAuthEvents } from "@/features/settings/api/settings.queries";
 import {
-  canSignIn,
   installLocalAgents,
+  localSignIn,
   readLocalAgent,
   signInLocalAgent,
   type LocalAgentState,
@@ -42,23 +42,20 @@ export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
   const auth = useAgentAuth();
   useAgentAuthEvents();
 
-  /** A sign-in under way that finishes with the code its page shows. */
-  function codeLogin(harness: LocalHarness) {
-    const state = readLocalAgent(auth, harness);
-    const login = state.status === "signed-out" ? state.login : undefined;
-    return login?.codeUrl && !login.url ? login : undefined;
-  }
-
-  /** Each agent as the engine has it: its CLI (installed by the engine), then its login. */
   function row(harness: LocalHarness) {
     const state = readLocalAgent(auth, harness);
-    const offerSignIn = state.status === "signed-out" && !state.login && canSignIn(state.auth);
-    const action = offerSignIn
-      ? { label: "Sign in", run: () => void signInLocalAgent(harness, state.auth) }
-      : state.status === "not-installed"
-        ? { label: state.error ? "Try again" : "Install", run: () => void installLocalAgents() }
-        : undefined;
+    const signIn = localSignIn(state);
+    let action;
+    if (signIn?.kind === "start") {
+      action = { label: "Sign in", run: () => void signInLocalAgent(harness, signIn.auth) };
+    } else if (state.status === "not-installed") {
+      action = {
+        label: state.error ? "Try again" : "Install",
+        run: () => void installLocalAgents(),
+      };
+    }
     return {
+      codeLoginId: signIn?.kind === "code" ? signIn.loginId : undefined,
       installed:
         state.status === "checking" || state.status === "installing"
           ? null
@@ -85,11 +82,11 @@ export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
 
       <div className="flex flex-col gap-3">
         {AGENTS.map(({ harness, name, description }) => {
-          const login = codeLogin(harness);
+          const { codeLoginId, ...props } = row(harness);
           return (
             <div key={harness} className="flex flex-col gap-2">
-              <CliStatusRow name={name} description={description} {...row(harness)} />
-              {login && <LoginCodeForm loginId={login.loginId} />}
+              <CliStatusRow name={name} description={description} {...props} />
+              {codeLoginId !== undefined && <LoginCodeForm loginId={codeLoginId} />}
             </div>
           );
         })}

@@ -94,6 +94,7 @@ export interface WorkspaceWithDetailsRow {
   /** The cloud organization it runs in (null for local, or not yet known: the default one). */
   organization_id: string | null;
   state: WorkspaceState;
+  start_recoverable: boolean;
   status: WorkspaceStatus;
   current_session_id: string | null;
   pr_url: string | null;

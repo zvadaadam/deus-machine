@@ -82,7 +82,7 @@ function render(rows: PlaceRow[], current: string, isExpanded = true): string {
       SidebarProvider,
       null,
       createElement(SidebarHeader, {
-        places: { rows, current, location: "local", activity: {}, onChoose: vi.fn() },
+        places: { rows, current, activity: {}, choose: vi.fn() },
         onOpenSettings: vi.fn(),
         onToggleSidebar: vi.fn(),
         isExpanded,

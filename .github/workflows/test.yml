@@ -169,6 +169,15 @@ jobs:
       - name: Verify the composer's picker for agent, model and thinking
         run: bun test/e2e/model-picker.browser.mjs
 
+      - name: Verify chat replies appear in order
+        run: node --import tsx test/e2e/transcript-order.browser.mjs
+
+      - name: Verify drafts survive moving between composers
+        run: node --import tsx test/e2e/composer-drafts.browser.mjs
+
+      - name: Verify workspace archiving and restoration
+        run: node --import tsx test/e2e/workspace-list.browser.mjs
+
       - name: Verify development hot reload preserves the backend connection
         run: node test/e2e/query-protocol-hmr.browser.mjs
 

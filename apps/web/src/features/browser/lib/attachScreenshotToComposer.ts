@@ -11,11 +11,13 @@
  * us (the user's text and element metadata should still land in the chat).
  */
 
-import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
-import { processImageFiles } from "@/features/session/lib/imageAttachments";
+import {
+  attachImageFiles,
+  type ComposerTarget,
+} from "@/features/session/store/sessionComposerStore";
 
 export async function attachScreenshotToComposer(
-  sessionId: string,
+  target: ComposerTarget,
   dataUrl: string | null,
   filenameLabel = "screenshot"
 ): Promise<boolean> {
@@ -29,10 +31,7 @@ export async function attachScreenshotToComposer(
     const file = new File([blob], `browser-${filenameLabel}-${Date.now()}.png`, {
       type: "image/png",
     });
-    const processed = await processImageFiles([file]);
-    if (!processed.length) return false;
-    sessionComposerActions.addImageAttachments(sessionId, processed);
-    return true;
+    return await attachImageFiles(target, [file]);
   } catch (err) {
     console.warn(`[browser] attachScreenshotToComposer failed (${filenameLabel}):`, err);
     return false;

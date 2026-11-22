@@ -1,7 +1,7 @@
 // The location menu with several organizations, on the Mac lane: the real web app against
 // the real backend, which holds one key per organization (what the desktop app hands it).
-// Acme and Beta are set up on this computer; Gamma has no key here. Only the platform is
-// scripted (./platform.mjs): it lists the account's organizations and each one's
+// Acme and Beta are set up on this computer; Gamma has no key here. The scripted platform
+// (./platform.mjs) lists the account's organizations and each one's
 // automations, mints GitHub App tokens for Acme and Beta (so nothing asks GitHub), and
 // records which key each request carried. No sandbox, no model call.
 // Run: bun run test:e2e:cloud   (or node --import tsx test/e2e/cloud/organizations.browser.mjs)
@@ -170,6 +170,8 @@ const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/serv
     DEUS_WEB_ORIGINS: LOOPBACK_WEB_ORIGINS,
     TSX_TSCONFIG_PATH: path.join(root, "apps/backend/tsconfig.json"),
     AGNT_BASE_URL: platform.url,
+    DEUS_GITHUB_API_URL: `${platform.url}/github`,
+    DEUS_BUNDLED_BIN_DIR: path.join(root, "test/e2e/fixtures/github"),
     DEUS_CLOUD_AGNT_URL: platform.url,
     DEUS_CLOUD_URL: platform.url,
     // As the desktop starts it: the spawn token is the first line on its stdin.

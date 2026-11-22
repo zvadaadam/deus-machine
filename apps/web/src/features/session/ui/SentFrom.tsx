@@ -1,28 +1,43 @@
-/**
- * Who sent a user message, when it was not the person: "Sent from" and the
- * sending chat, which opens it (its title, its workspace's name in front when
- * it is another workspace), or "Sent from <assistant>". The person's own
- * messages, and a sender this build does not know, show nothing.
- */
-
 import type { ReportedOrigin } from "@shared/protocol-types";
+import { cn } from "@/shared/lib/utils";
 import { useSession } from "../api/session.queries";
 import { openChat } from "../lib/openChat";
 import { useWorkspacesByRepo } from "@/features/workspace/api/workspace.queries";
 import { useWorkspaceStore } from "@/features/workspace/store";
 
-const CAPTION = "text-muted-foreground flex items-center justify-end gap-1 text-xs";
-
 export function SentFrom({ origin }: { origin: ReportedOrigin }) {
-  // A newer engine's kind arrives intact: read only the fields this build knows, as strings.
-  const { kind, name, sessionId } = origin as { kind: string; name?: unknown; sessionId?: unknown };
-  const named = typeof name === "string" ? name : undefined;
-  if (kind === "assistant" && named) return <div className={CAPTION}>Sent from {named}</div>;
-  if (kind !== "session" || typeof sessionId !== "string") return null;
-  return <SentFromChat sessionId={sessionId} name={named} />;
+  return <OriginCaption origin={origin} caption="Sent from" className="justify-end" />;
 }
 
-function SentFromChat({ sessionId, name }: { sessionId: string; name?: string }) {
+export function OriginCaption({
+  origin,
+  caption,
+  className,
+}: {
+  origin: ReportedOrigin;
+  caption: string;
+  className?: string;
+}) {
+  // A newer engine's kind arrives intact: read only the fields this build knows, as strings.
+  const name = "name" in origin && typeof origin.name === "string" ? origin.name : undefined;
+  let source;
+  if (origin.kind === "session" && typeof origin.sessionId === "string") {
+    source = <ChatName sessionId={origin.sessionId} name={name} />;
+  } else if (origin.kind === "assistant" && name) {
+    source = (
+      <span className="truncate" title={name}>
+        {name}
+      </span>
+    );
+  } else return null;
+  return (
+    <div className={cn("text-muted-foreground flex min-w-0 items-center gap-1 text-xs", className)}>
+      <span className="shrink-0">{caption}</span> {source}
+    </div>
+  );
+}
+
+function ChatName({ sessionId, name }: { sessionId: string; name?: string }) {
   const { data: session } = useSession(sessionId);
   const { data: groups } = useWorkspacesByRepo();
   const selected = useWorkspaceStore((state) => state.selectedWorkspaceId);
@@ -35,17 +50,19 @@ function SentFromChat({ sessionId, name }: { sessionId: string; name?: string })
   const label = place && place !== title ? `${place} · ${title}` : title;
   // A sender put away (its chat or its workspace archived) or gone is named, not linked.
   if (!workspace || !session || session.is_hidden)
-    return <div className={CAPTION}>Sent from {label}</div>;
-  return (
-    <div className={CAPTION}>
-      Sent from
-      <button
-        type="button"
-        onClick={() => openChat(workspace.id, sessionId)}
-        className="bg-muted text-foreground hover:bg-accent max-w-64 truncate rounded-md px-1.5 py-0.5 transition-colors"
-      >
+    return (
+      <span className="truncate" title={label}>
         {label}
-      </button>
-    </div>
+      </span>
+    );
+  return (
+    <button
+      type="button"
+      title={label}
+      onClick={() => openChat(workspace.id, sessionId)}
+      className="bg-muted text-foreground hover:bg-accent max-w-64 truncate rounded-md px-1.5 py-0.5 transition-colors"
+    >
+      {label}
+    </button>
   );
 }

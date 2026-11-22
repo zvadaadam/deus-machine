@@ -1,10 +1,7 @@
 /**
  * Compaction placement.
  *
- * A compaction is a POSITIONAL entity (protocol §5): it renders between the
- * turn it fired during and that turn's successor, and a reload must land it in
- * the same slot the live stream did. These tests pin the anchor rules so the
- * divider can't drift to the bottom of the transcript.
+ * A completed compaction follows its settled turn in both live and reloaded transcripts.
  */
 import { describe, expect, it } from "vitest";
 
@@ -17,6 +14,7 @@ import {
   type AssistantTurnData,
   type Turn,
 } from "../../../apps/web/src/features/session/lib/chatTimeline";
+import { createOptimisticUserMessage } from "../../../apps/web/src/features/session/lib/optimisticMessage";
 import type { Compaction, Message } from "../../../shared/types/session";
 
 function message(overrides: Partial<Message> & { id: string; turn_id: string }): Message {
@@ -44,6 +42,7 @@ function assistantTurn(turnId: string, sentAt: string): Turn {
     messages: [message({ id: `a-${turnId}`, turn_id: turnId, sent_at: sentAt })],
     firstMessageIndex: 0,
     isLatest: false,
+    isOpen: false,
     startedAt: sentAt,
   };
 }
@@ -223,7 +222,7 @@ describe("buildChatTimeline", () => {
           text: "hi",
           state: "done",
         },
-      ] as Message["parts"],
+      ],
       ...over,
     });
 
@@ -237,6 +236,76 @@ describe("buildChatTimeline", () => {
     sent_at: "2026-08-14T10:00:00.000Z",
   });
   const reply = withText({ id: "a-1", turn_id: "turn-1", sent_at: "2026-08-14T10:00:05.000Z" });
+
+  it("keeps the recorded turn open while a new send's bubble is pending", () => {
+    const pending = createOptimisticUserMessage({
+      sessionId: reply.session_id,
+      turnId: "pending",
+      content: "Another question",
+    });
+    const { items } = buildChatTimeline(
+      [reply, pending],
+      [compaction({ turn_id: "turn-1" })],
+      true,
+      [],
+      [{ turnId: "turn-1", startedAt: 1 }]
+    );
+    expect(items).toMatchObject([
+      { type: "assistant", turnId: "turn-1", isOpen: true },
+      { type: "user", message: { id: pending.id } },
+    ]);
+  });
+
+  it("holds a completed compaction before the running turn has a message", () => {
+    const { items } = buildChatTimeline(
+      [],
+      [compaction({ turn_id: "turn-1" })],
+      true,
+      [],
+      [{ turnId: "turn-1", startedAt: 1 }]
+    );
+    expect(items).toEqual([]);
+  });
+
+  it("holds the newest message's divider before its first part arrives", () => {
+    const shell = message({ id: "a-2", turn_id: "turn-2", parts: [] });
+    const marker = compaction({ turn_id: "turn-2" });
+    const { items } = buildChatTimeline(
+      [reply, shell],
+      [marker],
+      false,
+      [],
+      [
+        { turnId: "turn-2", startedAt: 2 },
+        { turnId: "turn-1", endedAt: 1 },
+      ]
+    );
+    expect(items).toMatchObject([{ type: "assistant", turnId: "turn-1", isOpen: false }]);
+  });
+
+  it("shows the earlier turn's footer and divider after a later turn settles without reading its activity", () => {
+    const later = withText({ id: "a-2", turn_id: "turn-2" });
+    const marker = compaction({ turn_id: "turn-1" });
+    const timeline = buildChatTimeline(
+      [reply, later],
+      [marker],
+      true,
+      [],
+      [
+        { turnId: "no-output", startedAt: 1 },
+        { turnId: "turn-1", startedAt: 2 },
+        { turnId: "turn-2", endedAt: 3 },
+      ]
+    );
+    expect(timeline).toMatchObject({
+      activity: "idle",
+      items: [
+        { type: "assistant", turnId: "turn-1", isOpen: false },
+        { type: "compaction", compaction: marker },
+        { type: "assistant", turnId: "turn-2", isOpen: false },
+      ],
+    });
+  });
 
   it("tells how the workspace started under the message that asked for it", () => {
     const start = {
@@ -446,4 +515,55 @@ describe("turnStopNotice", () => {
       expect(turnStopNotice(reason)).toBeNull();
     }
   });
+});
+
+it("holds the active turn's completed compactions through a disconnect until success or stop", () => {
+  const rows = ["earlier", "active"].map((turn_id) =>
+    message({
+      id: turn_id,
+      turn_id,
+      parts: [
+        {
+          id: turn_id,
+          type: "text",
+          sessionId: "session-1",
+          messageId: turn_id,
+          text: turn_id,
+          state: "done",
+        },
+      ],
+    })
+  );
+  const markers = [
+    compaction({ turn_id: "earlier" }),
+    compaction({ turn_id: "active", compaction_id: "first" }),
+    compaction({ turn_id: "active", compaction_id: "second" }),
+    compaction({ turn_id: "active", compaction_id: "running", status: "in_progress" }),
+    compaction({ turn_id: "active", compaction_id: "failed", status: "failed" }),
+  ];
+  const result = buildChatTimeline(rows, markers, true);
+  expect(shape(result.items)).toEqual([
+    "assistant:earlier",
+    "compaction:c-earlier",
+    "assistant:active",
+    "compaction:running",
+    "compaction:failed",
+  ]);
+  const disconnected = buildChatTimeline(
+    rows,
+    markers,
+    false,
+    [],
+    [{ turnId: "active", startedAt: 1 }]
+  );
+  expect(shape(disconnected.items)).toEqual(shape(result.items));
+  for (const stopReason of ["end_turn", "cancelled"]) {
+    const settled = buildChatTimeline(rows, markers, true, [], [{ turnId: "active", stopReason }]);
+    expect(shape(settled.items).slice(3)).toEqual([
+      "compaction:first",
+      "compaction:second",
+      "compaction:running",
+      "compaction:failed",
+    ]);
+  }
 });

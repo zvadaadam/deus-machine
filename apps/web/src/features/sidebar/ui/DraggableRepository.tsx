@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { CSS, useCombinedRefs } from "@dnd-kit/utilities";
 import { cn } from "@/shared/lib/utils";
 import { tempo } from "@/shared/lib/tempo";
 import type { RepositoryItemProps } from "../model/types";
@@ -23,7 +23,15 @@ export function DraggableRepository({
   dragDisabled = false,
   ...props
 }: DraggableRepositoryProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
     id: repository.repo_id,
     disabled: dragDisabled,
     transition: {
@@ -31,6 +39,8 @@ export function DraggableRepository({
       easing: "var(--ease-move)",
     },
   });
+  // Only the focused project starts a keyboard drag. Its nested controls keep Enter and Space.
+  const dragRef = useCombinedRefs(setNodeRef, setActivatorNodeRef);
 
   // Auto-collapse when drag starts (prevents huge drag preview with many workspaces)
   useEffect(() => {
@@ -47,7 +57,7 @@ export function DraggableRepository({
 
   return (
     <div
-      ref={setNodeRef}
+      ref={dragRef}
       style={style}
       {...attributes}
       {...listeners}

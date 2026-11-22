@@ -1,7 +1,7 @@
 import { tempo } from "@/shared/lib/tempo";
 import { match } from "ts-pattern";
 import type { Compaction, Message, SessionTurn, SessionStatus } from "@/shared/types";
-import { ACTIVE_TURN_STATUSES, type WorkspaceKind } from "@shared/enums";
+import { ACTIVE_TURN_STATUSES, type AgentHarness, type WorkspaceKind } from "@shared/enums";
 import { MessageItem } from "./MessageItem";
 import { AssistantTurn } from "./AssistantTurn";
 import { CompactionChip } from "./CompactionChip";
@@ -34,10 +34,8 @@ interface ChatProps {
   errorMessage?: string | null;
   /** Structured error category from classifyError (e.g. "auth", "rate_limit") */
   errorCategory?: string;
-  agentHarness?: string | null;
+  agentHarness?: AgentHarness | null;
   latestMessageSentAt?: string | null;
-  onStop?: () => void; // Callback to stop/cancel the session
-  onOpenLoginTerminal?: () => void;
   onRetryInNewChat?: () => void;
   /** True when there are older messages beyond the loaded window */
   hasOlder?: boolean;
@@ -75,7 +73,6 @@ export function Chat({
   errorCategory,
   agentHarness,
   latestMessageSentAt,
-  onOpenLoginTerminal,
   onRetryInNewChat,
   hasOlder = false,
   loadingOlder = false,
@@ -94,9 +91,11 @@ export function Chat({
   // Chat owns its scroll behavior entirely — refs, hook, and button.
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  // "New chat" opens a fresh tab through the Mac backend; web-direct
-  // has no such lane, so the offer hides rather than failing on click.
-  const retryInNewChat = isCloudDirectWebMode() ? undefined : onRetryInNewChat;
+  const directWeb = isCloudDirectWebMode();
+  // A new chat opens a tab through the Mac backend, which the hosted web cannot reach.
+  const retryInNewChat = directWeb ? undefined : onRetryInNewChat;
+  const active = ACTIVE_TURN_STATUSES.includes(sessionStatus);
+  const working = sessionStatus === "working";
 
   // --- Message entrance animation tracking ---
   // Counter-based: only the turn at index > maxAnimatedTurnIndex gets the
@@ -134,16 +133,8 @@ export function Chat({
     activity,
     lastRole,
   } = useMemo(
-    () =>
-      buildChatTimeline(
-        messages,
-        compactions,
-        sessionStatus === "working",
-        cloudEnvEntries,
-        turns,
-        workspaceStart
-      ),
-    [messages, compactions, sessionStatus, cloudEnvEntries, turns, workspaceStart]
+    () => buildChatTimeline(messages, compactions, active, cloudEnvEntries, turns, workspaceStart),
+    [messages, compactions, active, cloudEnvEntries, turns, workspaceStart]
   );
 
   /**
@@ -155,13 +146,13 @@ export function Chat({
    * is also what a non-working session shows.
    */
   const agentSubState = useMemo((): CircularPixelGridVariant => {
-    if (sessionStatus !== "working") return "generating";
+    if (!working) return "generating";
     return match(activity)
       .with("thinking", () => "thinking" as const)
       .with("tool_running", () => "toolExecuting" as const)
       .with("tool_failed", () => "error" as const)
       .otherwise(() => "generating" as const);
-  }, [sessionStatus, activity]);
+  }, [working, activity]);
 
   // Advance maxAnimatedTurnIndex after commit (useEffect runs once per commit,
   // not twice in StrictMode). During render, shouldAnimate reads the ref purely.
@@ -247,8 +238,7 @@ export function Chat({
   // The working indicator sits tighter under a user message than under a
   // finished assistant turn.
   const indicatorMarginClass = lastRole === "user" ? "mt-0" : "mt-1";
-  const showSessionError =
-    sessionStatus === "error" || ACTIVE_TURN_STATUSES.includes(sessionStatus);
+  const showSessionError = !!errorMessage && (sessionStatus === "error" || active);
 
   return (
     <div className={cn("relative min-h-0 flex-1", className)}>
@@ -267,11 +257,7 @@ export function Chat({
             <Skeleton className="h-4 w-[90%]" />
             <Skeleton className="h-4 w-[80%]" />
           </div>
-        ) : timeline.length === 0 ? (
-          // Empty means NOTHING to show — no messages AND no env markers. A
-          // fresh cloud workspace provisioning before its first message has a
-          // timeline (the spliced cloudEnv item), so it renders through the
-          // one virtualized flow below, top-of-flow like a first agent turn.
+        ) : timeline.length === 0 && !showSessionError && !working ? (
           <WorkspaceEmptyState
             repoName={workspaceRepoName}
             parentBranch={workspaceParentBranch}
@@ -367,8 +353,8 @@ export function Chat({
                             <AssistantTurn
                               messages={t.messages}
                               turn={t.record}
-                              isLatest={t.isLatest}
-                              isWorking={sessionStatus === "working"}
+                              isOpen={t.isOpen}
+                              isStreaming={t.isOpen && t.isLatest && working}
                               startedAt={t.startedAt}
                             />
                           ))
@@ -426,7 +412,7 @@ export function Chat({
 
               {/* Session-level error — rendered inline in the chat flow (law of locality) */}
               <AnimatePresence>
-                {showSessionError && errorMessage && (
+                {showSessionError && (
                   <m.div
                     key="session-error"
                     initial={{ opacity: 0 }}
@@ -441,14 +427,14 @@ export function Chat({
                       message={errorMessage}
                       category={errorCategory}
                       agentHarness={agentHarness}
-                      onOpenLoginTerminal={onOpenLoginTerminal}
+                      cloud={workspaceKind === "cloud" || directWeb}
                       onRetryInNewChat={retryInNewChat}
                     />
                   </m.div>
                 )}
               </AnimatePresence>
               <AnimatePresence>
-                {sessionStatus === "working" && (
+                {working && (
                   <m.div
                     key="working-indicator"
                     initial={{ opacity: 0 }}

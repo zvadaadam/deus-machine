@@ -14,7 +14,8 @@ vi.mock("../../../src/lib/database", () => ({
     transaction: (fn: () => void) => fn,
   }),
 }));
-vi.mock("../../../src/db", () => ({
+vi.mock("../../../src/db", async (original) => ({
+  ...(await original<typeof import("../../../src/db")>()),
   getWorkspaceRaw: mocks.get,
   getRepositoryById: () => ({
     git_origin_url: "https://gitlab.com/team/app",

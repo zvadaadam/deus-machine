@@ -80,7 +80,8 @@ export const SCHEMA_SQL = `
     error_detail TEXT,
     -- The branch the workspace was started from, so a retry starts from it again.
     git_source_branch TEXT,
-    -- Why origin's latest was not fetched first: offline | auth | failed (NULL = it was, or there is no origin).
+    -- Why the fetch was skipped (no_origin) or failed (offline | auth | failed).
+    -- NULL when fetched or when the source branch exists only locally.
     init_fetch_issue TEXT,
     kind TEXT NOT NULL DEFAULT 'worktree',
     provider_workspace_id TEXT,

@@ -2,11 +2,8 @@
  * MobilePRBar -- compact PR status UI for mobile web layout.
  *
  * Two exports:
- *   MobilePRHeaderAction  -- "Create PR" pill for the header row (no-PR state only)
+ *   MobilePRHeaderAction  -- "Create PR" pill for the header row
  *   MobilePRStatusBar     -- 32px bar below header (all states with an existing PR)
- *
- * Uses the same derivePRActionState function as the desktop PRActions component
- * to keep state logic unified. Only the presentation differs.
  */
 
 import { useState } from "react";
@@ -33,7 +30,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/shared/lib/utils";
 import { BranchSelector } from "@/features/workspace/ui/BranchSelector";
-import { derivePRActionState } from "@/features/workspace/lib/prState";
+import type { PRActionState } from "@/features/workspace/lib/prState";
 import {
   RESOLVE_CONFLICTS,
   fixCIPrompt,
@@ -41,15 +38,13 @@ import {
   MERGE_PR,
 } from "@/features/session/lib/sessionPrompts";
 import { track } from "@/platform/analytics";
-import type { PRStatus, GhCliStatus } from "@/shared/types";
 
 // ---------------------------------------------------------------------------
 // Shared props
 // ---------------------------------------------------------------------------
 
 interface MobilePRBarProps {
-  prStatus: PRStatus | null;
-  ghStatus?: GhCliStatus | null;
+  state: PRActionState;
   onCreatePR?: () => void;
   onSendAgentMessage?: (text: string) => void;
   onArchive?: () => void;
@@ -63,13 +58,8 @@ interface MobilePRBarProps {
 // MobilePRHeaderAction -- compact "Create PR" pill for the header row
 // ---------------------------------------------------------------------------
 
-/**
- * Renders a small "Create PR" pill in the mobile header.
- * Only visible when no PR exists yet. Returns null otherwise.
- */
 export function MobilePRHeaderAction({
-  prStatus,
-  ghStatus,
+  state,
   onCreatePR,
   onArchive,
   targetBranch,
@@ -77,9 +67,8 @@ export function MobilePRHeaderAction({
   repoId,
 }: MobilePRBarProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const state = derivePRActionState(prStatus, ghStatus, targetBranch);
 
-  if (state.type !== "no_pr") return null;
+  if (state.type !== "create_pr") return null;
 
   return (
     <>
@@ -167,24 +156,21 @@ export function MobilePRHeaderAction({
 // MobilePRStatusBar -- 32px bar for states with an existing PR
 // ---------------------------------------------------------------------------
 
-/**
- * Renders a compact status bar below the mobile header showing PR status.
- * Only visible when a PR exists. Returns null for no_pr, gh_unavailable, and error.
- */
 export function MobilePRStatusBar({
-  prStatus,
-  ghStatus,
+  state,
   onSendAgentMessage,
   onArchive,
-  targetBranch,
   workspaceId,
 }: MobilePRBarProps) {
-  const state = derivePRActionState(prStatus, ghStatus, targetBranch);
-
   return match(state)
-    .with({ type: "gh_unavailable" }, () => null)
-    .with({ type: "error" }, () => null)
-    .with({ type: "no_pr" }, () => null)
+    .with(
+      { type: "checking" },
+      { type: "gh_unavailable" },
+      { type: "error" },
+      { type: "create_pr" },
+      { type: "no_remote" },
+      () => null
+    )
     .with({ type: "ci_pending" }, (s) => (
       <StatusBar prNumber={s.prNumber} prUrl={s.prUrl}>
         <span className="text-warning flex items-center gap-1 text-xs">
