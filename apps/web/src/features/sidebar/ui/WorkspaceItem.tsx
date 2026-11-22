@@ -314,7 +314,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         )}
       </div>
 
-      {/* Archive button — revealed on hover or keyboard focus */}
+      {/* On touch, Archive has its own space beside the row's status. */}
       {canArchive && (
         <button
           type="button"
@@ -322,8 +322,8 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
           aria-label={`Archive workspace ${displayName}`}
           title="Archive workspace"
           className={cn(
-            "control-interaction text-text-muted hover:text-text-secondary flex h-7 w-7 items-center justify-center rounded-lg",
-            "absolute top-1/2 right-1 -translate-y-1/2 opacity-0",
+            "control-interaction text-text-muted hover:text-text-secondary flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
+            "absolute inset-y-0 right-1 my-auto opacity-0 pointer-coarse:static pointer-coarse:opacity-100",
             "group-hover/sidebar-row:opacity-100 focus-visible:opacity-100"
           )}
         >

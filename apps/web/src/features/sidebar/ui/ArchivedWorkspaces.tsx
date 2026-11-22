@@ -1,49 +1,36 @@
 import { useId, useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { AnimatePresence } from "framer-motion";
 import { ChevronRight } from "lucide-react";
-import { toast } from "sonner";
-import { getErrorMessage } from "@shared/lib/errors";
-import type { ReportedOrigin } from "@shared/protocol-types";
-import type { RepoGroup, Workspace } from "@shared/types/workspace";
+import type { RepoGroup } from "@shared/types/workspace";
 import { Button } from "@/components/ui/button";
 import { Collapse } from "@/components/ui/collapse";
 import { OriginCaption } from "@/features/session/ui/SentFrom";
-import { useUnarchiveWorkspace } from "@/features/workspace/api/workspace.queries";
-import { getRuntimeClient } from "@/platform/ws";
-import { queryKeys } from "@/shared/api/queryKeys";
+import {
+  useArchivedWorkspaces,
+  useUnarchiveWorkspace,
+  type ArchivedWorkspace,
+} from "@/features/workspace/api/workspace.queries";
 import { cn } from "@/shared/lib/utils";
+import { workspaceInPlace, type Organizations, type Place } from "../lib/location";
 import { SidebarRow, SidebarRowMain, SidebarRowIconSlot } from "./SidebarRow";
-
-type ArchivedWorkspace = Pick<
-  Workspace,
-  "id" | "slug" | "title" | "git_branch" | "kind" | "organization_id"
-> & {
-  archived_at: string;
-  archived_by: ReportedOrigin | null;
-};
 
 export function ArchivedWorkspaces({
   repository,
-  inPlace,
+  place,
+  organizations,
 }: {
   repository: RepoGroup & { archived_count?: number };
-  inPlace: (w: ArchivedWorkspace) => boolean;
+  place: Place;
+  organizations: Organizations;
 }) {
   const [open, setOpen] = useState(false);
   const listId = useId();
   const { repo_id: repositoryId, archived_count: count } = repository;
-  const archives = useQuery({
-    queryKey: queryKeys.workspaces.archived(repositoryId, count),
-    // Replace this request with call(api.archivedWorkspaces, { repositoryId }) when the shared declaration lands.
-    queryFn: () =>
-      getRuntimeClient().sendRequest<ArchivedWorkspace[]>("archivedWorkspaces", { repositoryId }),
-    enabled: open && count !== undefined,
-    placeholderData: keepPreviousData,
-    staleTime: 0,
-  });
+  const archives = useArchivedWorkspaces(repositoryId, count, open);
   if (count === undefined || (!open && !count)) return null;
-  const rows = archives.isError ? undefined : archives.data?.filter(inPlace);
+  const rows = archives.isError
+    ? undefined
+    : archives.data?.filter((row) => workspaceInPlace(row, place, organizations));
   return (
     <li>
       <SidebarRow
@@ -70,7 +57,7 @@ export function ArchivedWorkspaces({
       <AnimatePresence initial={false}>
         {open && (
           <Collapse id={listId} className="px-3 pb-1 pl-8">
-            {archives.isError ? (
+            {archives.isError && (
               <div
                 className="text-text-muted flex items-center justify-between gap-2 py-1 text-xs"
                 role="alert"
@@ -80,11 +67,13 @@ export function ArchivedWorkspaces({
                   Retry
                 </Button>
               </div>
-            ) : !rows?.length ? (
+            )}
+            {!archives.isError && !rows?.length && (
               <p className="text-text-muted py-1 text-xs" role="status">
                 {rows ? "No archived workspaces here." : "Loading archived workspaces…"}
               </p>
-            ) : (
+            )}
+            {!!rows?.length && (
               <ul aria-label="Archived workspaces">
                 {rows.map((row) => (
                   <ArchiveRow key={row.id} row={row} />
@@ -111,9 +100,7 @@ function ArchiveRow({ row }: { row: ArchivedWorkspace }) {
         variant="ghost"
         aria-label={`Restore ${name}`}
         disabled={restore.isPending}
-        onClick={() =>
-          void restore.mutateAsync(row.id).catch((error) => toast.error(getErrorMessage(error)))
-        }
+        onClick={() => restore.mutate(row.id)}
       >
         Restore
       </Button>

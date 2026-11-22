@@ -14,8 +14,11 @@ export const queryKeys = {
   workspaces: {
     all: ["workspaces"] as const,
     byRepo: (state?: string) => ["workspaces", "by-repo", state] as const,
-    archived: (repoId: string, count: number | undefined) =>
-      ["workspaces", "archived", repoId, count] as const,
+    archived: {
+      all: ["workspaces", "archived"] as const,
+      byRepo: (repoId: string, count: number | undefined) =>
+        ["workspaces", "archived", repoId, count] as const,
+    },
     detail: (id: string) => ["workspaces", "detail", id] as const,
     diffStats: (id: string) => ["workspaces", "diff-stats", id] as const,
     diffFiles: (id: string) => ["workspaces", "diff-files", id] as const,

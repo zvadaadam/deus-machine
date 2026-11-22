@@ -8,6 +8,7 @@ import { createServer } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import svgr from "vite-plugin-svgr";
 import { chromium } from "playwright";
+import { freePort } from "./remote-access/stack.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const artifacts = path.join(root, ".context/workspace-layout-ui");
@@ -42,7 +43,7 @@ function App() {
  window.setCloudStage = state => setCurrent({...workspace,kind:"cloud",state,init_stage:state === "initializing" ? "resuming" : null,cloud_status: state === "ready" ? "running" : "paused"});
  return <QueryClientProvider client={client}><TooltipProvider><SidebarProvider>
    <aside data-fixture-sidebar className="bg-bg-base h-screen w-64 shrink-0 p-4">Deus</aside>
-   <MainContent selectedWorkspace={current as any} prStatus={null} ghStatus={{isInstalled:true,isAuthenticated:true} as any} workspaceChatPanelRef={chatRef}
+   <MainContent selectedWorkspace={current as any} prStatus={{has_pr:false,conclusive:true}} ghStatus={{isInstalled:true,isAuthenticated:true} as any} workspaceChatPanelRef={chatRef}
      repos={[]} repoGroups={[]} onCreateWorkspace={()=>{}} onOpenProject={()=>{}} onCloneRepository={()=>{}} onStartNewProject={()=>{}} onStartWorkspace={()=>{}} onWorkspaceClick={()=>{}} />
    <div hidden data-custom-icons><Check className="stroke-[2.5]" /><ConnectionIllustration /></div>
  </SidebarProvider></TooltipProvider></QueryClientProvider>;
@@ -150,7 +151,7 @@ const server = await createServer({
       },
     },
   ],
-  server: { host: "127.0.0.1", port: 0 },
+  server: { host: "127.0.0.1", port: await freePort(), strictPort: true, watch: null },
 });
 let browser, page;
 try {

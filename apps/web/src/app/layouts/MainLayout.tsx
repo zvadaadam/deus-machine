@@ -284,7 +284,7 @@ export function MainLayout() {
   }, [githubPickerRepoId, repoGroups]);
 
   const { mutateAsync: archive } = useArchiveWorkspace();
-  const { mutateAsync: restore } = useUnarchiveWorkspace();
+  const { mutate: restore } = useUnarchiveWorkspace();
   const archiveWorkspace = useCallback(
     async (workspaceId: string) => {
       try {
@@ -294,8 +294,7 @@ export function MainLayout() {
           duration: 5000,
           action: {
             label: "Undo",
-            onClick: () =>
-              void restore(workspaceId).catch((error) => toast.error(getErrorMessage(error))),
+            onClick: () => restore(workspaceId),
           },
         });
       } catch (error) {
@@ -305,29 +304,15 @@ export function MainLayout() {
     [archive, restore, selectWorkspace]
   );
 
-  // --- Workflow status change (ref-stable like archive) ---
-
-  const statusMutation = useUpdateWorkspaceStatus();
-  const statusMutationRef = useRef(statusMutation);
-  useEffect(() => {
-    statusMutationRef.current = statusMutation;
-  });
-
+  const { mutate: updateStatus } = useUpdateWorkspaceStatus();
   const handleStatusChange = useCallback(
     (workspaceId: string, status: import("@shared/enums").WorkspaceStatus) => {
-      statusMutationRef.current.mutate(
+      updateStatus(
         { workspaceId, status },
-        {
-          onError: (error) =>
-            toast.error(
-              isCloudDirectWebMode()
-                ? "Workflow status is set from the desktop app for now"
-                : getErrorMessage(error)
-            ),
-        }
+        { onError: (error) => toast.error(getErrorMessage(error)) }
       );
     },
-    []
+    [updateStatus]
   );
 
   // --- Global hooks ---
@@ -385,21 +370,14 @@ export function MainLayout() {
 
   // Where this window's workspaces run: this computer, or the cloud (by organization).
   // The sidebar lists that place; the rest of the app reads the full list.
-  const {
-    place: windowPlace,
-    rows: placeRows,
-    current: currentPlace,
-    activity: activityByPlace,
-    choose: choosePlace,
-    chooseIndex: choosePlaceAt,
-    repositories: placeRepositories,
-  } = useWindowPlace({
+  const places = useWindowPlace({
     repoGroups,
     selectedWorkspaceId,
     selectedWorkspace,
     openWorkspace: handleWorkspaceClick,
     selectWorkspace,
   });
+  const { place: windowPlace } = places;
   // Adding a project follows the window's place: a folder on this computer, a
   // GitHub repository (no clone) in the cloud, in the window's organization.
   const folderPicker = { nativeFolderPicker: capabilities.nativeFolderPicker };
@@ -409,16 +387,6 @@ export function MainLayout() {
     (organizationId?: string | null) =>
       openAddFromGitHub(organizationId !== undefined ? organizationId : windowPlace.organizationId),
     [openAddFromGitHub, windowPlace.organizationId]
-  );
-  const sidebarPlaces = useMemo(
-    () => ({
-      rows: placeRows,
-      current: currentPlace,
-      location: windowPlace.location,
-      activity: activityByPlace,
-      onChoose: choosePlace,
-    }),
-    [placeRows, currentPlace, windowPlace.location, activityByPlace, choosePlace]
   );
 
   // Keyboard shortcuts
@@ -430,7 +398,7 @@ export function MainLayout() {
       }
     },
     onOpenInApp: canOpenInApp ? openInLastApp : undefined,
-    onSwitchPlace: choosePlaceAt,
+    onSwitchPlace: places.chooseIndex,
   });
 
   return (
@@ -451,8 +419,7 @@ export function MainLayout() {
         <SidebarSkeleton />
       ) : (
         <AppSidebar
-          repositories={placeRepositories}
-          places={sidebarPlaces}
+          places={places}
           selectedWorkspaceId={selectedWorkspace?.id || null}
           diffStatsMap={bulkDiffStatsQuery.data}
           onWorkspaceClick={handleWorkspaceClick}

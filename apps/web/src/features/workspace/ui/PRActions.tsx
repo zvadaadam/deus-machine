@@ -12,7 +12,6 @@
  * No redundant chips. The button IS the status indicator.
  */
 
-import { useState, useEffect } from "react";
 import {
   GitMerge,
   GitPullRequestCreate,
@@ -66,22 +65,12 @@ export function PRActions({
   onCreatePR,
   onSendAgentMessage,
   onArchive,
-  targetBranch: targetBranchProp = "main",
+  targetBranch,
   onTargetBranchChange,
   workspaceId,
   repoId,
 }: PRActionsProps) {
-  const [localTargetBranch, setLocalTargetBranch] = useState(targetBranchProp);
-  useEffect(() => {
-    setLocalTargetBranch(targetBranchProp);
-  }, [targetBranchProp]);
-
-  const handleBranchSelect = (name: string) => {
-    setLocalTargetBranch(name);
-    onTargetBranchChange(name);
-  };
-
-  const state = derivePRActionState(prStatus, ghStatus, localTargetBranch);
+  const state = derivePRActionState(prStatus, ghStatus, targetBranch);
   if (state.type === "unchecked") return null;
 
   return (
@@ -95,9 +84,9 @@ export function PRActions({
         .with({ type: "error" }, (s) => <ErrorWarning reason={s.reason} />)
         .with({ type: "no_pr" }, () => (
           <CreatePRButton
-            targetBranch={localTargetBranch}
+            targetBranch={targetBranch}
             repoId={repoId}
-            onBranchSelect={handleBranchSelect}
+            onBranchSelect={onTargetBranchChange}
             onCreatePR={onCreatePR}
           />
         ))

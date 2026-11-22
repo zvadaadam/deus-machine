@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { createServer as createHttpServer } from "node:http";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import Database from "better-sqlite3";
@@ -15,8 +16,10 @@ const root = path.resolve(import.meta.dirname, "../..");
 const evidence = path.join(root, ".context/workspace-list");
 await mkdir(evidence, { recursive: true });
 const directory = await mkdtemp(path.join(evidence, "run-"));
+const database = path.join(directory, "deus.db");
 const stack = createStack({ root, directory });
-let backend, server, browser, host, baseUrl, local, remote, offline;
+const spawnToken = crypto.randomUUID();
+let backend, db, server, browser, host, baseUrl, local, remote, offline;
 
 async function makeProject(name, origin) {
   const folder = path.join(directory, name);
@@ -77,11 +80,13 @@ esac
   );
   host = await stack.host({
     name: "backend",
-    database: path.join(directory, "deus.db"),
+    authToken: spawnToken,
+    database,
     dir: directory,
     env: { DEUS_USER_DATA_DIR: directory, TMPDIR: directory, DEUS_BUNDLED_BIN_DIR: directory },
   });
   backend = await connectBackend(host.url);
+  db = new Database(database);
   local = await makeProject("local");
   const upstream = path.join(directory, "origin.git");
   execFileSync("git", ["clone", "--bare", local.root_path, upstream], { stdio: "pipe" });
@@ -102,16 +107,20 @@ after(async () => {
   await browser?.close();
   await server?.close();
   backend?.close();
+  db?.close();
   await stack.close();
 });
 
-async function tab(t, electron = false) {
+async function tab(t, mode = "web") {
+  const phone = mode === "phone";
   const context = await browser.newContext({
-    viewport: { width: 1440, height: 900 },
+    viewport: phone ? { width: 390, height: 844 } : { width: 1440, height: 900 },
+    hasTouch: phone,
+    isMobile: phone,
     colorScheme: "light",
   });
   t.after(() => context.close());
-  if (electron)
+  if (mode === "desktop")
     await context.addInitScript(() => {
       document.addEventListener(
         "readystatechange",
@@ -126,6 +135,8 @@ async function tab(t, electron = false) {
 }
 
 const row = (page, ws) => page.locator(`[data-workspace-id="${ws.id}"]`);
+const archiveButton = (page, ws) =>
+  row(page, ws).getByRole("button", { name: /Archive workspace/ });
 
 for (const project of ["local", "remote", "offline"]) {
   test(`start details for ${project}`, async (t) => {
@@ -135,8 +146,9 @@ for (const project of ["local", "remote", "offline"]) {
     await row(page, ws).waitFor();
     // This client saw the checkout finish. Resume that start story in its real chat.
     await page.evaluate(async ({ id, current_session_id }) => {
-      const { markStartedIn } =
-        await import("/src/features/workspace/store/workspaceStartStore.ts");
+      const { markStartedIn } = await import(
+        `${window.location.origin}/src/features/workspace/store/workspaceStartStore.ts`
+      );
       markStartedIn(id, current_session_id);
     }, ws);
     const group = page.locator('[data-slot="env-group"]');
@@ -159,8 +171,12 @@ async function waitForPRRead(page, workspaceId, conclusive) {
     () =>
       page.evaluate(
         async ({ workspaceId, conclusive }) => {
-          const { queryClient } = await import("/src/shared/api/queryClient.ts");
-          const { queryKeys } = await import("/src/shared/api/queryKeys.ts");
+          const { queryClient } = await import(
+            `${window.location.origin}/src/shared/api/queryClient.ts`
+          );
+          const { queryKeys } = await import(
+            `${window.location.origin}/src/shared/api/queryKeys.ts`
+          );
           return (
             queryClient.getQueryData(queryKeys.workspaces.prStatus(workspaceId))?.conclusive ===
             conclusive
@@ -175,8 +191,7 @@ async function waitForPRRead(page, workspaceId, conclusive) {
 
 for (const mode of ["web", "desktop", "phone"]) {
   test(`the ${mode} header settles without PR actions for a project with no remote`, async (t) => {
-    const page = await tab(t, mode === "desktop");
-    if (mode === "phone") await page.setViewportSize({ width: 390, height: 844 });
+    const page = await tab(t, mode);
     const ws = await start(local, "Header");
     await page.goto(`${baseUrl}/w/${ws.id}`);
     await waitForPRRead(page, ws.id, false);
@@ -190,15 +205,27 @@ for (const mode of ["web", "desktop", "phone"]) {
       0
     );
     assert.equal(await page.getByRole("button", { name: "Create PR", exact: true }).count(), 0);
+    if (mode === "phone") {
+      await page.getByRole("button", { name: "Expand sidebar" }).tap();
+      const archive = archiveButton(page, ws);
+      await archive.waitFor();
+      assert.equal(
+        await archive.evaluate((button) => window.getComputedStyle(button).opacity),
+        "1",
+        "Archive is visible on touch before the person points at the row"
+      );
+      await archive.tap();
+      await page.getByText("Workspace archived", { exact: true }).waitFor();
+      await row(page, ws).waitFor({ state: "detached" });
+      assert.equal((await backend.read("workspace", { workspaceId: ws.id })).state, "archived");
+    }
   });
 }
 
 test("the next PR poll discovers the remote without reloading", async (t) => {
   const page = await tab(t);
   const ws = await start(local, "PR polling");
-  const db = new Database(path.join(directory, "deus.db"));
   db.prepare("UPDATE sessions SET status = 'working' WHERE id = ?").run(ws.current_session_id);
-  db.close();
   await page.goto(`${baseUrl}/w/${ws.id}`);
   await waitForPRRead(page, ws.id, false);
   const button = page.getByRole("button", { name: "Create PR", exact: true });
@@ -218,7 +245,7 @@ async function general(page) {
   await page.goto(baseUrl);
   await page.getByRole("button", { name: "Toggle local workspaces", exact: true }).waitFor();
   await page.evaluate(async () => {
-    const { useUIStore } = await import("/src/shared/stores/uiStore.ts");
+    const { useUIStore } = await import(`${window.location.origin}/src/shared/stores/uiStore.ts`);
     useUIStore.getState().openSettings();
     useUIStore.getState().setActiveSettingsSection("general");
   });
@@ -277,50 +304,90 @@ for (const packageName of ["Debian", "AppImage"]) {
       await automatic.waitFor();
       await check.click();
       await page.getByText("You're on the latest version.").waitFor();
+      await page.evaluate(() => {
+        window.electronAPI.checkForUpdates = async () => {
+          throw new Error("net::ERR_INTERNET_DISCONNECTED");
+        };
+      });
+      await check.click();
+      await page.getByText("Couldn't get the latest update. Deus will try again.").waitFor();
     }
   });
 }
 
 for (const failureFirst of [false, true]) {
   test(`a failed removal preserves live rows with the ${failureFirst ? "failure" : "success"} reply first`, async (t) => {
-    const page = await tab(t, failureFirst);
-    const project = await makeProject(failureFirst ? "delete-refusal" : "archive-refusal");
-    const a = await start(project, "A", failureFirst ? "missing" : "main");
-    const b = await start(local, "B", failureFirst ? "main" : "missing");
+    const page = await tab(t, failureFirst ? "desktop" : "web");
+    const project = await makeProject(failureFirst ? "archive-refusal" : "delete-refusal");
+    const source = failureFirst ? "main" : "missing";
+    const a = await start(failureFirst ? project : local, "A", source);
+    const b = await start(failureFirst ? local : project, "B", source);
     const c = await start(local, "Witness");
     const saved = await start(project, "Already archived");
     await backend.write("archiveWorkspace", { workspaceId: saved.id });
 
-    // Deliver B and C's live changes as session-scoped deltas while only A in its project
-    // is optimistically removed. Delay reconciliation and release the two real replies in order.
-    const replies = new Map();
-    let holdReads = false;
+    // B's cloud computer has to finish pausing before its archive can commit.
+    let finishPause;
+    if (failureFirst) {
+      const platform = createHttpServer((req, res) => {
+        if (req.method === "POST" && req.url.endsWith(`/workspaces/${b.id}/pause`)) {
+          finishPause = () =>
+            res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
+        } else res.writeHead(404).end();
+      });
+      await new Promise((resolve) => platform.listen(0, "127.0.0.1", resolve));
+      const credentials = (body) =>
+        host.api("/settings/cloud/credentials", {
+          method: "POST",
+          headers: { authorization: `Bearer ${spawnToken}` },
+          body,
+        });
+      t.after(async () => {
+        platform.closeAllConnections();
+        await new Promise((resolve) => platform.close(resolve));
+        await credentials({ baseUrl: null, orgKeys: null });
+      });
+      await credentials({
+        baseUrl: `http://127.0.0.1:${platform.address().port}`,
+        orgKeys: { blue: "fixture" },
+      });
+      db.prepare("UPDATE workspaces SET kind = 'cloud' WHERE id IN (?, ?, ?)").run(
+        a.id,
+        b.id,
+        c.id
+      );
+      db.prepare("UPDATE workspaces SET provider_workspace_id = ? WHERE id = ?").run(b.id, b.id);
+    }
+
+    // Unrelated session deltas arrive while A is pending. All one-shot reads reach the host.
+    let refuseA;
     await page.routeWebSocket(
       (url) => url.pathname === "/ws",
       (route) => {
         const server = route.connectToServer();
-        const writes = new Map(),
-          groups = new Set();
+        const groups = new Set();
+        let aRequest;
         route.onMessage((raw) => {
           const f = JSON.parse(String(raw));
           if (f.resource === "workspaces") groups.add(f.id);
-          if (holdReads && f.type === "q:request" && f.resource === "workspaces") return;
-          if (f.type === "q:mutate" && ["archiveWorkspace", "deleteWorkspace"].includes(f.action)) {
-            writes.set(f.id, f.params.workspaceId);
-            if (f.params.workspaceId === a.id) {
-              // Exercise the backend's refusal through the same mutation as a stale window.
-              server.send(JSON.stringify({ ...f, params: { workspaceId: "missing" } }));
-              return;
-            }
+          if (
+            f.type === "q:mutate" &&
+            f.params.workspaceId === a.id &&
+            ["archiveWorkspace", "deleteWorkspace"].includes(f.action)
+          ) {
+            // Exercise the backend's refusal through the same mutation as a stale window.
+            aRequest = f.id;
+            server.send(JSON.stringify({ ...f, params: { workspaceId: "missing" } }));
+            return;
           }
           server.send(raw);
         });
         server.onMessage((raw) => {
           const f = JSON.parse(String(raw));
-          if (writes.has(f.id) && f.type === "q:mutate_result") {
-            replies.set(writes.get(f.id), () => route.send(raw));
+          if (f.id === aRequest && f.type === "q:mutate_result") {
+            refuseA = () => route.send(raw);
           } else if (groups.has(f.id) && (f.type === "q:snapshot" || f.type === "q:response")) {
-            if (f.type === "q:snapshot" && replies.has(a.id)) {
+            if (f.type === "q:snapshot" && refuseA) {
               const changed = f.data
                 .flatMap((group) => group.workspaces)
                 .filter((ws) => ws.id === b.id || ws.id === c.id);
@@ -341,7 +408,7 @@ for (const failureFirst of [false, true]) {
         });
       }
     );
-    await page.goto(baseUrl);
+    await page.goto(failureFirst ? `${baseUrl}/w/${a.id}` : baseUrl);
     const remove = async (ws) => {
       if (ws.state === "error") {
         await row(page, ws).click();
@@ -350,94 +417,147 @@ for (const failureFirst of [false, true]) {
           .getByRole("button", { name: "Delete" })
           .click();
       } else {
-        await row(page, ws)
-          .getByRole("button", { name: /Archive workspace/ })
-          .click();
+        await archiveButton(page, ws).click();
       }
     };
     await remove(a);
-    await until(() => replies.has(a.id));
+    await until(() => !!refuseA);
     await row(page, a).waitFor({ state: "detached" });
     await backend.write("updateWorkspaceTitle", { workspaceId: b.id, title: "B live" });
     await row(page, b).getByText("B live").waitFor();
     await backend.write("updateWorkspaceTitle", { workspaceId: c.id, title: "Witness live" });
     await row(page, c).getByText("Witness live").waitFor();
-    const projectState = () =>
-      page.evaluate(async (id) => {
-        const { queryClient } = await import("/src/shared/api/queryClient.ts");
-        const { queryKeys } = await import("/src/shared/api/queryKeys.ts");
-        const { SIDEBAR_WORKSPACE_STATE } =
-          await import("/src/features/workspace/api/workspace.queries.ts");
-        const group = queryClient
-          .getQueryData(queryKeys.workspaces.byRepo(SIDEBAR_WORKSPACE_STATE))
-          .find((g) => g.repo_id === id);
-        return [group?.archived_count, group?.workspaces.map((w) => w.id)];
-      }, project.id);
-    assert.deepEqual(
-      await projectState(),
-      [1, []],
-      "the delta keeps A’s emptied project and its count"
-    );
-    holdReads = true;
+    const projectState = (refetch = false) =>
+      page.evaluate(
+        async ({ id, refetch }) => {
+          const { queryClient } = await import(
+            `${window.location.origin}/src/shared/api/queryClient.ts`
+          );
+          const { queryKeys } = await import(
+            `${window.location.origin}/src/shared/api/queryKeys.ts`
+          );
+          const { SIDEBAR_WORKSPACE_STATE } = await import(
+            `${window.location.origin}/src/features/workspace/api/workspace.queries.ts`
+          );
+          const queryKey = queryKeys.workspaces.byRepo(SIDEBAR_WORKSPACE_STATE);
+          if (refetch) await queryClient.refetchQueries({ queryKey });
+          const group = queryClient.getQueryData(queryKey).find((g) => g.repo_id === id);
+          return [group?.archived_count, group?.workspaces.map((w) => w.id)];
+        },
+        { id: project.id, refetch }
+      );
+    assert.equal((await projectState())[0], 1, "session deltas keep the project's archive count");
+    assert.equal(await row(page, a).count(), 0);
     await remove(b);
     await row(page, b).waitFor({ state: "detached" });
-    await until(() => replies.has(b.id));
-    if (!failureFirst) replies.get(b.id)();
-    replies.get(a.id)();
+    if (failureFirst) await until(() => !!finishPause, 10_000, "the cloud computer is pausing");
+    else await page.getByText("Workspace deleted", { exact: true }).waitFor();
+    refuseA();
     await page.getByText("Workspace not found", { exact: true }).waitFor();
-    if (failureFirst) replies.get(b.id)();
     await row(page, a).waitFor();
+    if (failureFirst) {
+      assert.equal((await backend.read("workspace", { workspaceId: b.id })).state, "ready");
+      // Mark the real read so the assertion waits until its answer is on screen.
+      db.prepare("UPDATE workspaces SET title = 'Witness read' WHERE id = ?").run(c.id);
+      await projectState(true);
+      await row(page, c).getByText("Witness read").waitFor();
+      assert.equal(
+        await row(page, b).count(),
+        0,
+        "the real read must not reveal B before its archive commits"
+      );
+      finishPause();
+      await page.getByText("Workspace archived", { exact: true }).waitFor();
+    }
     assert.equal(await row(page, b).count(), 0, "B stayed removed");
-    assert.match(await row(page, c).innerText(), /Witness live/);
-    assert.deepEqual(await projectState(), [1, [a.id]]);
+    await row(page, c)
+      .getByText(failureFirst ? "Witness read" : "Witness live")
+      .waitFor();
+    assert.deepEqual(await projectState(), [1, failureFirst ? [a.id] : []]);
   });
 }
 
-test("Archive offers Undo when the backend confirms it", async (t) => {
-  const page = await tab(t);
-  const ws = await start(local, "Undo archive");
-  let acknowledge;
-  await page.routeWebSocket(
-    (url) => url.pathname === "/ws",
-    (route) => {
-      const host = route.connectToServer();
-      let id;
-      route.onMessage((raw) => {
-        const f = JSON.parse(String(raw));
-        if (f.type === "q:mutate" && f.action === "archiveWorkspace") id = f.id;
-        host.send(raw);
+for (const loseReply of [false, true]) {
+  test(
+    loseReply
+      ? "a committed archive stays absent when its acknowledgement is lost"
+      : "Archive offers Undo when the backend confirms it",
+    async (t) => {
+      const page = await tab(t);
+      const ws = await start(local, loseReply ? "Lost archive reply" : "Undo archive");
+      const reconnect = Promise.withResolvers();
+      let finish,
+        snapshotBeforeReply,
+        reconciled = false;
+      await page.routeWebSocket(/\/ws$/, (route) => {
+        const host = route.connectToServer();
+        const reconnecting = !!finish;
+        let mutation,
+          subscription,
+          removed = false;
+        route.onMessage((raw) => {
+          const f = JSON.parse(String(raw));
+          if (f.type === "q:subscribe" && f.resource === "workspaces") subscription = f.id;
+          if (f.type === "q:mutate" && f.action === "archiveWorkspace") mutation = f.id;
+          host.send(raw);
+        });
+        host.onMessage(async (raw) => {
+          if (reconnecting) await reconnect.promise;
+          const f = JSON.parse(String(raw));
+          if (f.type === "q:snapshot" && f.id === subscription) {
+            removed = !f.data.some((g) => g.workspaces.some((w) => w.id === ws.id));
+            if (reconnecting && removed) reconciled = true;
+          }
+          if (f.type === "q:mutate_result" && f.id === mutation && f.success) {
+            snapshotBeforeReply = removed;
+            finish = () => {
+              if (loseReply) {
+                route.close({ code: 1011, reason: "Lost archive acknowledgement" });
+                host.close();
+              } else route.send(raw);
+            };
+          } else route.send(raw);
+        });
       });
-      host.onMessage((raw) => {
-        const f = JSON.parse(String(raw));
-        if (f.type === "q:mutate_result" && f.id === id) acknowledge = () => route.send(raw);
-        else route.send(raw);
-      });
+      await page.goto(baseUrl);
+      await archiveButton(page, ws).click();
+      await until(() => !!finish);
+      assert.equal(
+        snapshotBeforeReply,
+        true,
+        "the host sent the removal before its acknowledgement"
+      );
+      const toast = page.getByText("Workspace archived", { exact: true });
+      assert.equal(await toast.count(), 0);
+      finish();
+      if (loseReply) {
+        try {
+          await page.getByText(/operation may have completed/i).waitFor();
+          assert.equal(
+            await row(page, ws).count(),
+            0,
+            "losing the reply must not undo a confirmed snapshot"
+          );
+        } finally {
+          reconnect.resolve();
+        }
+        await until(() => reconciled, 15_000, "the reconnect snapshot without the archived row");
+        assert.equal(await row(page, ws).count(), 0);
+      } else {
+        await toast.waitFor();
+        await page.getByRole("button", { name: "Undo", exact: true }).click();
+        await row(page, ws).waitFor();
+      }
     }
   );
-  await page.goto(baseUrl);
-  await row(page, ws)
-    .getByRole("button", { name: /Archive workspace/ })
-    .click();
-  const toast = page.getByText("Workspace archived", { exact: true });
-  await until(() => !!acknowledge);
-  assert.equal(await toast.count(), 0);
-  acknowledge();
-  await toast.waitFor();
-  await page.getByRole("button", { name: "Undo", exact: true }).click();
-  await row(page, ws).waitFor();
-});
+}
 
 test("a start that never got a chat offers Delete and stays out of the archive", async (t) => {
-  const page = await tab(t, true);
+  const page = await tab(t, "desktop");
   const ws = await start(local, "Never started", "missing");
   await page.goto(`${baseUrl}/w/${ws.id}`);
   await row(page, ws).waitFor();
-  assert.equal(
-    await row(page, ws)
-      .getByRole("button", { name: /Archive workspace/ })
-      .count(),
-    0
-  );
+  assert.equal(await archiveButton(page, ws).count(), 0);
   await page
     .locator('[data-slot="workspace-start-state"]')
     .getByRole("button", { name: "Delete" })
@@ -449,8 +569,8 @@ test("a start that never got a chat offers Delete and stays out of the archive",
 
 // The incoming backend contract: add its project totals to live snapshots and answer
 // its archive read from this run's SQLite rows. Restore goes to the real backend.
-async function archiveContract(page, db, origins, allowRestore) {
-  const reads = [];
+async function archiveContract(page, origins, allowRestore) {
+  const reads = { archives: [], workspaces: 0 };
   await page.routeWebSocket(
     (url) => url.pathname === "/ws",
     (route) => {
@@ -459,9 +579,12 @@ async function archiveContract(page, db, origins, allowRestore) {
       route.onMessage(async (raw) => {
         const frame = JSON.parse(String(raw));
         if (frame.type === "q:mutate" && frame.action === "updateWorkspace") await allowRestore;
-        if (frame.resource === "workspaces") groups.add(frame.id);
+        if (frame.resource === "workspaces") {
+          groups.add(frame.id);
+          if (frame.type === "q:request") reads.workspaces++;
+        }
         if (frame.type === "q:request" && frame.resource === "archivedWorkspaces") {
-          reads.push(frame.params.repositoryId);
+          reads.archives.push(frame.params.repositoryId);
           const data = db
             .prepare(
               `SELECT id, title, slug, git_branch, kind, organization_id, updated_at AS archived_at
@@ -494,18 +617,17 @@ async function archiveContract(page, db, origins, allowRestore) {
   return reads;
 }
 
-for (const electron of [false, true]) {
-  test(`browse archived workspaces and restore in ${electron ? "desktop" : "web"} styling`, async (t) => {
-    const page = await tab(t, electron);
-    const db = new Database(path.join(directory, "deus.db"));
-    t.after(() => db.close());
-    const project = await makeProject("archive-" + (electron ? "desktop" : "web"));
+for (const mode of ["web", "desktop"]) {
+  test(`browse archived workspaces and restore in ${mode} styling`, async (t) => {
+    const page = await tab(t, mode);
+    const project = await makeProject("archive-" + mode);
     // A project with a GitHub origin appears in the local and cloud places.
     db.prepare("UPDATE repositories SET git_origin_url = ? WHERE id = ?").run(
       "https://github.com/fixture/workspace-list",
       project.id
     );
     const sender = await start(local, "Source workspace");
+    const other = await start(local, "Archive while closed");
     db.prepare("UPDATE sessions SET title = 'Review' WHERE id = ?").run(sender.current_session_id);
     const chat = await start(project, "Chat archive");
     const assistant = await start(project, "Assistant archive");
@@ -523,7 +645,7 @@ for (const electron of [false, true]) {
       "INSERT INTO workspaces (id, repository_id, slug, kind, organization_id, state) VALUES (?, ?, 'on-another-computer', 'cloud', 'blue', 'archived')"
     ).run(cloud, project.id);
     const allowRestore = Promise.withResolvers();
-    const reads = await archiveContract(page, db, origins, allowRestore.promise);
+    const reads = await archiveContract(page, origins, allowRestore.promise);
     await page.goto(baseUrl);
     const toggle = page.getByRole("button", {
       name: "Toggle " + project.name + " workspaces",
@@ -533,8 +655,8 @@ for (const electron of [false, true]) {
     const group = toggle.locator("xpath=ancestor::div[@aria-roledescription='sortable'][1]");
     const disclosure = group.getByRole("button", { name: "Archived", exact: true });
     await disclosure.waitFor({ timeout: 3000 });
-    assert.equal(await page.locator("html.electron").count(), electron ? 1 : 0);
-    assert.equal(reads.length, 0);
+    assert.equal(await page.locator("html.electron").count(), mode === "desktop" ? 1 : 0);
+    assert.equal(reads.archives.length, 0);
     const unknownProject = page
       .getByRole("button", { name: "Toggle local workspaces", exact: true })
       .locator("xpath=ancestor::div[@aria-roledescription='sortable'][1]");
@@ -552,13 +674,15 @@ for (const electron of [false, true]) {
       group.getByRole("button", { name: "Restore " + (ws.title || ws.slug), exact: true });
     await restore(person).waitFor();
     assert.equal(await group.getByText("on-another-computer").count(), 0);
-    assert.deepEqual(reads, [project.id]);
+    assert.deepEqual(reads.archives, [project.id]);
     await group.screenshot({
-      path: path.join(evidence, electron ? "archive-desktop.png" : "archive-web.png"),
+      path: path.join(evidence, `archive-${mode}.png`),
     });
     // Give this isolated backend two ready organizations, then switch with the sidebar shortcuts.
     await page.evaluate(async () => {
-      const { queryClient } = await import("/src/shared/api/queryClient.ts");
+      const { queryClient } = await import(
+        `${window.location.origin}/src/shared/api/queryClient.ts`
+      );
       queryClient.setQueryData(["cloudOrganizations"], {
         available: true,
         accountId: "fixture",
@@ -573,29 +697,25 @@ for (const electron of [false, true]) {
     await group.getByText("No archived workspaces here.").waitFor();
     await page.keyboard.press("Control+1");
     await group.getByRole("button", { name: "Archived (3)", exact: true }).waitFor();
-    // Exercise the family invalidation used by Archive and Restore while the live count stays put.
-    const invalidateWorkspaces = () =>
-      page.evaluate(async () => {
-        const { queryClient } = await import("/src/shared/api/queryClient.ts");
-        const { queryKeys } = await import("/src/shared/api/queryKeys.ts");
-        await queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
-      });
+    // Archive in another project so this one's live count stays put.
+    const sidebarReads = reads.workspaces;
     await open.click();
     await disclosure.waitFor();
-    await invalidateWorkspaces();
-    assert.deepEqual(reads, [project.id], "the closed, previously loaded list stays idle");
+    await archiveButton(page, other).click();
+    await page.getByText("Workspace archived", { exact: true }).waitFor();
+    assert.deepEqual(reads.archives, [project.id], "the closed, previously loaded list stays idle");
     await disclosure.click();
-    await until(() => reads.length === 2);
-    await invalidateWorkspaces();
-    const openReads = reads.length - 2;
+    await until(() => reads.archives.length === 2);
+    await archiveButton(page, sender).click();
+    await until(() => reads.archives.length === 3);
     const button = restore(chat);
     const width = (await button.boundingBox()).width;
     await button.click();
     try {
       await until(() => button.isDisabled());
       assert.deepEqual(
-        { openReads, label: await button.innerText(), width: (await button.boundingBox()).width },
-        { openReads: 1, label: "Restore", width }
+        { label: await button.innerText(), width: (await button.boundingBox()).width },
+        { label: "Restore", width }
       );
     } finally {
       allowRestore.resolve();
@@ -608,9 +728,14 @@ for (const electron of [false, true]) {
     await row(page, person).waitFor();
     await group.getByRole("button", { name: "Archived (0)" }).waitFor();
     await group.getByText("No archived workspaces here.").waitFor();
-    const beforeLastRestore = reads.length;
+    assert.equal(
+      reads.workspaces,
+      sidebarReads,
+      "Archive and Restore leave the sidebar to its live read"
+    );
+    const beforeLastRestore = reads.archives.length;
     await backend.write("updateWorkspace", { workspaceId: cloud, state: "ready" });
-    await until(() => reads.length > beforeLastRestore);
+    await until(() => reads.archives.length > beforeLastRestore);
     await group.getByRole("button", { name: "Archived (0)" }).waitFor();
     await group.getByText("No archived workspaces here.").waitFor();
     await open.click();

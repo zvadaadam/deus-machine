@@ -3,17 +3,24 @@
  * TanStack Query hooks for workspace-related data fetching
  */
 
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import {
+  useQuery,
+  useMutation,
+  useMutationState,
+  useQueryClient,
+  keepPreviousData,
+} from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { produce } from "immer";
 import { api } from "@shared/api";
+import type { ReportedOrigin } from "@shared/protocol-types";
 import { toast } from "sonner";
 import { getErrorMessage } from "@shared/lib/errors";
 import { native } from "@/platform";
-import { call } from "@/platform/ws";
+import { call, getRuntimeClient } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
-import type { RepoGroup, DiffStats } from "../types";
+import type { RepoGroup, DiffStats, Workspace } from "../types";
 import type { PRStatus } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
 import { mergeWorkspaceDelta } from "../lib/workspace.utils";
@@ -21,24 +28,17 @@ import { diffStatsToAsk } from "../lib/diffStats";
 import { track } from "@/platform/analytics";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 
-/**
- * Fetch workspaces grouped by repository.
- *
- * The subscription pushes each new value into the cache (`q:snapshot`, then
- * `q:delta`); the query function reads it once for the first paint.
- */
-/**
- * The states the sidebar shows. 'error' is included so a failed cloud
- * provision stays VISIBLE (red state + message) instead of vanishing.
- *
- * This is also the optimistic-write key for the workspace mutations below —
- * they must target the SAME cache entry the sidebar reads, or placeholders,
- * archive removal and status flips land in a cache nobody renders and only
- * appear after the follow-up invalidation.
- */
+// Include errors so a failed start stays visible with its reason.
+// Optimistic writes must use this state in their query key to reach the cache the sidebar renders.
 export const SIDEBAR_WORKSPACE_STATE = "ready,initializing,error";
+const removeWorkspaceKey = ["removeWorkspace"] as const;
 
+// The query reads once for the first paint, and the subscription pushes each new value into the cache.
 export function useWorkspacesByRepo(state: string = SIDEBAR_WORKSPACE_STATE) {
+  const pending = useMutationState({
+    filters: { mutationKey: removeWorkspaceKey, status: "pending" },
+    select: (mutation) => mutation.state.variables,
+  });
   useQuerySubscription(api.workspaces, {
     queryKey: queryKeys.workspaces.byRepo(state),
     params: { state },
@@ -48,6 +48,14 @@ export function useWorkspacesByRepo(state: string = SIDEBAR_WORKSPACE_STATE) {
   return useQuery({
     queryKey: queryKeys.workspaces.byRepo(state),
     queryFn: () => call(api.workspaces, { state }),
+    // The host publishes the removal before acknowledging it. Until then, hide it only in the view.
+    select: pending.length
+      ? (groups) =>
+          groups.map((group) => ({
+            ...group,
+            workspaces: group.workspaces.filter((workspace) => !pending.includes(workspace.id)),
+          }))
+      : undefined,
     staleTime: Infinity, // WS subscription keeps data fresh
     refetchOnWindowFocus: false, // Subscription handles freshness
   });
@@ -358,34 +366,18 @@ export function useCreateWorkspace() {
   });
 }
 
-/** Remove one sidebar row. A refusal restores it only if a live update hasn't already done so. */
 function useRemoveWorkspace(action: typeof api.archiveWorkspace | typeof api.deleteWorkspace) {
   const queryClient = useQueryClient();
-  const queryKey = queryKeys.workspaces.byRepo(SIDEBAR_WORKSPACE_STATE);
 
   return useMutation({
+    mutationKey: removeWorkspaceKey,
     mutationFn: (workspaceId: string) => call(action, { workspaceId }),
     retry: false,
-    onMutate: async (workspaceId) => {
-      await queryClient.cancelQueries({ queryKey });
-      const groups = queryClient.getQueryData<RepoGroup[]>(queryKey);
-      const row = groups?.flatMap((group) => group.workspaces).find((w) => w.id === workspaceId);
-      if (row) queryClient.setQueryData(queryKey, mergeWorkspaceDelta(groups, undefined, [row.id]));
-      return row;
-    },
-    onError: (_error, _id, removed) => {
-      if (!removed) return;
-      const groups = queryClient.getQueryData<RepoGroup[]>(queryKey);
-      if (groups && !groups.some((group) => group.workspaces.some((w) => w.id === removed.id))) {
-        queryClient.setQueryData(queryKey, mergeWorkspaceDelta(groups, [removed]));
-      }
-    },
     onSuccess: (_data, workspaceId) => {
-      if (action === api.archiveWorkspace)
+      if (action === api.archiveWorkspace) {
         track("workspace_archived", { workspace_id: workspaceId });
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.archived.all });
+      }
     },
   });
 }
@@ -468,6 +460,30 @@ export function useUpdateWorkspaceStatus() {
   });
 }
 
+export type ArchivedWorkspace = Pick<
+  Workspace,
+  "id" | "slug" | "title" | "git_branch" | "kind" | "organization_id"
+> & {
+  archived_at: string;
+  archived_by: ReportedOrigin | null;
+};
+
+export function useArchivedWorkspaces(
+  repositoryId: string,
+  count: number | undefined,
+  open: boolean
+) {
+  return useQuery({
+    queryKey: queryKeys.workspaces.archived.byRepo(repositoryId, count),
+    // Replace this request with call(api.archivedWorkspaces, { repositoryId }) when the shared declaration lands.
+    queryFn: () =>
+      getRuntimeClient().sendRequest<ArchivedWorkspace[]>("archivedWorkspaces", { repositoryId }),
+    enabled: open && count !== undefined,
+    placeholderData: keepPreviousData,
+    staleTime: 0,
+  });
+}
+
 /** Restore from the sidebar or Undo. The live workspace row tells us what opened. */
 export function useUnarchiveWorkspace() {
   const queryClient = useQueryClient();
@@ -476,8 +492,9 @@ export function useUnarchiveWorkspace() {
     mutationFn: (workspaceId: string) => call(api.updateWorkspace, { workspaceId, state: "ready" }),
     onSuccess: (_data, workspaceId) => {
       track("workspace_unarchived", { workspace_id: workspaceId });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.archived.all });
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all }),
+    onError: (error) => toast.error(getErrorMessage(error)),
   });
 }
 

@@ -19,15 +19,14 @@ export function OriginCaption({
   className?: string;
 }) {
   // A newer engine's kind arrives intact: read only the fields this build knows, as strings.
-  const { kind, name, sessionId } = origin as { kind: string; name?: unknown; sessionId?: unknown };
-  const named = typeof name === "string" ? name : undefined;
+  const name = "name" in origin && typeof origin.name === "string" ? origin.name : undefined;
   let source;
-  if (kind === "session" && typeof sessionId === "string") {
-    source = <ChatName sessionId={sessionId} name={named} />;
-  } else if (kind === "assistant" && named) {
+  if (origin.kind === "session" && typeof origin.sessionId === "string") {
+    source = <ChatName sessionId={origin.sessionId} name={name} />;
+  } else if (origin.kind === "assistant" && name) {
     source = (
-      <span className="truncate" title={named}>
-        {named}
+      <span className="truncate" title={name}>
+        {name}
       </span>
     );
   } else return null;

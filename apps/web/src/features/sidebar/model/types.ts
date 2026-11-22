@@ -6,7 +6,8 @@
 import type { AddProjectAction } from "@/features/repository/lib/addProject";
 import type { Workspace, DiffStats, RepoGroup } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
-import type { PlaceActivity, PlaceRow, WorkspaceLocation } from "../lib/location";
+import type { WindowPlace } from "../hooks/useWindowPlace";
+import type { Organizations, Place } from "../lib/location";
 
 /**
  * Sidebar profile chip — derived from `gh api user` via useGhStatus().
@@ -22,7 +23,6 @@ export interface SidebarProfile {
  * Main AppSidebar component props
  */
 export interface AppSidebarProps {
-  repositories: RepoGroup[];
   selectedWorkspaceId: string | null;
   diffStatsMap?: Record<string, DiffStats>;
   onWorkspaceClick: (workspace: Workspace) => void;
@@ -46,22 +46,7 @@ export interface AppSidebarProps {
   onOpenCustomize?: () => void;
   customizeActive?: boolean;
   profile?: SidebarProfile;
-  /** Where this window's workspaces run; `repositories` lists only those. */
-  places: SidebarPlaces;
-}
-
-/** The header's location menu: where the window can be, and where it is. */
-export interface SidebarPlaces {
-  /** This computer (where there is one), then each organization, or the one cloud. */
-  rows: PlaceRow[];
-  /** The key of the row the window is in. */
-  current: string;
-  /** Where the window is: this computer or the cloud. */
-  location: WorkspaceLocation;
-  /** Working or unread workspaces, by place key (`placeActivity`). */
-  activity: Partial<Record<string, PlaceActivity>>;
-  /** Choosing a row (or its ⌃ digit) does what it says. */
-  onChoose: (row: PlaceRow) => void;
+  places: WindowPlace;
 }
 
 /**
@@ -76,9 +61,8 @@ export interface RepositoryItemProps {
   onWorkspaceClick: (workspace: Workspace) => void;
   onNewWorkspace: (repoId?: string) => void;
   onNewWorkspaceFromGitHub?: (repoId: string) => void;
-  /** Where the window is (`offersNewFromBranch`). */
-  windowLocation: WorkspaceLocation;
-  inPlace: (workspace: Pick<Workspace, "kind" | "organization_id">) => boolean;
+  place: Place;
+  organizations: Organizations;
   onArchive?: (workspaceId: string) => void;
   onStatusChange?: (workspaceId: string, status: WorkspaceStatus) => void;
   // Avoid mounting workspace list when sidebar is offcanvas-collapsed.
@@ -102,7 +86,7 @@ export interface WorkspaceItemProps {
  */
 export interface SidebarHeaderProps {
   profile?: SidebarProfile;
-  places: SidebarPlaces;
+  places: Pick<WindowPlace, "rows" | "current" | "activity" | "choose">;
   onOpenSettings: () => void;
   onToggleSidebar: () => void;
   isExpanded: boolean;
