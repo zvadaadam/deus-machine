@@ -72,7 +72,7 @@ export function SessionErrorCard({
       <Button
         variant={category === "context_limit" ? "outline" : "ghost"}
         size="xs"
-        onClick={onRetryInNewChat}
+        onClick={() => onRetryInNewChat()}
       >
         <MessageSquarePlus className="mr-1.5 size-3.5" />
         {category === "context_limit" ? "New session" : "New chat"}

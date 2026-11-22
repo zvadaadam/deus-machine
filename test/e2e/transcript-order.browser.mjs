@@ -457,6 +457,7 @@ async function run() {
         const before = count();
         await card.getByRole("button", { name: "New chat", exact: true }).click();
         await until("the new local chat", () => count() === before + 1);
+        await page.getByRole("tab", { name: "New chat", exact: true, selected: true }).waitFor();
       }
     );
     const hostedPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });

@@ -95,7 +95,7 @@ before(async () => {
     cacheDir: path.join(directory, "vite-cache"),
     logLevel: "error",
     define: { "import.meta.env.VITE_BACKEND_PORT": JSON.stringify(new URL(host.url).port) },
-    server: { host: "127.0.0.1", port: await freePort(), strictPort: true, fs: { allow: [root] } },
+    server: { host: "127.0.0.1", port: await freePort(), fs: { allow: [root] } },
   });
   await server.listen();
   baseUrl = server.resolvedUrls.local[0] + "s/local";
@@ -719,9 +719,8 @@ for (const loseReply of [false, true]) {
       );
       if (!loseReply) await writeFile(path.join(directory, "merged-head"), ws.git_branch);
       const reconnect = Promise.withResolvers();
-      let finish,
-        snapshotBeforeReply,
-        reconciled = false;
+      const reconnectedProject = "Project after reconnect";
+      let finish, snapshotBeforeReply;
       await page.routeWebSocket(/\/ws$/, (route) => {
         const host = route.connectToServer();
         const reconnecting = !!finish;
@@ -739,7 +738,11 @@ for (const loseReply of [false, true]) {
           const f = JSON.parse(String(raw));
           if (f.type === "q:snapshot" && f.id === subscription) {
             removed = !f.data.some((g) => g.workspaces.some((w) => w.id === ws.id));
-            if (reconnecting && removed) reconciled = true;
+            if (reconnecting && removed) {
+              // The new project name shows when the sidebar has rendered this snapshot.
+              f.data.find((g) => g.repo_id === ws.repository_id).repo_name = reconnectedProject;
+              return route.send(JSON.stringify(f));
+            }
           }
           if (f.type === "q:mutate_result" && f.id === mutation && f.success) {
             snapshotBeforeReply = removed;
@@ -779,8 +782,15 @@ for (const loseReply of [false, true]) {
         } finally {
           reconnect.resolve();
         }
-        await until(() => reconciled, 15_000, "the reconnect snapshot without the archived row");
-        assert.equal(await row(page, ws).count(), 0);
+        await page.waitForFunction(
+          ({ id, name }) => {
+            if (document.querySelector(`[data-workspace-id="${id}"]`))
+              throw new Error("The archived workspace reappeared on reconnect");
+            return !!document.querySelector(`[aria-label="Toggle ${name} workspaces"]`);
+          },
+          { id: ws.id, name: reconnectedProject },
+          { timeout: 15_000 }
+        );
       } else {
         await toast.waitFor();
         assert.ok(
@@ -1002,13 +1012,13 @@ for (const mode of ["web", "desktop"]) {
     await restore(person).waitFor();
     assert.equal(await row(page, person).count(), 0);
     await page.keyboard.press("Control+2");
-    const refused = group.getByRole("button", { name: "Restore no-chat" });
-    await refused.click();
+    const enabledRestore = group.getByRole("button", { name: "Restore no-chat", disabled: false });
+    await enabledRestore.click();
     await page
       .locator("[data-sonner-toast] [data-title]", {
         hasText: "The cloud computer exists, but its chat did not open.",
       })
       .waitFor();
-    await refused.waitFor();
+    await enabledRestore.waitFor();
   });
 }
