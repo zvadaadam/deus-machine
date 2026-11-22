@@ -949,6 +949,32 @@ exec "$REAL_GIT" "$@"
 
 describe("only a failed start can be retried or deleted", () => {
   it.each([
+    ["worktree", lifecycle.claimLocalRetry],
+    ["cloud", lifecycle.claimCloudRetry],
+  ] as const)("refuses a %s retry claim until the failed attempt returns", async (kind, claim) => {
+    add("w", "vega", { kind });
+    const release = Promise.withResolvers<void>();
+    const attempt = lifecycle.runWorkspaceAttempt("w", async (token) => {
+      if (kind === "cloud") lifecycle.failCloudStart("w", "allocation failed", token);
+      else lifecycle.failStart("w", "session", { message: "chat failed", detail: null }, token);
+      await release.promise;
+    });
+    try {
+      const failed = row("w");
+      expect(failed.state).toBe("error");
+      mocks.invalidate.mockClear();
+      expect(() => claim("w")).toThrow("This workspace is not waiting for a retry.");
+      expect(row("w")).toEqual(failed);
+      expect(mocks.invalidate).not.toHaveBeenCalled();
+    } finally {
+      release.resolve();
+      await attempt;
+    }
+    claim("w");
+    expect(row("w").state).toBe("initializing");
+  });
+
+  it.each([
     ["local Retry", "worktree", lifecycle.claimLocalRetry],
     ["cloud Retry", "cloud", lifecycle.claimCloudRetry],
     ["local Delete", "worktree", deleteFailedWorkspace],

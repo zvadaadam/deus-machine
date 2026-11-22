@@ -201,8 +201,10 @@ function hasLocalStartInputs(
 
 const FAILED_TO_START = `state = 'error' AND current_session_id IS NULL AND provider_workspace_id IS NULL
   AND NOT EXISTS (SELECT 1 FROM sessions WHERE workspace_id = workspaces.id)`;
+const NOT_WAITING_FOR_RETRY = "This workspace is not waiting for a retry.";
 
 export function claimLocalRetry(workspaceId: string) {
+  if (attempts.has(workspaceId)) throw new ConflictError(NOT_WAITING_FOR_RETRY);
   const db = getDatabase();
   const row = db.prepare(`${START_ROW} WHERE w.id = ?`).get(workspaceId) as StartRow | undefined;
   if (!hasLocalStartInputs(row)) throw new NotFoundError("Workspace not found");
@@ -214,7 +216,7 @@ export function claimLocalRetry(workspaceId: string) {
        WHERE id = ? AND kind = 'worktree' AND ${FAILED_TO_START}`
     )
     .run(workspaceId);
-  if (claimed.changes === 0) throw new ConflictError("This workspace is not waiting for a retry.");
+  if (claimed.changes === 0) throw new ConflictError(NOT_WAITING_FOR_RETRY);
   if (row.setup_status !== "none") setSetupStatus(workspaceId, "none");
   invalidate(["workspaces"]);
   return row;
@@ -298,6 +300,7 @@ export function insertCloudWorkspace(
 }
 
 export function claimCloudRetry(workspaceId: string): void {
+  if (attempts.has(workspaceId)) throw new ConflictError(NOT_WAITING_FOR_RETRY);
   const claimed = getDatabase()
     .prepare(
       `UPDATE workspaces
@@ -306,7 +309,7 @@ export function claimCloudRetry(workspaceId: string): void {
        WHERE id = ? AND ${FAILED_TO_START}`
     )
     .run(workspaceId);
-  if (claimed.changes === 0) throw new ConflictError("This workspace is not waiting for a retry.");
+  if (claimed.changes === 0) throw new ConflictError(NOT_WAITING_FOR_RETRY);
   invalidate([...WORKSPACE_RESOURCES], {});
 }
 
