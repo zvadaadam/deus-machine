@@ -238,7 +238,17 @@ describe("a card's line counts", () => {
 
 describe("an MCP tool's card", () => {
   const mcp = (server: string, tool: string, toolName: string) =>
-    part({ toolName, kind: "other", mcp: { server, tool } } as Partial<ToolPart>);
+    part({
+      toolName,
+      kind: "other",
+      mcp: { server, tool },
+      state: {
+        status: "completed",
+        input: {},
+        output: "Page screenshot.",
+        time: { start: 1, end: 2 },
+      },
+    });
 
   it("is Deus's own card for a Deus tool, on both harnesses' spelling", () => {
     for (const toolName of [

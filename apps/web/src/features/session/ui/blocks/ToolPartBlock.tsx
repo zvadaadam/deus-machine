@@ -4,6 +4,7 @@ import { DEUS_TOOLS_SERVER, toolCardName } from "@shared/mcp-servers";
 import type { ToolPart, ToolResultContent, ToolStateCompleted } from "@shared/protocol-types";
 import type { ToolUseBlock, ToolResultBlock } from "../tools/types";
 import { toolRegistry } from "../tools/ToolRegistry";
+import { DefaultToolRenderer } from "../tools/renderers/DefaultToolRenderer";
 import { SubagentGroupBlock } from "./SubagentGroupBlock";
 import { useSession } from "../../context";
 
@@ -28,9 +29,21 @@ function parsePartialInput(partialInput: string): Record<string, unknown> {
   }
 }
 
+type ToolCard = ToolUseBlock & { inputOnly?: true };
+
 /** A registered card takes the tool's own input. Other tools can describe a command or file changes. */
-export function toToolUseBlocks(part: ToolPart): ToolUseBlock[] {
+export function toToolUseBlocks(part: ToolPart): ToolCard[] {
   const toolUse = toToolUseBlock(part);
+  // Every Deus tool returns text, even for a clean workspace. A completed call
+  // with neither output nor content can show its input but has no result to draw.
+  if (
+    part.mcp?.server === DEUS_TOOLS_SERVER &&
+    part.state.status === "completed" &&
+    !part.state.output &&
+    !part.state.content?.length
+  ) {
+    return [{ ...toolUse, name: part.mcp.tool, inputOnly: true }];
+  }
   if (toolRegistry.has(toolUse.name)) return [toolUse];
 
   const card = (name: string, input: Record<string, unknown>, id = part.toolCallId) => ({
@@ -171,10 +184,11 @@ function ToolRendererBridge({
   toolResult,
   isLoading,
 }: {
-  toolUse: ToolUseBlock;
+  toolUse: ToolCard;
   toolResult?: ToolResultBlock;
   isLoading: boolean;
 }) {
+  if (toolUse.inputOnly) return <DefaultToolRenderer toolUse={toolUse} />;
   const Renderer = toolRegistry.getRenderer(toolUse.name);
   return createElement(Renderer, { toolUse, toolResult, isLoading });
 }
@@ -187,7 +201,7 @@ export const ToolPartBlock = memo(function ToolPartBlock({ part }: ToolPartBlock
   const toolResult = useMemo(() => toToolResultBlock(part), [part]);
   const isLoading = part.state.status === "pending" || part.state.status === "in_progress";
 
-  const isAgentTool = part.kind === "task" || !!part.subagent;
+  const isAgentTool = !toolUse.inputOnly && (part.kind === "task" || !!part.subagent);
   if (isAgentTool && !insideSubagent && subagentMessages.has(part.toolCallId)) {
     return (
       <div className="w-full min-w-0">
