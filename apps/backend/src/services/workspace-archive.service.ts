@@ -54,8 +54,8 @@ export function archiveWorkspace(
       await stopped;
     } finally {
       if (workspace.kind !== "cloud") await done;
+      invalidate(["workspaces"]);
     }
-    invalidate(["workspaces"]);
   });
 }
 
@@ -95,9 +95,12 @@ export function unarchiveWorkspace(workspaceId: string): Promise<void> {
         throw err;
       }
     }
-    if (getWorkspaceRaw(getDatabase(), workspaceId)?.status === "done") {
-      autoProgressStatus(workspaceId, "in-progress", { force: true });
+    try {
+      if (getWorkspaceRaw(getDatabase(), workspaceId)?.status === "done") {
+        autoProgressStatus(workspaceId, "in-progress", { force: true });
+      }
+    } finally {
+      invalidate(["workspaces", "sessions"]);
     }
-    invalidate(["workspaces", "sessions"]);
   });
 }

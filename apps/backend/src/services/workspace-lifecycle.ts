@@ -492,7 +492,7 @@ export function markArchived(
   return write.changes > 0;
 }
 
-/** unarchiveWorkspace publishes after the wake and workflow update succeed. */
+/** unarchiveWorkspace publishes after the workflow update. A failed wake publishes through rollbackCloudRestore. */
 export function markRestored(workspaceId: string) {
   const db = getDatabase();
   const row = getWorkspaceRaw(db, workspaceId);
