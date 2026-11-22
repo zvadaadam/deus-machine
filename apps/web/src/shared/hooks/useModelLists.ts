@@ -79,15 +79,6 @@ export function useChatModel({
  * Local lists sit under one key prefix, which a login change invalidates
  * (useAgentAuthEvents); the engine reads the CLI again after one.
  */
-export function useModelLists(chat: ModelScope): readonly HarnessModels[] {
-  return useModelListsState(chat).lists;
-}
-
-/**
- * The lists, and whether a harness's is live: this computer's CLI answered
- * for it (the platform's, for a cloud chat). Until then it is the catalog,
- * which a chat's choices must not be fitted to for good.
- */
 export function useModelListsState(chat: ModelScope): ModelListsState {
   const workspaceId = chat.workspaceId ?? null;
   const local = useQuery({

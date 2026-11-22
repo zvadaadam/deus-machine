@@ -1,6 +1,8 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { queryKeys } from "@/shared/api/queryKeys";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SetUpEnvironmentWithAgent } from "@/features/settings/ui/sections/SetUpEnvironmentWithAgent";
 import { cloudNotReady } from "@/features/settings/lib/section-organization";
@@ -19,7 +21,7 @@ const twoOrganizations = (ready: { acme: boolean; beta: boolean }): CloudOrganiz
 
 const state = vi.hoisted(() => ({
   data: undefined as ProviderAccounts | undefined,
-  model: "claude-code:claude-fable-5",
+  model: "claude-code:claude-fable-5" as string | undefined,
   vaultLocked: false,
   organizations: undefined as CloudOrganizations | undefined,
   isError: false,
@@ -40,12 +42,14 @@ vi.mock("@/features/session/lib/modelPreference", () => ({
 vi.mock("@/shared/stores/uiStore", () => ({
   useUIStore: () => vi.fn(),
 }));
-vi.mock("@/shared/hooks/useModelLists", async () => {
-  const { CATALOG_MODEL_LISTS } = await import("@shared/models");
-  return { useModelLists: () => CATALOG_MODEL_LISTS };
-});
+vi.mock("@/components/ui/tooltip", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/ui/tooltip")>()),
+  TooltipContent: ({ children }: { children: React.ReactNode }) => children,
+}));
+let client: QueryClient;
 
 beforeEach(() => {
+  client = new QueryClient();
   state.model = "claude-code:claude-fable-5";
   state.vaultLocked = false;
   state.organizations = twoOrganizations({ acme: true, beta: true });
@@ -76,14 +80,18 @@ const render = (
 ) =>
   renderToStaticMarkup(
     createElement(
-      TooltipProvider,
-      null,
-      createElement(SetUpEnvironmentWithAgent, {
-        repoId,
-        location,
-        organizationId,
-        onBeforeStart: () => true,
-      })
+      QueryClientProvider,
+      { client },
+      createElement(
+        TooltipProvider,
+        null,
+        createElement(SetUpEnvironmentWithAgent, {
+          repoId,
+          location,
+          organizationId,
+          onBeforeStart: () => true,
+        })
+      )
     )
   );
 
@@ -91,6 +99,29 @@ describe("environment setup provider readiness", () => {
   it("uses the connected personal Claude default", () => {
     expect(render()).toContain("Set up with agent");
     expect(render()).not.toContain('disabled=""');
+  });
+  it("resolves a saved local Gemini pick for cloud setup and keeps it for local setup", () => {
+    state.model = "gemini:gemini-4-neon";
+    const cloud = render("cloud");
+    expect(cloud).not.toContain('disabled=""');
+    expect(cloud).toMatch(/Start a cloud workspace with .*Opus/);
+    expect(render("local")).toContain("Start a local workspace with gemini-4-neon");
+  });
+  it("shows the empty list's reason when a local setup has no model", () => {
+    state.model = undefined;
+    client.setQueryData([...queryKeys.settings.agentModels, null], {
+      lists: [
+        {
+          harness: "claude-code",
+          source: "catalog",
+          models: [],
+          error: "Sign in on this computer.",
+        },
+      ],
+    });
+    const local = render("local");
+    expect(local).toContain('disabled=""');
+    expect(local).toContain("Sign in on this computer.");
   });
   it("supports the selected Codex model without requiring Claude", () => {
     state.model = "codex-app-server:gpt-6-astra";
