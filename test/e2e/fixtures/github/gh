@@ -1,0 +1,14 @@
+#!/bin/sh
+# Keep the person's GitHub login out of backend journeys.
+case "$1" in
+  --version) echo 'gh version test' ;;
+  auth) echo '{"hosts":{"github.com":[{"login":"test","active":true,"state":"success"}]}}' ;;
+  api) echo '{"login":"test"}' ;;
+  pr)
+    if [ -f "$DEUS_TEST_MERGED_HEAD" ] && grep -Fqx -- "$4" "$DEUS_TEST_MERGED_HEAD"; then
+      echo '[{"number":1,"state":"MERGED","url":"https://github.com/fixture/workspace-list/pull/1"}]'
+    else
+      echo '[]'
+    fi ;;
+  *) exit 1 ;;
+esac

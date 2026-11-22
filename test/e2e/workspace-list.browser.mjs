@@ -2,13 +2,14 @@
 // Run: node --import tsx test/e2e/workspace-list.browser.mjs (Node SQLite ABI).
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rename, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import Database from "better-sqlite3";
 import { chromium } from "playwright";
 import { createServer } from "vite";
+import { queryKeys } from "../../apps/web/src/shared/api/queryKeys.ts";
 import { connectBackend } from "./lib/operations.mjs";
 import { createStack, freePort, until } from "./remote-access/stack.mjs";
 
@@ -69,7 +70,8 @@ async function startBackend(port = "0") {
       PORT: port,
       DEUS_USER_DATA_DIR: directory,
       TMPDIR: directory,
-      DEUS_BUNDLED_BIN_DIR: directory,
+      DEUS_BUNDLED_BIN_DIR: path.join(root, "test/e2e/fixtures/github"),
+      DEUS_TEST_MERGED_HEAD: path.join(directory, "merged-head"),
     },
   });
   backend = await connectBackend(host.url);
@@ -79,23 +81,6 @@ before(async () => {
   await writeFile(
     path.join(directory, "preferences.json"),
     JSON.stringify({ onboarding_completed: true, remote_access_enabled: false })
-  );
-  // Stand in only for GitHub: the installed CLI and login may differ on every machine.
-  await writeFile(
-    path.join(directory, "gh"),
-    `#!/bin/sh
-case "$1" in
---version) echo 'gh version test' ;;
-auth) echo '{"hosts":{"github.com":[{"login":"test","active":true,"state":"success"}]}}' ;;
-api) echo '{"login":"test"}' ;;
-pr)
-  if grep -Fqx -- "$4" "$DEUS_USER_DATA_DIR/merged-head" 2>/dev/null; then
-    echo '[{"number":1,"state":"MERGED","url":"https://github.com/fixture/workspace-list/pull/1"}]'
-  else echo '[]'; fi ;;
-*) exit 1 ;;
-esac
-`,
-    { mode: 0o755 }
   );
   await startBackend();
   db = new Database(database);
@@ -149,6 +134,56 @@ async function tab(t, mode = "web") {
 const row = (page, ws) => page.locator(`[data-workspace-id="${ws.id}"]`);
 const archiveButton = (page, ws) =>
   row(page, ws).getByRole("button", { name: /Archive workspace/ });
+
+test("Changes keeps the missing checkout error until a read succeeds", async (t) => {
+  const page = await tab(t);
+  const other = await start(local, "Files");
+  const ws = await start(local, "Unavailable checkout");
+  const file = "recovered.txt";
+  const reason = "Could not read the changes: git failed (ENOENT).";
+  await writeFile(path.join(ws.workspace_path, file), "Change to recover\n");
+  await page.goto(`${baseUrl}/w/${other.id}`);
+  await page.getByRole("tab", { name: "Files", exact: true }).click();
+
+  const displays = await page.evaluateHandle(
+    (labels) => {
+      const seen = [];
+      const sample = () => {
+        const text = document.body.innerText;
+        const display = labels.find((label) => text.includes(label)) ?? null;
+        if (seen.at(-1) !== display) seen.push(display);
+      };
+      new window.MutationObserver(sample).observe(document.body, {
+        childList: true,
+        characterData: true,
+        subtree: true,
+      });
+      sample();
+      return seen;
+    },
+    ["No file changes yet", reason, file]
+  );
+
+  const moved = ws.workspace_path + "-aside";
+  await rename(ws.workspace_path, moved);
+  try {
+    await row(page, ws).click();
+    await page.getByRole("tab", { name: "Changes", exact: true }).click();
+    // The first failed read and two completed polls, regardless of per-read retries.
+    const cache = await page.evaluateHandle(
+      async () =>
+        (await import(`${window.location.origin}/src/shared/api/queryClient.ts`)).queryClient
+    );
+    await page.waitForFunction(
+      ({ cache, key }) => cache.getQueryState(key)?.errorUpdateCount >= 3,
+      { cache, key: queryKeys.workspaces.diffFiles(ws.id) }
+    );
+  } finally {
+    await rename(moved, ws.workspace_path);
+  }
+  await page.getByText(file, { exact: true }).first().waitFor();
+  assert.deepEqual(await displays.jsonValue(), [null, reason, file]);
+});
 
 for (const project of ["local", "remote", "offline"]) {
   test(`start details for ${project}`, async (t) => {
@@ -206,9 +241,23 @@ for (const mode of ["web", "desktop", "phone"]) {
   test(`the ${mode} header settles without PR actions for a project with no remote`, async (t) => {
     const page = await tab(t, mode);
     const ws = await start(local, "Header");
+    let answer;
+    await page.routeWebSocket(/\/ws$/, (route) => {
+      const host = route.connectToServer();
+      route.onMessage((raw) => {
+        const f = JSON.parse(String(raw));
+        if (!answer && f.type === "q:request" && f.resource === "prStatus")
+          answer = () => host.send(raw);
+        else host.send(raw);
+      });
+    });
     await page.goto(`${baseUrl}/w/${ws.id}`);
-    await waitForPRRead(page, ws.id, false);
     await page.locator('[data-slot="workspace-header"]').waitFor();
+    await until(() => !!answer, 10_000, "the first PR read");
+    const createPR = page.getByRole("button", { name: "Create PR", exact: true });
+    assert.equal(await createPR.count(), 0, "no Create PR while the first read is pending");
+    answer();
+    await waitForPRRead(page, ws.id, false);
     assert.equal(
       await page
         .locator(
@@ -217,7 +266,7 @@ for (const mode of ["web", "desktop", "phone"]) {
         .count(),
       0
     );
-    assert.equal(await page.getByRole("button", { name: "Create PR", exact: true }).count(), 0);
+    assert.equal(await createPR.count(), 0);
     if (mode === "phone") {
       await page.getByRole("button", { name: "Expand sidebar" }).tap();
       const archive = archiveButton(page, ws);
@@ -231,9 +280,24 @@ for (const mode of ["web", "desktop", "phone"]) {
       await page.getByText("Workspace archived", { exact: true }).waitFor();
       await row(page, ws).waitFor({ state: "detached" });
       assert.equal((await backend.read("workspace", { workspaceId: ws.id })).state, "archived");
+      await page.getByRole("button", { name: "Undo", exact: true }).tap();
+      await page.getByRole("button", { name: "Expand sidebar" }).tap();
+      await row(page, ws).waitFor();
     }
   });
 }
+
+test("Enter on the sidebar Archive button archives the workspace", async (t) => {
+  const page = await tab(t, "desktop");
+  const ws = await start(local, "Keyboard archive");
+  await page.goto(`${baseUrl}/w/${ws.id}`);
+  await archiveButton(page, ws).focus();
+  await page.keyboard.press("Enter");
+  await page.getByText("Workspace archived", { exact: true }).waitFor();
+  const project = page.getByLabel("Toggle local workspaces", { exact: true });
+  assert.equal(await project.getAttribute("aria-expanded"), "true");
+  assert.equal((await backend.read("workspace", { workspaceId: ws.id })).state, "archived");
+});
 
 test("a detached HEAD with a remote still offers Create PR", async (t) => {
   const page = await tab(t);
@@ -244,10 +308,10 @@ test("a detached HEAD with a remote still offers Create PR", async (t) => {
   await page.getByRole("button", { name: "Create PR", exact: true }).waitFor();
 });
 
-test("the next PR poll discovers the remote without reloading", async (t) => {
+test("the idle workspace discovers a newly added remote without reloading", async (t) => {
   const page = await tab(t);
   const ws = await start(local, "PR polling");
-  db.prepare("UPDATE sessions SET status = 'working' WHERE id = ?").run(ws.current_session_id);
+  assert.equal(ws.session_status, "idle");
   await page.goto(`${baseUrl}/w/${ws.id}`);
   await waitForPRRead(page, ws.id, false);
   const button = page.getByRole("button", { name: "Create PR", exact: true });

@@ -34,6 +34,7 @@ import { SidebarProvider, useSidebar } from "@/components/ui";
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { useWorkspaceStore, workspaceLayoutActions } from "@/features/workspace/store";
 import { openNewWorkspace } from "@/features/workspace/lib/newWorkspace";
+import { derivePRActionState } from "@/features/workspace/lib/prState";
 import { pendingFirstMessages } from "@/features/workspace/store/workspaceStartStore";
 import { useFirstMessageDelivery } from "@/features/session/hooks/useFirstMessageDelivery";
 import { simulatorStoreActions } from "@/features/simulator/store";
@@ -471,8 +472,7 @@ export function MainLayout() {
               ? () => archiveWorkspace(selectedWorkspace.id)
               : undefined
           }
-          prStatus={prStatusQuery.data ?? null}
-          ghStatus={ghStatusQuery.data}
+          prState={derivePRActionState(prStatusQuery, ghIdentity)}
           onOpenProject={repoActions.handleOpenProject}
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
           onStartNewProject={() => repoActions.setShowStartNewModal(true)}

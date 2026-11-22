@@ -36,16 +36,14 @@ import {
   ADDRESS_REVIEW,
   MERGE_PR,
 } from "@/features/session/lib/sessionPrompts";
-import { derivePRActionState, type PRActionState } from "../lib/prState";
-import type { PRStatus, GhCliStatus } from "@/shared/types";
+import type { PRActionState } from "../lib/prState";
 
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
 interface PRActionsProps {
-  prStatus: PRStatus | null;
-  ghStatus?: GhCliStatus | null;
+  state: PRActionState;
   onCreatePR?: () => void;
   onSendAgentMessage?: (text: string) => void;
   onArchive?: () => void;
@@ -60,8 +58,7 @@ interface PRActionsProps {
 // ---------------------------------------------------------------------------
 
 export function PRActions({
-  prStatus,
-  ghStatus,
+  state,
   onCreatePR,
   onSendAgentMessage,
   onArchive,
@@ -70,8 +67,7 @@ export function PRActions({
   workspaceId,
   repoId,
 }: PRActionsProps) {
-  const state = derivePRActionState(prStatus, ghStatus, targetBranch);
-  if (state.type === "no_remote") return null;
+  if (state.type === "checking" || state.type === "no_remote") return null;
 
   return (
     <div className="flex items-center gap-1.5">
@@ -137,7 +133,7 @@ export function PRActions({
         .with({ type: "ready_to_merge" }, (s) => (
           <ActionButton
             icon={<GitMerge className="h-2.5 w-2.5" />}
-            label={`Merge into ${s.targetBranch}`}
+            label={`Merge into ${targetBranch}`}
             variant="success"
             onClick={() => {
               if (workspaceId) {

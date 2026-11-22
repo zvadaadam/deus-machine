@@ -1,7 +1,7 @@
 /* global window */
 // A cloud workspace on the Mac lane. The real backend holds the platform's session
 // socket (the cloud driver) and the real web app follows the backend's streams.
-// Only the platform is scripted (./platform.mjs). No sandbox, no model call.
+// The platform is scripted (./platform.mjs). No sandbox, no model call.
 // Run: bun run test:e2e:cloud   (or node --import tsx test/e2e/cloud/mac-lane.browser.mjs)
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
@@ -163,6 +163,8 @@ const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/serv
     DEUS_WEB_ORIGINS: LOOPBACK_WEB_ORIGINS,
     TSX_TSCONFIG_PATH: path.join(root, "apps/backend/tsconfig.json"),
     AGNT_BASE_URL: platform.url,
+    DEUS_GITHUB_API_URL: `${platform.url}/github`,
+    DEUS_BUNDLED_BIN_DIR: path.join(root, "test/e2e/fixtures/github"),
     DEUS_CLOUD_AGNT_URL: platform.url,
     AGNT_API_KEY: "agnt_sk_smoke",
     DEUS_CLOUD_AGNT_API_KEY: "agnt_sk_smoke",

@@ -20,7 +20,6 @@ import { call } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 import type { RepoGroup, DiffStats } from "../types";
-import type { PRStatus } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
 import { mergeWorkspaceDelta } from "../lib/workspace.utils";
 import { diffStatsToAsk } from "../lib/diffStats";
@@ -169,6 +168,9 @@ export function useFileChanges(
 ) {
   return useQuery({
     queryKey: queryKeys.workspaces.diffFiles(workspaceId || ""),
+    // Null means no successful read yet. With undefined data, a refetch clears the last error.
+    initialData: null,
+    initialDataUpdatedAt: 0,
     queryFn: async () => {
       const result = await call(api.diffFiles, { workspaceId: workspaceId! });
       return {
@@ -265,14 +267,6 @@ export function useRepoBranches(repoId: string | null, organizationId?: string |
   });
 }
 
-/**
- * Fetch PR status for a workspace.
- *
- * Gated on GitHub integration being available + authenticated.
- * Polls every 30s while agent is working (to detect PR creation),
- * 60s while CI is pending post-session (CI runs 2-15min after push),
- * stops polling otherwise.
- */
 export function usePRStatus(
   workspaceId: string | null,
   options?: { ghInstalled?: boolean; ghAuthenticated?: boolean; sessionStatus?: string }
@@ -284,12 +278,12 @@ export function usePRStatus(
     enabled: !!workspaceId && ghInstalled && ghAuthenticated,
     staleTime: 10_000,
     refetchInterval: (query) => {
-      // While agent is working: poll every 30s to detect PR creation/updates.
-      if (sessionStatus === "working") return 30_000;
+      const data = query.state.data;
+      // A turn can create a PR, and a remote can be added while the workspace is idle.
+      if (sessionStatus === "working" || data?.no_remote) return 30_000;
 
       // After agent stops: CI checks typically run 2-15min. Poll every 60s
       // while CI is pending so the user sees updates without manual refresh.
-      const data = query.state.data as PRStatus | null | undefined;
       if (data?.has_pr && data?.ci_status === "pending") return 60_000;
 
       // No PR or CI resolved: stop polling. Window focus refetch handles edge cases.

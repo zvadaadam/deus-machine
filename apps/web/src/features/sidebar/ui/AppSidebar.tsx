@@ -81,6 +81,13 @@ export function AppSidebar({
     },
     [onWorkspaceClick, isMobile, setOpenMobile]
   );
+  const archiveFromSidebar =
+    isMobile && onArchive
+      ? (id: string) => {
+          setOpenMobile(false);
+          onArchive(id);
+        }
+      : onArchive;
 
   // User's drag-drop order is the final word.
   // Status is shown visually (badges, colors) — not by re-sorting after drag.
@@ -230,7 +237,7 @@ export function AppSidebar({
                       onNewWorkspaceFromGitHub={onNewWorkspaceFromGitHub}
                       place={place}
                       organizations={organizations}
-                      onArchive={onArchive}
+                      onArchive={archiveFromSidebar}
                       onStatusChange={onStatusChange}
                       diffStatsMap={diffStatsMap}
                       sidebarExpanded={isExpanded}
