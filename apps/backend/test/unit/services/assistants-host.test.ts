@@ -239,7 +239,7 @@ beforeEach(() => {
     archiveWorkspace: ({ workspaceId }) => {
       state.db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
     },
-    agentModels: () => ({ lists: [] }),
+    agentModels: () => ({ lists: CATALOG_MODEL_LISTS }),
   };
   state.listeners.clear();
   state.live.clear();
@@ -307,6 +307,107 @@ describe("chats as sessions", () => {
 });
 
 describe("sending and starting", () => {
+  it("resolves the account's default and thinking once before a held first delivery", async () => {
+    const host = createDeusHost();
+    const harness = "codex-app-server";
+    const lists = [
+      {
+        harness,
+        source: "live",
+        models: ["first", "account-pick"].map((id) => ({
+          harness,
+          id,
+          label: id,
+          isDefault: id === "account-pick",
+          thinking: { levels: ["low", "medium"] },
+        })),
+      },
+    ];
+    const read = vi.fn(() => ({ lists }));
+    state.ops.agentModels = read;
+    const entry = await host.start!(LEAD as never, startInput({ harness }));
+    expect(read).toHaveBeenCalledOnce();
+    ready(entry);
+    await vi.waitFor(() => expect(state.sent).toHaveLength(1));
+    expect(read).toHaveBeenCalledOnce();
+    expect(state.sent[0].input).toMatchObject({
+      agentHarness: harness,
+      model: "account-pick",
+      thinkingLevel: "medium",
+    });
+  });
+
+  it("quotes an empty list before creating a chat or sending a model-less continuation", async () => {
+    const host = createDeusHost();
+    const why = "The fixture CLI is signed out.";
+    const read = vi.fn(() => ({
+      lists: ["codex-app-server", "fixture-agent"].map((harness) => ({
+        harness,
+        models: [],
+        source: "catalog",
+        error: why,
+      })),
+    }));
+    state.ops.agentModels = read;
+    const sessionsBefore = state.db.prepare("SELECT id FROM sessions").all();
+    await expect(
+      host.start!(LEAD as never, startInput({ harness: "Codex" }))
+    ).rejects.toMatchObject({
+      code: "unsupported",
+    });
+    expect(state.created).toBe(0);
+    await expect(
+      host.start!(
+        LEAD as never,
+        startInput({ harness: "Codex", workspace: { id: "w-lead", name: "lead" } })
+      )
+    ).rejects.toMatchObject({
+      code: "unsupported",
+      message: expect.stringContaining(
+        `("${why}"). Ask the person to install or sign in to the agent in Settings → AI. Nothing was started.`
+      ),
+    });
+    expect(state.db.prepare("SELECT id FROM sessions").all()).toEqual(sessionsBefore);
+    state.db
+      .prepare("UPDATE sessions SET agent_harness = 'fixture-agent' WHERE id = 's-lead'")
+      .run();
+    await expect(
+      host.send(LEAD as never, "s-lead", { turnId: "t", message: "continue", origin: LEAD })
+    ).rejects.toMatchObject({
+      code: "unsupported",
+      message: expect.stringContaining(
+        `("${why}"). Ask the person to install or sign in to the agent in Settings → AI. Nothing was sent.`
+      ),
+    });
+    expect(read.mock.calls).toEqual([
+      [{ workspaceId: undefined }],
+      [{ workspaceId: "w-lead" }],
+      [{ workspaceId: "w-lead" }],
+    ]);
+    expect(state.sent).toHaveLength(0);
+  });
+
+  it("continues on the recorded model and thinking without asking for a list", async () => {
+    const host = createDeusHost();
+    const read = vi.fn();
+    state.ops.agentModels = read;
+    state.ops.messages = () => ({
+      turns: [
+        {
+          turnId: "t0",
+          execution: { harness: "claude-code", model: "older-model", thinkingLevel: "low" },
+        },
+      ],
+    });
+    await host.send(LEAD as never, "s-lead", { turnId: "t1", message: "continue", origin: LEAD });
+    expect(read).not.toHaveBeenCalled();
+    expect(state.sent[0].input).toMatchObject({
+      agentHarness: "claude-code",
+      model: "older-model",
+      thinkingLevel: "low",
+    });
+  });
+
   it("a send is the app's, with the minted turn id and the sender; a busy chat is refused as busy", async () => {
     const host = createDeusHost();
     await host.send(LEAD as never, "s-lead", { turnId: "t9", message: "hi", origin: LEAD });
@@ -618,16 +719,26 @@ describe("through MCP and as a chat's own tools", () => {
     expect(text).not.toContain("Restart Deus");
   });
 
-  it("lists the engine's built-in models when the engine cannot answer", async () => {
+  it("lists and defaults to the engine's catalog when no list can be read", async () => {
     state.ops.agentModels = () => {
       throw new Error("Agent server not connected");
     };
     const { text, isError } = await call(LOCAL_CALLER, "list_models", {});
     expect(isError).toBe(false);
-    for (const { harness, models } of CATALOG_MODEL_LISTS) {
+    for (const {
+      harness,
+      models: [first],
+    } of CATALOG_MODEL_LISTS) {
+      if (!first) continue;
       expect(text).toContain(harness);
-      expect(text).toContain(models[0]!.id);
+      expect(text).toContain(first.id);
     }
+    await createDeusHost().send(LEAD as never, "s-lead", {
+      turnId: "t",
+      message: "go",
+      origin: LEAD,
+    });
+    expect(state.sent[0].input).toMatchObject({ agentHarness: "claude-code", model: "opus" });
   });
 
   it("retains the unknown outcome of unclassified wire errors", async () => {

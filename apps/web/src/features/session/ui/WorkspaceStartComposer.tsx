@@ -1,6 +1,7 @@
 /** This workspace has no chat yet. Its draft moves to the first chat when it opens. */
 import type { Workspace } from "@/shared/types";
-import { DEFAULT_MODEL } from "@/shared/agents";
+import { useStore } from "zustand";
+import { useChatModel } from "@/shared/hooks/useModelLists";
 import { useDefaultThinkingLevel } from "@/features/settings/api";
 import { FIRST_MESSAGE_PLACEHOLDER } from "@/features/workspace/lib/newWorkspace";
 import {
@@ -14,13 +15,19 @@ import { MessageInput } from "./MessageInput";
 export function WorkspaceStartComposer({ workspace }: { workspace: Workspace }) {
   const pending = useWorkspaceStartStore((state) => state.pending[workspace.id]);
   const defaultThinking = useDefaultThinkingLevel();
+  const picked = useStore(composerStore(), (s) => s.composers[workspace.id]?.model);
+  const selection = useChatModel({
+    workspaceId: workspace.id,
+    cloud: workspace.kind === "cloud",
+    picked: picked ?? pending?.model,
+  });
 
   const handleSend = (message: string) => {
     const composer = composerStore().getState().composers[workspace.id];
-    if (!composer || pendingFirstMessages.get(workspace.id)) return false;
+    if (!composer || !selection.model || pendingFirstMessages.get(workspace.id)) return false;
     pendingFirstMessages.set(workspace.id, {
       message,
-      model: composer.model,
+      model: selection.model,
       thinkingLevel: composer.thinkingLevel,
       planMode: composer.planModeEnabled,
     });
@@ -37,7 +44,7 @@ export function WorkspaceStartComposer({ workspace }: { workspace: Workspace }) 
         workspacePath={null}
         workspaceKind={workspace.kind}
         // It opens with what the waiting message was sent with.
-        initialModel={pending?.model ?? DEFAULT_MODEL}
+        selection={selection}
         defaultThinking={pending?.thinkingLevel ?? defaultThinking}
         sending={false}
         // While a message waits, the agent the chat will have is decided.

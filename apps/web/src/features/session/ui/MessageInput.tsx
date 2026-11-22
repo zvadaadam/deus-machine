@@ -1,12 +1,9 @@
 /**
  * MessageInput — the chat composer pill.
  *
- * Session-aware presentational view: all staged content (draft, pastes,
- * inspected elements, file/skill mentions, image attachments, model,
- * thinking level, plan mode) is read from `sessionComposerStore` keyed
- * by `sessionId`. Two surfaces rendering with the same sessionId — main
- * chat, focus-mode overlay, activity modal — see and mutate the same
- * state in real time.
+ * The chat, focus-mode overlay and activity modal share staged content and
+ * explicit choices in `sessionComposerStore` by sessionId. The parent
+ * supplies the model from those choices, the chat's turns and its lane's lists.
  *
  * What DOES live locally here:
  *   - @ file-picker popover open/close + query + highlighted row
@@ -54,16 +51,14 @@ import { FileMentionCard } from "./FileMentionCard";
 import { SkillMentionCard } from "./SkillMentionCard";
 import { serializeInspectElement } from "../lib/parseInspectTags";
 import {
-  DEFAULT_MODEL,
   DEFAULT_THINKING_LEVEL,
   composerThinking,
   getAgentHarnessForModel,
   getModelId,
   modelThinkingLevels as thinkingLevelsOf,
-  type AgentHarness,
   type ThinkingLevel,
 } from "@/shared/agents";
-import { useModelListsState } from "@/shared/hooks/useModelLists";
+import type { useChatModel } from "@/shared/hooks/useModelLists";
 import { ModelPicker } from "./ModelPicker";
 import { PlanModeToggle } from "./PlanModeToggle";
 import { ContextTokenIndicator } from "./ContextTokenIndicator";
@@ -80,9 +75,7 @@ interface MessageInputProps {
   workspacePath?: string | null;
   /** Cloud sessions hide plan mode because the sidecar runs bypass. */
   workspaceKind?: WorkspaceKind | null;
-  /** Seed initial model on first mount if the store doesn't have this
-   *  session yet. Ignored afterwards. */
-  initialModel?: string;
+  selection: ReturnType<typeof useChatModel>;
 
   sending: boolean;
   sessionStatus?: SessionStatus;
@@ -221,7 +214,7 @@ export function MessageInput({
   workspaceId = null,
   workspacePath = null,
   workspaceKind = null,
-  initialModel,
+  selection,
   sending,
   sessionStatus,
   contextTokenCount = 0,
@@ -230,7 +223,7 @@ export function MessageInput({
   environmentUnconfigured = false,
   showCompactButton = false,
   onSend,
-  sendDisabledReason,
+  sendDisabledReason = selection.unavailable,
   onCompact,
   onStop,
   onOpenNewTab,
@@ -244,14 +237,13 @@ export function MessageInput({
 
   // Composer content — subscribed from the store, mutated via bound setters.
   const composer = useSessionComposer(sessionId, {
-    initialModel: initialModel ?? DEFAULT_MODEL,
+    initialModel: selection.picked,
     initialThinking,
     defaultThinking,
   });
 
   const {
     draft,
-    model,
     thinkingLevel,
     planModeEnabled,
     pastedTexts,
@@ -261,21 +253,15 @@ export function MessageInput({
     imageAttachments,
   } = composer;
 
-  const agentHarness: AgentHarness = getAgentHarnessForModel(model);
+  const { model, agentHarness, lists: modelLists, live: listIsLive } = selection;
   const isClaudeAgent = agentHarness === "claude-code";
 
-  // The models and levels this chat chooses from: the platform's for a cloud
-  // workspace, this computer's CLIs' otherwise.
-  const { lists: modelLists, live: listIsLive } = useModelListsState({
-    cloud: workspaceKind === "cloud",
-    workspaceId,
-  });
-  const levelsFor = (value: string) =>
-    thinkingLevelsOf(modelLists, getAgentHarnessForModel(value), getModelId(value));
-  // The one rule for fitting a chat's level: only to a model whose list is live,
-  // never to the catalog alone, when a model is shown and when one is chosen.
-  const fittingLevels = (value: string) =>
-    listIsLive(getAgentHarnessForModel(value)) ? levelsFor(value) : undefined;
+  const fittingLevels = (value: string) => {
+    const harness = getAgentHarnessForModel(value);
+    return listIsLive(harness)
+      ? thinkingLevelsOf(modelLists, harness, getModelId(value))
+      : undefined;
+  };
 
   // Build combined message content from all staged sources.
   // See the big block-comment in the previous revision for ordering rationale
@@ -386,11 +372,10 @@ export function MessageInput({
     }
   };
 
-  const modelThinkingLevels = levelsFor(model);
   // A level the model lacks runs as the nearest it has: once the model list is
   // live, that is the one shown, and the chat keeps it, so what the picker shows
   // is what a send carries. Against the catalog alone the chat keeps its own.
-  const fitTo = fittingLevels(model);
+  const fitTo = model && listIsLive(agentHarness) ? selection.thinkingLevels : undefined;
   const shownThinking = composerThinking(thinkingLevel, fitTo, defaultThinking);
   const live = fitTo !== undefined;
   const { setThinkingLevel } = composer;
@@ -404,6 +389,7 @@ export function MessageInput({
     setupLocation !== null &&
     environmentUnconfigured &&
     !hasMessages &&
+    !!model &&
     !sending &&
     (!sessionStatus || !ACTIVE_TURN_STATUSES.includes(sessionStatus));
   const handleSetupEnvironment = () => {
@@ -527,9 +513,10 @@ export function MessageInput({
           <div className="flex items-center gap-0.5">
             <ModelPicker
               model={model}
+              agentHarness={agentHarness}
               lists={modelLists}
               thinkingLevel={shownThinking}
-              thinkingLevels={modelThinkingLevels}
+              thinkingLevels={selection.thinkingLevels}
               hasMessages={hasMessages}
               onModelChange={(value) => composer.setModel(value, fittingLevels(value))}
               onThinkingLevelChange={composer.setThinkingLevel}

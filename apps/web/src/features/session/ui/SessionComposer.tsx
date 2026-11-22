@@ -6,13 +6,8 @@ import { useSessionActions } from "../hooks";
 import { useSessionWithMessages } from "../api/session.queries";
 import { useProjectEnvironment } from "@/features/workspace/api/workspace.queries";
 import { useDefaultThinkingLevel } from "@/features/settings/api";
-import {
-  DEFAULT_MODEL,
-  getAgentHarnessForModel,
-  type AgentHarness,
-  getModelForSession,
-  getThinkingForSession,
-} from "@/shared/agents";
+import { type AgentHarness, getThinkingForSession } from "@/shared/agents";
+import { useChatModel } from "@/shared/hooks/useModelLists";
 import { composerStore } from "../store/sessionComposerStore";
 
 export interface SessionComposerRef {
@@ -96,9 +91,6 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     const environment = useProjectEnvironment(workspaceId);
     const environmentUnconfigured =
       environment.isSuccess && environment.data.source === "unconfigured";
-    const seedModel =
-      initialModel ??
-      (session ? getModelForSession(session.agent_harness, turns ?? []) : DEFAULT_MODEL);
     // The chat reopens on the level its latest turn ran, as on its model. The
     // user's setting stays the level a model switch falls back to.
     const seedThinking = session
@@ -106,13 +98,24 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
       : defaultThinking;
 
     const pickedModel = useStore(composerStore(), (s) => s.composers[sessionId]?.model);
-    const agentHarness = getAgentHarnessForModel(pickedModel ?? seedModel);
+    const selection = useChatModel({
+      cloud: session?.workspace_kind === "cloud",
+      workspaceId,
+      harness: session?.agent_harness,
+      turns,
+      picked: pickedModel ?? initialModel,
+    });
+    const { agentHarness } = selection;
+    const loadFailed = !!error || !!historyConnection?.error;
+    const needsHistory =
+      (!session || turns === undefined) && (!selection.picked || (loadFailed && !initialModel));
     useEffect(() => {
       onAgentHarnessChange?.(agentHarness);
     }, [agentHarness, onAgentHarnessChange]);
 
     const { sendMessage, stopSession, compactConversation, createPR, sending } = useSessionActions({
       sessionId,
+      model: needsHistory ? undefined : selection.model,
       workspaceId: workspaceId ?? undefined,
       targetBranch: targetBranch ?? "main",
       onMessageSent: onSendComplete,
@@ -130,12 +133,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     );
 
     // Without a pick from a tab or its start page, wait for the model from history.
-    const loadFailed = !!error || !!historyConnection?.error;
-    if (
-      (!session || turns === undefined) &&
-      !initialModel &&
-      (loadFailed || pickedModel === undefined)
-    ) {
+    if (needsHistory) {
       return (
         <DisabledComposerPlaceholder className={className}>
           {error || historyConnection?.error ? (
@@ -167,7 +165,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
         sessionId={sessionId}
         workspaceId={workspaceId}
         workspacePath={workspacePath}
-        initialModel={seedModel}
+        selection={selection}
         initialThinking={seedThinking}
         defaultThinking={defaultThinking}
         sending={sending}

@@ -1,8 +1,15 @@
-import { createElement } from "react";
+import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { useChatModel } from "@/shared/hooks/useModelLists";
+import { queryKeys } from "@/shared/api/queryKeys";
 import { MessageInput } from "@/features/session/ui/MessageInput";
+import {
+  composerStore,
+  emptyComposer,
+  sessionComposerActions,
+} from "@/features/session/store/sessionComposerStore";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { SessionStatus } from "@shared/enums";
 
@@ -21,6 +28,77 @@ vi.mock("react", async (importOriginal) => {
   return { ...react, useLayoutEffect: react.useEffect };
 });
 
+function Input({
+  initialModel,
+  ...props
+}: Omit<ComponentProps<typeof MessageInput>, "selection"> & { initialModel?: string }) {
+  const selection = useChatModel({ cloud: props.workspaceKind === "cloud", picked: initialModel });
+  return createElement(MessageInput, { ...props, selection });
+}
+
+const client = new QueryClient();
+afterEach(() => client.clear());
+function renderInput(props: Partial<ComponentProps<typeof Input>>) {
+  return renderToStaticMarkup(
+    createElement(
+      QueryClientProvider,
+      { client },
+      createElement(
+        TooltipProvider,
+        null,
+        createElement(Input, {
+          sessionId: "test",
+          sending: false,
+          sessionStatus: "idle",
+          onStop: vi.fn(),
+          onSend: vi.fn(),
+          ...props,
+        })
+      )
+    )
+  );
+}
+
+it("keeps a draft while there is no model, explains Send and enables it when a list arrives", () => {
+  const error = "The fixture CLI is signed out.";
+  const key = [...queryKeys.settings.agentModels, null];
+  client.setQueryData(key, {
+    lists: [{ harness: "claude-code", source: "catalog", models: [], error }],
+  });
+  const sessionId = "waiting-draft";
+  const store = composerStore();
+  sessionComposerActions.seedIfAbsent(sessionId, emptyComposer(undefined, "high"));
+  sessionComposerActions.setDraft(sessionId, "Keep my draft");
+  // Render the current store snapshot as the browser would.
+  const snapshot = vi.spyOn(store, "getInitialState").mockImplementation(store.getState);
+  try {
+    const html = renderInput({ sessionId });
+    const sendButton = /<button[^>]*aria-label="Send message"[^>]*>/;
+    expect(html).toContain(`>${error}</p>`);
+    expect(html.match(sendButton)?.[0]).toContain(' disabled=""');
+    expect(html.match(sendButton)?.[0]).toContain(`title="${error}"`);
+    expect(html.match(/<textarea[^>]*>/)?.[0]).not.toContain(' disabled=""');
+    expect(html).toContain("Keep my draft</textarea>");
+    client.setQueryData(key, {
+      lists: [
+        {
+          harness: "claude-code",
+          source: "live",
+          models: [
+            { id: "returned", harness: "claude-code", label: "Returned", thinking: { levels: [] } },
+          ],
+        },
+      ],
+    });
+    const ready = renderInput({ sessionId });
+    expect(ready.match(sendButton)?.[0]).not.toContain(' disabled=""');
+    expect(ready).toContain("Keep my draft</textarea>");
+  } finally {
+    snapshot.mockRestore();
+    sessionComposerActions.discard(sessionId);
+  }
+});
+
 describe("composer Stop availability", () => {
   it.each([
     ["working", true],
@@ -29,59 +107,17 @@ describe("composer Stop availability", () => {
     ["idle", false],
     ["error", false],
   ] satisfies [SessionStatus, boolean][])("%s shows Stop: %s", (sessionStatus, canStop) => {
-    const client = new QueryClient();
-    try {
-      const html = renderToStaticMarkup(
-        createElement(
-          QueryClientProvider,
-          { client },
-          createElement(
-            TooltipProvider,
-            null,
-            createElement(MessageInput, {
-              sessionId: `stop-${sessionStatus}`,
-              sending: false,
-              sessionStatus,
-              onStop: vi.fn(),
-              onSend: vi.fn(),
-            })
-          )
-        )
-      );
-      expect(html.includes('title="Stop execution"')).toBe(canStop);
-    } finally {
-      client.clear();
-    }
+    expect(renderInput({ sessionStatus }).includes('title="Stop execution"')).toBe(canStop);
   });
 });
 
 describe("the composer's placeholder", () => {
   const placeholder = (workspaceKind: "worktree" | "cloud") => {
-    const client = new QueryClient();
-    try {
-      const html = renderToStaticMarkup(
-        createElement(
-          QueryClientProvider,
-          { client },
-          createElement(
-            TooltipProvider,
-            null,
-            createElement(MessageInput, {
-              sessionId: `placeholder-${workspaceKind}`,
-              workspaceKind,
-              workspacePath: workspaceKind === "cloud" ? null : "/Users/me/rocket",
-              sending: false,
-              sessionStatus: "idle",
-              onStop: vi.fn(),
-              onSend: vi.fn(),
-            })
-          )
-        )
-      );
-      return /placeholder="([^"]*)"/.exec(html)?.[1];
-    } finally {
-      client.clear();
-    }
+    const html = renderInput({
+      workspaceKind,
+      workspacePath: workspaceKind === "cloud" ? null : "/Users/me/rocket",
+    });
+    return /placeholder="([^"]*)"/.exec(html)?.[1];
   };
 
   it("names / skills in a cloud chat only when its menu has something", () => {
@@ -98,33 +134,8 @@ describe("the composer's placeholder", () => {
 });
 
 describe("the plan mode toggle", () => {
-  const hasToggle = (initialModel: string, workspaceKind: "worktree" | "cloud") => {
-    const client = new QueryClient();
-    try {
-      const html = renderToStaticMarkup(
-        createElement(
-          QueryClientProvider,
-          { client },
-          createElement(
-            TooltipProvider,
-            null,
-            createElement(MessageInput, {
-              sessionId: `plan-${initialModel}-${workspaceKind}`,
-              initialModel,
-              workspaceKind,
-              sending: false,
-              sessionStatus: "idle",
-              onStop: vi.fn(),
-              onSend: vi.fn(),
-            })
-          )
-        )
-      );
-      return html.includes('aria-label="Plan mode"');
-    } finally {
-      client.clear();
-    }
-  };
+  const hasToggle = (initialModel: string, workspaceKind: "worktree" | "cloud") =>
+    renderInput({ initialModel, workspaceKind }).includes('aria-label="Plan mode"');
 
   it("is offered in a local chat on either agent, and not in the cloud", () => {
     expect(hasToggle("claude-code:opus", "worktree")).toBe(true);

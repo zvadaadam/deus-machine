@@ -1,3 +1,5 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@shared/harnesses", async (importOriginal) => {
@@ -20,9 +22,14 @@ vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: state.local }
 vi.mock("@/shared/hooks/useCloudModels", () => ({ useCloudModels: () => ({ data: state.cloud }) }));
 vi.mock("@/platform/ws", () => ({ call: vi.fn() }));
 vi.mock("@/shared/config/webDirectMode", () => ({ isCloudDirectWebMode: () => false }));
+vi.mock("@/features/settings/api", () => ({ useDefaultThinkingLevel: () => "high" }));
 
-const { useModelListsState } = await import("@/shared/hooks/useModelLists");
+const { useChatModel, useModelListsState } = await import("@/shared/hooks/useModelLists");
+const { AgentHarnessSchema } = await import("@shared/enums");
 const { modelPickerView } = await import("@/shared/agents/picker");
+const { useNewChatSelection } =
+  await import("@/features/repository/ui/composer/useNewChatSelection");
+const { setStoredModel } = await import("@/features/session/lib/modelPreference");
 
 describe("whether a chat's model list is live", () => {
   it("is per harness for a cloud chat: a Claude-only answer leaves Codex provisional", () => {
@@ -62,6 +69,52 @@ describe("the harnesses a picker offers", () => {
         (group) => group.label === "Local fixture"
       );
       expect(group?.emptyReason).toBe(error);
+    }
+  });
+
+  it("derives the model on a catalogless harness when its list arrives", () => {
+    const harness = AgentHarnessSchema.parse("scripted");
+    const error = "Sign in to the fixture agent.";
+    state.local = { lists: [{ harness, models: [], source: "catalog", error }] };
+    const chat = { cloud: false, harness };
+    expect(useChatModel(chat)).toMatchObject({
+      model: undefined,
+      picked: undefined,
+      unavailable: error,
+    });
+    const row = {
+      harness,
+      id: "account",
+      label: "Account",
+      isDefault: true,
+      thinking: { levels: ["low"] },
+    };
+    state.local = { lists: [{ harness, models: [row], source: "live" }] };
+    expect(useChatModel(chat)).toMatchObject({
+      model: "scripted:account",
+      picked: undefined,
+      unavailable: undefined,
+    });
+  });
+
+  it("Home shows and sends the cloud default and keeps the saved pick for a local start", () => {
+    state.cloud = state.local = undefined;
+    const storage = new Map<string, string>();
+    const setItem = vi.fn((key: string, value: string) => storage.set(key, value));
+    vi.stubGlobal("localStorage", { getItem: (key: string) => storage.get(key), setItem });
+    const HomeModel = ({ location }: { location: "local" | "cloud" }) =>
+      useNewChatSelection(location).model;
+    try {
+      const picked = "scripted:my-local-model";
+      setStoredModel(picked);
+      expect(renderToStaticMarkup(createElement(HomeModel, { location: "local" }))).toBe(picked);
+      expect(renderToStaticMarkup(createElement(HomeModel, { location: "cloud" }))).toBe(
+        "claude-code:opus"
+      );
+      expect(renderToStaticMarkup(createElement(HomeModel, { location: "local" }))).toBe(picked);
+      expect(setItem).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 

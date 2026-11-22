@@ -6,7 +6,7 @@ import { cloudNotReady } from "../../lib/section-organization";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { getStoredModel } from "@/features/session/lib/modelPreference";
-import { getAgentHarnessForModel, getModelId, modelLabel } from "@/shared/agents";
+import { DEFAULT_MODEL, getAgentHarnessForModel, getModelId, modelLabel } from "@/shared/agents";
 import { useModelLists } from "@/shared/hooks/useModelLists";
 import { defaultProviderAccount } from "@shared/types/provider-account";
 import { HARNESSES } from "@shared/harnesses";
@@ -28,7 +28,7 @@ export function SetUpEnvironmentWithAgent({
   const organizations = useCloudOrganizations();
   const providers = useProviderAccounts();
   const requestEnvSetup = useUIStore((state) => state.requestEnvSetup);
-  const model = getStoredModel();
+  const model = getStoredModel() ?? DEFAULT_MODEL;
   const harness = getAgentHarnessForModel(model);
   const { cloudProvider: provider, label: agentLabel } = HARNESSES[harness];
   const label = modelLabel(

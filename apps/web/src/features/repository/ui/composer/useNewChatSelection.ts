@@ -1,14 +1,8 @@
 import { useCallback, useState } from "react";
 import { getStoredModel, setStoredModel } from "@/features/session/lib/modelPreference";
 import { useDefaultThinkingLevel } from "@/features/settings/api";
-import {
-  fitThinkingLevel,
-  getAgentHarnessForModel,
-  getModelId,
-  modelThinkingLevels,
-  type ThinkingLevel,
-} from "@/shared/agents";
-import { useModelLists } from "@/shared/hooks/useModelLists";
+import { fitThinkingLevel, type ThinkingLevel } from "@/shared/agents";
+import { useChatModel } from "@/shared/hooks/useModelLists";
 
 /**
  * What a chat started from the Home composer runs on. The model is the
@@ -17,32 +11,24 @@ import { useModelLists } from "@/shared/hooks/useModelLists";
  * workspace chooses from the platform's models.
  */
 export function useNewChatSelection(location: "local" | "cloud") {
-  const [model, setModelState] = useState(getStoredModel);
+  const [picked, setModelState] = useState(getStoredModel);
   const [pickedLevel, setThinkingLevel] = useState<ThinkingLevel | null>(null);
   const defaultThinking = useDefaultThinkingLevel();
-  const lists = useModelLists({ cloud: location === "cloud" });
-  const thinkingLevels = modelThinkingLevels(
-    lists,
-    getAgentHarnessForModel(model),
-    getModelId(model)
+  const selection = useChatModel({ cloud: location === "cloud", picked });
+  const thinkingLevel = fitThinkingLevel(
+    pickedLevel ?? defaultThinking,
+    selection.thinkingLevels,
+    defaultThinking
   );
   const setModel = useCallback((value: string) => {
     setModelState(value);
     setStoredModel(value);
   }, []);
   return {
-    model,
-    lists,
-    thinkingLevels,
-    thinkingLevel: fitThinkingLevel(
-      pickedLevel ?? defaultThinking,
-      thinkingLevels,
-      defaultThinking
-    ),
+    ...selection,
+    thinkingLevel,
     /** The level the first turn names; none for a model with no thinking control. */
-    sentThinkingLevel: thinkingLevels.length
-      ? fitThinkingLevel(pickedLevel ?? defaultThinking, thinkingLevels, defaultThinking)
-      : undefined,
+    sentThinkingLevel: selection.thinkingLevels.length ? thinkingLevel : undefined,
     setModel,
     setThinkingLevel,
   };

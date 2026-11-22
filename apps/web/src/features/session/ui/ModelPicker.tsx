@@ -12,6 +12,7 @@ import {
 import { cn } from "@/shared/lib/utils";
 import { getAgentLogo } from "@/assets/agents";
 import {
+  getAgentLabel,
   thinkingLevelLabel,
   type AgentHarness,
   type HarnessModels,
@@ -21,7 +22,8 @@ import { modelPickerView } from "@/shared/agents/picker";
 import { uiActions } from "@/shared/stores/uiStore";
 
 interface ModelPickerProps {
-  model: string;
+  model: string | undefined;
+  agentHarness: AgentHarness;
   /** The models to offer (useModelLists). */
   lists: readonly HarnessModels[];
   /** The level the chat runs, and the ones its model offers; none for a model with no thinking control. */
@@ -52,6 +54,7 @@ function AgentLogo({ type, className }: { type: AgentHarness; className: string 
  */
 export function ModelPicker({
   model,
+  agentHarness: currentAgent,
   lists,
   thinkingLevel,
   thinkingLevels,
@@ -62,8 +65,7 @@ export function ModelPicker({
   side = "top",
 }: ModelPickerProps) {
   const { groups, selected } = modelPickerView(lists, model);
-  const modelLabel = selected?.label ?? model;
-  const currentAgent = selected?.agentHarness ?? "claude-code";
+  const modelLabel = selected?.label ?? model ?? getAgentLabel(currentAgent);
   // The agent whose models are shown: the chat's own until another is looked at.
   const [lookedAt, setLookedAt] = useState<AgentHarness | null>(null);
   const shownAgent = lookedAt ?? currentAgent;
@@ -75,6 +77,9 @@ export function ModelPicker({
   // Nowhere to open one (a workspace with no chat yet): those models are shown, not offered.
   const keepsAgent = otherAgent && !onOpenNewTab;
   const hasThinking = thinkingLevels.length > 0;
+  const currentLabel = hasThinking
+    ? `${modelLabel}, thinking ${thinkingLevelLabel(thinkingLevel)}`
+    : modelLabel;
 
   return (
     <DropdownMenu onOpenChange={(open) => !open && setLookedAt(null)}>
@@ -84,9 +89,7 @@ export function ModelPicker({
           size="sm"
           title="Model and thinking effort"
           aria-label={
-            hasThinking
-              ? `Select model, currently ${modelLabel}, thinking ${thinkingLevelLabel(thinkingLevel)}`
-              : `Select model, currently ${modelLabel}`
+            model ? `Select model, currently ${currentLabel}` : `Select a model for ${modelLabel}`
           }
           className="text-text-secondary data-[state=open]:bg-accent gap-1.5 px-2 text-sm focus-visible:ring-1 has-[>svg]:px-2"
         >

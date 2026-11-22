@@ -8,7 +8,6 @@
 
 import {
   continuedThinkingLevel,
-  defaultModelValue,
   latestTurnExecution,
   modelValue,
   parseModelValue,
@@ -52,23 +51,6 @@ export function getModelId(model: string): string {
   const parsed = parseModelValue(model);
   if (!parsed) throw new Error(`[agents] "${model}" names no harness and model`);
   return parsed.model;
-}
-
-/** Fallback for a session with no recorded selection, preserving its harness. */
-export function getDefaultModelForHarness(agentHarness: AgentHarness): string {
-  return defaultModelValue(agentHarness);
-}
-
-/** Reopen with the last recorded selection; an empty session uses its harness default. */
-export function getModelForSession(
-  agentHarness: AgentHarness,
-  turns: readonly SessionTurn[]
-): string {
-  const model = latestTurnExecution(agentHarness, turns)?.model;
-  return (
-    (model && resolveModelSelection(modelValue(agentHarness, model))) ||
-    getDefaultModelForHarness(agentHarness)
-  );
 }
 
 /** Reopen on the last recorded thinking level; a chat with none uses `fallback`. */

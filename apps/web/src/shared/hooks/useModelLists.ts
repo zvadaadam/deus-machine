@@ -1,11 +1,49 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@shared/api";
 import { CLOUD_HARNESSES, LOCAL_HARNESSES } from "@shared/harnesses";
+import type { AgentHarness } from "@shared/enums";
+import type { SessionTurn } from "@shared/types/session";
 import { call } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
-import { CATALOG_MODEL_LISTS, type HarnessModels } from "@shared/models";
+import {
+  CATALOG_MODEL_LISTS,
+  DEFAULT_AGENT_HARNESS,
+  modelForSession,
+  modelThinkingLevels,
+  modelValue,
+  noModelsReason,
+  parseModelValue,
+  type HarnessModels,
+} from "@shared/models";
 import { useCloudModels } from "./useCloudModels";
+
+type ModelScope = { cloud: boolean; workspaceId?: string | null };
+
+/** A pick belongs to its lane. Without one the chat follows its history and its harness's list. */
+export function useChatModel({
+  picked,
+  harness = DEFAULT_AGENT_HARNESS,
+  turns = [],
+  ...scope
+}: ModelScope & { picked?: string; harness?: AgentHarness; turns?: readonly SessionTurn[] }) {
+  const state = useModelListsState(scope);
+  const selection = picked ? parseModelValue(picked) : undefined;
+  const eligible = selection && state.lists.some((list) => list.harness === selection.harness);
+  const agentHarness = eligible ? selection.harness : harness;
+  const id = eligible ? selection.model : modelForSession(harness, turns, state.lists);
+  const model = id && modelValue(agentHarness, id);
+  return {
+    ...state,
+    agentHarness,
+    model,
+    picked: eligible ? model : undefined,
+    thinkingLevels: id ? modelThinkingLevels(state.lists, agentHarness, id) : [],
+    unavailable: id
+      ? undefined
+      : noModelsReason(state.lists.find((list) => list.harness === agentHarness)),
+  };
+}
 
 /**
  * The models a chat's pickers offer. A cloud chat gets the platform's lists; a
@@ -16,10 +54,7 @@ import { useCloudModels } from "./useCloudModels";
  * Local lists sit under one key prefix, which a login change invalidates
  * (useAgentAuthEvents); the engine reads the CLI again after one.
  */
-export function useModelLists(chat: {
-  cloud: boolean;
-  workspaceId?: string | null;
-}): readonly HarnessModels[] {
+export function useModelLists(chat: ModelScope): readonly HarnessModels[] {
   return useModelListsState(chat).lists;
 }
 
@@ -28,7 +63,7 @@ export function useModelLists(chat: {
  * for it (the platform's, for a cloud chat). Until then it is the catalog,
  * which a chat's choices must not be fitted to for good.
  */
-export function useModelListsState(chat: { cloud: boolean; workspaceId?: string | null }): {
+export function useModelListsState(chat: ModelScope): {
   lists: readonly HarnessModels[];
   live: (harness: string) => boolean;
 } {

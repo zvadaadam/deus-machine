@@ -31,6 +31,10 @@ export interface HarnessModels extends Pick<ModelList, "source" | "error"> {
   readonly models: readonly ModelDescriptor[];
 }
 
+export function noModelsReason(list: HarnessModels | undefined): string {
+  return list?.error || "No models available.";
+}
+
 /** `q:request agentModels`: each local harness's list, as the engine has it. */
 export interface AgentModelsAnswer {
   lists: ModelList[];
@@ -221,16 +225,11 @@ export function parseModelValue(
   return harness.success ? { harness: harness.data, model } : undefined;
 }
 
-/** The picker value a new chat on `harness` starts on, from the engine's own catalog. */
-export function defaultModelValue(harness: AgentHarness): string {
-  const model = defaultModelId(CATALOG_MODEL_LISTS, harness);
-  // A harness this build does not know (a chat another build wrote): the
-  // chat still opens, on the default model, and a send says it cannot switch.
-  return model ? modelValue(harness, model) : DEFAULT_MODEL;
-}
-
-/** The model a new chat starts on. */
-export const DEFAULT_MODEL = defaultModelValue(DEFAULT_AGENT_HARNESS);
+/** An unbound chat starts on Claude, which ships model rows in the engine's catalog. */
+export const DEFAULT_MODEL = modelValue(
+  DEFAULT_AGENT_HARNESS,
+  defaultModelId(CATALOG_MODEL_LISTS, DEFAULT_AGENT_HARNESS)!
+);
 
 /**
  * The model and thinking level a chat continues on: those its latest turn on
@@ -239,7 +238,7 @@ export const DEFAULT_MODEL = defaultModelValue(DEFAULT_AGENT_HARNESS);
  * the defaults.
  */
 export function latestTurnExecution(
-  harness: AgentHarness,
+  harness: string,
   turns: readonly Pick<SessionTurn, "execution" | "startedAt" | "endedAt">[]
 ): SessionTurn["execution"] {
   let latest: (typeof turns)[number] | undefined;
@@ -249,6 +248,15 @@ export function latestTurnExecution(
     if (!latest || at(turn) > at(latest)) latest = turn;
   }
   return latest?.execution;
+}
+
+/** Without an explicit pick, continue on the recorded model or take this harness's own default. */
+export function modelForSession(
+  harness: string,
+  turns: readonly SessionTurn[],
+  lists: readonly HarnessModels[]
+): string | undefined {
+  return latestTurnExecution(harness, turns)?.model ?? defaultModelId(lists, harness);
 }
 
 /**

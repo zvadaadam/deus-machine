@@ -6,6 +6,7 @@
 import {
   modelLabel,
   modelValue,
+  noModelsReason,
   parseModelValue,
   pickerModels,
   type HarnessModels,
@@ -35,11 +36,14 @@ export interface ModelPickerView {
   selected?: PickerOption;
 }
 
-export function modelPickerView(lists: readonly HarnessModels[], model: string): ModelPickerView {
-  const current = parseModelValue(model);
+export function modelPickerView(
+  lists: readonly HarnessModels[],
+  model: string | undefined
+): ModelPickerView {
+  const current = model ? parseModelValue(model) : undefined;
   let selected: PickerOption | undefined;
-  const groups = lists.flatMap(({ harness, error }): PickerGroup[] => {
-    const parsed = AgentHarnessSchema.safeParse(harness);
+  const groups = lists.flatMap((list): PickerGroup[] => {
+    const parsed = AgentHarnessSchema.safeParse(list.harness);
     if (!parsed.success) return [];
     const agentHarness = parsed.data;
     const options = pickerModels(lists, agentHarness).map(
@@ -50,7 +54,7 @@ export function modelPickerView(lists: readonly HarnessModels[], model: string):
         agentHarness,
       })
     );
-    const emptyReason = options.length ? undefined : error || "No models available.";
+    const emptyReason = options.length ? undefined : noModelsReason(list);
     if (current?.harness === agentHarness) {
       selected = options.find((option) => option.value === modelValue(agentHarness, current.model));
       if (!selected) {

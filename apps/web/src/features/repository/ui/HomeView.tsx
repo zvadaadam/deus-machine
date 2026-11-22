@@ -264,7 +264,7 @@ export function HomeView({
 
   // ── Send ────────────────────────────────────────────────────────
   const hasContent = message.trim().length > 0 || attachments.length > 0;
-  const canSend = hasContent && !!selectedRepoId && !isSubmitting;
+  const canSend = hasContent && !!selectedRepoId && !!selection.model && !isSubmitting;
 
   // A project that runs only in the cloud, where the cloud cannot be used now.
   const sendBlock = cloudOnlySendBlock({
@@ -274,7 +274,7 @@ export function HomeView({
   });
 
   const handleSend = useCallback(async () => {
-    if (!canSend || !selectedRepoId) return;
+    if (!canSend || !selectedRepoId || !selection.model) return;
     if (sendBlock) {
       toast.error(sendBlock);
       return;
@@ -498,10 +498,14 @@ export function HomeView({
               )}
             />
 
+            {selection.unavailable && (
+              <p className="text-text-muted px-4 pb-1 text-xs">{selection.unavailable}</p>
+            )}
             {/* Bottom toolbar — model picker (left) + send button (right) */}
             <div className="flex items-center justify-between px-1.5 pt-0.5 pb-2">
               <ModelPicker
                 model={selection.model}
+                agentHarness={selection.agentHarness}
                 lists={selection.lists}
                 thinkingLevel={selection.thinkingLevel}
                 thinkingLevels={selection.thinkingLevels}
@@ -517,7 +521,7 @@ export function HomeView({
                 onClick={handleSend}
                 disabled={!canSend}
                 aria-label="Send message"
-                title="Send message (Enter)"
+                title={selection.unavailable ?? "Send message (Enter)"}
                 className={cn(
                   "control-interaction mr-1 flex h-7 w-7 items-center justify-center rounded-full",
                   canSend
