@@ -34,7 +34,7 @@ function App() {
   const levels = levelsOf(model);
   return <main className="bg-background text-foreground flex min-h-screen flex-col justify-end p-4">
     <output data-model={model} data-level={level} data-opened={opened} />
-    <ModelPicker model={model} lists={CATALOG_MODEL_LISTS}
+    <ModelPicker model={model} agentHarness={parseModelValue(model)!.harness} lists={CATALOG_MODEL_LISTS}
       thinkingLevel={fitThinkingLevel(level, levels, "high")} thinkingLevels={levels}
       hasMessages={params.has("started")}
       onModelChange={(value) => { setModel(value); setLevel((current) => fitThinkingLevel(current, levelsOf(value), "high")); }}
@@ -114,6 +114,7 @@ try {
     [
       "Claude Code",
       "Codex",
+      "Gemini",
       ...["Opus 5.5", "Fable 5.2", "Sonnet 5.5", "Haiku 5.5", "Fable 5.1", "Haiku 4.5", "Sonnet 5"],
       ...["Opus 5", "Fable 5"],
       ...["Opus 4.8", "Opus 4.7", "Opus 4.6", "Sonnet 4.6"],
@@ -178,7 +179,7 @@ try {
   const focused = (text) =>
     chat.page.waitForFunction((want) => document.activeElement?.textContent === want, text);
   await focused("Claude Code");
-  for (const next of ["Codex", "Opus 5.5", "Fable 5.2", "Sonnet 5.5"]) {
+  for (const next of ["Codex", "Gemini", "Opus 5.5", "Fable 5.2", "Sonnet 5.5"]) {
     await chat.page.keyboard.press("ArrowDown");
     await focused(next);
   }

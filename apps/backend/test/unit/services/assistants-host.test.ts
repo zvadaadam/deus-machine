@@ -6,11 +6,12 @@
 
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { z } from "zod";
 import { WireRequestError } from "@zvada/agent-server/client";
 import { createOperator } from "@zvada/agent-server/operator";
 import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
 import { CATALOG_MODEL_LISTS, defaultModelId } from "@shared/models";
-import type { AnyOp } from "@shared/api/op";
+import type { Op } from "@shared/api/op";
 import { SCHEMA_SQL } from "@shared/schema";
 
 const state = vi.hoisted(() => ({
@@ -37,7 +38,7 @@ const state = vi.hoisted(() => ({
 
 vi.mock("../../../src/lib/database", () => ({ getDatabase: () => state.db }));
 vi.mock("../../../src/services/query-engine", () => ({
-  runAsThisComputer: async (op: AnyOp, input: Record<string, unknown>) => {
+  runAsThisComputer: async (op: Op<string, z.ZodObject>, input: unknown) => {
     const answer = state.ops[op.name];
     if (!answer) throw new Error(`no stand-in for ${op.name}`);
     return answer(op.input.parse(input ?? {}));
