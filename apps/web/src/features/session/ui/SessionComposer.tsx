@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, type ReactNode } from "react";
+import type { WorkspaceKind } from "@shared/enums";
 import { useStore } from "zustand";
 import { Button } from "@/components/ui/button";
 import { MessageInput } from "./MessageInput";
@@ -23,6 +24,7 @@ interface SessionComposerProps {
   /** Active session — null renders a disabled pill. */
   sessionId: string | null;
   workspaceId?: string | null;
+  workspaceKind?: WorkspaceKind;
   workspacePath?: string | null;
   /** Target branch for createPR prompts (defaults to "main"). */
   targetBranch?: string;
@@ -72,6 +74,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     {
       sessionId,
       workspaceId,
+      workspaceKind: parentKind,
       workspacePath = null,
       targetBranch,
       initialModel,
@@ -88,6 +91,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
 
     const { session, messages, turns, error, retry, sessionStatus } =
       useSessionWithMessages(sessionId);
+    const workspaceKind = parentKind ?? session?.workspace_kind;
     const environment = useProjectEnvironment(workspaceId);
     const environmentUnconfigured =
       environment.isSuccess && environment.data.source === "unconfigured";
@@ -99,7 +103,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
 
     const pickedModel = useStore(composerStore(), (s) => s.composers[sessionId]?.model);
     const selection = useChatModel({
-      cloud: session?.workspace_kind === "cloud",
+      cloud: workspaceKind === "cloud",
       workspaceId,
       harness: session?.agent_harness,
       turns,
@@ -117,7 +121,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
       sessionId,
       model: needsHistory ? undefined : selection.model,
       workspaceId: workspaceId ?? undefined,
-      workspaceKind: session?.workspace_kind,
+      workspaceKind,
       targetBranch: targetBranch ?? "main",
       onMessageSent: onSendComplete,
     });
@@ -171,7 +175,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
         defaultThinking={defaultThinking}
         sending={sending}
         sessionStatus={sessionStatus}
-        workspaceKind={session?.workspace_kind}
+        workspaceKind={workspaceKind}
         contextTokenCount={session?.context_token_count ?? 0}
         contextUsedPercent={session?.context_used_percent ?? 0}
         hasMessages={messages.length > 0}

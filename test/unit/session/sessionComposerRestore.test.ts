@@ -5,9 +5,11 @@ import { queryKeys } from "@/shared/api/queryKeys";
 import { CATALOG_MODEL_LISTS, defaultModelId } from "@shared/models";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionComposer } from "@/features/session/ui/SessionComposer";
+import type { WorkspaceKind } from "@shared/enums";
 import type { SessionTurn } from "@shared/types/session";
 
 const state = vi.hoisted(() => ({
+  hasSession: true,
   turns: undefined as SessionTurn[] | undefined,
   error: null as Error | null,
   input: vi.fn(),
@@ -16,7 +18,7 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("@/features/session/api/session.queries", () => ({
   useSessionWithMessages: () => ({
-    session: { id: "session", agent_harness: "codex-app-server" },
+    session: state.hasSession ? { id: "session", agent_harness: "codex-app-server" } : undefined,
     messages: [],
     sessionStatus: "idle",
     loading: false,
@@ -38,12 +40,12 @@ vi.mock("@/features/session/ui/MessageInput", () => ({
 }));
 
 const client = new QueryClient();
-const render = (initialModel?: string) =>
+const render = (initialModel?: string, workspaceKind?: WorkspaceKind) =>
   renderToStaticMarkup(
     createElement(
       QueryClientProvider,
       { client },
-      createElement(SessionComposer, { sessionId: "session", initialModel })
+      createElement(SessionComposer, { sessionId: "session", initialModel, workspaceKind })
     )
   );
 const history: SessionTurn[] = [
@@ -55,6 +57,7 @@ const history: SessionTurn[] = [
 ];
 
 beforeEach(() => {
+  state.hasSession = true;
   state.turns = undefined;
   state.error = null;
   client.clear();
@@ -131,6 +134,15 @@ describe("composer history restoration", () => {
     });
     expect(state.actions).toHaveBeenLastCalledWith(
       expect.objectContaining({ model: "codex-app-server:my-default" })
+    );
+  });
+
+  it("ignores a local-only seed on the first render of a known cloud workspace", () => {
+    state.hasSession = false;
+    expect(render("gemini:gemini-4-neon", "cloud")).toContain("Loading conversation…");
+    expect(state.input).not.toHaveBeenCalled();
+    expect(state.actions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ model: undefined, workspaceKind: "cloud" })
     );
   });
 
