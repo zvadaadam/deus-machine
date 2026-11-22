@@ -13,14 +13,13 @@ import {
 import { useMemo, useState } from "react";
 import { produce } from "immer";
 import { api } from "@shared/api";
-import type { ReportedOrigin } from "@shared/protocol-types";
 import { toast } from "sonner";
 import { getErrorMessage } from "@shared/lib/errors";
 import { native } from "@/platform";
-import { call, getRuntimeClient } from "@/platform/ws";
+import { call } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
-import type { RepoGroup, DiffStats, Workspace } from "../types";
+import type { RepoGroup, DiffStats } from "../types";
 import type { PRStatus } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
 import { mergeWorkspaceDelta } from "../lib/workspace.utils";
@@ -460,14 +459,6 @@ export function useUpdateWorkspaceStatus() {
   });
 }
 
-export type ArchivedWorkspace = Pick<
-  Workspace,
-  "id" | "slug" | "title" | "git_branch" | "kind" | "organization_id"
-> & {
-  archived_at: string;
-  archived_by: ReportedOrigin | null;
-};
-
 export function useArchivedWorkspaces(
   repositoryId: string,
   count: number | undefined,
@@ -475,9 +466,7 @@ export function useArchivedWorkspaces(
 ) {
   return useQuery({
     queryKey: queryKeys.workspaces.archived.byRepo(repositoryId, count),
-    // Replace this request with call(api.archivedWorkspaces, { repositoryId }) when the shared declaration lands.
-    queryFn: () =>
-      getRuntimeClient().sendRequest<ArchivedWorkspace[]>("archivedWorkspaces", { repositoryId }),
+    queryFn: () => call(api.archivedWorkspaces, { repositoryId }),
     enabled: open && count !== undefined,
     placeholderData: keepPreviousData,
     staleTime: 0,

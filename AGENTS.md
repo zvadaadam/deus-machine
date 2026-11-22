@@ -179,6 +179,12 @@ client package does this bookkeeping; a consumer supplies only `onReset`
 not reload the chats a window holds, and a phone following one chat is not
 sent every other chat's tokens.
 
+A turn's parts are drawn in their recorded order (`session/lib/assistantTurnContent.ts`).
+A compaction of the running turn appears when that turn settles. An unfinished
+last turn record is the open turn. A replay can append an older end, so otherwise
+`session/lib/conversationView.ts` uses the newest message's turn record, or the
+chat's working status until that record arrives.
+
 A `fileChanges` subscription names one workspace. On macOS its first follower
 opens a recursive watch on the local checkout. The last one leaving, including
 a dropped connection, closes it after three seconds so a quick return reuses
@@ -248,6 +254,12 @@ processes and cleanup. Retry waits for startup recovery and refuses a checkout
 whose cleanup is still running. Retry and Delete both
 require an error row with no chat, current chat pointer or cloud computer.
 
+Opening a project's Archived line reads `archivedWorkspaces` and shows the rows
+in the sidebar's place. The open list reads again when the live group's
+`archived_count` changes. Restore goes through `updateWorkspace`. Archive and Delete leave the cache to the server.
+`useWorkspacesByRepo` hides each pending removal until its write settles. The
+backend publishes the changed list before it acknowledges the write.
+
 Creating a local workspace writes its row and returns. The rest runs in the
 background, in three stages: `fetch` (origin's latest for the branch it starts
 from), `worktree` (`git worktree add` on a new branch), and `session` (the first
@@ -257,7 +269,8 @@ progress channel: the desktop, the web app and a phone all follow it.
 
 - Only `worktree` and `session` are fatal. A fetch that fails still starts the
   workspace, from what is on this computer, and records why
-  (`init_fetch_issue`: `offline`, `auth` or `failed`).
+  (`init_fetch_issue`: `offline`, `auth` or `failed`). A project with no origin
+  records `no_remote` and the start line says "No remote to check".
 - Once the checkout exists, the first chat can take its message while the project's
   setup script runs. A local turn is told the running command, log and status
   file, or a failure's quoted reason and last log lines. After a repair the
@@ -299,6 +312,13 @@ line under its first message, as a cloud chat shows its computer's
 provisioning. In a ready chat the line is per client and in memory
 (`workspaceStartStore`), as a cloud chat's provisioning story is.
 
+Drafts on Home, the start page and in a chat are kept per host and account
+(`session/store/sessionComposerStore.ts`). A browser tab uses sessionStorage,
+the single-window desktop uses localStorage (`capabilities.singleWindow`).
+Each stores text, mentions and inspection notes. Pictures, pasted text cards
+and drafts over 100,000 characters stay in memory. The saved counts tell the
+person what was left out when the window reopens.
+
 Home keeps the typed message in its composer until the workspace exists, so
 one that could not be created is still there to send again. From then on the
 message waits in `workspaceStartStore`, keyed by workspace,
@@ -335,8 +355,8 @@ same way (`workspaceStart(workspace).brief`, `SETUP_RUNNING`, `SETUP_FAILED`).
 The start page has the chat's composer (`WorkspaceStartComposer`), where the
 chat will have it, keyed by the workspace since there is no chat yet. One
 message waits per workspace: sending there when nothing waits makes it the
-waiting message, and a second is refused in words and stays in the box. What
-was typed there moves to the chat's composer when the chat opens
+waiting message. While it waits, Send is disabled and a line says why.
+What is typed there stays in the box and moves to the chat's composer when the chat opens
 (`sessionComposerActions.move`, from `useFirstMessageDelivery`), before the
 waiting message is sent. The waiting message is per client, so another device
 or window can speak to the chat first; this client's message is then never

@@ -1,14 +1,13 @@
 import { useId, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { ChevronRight } from "lucide-react";
-import type { RepoGroup } from "@shared/types/workspace";
+import type { ArchivedWorkspace, RepoGroup } from "@shared/types/workspace";
 import { Button } from "@/components/ui/button";
 import { Collapse } from "@/components/ui/collapse";
 import { OriginCaption } from "@/features/session/ui/SentFrom";
 import {
   useArchivedWorkspaces,
   useUnarchiveWorkspace,
-  type ArchivedWorkspace,
 } from "@/features/workspace/api/workspace.queries";
 import { cn } from "@/shared/lib/utils";
 import { workspaceInPlace, type Organizations, type Place } from "../lib/location";
@@ -19,7 +18,7 @@ export function ArchivedWorkspaces({
   place,
   organizations,
 }: {
-  repository: RepoGroup & { archived_count?: number };
+  repository: RepoGroup;
   place: Place;
   organizations: Organizations;
 }) {

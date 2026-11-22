@@ -120,6 +120,12 @@ describe("a workspace that started", () => {
     expect(labels(finished)).toContain("done: Ran setup");
   });
 
+  it("keeps the fetch step in place when the project has no remote", () => {
+    const start = workspaceStart({ ...ready, init_fetch_issue: "no_remote" });
+    expect(labels(start)).toEqual(["done: No remote to check", "done: Made a safe copy"]);
+    expect(warnings(start)).toEqual([]);
+  });
+
   it("warns that it may be behind when the remote could not be fetched, and says why", () => {
     const start = workspaceStart({ ...ready, init_fetch_issue: "offline" });
     expect(labels(start)[0]).toBe("warning: Copy may be out of date");

@@ -48,10 +48,11 @@ export type SetupStatus = "none" | "running" | "completed" | "failed";
 
 /**
  * Why a new workspace did not get origin's latest first. It still starts, from
- * the copy of the branch already on this computer: `offline` (origin could not
- * be reached), `auth` (Git could not sign in to it), `failed` (anything else).
+ * the copy of the branch already on this computer. With `no_remote` there was
+ * no origin to check. A failed fetch records `offline` (unreachable), `auth`
+ * (Git could not sign in) or `failed` (anything else).
  */
-export const InitFetchIssueSchema = z.enum(["offline", "auth", "failed"]);
+export const InitFetchIssueSchema = z.enum(["no_remote", "offline", "auth", "failed"]);
 export type InitFetchIssue = z.infer<typeof InitFetchIssueSchema>;
 
 /** Workflow states for workspaces. */

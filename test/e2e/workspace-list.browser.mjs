@@ -59,6 +59,22 @@ async function start(project, title, source = "main") {
   return ws;
 }
 
+async function startBackend(port = "0") {
+  host = await stack.host({
+    name: "backend",
+    authToken: spawnToken,
+    database,
+    dir: directory,
+    env: {
+      PORT: port,
+      DEUS_USER_DATA_DIR: directory,
+      TMPDIR: directory,
+      DEUS_BUNDLED_BIN_DIR: directory,
+    },
+  });
+  backend = await connectBackend(host.url);
+}
+
 before(async () => {
   await writeFile(
     path.join(directory, "preferences.json"),
@@ -72,20 +88,16 @@ case "$1" in
 --version) echo 'gh version test' ;;
 auth) echo '{"hosts":{"github.com":[{"login":"test","active":true,"state":"success"}]}}' ;;
 api) echo '{"login":"test"}' ;;
-pr) echo '[]' ;;
+pr)
+  if grep -Fqx -- "$4" "$DEUS_USER_DATA_DIR/merged-head" 2>/dev/null; then
+    echo '[{"number":1,"state":"MERGED","url":"https://github.com/fixture/workspace-list/pull/1"}]'
+  else echo '[]'; fi ;;
 *) exit 1 ;;
 esac
 `,
     { mode: 0o755 }
   );
-  host = await stack.host({
-    name: "backend",
-    authToken: spawnToken,
-    database,
-    dir: directory,
-    env: { DEUS_USER_DATA_DIR: directory, TMPDIR: directory, DEUS_BUNDLED_BIN_DIR: directory },
-  });
-  backend = await connectBackend(host.url);
+  await startBackend();
   db = new Database(database);
   local = await makeProject("local");
   const upstream = path.join(directory, "origin.git");
@@ -159,10 +171,11 @@ for (const project of ["local", "remote", "offline"]) {
       (await group.getByText("Copy may be out of date", { exact: true }).count()) > 0,
       project === "offline"
     );
-    const checked = await group.getByText("Checked for the latest changes").count();
-    if (project === "local" && checked === 1)
-      t.todo("The backend will record when git skipped the fetch.");
-    assert.equal(checked, project === "remote" ? 1 : 0);
+    assert.equal(await group.getByText("No remote to check").count(), project === "local" ? 1 : 0);
+    assert.equal(
+      await group.getByText("Checked for the latest changes").count(),
+      project === "remote" ? 1 : 0
+    );
   });
 }
 
@@ -318,7 +331,10 @@ for (const packageName of ["Debian", "AppImage"]) {
 for (const failureFirst of [false, true]) {
   test(`a failed removal preserves live rows with the ${failureFirst ? "failure" : "success"} reply first`, async (t) => {
     const page = await tab(t, failureFirst ? "desktop" : "web");
-    const project = await makeProject(failureFirst ? "archive-refusal" : "delete-refusal");
+    const project = await makeProject(
+      failureFirst ? "archive-refusal" : "delete-refusal",
+      failureFirst ? local.root_path : undefined
+    );
     const source = failureFirst ? "main" : "missing";
     const a = await start(failureFirst ? project : local, "A", source);
     const b = await start(failureFirst ? local : project, "B", source);
@@ -329,6 +345,7 @@ for (const failureFirst of [false, true]) {
     // B's cloud computer has to finish pausing before its archive can commit.
     let finishPause;
     if (failureFirst) {
+      await writeFile(path.join(directory, "merged-head"), a.git_branch);
       const platform = createHttpServer((req, res) => {
         if (req.method === "POST" && req.url.endsWith(`/workspaces/${b.id}/pause`)) {
           finishPause = () =>
@@ -361,6 +378,7 @@ for (const failureFirst of [false, true]) {
 
     // Unrelated session deltas arrive while A is pending. All one-shot reads reach the host.
     let refuseA;
+    let simulatorStops = 0;
     await page.routeWebSocket(
       (url) => url.pathname === "/ws",
       (route) => {
@@ -370,6 +388,7 @@ for (const failureFirst of [false, true]) {
         route.onMessage((raw) => {
           const f = JSON.parse(String(raw));
           if (f.resource === "workspaces") groups.add(f.id);
+          if (f.action === "simStop") simulatorStops++;
           if (
             f.type === "q:mutate" &&
             f.params.workspaceId === a.id &&
@@ -399,11 +418,7 @@ for (const failureFirst of [false, true]) {
                   removed: changed.some((w) => w.id === b.id) ? [] : [b.id],
                 })
               );
-            } else {
-              // The incoming snapshot contract carries the total on the group, never on its deltas.
-              f.data.find((group) => group.repo_id === project.id).archived_count = 1;
-              route.send(JSON.stringify(f));
-            }
+            } else route.send(raw);
           } else route.send(raw);
         });
       }
@@ -420,7 +435,20 @@ for (const failureFirst of [false, true]) {
         await archiveButton(page, ws).click();
       }
     };
-    await remove(a);
+    if (failureFirst) {
+      const button = page.getByRole("button", { name: "Archive", exact: true });
+      await page.evaluate(async (id) => {
+        const { simulatorStoreActions } = await import(
+          `${window.location.origin}/src/features/simulator/store.ts`
+        );
+        simulatorStoreActions.setSession(id, {
+          phase: "streaming",
+          udid: "fixture",
+          stream: { url: "about:blank", hid_available: true },
+        });
+      }, a.id);
+      await button.click();
+    } else await remove(a);
     await until(() => !!refuseA);
     await row(page, a).waitFor({ state: "detached" });
     await backend.write("updateWorkspaceTitle", { workspaceId: b.id, title: "B live" });
@@ -456,6 +484,17 @@ for (const failureFirst of [false, true]) {
     await page.getByText("Workspace not found", { exact: true }).waitFor();
     await row(page, a).waitFor();
     if (failureFirst) {
+      assert.equal(
+        await page.evaluate(async (id) => {
+          const { simulatorStoreActions } = await import(
+            `${window.location.origin}/src/features/simulator/store.ts`
+          );
+          return simulatorStoreActions.getSession(id).phase;
+        }, a.id),
+        "streaming",
+        "a refused archive keeps the simulator streaming"
+      );
+      assert.equal(simulatorStops, 0);
       assert.equal((await backend.read("workspace", { workspaceId: b.id })).state, "ready");
       // Mark the real read so the assertion waits until its answer is on screen.
       db.prepare("UPDATE workspaces SET title = 'Witness read' WHERE id = ?").run(c.id);
@@ -481,10 +520,14 @@ for (const loseReply of [false, true]) {
   test(
     loseReply
       ? "a committed archive stays absent when its acknowledgement is lost"
-      : "Archive offers Undo when the backend confirms it",
+      : "the header archive changes its pending toast to Undo when the backend confirms it",
     async (t) => {
       const page = await tab(t);
-      const ws = await start(local, loseReply ? "Lost archive reply" : "Undo archive");
+      const ws = await start(
+        loseReply ? local : remote,
+        loseReply ? "Lost archive reply" : "Undo archive"
+      );
+      if (!loseReply) await writeFile(path.join(directory, "merged-head"), ws.git_branch);
       const reconnect = Promise.withResolvers();
       let finish,
         snapshotBeforeReply,
@@ -519,8 +562,9 @@ for (const loseReply of [false, true]) {
           } else route.send(raw);
         });
       });
-      await page.goto(baseUrl);
-      await archiveButton(page, ws).click();
+      await page.goto(loseReply ? baseUrl : `${baseUrl}/w/${ws.id}`);
+      if (loseReply) await archiveButton(page, ws).click();
+      else await page.getByRole("button", { name: "Archive", exact: true }).click();
       await until(() => !!finish);
       assert.equal(
         snapshotBeforeReply,
@@ -529,10 +573,14 @@ for (const loseReply of [false, true]) {
       );
       const toast = page.getByText("Workspace archived", { exact: true });
       assert.equal(await toast.count(), 0);
+      const pending = page.locator("[data-sonner-toast]").filter({ hasText: "Archiving…" });
+      await pending.waitFor({ timeout: 3000 });
+      const toastNode = await pending.elementHandle();
       finish();
       if (loseReply) {
         try {
           await page.getByText(/operation may have completed/i).waitFor();
+          assert.match(await toastNode.textContent(), /operation may have completed/i);
           assert.equal(
             await row(page, ws).count(),
             0,
@@ -545,6 +593,9 @@ for (const loseReply of [false, true]) {
         assert.equal(await row(page, ws).count(), 0);
       } else {
         await toast.waitFor();
+        assert.ok(
+          await toastNode.evaluate((node) => node.textContent.includes("Workspace archived"))
+        );
         await page.getByRole("button", { name: "Undo", exact: true }).click();
         await row(page, ws).waitFor();
       }
@@ -567,59 +618,36 @@ test("a start that never got a chat offers Delete and stays out of the archive",
   assert.ok(!groups.some((g) => g.workspaces.some((w) => w.id === ws.id)));
 });
 
-// The incoming backend contract: add its project totals to live snapshots and answer
-// its archive read from this run's SQLite rows. Restore goes to the real backend.
-async function archiveContract(page, origins, allowRestore) {
+async function observeArchiveReads(page, allowRestore) {
   const reads = { archives: [], workspaces: 0 };
-  await page.routeWebSocket(
-    (url) => url.pathname === "/ws",
-    (route) => {
-      const host = route.connectToServer();
-      const groups = new Set();
-      route.onMessage(async (raw) => {
-        const frame = JSON.parse(String(raw));
-        if (frame.type === "q:mutate" && frame.action === "updateWorkspace") await allowRestore;
-        if (frame.resource === "workspaces") {
-          groups.add(frame.id);
-          if (frame.type === "q:request") reads.workspaces++;
-        }
-        if (frame.type === "q:request" && frame.resource === "archivedWorkspaces") {
-          reads.archives.push(frame.params.repositoryId);
-          const data = db
-            .prepare(
-              `SELECT id, title, slug, git_branch, kind, organization_id, updated_at AS archived_at
-          FROM workspaces WHERE repository_id = ? AND state = 'archived' ORDER BY updated_at DESC, rowid DESC`
-            )
-            .all(frame.params.repositoryId)
-            .map((w) => ({ ...w, archived_by: origins.get(w.id) ?? null }));
-          route.send(JSON.stringify({ type: "q:response", id: frame.id, data }));
-        } else host.send(raw);
-      });
-      host.onMessage((raw) => {
-        const frame = JSON.parse(String(raw));
-        if (groups.has(frame.id) && (frame.type === "q:snapshot" || frame.type === "q:response")) {
-          for (const group of frame.data) {
-            if (group.repo_id === local.id) {
-              delete group.archived_count; // A hosted web group has no count.
-              continue;
-            }
-            group.archived_count = db
-              .prepare(
-                "SELECT COUNT(*) AS n FROM workspaces WHERE repository_id = ? AND state = 'archived'"
-              )
-              .get(group.repo_id).n;
-          }
-          route.send(JSON.stringify(frame));
-        } else route.send(raw);
-      });
-    }
-  );
+  await page.routeWebSocket(/\/ws$/, (route) => {
+    const host = route.connectToServer();
+    const groups = new Set();
+    route.onMessage(async (raw) => {
+      const f = JSON.parse(String(raw));
+      if (f.type === "q:mutate" && f.action === "updateWorkspace") await allowRestore;
+      if (f.resource === "workspaces") {
+        groups.add(f.id);
+        if (f.type === "q:request") reads.workspaces++;
+      }
+      if (f.type === "q:request" && f.resource === "archivedWorkspaces")
+        reads.archives.push(f.params.repositoryId);
+      host.send(raw);
+    });
+    host.onMessage((raw) => {
+      const f = JSON.parse(String(raw));
+      if (groups.has(f.id) && (f.type === "q:snapshot" || f.type === "q:response")) {
+        // Only the hosted web builds groups without a count.
+        delete f.data.find((group) => group.repo_id === local.id).archived_count;
+        route.send(JSON.stringify(f));
+      } else route.send(raw);
+    });
+  });
   return reads;
 }
 
 for (const mode of ["web", "desktop"]) {
   test(`browse archived workspaces and restore in ${mode} styling`, async (t) => {
-    const page = await tab(t, mode);
     const project = await makeProject("archive-" + mode);
     // A project with a GitHub origin appears in the local and cloud places.
     db.prepare("UPDATE repositories SET git_origin_url = ? WHERE id = ?").run(
@@ -632,20 +660,30 @@ for (const mode of ["web", "desktop"]) {
     const chat = await start(project, "Chat archive");
     const assistant = await start(project, "Assistant archive");
     const person = await start(project, null);
-    const origins = new Map([
-      [chat.id, { kind: "session", sessionId: sender.current_session_id, name: "another chat" }],
-      [assistant.id, { kind: "assistant", id: "helper", name: "Release helper" }],
-    ]);
     const unknownCount = await start(local, "Unknown archive count");
     await backend.write("archiveWorkspace", { workspaceId: unknownCount.id });
     for (const ws of [chat, assistant, person])
       await backend.write("archiveWorkspace", { workspaceId: ws.id });
+    // This runner connects as the person's window. The assistants' host records these two origins.
+    const by = db.prepare("UPDATE workspaces SET archived_by = ? WHERE id = ?");
+    by.run(JSON.stringify({ kind: "session", sessionId: sender.current_session_id }), chat.id);
+    by.run(
+      JSON.stringify({ kind: "assistant", id: "helper", name: "Release helper" }),
+      assistant.id
+    );
+    if (mode === "web") {
+      const { port } = new URL(host.url);
+      backend.close();
+      await stack.stop(host);
+      await startBackend(port);
+    }
+    const page = await tab(t, mode);
     const cloud = crypto.randomUUID();
     db.prepare(
       "INSERT INTO workspaces (id, repository_id, slug, kind, organization_id, state) VALUES (?, ?, 'on-another-computer', 'cloud', 'blue', 'archived')"
     ).run(cloud, project.id);
     const allowRestore = Promise.withResolvers();
-    const reads = await archiveContract(page, origins, allowRestore.promise);
+    const reads = await observeArchiveReads(page, allowRestore.promise);
     await page.goto(baseUrl);
     const toggle = page.getByRole("button", {
       name: "Toggle " + project.name + " workspaces",
@@ -741,9 +779,22 @@ for (const mode of ["web", "desktop"]) {
     await open.click();
     await open.waitFor({ state: "detached" });
     assert.equal(await disclosure.count(), 0);
+    db.prepare(
+      `INSERT INTO workspaces (id, repository_id, slug, kind, organization_id, provider_workspace_id, state)
+       VALUES (?, ?, 'no-chat', 'cloud', 'blue', ?, 'archived')`
+    ).run(crypto.randomUUID(), project.id, crypto.randomUUID());
     await backend.write("archiveWorkspace", { workspaceId: person.id });
     await disclosure.click();
     await restore(person).waitFor();
     assert.equal(await row(page, person).count(), 0);
+    await page.keyboard.press("Control+2");
+    const refused = group.getByRole("button", { name: "Restore no-chat" });
+    await refused.click();
+    await page
+      .locator("[data-sonner-toast] [data-title]", {
+        hasText: "The cloud computer exists, but its chat did not open.",
+      })
+      .waitFor();
+    await refused.waitFor();
   });
 }

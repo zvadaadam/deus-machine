@@ -70,14 +70,20 @@ export interface WorkspaceStart {
 /** The local pipeline's stages, in order (backend: services/workspace-init). */
 const STAGES = ["fetch", "worktree", "session"] as const;
 
-/** Why the workspace may be behind: it started without the remote's latest. */
-function fetchIssueNotice(issue: InitFetchIssue): string {
+function completedFetch(issue: InitFetchIssue | null | undefined): StartStep {
+  if (!issue) return { key: "fetch", label: "Checked for the latest changes", state: "done" };
+  if (issue === "no_remote") return { key: "fetch", label: "No remote to check", state: "done" };
   const why = match(issue)
     .with("offline", () => "We couldn’t reach the remote")
     .with("auth", () => "Git couldn’t sign in to the remote repository")
     .with("failed", () => "We couldn’t get the latest changes")
     .exhaustive();
-  return `${why}, so this copy may be out of date.`;
+  return {
+    key: "fetch",
+    label: "Copy may be out of date",
+    state: "warning",
+    warning: { message: `${why}, so this copy may be out of date.` },
+  };
 }
 
 function setupWarning({ state, error_message, error_detail }: StartFields): StartWarning {
@@ -189,16 +195,7 @@ export function workspaceStart(workspace: StartFields): WorkspaceStart {
       state: "active",
     });
   } else if (reached("fetch")) {
-    steps.push(
-      workspace.init_fetch_issue
-        ? {
-            key: "fetch",
-            label: "Copy may be out of date",
-            state: "warning",
-            warning: { message: fetchIssueNotice(workspace.init_fetch_issue) },
-          }
-        : { key: "fetch", label: "Checked for the latest changes", state: "done" }
-    );
+    steps.push(completedFetch(workspace.init_fetch_issue));
   }
   if (working("worktree")) {
     steps.push({

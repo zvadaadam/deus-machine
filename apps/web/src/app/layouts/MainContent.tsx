@@ -43,6 +43,7 @@ import { usePanelShortcuts } from "./hooks/usePanelShortcuts";
 
 interface MainContentProps {
   selectedWorkspace: Workspace | null;
+  onArchive?: () => void;
   prStatus: PRStatus | null;
   ghStatus?: GhCliStatus | null;
   onOpenProject: () => void;
@@ -78,6 +79,7 @@ interface MainContentProps {
 
 export function MainContent({
   selectedWorkspace,
+  onArchive,
   prStatus,
   ghStatus,
   onOpenProject,
@@ -142,7 +144,6 @@ export function MainContent({
     setSelectedTargetBranch,
     handleCreatePR,
     handleSendAgentMessage,
-    handleArchive,
     environmentTasks,
     handleRunTask,
   } = useWorkspaceActions({
@@ -213,7 +214,7 @@ export function MainContent({
       ghStatus={ghStatus}
       onCreatePR={createPRHandler ? handleCreatePR : undefined}
       onSendAgentMessage={sendAgentMessageHandler ? handleSendAgentMessage : undefined}
-      onArchive={handleArchive}
+      onArchive={onArchive}
       targetBranch={selectedTargetBranch}
       onTargetBranchChange={setSelectedTargetBranch}
       repoId={selectedWorkspace.repository_id}
@@ -279,7 +280,7 @@ export function MainContent({
               prStatus={prStatus}
               ghStatus={ghStatus}
               onCreatePR={createPRHandler ? handleCreatePR : undefined}
-              onArchive={handleArchive}
+              onArchive={onArchive}
               targetBranch={selectedTargetBranch}
               onTargetBranchChange={setSelectedTargetBranch}
             />

@@ -44,6 +44,7 @@ import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
 import { wokeUp, type OpenCloudWorkspace } from "@/features/workspace/lib/diffStats";
 import { uiActions, useUIStore } from "@/shared/stores/uiStore";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
+import { tempo } from "@/shared/lib/tempo";
 import type { Workspace } from "@/shared/types";
 import { unreadActions } from "@/features/session/store/unreadStore";
 import { native } from "@/platform";
@@ -287,10 +288,16 @@ export function MainLayout() {
   const { mutate: restore } = useUnarchiveWorkspace();
   const archiveWorkspace = useCallback(
     async (workspaceId: string) => {
+      let toastId: ReturnType<typeof toast.loading> | undefined;
+      // A local archive usually finishes before a progress message can be read.
+      const pending = setTimeout(() => {
+        toastId = toast.loading("Archiving…");
+      }, tempo.moderate.duration * 1000);
       try {
         await archive(workspaceId);
         if (useWorkspaceStore.getState().selectedWorkspaceId === workspaceId) selectWorkspace(null);
-        toast("Workspace archived", {
+        toast.success("Workspace archived", {
+          id: toastId,
           duration: 5000,
           action: {
             label: "Undo",
@@ -298,7 +305,9 @@ export function MainLayout() {
           },
         });
       } catch (error) {
-        toast.error(getErrorMessage(error));
+        toast.error(getErrorMessage(error), { id: toastId });
+      } finally {
+        clearTimeout(pending);
       }
     },
     [archive, restore, selectWorkspace]
@@ -455,6 +464,11 @@ export function MainLayout() {
       ) : (
         <MainContent
           selectedWorkspace={selectedWorkspace}
+          onArchive={
+            selectedWorkspace && !webDirect
+              ? () => archiveWorkspace(selectedWorkspace.id)
+              : undefined
+          }
           prStatus={prStatusQuery.data ?? null}
           ghStatus={ghStatusQuery.data}
           onOpenProject={repoActions.handleOpenProject}

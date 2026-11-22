@@ -1,24 +1,19 @@
 /**
- * Workspace Actions Hook — PR bridge, archive, and project commands.
+ * Workspace Actions Hook — PR bridge and project commands.
  *
  * Extracts all workspace-level action handlers from MainContent, keeping
  * the layout component focused on panel geometry. This hook manages:
  * - PR handler bridge (ChatArea sets handlers, WorkspaceHeader consumes them)
- * - Archive the workspace
  * - Project command discovery and execution
  * - Target branch selection for PR creation
  */
 
 import { useState, useCallback } from "react";
 import { toast } from "sonner";
-import {
-  useArchiveWorkspace,
-  useProjectEnvironment,
-} from "@/features/workspace/api/workspace.queries";
+import { useProjectEnvironment } from "@/features/workspace/api/workspace.queries";
 import { api } from "@shared/api";
 import { call } from "@/platform/ws";
 import { queueTerminalTask } from "@/features/terminal/store/terminalTaskStore";
-import { simulatorStoreActions } from "@/features/simulator/store";
 import type { ContentTab } from "@/features/workspace/store";
 import type { Workspace } from "@/shared/types";
 import { prTargetBranch } from "@/features/workspace/lib/prState";
@@ -80,25 +75,6 @@ export function useWorkspaceActions({
     [sendAgentMessageHandler]
   );
 
-  // --- Archive ---
-
-  const { mutate: archiveWorkspace } = useArchiveWorkspace();
-  const handleArchive = useCallback(() => {
-    if (!selectedWorkspace) return;
-    // Release simulator resources before archiving — the native session would
-    // otherwise leak in the HashMap until app close (no lifecycle hook exists).
-    const simSession = simulatorStoreActions.getSession(selectedWorkspace.id);
-    if (simSession.phase !== "idle") {
-      call(api.simStop, { workspaceId: selectedWorkspace.id }).catch(() => {
-        /* Expected: streaming may already be stopped or session may not exist */
-      });
-      simulatorStoreActions.clearWorkspaceSession(selectedWorkspace.id);
-    }
-    archiveWorkspace(selectedWorkspace.id, {
-      onError: (error) => toast.error(error.message),
-    });
-  }, [selectedWorkspace, archiveWorkspace]);
-
   // --- Project environment commands ---
 
   const isWorkspaceReady = selectedWorkspace?.state === "ready";
@@ -137,7 +113,6 @@ export function useWorkspaceActions({
     // Action handlers
     handleCreatePR,
     handleSendAgentMessage,
-    handleArchive,
     // Project environment
     environmentTasks,
     handleRunTask,
