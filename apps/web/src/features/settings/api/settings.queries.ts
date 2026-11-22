@@ -81,9 +81,12 @@ export function useAgentAuthEvents(): void {
   const filter = isCloudDirectWebMode() ? null : {};
   const readLogin = () =>
     void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentAuth });
-  const readLoginAndModels = () => {
+  const readLoginAndModels = async () => {
     readLogin();
-    void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentModels });
+    const models = { queryKey: queryKeys.settings.agentModels };
+    // Invalidation alone reuses a first read that was started before the login changed.
+    await queryClient.cancelQueries(models);
+    await queryClient.invalidateQueries(models);
   };
   useStream(
     api.agentCliProgress,
@@ -92,7 +95,7 @@ export function useAgentAuthEvents(): void {
       queryClient.setQueryData<AgentAuthAnswer>(queryKeys.settings.agentAuth, (answer) =>
         answer ? withProgress(answer, progress) : answer
       );
-      if (progress.phase === "ready") readLoginAndModels();
+      if (progress.phase === "ready") void readLoginAndModels();
       if (progress.phase === "failed") readLogin();
     },
     readLoginAndModels
@@ -101,7 +104,7 @@ export function useAgentAuthEvents(): void {
     api.agentAuthChanges,
     filter,
     ({ login }) => {
-      readLoginAndModels();
+      void readLoginAndModels();
       if (login && (login.outcome === "failed" || login.outcome === "expired")) {
         toast.error(login.error ?? "The sign-in didn’t finish");
       }

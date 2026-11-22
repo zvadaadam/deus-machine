@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
@@ -36,22 +36,55 @@ it("does not follow either computer stream in the hosted direct lane", () => {
 
 it.each([api.agentCliProgress, api.agentAuthChanges])(
   "reads login and workspace models again after a missed $name event",
-  (stream) => {
+  async (stream) => {
     const client = observe();
     const subscription = vi.mocked(useStream).mock.calls.find(([s]) => s === stream)!;
     expect(subscription[1]).toEqual({});
     subscription[3]!();
     expect(client.getQueryState(queryKeys.settings.agentAuth)?.isInvalidated).toBe(true);
-    expect(client.getQueryState(models)?.isInvalidated).toBe(true);
+    await vi.waitFor(() => expect(client.getQueryState(models)?.isInvalidated).toBe(true));
   }
 );
 
-it("reads workspace models again when installation or sign-in finishes", () => {
+it("reads workspace models again when installation or sign-in finishes", async () => {
   const client = observe();
   const [cli, auth] = vi.mocked(useStream).mock.calls;
   cli![2]({ harness: "gemini", phase: "ready", version: "1", receivedBytes: 0 });
-  expect(client.getQueryState(models)?.isInvalidated).toBe(true);
+  await vi.waitFor(() => expect(client.getQueryState(models)?.isInvalidated).toBe(true));
   client.setQueryData(models, { lists: [] });
   auth![2]({ harness: "gemini" });
-  expect(client.getQueryState(models)?.isInvalidated).toBe(true);
+  await vi.waitFor(() => expect(client.getQueryState(models)?.isInvalidated).toBe(true));
+});
+
+it("discards a cold model read when sign-in finishes, including in a workspace whose picker closed", async () => {
+  const client = observe();
+  const open = [...queryKeys.settings.agentModels, "open"];
+  const closed = [...queryKeys.settings.agentModels, "closed"];
+  const signedOut = { lists: [{ harness: "gemini", models: [], error: "Sign in." }] };
+  const signedIn = { lists: [{ harness: "gemini", models: [{ id: "gemini-4-neon" }] }] };
+  const first = Promise.withResolvers<typeof signedOut>();
+  const read = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValue(signedIn);
+  const unsubscribe = new QueryObserver(client, { queryKey: open, queryFn: read }).subscribe(
+    () => {}
+  );
+  const close = new QueryObserver(client, {
+    queryKey: closed,
+    queryFn: () => first.promise,
+  }).subscribe(() => {});
+  close();
+  try {
+    expect(read).toHaveBeenCalledOnce();
+    expect(client.getQueryState(closed)?.fetchStatus).toBe("fetching");
+    const auth = vi
+      .mocked(useStream)
+      .mock.calls.find(([stream]) => stream === api.agentAuthChanges)!;
+    auth[2]({ harness: "gemini" });
+    first.resolve(signedOut);
+    await vi.waitFor(() => expect(client.getQueryData(open)).toEqual(signedIn));
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(client.getQueryState(closed)).toMatchObject({ data: undefined, isInvalidated: true });
+  } finally {
+    unsubscribe();
+    client.clear();
+  }
 });
