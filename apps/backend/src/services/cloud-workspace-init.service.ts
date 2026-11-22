@@ -934,14 +934,13 @@ async function provisionCloudWorkspace(
       // New branch off the source — the sandbox's whole life happens here.
       checkout: { branch: branch.work, from: branch.source },
     });
-    const attached = getDatabase().transaction(() => {
-      if (!attachCloudComputer(workspaceId, provider.id, token)) return false;
+    if (!attachCloudComputer(workspaceId, provider.id, token)) return;
+    try {
       setInlineMintStamp(provider.id, inlineMintStampAtCreate);
-      return true;
-    })();
-    if (!attached) return;
-    if (repositoryAuth) markWorkspaceTokenRefreshed(provider.id);
-    invalidate(["workspaces", "sessions", "session"], {});
+      if (repositoryAuth) markWorkspaceTokenRefreshed(provider.id);
+    } finally {
+      invalidate(["workspaces", "sessions", "session"], {});
+    }
     const sessionId = await openCloudChat(workspaceId, provider.id, () => org, token);
     if (!sessionId || token.aborted) return;
 
