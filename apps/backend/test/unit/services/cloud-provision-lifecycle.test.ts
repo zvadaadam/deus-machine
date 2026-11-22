@@ -164,6 +164,20 @@ it("keeps the allocated computer and last stage when chat creation fails", async
   expect(mock.invalidate).toHaveBeenCalledTimes(3);
 });
 
+it("rolls back the computer attachment if its first mint stamp cannot be written", async () => {
+  db.exec(`CREATE TRIGGER reject_stamp BEFORE UPDATE OF last_inline_mint_at ON workspaces
+    BEGIN SELECT RAISE(ABORT, 'stamp write failed'); END`);
+  const { workspaceId } = createCloudWorkspace({ repositoryId: "r" });
+  await vi.waitFor(() => expect(row(workspaceId)).toMatchObject({ state: "error" }));
+  expect(row(workspaceId)).toMatchObject({
+    provider_workspace_id: null,
+    last_inline_mint_at: null,
+    init_stage: "creating cloud workspace",
+    error_message: "Cloud provisioning failed: stamp write failed",
+  });
+  expect(mock.createSession).not.toHaveBeenCalled();
+});
+
 const row = (id: string) => db.prepare("SELECT * FROM workspaces WHERE id = ?").get(id);
 const report = (id: string, status: string) => applyCloudStatus(id, { status });
 const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
