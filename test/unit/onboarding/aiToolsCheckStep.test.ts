@@ -25,6 +25,7 @@ const claude = (overrides: Partial<HarnessAuth> = {}): HarnessAuth => ({
 const clis: HarnessCli[] = [
   { harness: "claude-code", state: "ready", version: "0.3.288", source: "cache" },
   { harness: "codex-app-server", state: "missing" },
+  { harness: "gemini", state: "missing" },
 ];
 
 beforeEach(() => {
@@ -95,8 +96,9 @@ describe("onboarding Claude account status", () => {
 
   it("offers to install an agent whose CLI the engine has not installed", () => {
     const html = render();
-    expect(html).toContain("Not installed yet");
-    expect(html).toContain(">Install</button>");
+    expect(html).toContain(">Gemini</p>");
+    expect(html.match(/>Not installed yet</g)).toHaveLength(2);
+    expect(html.match(/>Install<\/button>/g)).toHaveLength(2);
   });
 
   it("waits for the login read before offering an action", () => {

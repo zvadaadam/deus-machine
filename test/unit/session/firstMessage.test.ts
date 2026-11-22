@@ -32,6 +32,14 @@ describe("the message typed before its workspace existed", () => {
     );
   });
 
+  it("drops a waiting plan when the first message opens a Gemini chat", () => {
+    const queued = { ...first, model: "gemini:gemini-4-neon", planMode: true };
+    expect(dueFirstMessages([ready], { a: queued })[0].first).toEqual({
+      ...queued,
+      planMode: false,
+    });
+  });
+
   it("goes to its own workspace, whichever others are ready", () => {
     const other = { ...ready, id: "b", current_session_id: "chat-b" };
     const second = { message: "add dark mode", model: "opus" };

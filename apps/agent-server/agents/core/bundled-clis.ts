@@ -1,13 +1,7 @@
 // agent-server/agents/core/bundled-clis.ts
-// Packaged/staged runtimes bundle the native agent CLIs (claude, codex) inside
-// the app — the engine must use those instead of downloading pins (packaged
-// apps run offline). The engine's operator overrides ($CLAUDE_CLI_PATH /
-// $CODEX_CLI_PATH) beat its pinned provisioning, so adopting the bundled
-// binaries is just setting those envs before the registry is built.
-//
-// The `BUNDLED_CLI_PATH <tool>=<path>` startup lines are a runtime-smoke
-// contract (scripts/runtime/smoke) carried over from the legacy discovery:
-// packaged CI asserts the server found the staged binaries.
+// The desktop ships Claude and Codex. Their path overrides select the staged
+// binaries ahead of the engine's pinned downloads. The engine downloads agy on first use.
+// The runtime smoke checks the BUNDLED_CLI_PATH lines for the binaries the desktop ships.
 
 import { delimiter } from "node:path";
 import { getBundledCliDirectory, resolveBundledCliPath } from "@shared/lib/cli-path";

@@ -1151,12 +1151,12 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     await expect(
       host.start!(
         LEAD as never,
-        startInput({ workspace: { id: "w-lead", name: "lead" }, harness: "Gemini" })
+        startInput({ workspace: { id: "w-lead", name: "lead" }, harness: "gpt-pilot" })
       )
     ).rejects.toMatchObject({
       code: "invalid_input",
       message:
-        'refused (invalid_input): start_session: agent: "Gemini" does not run here; the agents are "claude-code" (Claude Code) and "codex-app-server" (Codex). Nothing was started.',
+        'refused (invalid_input): start_session: agent: "gpt-pilot" does not run here; the agents are "claude-code" (Claude Code), "codex-app-server" (Codex), and "gemini" (Gemini). Nothing was started.',
     });
   });
 
@@ -1289,6 +1289,38 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     await expect(start("gpt-5-mini")).resolves.toMatchObject({ workspace: { name: "lead" } });
     expect(state.sent.at(-1)).toMatchObject({
       input: { model: "gpt-5-mini", thinkingLevel: "off" },
+    });
+  });
+
+  it("starts Gemini on the account's default and judges off against its live list", async () => {
+    const host = createDeusHost();
+    state.ops.agentModels = () => ({
+      lists: [
+        {
+          harness: "gemini",
+          source: "live",
+          models: [
+            {
+              id: "gemini-4-neon",
+              harness: "gemini",
+              label: "Gemini 4 Neon",
+              isDefault: true,
+              thinking: { levels: ["low", "medium", "high", "xhigh"], default: "high" },
+            },
+          ],
+        },
+      ],
+    });
+    const input = { workspace: { id: "w-lead", name: "lead" }, harness: "gemini" };
+    await expect(
+      host.start!(LEAD as never, startInput({ ...input, thinkingLevel: "off" }))
+    ).rejects.toMatchObject({
+      code: "invalid_input",
+      message: expect.stringContaining('"off" is not a level gemini-4-neon offers'),
+    });
+    await host.start!(LEAD as never, startInput(input));
+    expect(state.sent.at(-1)).toMatchObject({
+      input: { agentHarness: "gemini", model: "gemini-4-neon" },
     });
   });
 

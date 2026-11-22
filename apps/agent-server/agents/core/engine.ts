@@ -27,9 +27,7 @@ async function checkpointHook(
 export function getRegistry(): AgentRegistry {
   registry ??= createAgentRegistry({
     harnesses: [...LOCAL_HARNESSES],
-    // Deterministic CLIs: always the engine's tested pins (sha-verified,
-    // cached downloads), never whatever binary the host happens to have.
-    // Operator escape hatches ($CLAUDE_CLI_PATH / $CODEX_CLI_PATH) still win.
+    // The engine uses a staged CLI or its verified pin. It downloads agy on first use.
     provision: { mode: "pinned" },
     hostTools: ({ sessionId }) => chatTools(deusTools(sessionId)),
     claudeCode: {

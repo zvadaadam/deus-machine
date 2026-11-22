@@ -8,6 +8,11 @@ describe("appServerName", () => {
     expect(appServerName("my.app", "codex-app-server")).toBe("deus_my_app");
   });
 
+  it("uses plain app ids on Gemini, including names other harnesses reserve", () => {
+    for (const name of ["context7", "deus", "computer"])
+      expect(appServerName(name, "gemini")).toBe(name);
+  });
+
   it("keeps the app's id on Claude, apart from the names Claude keeps for itself", () => {
     expect(appServerName("context7", "claude-code")).toBe("context7");
     expect(appServerName("deus", "claude-code")).toBe("app_deus");

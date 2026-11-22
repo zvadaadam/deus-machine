@@ -950,7 +950,7 @@ try {
   assert.equal(badAgent.isError, true, badAgent.text);
   assert.equal(
     badAgent.text,
-    'refused (invalid_input): start_session: agent: "gpt-pilot" does not run here; the agents are "claude-code" (Claude Code) and "codex-app-server" (Codex). Nothing was started.'
+    'refused (invalid_input): start_session: agent: "gpt-pilot" does not run here; the agents are "claude-code" (Claude Code), "codex-app-server" (Codex), and "gemini" (Gemini). Nothing was started.'
   );
   skip(
     "start_session with a model the agent does not offer is refused in words (and with an explicit model, started)",

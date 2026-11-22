@@ -46,6 +46,15 @@ export const HARNESSES = {
     acceptsUnlistedOff: false,
     supportsPlanMode: true,
   },
+  gemini: {
+    label: "Gemini",
+    vendor: "Google",
+    preferredModels: [],
+    appServers: { reserved: [] },
+    cloudProvider: null,
+    acceptsUnlistedOff: false,
+    supportsPlanMode: false,
+  },
 } as const satisfies Partial<Record<EngineHarness, Harness>>;
 
 /** The harness ids Deus offers on this computer, in picker order. */

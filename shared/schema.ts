@@ -99,7 +99,7 @@ export const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY NOT NULL,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    -- Engine harness id (@zvada/agent-server): claude-code | codex-app-server
+    -- Engine harness id, as named in shared/harnesses.ts.
     agent_harness TEXT NOT NULL DEFAULT 'claude-code',
     agent_session_id TEXT,
     provider_session_id TEXT,

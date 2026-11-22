@@ -2,18 +2,6 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@shared/harnesses", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@shared/harnesses")>();
-  return {
-    ...actual,
-    LOCAL_HARNESSES: [...actual.LOCAL_HARNESSES, "scripted"],
-    HARNESSES: {
-      ...actual.HARNESSES,
-      scripted: { ...actual.HARNESSES["claude-code"], label: "Local fixture", cloudProvider: null },
-    },
-  };
-});
-
 const state = vi.hoisted(() => ({
   local: undefined as unknown,
   cloud: undefined as unknown,
@@ -25,7 +13,6 @@ vi.mock("@/shared/config/webDirectMode", () => ({ isCloudDirectWebMode: () => fa
 vi.mock("@/features/settings/api", () => ({ useDefaultThinkingLevel: () => "high" }));
 
 const { useChatModel, useModelListsState } = await import("@/shared/hooks/useModelLists");
-const { AgentHarnessSchema } = await import("@shared/enums");
 const { modelPickerView } = await import("@/shared/agents/picker");
 const { useNewChatSelection } =
   await import("@/features/repository/ui/composer/useNewChatSelection");
@@ -57,24 +44,22 @@ describe("whether a chat's model list is live", () => {
 
 describe("the harnesses a picker offers", () => {
   it("shows the reason from the empty harness even when a chat remembers one of its models", () => {
-    const error = "The fixture CLI is not installed yet.";
-    state.local = { lists: [{ harness: "scripted", source: "catalog", models: [], error }] };
+    const error = "The CLI is not installed yet.";
+    state.local = { lists: [{ harness: "gemini", source: "catalog", models: [], error }] };
     const { lists } = useModelListsState({ cloud: false });
-    expect(lists.find((list) => list.harness === "scripted")).toMatchObject({
-      source: "catalog",
-      error,
-    });
-    for (const model of ["claude-code:opus", "scripted:previous"]) {
-      const group = modelPickerView(lists, model).groups.find(
-        (group) => group.label === "Local fixture"
+    expect(lists).toContainEqual(
+      expect.objectContaining({ harness: "gemini", source: "catalog", error })
+    );
+    for (const model of ["claude-code:opus", "gemini:previous"]) {
+      expect(modelPickerView(lists, model).groups).toContainEqual(
+        expect.objectContaining({ label: "Gemini", emptyReason: error })
       );
-      expect(group?.emptyReason).toBe(error);
     }
   });
 
   it("derives the model on a catalogless harness when its list arrives", () => {
-    const harness = AgentHarnessSchema.parse("scripted");
-    const error = "Sign in to the fixture agent.";
+    const harness = "gemini" as const;
+    const error = "Sign in to the agent.";
     state.local = { lists: [{ harness, models: [], source: "catalog", error }] };
     const chat = { cloud: false, harness };
     expect(useChatModel(chat)).toMatchObject({
@@ -84,14 +69,14 @@ describe("the harnesses a picker offers", () => {
     });
     const row = {
       harness,
-      id: "account",
-      label: "Account",
+      id: "gemini-4-neon",
+      label: "Gemini 4 Neon",
       isDefault: true,
       thinking: { levels: ["low"] },
     };
     state.local = { lists: [{ harness, models: [row], source: "live" }] };
     expect(useChatModel(chat)).toMatchObject({
-      model: "scripted:account",
+      model: "gemini:gemini-4-neon",
       picked: undefined,
       unavailable: undefined,
     });
@@ -105,7 +90,7 @@ describe("the harnesses a picker offers", () => {
     const HomeModel = ({ location }: { location: "local" | "cloud" }) =>
       useNewChatSelection(location).model;
     try {
-      const picked = "scripted:my-local-model";
+      const picked = "gemini:gemini-4-neon";
       setStoredModel(picked);
       expect(renderToStaticMarkup(createElement(HomeModel, { location: "local" }))).toBe(picked);
       expect(renderToStaticMarkup(createElement(HomeModel, { location: "cloud" }))).toBe(
@@ -124,17 +109,17 @@ describe("the harnesses a picker offers", () => {
       const lists = [
         { harness: "claude-code", source: "catalog", models: [] },
         { harness: "codex-app-server", source: "live", models: [] },
-        { harness: "scripted", source: "live", models: [] },
+        { harness: "gemini", source: "live", models: [] },
       ];
       state.local = state.cloud = source === "answer" ? { lists } : undefined;
       const local = useModelListsState({ cloud: false });
       const cloud = useModelListsState({ cloud: true });
-      const current = "scripted:sample";
+      const current = "gemini:sample";
       expect(modelPickerView(local.lists, current).selected?.value).toBe(current);
       const view = modelPickerView(cloud.lists, current);
       expect(view.groups.map((group) => group.label)).toEqual(["Claude Code", "Codex"]);
       expect(view.selected).toBeUndefined();
-      expect(cloud.live("scripted")).toBe(false);
+      expect(cloud.live("gemini")).toBe(false);
     }
   );
 });

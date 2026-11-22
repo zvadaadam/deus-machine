@@ -1,7 +1,7 @@
 /**
  * AddCustomDialog — bring your own: an MCP server (remote URL or a local
  * command) becomes an app like any other; a GitHub link to a skill folder
- * becomes a skill. Both reach every agent, like catalog items.
+ * becomes a skill for Claude and Codex.
  */
 
 import { useState } from "react";

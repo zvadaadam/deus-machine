@@ -254,9 +254,9 @@ export const whereSentence = () =>
   `These are the coding agents on the computer ${JSON.stringify(getServerName())} itself: its own workspaces and their chats. Cloud workspaces are not listed here.`;
 
 /** The agents a start may name, as a refusal lists them: `"claude-code" (Claude Code) and …`. */
-const AGENT_NAMES = Object.entries(HARNESSES)
-  .map(([id, { label }]) => `${JSON.stringify(id)} (${label})`)
-  .join(" and ");
+const AGENT_NAMES = new Intl.ListFormat("en").format(
+  Object.entries(HARNESSES).map(([id, { label }]) => `${JSON.stringify(id)} (${label})`)
+);
 
 /** What a chat the host could not deliver its first task to says, the reason kept safe. */
 const NOT_DELIVERED = "Its first task could not be delivered.";

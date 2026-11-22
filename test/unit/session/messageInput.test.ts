@@ -141,9 +141,10 @@ describe("the plan mode toggle", () => {
   const hasToggle = (initialModel: string, workspaceKind: "worktree" | "cloud") =>
     renderInput({ initialModel, workspaceKind }).includes('aria-label="Plan mode"');
 
-  it("is offered in a local chat on either agent, and not in the cloud", () => {
+  it("is offered on the local agents that can plan", () => {
     expect(hasToggle("claude-code:opus", "worktree")).toBe(true);
     expect(hasToggle("codex-app-server:gpt-6.1-sol", "worktree")).toBe(true);
+    expect(hasToggle("gemini:gemini-4-neon", "worktree")).toBe(false);
     expect(hasToggle("codex-app-server:gpt-6.1-sol", "cloud")).toBe(false);
   });
 });

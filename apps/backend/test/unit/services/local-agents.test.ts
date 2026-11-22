@@ -12,6 +12,7 @@ vi.mock("../../../src/services/streams", () => ({ publish: mockPublish }));
 
 import { LocalAgents } from "../../../src/services/agent/local-agents";
 import { agentAuthChanges, agentCliProgress } from "@shared/api/settings";
+import { LOCAL_HARNESSES } from "@shared/harnesses";
 import { published } from "../../helpers";
 
 const browser = { id: "claudeai", kind: "browser", label: "Claude", credential: "subscription" };
@@ -85,16 +86,16 @@ beforeEach(() => mockPublish.mockClear());
 describe("LocalAgents", () => {
   it("asks each harness's CLI for its models, for the folder a turn would run in", async () => {
     const { logins, client } = engine(signedIn);
-    await expect(logins.models("/repo/.deus/berlin")).resolves.toEqual([
-      expect.objectContaining({ harness: "claude-code", source: "live" }),
-      expect.objectContaining({ harness: "codex-app-server", source: "live" }),
-    ]);
-    expect(client.listModels.mock.calls).toEqual([
-      [{ harness: "claude-code", cwd: "/repo/.deus/berlin" }],
-      [{ harness: "codex-app-server", cwd: "/repo/.deus/berlin" }],
-    ]);
+    const cwd = "/repo/.deus/berlin";
+    await expect(logins.models(cwd)).resolves.toEqual(
+      LOCAL_HARNESSES.map((harness) => expect.objectContaining({ harness, source: "live" }))
+    );
+    expect(client.listModels.mock.calls).toEqual(
+      LOCAL_HARNESSES.map((harness) => [{ harness, cwd }])
+    );
+    client.listModels.mockClear();
     await logins.models();
-    expect(client.listModels).toHaveBeenLastCalledWith({ harness: "codex-app-server" });
+    expect(client.listModels.mock.calls).toEqual(LOCAL_HARNESSES.map((harness) => [{ harness }]));
   });
 
   it("reads only the named CLI when a start needs its model", async () => {
