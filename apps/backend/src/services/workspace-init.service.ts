@@ -78,7 +78,7 @@ export async function createLocalWorkspace(
   const { slug, branchName } = await pickWorkspaceName(rootPath);
 
   options.admit?.();
-  const inserted = insertLocalWorkspace({
+  insertLocalWorkspace({
     id: workspaceId,
     repository_id: input.repository_id,
     slug,
@@ -94,19 +94,17 @@ export async function createLocalWorkspace(
         ? JSON.stringify(options.startedBy)
         : null,
   });
-  if (inserted) {
-    try {
-      void initializeWorkspace({
-        workspaceId,
-        repoRootPath: rootPath,
-        workspacePath: path.join(rootPath, ".deus", slug),
-        branchName,
-        sourceBranch,
-        repoOriginUrl: repo.git_origin_url,
-      });
-    } finally {
-      invalidate(["workspaces"]);
-    }
+  try {
+    void initializeWorkspace({
+      workspaceId,
+      repoRootPath: rootPath,
+      workspacePath: path.join(rootPath, ".deus", slug),
+      branchName,
+      sourceBranch,
+      repoOriginUrl: repo.git_origin_url,
+    });
+  } finally {
+    invalidate(["workspaces"]);
   }
   return { workspaceId, firstSessionId };
 }

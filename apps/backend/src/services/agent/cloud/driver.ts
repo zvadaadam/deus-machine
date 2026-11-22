@@ -208,7 +208,7 @@ function recordWorkspaceStatus(
   workspaceId: string,
   data: { status?: string; step?: string }
 ): void {
-  if (applyCloudStatus(workspaceId, data) === undefined) return;
+  applyCloudStatus(workspaceId, data);
   try {
     // A dropped sandbox socket may never deliver the device's own stopped event.
     if (data.status === "stopped" || data.status === "paused" || data.status === "error")

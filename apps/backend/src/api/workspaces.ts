@@ -122,9 +122,7 @@ export default [
     return retryWorkspaceInit(workspaceId);
   }),
   // Only a workspace that never started: see deleteFailedWorkspace.
-  handle(api.deleteWorkspace, ({ workspaceId }) => {
-    deleteFailedWorkspace(workspaceId);
-  }),
+  handle(api.deleteWorkspace, ({ workspaceId }) => deleteFailedWorkspace(workspaceId)),
   handle(api.retrySetup, ({ workspaceId }) => {
     const { workspace, workspacePath } = loadWorkspace(workspaceId);
     if (workspace.kind === "cloud") {

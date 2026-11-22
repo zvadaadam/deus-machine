@@ -1107,7 +1107,7 @@ describe("cloud driver frame → fold contract", () => {
     }
   });
 
-  it("skips parking and workspace publication for a missing row", async () => {
+  it("parks and publishes a paused report even when its workspace row is gone", async () => {
     const park = vi.spyOn(simulator, "parkCloudSimulator");
     mockInvalidate.mockClear();
     try {
@@ -1117,8 +1117,8 @@ describe("cloud driver frame → fold contract", () => {
           capturedOnFrame!({ type: "workspace.state", data: { status: "paused" } });
         }
       );
-      expect(park).not.toHaveBeenCalled();
-      expect(mockInvalidate).not.toHaveBeenCalled();
+      expect(park).toHaveBeenCalledExactlyOnceWith("deus-ws-1");
+      expect(mockInvalidate).toHaveBeenCalledExactlyOnceWith(["workspaces"], {});
     } finally {
       park.mockRestore();
     }
