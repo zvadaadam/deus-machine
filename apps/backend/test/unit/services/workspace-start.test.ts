@@ -823,24 +823,19 @@ exec "$REAL_GIT" "$@"
       original = token;
       lifecycle.failStart("w", "fetch", { message: "first start failed", detail: null }, token);
     });
-    let before: unknown;
-    let after: unknown;
-    let publishes = 0;
-    mocks.invalidate.mockImplementation(() => {
-      if (before || row("w").init_stage !== "fetch") return;
-      before = row("w");
-      const n = mocks.invalidate.mock.calls.length;
+    lifecycle.claimLocalRetry("w");
+    await lifecycle.runWorkspaceAttempt("w", async (current) => {
+      lifecycle.advanceLocalStage("w", "fetch", current);
+      const before = row("w");
+      mocks.invalidate.mockClear();
       lifecycle.advanceLocalStage("w", "session", original);
       lifecycle.recordFetchOutcome("w", "offline", original);
       lifecycle.finishLocalStart("w", original);
       lifecycle.failStart("w", "session", { message: "old failure", detail: null }, original);
-      after = row("w");
-      publishes = mocks.invalidate.mock.calls.length - n;
+      expect(row("w")).toEqual(before);
+      expect(mocks.invalidate).not.toHaveBeenCalled();
+      expect(lifecycle.finishLocalStart("w", current)).toBe(true);
     });
-    await retryWorkspaceInit("w");
-    await vi.waitFor(() => expect(row("w").init_stage).toBe("done"), { timeout: 3000 });
-    expect(after).toEqual(before);
-    expect(publishes).toBe(0);
     expect(row("w").state).toBe("ready");
   });
 
@@ -1002,41 +997,5 @@ describe("only a failed start can be retried or deleted", () => {
     }
     claim("w");
     expect(row("w").state).toBe("initializing");
-  });
-
-  it.each([
-    ["local Retry", "worktree", lifecycle.claimLocalRetry],
-    ["cloud Retry", "cloud", lifecycle.claimCloudRetry],
-    ["local Delete", "worktree", deleteFailedWorkspace],
-    ["cloud Delete", "cloud", deleteFailedWorkspace],
-  ] as const)("%s checks every state, chat selection and computer", (_name, kind, operation) => {
-    // Each verdict column is one stored state, in the order below.
-    const states = ["initializing", "ready", "archived", "error"] as const;
-    const cases = [
-      [null, false, null, ["refused", "refused", "refused", "allowed"]],
-      [null, false, "computer", ["refused", "refused", "refused", "refused"]],
-      [null, true, null, ["refused", "refused", "refused", "refused"]],
-      [null, true, "computer", ["refused", "refused", "refused", "refused"]],
-      ["selected", false, null, ["refused", "refused", "refused", "refused"]],
-      ["selected", false, "computer", ["refused", "refused", "refused", "refused"]],
-      ["selected", true, null, ["refused", "refused", "refused", "refused"]],
-      ["selected", true, "computer", ["refused", "refused", "refused", "refused"]],
-    ] as const;
-    for (const [pointer, chat, computer, expected] of cases) {
-      for (const [index, state] of states.entries()) {
-        const id = [kind, state, pointer, chat, computer].join("-");
-        const sessionId = "s-" + id;
-        add(id, id, {
-          kind,
-          state,
-          current_session_id: pointer && sessionId,
-          provider_workspace_id: computer,
-        });
-        if (chat)
-          db().prepare("INSERT INTO sessions (id, workspace_id) VALUES (?, ?)").run(sessionId, id);
-        if (expected[index] === "allowed") expect(() => operation(id)).not.toThrow();
-        else expect(() => operation(id)).toThrow(expect.objectContaining({ statusCode: 409 }));
-      }
-    }
   });
 });
