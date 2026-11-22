@@ -120,9 +120,9 @@ describe("a workspace that started", () => {
     expect(labels(finished)).toContain("done: Ran setup");
   });
 
-  it("keeps the fetch step in place when the project has no remote", () => {
-    const start = workspaceStart({ ...ready, init_fetch_issue: "no_remote" });
-    expect(labels(start)).toEqual(["done: No remote to check", "done: Made a safe copy"]);
+  it("keeps the fetch step in place when the project has no origin", () => {
+    const start = workspaceStart({ ...ready, init_fetch_issue: "no_origin" });
+    expect(labels(start)).toEqual(["done: No origin to check", "done: Made a safe copy"]);
     expect(warnings(start)).toEqual([]);
   });
 

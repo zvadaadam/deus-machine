@@ -260,6 +260,8 @@ in the sidebar's place. The open list reads again when the live group's
 `archived_count` changes. Restore goes through `updateWorkspace`. Archive and Delete leave the cache to the server.
 `useWorkspacesByRepo` hides each pending removal until its write settles. The
 backend publishes the changed list before it acknowledges the write.
+For each new mutation that removes a row, use `useMutationState` in the list
+reader to hide the pending row and let the server's live list update the cache.
 
 Creating a local workspace writes its row and returns. The rest runs in the
 background, in three stages: `fetch` (origin's latest for the branch it starts
@@ -270,8 +272,8 @@ progress channel: the desktop, the web app and a phone all follow it.
 
 - Only `worktree` and `session` are fatal. A fetch that fails still starts the
   workspace, from what is on this computer, and records why
-  (`init_fetch_issue`: `offline`, `auth` or `failed`). A project with no origin
-  records `no_remote` and the start line says "No remote to check".
+  (`init_fetch_issue`: `offline`, `auth` or `failed`). A project with no remote
+  named `origin` records `no_origin` and the start line says "No origin to check".
 - Once the checkout exists, the first chat can take its message while the project's
   setup script runs. A local turn is told the running command, log and status
   file, or a failure's quoted reason and last log lines. After a repair the

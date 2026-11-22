@@ -20,9 +20,9 @@ const directory = await mkdtemp(path.join(evidence, "run-"));
 const database = path.join(directory, "deus.db");
 const stack = createStack({ root, directory });
 const spawnToken = crypto.randomUUID();
-let backend, db, server, browser, host, baseUrl, local, remote, offline;
+let backend, db, server, browser, host, baseUrl, local, remote, offline, upstream;
 
-async function makeProject(name, origin) {
+async function makeProject(name, remoteUrl, remoteName = "origin") {
   const folder = path.join(directory, name);
   await mkdir(folder);
   const git = (...args) => execFileSync("git", args, { cwd: folder, stdio: "pipe" });
@@ -37,7 +37,7 @@ async function makeProject(name, origin) {
     "-m",
     "init"
   );
-  if (origin) git("remote", "add", "origin", origin);
+  if (remoteUrl) git("remote", "add", remoteName, remoteUrl);
   return backend.write("addRepo", { root_path: folder });
 }
 
@@ -85,9 +85,10 @@ before(async () => {
   await startBackend();
   db = new Database(database);
   local = await makeProject("local");
-  const upstream = path.join(directory, "origin.git");
-  execFileSync("git", ["clone", "--bare", local.root_path, upstream], { stdio: "pipe" });
-  remote = await makeProject("remote", upstream);
+  const bare = path.join(directory, "origin.git");
+  execFileSync("git", ["clone", "--bare", local.root_path, bare], { stdio: "pipe" });
+  remote = await makeProject("remote", bare);
+  upstream = await makeProject("upstream", bare, "upstream");
   offline = await makeProject("offline", path.join(directory, "missing.git"));
   server = await createServer({
     configFile: path.join(root, "apps/web/vite.config.ts"),
@@ -185,10 +186,10 @@ test("Changes keeps the missing checkout error until a read succeeds", async (t)
   assert.deepEqual(await displays.jsonValue(), [null, reason, file]);
 });
 
-for (const project of ["local", "remote", "offline"]) {
+for (const project of ["local", "remote", "offline", "upstream"]) {
   test(`start details for ${project}`, async (t) => {
     const page = await tab(t);
-    const ws = await start({ local, remote, offline }[project], project + " start");
+    const ws = await start({ local, remote, offline, upstream }[project], project + " start");
     await page.goto(`${baseUrl}/w/${ws.id}`);
     await row(page, ws).waitFor();
     // This client saw the checkout finish. Resume that start story in its real chat.
@@ -206,7 +207,13 @@ for (const project of ["local", "remote", "offline"]) {
       (await group.getByText("Copy may be out of date", { exact: true }).count()) > 0,
       project === "offline"
     );
-    assert.equal(await group.getByText("No remote to check").count(), project === "local" ? 1 : 0);
+    if (project === "upstream")
+      await page.getByRole("button", { name: "Create PR", exact: true }).waitFor();
+    assert.equal(
+      await group.getByText("No origin to check", { exact: true }).count(),
+      project === "local" || project === "upstream" ? 1 : 0,
+      await group.innerText()
+    );
     assert.equal(
       await group.getByText("Checked for the latest changes").count(),
       project === "remote" ? 1 : 0
@@ -308,9 +315,9 @@ test("a detached HEAD with a remote still offers Create PR", async (t) => {
   await page.getByRole("button", { name: "Create PR", exact: true }).waitFor();
 });
 
-test("the idle workspace discovers a newly added remote without reloading", async (t) => {
+test("an idle workspace discovers a newly added remote when the window regains focus", async (t) => {
   const page = await tab(t);
-  const ws = await start(local, "PR polling");
+  const ws = await start(local, "PR on focus");
   assert.equal(ws.session_status, "idle");
   await page.goto(`${baseUrl}/w/${ws.id}`);
   await waitForPRRead(page, ws.id, false);
@@ -320,8 +327,12 @@ test("the idle workspace discovers a newly added remote without reloading", asyn
   const git = (...args) => execFileSync("git", args, { cwd: ws.workspace_path, stdio: "pipe" });
   git("remote", "add", "publish", remote.git_origin_url);
   try {
-    await waitForPRRead(page, ws.id, true);
-    await button.waitFor();
+    // The tab returns after the cached PR answer has gone stale.
+    await page.clock.setFixedTime(new Date(Date.now() + 60_000));
+    await page.evaluate(() =>
+      document.dispatchEvent(new Event("visibilitychange", { bubbles: true }))
+    );
+    await button.waitFor({ timeout: 5000 });
   } finally {
     git("remote", "remove", "publish");
   }

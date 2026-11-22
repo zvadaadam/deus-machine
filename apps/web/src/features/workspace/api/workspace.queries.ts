@@ -278,12 +278,12 @@ export function usePRStatus(
     enabled: !!workspaceId && ghInstalled && ghAuthenticated,
     staleTime: 10_000,
     refetchInterval: (query) => {
-      const data = query.state.data;
-      // A turn can create a PR, and a remote can be added while the workspace is idle.
-      if (sessionStatus === "working" || data?.no_remote) return 30_000;
+      // A working turn can create a PR.
+      if (sessionStatus === "working") return 30_000;
 
       // After agent stops: CI checks typically run 2-15min. Poll every 60s
       // while CI is pending so the user sees updates without manual refresh.
+      const data = query.state.data;
       if (data?.has_pr && data?.ci_status === "pending") return 60_000;
 
       // No PR or CI resolved: stop polling. Window focus refetch handles edge cases.

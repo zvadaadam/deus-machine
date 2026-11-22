@@ -148,7 +148,7 @@ describe("starting a workspace", () => {
     expect(row("w")).toMatchObject({
       state: "ready",
       init_stage: "done",
-      init_fetch_issue: "no_remote",
+      init_fetch_issue: "no_origin",
       error_message: null,
     });
     expect(row("w").current_session_id).toBeTruthy();
@@ -312,9 +312,10 @@ describe("starting a workspace", () => {
     expect(gitIn(workspacePath("vega"), "rev-parse", "HEAD")).toBe(git("rev-parse", "main"));
   });
 
-  it("records when a project has no remote to check", async () => {
+  it("records that origin was absent when upstream is the only remote", async () => {
+    git("remote", "add", "upstream", root);
     await initializeWorkspace(add("w", "vega"));
-    expect(row("w").init_fetch_issue).toBe("no_remote");
+    expect(row("w").init_fetch_issue).toBe("no_origin");
   });
 
   it("takes another name instead of reusing or removing one that is taken on disk", async () => {

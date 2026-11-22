@@ -157,7 +157,7 @@ async function refreshSource(
       );
     }
   } else {
-    issue = "no_remote";
+    issue = "no_origin";
   }
   const onOrigin = await succeeds(
     runGit(["show-ref", "--verify", "--quiet", `refs/remotes/origin/${ctx.sourceBranch}`], {

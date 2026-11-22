@@ -71,7 +71,7 @@ const STAGES = ["fetch", "worktree", "session"] as const;
 
 function completedFetch(issue: InitFetchIssue | null | undefined): StartStep {
   if (!issue) return { key: "fetch", label: "Checked for the latest changes", state: "done" };
-  if (issue === "no_remote") return { key: "fetch", label: "No remote to check", state: "done" };
+  if (issue === "no_origin") return { key: "fetch", label: "No origin to check", state: "done" };
   const why = match(issue)
     .with("offline", () => "We couldn’t reach the remote")
     .with("auth", () => "Git couldn’t sign in to the remote repository")
