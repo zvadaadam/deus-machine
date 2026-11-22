@@ -1,6 +1,6 @@
 /** Runs a local checkout from fetch through its first chat. A fetch failure is a
- * warning. A later failure hands the attempt's worktree and branch to the
- * workspace queue for cleanup before another start can claim the same name. */
+ * warning. A later failure removes the attempt's worktree and branch before
+ * the workspace is marked failed. */
 import fs from "fs";
 import path from "path";
 import type { InitFetchIssue } from "@shared/enums";
@@ -13,8 +13,6 @@ import {
   finishLocalStart,
   recordFetchOutcome,
   runWorkspaceAttempt,
-  changeWorkspaceState,
-  workspaceAttemptDone,
   type Stage,
 } from "./workspace-lifecycle";
 import { prepareLocalEnvironment } from "./project-environment.service";
@@ -322,10 +320,6 @@ async function checkout(ctx: InitContext, signal: AbortSignal) {
   } catch (err) {
     // Shutdown leaves the durable stage for startup recovery.
     if (processGroupsStopped()) return;
-    // A Retry arriving during removal waits for this attempt. Removal must also
-    // finish when Archive already holds the queue and is waiting for us.
-    const done = workspaceAttemptDone(ctx.workspaceId);
-    if (done) void changeWorkspaceState(ctx.workspaceId, () => done);
     if (OWNS_WORKTREE.has(stage)) {
       await removeWorktree(ctx.repoRootPath, ctx.workspacePath, ctx.branchName).catch((error) =>
         console.warn(`[WORKSPACE] Could not remove what ${ctx.workspaceId} left behind:`, error)

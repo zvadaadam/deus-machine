@@ -244,7 +244,8 @@ The owner also records `archived_at` and `archived_by` when a workspace is archi
 `workspace-lifecycle-fence.test.ts` checks the owner's imports and checks backend
 SQL and the integration CLI for lifecycle writes. Each local start has an
 in-memory attempt token. Archiving aborts that checkout and waits for its git
-processes and cleanup. Retry waits in the same queue. Retry and Delete both
+processes and cleanup. Retry waits for startup recovery and refuses a checkout
+whose cleanup is still running. Retry and Delete both
 require an error row with no chat, current chat pointer or cloud computer.
 
 Creating a local workspace writes its row and returns. The rest runs in the

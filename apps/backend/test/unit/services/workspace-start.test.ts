@@ -715,6 +715,24 @@ describe("an attempt owns its checkout", () => {
     );
   }
 
+  function holdWorktreeRemoval() {
+    const started = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const rm = fs.promises.rm.bind(fs.promises);
+    const hold = vi.spyOn(fs.promises, "rm").mockImplementationOnce(async (...args) => {
+      started.resolve();
+      await release.promise;
+      return rm(...args);
+    });
+    return {
+      started: started.promise,
+      finish() {
+        release.resolve();
+        hold.mockRestore();
+      },
+    };
+  }
+
   it.each(["fetch", "worktree"])(
     "archive stops the %s process group and reaps the checkout before returning",
     async (stage) => {
@@ -894,55 +912,67 @@ exec "$REAL_GIT" "$@"
     }
   );
 
-  it.each(["worktree", "setup", "session", "failed first chat"])(
-    "queues two immediate retries behind %s cleanup",
+  it("refuses Retry during a live checkout's cleanup and accepts it once the start fails", async () => {
+    refuseChatInsert();
+    const cleanup = holdWorktreeRemoval();
+    const checkout = initializeWorkspace(add("w", "vega"));
+    await cleanup.started;
+    const retry = retryWorkspaceInit("w").then(
+      () => "claimed",
+      (error: Error) => error.message
+    );
+    try {
+      expect(row("w")).toMatchObject({ state: "initializing", init_stage: "session" });
+      expect(() => deleteFailedWorkspace("w")).toThrow();
+      const verdict = await Promise.race([
+        retry,
+        new Promise<string>((resolve) => setImmediate(resolve, "still waiting for cleanup")),
+      ]);
+      expect(verdict).toBe("This workspace is not waiting for a retry.");
+    } finally {
+      cleanup.finish();
+      await checkout;
+      await retry;
+      await lifecycle.workspaceAttemptDone("w");
+    }
+    expect(row("w").state).toBe("error");
+    expect(branches()).toEqual(["main"]);
+    db().exec("DROP TRIGGER refuse_chat");
+    await retryWorkspaceInit("w");
+    await lifecycle.workspaceAttemptDone("w");
+    expect(row("w")).toMatchObject({ state: "ready", slug: "vega" });
+  });
+
+  it.each(["worktree", "setup", "session"])(
+    "queues two immediate retries behind startup recovery's %s cleanup",
     async (stage) => {
-      const failed = stage === "failed first chat";
-      const ctx = add("w", "vega", {
+      add("w", "vega", {
         init_stage: stage,
         git_source_branch: "main",
       });
-      if (failed) refuseChatInsert();
-      else git("worktree", "add", "-q", "-b", "test-user/vega", workspacePath("vega"), "main");
-      const removing = Promise.withResolvers<void>();
-      const release = Promise.withResolvers<void>();
-      const rm = fs.promises.rm.bind(fs.promises);
-      const hold = vi.spyOn(fs.promises, "rm").mockImplementationOnce(async (...args) => {
-        removing.resolve();
-        await release.promise;
-        return rm(...args);
-      });
+      git("worktree", "add", "-q", "-b", "test-user/vega", workspacePath("vega"), "main");
+      const cleanup = holdWorktreeRemoval();
+      const recovery = failInterruptedWorkspaces();
+      const requests = Promise.allSettled([retryWorkspaceInit("w"), retryWorkspaceInit("w")]);
       try {
-        const first = failed ? initializeWorkspace(ctx) : failInterruptedWorkspaces();
-        if (failed) {
-          await removing.promise;
-          db().exec("DROP TRIGGER refuse_chat");
-        }
-        const requests = Promise.allSettled([retryWorkspaceInit("w"), retryWorkspaceInit("w")]);
-        await removing.promise;
-        const stateDuringCleanup = row("w").state;
-        const branchDuringCleanup = branches();
+        await cleanup.started;
+        expect(row("w").state).toBe("initializing");
+        expect(branches()).toContain("test-user/vega");
         expect(() => deleteFailedWorkspace("w")).toThrow();
-
-        release.resolve();
-        const results = await requests;
-        expect(await first).toBe(failed ? undefined : 1);
-        expect(results.map((r) => r.status)).toEqual(["fulfilled", "rejected"]);
-        await vi.waitFor(() => expect(row("w").state).toBe("ready"), { timeout: 5000 });
-        expect(stateDuringCleanup).toBe("initializing");
-        expect(branchDuringCleanup).toContain("test-user/vega");
-        expect(results[1]).toMatchObject({
-          reason: { message: "This workspace is not waiting for a retry." },
-        });
-        expect(row("w").slug).toBe("vega");
-        expect(branches()).toEqual(["main", "test-user/vega"]);
-        expect(
-          db().prepare("SELECT count(*) FROM sessions WHERE workspace_id = 'w'").pluck().get()
-        ).toBe(1);
       } finally {
-        release.resolve();
-        hold.mockRestore();
+        cleanup.finish();
       }
+      expect(await recovery).toBe(1);
+      expect(await requests).toMatchObject([
+        { status: "fulfilled" },
+        { status: "rejected", reason: { message: "This workspace is not waiting for a retry." } },
+      ]);
+      await lifecycle.workspaceAttemptDone("w");
+      expect(row("w")).toMatchObject({ state: "ready", slug: "vega" });
+      expect(branches()).toEqual(["main", "test-user/vega"]);
+      expect(
+        db().prepare("SELECT count(*) AS n FROM sessions WHERE workspace_id = 'w'").get()
+      ).toEqual({ n: 1 });
     }
   );
 });
