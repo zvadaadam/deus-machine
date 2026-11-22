@@ -421,22 +421,21 @@ export function createDeusHost(): DeusHost {
       throw new Refused({ code: "archived", sessions: [sessionId] });
   }
 
-  /**
-   * An archive may be made now: the caller allowed; no member being set up or
-   * still working or waiting (a stop must be confirmed first; `not_yours` for
-   * one the caller did not start); no member that started a session not
-   * archived, in its own workspace or another, lineage as the package reads it.
-   */
+  /** A busy refusal lets the operator stop the caller's turns. Check everything a stop cannot change first. */
   function mayArchive(caller: Who, members: readonly Entry[], all: readonly Entry[]) {
     assertMayWrite(appCaller(caller));
-    for (const m of members) {
-      if (m.status === "setting_up")
-        throw new Refused({ code: "busy", sessions: [m.id], state: "setting_up" });
-      if (m.status === "working" || m.status === "needs_input") {
-        const code = sameOrigin(m.startedBy, originOf(caller)) ? "busy" : "not_yours";
-        throw new Refused({ code, sessions: [m.id], state: m.status });
-      }
-    }
+    const starting = members.find((m) => m.status === "setting_up");
+    if (starting) throw new Refused({ code: "busy", sessions: [starting.id], state: "setting_up" });
+    const active = members.filter((m) => m.status === "working" || m.status === "needs_input");
+    const origin = originOf(caller);
+    const others = active.filter((m) => !sameOrigin(m.startedBy, origin));
+    if (others.length)
+      throw new Refused({
+        code: "not_yours",
+        sessions: others.map((m) => m.id),
+        state: others[0]!.status,
+      });
+
     const ids = new Set(members.map((m) => m.id));
     const children = all.filter(
       (e) =>
@@ -444,6 +443,13 @@ export function createDeusHost(): DeusHost {
     );
     if (children.length)
       throw new Refused({ code: "has_children", sessions: children.map((c) => c.id) });
+    // The operator words the refusal for the first named member and checks each turn before stopping it.
+    if (active.length)
+      throw new Refused({
+        code: "busy",
+        sessions: active.map((m) => m.id),
+        state: active[0]!.status,
+      });
   }
 
   // ---- the first task ---------------------------------------------------------------

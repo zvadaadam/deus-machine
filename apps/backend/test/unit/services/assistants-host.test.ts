@@ -7,6 +7,7 @@
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WireRequestError } from "@zvada/agent-server/client";
+import { createOperator } from "@zvada/agent-server/operator";
 import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
 import { CATALOG_MODEL_LISTS } from "@shared/models";
 import type { AnyOp } from "@shared/api/op";
@@ -495,6 +496,72 @@ describe("archiving one chat (the owner's ruling, 2026-11-20)", () => {
     ).rejects.toMatchObject({
       refusal: { code: "has_children", sessions: ["s-kid"] },
     });
+  });
+});
+
+describe("archiving a workspace with a running turn", () => {
+  const caller = {
+    ...LEAD,
+    turnId: "lead-turn",
+    harness: "claude-code",
+    permissionMode: "bypass_permissions",
+  } as const;
+  const target = { kind: "workspace", id: "w-work" } as const;
+  const worker = { kind: "session", sessionId: "s-work" } as const;
+  beforeEach(() => {
+    insertWorkspace("w-work", "work", { startedBy: LEAD });
+    insertChat("s-work", "w-work", LEAD);
+    state.live.set("s-work", "first");
+  });
+
+  it("refuses an unarchived child before asking to stop its parent", async () => {
+    insertChat("s-child", "w-lead", worker);
+    await expect(createDeusHost().archive!(caller, target)).rejects.toMatchObject({
+      refusal: { code: "has_children", sessions: ["s-child"] },
+    });
+  });
+
+  it("refuses another starter's working chat before asking to stop the caller's chat", async () => {
+    insertChat("s-other", "w-work");
+    state.live.set("s-other", "other-turn");
+    await expect(createDeusHost().archive!(caller, target)).rejects.toMatchObject({
+      refusal: { code: "not_yours", sessions: ["s-other"], state: "working" },
+    });
+  });
+
+  it.each(["working", "needs_input"])(
+    "names both of the caller's active chats when the first is %s",
+    async (status) => {
+      insertChat("s-second", "w-work", LEAD);
+      state.live.set("s-second", "second");
+      if (status === "needs_input") {
+        state.pending.push({
+          sessionId: "s-work",
+          requestId: "plan",
+          method: "exitPlanMode",
+          params: {},
+        });
+      }
+      await expect(createDeusHost().archive!(caller, target)).rejects.toMatchObject({
+        refusal: { code: "busy", sessions: ["s-work", "s-second"], state: status },
+      });
+    }
+  );
+
+  it("the operator leaves the turn running if a child starts between preflight and commit", async () => {
+    const host = createDeusHost();
+    const archive = host.archive!;
+    vi.spyOn(host, "archive").mockImplementationOnce((who, subject) => {
+      insertChat("s-child", "w-lead", worker);
+      return archive(who, subject);
+    });
+    await expect(
+      createOperator(host).call("archive", { workspaces: ["work"] }, caller)
+    ).rejects.toMatchObject({
+      code: "has_children",
+    });
+    expect(state.stopped).toEqual([]);
+    expect(state.live.get("s-work")).toBe("first");
   });
 });
 
