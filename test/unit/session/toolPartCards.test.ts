@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { SessionProvider } from "@/features/session/context";
 import type { ToolPart } from "@shared/protocol-types";
 import { toToolUseBlocks } from "@/features/session/ui/blocks/ToolPartBlock";
 import { toolRegistry } from "@/features/session/ui/tools/ToolRegistry";
-import { BashToolRenderer, DefaultToolRenderer } from "@/features/session/ui/tools/renderers";
+import {
+  BashToolRenderer,
+  DefaultToolRenderer,
+  WriteToolRenderer,
+} from "@/features/session/ui/tools/renderers";
 
 function part(overrides: Partial<ToolPart>): ToolPart {
   return {
@@ -201,6 +208,24 @@ describe("a tool's own card and the fields an unregistered tool carries", () => 
 });
 
 describe("a card's line counts", () => {
+  it("shows +3 for a three-line write ending in a newline", () => {
+    const html = renderToStaticMarkup(
+      createElement(SessionProvider, {
+        sessionStatus: "idle",
+        subagentMessages: new Map(),
+        children: createElement(WriteToolRenderer, {
+          toolUse: {
+            type: "tool_use",
+            id: "create",
+            name: "Write",
+            input: { file_path: "small.txt", content: "start\ncolor=blue\nend\n" },
+          },
+        }),
+      })
+    );
+    expect(html).toContain(">+3<");
+  });
+
   it("counts no line for an empty side and none after a final newline", async () => {
     const { computeDiffStats } = await import("@/features/session/ui/tools/utils/computeDiffStats");
     // A deleted two-line file with no final newline.
