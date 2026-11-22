@@ -59,12 +59,9 @@ vi.mock("../../../src/services/query-engine", () => ({ invalidate: vi.fn() }));
 import {
   clearGithubTokenRefreshFlights,
   refreshWorkspaceGithubToken,
-  wakeCloudWorkspaceWithFeedback as wake,
+  wakeCloudWorkspaceWithFeedback,
 } from "../../../src/services/cloud-workspace-init.service";
 import { forgetGithubAnswers } from "../../../src/services/github-remote";
-
-const wakeCloudWorkspaceWithFeedback = (workspace: Parameters<typeof wake>[0]) =>
-  wake(workspace, () => undefined);
 
 beforeEach(() => {
   vi.resetAllMocks();

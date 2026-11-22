@@ -121,8 +121,7 @@ describe("workspace unarchive", () => {
     release();
     await Promise.all([archiving, opening]);
     expect(mocks.wake).toHaveBeenCalledWith(
-      expect.objectContaining({ provider_workspace_id: "cloud-vm" }),
-      expect.any(Function)
+      expect.objectContaining({ provider_workspace_id: "cloud-vm" })
     );
     expect(mocks.run).toHaveBeenCalledTimes(2);
   });

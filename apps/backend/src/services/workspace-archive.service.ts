@@ -12,7 +12,6 @@ import {
   markRestored,
   retireWorkspaceAttempt,
   rollbackCloudRestore,
-  queueCloudWake,
 } from "./workspace-lifecycle";
 import { stopWorkspaceSetup } from "./project-environment.service";
 import { invalidate } from "./query-engine";
@@ -61,7 +60,7 @@ export function archiveWorkspace(
 }
 
 export function wakeWorkspace(workspaceId: string) {
-  return queueCloudWake(workspaceId, async (latest) => {
+  return changeWorkspaceState(workspaceId, async () => {
     const workspace = getWorkspaceRaw(getDatabase(), workspaceId);
     if (!workspace) throw new NotFoundError("Workspace not found");
     if (workspace.kind !== "cloud" || !workspace.provider_workspace_id) {
@@ -70,29 +69,23 @@ export function wakeWorkspace(workspaceId: string) {
     if (workspace.state === "archived") {
       throw new ValidationError("Workspace is archived — unarchive it first");
     }
-    return wakeCloudWorkspaceWithFeedback(
-      {
-        ...workspace,
-        provider_workspace_id: workspace.provider_workspace_id,
-      },
-      latest
-    );
+    return wakeCloudWorkspaceWithFeedback({
+      ...workspace,
+      provider_workspace_id: workspace.provider_workspace_id,
+    });
   });
 }
 
 export function unarchiveWorkspace(workspaceId: string): Promise<void> {
-  return queueCloudWake(workspaceId, async (latest) => {
+  return changeWorkspaceState(workspaceId, async () => {
     const workspace = markRestored(workspaceId);
     if (!workspace) return;
     if (workspace.kind === "cloud" && workspace.provider_workspace_id) {
       try {
-        const result = await wakeCloudWorkspaceWithFeedback(
-          {
-            ...workspace,
-            provider_workspace_id: workspace.provider_workspace_id,
-          },
-          latest
-        );
+        const result = await wakeCloudWorkspaceWithFeedback({
+          ...workspace,
+          provider_workspace_id: workspace.provider_workspace_id,
+        });
         // A failed status refresh can still leave the computer serving.
         if (!result.ok && result.status !== "running") {
           throw new Error(result.error || "Could not wake the cloud machine. Try again.");

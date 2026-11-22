@@ -42,7 +42,7 @@ import {
   pushCloudSessionFacts,
 } from "./cloud/driver";
 import { refreshWorkspaceGithubToken } from "../cloud-workspace-init.service";
-import { rollbackSendWake, setCloudWakeStage } from "../workspace-lifecycle";
+import { setCloudWakeStage, watchCloudReports } from "../workspace-lifecycle";
 
 // ---- sendMessage ----
 
@@ -267,6 +267,7 @@ async function sendMessageOnce(
       workspace?.init_stage === "paused" || workspace?.init_stage === "stopped"
         ? workspace.init_stage
         : null;
+    const latest = asleepStage && workspace ? watchCloudReports(workspace.id) : undefined;
     try {
       // A send WAKES a sleeping sandbox, and its App token expires in an hour
       // — so the wake chip is not the only path that needs a fresh mint.
@@ -301,8 +302,8 @@ async function sendMessageOnce(
       // The optimistic "Waking" flip above must not outlive a failed wake:
       // the prompt is rolled back, so a stuck Waking chip would promise a
       // recovery nothing is driving. Same honest revert the chip path does.
-      if (asleepStage && workspace) {
-        rollbackSendWake(workspace.id, asleepStage);
+      if (asleepStage && workspace && !latest?.()) {
+        setCloudWakeStage(workspace.id, asleepStage);
         announceCloudEnv(workspace.id, sessionId, {
           status: asleepStage,
           reason: "wake failed — try again",

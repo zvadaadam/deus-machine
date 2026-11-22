@@ -32,7 +32,7 @@ import { generateUniqueName } from "./workspace.service";
 import {
   CLOUD_STILL_STARTING,
   applyCloudStatus,
-  type LatestCloudReport,
+  watchCloudReports,
   attachCloudComputer,
   attachCloudChat,
   failCloudStart,
@@ -451,16 +451,14 @@ function setInlineMintStamp(
 const githubTokenRefreshes = new Map<string, Promise<RepositoryAuth | null>>();
 
 /** Explicit wake releases the platform hold; the runtime owns resume and recovery. */
-export async function wakeCloudWorkspaceWithFeedback(
-  workspace: {
-    id: string;
-    provider_workspace_id: string;
-    current_session_id: string | null;
-    repository_id?: string | null;
-    organization_id?: string | null;
-  },
-  latest: LatestCloudReport
-): Promise<{ ok: boolean; status: string; error?: string }> {
+export async function wakeCloudWorkspaceWithFeedback(workspace: {
+  id: string;
+  provider_workspace_id: string;
+  current_session_id: string | null;
+  repository_id?: string | null;
+  organization_id?: string | null;
+}): Promise<{ ok: boolean; status: string; error?: string }> {
+  const latest = watchCloudReports(workspace.id);
   const db = getDatabase();
   const sessionId = await ensureWorkspaceChat(workspace);
   if (!sessionId) throw new ConflictError(CHAT_OPEN_FAILED);

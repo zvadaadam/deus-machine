@@ -422,60 +422,48 @@ function projectCloudStatus(data: CloudReport, row: { archived: boolean; hasChat
 }
 
 type WakeReport = { outcome?: { ok: boolean; status: string; error?: string } };
-export type LatestCloudReport = () => WakeReport | undefined;
-const wakes = new Map<string, { report?: WakeReport }>();
+const cloudReports = new Map<string, WakeReport>();
 
-export function queueCloudWake<T>(id: string, wake: (latest: LatestCloudReport) => Promise<T>) {
-  return changeWorkspaceState(id, async () => {
-    const watch: { report?: WakeReport } = {};
-    wakes.set(id, watch);
-    try {
-      return await wake(() => watch.report);
-    } finally {
-      wakes.delete(id);
-    }
-  });
+export function watchCloudReports(id: string) {
+  const before = cloudReports.get(id);
+  return (): WakeReport | undefined => {
+    const latest = cloudReports.get(id);
+    if (latest === before) return;
+    // An unknown report arrived, but no report since this watch changed the row.
+    return latest?.outcome === before?.outcome ? {} : latest;
+  };
 }
 
 /** The driver parks a sleeping computer's simulator before publishing. Undefined means the row is gone. */
 export function applyCloudStatus(workspaceId: string, data: CloudReport): boolean | undefined {
-  const wake = wakes.get(workspaceId);
-  if (wake) wake.report ??= {}; // Even an unrecognized report supersedes tentative stage writes.
   const row = cloudWorkspaceChat(workspaceId);
-  if (!row) return;
-  const fields = projectCloudStatus(data, {
-    archived: row.state === "archived",
-    hasChat: !!row.chat,
-  });
-  if (fields) {
+  const fields =
+    row &&
+    projectCloudStatus(data, {
+      archived: row.state === "archived",
+      hasChat: !!row.chat,
+    });
+  let outcome = cloudReports.get(workspaceId)?.outcome;
+  if (fields && data.status) {
     getDatabase()
       .prepare(
         "UPDATE workspaces SET state = ?, init_stage = ?, error_message = ?, error_detail = ? WHERE id = ?"
       )
       .run(...fields, workspaceId);
-    if (wake && data.status)
-      wake.report = {
-        outcome: {
-          ok: ["running", "provisioning", "resuming"].includes(data.status),
-          status: data.status,
-          error: fields[2] ?? undefined,
-        },
-      };
+    outcome = {
+      ok: ["running", "provisioning", "resuming"].includes(data.status),
+      status: data.status,
+      error: fields[2] ?? undefined,
+    };
   }
-  return !!fields;
+  cloudReports.set(workspaceId, { outcome });
+  return row && !!fields;
 }
 
 export function setCloudWakeStage(workspaceId: string, stage: string | null): void {
   getDatabase()
     .prepare("UPDATE workspaces SET init_stage = ? WHERE id = ?")
     .run(stage, workspaceId);
-  invalidate(["workspaces"], {});
-}
-
-export function rollbackSendWake(workspaceId: string, asleepStage: "paused" | "stopped"): void {
-  getDatabase()
-    .prepare("UPDATE workspaces SET init_stage = ? WHERE id = ? AND init_stage = 'resuming'")
-    .run(asleepStage, workspaceId);
   invalidate(["workspaces"], {});
 }
 

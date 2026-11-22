@@ -10,6 +10,7 @@ import {
 } from "../../../src/services/workspace-archive.service";
 import {
   applyCloudStatus,
+  watchCloudReports,
   attachCloudComputer,
   attachCloudChat,
   failCloudStart,
@@ -455,6 +456,33 @@ it("records a credentials failure when waking a computer whose chat never opened
     error_detail: "This cloud organization is not set up on this computer.",
   });
   expect(mock.allocate).toHaveBeenCalledOnce();
+});
+
+it("distinguishes no report from a report that kept an earlier outcome", async () => {
+  const { workspaceId } = createCloudWorkspace({ repositoryId: "r" });
+  await vi.waitFor(() => expect(mock.connect).toHaveBeenCalledOnce());
+  const first = watchCloudReports(workspaceId);
+  expect(first()).toBeUndefined();
+  report(workspaceId, "running");
+  const second = watchCloudReports(workspaceId);
+  expect(second()).toBeUndefined();
+  report(workspaceId, "unknown");
+  expect(first()).toEqual({ outcome: { ok: true, status: "running" } });
+  expect(second()).toEqual({});
+});
+
+it("restores after a failed resume when running was followed by an unknown report", async () => {
+  const { workspaceId } = createCloudWorkspace({ repositoryId: "r" });
+  await vi.waitFor(() => expect(mock.connect).toHaveBeenCalledOnce());
+  await archiveWorkspace(workspaceId);
+  mock.status.mockResolvedValue({ status: "paused" });
+  mock.resume.mockImplementationOnce(async () => {
+    report(workspaceId, "running");
+    report(workspaceId, "future-status");
+    throw new Error("resume unavailable");
+  });
+  await unarchiveWorkspace(workspaceId);
+  expect(row(workspaceId)).toMatchObject({ state: "ready", init_stage: null });
 });
 
 it("repairs an unarchived failed chat through an explicit wake", async () => {
