@@ -11,6 +11,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { OperatorError } from "@zvada/agent-server/operator";
 import type { AnyOp } from "@shared/api/op";
 import { SCHEMA_SQL } from "@shared/schema";
 
@@ -451,6 +452,18 @@ describe("the same folder added meanwhile (H18)", () => {
 });
 
 describe("a clone", () => {
+  it("reports the refusal reason and gives the clone retry hint once", async () => {
+    const folder = path.join(developer, "widget");
+    const reason = "The folder could not be registered.";
+    const next = '-> add_project(repository: "acme/widget")';
+    state.ops.addRepo = () => {
+      throw new OperatorError("unsupported", reason, { next });
+    };
+    await expect(addProject("acme/widget")).rejects.toMatchObject({
+      message: `refused (unsupported): Cloned into ${JSON.stringify(folder)}, but could not add the project. ${reason}\n  ${next}`,
+    });
+  });
+
   it.each(["inspectRepo", "addRepo"])(
     "reports the clone left on disk when %s fails",
     async (op) => {
@@ -543,7 +556,8 @@ describe("a clone", () => {
     // Another form of the same address joins the clone in flight.
     const second = await addProject("git@github.com:acme/slow.git", ending(7));
     expect(second).toContain("still cloning");
-    expect(clones()).toHaveLength(1);
+    // A short call can return before the child has scheduled its first write.
+    await vi.waitFor(() => expect(clones()).toHaveLength(1), { timeout: 5000 });
 
     fs.writeFileSync(release, "");
     const third = await addProject("acme/slow", assistant());

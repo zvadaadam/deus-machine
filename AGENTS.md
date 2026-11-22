@@ -235,6 +235,19 @@ ends on Home with that project chosen. There is no creation dialog. The one
 exception has its subject already: a workspace on a pull request or branch
 (`GitHubPickerModal`).
 
+The app and assistants' host share the creator in `services/workspace-init.service.ts`.
+It starts the local job in `workspace-checkout.ts`. The lifecycle owner
+(`workspace-lifecycle.ts`) holds the per-workspace queue, deletes failed starts,
+and writes `state`,
+`init_stage`, `setup_status`, `init_fetch_issue`, `error_message` and `error_detail`.
+The owner also records `archived_at` and `archived_by` when a workspace is archived.
+`workspace-lifecycle-fence.test.ts` checks the owner's imports and checks backend
+SQL and the integration CLI for lifecycle writes. Each local start has an
+in-memory attempt token. Archiving aborts that checkout and waits for its git
+processes and cleanup. Retry waits for startup recovery and refuses a checkout
+whose cleanup is still running. Retry and Delete both
+require an error row with no chat, current chat pointer or cloud computer.
+
 Creating a local workspace writes its row and returns. The rest runs in the
 background, in three stages: `fetch` (origin's latest for the branch it starts
 from), `worktree` (`git worktree add` on a new branch), and `session` (the first
@@ -272,6 +285,7 @@ progress channel: the desktop, the web app and a phone all follow it.
 - Cloud workspaces provision through `cloud-workspace-init.service.ts`. They
   share the `error` state, and the same retry and delete while no cloud
   computer exists for them; once one does, waking it is the way back.
+  During allocation or startup, Archive tells the person to try again once the computer is ready.
 
 In the app a start is told in the transcript, by the line cloud provisioning
 uses (`session/ui/EnvGroup`): `workspaceStart(workspace)`

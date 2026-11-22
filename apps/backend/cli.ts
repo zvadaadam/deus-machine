@@ -45,6 +45,7 @@ import {
   questionAnswer,
 } from "@shared/agent-asks";
 import { DB_PATH, closeDatabase, getDatabase, initDatabase } from "./src/lib/database";
+import { insertWorkspaceFixture } from "./src/services/workspace-lifecycle";
 import { persistChanges } from "./src/services/agent/persistence";
 import type { ConversationChange } from "@zvada/agent-server/protocol";
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
@@ -253,9 +254,7 @@ async function main() {
   db.prepare(
     `INSERT OR IGNORE INTO repositories (id, name, root_path) VALUES (?, 'cli-test', ?)`
   ).run(repoId, opts.cwd);
-  db.prepare(
-    `INSERT OR IGNORE INTO workspaces (id, repository_id, slug, state) VALUES (?, ?, 'cli-test', 'ready')`
-  ).run(workspaceId, repoId);
+  insertWorkspaceFixture(workspaceId, repoId);
   db.prepare(
     `INSERT INTO sessions (id, workspace_id, agent_harness, status) VALUES (?, ?, ?, 'working')`
   ).run(sessionId, workspaceId, opts.agent);

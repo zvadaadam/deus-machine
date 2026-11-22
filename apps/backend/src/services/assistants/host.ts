@@ -41,7 +41,6 @@ import {
   type Entry,
   type ModelEntry,
   type OperatorHost,
-  type Origin,
   type SessionStatus,
   type SessionView,
   type StartInput,
@@ -49,6 +48,7 @@ import {
   type TurnFact,
   type ViewTurn,
 } from "@zvada/agent-server/operator";
+import type { Origin } from "@zvada/agent-server/protocol";
 import type { AnyOp, InputOf, OutputOf } from "@shared/api/op";
 import * as sessions from "@shared/api/sessions";
 import { agentModels } from "@shared/api/settings";
@@ -66,9 +66,9 @@ import {
   pickerModels,
 } from "@shared/models";
 import { LOCAL_CALLER, type Caller } from "../../api/registry";
-import { createLocalWorkspace } from "../../api/workspaces";
 import { archiveWorkspace } from "../workspace-archive.service";
-import { attachParts, getMessages, getSessionRaw, hasOlderMessages } from "../../db";
+import { createLocalWorkspace } from "../workspace-init.service";
+import { attachParts, encodeOrigin, getMessages, getSessionRaw, hasOlderMessages } from "../../db";
 import { getDatabase } from "../../lib/database";
 import { AgentServerDisconnectedError, AppError, ChatBusyError } from "../../lib/errors";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
@@ -206,6 +206,11 @@ interface TurnRow {
 export interface DeusHost extends OperatorHost<Caller> {
   /** Run one of the app's operations for the call's caller; a write's access read again just before it. */
   act<O extends AnyOp>(caller: Who, op: O, input: InputOf<O>): Promise<OutputOf<O>>;
+}
+
+/** Return the refusal sentence, which OperatorError exposes only in its rendered message. */
+export function refusalSentence(error: OperatorError): string {
+  return error.message.split("\n", 1)[0]!.replace(/^refused \([a-z_]+\): /, "");
 }
 
 /**
@@ -481,12 +486,7 @@ export function createDeusHost(): DeusHost {
       );
     } catch (error) {
       const said = appRefusal(error);
-      undelivered(
-        sessionId,
-        said instanceof OperatorError
-          ? said.message.split("\n")[0]!.replace(/^refused \([a-z_]+\): /, "")
-          : ""
-      );
+      undelivered(sessionId, said instanceof OperatorError ? refusalSentence(said) : "");
       throw said;
     }
   }
@@ -782,12 +782,7 @@ export function createDeusHost(): DeusHost {
           db.transaction(() => {
             db.prepare(
               "INSERT INTO sessions (id, workspace_id, status, agent_harness, started_by, updated_at) VALUES (?, ?, 'idle', ?, ?, datetime('now'))"
-            ).run(
-              sessionId,
-              workspaceId,
-              agentHarness,
-              input.origin.kind === "person" ? null : JSON.stringify(input.origin)
-            );
+            ).run(sessionId, workspaceId, agentHarness, encodeOrigin(input.origin));
             db.prepare("UPDATE workspaces SET current_session_id = ? WHERE id = ?").run(
               sessionId,
               workspaceId
@@ -800,7 +795,7 @@ export function createDeusHost(): DeusHost {
         }
         mayStart(caller, input);
         const { workspaceId, firstSessionId } = await createLocalWorkspace(
-          { repository_id: input.project.id, location: "local" } as never,
+          { repository_id: input.project.id },
           { startedBy: input.origin, admit: () => mayStart(caller, input) }
         );
         hold(firstSessionId, { caller, workspaceId, input });
@@ -852,8 +847,11 @@ export function createDeusHost(): DeusHost {
             return { note: "Its start had failed, so it was removed." };
           }
           // Eligibility read again inside the app's queue, right before the update.
-          await archiveWorkspace(target.id, () => mayArchive(caller, members(), everything()));
-          invalidate(["workspaces"]);
+          await archiveWorkspace(
+            target.id,
+            () => mayArchive(caller, members(), everything()),
+            originOf(caller)
+          );
           return {
             note: `Its branch${w.git_branch ? ` ${JSON.stringify(w.git_branch)}` : ""} and changes are kept.`,
           };

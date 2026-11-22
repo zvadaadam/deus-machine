@@ -7,7 +7,6 @@ import {
   getCloudConnectionIdentity,
   getCloudIdentitySignal,
   getDeusCloudSessionConfig,
-  hasFallbackCloudKey,
   requireCloudOrg,
   resetCloudConfigForTests,
   setCloudRuntimeCredentials,
@@ -133,14 +132,12 @@ describe("cloud config runtime credentials", () => {
     expect(defaultCloudOrgId()).toBeNull();
     expect(cloudOrg()).toMatchObject({ orgId: null, apiKey: "agnt_sk_from_env" });
     expect(cloudOrg("org_x")).toMatchObject({ orgId: "org_x", apiKey: "agnt_sk_from_env" });
-    expect(hasFallbackCloudKey()).toBe(true);
 
     // One organization's key is pushed: the developer key no longer stands in for another.
     setCloudRuntimeCredentials({ orgKeys: { org_a: "key_a" } });
     expect(cloudOrg("org_a")?.apiKey).toBe("key_a");
     expect(cloudOrg("org_x")).toBeNull();
     expect(() => requireCloudOrg("org_x")).toThrow(/not set up on this computer/);
-    expect(hasFallbackCloudKey()).toBe(false);
   });
 
   it("the default is the organization the desktop names, even when its key is missing", () => {

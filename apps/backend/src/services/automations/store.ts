@@ -4,6 +4,7 @@
 // instantly. Sync logic lives in service.ts; this file owns rows.
 
 import { uuidv7 } from "@shared/lib/uuid";
+import { attachAdoptedSession, insertAdoptedWorkspace } from "../workspace-lifecycle";
 import { getDatabase } from "../../lib/database";
 import type { AutomationRow, AutomationRunRow, AutomationWithDetailsRow } from "../../db/types";
 
@@ -188,23 +189,6 @@ export function upsertRuns(rows: AutomationRunRow[]): void {
   apply();
 }
 
-// ─── Run adoption (find-or-create the deus rows for a platform run) ──
-
-/** Resurface an archived adopted workspace and repoint its current session.
- *  Returns true when anything changed (caller invalidates). */
-export function reviveAdoptedWorkspace(workspaceId: string, sessionId: string): boolean {
-  const db = getDatabase();
-  const revived = db
-    .prepare(
-      "UPDATE workspaces SET state = 'ready', updated_at = datetime('now') WHERE id = ? AND state = 'archived'"
-    )
-    .run(workspaceId);
-  db.prepare(
-    "UPDATE workspaces SET current_session_id = ?, updated_at = datetime('now') WHERE id = ? AND current_session_id IS NOT ?"
-  ).run(sessionId, workspaceId, sessionId);
-  return revived.changes > 0;
-}
-
 /** True when an adopted deus session row still exists. */
 export function sessionExists(sessionId: string): boolean {
   return getDatabase().prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId) !== undefined;
@@ -229,40 +213,30 @@ export function adoptRunRows(input: {
   /** The automation's organization: the run's workspace is in it. */
   organizationId: string | null;
   newWorkspaceSlug: () => string;
-}): { workspaceId: string; sessionId: string } {
+}) {
   const db = getDatabase();
   const adopt = db.transaction(() => {
     let session = db
       .prepare("SELECT id, workspace_id FROM sessions WHERE provider_session_id = ?")
       .get(input.providerSessionId) as { id: string; workspace_id: string } | undefined;
 
-    let workspaceId: string;
-    if (session) {
-      workspaceId = session.workspace_id;
-      db.prepare(
-        "UPDATE workspaces SET state = 'ready', updated_at = datetime('now') WHERE id = ? AND state = 'archived'"
-      ).run(workspaceId);
-    } else {
-      const found = db
+    if (!session) {
+      const workspace = db
         .prepare(
-          "SELECT id FROM workspaces WHERE provider_workspace_id = ? AND state != 'archived'"
+          `SELECT id FROM workspaces WHERE provider_workspace_id = ?
+           ORDER BY state = 'archived', updated_at DESC, id LIMIT 1`
         )
         .get(input.providerWorkspaceId) as { id: string } | undefined;
-      if (found) {
-        workspaceId = found.id;
-      } else {
-        workspaceId = uuidv7();
-        db.prepare(
-          `INSERT INTO workspaces (id, repository_id, slug, title, state, kind, provider_workspace_id, organization_id)
-           VALUES (?, ?, ?, ?, 'ready', 'cloud', ?, ?)`
-        ).run(
-          workspaceId,
-          input.repositoryId,
-          input.newWorkspaceSlug(),
-          input.automationName,
-          input.providerWorkspaceId,
-          input.organizationId
-        );
+      const workspaceId = workspace?.id ?? uuidv7();
+      if (!workspace) {
+        insertAdoptedWorkspace({
+          id: workspaceId,
+          repository_id: input.repositoryId,
+          slug: input.newWorkspaceSlug(),
+          title: input.automationName,
+          provider_workspace_id: input.providerWorkspaceId,
+          organization_id: input.organizationId,
+        });
       }
       const sessionId = uuidv7();
       db.prepare(
@@ -272,9 +246,8 @@ export function adoptRunRows(input: {
       session = { id: sessionId, workspace_id: workspaceId };
     }
 
-    db.prepare(
-      "UPDATE workspaces SET current_session_id = ?, organization_id = COALESCE(organization_id, ?), updated_at = datetime('now') WHERE id = ?"
-    ).run(session.id, input.organizationId, workspaceId);
+    const workspaceId = session.workspace_id;
+    attachAdoptedSession(workspaceId, session.id, input.organizationId);
     db.prepare("UPDATE automation_runs SET session_id = ?, workspace_id = ? WHERE id = ?").run(
       session.id,
       workspaceId,

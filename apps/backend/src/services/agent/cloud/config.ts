@@ -118,7 +118,7 @@ function agntBaseUrl(): string {
  * wrong organization.
  */
 function fallbackKey(): string | null {
-  return process.env.DEUS_CLOUD_AGNT_API_KEY ?? process.env.AGNT_API_KEY ?? null;
+  return process.env.DEUS_CLOUD_AGNT_API_KEY || process.env.AGNT_API_KEY || null;
 }
 
 function sessionSubject(token: string | null): string | null {
@@ -186,11 +186,6 @@ export function requireCloudOrg(orgId?: string | null): CloudOrg {
 /** Organizations this backend holds its own key for, in the platform's order. */
 export function cloudOrgKeyIds(): string[] {
   return [...orgKeys.keys()];
-}
-
-/** Whether this backend acts with the fallback key: one is set and no organization keys were pushed. */
-export function hasFallbackCloudKey(): boolean {
-  return orgKeys.size === 0 && fallbackKey() !== null;
 }
 
 /**

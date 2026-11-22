@@ -42,12 +42,14 @@ export function runGit(
   options: {
     cwd: string;
     timeoutMs?: number;
+    signal?: AbortSignal;
     /** Each piece of stderr as it arrives (a clone's progress). */
     onStderr?: (chunk: string) => void;
   }
 ): Promise<string> {
-  const { cwd, timeoutMs = 10_000, onStderr } = options;
+  const { cwd, timeoutMs = 10_000, onStderr, signal } = options;
   return new Promise((resolve, reject) => {
+    signal?.throwIfAborted();
     if (processGroupsStopped()) {
       reject(new GitError(args, "", false, new Error("Deus is closing.")));
       return;
@@ -57,7 +59,7 @@ export function runGit(
       detached: true,
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
-      env: createBackendChildEnv({ GIT_TERMINAL_PROMPT: "0" }),
+      env: createBackendChildEnv({ GIT_TERMINAL_PROMPT: "0", LC_ALL: "C" }),
     });
     const untrack = trackProcessGroup(child.pid);
     let stdout = "";
@@ -68,15 +70,17 @@ export function runGit(
       onStderr?.(chunk);
     });
 
-    const signalGroup = (signal: NodeJS.Signals) => {
+    const signalGroup = (killSignal: NodeJS.Signals) => {
       if (!child.pid) return;
       try {
-        process.kill(-child.pid, signal);
+        process.kill(-child.pid, killSignal);
       } catch {
         // The group is gone, or this platform has none: stop the one process.
-        child.kill(signal);
+        child.kill(killSignal);
       }
     };
+    const abort = () => signalGroup("SIGKILL");
+    signal?.addEventListener("abort", abort, { once: true });
     let timedOut = false;
     let kill: NodeJS.Timeout | undefined;
     const stop = setTimeout(() => {
@@ -89,10 +93,12 @@ export function runGit(
     const settle = (error?: unknown, code?: number | null) => {
       if (settled) return;
       settled = true;
+      signal?.removeEventListener("abort", abort);
       untrack();
       clearTimeout(stop);
       clearTimeout(kill);
-      if (error === undefined && code === 0 && !timedOut) resolve(stdout);
+      if (signal?.aborted) reject(signal.reason);
+      else if (error === undefined && code === 0 && !timedOut) resolve(stdout);
       else reject(new GitError(args, stderr.trim(), timedOut, error));
     };
     // "error" without "close": git is not installed, or the folder is gone.

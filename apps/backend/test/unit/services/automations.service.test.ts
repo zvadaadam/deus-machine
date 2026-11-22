@@ -41,6 +41,7 @@ const {
     updateAutomation: vi.fn(),
     deleteAutomation: vi.fn(),
     pauseAutomation: vi.fn(),
+    pauseWorkspace: vi.fn(),
     resumeAutomation: vi.fn(),
     triggerAutomation: vi.fn(),
     listAutomationRuns: vi.fn(),
@@ -52,7 +53,13 @@ const {
 
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
-vi.mock("../../../src/services/streams", () => ({ resetSubscribers: mockResetSubscribers }));
+const socketFor = vi.hoisted(() => vi.fn());
+vi.mock("../../../src/services/ws.service", () => ({ getConnection: socketFor }));
+vi.mock("../../../src/services/agent", () => ({ answerToolRequest: vi.fn() }));
+vi.mock("../../../src/services/streams", () => ({
+  resetSubscribers: mockResetSubscribers,
+  dropConnection: vi.fn(),
+}));
 vi.mock("../../../src/services/agent/cloud/config", async () =>
   (await import("../../cloud-config-mock")).cloudConfigMock(mockGetCloudConfig)
 );
@@ -88,6 +95,7 @@ import {
   validateSchedule,
 } from "../../../src/services/automations/service";
 import { summaryToRow, runSummaryToRow } from "../../../src/services/automations/platform";
+import { archiveWorkspace } from "../../../src/services/workspace-archive.service";
 import * as store from "../../../src/services/automations/store";
 import { resetCloudModelListsForTests } from "../../../src/services/agent/cloud/models";
 import { handleAutomationToolRequest } from "../../../src/services/automations/agent-rpc";
@@ -1071,8 +1079,13 @@ describeWithDb("openAutomationRun", () => {
     });
   });
 
-  it("adopts the sandbox into deus rows and is idempotent", async () => {
-    const first = await openAutomationRun("run-1");
+  it("adopts one workspace and one chat when two first opens both read the platform", async () => {
+    const detail = Promise.withResolvers<{ workspaceId: string; messages: [] }>();
+    sdk.getSession.mockReturnValue(detail.promise);
+    const opens = [openAutomationRun("run-1"), openAutomationRun("run-1")];
+    expect(sdk.getSession).toHaveBeenCalledTimes(2);
+    detail.resolve({ workspaceId: "agnt-ws-1", messages: [] });
+    const [first, second] = await Promise.all(opens);
     expect(sdk.getSession).toHaveBeenCalledWith("run-1", AUTH);
     const workspace = db
       .prepare("SELECT * FROM workspaces WHERE id = ?")
@@ -1085,10 +1098,28 @@ describeWithDb("openAutomationRun", () => {
       .get(first.sessionId) as Record<string, unknown>;
     expect(session.provider_session_id).toBe("run-1");
 
-    const second = await openAutomationRun("run-1");
     expect(second).toEqual(first);
     expect(db.prepare("SELECT COUNT(*) AS n FROM workspaces").get()).toEqual({ n: 1 });
+    expect(db.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toEqual({ n: 1 });
   });
+
+  it.each(["ready", "archived"])(
+    "reuses the newest %s workspace on the computer for a new chat",
+    async (state) => {
+      const insert = db.prepare(
+        `INSERT INTO workspaces (id, repository_id, slug, provider_workspace_id, state, updated_at)
+       VALUES (?, 'r1', ?, 'agnt-ws-1', ?, ?)`
+      );
+      insert.run("oldest", "oldest", state, "2026-01-01");
+      insert.run("newest", "newest", state, "2026-01-02");
+      if (state === "ready") insert.run("archived", "archived", "archived", "2026-01-03");
+      const { workspaceId } = await openAutomationRun("run-1");
+      expect(workspaceId).toBe("newest");
+      expect(db.prepare("SELECT state FROM workspaces WHERE id = ?").get(workspaceId)).toEqual({
+        state: "ready",
+      });
+    }
+  );
 
   it("tells whoever has the chat open to read it again once its transcript is filled in", async () => {
     sdk.getSession.mockResolvedValue({
@@ -1108,6 +1139,128 @@ describeWithDb("openAutomationRun", () => {
       expect.objectContaining({ name: "sessionEvents" }),
       { sessionId: adopted.sessionId }
     );
+  });
+
+  it("revives an archived owner on adoption and on reopen, with each path's live reads", async () => {
+    const first = await openAutomationRun("run-1");
+    const archive = db.prepare(
+      "UPDATE workspaces SET state = 'archived', current_session_id = NULL WHERE id = ?"
+    );
+    const workspace = db.prepare("SELECT state, current_session_id FROM workspaces WHERE id = ?");
+    const ready = { state: "ready", current_session_id: first.sessionId };
+    expect(workspace.get(first.workspaceId)).toEqual(ready);
+
+    archive.run(first.workspaceId);
+    mockInvalidate.mockClear();
+    expect(await openAutomationRun("run-1")).toEqual(first);
+    expect(workspace.get(first.workspaceId)).toEqual(ready);
+    expect(mockInvalidate).toHaveBeenCalledExactlyOnceWith(["workspaces"]);
+
+    // An unadopted ledger entry may point to the same platform session.
+    db.prepare(
+      "UPDATE automation_runs SET session_id = NULL, workspace_id = NULL WHERE id = 'run-1'"
+    ).run();
+    archive.run(first.workspaceId);
+    db.exec(
+      "INSERT INTO workspaces (id, repository_id, slug, provider_workspace_id) VALUES ('other', 'r1', 'other', 'agnt-ws-1')"
+    );
+    mockInvalidate.mockClear();
+    expect(await openAutomationRun("run-1")).toEqual(first);
+    expect(workspace.get(first.workspaceId)).toEqual(ready);
+    expect(mockInvalidate).toHaveBeenCalledTimes(2);
+    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces"]);
+    expect(mockInvalidate).toHaveBeenCalledWith(
+      ["workspaces", "sessions", "session", "automations", "automationRuns"],
+      { sessionIds: [first.sessionId] }
+    );
+  });
+
+  it.each([false, true])(
+    "backfills an adopted=%s run during archive and opens it after the pause",
+    async (linked) => {
+      const first = await openAutomationRun("run-1");
+      if (!linked) db.exec("UPDATE automation_runs SET session_id = NULL, workspace_id = NULL");
+      const gate = Promise.withResolvers<void>();
+      sdk.pauseWorkspace.mockReturnValueOnce(gate.promise);
+      const closing = archiveWorkspace(first.workspaceId);
+      await vi.waitFor(() => expect(sdk.pauseWorkspace).toHaveBeenCalledOnce());
+      sdk.getSession.mockResolvedValueOnce({
+        workspaceId: "agnt-ws-1",
+        messages: [{ id: "while-pausing", role: "assistant", parts: [] }],
+      });
+      let finished = false;
+      const opening = openAutomationRun("run-1").then(() => {
+        finished = true;
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      const premature = finished;
+      const transcript = db
+        .prepare("SELECT id FROM messages WHERE session_id = ?")
+        .all(first.sessionId);
+      gate.resolve();
+      await Promise.all([closing, opening]);
+      expect(transcript).toEqual([{ id: "while-pausing" }]);
+      expect(premature).toBe(false);
+      expect(db.prepare("SELECT state FROM workspaces").pluck().get()).toBe("ready");
+    }
+  );
+
+  it("resurfaces the selected run when Archive completes during its transcript read", async () => {
+    const first = await openAutomationRun("run-1");
+    store.upsertRuns([runSummaryToRow(runFixture({ id: "run-2", sessionId: "run-2" }))]);
+    const second = await openAutomationRun("run-2");
+    const transcript = Promise.withResolvers<{ workspaceId: string; messages: [] }>();
+    sdk.getSession.mockClear().mockReturnValueOnce(transcript.promise);
+    const opening = openAutomationRun("run-1");
+    const workspace = db.prepare("SELECT state, current_session_id FROM workspaces WHERE id = ?");
+    try {
+      expect(sdk.getSession).toHaveBeenCalledExactlyOnceWith("run-1", AUTH);
+      await archiveWorkspace(first.workspaceId);
+      expect(workspace.get(first.workspaceId)).toEqual({
+        state: "archived",
+        current_session_id: second.sessionId,
+      });
+    } finally {
+      transcript.resolve({ workspaceId: "agnt-ws-1", messages: [] });
+      await opening;
+    }
+    expect(workspace.get(first.workspaceId)).toEqual({
+      state: "ready",
+      current_session_id: first.sessionId,
+    });
+  });
+
+  it("sends a new selection to both subscribed devices and stays quiet on a second open", async () => {
+    const first = await openAutomationRun("run-1");
+    store.upsertRuns([runSummaryToRow(runFixture({ id: "run-2", sessionId: "run-2" }))]);
+    await openAutomationRun("run-2");
+    const engine = await vi.importActual<typeof import("../../../src/services/query-engine")>(
+      "../../../src/services/query-engine"
+    );
+    const { Registry } = await import("../../../src/api/registry");
+    const { default: operations } = await import("../../../src/api/workspaces");
+    engine.serveOperations(new Registry(operations));
+    const frames = new Map(["window", "phone"].map((id) => [id, vi.fn()]));
+    socketFor.mockImplementation((id: string) => ({ deviceId: id, ws: { send: frames.get(id) } }));
+    for (const [id, send] of frames) {
+      engine.handleFrame(id, { type: "q:subscribe", resource: "workspaces", id: "sidebar" });
+      expect(send).toHaveBeenCalledOnce();
+      send.mockClear();
+    }
+    try {
+      await mockInvalidate.withImplementation(engine.invalidate, async () => {
+        await openAutomationRun("run-1");
+        await openAutomationRun("run-1");
+      });
+      for (const send of frames.values()) {
+        expect(send).toHaveBeenCalledOnce();
+        expect(JSON.parse(send.mock.calls[0][0]).data[0].workspaces).toContainEqual(
+          expect.objectContaining({ id: first.workspaceId, current_session_id: first.sessionId })
+        );
+      }
+    } finally {
+      for (const id of frames.keys()) engine.removeSubs(id);
+    }
   });
 
   it("does not adopt a late session after the account changes", async () => {

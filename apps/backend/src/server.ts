@@ -52,8 +52,11 @@ const db = initDatabase();
 forgetUnusedAssistants();
 
 // Workspaces the previous process was still starting when it stopped.
-const interrupted = failInterruptedWorkspaces();
-if (interrupted > 0) console.log(`[server] ${interrupted} interrupted workspace start(s) failed`);
+void failInterruptedWorkspaces()
+  .then((count) => {
+    if (count) console.log(`[server] ${count} interrupted workspace start(s) failed`);
+  })
+  .catch((err) => console.warn("[server] Workspace recovery failed:", err));
 
 // Backfill git_origin_url for repos added before we tracked origin URLs.
 // Runs once at startup (fire-and-forget) so WS subscribers get the data

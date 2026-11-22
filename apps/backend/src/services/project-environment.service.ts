@@ -19,7 +19,8 @@ import { processGroupsStopped, trackProcessGroup } from "../lib/process-groups";
 import { cloudAccount, cloudOrg, requireCloudOrg } from "./agent/cloud/config";
 import { getCloudEnvironmentInfo } from "./cloud-environment.service";
 import { createBackendChildEnv } from "@shared/lib/child-env";
-import { SETUP_INTERRUPTED, SETUP_LOG_SUFFIX, setSetupStatus, setupFile } from "./setup-status";
+import { SETUP_INTERRUPTED, SETUP_LOG_SUFFIX, setupFile } from "./setup-status";
+import { setSetupStatus } from "./workspace-lifecycle";
 import type { WorkspaceSetup } from "./agent/workspace-context";
 import type { WorkspaceWithDetailsRow } from "../db";
 
@@ -204,6 +205,7 @@ export async function prepareLocalEnvironment(
   const run: SetupRun = { controller: new AbortController() };
   runs.set(workspaceId, run);
   const { signal } = run.controller;
+  const current = () => runs.get(workspaceId) === run;
   try {
     setSetupStatus(workspaceId, "running");
     const { project } = await readLocalProjectEnvironment(directory, repoUrl);
@@ -220,9 +222,10 @@ export async function prepareLocalEnvironment(
         await run.process;
       }
     }
-    if (!signal.aborted) setSetupStatus(workspaceId, run.command ? "completed" : "none");
+    if (current()) setSetupStatus(workspaceId, run.command ? "completed" : "none");
   } catch (error) {
-    if (!signal.aborted) {
+    if (current()) {
+      // Release the failed run before publishing so Run again can take its place.
       runs.delete(workspaceId);
       setSetupStatus(
         workspaceId,
@@ -231,7 +234,7 @@ export async function prepareLocalEnvironment(
       );
     }
   } finally {
-    if (runs.get(workspaceId) === run) runs.delete(workspaceId);
+    if (current()) runs.delete(workspaceId);
   }
 }
 

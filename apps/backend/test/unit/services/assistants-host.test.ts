@@ -84,15 +84,13 @@ vi.mock("../../../src/services/agent/turns", () => ({
 // The app's own workspace creation runs; only its name lookup (git) and its
 // background start are stood in for, the lookup awaitable so a test can act
 // while a creation waits on it.
-vi.mock("../../../src/services/workspace-init.service", () => ({
+vi.mock("../../../src/services/workspace-checkout", () => ({
   pickWorkspaceName: async () => {
     await state.naming?.();
     const n = ++state.created;
     return { slug: `new${n}`, branchName: `lab/new${n}` };
   },
   initializeWorkspace: async () => {},
-  deleteFailedWorkspace: () => {},
-  retryWorkspaceInit: async () => {},
 }));
 vi.mock("../../../src/services/settings.service", () => ({ getSetting: () => undefined }));
 vi.mock("../../../src/services/assistants/feedback", () => ({
@@ -752,6 +750,47 @@ describe("each commit re-reads what it depends on, with no await before its writ
       "made",
       "made",
     ]);
+  });
+
+  it.each(["assistant", "chat"])(
+    "records the %s that archived a workspace through the host",
+    async (kind) => {
+      state.stored.claude = "operate";
+      const by =
+        kind === "chat" ? LEAD : { kind: "assistant", id: "assistant:claude", name: "Claude" };
+      insertWorkspace("w-close", "close", { startedBy: by });
+      insertChat("s-close", "w-close", by);
+      await createDeusHost().archive!(kind === "chat" ? (LEAD as never) : assistantWho(), {
+        kind: "workspace",
+        id: "w-close",
+      });
+      const archived = state.db
+        .prepare("SELECT state,archived_by,archived_at FROM workspaces WHERE id='w-close'")
+        .get();
+      expect(archived).toEqual({
+        state: "archived",
+        archived_by: JSON.stringify(by),
+        archived_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2} /),
+      });
+    }
+  );
+
+  it("publishes one archive when two assistant requests reach the same workspace", async () => {
+    state.stored.claude = "operate";
+    const caller = assistantWho();
+    insertWorkspace("w-close", "close", { startedBy: caller });
+    insertChat("s-close", "w-close", caller);
+    const host = createDeusHost();
+    const changed = vi.fn();
+    state.listeners.add(changed);
+    const target = { kind: "workspace", id: "w-close" } as const;
+    await Promise.all([host.archive!(caller, target), host.archive!(caller, target)]);
+    expect(
+      changed.mock.calls.filter(([resources]) => resources.includes("workspaces"))
+    ).toHaveLength(1);
+    expect(state.db.prepare("SELECT state FROM workspaces WHERE id='w-close'").get()).toEqual({
+      state: "archived",
+    });
   });
 
   it("H4: a child started after the archive was asked, before its queued update, stops it", async () => {

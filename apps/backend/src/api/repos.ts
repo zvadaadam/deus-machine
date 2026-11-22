@@ -9,18 +9,13 @@ import * as api from "@shared/api/repos";
 import type { ParsedInputOf } from "@shared/api/op";
 import { uuidv7 } from "@shared/lib/uuid";
 import { isExecError } from "@shared/lib/errors";
-import {
-  githubRepoSlug,
-  httpsOrigin,
-  normalizeRepoRef,
-  parseGithubRepository,
-} from "@shared/git-origin";
+import { githubRepoSlug, parseGithubRepository } from "@shared/git-origin";
 import type { BranchSummary, PRSummary } from "@shared/types/github";
 import type { InspectedRepository, Repository } from "@shared/types/repository";
 import type { RepositoryRow } from "../db/types";
 import { getDatabase } from "../lib/database";
 import { AppError, ConflictError, NotFoundError, ValidationError } from "../lib/errors";
-import { parseCloneAddress } from "../lib/clone-address";
+import { parseCloneAddress, repositoryKey } from "../lib/clone-address";
 import { getGitRemoteUrlSync } from "../lib/git-remotes";
 import { GitError, runGit } from "../lib/git-process";
 import {
@@ -72,21 +67,16 @@ function requireFolder(repo: RepositoryRow): string {
   return repo.root_path;
 }
 
-/** One GitHub repository's identity, whatever form its address was written in. */
-function originKey(origin: string): string {
-  return normalizeRepoRef(httpsOrigin(origin));
-}
-
 /** The projects for one GitHub repository, in sidebar order. */
 function projectsWithOrigin(db: ReturnType<typeof getDatabase>, origin: string): RepositoryRow[] {
-  const key = originKey(origin);
+  const key = repositoryKey(origin);
   return (
     db
       .prepare(
         "SELECT * FROM repositories WHERE git_origin_url IS NOT NULL ORDER BY sort_order, name"
       )
       .all() as RepositoryRow[]
-  ).filter((repo) => originKey(repo.git_origin_url!) === key);
+  ).filter((repo) => repositoryKey(repo.git_origin_url!) === key);
 }
 
 /** The organization a cloud read acts in: the one named, else the default one. */
@@ -143,13 +133,13 @@ async function listCloudRepositories(organizationId?: string | null) {
   const byOrigin = new Map<string, string>();
   for (const repo of getAllRepositories(getDatabase())) {
     if (!repo.git_origin_url) continue;
-    const key = originKey(repo.git_origin_url);
+    const key = repositoryKey(repo.git_origin_url);
     if (!byOrigin.has(key)) byOrigin.set(key, repo.id);
   }
   return {
     repositories: repos.map((slug) => ({
       slug,
-      repoId: byOrigin.get(originKey(`https://github.com/${slug}`)) ?? null,
+      repoId: byOrigin.get(repositoryKey(`https://github.com/${slug}`)) ?? null,
     })),
   };
 }

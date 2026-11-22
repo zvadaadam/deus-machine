@@ -36,7 +36,7 @@ describe("cloud pause error boundary", () => {
     const response = await app.request("/pause", { method: "POST" });
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
-      error: "The cloud computer is still starting. Try archiving it once it is ready.",
+      error: "This cloud workspace is still starting. Archive it once it is ready.",
     });
     expect(pause).toHaveBeenCalledOnce();
   });

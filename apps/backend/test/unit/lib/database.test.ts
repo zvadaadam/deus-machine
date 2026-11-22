@@ -237,6 +237,20 @@ describe("database schema check at startup", () => {
     closeDatabase();
   });
 
+  it("upgrades archives from before attribution without losing their fallback time", async () => {
+    databaseFile(`ALTER TABLE workspaces DROP COLUMN archived_by;
+      INSERT INTO repositories (id,name) VALUES ('repo','Project');
+      INSERT INTO workspaces (id,repository_id,slug,state,updated_at) VALUES ('old','repo','old','archived','2026-08-16');`);
+    const { initDatabase, closeDatabase } = await open();
+    const row = initDatabase()
+      .prepare(
+        "SELECT archived_by, COALESCE(archived_at,updated_at) AS time FROM workspaces WHERE id='old'"
+      )
+      .get();
+    expect(row).toEqual({ archived_by: null, time: "2026-08-16" });
+    closeDatabase();
+  });
+
   it("adds an additive column before the schema's index on it is created", async () => {
     vi.doMock("@shared/schema", async (original) => ({
       ...(await original<typeof import("@shared/schema")>()),

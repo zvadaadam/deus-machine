@@ -5,9 +5,11 @@
  * Route handlers call these functions instead of inline SQL.
  */
 import type Database from "better-sqlite3";
+import type { ArchivedWorkspace } from "@shared/types/workspace";
 import {
   ReportedOriginSchema,
   decodePart,
+  type Origin,
   type ReportedOrigin,
 } from "@zvada/agent-server/protocol";
 import type { Part, UnknownPart } from "@shared/protocol-types";
@@ -83,6 +85,23 @@ export function getWorkspacesByRepo(
   `
     )
     .all(...stateParams) as WorkspaceWithDetailsRow[];
+}
+
+export function getArchivedWorkspaces(
+  db: Database.Database,
+  repositoryId: string
+): ArchivedWorkspace[] {
+  const rows = db
+    .prepare(
+      `SELECT id, slug, title, git_branch, kind, organization_id,
+              COALESCE(archived_at, updated_at) AS archived_at, archived_by
+       FROM workspaces WHERE repository_id = ? AND state = 'archived'
+       ORDER BY archived_at DESC, id DESC`
+    )
+    .all(repositoryId) as (Omit<ArchivedWorkspace, "archived_by"> & {
+    archived_by: string | null;
+  })[];
+  return rows.map((row) => ({ ...row, archived_by: readOrigin(row.archived_by) }));
 }
 
 export function getWorkspaceById(
@@ -341,6 +360,10 @@ function readOrigin(stored: string | null): ReportedOrigin | null {
   }
 }
 
+export function encodeOrigin(origin?: Origin | null): string | null {
+  return origin && origin.kind !== "person" ? JSON.stringify(origin) : null;
+}
+
 export function attachParts(db: Database.Database, messages: MessageRow[]): MessageRowWithParts[] {
   if (messages.length === 0) return [];
 
@@ -396,23 +419,6 @@ export function getAllRepositories(db: Database.Database): RepositoryWithCountsR
   `
     )
     .all() as RepositoryWithCountsRow[];
-}
-
-/** Lightweight repo list for backfilling empty groups in by-repo queries. */
-export interface RepositorySummaryRow {
-  id: string;
-  name: string;
-  sort_order: number;
-  git_origin_url: string | null;
-  root_path: string | null;
-}
-
-export function getAllRepositorySummaries(db: Database.Database): RepositorySummaryRow[] {
-  return db
-    .prepare(
-      "SELECT id, name, sort_order, git_origin_url, root_path FROM repositories ORDER BY sort_order, name"
-    )
-    .all() as RepositorySummaryRow[];
 }
 
 export function getRepositoryById(db: Database.Database, id: string): RepositoryRow | undefined {

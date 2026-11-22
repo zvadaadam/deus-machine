@@ -21,7 +21,7 @@ import WebSocket from "ws";
 import { createBackendChildEnv } from "@shared/lib/child-env";
 import { getDatabase } from "../lib/database";
 import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
-import { getSessionRaw } from "../db/queries";
+import { getSessionRaw, getWorkspaceRaw } from "../db/queries";
 import { simulatorEvents, type SimulatorEvent } from "@shared/api/simulator";
 import { publish } from "./streams";
 import type {
@@ -104,7 +104,7 @@ interface SimulatorSession {
 // ---------------------------------------------------------------------------
 
 const sessions = new Map<string, SimulatorSession>();
-const startingUdids = new Map<string, string>();
+const startingUdids = new Map<string, { workspaceId: string; pending: number; stopped: boolean }>();
 
 const MACOS_REQUIRED_REASON = "iOS Simulator requires a local macOS backend with Xcode.";
 const SIMCTL_REQUIRED_REASON = "iOS Simulator requires Xcode simctl on the backend Mac.";
@@ -221,7 +221,7 @@ function getActiveUdidOwner(udid: string, requesterWorkspaceId: string): string 
   );
   if (owner) return owner.workspaceId;
 
-  const starterWorkspaceId = startingUdids.get(udid);
+  const starterWorkspaceId = startingUdids.get(udid)?.workspaceId;
   if (starterWorkspaceId && starterWorkspaceId !== requesterWorkspaceId) {
     return starterWorkspaceId;
   }
@@ -229,18 +229,16 @@ function getActiveUdidOwner(udid: string, requesterWorkspaceId: string): string 
   return null;
 }
 
-function claimStartingUdid(workspaceId: string, udid: string): void {
+function claimStartingUdid(workspaceId: string, udid: string) {
   const ownerWorkspaceId = getActiveUdidOwner(udid, workspaceId);
   if (ownerWorkspaceId) {
     throw new ConflictError("Simulator is already in use by another workspace");
   }
-  startingUdids.set(udid, workspaceId);
-}
-
-function releaseStartingUdid(workspaceId: string, udid: string): void {
-  if (startingUdids.get(udid) === workspaceId) {
-    startingUdids.delete(udid);
-  }
+  const claim = startingUdids.get(udid) ?? { workspaceId, pending: 0, stopped: false };
+  if (claim.stopped) throw new ConflictError("The simulator stream is stopping.");
+  claim.pending++;
+  startingUdids.set(udid, claim);
+  return claim;
 }
 
 // ---------------------------------------------------------------------------
@@ -483,7 +481,11 @@ export async function startStream(
   udid: string,
   skipBootCheck = false
 ): Promise<void> {
-  claimStartingUdid(workspaceId, udid);
+  if (getWorkspaceRaw(getDatabase(), workspaceId)?.state === "archived")
+    throw new ConflictError(
+      "This workspace is archived. Restore it before starting the simulator."
+    );
+  const claim = claimStartingUdid(workspaceId, udid);
 
   const previousSession = sessions.get(workspaceId);
   let hidWs: WebSocket | null = null;
@@ -514,6 +516,7 @@ export async function startStream(
     }
 
     // Start MJPEG stream
+    if (claim.stopped) throw new Error("The simulator stream stopped while it was starting.");
     const stream = await spawnStream(udid);
 
     // Connect HID WebSocket
@@ -530,6 +533,10 @@ export async function startStream(
     const deviceInfo = devices.find((d) => d.udid === udid);
 
     // A helper that exited since it said it was ready found no session to fail.
+    if (claim.stopped) {
+      if (activeStreams.get(udid) === stream) activeStreams.delete(udid);
+      stream.child.kill("SIGTERM");
+    }
     if (activeStreams.get(udid) !== stream) {
       throw new Error("The simulator stream stopped while it was starting.");
     }
@@ -570,14 +577,14 @@ export async function startStream(
     }
     throw err;
   } finally {
-    releaseStartingUdid(workspaceId, udid);
+    if (--claim.pending === 0 && startingUdids.get(udid) === claim) startingUdids.delete(udid);
   }
 }
 
 export function stopStream(workspaceId: string): void {
-  const session = sessions.get(workspaceId);
-  if (!session) return;
-
+  for (const claim of startingUdids.values()) {
+    if (claim.workspaceId === workspaceId) claim.stopped = true;
+  }
   releaseWorkspaceSession(workspaceId);
 }
 

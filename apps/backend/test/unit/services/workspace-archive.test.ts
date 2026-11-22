@@ -7,13 +7,18 @@ import {
 const mocks = vi.hoisted(() => ({
   workspace: vi.fn(),
   pause: vi.fn(),
+  release: vi.fn(),
   wake: vi.fn(),
   run: vi.fn(),
   status: vi.fn(),
 }));
-vi.mock("../../../src/db", () => ({ getWorkspaceRaw: mocks.workspace }));
+vi.mock("../../../src/services/simulator-context", () => ({ stopStream: mocks.release }));
+vi.mock("../../../src/db", async (original) => ({
+  ...(await original<typeof import("../../../src/db")>()),
+  getWorkspaceRaw: mocks.workspace,
+}));
 vi.mock("../../../src/lib/database", () => ({
-  getDatabase: () => ({ prepare: () => ({ run: mocks.run }) }),
+  getDatabase: () => ({ prepare: () => ({ run: mocks.run, get: () => ({ chat: "chat" }) }) }),
 }));
 vi.mock("../../../src/services/cloud-workspace-init.service", () => ({
   pauseCloudWorkspace: mocks.pause,
@@ -26,6 +31,7 @@ vi.mock("../../../src/services/workspace-status.service", () => ({
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.run.mockReturnValue({ changes: 1 });
   mocks.workspace.mockReturnValue({
     id: "workspace",
     kind: "cloud",
@@ -52,7 +58,7 @@ describe("workspace archive", () => {
     expect(mocks.run).not.toHaveBeenCalled();
     resume();
     await archiving;
-    expect(mocks.run).toHaveBeenCalledWith("workspace");
+    expect(mocks.run).toHaveBeenCalledWith(null, "workspace");
     expect(mocks.status).toHaveBeenCalledWith("workspace", "done", { force: true });
   });
 
@@ -60,7 +66,33 @@ describe("workspace archive", () => {
     mocks.pause.mockRejectedValue(new Error("provider unavailable"));
     await expect(archiveWorkspace("workspace")).rejects.toThrow("provider unavailable");
     expect(mocks.run).not.toHaveBeenCalled();
+    expect(mocks.release).not.toHaveBeenCalled();
     expect(mocks.status).not.toHaveBeenCalled();
+  });
+
+  it("releases the local simulator once, after committing the archive", async () => {
+    mocks.workspace.mockReturnValue({ id: "workspace", kind: "worktree" });
+    await expect(
+      archiveWorkspace("workspace", () => {
+        throw new Error("refused");
+      })
+    ).rejects.toThrow("refused");
+    expect(mocks.release).not.toHaveBeenCalled();
+    mocks.release.mockImplementation(() => expect(mocks.run).toHaveBeenCalledOnce());
+    await archiveWorkspace("workspace");
+    expect(mocks.release).toHaveBeenCalledExactlyOnceWith("workspace");
+  });
+
+  it("skips the pause and local effects for an already archived computer", async () => {
+    mocks.workspace.mockReturnValue({
+      id: "workspace",
+      kind: "cloud",
+      provider_workspace_id: "vm",
+      state: "archived",
+    });
+    await archiveWorkspace("workspace");
+    for (const effect of [mocks.pause, mocks.run, mocks.release, mocks.status])
+      expect(effect).not.toHaveBeenCalled();
   });
 
   it("archives local workspaces without touching cloud infrastructure", async () => {
@@ -97,7 +129,7 @@ describe("workspace unarchive", () => {
     expect(mocks.run).toHaveBeenCalledTimes(2);
   });
 
-  it("restores archived membership when wake fails; a retry can succeed", async () => {
+  it("rolls back a failed wake and restores on retry when the computer is still serving", async () => {
     mocks.workspace.mockReturnValue({
       id: "workspace",
       state: "archived",
@@ -107,6 +139,7 @@ describe("workspace unarchive", () => {
     mocks.wake.mockResolvedValueOnce({ ok: false, status: "paused" });
     await expect(unarchiveWorkspace("workspace")).rejects.toThrow("Could not wake");
     expect(mocks.run).toHaveBeenCalledTimes(2);
+    mocks.wake.mockResolvedValueOnce({ ok: false, status: "running" });
     await unarchiveWorkspace("workspace");
     expect(mocks.run).toHaveBeenCalledTimes(3);
   });

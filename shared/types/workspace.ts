@@ -3,6 +3,7 @@
  * Centralized types for workspace entities and operations
  */
 
+import type { ReportedOrigin } from "../protocol-types";
 import type { SessionStatus } from "./session";
 
 // Canonical enum types — defined as Zod schemas in shared/enums.ts,
@@ -71,6 +72,14 @@ export interface Workspace {
   archived_at?: string | null;
 }
 
+export type ArchivedWorkspace = Pick<
+  Workspace,
+  "id" | "slug" | "title" | "git_branch" | "kind" | "organization_id"
+> & {
+  archived_at: string;
+  archived_by: ReportedOrigin | null;
+};
+
 /**
  * Repository grouping for sidebar display
  * Groups workspaces by their parent repository
@@ -86,6 +95,7 @@ export interface RepoGroup {
    * says (the hosted web's groups).
    */
   has_folder?: boolean;
+  archived_count?: number;
   workspaces: Workspace[];
 }
 

@@ -30,25 +30,32 @@ vi.mock("../../../src/services/workspace-status.service", () => ({
 }));
 
 import {
-  deleteFailedWorkspace,
-  failInterruptedWorkspaces,
   fetchIssue,
   initializeWorkspace,
   pickWorkspaceName,
   removeWorktree,
-  retryWorkspaceInit,
   type InitContext,
-} from "../../../src/services/workspace-init.service";
+} from "../../../src/services/workspace-checkout";
 import {
   archiveWorkspace,
   unarchiveWorkspace,
 } from "../../../src/services/workspace-archive.service";
 import {
+  failInterruptedWorkspaces,
+  retryWorkspaceInit,
+} from "../../../src/services/workspace-init.service";
+import {
+  deleteFailedWorkspace,
+  insertWorkspaceFixture,
+  setSetupStatus,
+} from "../../../src/services/workspace-lifecycle";
+import {
   prepareLocalEnvironment,
   setupForTurn,
   writeProjectFile,
 } from "../../../src/services/project-environment.service";
-import { setSetupStatus, setupFile } from "../../../src/services/setup-status";
+import * as lifecycle from "../../../src/services/workspace-lifecycle";
+import { setupFile } from "../../../src/services/setup-status";
 import { buildWorkspaceContext } from "../../../src/services/agent/workspace-context";
 import { GitError, runGit } from "../../../src/lib/git-process";
 import { CELESTIAL_NAMES } from "../../../src/services/workspace.service";
@@ -350,9 +357,9 @@ describe("a start that fails", () => {
     await initializeWorkspace(add("w", "vega", { git_source_branch: "develop" }));
     git("branch", "develop");
 
-    retryWorkspaceInit("w");
+    await retryWorkspaceInit("w");
     // The claim is taken: a second click, or a second device, starts nothing.
-    expect(() => retryWorkspaceInit("w")).toThrow("not waiting for a retry");
+    await expect(retryWorkspaceInit("w")).rejects.toThrow("not waiting for a retry");
     expect(row("w")).toMatchObject({ state: "initializing", error_message: null });
 
     await vi.waitFor(() => expect(row("w").state).toBe("ready"), { timeout: 8000 });
@@ -361,7 +368,7 @@ describe("a start that fails", () => {
     expect(
       db().prepare("SELECT count(*) AS n FROM sessions WHERE workspace_id = 'w'").get()
     ).toEqual({ n: 1 });
-    expect(() => retryWorkspaceInit("w")).toThrow("not waiting for a retry");
+    await expect(retryWorkspaceInit("w")).rejects.toThrow("not waiting for a retry");
   });
 
   it("names a project folder that is gone", async () => {
@@ -384,6 +391,12 @@ describe("a start that fails", () => {
     expect(branches()).toEqual(["main"]);
     // And it is a quiet no-op when there is nothing to remove.
     await removeWorktree(root, workspacePath("vega"), "test-user/vega");
+  });
+
+  it("runs git with a fixed locale for classifying its errors", async () => {
+    vi.stubEnv("LC_ALL", "de_DE.UTF-8");
+    const locale = await runGit(["-c", "alias.locale=!printenv LC_ALL", "locale"], { cwd: root });
+    expect(locale.trim()).toBe("C");
   });
 
   it("stops a command that runs too long, with everything it started", async () => {
@@ -438,7 +451,7 @@ describe("a start Deus closed in the middle of", () => {
     // Modules of their own: once stopped they stay stopped, as the backend does.
     vi.resetModules();
     const groups = await import("../../../src/lib/process-groups");
-    const init = await import("../../../src/services/workspace-init.service");
+    const init = await import("../../../src/services/workspace-checkout");
     await init.initializeWorkspace(add("w", "vega"));
     await vi.waitFor(() =>
       expect(fs.existsSync(path.join(workspacePath("vega"), "started"))).toBe(true)
@@ -483,12 +496,12 @@ describe("workspaces a previous process was still starting", () => {
     expect(warn).toHaveBeenCalledOnce();
   });
 
-  it("recovers interrupted workspaces even when the temp directory cannot hold a file", () => {
+  it("recovers interrupted workspaces even when the temp directory cannot hold a file", async () => {
     add("w", "vega", { state: "ready", setup_status: "running" });
     add("early", "lyra", { init_stage: "fetch" });
     vi.stubEnv("TMPDIR", path.join(root, "tracked.txt"));
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(failInterruptedWorkspaces()).toBe(1);
+    expect(await failInterruptedWorkspaces()).toBe(1);
     expect(row("w")).toMatchObject({
       state: "ready",
       setup_status: "failed",
@@ -497,38 +510,88 @@ describe("workspaces a previous process was still starting", () => {
     expect(row("early").state).toBe("error");
   });
 
-  it("fail at startup, with what they half made removed", async () => {
-    add("made", "vega", { init_stage: "worktree" });
-    git("worktree", "add", "-q", "-b", "test-user/vega", workspacePath("vega"), "main");
-    git("worktree", "lock", "--reason", "initializing", workspacePath("vega"));
-    // Stopped before it made anything: a folder under its name is not its own.
-    add("early", "lyra", { init_stage: "fetch" });
-    fs.mkdirSync(workspacePath("lyra"), { recursive: true });
+  it.each(["worktree", "setup"])(
+    "fail at startup and remove the owned %s checkout",
+    async (stage) => {
+      add("made", "vega", { init_stage: stage });
+      git("worktree", "add", "-q", "-b", "test-user/vega", workspacePath("vega"), "main");
+      git("worktree", "lock", "--reason", "initializing", workspacePath("vega"));
+      // Stopped before it made anything: a folder under its name is not its own.
+      add("early", "lyra", { init_stage: "fetch" });
+      fs.mkdirSync(workspacePath("lyra"), { recursive: true });
 
-    expect(failInterruptedWorkspaces()).toBe(2);
+      expect(await failInterruptedWorkspaces()).toBe(2);
 
-    for (const id of ["made", "early"]) {
-      expect(row(id)).toMatchObject({
+      for (const id of ["made", "early"]) {
+        expect(row(id)).toMatchObject({
+          state: "error",
+          error_message: "Deus closed before this workspace was ready.",
+        });
+      }
+      expect(fs.existsSync(workspacePath("vega"))).toBe(false);
+      expect(branches()).toEqual(["main"]);
+      expect(fs.existsSync(workspacePath("lyra"))).toBe(true);
+      // Either can be started again.
+      await retryWorkspaceInit("made");
+      await vi.waitFor(() => expect(row("made").state).toBe("ready"), { timeout: 8000 });
+    }
+  );
+
+  it("ends an interrupted start in error when removal throws at startup", async () => {
+    add("w", "vega", { init_stage: "session" });
+    const error = new Error("cannot remove checkout");
+    vi.spyOn(fs.promises, "rm").mockRejectedValueOnce(error);
+    const warn = vi.spyOn(console, "warn");
+    expect(await failInterruptedWorkspaces()).toBe(1);
+
+    expect(warn).toHaveBeenCalledWith("[WORKSPACE] Could not remove what w left behind:", error);
+    expect(row("w")).toMatchObject({
+      state: "error",
+      init_stage: "session",
+      error_message: "Deus closed before this workspace was ready.",
+      error_detail: null,
+    });
+  });
+
+  it.each(["resolves", "rejects"])(
+    "leaves the stage for the next launch if Deus quits while startup cleanup %s",
+    async (result) => {
+      add("w", "vega", { init_stage: "worktree" });
+      git("worktree", "add", "-q", "-b", "test-user/vega", workspacePath("vega"), "main");
+      vi.resetModules();
+      const groups = await import("../../../src/lib/process-groups");
+      const init = await import("../../../src/services/workspace-init.service");
+      vi.spyOn(fs.promises, "rm").mockImplementationOnce(async () => {
+        groups.stopProcessGroups();
+        if (result === "rejects") throw new Error("cannot remove checkout");
+      });
+      expect(await init.failInterruptedWorkspaces()).toBe(0);
+
+      expect(row("w")).toMatchObject({
+        state: "initializing",
+        init_stage: "worktree",
+        error_message: null,
+      });
+      expect(branches()).toContain("test-user/vega");
+
+      expect(await failInterruptedWorkspaces()).toBe(1);
+
+      expect(row("w")).toMatchObject({
         state: "error",
         error_message: "Deus closed before this workspace was ready.",
       });
+      expect(branches()).toEqual(["main"]);
     }
-    await vi.waitFor(() => expect(fs.existsSync(workspacePath("vega"))).toBe(false));
-    await vi.waitFor(() => expect(branches()).toEqual(["main"]));
-    expect(fs.existsSync(workspacePath("lyra"))).toBe(true);
-    // Either can be started again.
-    retryWorkspaceInit("made");
-    await vi.waitFor(() => expect(row("made").state).toBe("ready"), { timeout: 8000 });
-  });
+  );
 
-  it("leave a cloud workspace alone once its session can report, and fail a setup nobody runs", () => {
+  it("leave a cloud workspace alone once its session can report, and fail a setup nobody runs", async () => {
     add("ready", "vega", { state: "ready", setup_status: "running" });
     add("cloud-live", "lyra", { kind: "cloud", provider_workspace_id: "vm" });
     db().prepare("INSERT INTO sessions (id, workspace_id) VALUES ('s', 'cloud-live')").run();
     db().prepare("UPDATE workspaces SET current_session_id = 's' WHERE id = 'cloud-live'").run();
     add("cloud-lost", "mira", { kind: "cloud" });
 
-    expect(failInterruptedWorkspaces()).toBe(1);
+    expect(await failInterruptedWorkspaces()).toBe(1);
 
     expect(row("cloud-live").state).toBe("initializing");
     expect(row("cloud-lost")).toMatchObject({
@@ -603,6 +666,23 @@ describe("names", () => {
   });
 });
 
+it("seeds a ready integration CLI workspace once, without publishing", () => {
+  insertWorkspaceFixture("cli", "r");
+  const seeded = row("cli");
+  expect(seeded).toMatchObject({
+    slug: "cli-test",
+    state: "ready",
+    init_stage: null,
+    init_fetch_issue: null,
+    setup_status: "none",
+    error_message: null,
+    error_detail: null,
+  });
+  insertWorkspaceFixture("cli", "r");
+  expect(row("cli")).toEqual(seeded);
+  expect(mocks.invalidate).not.toHaveBeenCalled();
+});
+
 describe("why origin's latest was not fetched", () => {
   const said = (stderr: string, timedOut = false) =>
     fetchIssue(new GitError(["fetch", "origin", "main"], stderr, timedOut));
@@ -625,5 +705,298 @@ describe("why origin's latest was not fetched", () => {
 
   it("is nothing when the branch simply is not on origin", () => {
     expect(said("fatal: couldn't find remote ref my-local-branch")).toBeNull();
+  });
+});
+
+describe("an attempt owns its checkout", () => {
+  function refuseChatInsert() {
+    db().exec(
+      "CREATE TRIGGER refuse_chat BEFORE INSERT ON sessions BEGIN SELECT RAISE(ABORT,'chat refused'); END"
+    );
+  }
+
+  function holdWorktreeRemoval() {
+    const started = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const rm = fs.promises.rm.bind(fs.promises);
+    const hold = vi.spyOn(fs.promises, "rm").mockImplementationOnce(async (...args) => {
+      started.resolve();
+      await release.promise;
+      return rm(...args);
+    });
+    return {
+      started: started.promise,
+      finish() {
+        release.resolve();
+        hold.mockRestore();
+      },
+    };
+  }
+
+  it.each(["fetch", "worktree"])(
+    "archive stops the %s process group and reaps the checkout before returning",
+    async (stage) => {
+      const realGit = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
+      git("remote", "add", "origin", root);
+      const bin = path.join(scratch, "bin");
+      const pidFile = path.join(scratch, "child.pid");
+      const release = path.join(scratch, "release");
+      fs.mkdirSync(bin);
+      fs.writeFileSync(
+        path.join(bin, "git"),
+        `#!/bin/sh
+if { [ "$1" = fetch ] && [ "$HOLD_STAGE" = fetch ]; } || { [ "$1 $2" = 'worktree add' ] && [ "$HOLD_STAGE" = worktree ]; }; then
+  "$REAL_GIT" "$@" || exit $?
+  sleep 60 &
+  helper=$!
+  echo "$helper" > "$PID_FILE"
+  while [ ! -f "$RELEASE" ]; do sleep 0.02; done
+  kill "$helper" 2>/dev/null
+  wait "$helper" 2>/dev/null
+  exit 0
+fi
+exec "$REAL_GIT" "$@"
+`,
+        { mode: 0o755 }
+      );
+      vi.stubEnv("HOLD_STAGE", stage);
+      vi.stubEnv("REAL_GIT", realGit);
+      vi.stubEnv("PID_FILE", pidFile);
+      vi.stubEnv("RELEASE", release);
+      vi.stubEnv("PATH", bin + path.delimiter + process.env.PATH);
+
+      const work = initializeWorkspace(add("w", "vega"));
+      try {
+        await vi.waitFor(() => expect(fs.existsSync(pidFile)).toBe(true), { timeout: 5000 });
+        const child = Number(fs.readFileSync(pidFile, "utf8"));
+        expect(row("w").init_stage).toBe(stage);
+        await archiveWorkspace("w");
+        await vi.waitFor(() => expect(() => process.kill(child, 0)).toThrow());
+      } finally {
+        fs.writeFileSync(release, "");
+        await work;
+      }
+      expect(row("w")).toMatchObject({
+        state: "archived",
+        init_stage: stage,
+        current_session_id: null,
+      });
+      expect(branches()).toEqual(["main"]);
+      expect(git("worktree", "list", "--porcelain")).not.toContain(workspacePath("vega"));
+      expect(fs.existsSync(workspacePath("vega"))).toBe(false);
+      await unarchiveWorkspace("w");
+      expect(row("w").state).toBe("error");
+    }
+  );
+
+  it("archive at the first-chat step ignores a late failure and a delayed ready", async () => {
+    const ready = lifecycle.finishLocalStart;
+    let lateReady!: () => void;
+    let archived!: ReturnType<typeof archiveWorkspace>;
+    const gate = vi.spyOn(lifecycle, "finishLocalStart").mockImplementationOnce((...args) => {
+      expect(row("w").init_stage).toBe("session");
+      lateReady = () => ready(...args);
+      archived = archiveWorkspace("w");
+      throw new Error("chat creation failed at the boundary");
+    });
+    try {
+      await initializeWorkspace(add("w", "vega"));
+      await archived;
+      const before = row("w");
+      mocks.invalidate.mockClear();
+      lateReady();
+      expect(row("w")).toEqual(before);
+      expect(mocks.invalidate).not.toHaveBeenCalled();
+      expect(row("w")).toMatchObject({ state: "archived", current_session_id: null });
+      expect(branches()).toEqual(["main"]);
+      expect(git("worktree", "list", "--porcelain")).not.toContain(workspacePath("vega"));
+      expect(fs.existsSync(workspacePath("vega"))).toBe(false);
+    } finally {
+      gate.mockRestore();
+    }
+  });
+
+  it("ignores every previous attempt result while a retry is initializing", async () => {
+    add("w", "vega");
+    let original!: AbortSignal;
+    await lifecycle.runWorkspaceAttempt("w", async (token) => {
+      original = token;
+      lifecycle.failStart("w", "fetch", { message: "first start failed", detail: null }, token);
+    });
+    lifecycle.claimLocalRetry("w");
+    await lifecycle.runWorkspaceAttempt("w", async (current) => {
+      lifecycle.advanceLocalStage("w", "fetch", current);
+      const before = row("w");
+      mocks.invalidate.mockClear();
+      lifecycle.advanceLocalStage("w", "session", original);
+      lifecycle.recordFetchOutcome("w", "offline", original);
+      lifecycle.finishLocalStart("w", original);
+      lifecycle.failStart("w", "session", { message: "old failure", detail: null }, original);
+      expect(row("w")).toEqual(before);
+      expect(mocks.invalidate).not.toHaveBeenCalled();
+      expect(lifecycle.finishLocalStart("w", current)).toBe(true);
+    });
+    expect(row("w").state).toBe("ready");
+  });
+
+  it("requires an initializing row even when the attempt token is current", async () => {
+    add("w", "vega");
+    await lifecycle.runWorkspaceAttempt("w", async (token) => {
+      for (const state of ["error", "ready", "archived"]) {
+        db().prepare("UPDATE workspaces SET state = ? WHERE id = 'w'").run(state);
+        const before = row("w");
+        mocks.invalidate.mockClear();
+        lifecycle.advanceLocalStage("w", "session", token);
+        lifecycle.recordFetchOutcome("w", "offline", token);
+        lifecycle.finishLocalStart("w", token);
+        lifecycle.failStart("w", "session", { message: "late", detail: null }, token);
+        expect(row("w")).toEqual(before);
+        expect(mocks.invalidate).not.toHaveBeenCalled();
+      }
+    });
+  });
+
+  it("recovers the durable session stage if first-chat cleanup is interrupted", async () => {
+    // Stop only this checkout's process groups. Recovery uses the next backend's live groups.
+    vi.resetModules();
+    const groups = await import("../../../src/lib/process-groups");
+    const checkout = await import("../../../src/services/workspace-checkout");
+    const ctx = add("w", "vega");
+    refuseChatInsert();
+    vi.spyOn(fs.promises, "rm").mockImplementationOnce(async () => groups.stopProcessGroups());
+    await checkout.initializeWorkspace(ctx);
+    expect(row("w")).toMatchObject({
+      state: "initializing",
+      init_stage: "session",
+      current_session_id: null,
+    });
+    expect(branches()).toContain("test-user/vega");
+    expect(await failInterruptedWorkspaces()).toBe(1);
+
+    expect(row("w")).toMatchObject({
+      state: "error",
+      error_message: "Deus closed before this workspace was ready.",
+    });
+    expect(branches()).toEqual(["main"]);
+  });
+
+  it.each(["Retry", "Delete"])(
+    "keeps the chat failure and allows %s when removal throws",
+    async (action) => {
+      refuseChatInsert();
+      const error = new Error("cannot remove checkout");
+      vi.spyOn(fs.promises, "rm").mockRejectedValueOnce(error);
+      const warn = vi.spyOn(console, "warn");
+
+      await initializeWorkspace(add("w", "vega"));
+      expect(warn).toHaveBeenCalledWith("[WORKSPACE] Could not remove what w left behind:", error);
+      expect(row("w")).toMatchObject({
+        state: "error",
+        init_stage: "session",
+        error_message: "The workspace was created, but its chat could not be opened.",
+        error_detail: "chat refused",
+      });
+      if (action === "Delete") {
+        deleteFailedWorkspace("w");
+        expect(row("w")).toBeUndefined();
+      } else {
+        db().exec("DROP TRIGGER refuse_chat");
+        await retryWorkspaceInit("w");
+        await vi.waitFor(() => expect(row("w").state).toBe("ready"), { timeout: 5000 });
+      }
+    }
+  );
+
+  it("refuses Retry during a live checkout's cleanup and accepts it once the start fails", async () => {
+    refuseChatInsert();
+    const cleanup = holdWorktreeRemoval();
+    const checkout = initializeWorkspace(add("w", "vega"));
+    await cleanup.started;
+    const retry = retryWorkspaceInit("w").then(
+      () => "claimed",
+      (error: Error) => error.message
+    );
+    try {
+      expect(row("w")).toMatchObject({ state: "initializing", init_stage: "session" });
+      expect(() => deleteFailedWorkspace("w")).toThrow();
+      const verdict = await Promise.race([
+        retry,
+        new Promise<string>((resolve) => setImmediate(resolve, "still waiting for cleanup")),
+      ]);
+      expect(verdict).toBe("This workspace is not waiting for a retry.");
+    } finally {
+      cleanup.finish();
+      await checkout;
+      await retry;
+      await lifecycle.workspaceAttemptDone("w");
+    }
+    expect(row("w").state).toBe("error");
+    expect(branches()).toEqual(["main"]);
+    db().exec("DROP TRIGGER refuse_chat");
+    await retryWorkspaceInit("w");
+    await lifecycle.workspaceAttemptDone("w");
+    expect(row("w")).toMatchObject({ state: "ready", slug: "vega" });
+  });
+
+  it.each(["worktree", "setup", "session"])(
+    "queues two immediate retries behind startup recovery's %s cleanup",
+    async (stage) => {
+      add("w", "vega", {
+        init_stage: stage,
+        git_source_branch: "main",
+      });
+      git("worktree", "add", "-q", "-b", "test-user/vega", workspacePath("vega"), "main");
+      const cleanup = holdWorktreeRemoval();
+      const recovery = failInterruptedWorkspaces();
+      const requests = Promise.allSettled([retryWorkspaceInit("w"), retryWorkspaceInit("w")]);
+      try {
+        await cleanup.started;
+        expect(row("w").state).toBe("initializing");
+        expect(branches()).toContain("test-user/vega");
+        expect(() => deleteFailedWorkspace("w")).toThrow();
+      } finally {
+        cleanup.finish();
+      }
+      expect(await recovery).toBe(1);
+      expect(await requests).toMatchObject([
+        { status: "fulfilled" },
+        { status: "rejected", reason: { message: "This workspace is not waiting for a retry." } },
+      ]);
+      await lifecycle.workspaceAttemptDone("w");
+      expect(row("w")).toMatchObject({ state: "ready", slug: "vega" });
+      expect(branches()).toEqual(["main", "test-user/vega"]);
+      expect(
+        db().prepare("SELECT count(*) AS n FROM sessions WHERE workspace_id = 'w'").get()
+      ).toEqual({ n: 1 });
+    }
+  );
+});
+
+describe("only a failed start can be retried or deleted", () => {
+  it.each([
+    ["worktree", lifecycle.claimLocalRetry],
+    ["cloud", lifecycle.claimCloudRetry],
+  ] as const)("refuses a %s retry claim until the failed attempt returns", async (kind, claim) => {
+    add("w", "vega", { kind });
+    const release = Promise.withResolvers<void>();
+    const attempt = lifecycle.runWorkspaceAttempt("w", async (token) => {
+      if (kind === "cloud")
+        lifecycle.failCloudStart("w", { message: "allocation failed", detail: null }, token);
+      else lifecycle.failStart("w", "session", { message: "chat failed", detail: null }, token);
+      await release.promise;
+    });
+    try {
+      const failed = row("w");
+      expect(failed.state).toBe("error");
+      mocks.invalidate.mockClear();
+      expect(() => claim("w")).toThrow("This workspace is not waiting for a retry.");
+      expect(row("w")).toEqual(failed);
+      expect(mocks.invalidate).not.toHaveBeenCalled();
+    } finally {
+      release.resolve();
+      await attempt;
+    }
+    claim("w");
+    expect(row("w").state).toBe("initializing");
   });
 });

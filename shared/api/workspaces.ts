@@ -4,7 +4,13 @@ import { z } from "zod";
 import { WorkspaceStatusSchema } from "../enums";
 import type { GhCliStatus, PRStatus } from "../types/github";
 import type { ProjectEnvironmentResponse, TaskRunResponse } from "../types/project-environment";
-import type { DiffStats, FileChange, RepoGroup, Workspace } from "../types/workspace";
+import type {
+  ArchivedWorkspace,
+  DiffStats,
+  FileChange,
+  RepoGroup,
+  Workspace,
+} from "../types/workspace";
 import { live, out, read, write } from "./op";
 import { stream } from "./stream";
 import type { CloudEnvEvent, CloudIdentityEvent } from "../events";
@@ -22,6 +28,12 @@ export const workspaces = live({
 });
 
 export const workspace = read({ name: "workspace", input: workspaceId, output: out<Workspace>() });
+
+export const archivedWorkspaces = read({
+  name: "archivedWorkspaces",
+  input: z.object({ repositoryId: z.string().min(1) }),
+  output: out<ArchivedWorkspace[]>(),
+});
 
 /** The project's environment and Run commands, read on the node that owns the workspace. */
 export const workspaceEnvironment = read({

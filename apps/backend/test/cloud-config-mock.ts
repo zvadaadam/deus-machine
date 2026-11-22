@@ -62,8 +62,6 @@ export function cloudConfigMock(read: () => TestCloudConfig | null | undefined) 
     requireCloudOrg,
     defaultCloudOrgId,
     cloudOrgKeyIds: () => Object.keys(current()?.orgKeys ?? {}),
-    hasFallbackCloudKey: () =>
-      Object.keys(current()?.orgKeys ?? {}).length === 0 && Boolean(current()?.apiKey),
     getDeusCloudSessionConfig: () => ({
       deusCloudUrl: current()?.deusCloudUrl ?? null,
       deusCloudSessionToken: current()?.deusCloudSessionToken ?? null,

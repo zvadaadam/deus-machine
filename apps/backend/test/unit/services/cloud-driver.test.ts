@@ -109,7 +109,11 @@ vi.mock("../../../src/services/streams", () => ({
 
 const mockRun = vi.fn((..._args: unknown[]) => ({ changes: 0, lastInsertRowid: 0 }));
 const mockGet = vi.fn(
-  (): Record<string, unknown> => ({ kind: "cloud", provider_workspace_id: "agnt-ws-1" })
+  (): Record<string, unknown> => ({
+    kind: "cloud",
+    provider_workspace_id: "agnt-ws-1",
+    chat: "deus-session-1",
+  })
 );
 const mockPrepare = vi.fn<(sql: string) => Pick<Database.Statement, "run" | "get">>(() => ({
   run: mockRun,
@@ -155,6 +159,7 @@ import {
   readCloudPreviewTemplate,
   getCloudIdentityGeneration,
 } from "../../../src/services/agent/cloud/driver";
+import * as simulator from "../../../src/services/agent/cloud/simulator";
 import { getCloudPreviewTemplate } from "../../../src/services/agent/cloud/preview";
 import {
   resetCloudConfigForTests,
@@ -1076,14 +1081,66 @@ describe("cloud driver frame → fold contract", () => {
 
   it("updates the workspace row from workspace.state frames", () => {
     capturedOnFrame!({ type: "workspace.state", data: { status: "running" } });
-    expect(mockRun).toHaveBeenCalledWith("deus-ws-1");
+    expect(mockRun).toHaveBeenCalledWith("ready", null, null, null, "deus-ws-1");
     expect(mockInvalidate).toHaveBeenCalled();
+  });
+
+  it("parks and publishes a paused report even when its workspace row is gone", async () => {
+    const park = vi.spyOn(simulator, "parkCloudSimulator");
+    mockInvalidate.mockClear();
+    try {
+      await mockPrepare.withImplementation(
+        () => ({ get: () => undefined, run: mockRun }),
+        () => {
+          capturedOnFrame!({ type: "workspace.state", data: { status: "paused" } });
+        }
+      );
+      expect(park).toHaveBeenCalledExactlyOnceWith("deus-ws-1");
+      expect(mockInvalidate).toHaveBeenCalledExactlyOnceWith(["workspaces"], {});
+    } finally {
+      park.mockRestore();
+    }
+  });
+
+  it.each([
+    ["ready", "paused"],
+    ["archived", "running"],
+  ])("parks the simulator before publishing a %s computer's sleep report", async (state, stage) => {
+    const db = new Database(":memory:");
+    const park = vi.spyOn(simulator, "parkCloudSimulator");
+    try {
+      db.exec(SCHEMA_SQL);
+      db.exec("INSERT INTO repositories (id, name) VALUES ('repo', 'Repo')");
+      db.prepare(
+        "INSERT INTO workspaces (id, repository_id, slug, kind, state, init_stage) VALUES ('deus-ws-1', 'repo', 'vm', 'cloud', ?, 'running')"
+      ).run(state);
+      db.exec(
+        "INSERT INTO sessions (id, workspace_id) VALUES ('chat','deus-ws-1'); UPDATE workspaces SET current_session_id='chat'"
+      );
+      mockInvalidate.mockClear();
+      await mockPrepare.withImplementation(
+        (sql) => db.prepare(sql),
+        () => {
+          capturedOnFrame!({ type: "workspace.state", data: { status: "paused" } });
+        }
+      );
+      expect(db.prepare("SELECT state, init_stage FROM workspaces").get()).toEqual({
+        state,
+        init_stage: stage,
+      });
+      expect(park).toHaveBeenCalledExactlyOnceWith("deus-ws-1");
+      expect(park).toHaveBeenCalledBefore(mockInvalidate);
+      expect(mockInvalidate).toHaveBeenCalledExactlyOnceWith(["workspaces"], {});
+    } finally {
+      park.mockRestore();
+      db.close();
+    }
   });
 
   it.each([
     { status: "running", expectedState: "ready", expectedStage: null },
     { status: "provisioning", expectedState: "initializing", expectedStage: "restoring" },
-    { status: "error", expectedState: "error", expectedStage: "resuming" },
+    { status: "error", expectedState: "error", expectedStage: null },
     { status: "already-running", expectedState: "ready", expectedStage: null },
     { status: "refresh-failed", expectedState: "ready", expectedStage: null },
     { status: "resume-failed", expectedState: "archived", expectedStage: "paused" },
@@ -1104,6 +1161,7 @@ describe("cloud driver frame → fold contract", () => {
       mockGetWorkspace.mockResolvedValueOnce({
         status: status === "already-running" || status === "refresh-failed" ? "running" : "paused",
       });
+      db.exec("INSERT INTO sessions (id, workspace_id) VALUES ('deus-session-1','deus-ws-1')");
       const connectionsBefore = connectCount;
       try {
         await mockPrepare.withImplementation(
@@ -1122,8 +1180,8 @@ describe("cloud driver frame → fold contract", () => {
               },
               async () => {
                 const opening = unarchiveWorkspace("deus-ws-1");
-                if (status === "resume-failed")
-                  await expect(opening).rejects.toThrow("Could not wake");
+                if (expectedState === "archived")
+                  await expect(opening).rejects.toThrow("resume unavailable");
                 else await opening;
               }
             );
@@ -1258,8 +1316,7 @@ describe("cloud driver frame → fold contract", () => {
     mockRun.mockClear();
     capturedOnFrame!({ type: "workspace.state", data: { step: 42 } });
     expect(mockPublish).not.toHaveBeenCalled();
-    // The row update has its own tolerance and still runs.
-    expect(mockRun).toHaveBeenCalled();
+    expect(mockRun).not.toHaveBeenCalled();
   });
 
   it("learns an asleep sandbox from the connect snapshot (row + chat line)", () => {
@@ -1442,7 +1499,11 @@ describe("cloud driver session lifecycle", () => {
         )
       );
     } finally {
-      mockGet.mockImplementation(() => ({ kind: "cloud", provider_workspace_id: "agnt-ws-1" }));
+      mockGet.mockImplementation(() => ({
+        kind: "cloud",
+        provider_workspace_id: "agnt-ws-1",
+        chat: "deus-session-1",
+      }));
     }
   });
 
@@ -1468,7 +1529,11 @@ describe("cloud driver session lifecycle", () => {
       // No key for its organization: the organization-scoped metadata push is skipped.
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/metadata"))).toBe(false);
     } finally {
-      mockGet.mockImplementation(() => ({ kind: "cloud", provider_workspace_id: "agnt-ws-1" }));
+      mockGet.mockImplementation(() => ({
+        kind: "cloud",
+        provider_workspace_id: "agnt-ws-1",
+        chat: "deus-session-1",
+      }));
     }
   });
 
@@ -1741,7 +1806,16 @@ describe("cloud driver simulator channel", () => {
     for (const status of ["stopped", "paused", "error"]) {
       ready();
       mockPublish.mockClear();
+      mockInvalidate.mockClear();
+      mockRun.mockClear();
       capturedOnFrame!({ type: "workspace.state", data: { status } });
+      expect(mockPublish.mock.calls[0][0]).toBe(cloudSimulatorEvents);
+      expect(mockRun.mock.invocationCallOrder[0]).toBeLessThan(
+        mockPublish.mock.invocationCallOrder[0]
+      );
+      expect(mockPublish.mock.invocationCallOrder[0]).toBeLessThan(
+        mockInvalidate.mock.invocationCallOrder[0]
+      );
       // The park is announced (clients drop the URL) and cached.
       const [parked] = deviceEvents();
       expect(parked).toEqual(deviceStatus({ status: "stopped", platform: "ios" }));

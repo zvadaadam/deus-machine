@@ -45,6 +45,7 @@ import { operations } from "../../helpers";
 import sessionHandlers from "../../../src/api/sessions";
 import * as agentService from "../../../src/services/agent/service";
 import * as cloudDriver from "../../../src/services/agent/cloud/driver";
+import { applyCloudStatus } from "../../../src/services/workspace-lifecycle";
 
 const SESSION = "sess-send";
 /** A session whose workspace row is gone — the worktree-deleted case. */
@@ -468,6 +469,42 @@ describeWithDb("sendMessage", () => {
       db.prepare(`UPDATE workspaces SET kind = 'cloud', state = 'ready' WHERE id = 'w1'`).run();
       vi.spyOn(cloudDriver, "hasLiveCloudSession").mockReturnValue(true);
     });
+
+    it.each([
+      {
+        report: null,
+        stage: "paused",
+        lastLine: { status: "paused", reason: "wake failed — try again" },
+      },
+      { report: "resuming", stage: "resuming", lastLine: { status: "resuming" } },
+      { report: "running", stage: null, lastLine: { status: "running" } },
+      { report: "paused", stage: "paused", lastLine: { status: "paused" } },
+    ])(
+      "keeps the row and chat line from a $report report when a send fails",
+      async ({ report, stage, lastLine }) => {
+        db.prepare(
+          "UPDATE workspaces SET init_stage='paused', current_session_id=? WHERE id='w1'"
+        ).run(SESSION);
+        const announce = vi.spyOn(cloudDriver, "announceCloudEnv");
+        vi.spyOn(cloudDriver, "startCloudTurn").mockImplementation(async () => {
+          expect(db.prepare("SELECT init_stage FROM workspaces WHERE id='w1'").get()).toEqual({
+            init_stage: "resuming",
+          });
+          if (report) {
+            applyCloudStatus("w1", { status: report });
+            cloudDriver.announceCloudEnv("w1", SESSION, { status: report });
+          }
+          throw new Error("send refused");
+        });
+        await expect(cloudSend("high")).rejects.toThrow("send refused");
+        expect(db.prepare("SELECT state, init_stage FROM workspaces WHERE id='w1'").get()).toEqual({
+          state: "ready",
+          init_stage: stage,
+        });
+        expect(announce).toHaveBeenCalledTimes(2);
+        expect(announce).toHaveBeenLastCalledWith("w1", SESSION, lastLine);
+      }
+    );
 
     it("hands the driver the turn's harness, model and thinking level, in the platform's vocabulary", async () => {
       const startCloudTurn = vi

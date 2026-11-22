@@ -15,6 +15,7 @@ vi.mock("../../../src/lib/database", () => ({
   }),
 }));
 vi.mock("../../../src/db", () => ({
+  getWorkspaceRaw: mocks.get,
   getRepositoryById: () => ({
     git_origin_url: "https://gitlab.com/team/app",
     git_default_branch: "main",
@@ -40,8 +41,8 @@ vi.mock("@deus-hq/sdk", () => ({
 
 import {
   createCloudWorkspace,
-  clearGithubTokenRefreshFlights,
   retryCloudWorkspace,
+  clearGithubTokenRefreshFlights,
 } from "../../../src/services/cloud-workspace-init.service";
 import {
   resetCloudConfigForTests,
@@ -56,6 +57,7 @@ const environment = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.run.mockReturnValue({ changes: 1 });
   resetCloudConfigForTests();
   clearGithubTokenRefreshFlights();
   setCloudRuntimeCredentials({
@@ -106,6 +108,7 @@ it("stops creation when the human switches accounts during preparation", async (
   await vi.waitFor(() =>
     expect(mocks.run).toHaveBeenCalledWith(
       expect.stringContaining("Your Deus account changed"),
+      null,
       expect.any(String)
     )
   );
@@ -115,12 +118,13 @@ it("stops creation when the human switches accounts during preparation", async (
 
 it("provisions a failed cloud workspace again on the same row, on its own branch", async () => {
   mocks.get.mockReturnValue({
+    kind: "cloud",
     repository_id: "repo",
     git_branch: "test-branch",
     git_target_branch: "release",
   });
   mocks.run.mockReturnValue({ changes: 1 });
-  retryCloudWorkspace("workspace");
+  await retryCloudWorkspace("workspace");
   await vi.waitFor(() => expect(mocks.connect).toHaveBeenCalledOnce());
   // The claim names the only rows it may take: failed, with no computer yet.
   expect(mocks.run).toHaveBeenCalledWith("workspace");
@@ -129,21 +133,22 @@ it("provisions a failed cloud workspace again on the same row, on its own branch
   );
 });
 
-it("does not provision twice, or over a computer that exists", () => {
+it("does not provision twice, or over a computer that exists", async () => {
   mocks.get.mockReturnValue({
+    kind: "cloud",
     repository_id: "repo",
     git_branch: "test-branch",
     git_target_branch: "main",
   });
   // Nothing claimed: another retry took it, it is not failed, or it has a computer.
   mocks.run.mockReturnValue({ changes: 0 });
-  expect(() => retryCloudWorkspace("workspace")).toThrow("not waiting for a retry");
+  await expect(retryCloudWorkspace("workspace")).rejects.toThrow("not waiting for a retry");
   expect(mocks.createWorkspace).not.toHaveBeenCalled();
 });
 
-it("asks for sign-in instead of retrying while signed out", () => {
+it("asks for sign-in instead of retrying while signed out", async () => {
   resetCloudConfigForTests();
-  expect(() => retryCloudWorkspace("workspace")).toThrow("Sign in to Deus Cloud");
+  await expect(retryCloudWorkspace("workspace")).rejects.toThrow("Sign in to Deus Cloud");
   expect(mocks.run).not.toHaveBeenCalled();
 });
 

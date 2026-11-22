@@ -24,7 +24,7 @@ import {
   NotFoundError,
   ValidationError,
 } from "../../lib/errors";
-import { getSessionRaw, getTurn, getWorkspaceForMiddleware } from "../../db";
+import { encodeOrigin, getSessionRaw, getTurn, getWorkspaceForMiddleware } from "../../db";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
 import {
   persistLastUserMessageAt,
@@ -42,14 +42,11 @@ import {
   pushCloudSessionFacts,
 } from "./cloud/driver";
 import { refreshWorkspaceGithubToken } from "../cloud-workspace-init.service";
+import { rollbackSendWake, setCloudWakeStage, watchCloudReports } from "../workspace-lifecycle";
 
 // ---- sendMessage ----
 
 const digest = (text: string) => createHash("sha256").update(text).digest("hex");
-
-/** Who sent a request, as the echo stores it: none for the person. */
-const originKey = (origin?: Origin) =>
-  origin && origin.kind !== "person" ? JSON.stringify(origin) : null;
 
 /** The sends of a turn id this process has asked the engine for, per database, by session and turn, for a while. */
 type Admission = { content: string; origin: string | null; done: Promise<{ turnId: string }> };
@@ -89,7 +86,7 @@ export async function sendMessage(
   if (!turnId) return sendMessageOnce(input, origin);
   const key = `${input.sessionId}\0${turnId}`;
   // Its text kept as a digest: a send with images would otherwise sit in memory for minutes.
-  const request = { content: digest(input.content), origin: originKey(origin) };
+  const request = { content: digest(input.content), origin: encodeOrigin(origin) };
   const different = () =>
     new ConflictError("A different message was already sent as this turn. Nothing was sent.");
   const db = getDatabase();
@@ -266,6 +263,7 @@ async function sendMessageOnce(
       workspace?.init_stage === "paused" || workspace?.init_stage === "stopped"
         ? workspace.init_stage
         : null;
+    const latest = asleepStage && workspace ? watchCloudReports(workspace.id) : undefined;
     try {
       // A send WAKES a sleeping sandbox, and its App token expires in an hour
       // — so the wake chip is not the only path that needs a fresh mint.
@@ -283,10 +281,7 @@ async function sendMessageOnce(
         // turn up — announce NOW so the send is never met with silence. The
         // chip flips to "Waking" (init_stage resuming) and the chat shows the
         // env line immediately; real frames replace both within seconds.
-        getDatabase()
-          .prepare("UPDATE workspaces SET init_stage = 'resuming' WHERE id = ?")
-          .run(workspace.id);
-        invalidate(["workspaces"], {});
+        setCloudWakeStage(workspace.id, "resuming");
         announceCloudEnv(workspace.id, sessionId, {
           status: "resuming",
           step: asleepStage === "stopped" ? "Restarting sandbox" : "Waking sandbox",
@@ -300,14 +295,8 @@ async function sendMessageOnce(
       // resume is agnt-internal) — the harness, model and thinking DO travel.
       await startCloudTurn(sessionId, turnId, content, cloudSelection);
     } catch (err) {
-      // The optimistic "Waking" flip above must not outlive a failed wake:
-      // the prompt is rolled back, so a stuck Waking chip would promise a
-      // recovery nothing is driving. Same honest revert the chip path does.
-      if (asleepStage && workspace) {
-        getDatabase()
-          .prepare("UPDATE workspaces SET init_stage = ? WHERE id = ? AND init_stage = 'resuming'")
-          .run(asleepStage, workspace.id);
-        invalidate(["workspaces"], {});
+      // A report can confirm resuming. A wake on another device can clear it without a report.
+      if (asleepStage && workspace && !latest?.() && rollbackSendWake(workspace.id, asleepStage)) {
         announceCloudEnv(workspace.id, sessionId, {
           status: asleepStage,
           reason: "wake failed — try again",
