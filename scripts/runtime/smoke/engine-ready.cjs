@@ -3,10 +3,10 @@
 //   [AgentService] Engine started, agents: [claude-code, codex-app-server, gemini]
 // (before it prints [BACKEND_PORT]).
 
-const { LOCAL_HARNESSES } = require("../../../shared/harnesses.ts");
+const DEFAULT_REQUIRED_HARNESSES = ["claude-code", "codex-app-server", "gemini"];
 const ENGINE_STARTED = /\[AgentService\] Engine started, agents: \[([^\]\n]*)\]/;
 
-function assertEngineStarted(output, requiredHarnesses = LOCAL_HARNESSES) {
+function assertEngineStarted(output, requiredHarnesses = DEFAULT_REQUIRED_HARNESSES) {
   const match = output.match(ENGINE_STARTED);
   if (!match) throw new Error("Backend output did not say the agent engine started");
   const harnesses = match[1]

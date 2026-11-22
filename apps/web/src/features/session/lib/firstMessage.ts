@@ -3,8 +3,6 @@
  * be sent, and when its chat was spoken to first. Pure, so the hook that acts
  * on them (hooks/useFirstMessageDelivery) only does the sending.
  */
-import { canPlan } from "@shared/harnesses";
-import { getAgentHarnessForModel } from "@/shared/agents";
 import type { Workspace } from "@shared/types/workspace";
 import type { PendingFirstMessage } from "@/features/workspace/store/workspaceStartStore";
 
@@ -66,19 +64,13 @@ function awaitsFirstMessage(workspace: FirstMessageFields): string | null {
 
 /** The waiting messages whose workspaces are ready for them now. */
 export function dueFirstMessages(
-  workspaces: (FirstMessageFields & Pick<Workspace, "kind">)[],
+  workspaces: FirstMessageFields[],
   pending: Record<string, PendingFirstMessage>
 ): FirstMessageDelivery[] {
   return workspaces.flatMap((workspace) => {
     const first = pending[workspace.id];
     const sessionId = first ? awaitsFirstMessage(workspace) : null;
-    if (!first || !sessionId) return [];
-    // A waiting message can outlive the build that stored its plan setting.
-    const deliver =
-      first.planMode && !canPlan(getAgentHarnessForModel(first.model), workspace.kind)
-        ? { ...first, planMode: false }
-        : first;
-    return [{ workspaceId: workspace.id, sessionId, first: deliver }];
+    return first && sessionId ? [{ workspaceId: workspace.id, sessionId, first }] : [];
   });
 }
 
