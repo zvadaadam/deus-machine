@@ -40,17 +40,15 @@ export function toToolUseBlocks(part: ToolPart): ToolUseBlock[] {
     input,
   });
   if (part.command) return [card("Bash", { command: part.command })];
-  const patch = part.state.status === "completed" && part.state;
-  const diffs = patch
-    ? (patch.content ?? []).flatMap((item) => (item.type === "diff" ? [item] : []))
-    : [];
-  if (patch && diffs.length > 0) {
-    // An update hunk's sides are its lines joined with the last one's newline
-    // dropped (the engine's `hunkDiff`), so each gets it back. A new file's
-    // `newText` and a deleted file's `oldText` are the file as it is.
-    const lines = (text?: string) => (text ? `${text}\n` : "");
+  if (part.state.status !== "completed") return [toolUse];
+  const diffs = (part.state.content ?? []).flatMap((item) => (item.type === "diff" ? [item] : []));
+  if (diffs.length > 0) {
+    const { changes } = coerceToolInput(part.state.input);
+    const isPatch = Array.isArray(changes);
+    // A patch hunk joins lines without the last line's newline. Whole files carry their own.
+    const side = (text = "") => (isPatch && text ? `${text}\n` : text);
     const deleted = new Set(
-      [coerceToolInput(patch.input).changes].flat().flatMap((change: unknown) => {
+      (isPatch ? changes : []).flatMap((change: unknown) => {
         const { path, kind } = coerceToolInput(change);
         const type = typeof kind === "string" ? kind : coerceToolInput(kind).type;
         return type === "delete" ? [path] : [];
@@ -67,8 +65,8 @@ export function toToolUseBlocks(part: ToolPart): ToolUseBlock[] {
         return card("Edit", { file_path, old_string: first.oldText, new_string: "" }, id);
       }
       const edits = [first, ...rest].map((diff) => ({
-        old_string: lines(diff.oldText),
-        new_string: lines(diff.newText),
+        old_string: side(diff.oldText),
+        new_string: side(diff.newText),
       }));
       return rest.length > 0
         ? card("MultiEdit", { file_path, edits }, id)

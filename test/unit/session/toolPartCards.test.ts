@@ -95,6 +95,55 @@ describe("a Codex tool drawn as Claude's card", () => {
   });
 });
 
+describe("whole files in Gemini's recorded tool parts", () => {
+  const small = "start\ncolor=blue\nend\n";
+  const large = Array.from(
+    { length: 320 },
+    (_, i) => `row ${String(i + 1).padStart(3, "0")} | ${i === 159 ? "before" : "fixture"}\n`
+  ).join("");
+
+  it.each([
+    ["/w/small.txt", small, "color=blue", "color=green"],
+    ["/w/large.txt", large, "row 160 | before", "row 160 | after"],
+  ])("keeps both complete sides of the edit to %s", (path, oldText, target, replacement) => {
+    const newText = oldText.replace(target, replacement);
+    const edit = part({
+      toolName: "edit_file",
+      kind: "edit",
+      locations: [{ path }],
+      state: {
+        status: "completed",
+        time: { start: 1, end: 2 },
+        output: "",
+        input: { Path: path, Target: target, Replacement: replacement },
+        content: [{ type: "diff", path, oldText, newText }],
+      },
+    });
+    expect(toToolUseBlocks(edit)).toMatchObject([
+      { name: "Edit", input: { file_path: path, old_string: oldText, new_string: newText } },
+    ]);
+  });
+
+  it("writes the new file including its final newline", () => {
+    const path = "/w/small.txt";
+    const write = part({
+      toolName: "write_file",
+      kind: "edit",
+      locations: [{ path }],
+      state: {
+        status: "completed",
+        time: { start: 1, end: 2 },
+        output: "",
+        input: { Path: path, Overwrite: true, Content: small },
+        content: [{ type: "diff", path, newText: small }],
+      },
+    });
+    expect(toToolUseBlocks(write)).toMatchObject([
+      { name: "Write", input: { file_path: path, content: small } },
+    ]);
+  });
+});
+
 describe("a tool's own card and the fields an unregistered tool carries", () => {
   it("keeps a monitor's description and timeout and a Bash call's full input", () => {
     for (const [toolName, input, renderer] of [
