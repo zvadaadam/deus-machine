@@ -416,27 +416,6 @@ export function getAllRepositories(db: Database.Database): RepositoryWithCountsR
     .all() as RepositoryWithCountsRow[];
 }
 
-/** Lightweight repo list for backfilling empty groups in by-repo queries. */
-export interface RepositorySummaryRow {
-  id: string;
-  name: string;
-  sort_order: number;
-  git_origin_url: string | null;
-  root_path: string | null;
-  archived_count: number;
-}
-
-export function getAllRepositorySummaries(db: Database.Database): RepositorySummaryRow[] {
-  return db
-    .prepare(
-      `SELECT r.id, r.name, r.sort_order, r.git_origin_url, r.root_path,
-        COUNT(CASE WHEN w.state = 'archived' THEN 1 END) AS archived_count
-       FROM repositories r LEFT JOIN workspaces w ON w.repository_id = r.id
-       GROUP BY r.id ORDER BY r.sort_order, r.name`
-    )
-    .all() as RepositorySummaryRow[];
-}
-
 export function getRepositoryById(db: Database.Database, id: string): RepositoryRow | undefined {
   return db.prepare("SELECT * FROM repositories WHERE id = ?").get(id) as RepositoryRow | undefined;
 }

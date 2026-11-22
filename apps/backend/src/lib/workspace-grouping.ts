@@ -1,5 +1,5 @@
 import type { RepoGroup, Workspace } from "@shared/types/workspace";
-import type { RepositorySummaryRow, WorkspaceWithDetailsRow } from "../db";
+import type { RepositoryWithCountsRow, WorkspaceWithDetailsRow } from "../db";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
 
 /** A workspace row as clients read it: its folder resolved, its repository named. */
@@ -15,7 +15,7 @@ export function toWorkspace(row: WorkspaceWithDetailsRow): Workspace {
 
 export function groupWorkspacesByRepo(
   workspaces: WorkspaceWithDetailsRow[],
-  allRepos: RepositorySummaryRow[]
+  allRepos: RepositoryWithCountsRow[]
 ): RepoGroup[] {
   const grouped: Record<string, RepoGroup> = {};
 

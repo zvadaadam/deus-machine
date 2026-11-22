@@ -938,8 +938,9 @@ async function provisionCloudWorkspace(
       // New branch off the source — the sandbox's whole life happens here.
       checkout: { branch: branch.work, from: branch.source },
     });
-    if (!attachCloudComputer(workspaceId, provider.id, inlineMintStampAtCreate, token)) return;
+    if (!attachCloudComputer(workspaceId, provider.id, token)) return;
     try {
+      setInlineMintStamp({ provider_workspace_id: provider.id }, inlineMintStampAtCreate);
       if (repositoryAuth) markWorkspaceTokenRefreshed(provider.id);
     } finally {
       invalidate(["workspaces", "sessions", "session"], {});

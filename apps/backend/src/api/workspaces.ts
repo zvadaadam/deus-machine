@@ -9,7 +9,7 @@ import { AppError, NotFoundError, ValidationError } from "../lib/errors";
 import { groupWorkspacesByRepo, toWorkspace } from "../lib/workspace-grouping";
 import { loadWorkspace } from "../middleware/workspace-loader";
 import {
-  getAllRepositorySummaries,
+  getAllRepositories,
   getArchivedWorkspaces,
   getWorkspaceById,
   getWorkspaceRaw,
@@ -62,7 +62,7 @@ export default [
     // `error` is in the default so a failed provision stays visible in the sidebar.
     return groupWorkspacesByRepo(
       getWorkspacesByRepo(db, state ?? "ready,initializing,error"),
-      getAllRepositorySummaries(db)
+      getAllRepositories(db)
     );
   }),
   handle(api.archivedWorkspaces, ({ repositoryId }) =>
@@ -122,7 +122,9 @@ export default [
     return retryWorkspaceInit(workspaceId);
   }),
   // Only a workspace that never started: see deleteFailedWorkspace.
-  handle(api.deleteWorkspace, ({ workspaceId }) => deleteFailedWorkspace(workspaceId)),
+  handle(api.deleteWorkspace, ({ workspaceId }) => {
+    deleteFailedWorkspace(workspaceId);
+  }),
   handle(api.retrySetup, ({ workspaceId }) => {
     const { workspace, workspacePath } = loadWorkspace(workspaceId);
     if (workspace.kind === "cloud") {

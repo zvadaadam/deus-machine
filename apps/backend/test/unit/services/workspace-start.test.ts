@@ -46,7 +46,7 @@ import {
 } from "../../../src/services/workspace-init.service";
 import {
   deleteFailedWorkspace,
-  prepareWorkspaceFixture,
+  insertWorkspaceFixture,
   setSetupStatus,
 } from "../../../src/services/workspace-lifecycle";
 import {
@@ -667,8 +667,7 @@ describe("names", () => {
 });
 
 it("seeds a ready integration CLI workspace once, without publishing", () => {
-  const insert = prepareWorkspaceFixture(db());
-  insert.run("cli", "r");
+  insertWorkspaceFixture("cli", "r");
   const seeded = row("cli");
   expect(seeded).toMatchObject({
     slug: "cli-test",
@@ -679,7 +678,7 @@ it("seeds a ready integration CLI workspace once, without publishing", () => {
     error_message: null,
     error_detail: null,
   });
-  insert.run("cli", "r");
+  insertWorkspaceFixture("cli", "r");
   expect(row("cli")).toEqual(seeded);
   expect(mocks.invalidate).not.toHaveBeenCalled();
 });
@@ -800,64 +799,48 @@ exec "$REAL_GIT" "$@"
   });
 
   it("ignores every previous attempt result while a retry is initializing", async () => {
-    const stages = vi.spyOn(lifecycle, "advanceLocalStage");
-    try {
-      await initializeWorkspace(add("w", "vega", { git_source_branch: "missing" }));
-      const original = stages.mock.calls[0][2];
-      git("branch", "missing");
-      let before: unknown;
-      let after: unknown;
-      let publishes = 0;
-      mocks.invalidate.mockImplementation(() => {
-        if (before || row("w").init_stage !== "fetch") return;
-        before = row("w");
-        const n = mocks.invalidate.mock.calls.length;
-        lifecycle.advanceLocalStage("w", "session", original);
-        lifecycle.recordFetchOutcome("w", "offline", original);
-        lifecycle.finishLocalStart("w", original);
-        lifecycle.failStart("w", "session", { message: "old failure", detail: null }, original);
-        after = row("w");
-        publishes = mocks.invalidate.mock.calls.length - n;
-      });
-      await retryWorkspaceInit("w");
-      await vi.waitFor(() => expect(row("w").init_stage).toBe("done"), { timeout: 3000 });
-      expect(after).toEqual(before);
-      expect(publishes).toBe(0);
-      expect(row("w").state).toBe("ready");
-    } finally {
-      stages.mockRestore();
-    }
+    add("w", "vega");
+    let original!: AbortSignal;
+    await lifecycle.runWorkspaceAttempt("w", async (token) => {
+      original = token;
+      lifecycle.failStart("w", "fetch", { message: "first start failed", detail: null }, token);
+    });
+    let before: unknown;
+    let after: unknown;
+    let publishes = 0;
+    mocks.invalidate.mockImplementation(() => {
+      if (before || row("w").init_stage !== "fetch") return;
+      before = row("w");
+      const n = mocks.invalidate.mock.calls.length;
+      lifecycle.advanceLocalStage("w", "session", original);
+      lifecycle.recordFetchOutcome("w", "offline", original);
+      lifecycle.finishLocalStart("w", original);
+      lifecycle.failStart("w", "session", { message: "old failure", detail: null }, original);
+      after = row("w");
+      publishes = mocks.invalidate.mock.calls.length - n;
+    });
+    await retryWorkspaceInit("w");
+    await vi.waitFor(() => expect(row("w").init_stage).toBe("done"), { timeout: 3000 });
+    expect(after).toEqual(before);
+    expect(publishes).toBe(0);
+    expect(row("w").state).toBe("ready");
   });
 
   it("requires an initializing row even when the attempt token is current", async () => {
-    const advance = lifecycle.advanceLocalStage;
-    const observations: [unknown, unknown, number][] = [];
-    const stage = vi
-      .spyOn(lifecycle, "advanceLocalStage")
-      .mockImplementationOnce((id, step, token) => {
-        for (const state of ["error", "ready", "archived"]) {
-          db().prepare("UPDATE workspaces SET state = ? WHERE id = ?").run(state, id);
-          const before = row(id);
-          const n = mocks.invalidate.mock.calls.length;
-          advance(id, step, token);
-          lifecycle.recordFetchOutcome(id, "offline", token);
-          lifecycle.finishLocalStart(id, token);
-          lifecycle.failStart(id, step, { message: "late", detail: null }, token);
-          observations.push([before, row(id), mocks.invalidate.mock.calls.length - n]);
-        }
-        db().prepare("UPDATE workspaces SET state = 'initializing' WHERE id = ?").run(id);
-        advance(id, step, token);
-      });
-    try {
-      await initializeWorkspace(add("w", "vega"));
-      expect(observations).toHaveLength(3);
-      for (const [before, after, notifications] of observations) {
-        expect(after).toEqual(before);
-        expect(notifications).toBe(0);
+    add("w", "vega");
+    await lifecycle.runWorkspaceAttempt("w", async (token) => {
+      for (const state of ["error", "ready", "archived"]) {
+        db().prepare("UPDATE workspaces SET state = ? WHERE id = 'w'").run(state);
+        const before = row("w");
+        mocks.invalidate.mockClear();
+        lifecycle.advanceLocalStage("w", "session", token);
+        lifecycle.recordFetchOutcome("w", "offline", token);
+        lifecycle.finishLocalStart("w", token);
+        lifecycle.failStart("w", "session", { message: "late", detail: null }, token);
+        expect(row("w")).toEqual(before);
+        expect(mocks.invalidate).not.toHaveBeenCalled();
       }
-    } finally {
-      stage.mockRestore();
-    }
+    });
   });
 
   it("recovers the durable session stage if first-chat cleanup is interrupted", async () => {
@@ -966,43 +949,39 @@ exec "$REAL_GIT" "$@"
 });
 
 describe("only a failed start can be retried or deleted", () => {
-  it.each(["retry", "delete"])(
-    "checks state, pointer, all sessions and cloud computer before %s",
-    (operation) => {
-      const mismatches: string[] = [];
-      for (const kind of ["cloud", "worktree"]) {
-        for (const state of ["initializing", "ready", "archived", "error"]) {
-          for (const pointer of [null, "unselected"]) {
-            for (const chat of [false, true]) {
-              for (const provider of [null, "computer"]) {
-                const id = [kind, state, pointer, chat, provider].join("-");
-                add(id, id, {
-                  kind,
-                  state,
-                  current_session_id: pointer,
-                  provider_workspace_id: provider,
-                });
-                if (chat)
-                  db()
-                    .prepare("INSERT INTO sessions (id, workspace_id) VALUES (?, ?)")
-                    .run("s-" + id, id);
-                let accepted = true;
-                try {
-                  if (operation === "delete") deleteFailedWorkspace(id);
-                  else if (kind === "cloud") lifecycle.claimCloudRetry(id);
-                  else lifecycle.claimLocalRetry(id);
-                } catch (error) {
-                  expect(error).toMatchObject({ statusCode: 409 });
-                  accepted = false;
-                }
-                if (accepted !== (state === "error" && !pointer && !chat && !provider))
-                  mismatches.push(id);
-              }
-            }
-          }
-        }
+  it.each([
+    ["local Retry", "worktree", lifecycle.claimLocalRetry],
+    ["cloud Retry", "cloud", lifecycle.claimCloudRetry],
+    ["local Delete", "worktree", deleteFailedWorkspace],
+    ["cloud Delete", "cloud", deleteFailedWorkspace],
+  ] as const)("%s checks every state, chat selection and computer", (_name, kind, operation) => {
+    // Each verdict column is one stored state, in the order below.
+    const states = ["initializing", "ready", "archived", "error"] as const;
+    const cases = [
+      [null, false, null, ["refused", "refused", "refused", "allowed"]],
+      [null, false, "computer", ["refused", "refused", "refused", "refused"]],
+      [null, true, null, ["refused", "refused", "refused", "refused"]],
+      [null, true, "computer", ["refused", "refused", "refused", "refused"]],
+      ["selected", false, null, ["refused", "refused", "refused", "refused"]],
+      ["selected", false, "computer", ["refused", "refused", "refused", "refused"]],
+      ["selected", true, null, ["refused", "refused", "refused", "refused"]],
+      ["selected", true, "computer", ["refused", "refused", "refused", "refused"]],
+    ] as const;
+    for (const [pointer, chat, computer, expected] of cases) {
+      for (const [index, state] of states.entries()) {
+        const id = [kind, state, pointer, chat, computer].join("-");
+        const sessionId = "s-" + id;
+        add(id, id, {
+          kind,
+          state,
+          current_session_id: pointer && sessionId,
+          provider_workspace_id: computer,
+        });
+        if (chat)
+          db().prepare("INSERT INTO sessions (id, workspace_id) VALUES (?, ?)").run(sessionId, id);
+        if (expected[index] === "allowed") expect(() => operation(id)).not.toThrow();
+        else expect(() => operation(id)).toThrow(expect.objectContaining({ statusCode: 409 }));
       }
-      expect(mismatches).toEqual([]);
     }
-  );
+  });
 });

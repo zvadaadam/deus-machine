@@ -155,9 +155,9 @@ function violations(file: ts.SourceFile, checker: ts.TypeChecker, db: Database.D
   const found: string[] = [];
   const relative = path.relative(backend, file.fileName);
   function visit(node: ts.Node): void {
-    if (relative !== "cli.ts" && ts.isIdentifier(node) && node.text === "prepareWorkspaceFixture") {
+    if (relative !== "cli.ts" && ts.isIdentifier(node) && node.text === "insertWorkspaceFixture") {
       const line = file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1;
-      found.push(`${relative}:${line} only the integration CLI uses prepareWorkspaceFixture`);
+      found.push(`${relative}:${line} only the integration CLI uses insertWorkspaceFixture`);
     }
     if (
       relative !== "src/services/setup-status.ts" &&
@@ -296,7 +296,7 @@ it("checks assembled statements and distinguishes assignment targets from reads"
     'db.exec(`DELETE FROM"workspaces"`); // reject',
     "db.prepare(`UPDATE ${unresolvedTable} SET state = ?`); // reject",
     "db.prepare(`INSERT INTO workspaces (${unresolvedColumns}) VALUES (?)`); // reject",
-    "prepareWorkspaceFixture(db); // reject",
+    "insertWorkspaceFixture(id, repoId); // reject",
     "writeSetupStatusFile(id, status); // reject",
   ];
   const host = ts.createCompilerHost({});

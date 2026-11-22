@@ -1,4 +1,8 @@
-/** Workspace row transitions, their live reads and the per-workspace queue. */
+/**
+ * Row transitions run synchronously, report whether they took effect and publish their writes.
+ * A transition that leaves publication to its caller names the sequence that caller finishes.
+ * Only changeWorkspaceState and runWorkspaceAttempt run caller-supplied code.
+ */
 import type { Origin } from "@shared/types/workspace";
 import type { InitFetchIssue, SetupStatus } from "@shared/enums";
 import { uuidv7 } from "@shared/lib/uuid";
@@ -86,19 +90,20 @@ function ownsAttempt(id: string, token: AbortSignal): boolean {
   return attempts.get(id)?.controller.signal === token && !token.aborted;
 }
 
-export function advanceLocalStage(workspaceId: string, stage: Stage, token: AbortSignal): void {
-  if (!ownsAttempt(workspaceId, token)) return;
+export function advanceLocalStage(workspaceId: string, stage: Stage, token: AbortSignal): boolean {
+  if (!ownsAttempt(workspaceId, token)) return false;
   try {
     const update = getDatabase()
       .prepare("UPDATE workspaces SET init_stage = ? WHERE id = ? AND state = 'initializing'")
       .run(stage, workspaceId);
-    if (!update.changes) return;
+    if (!update.changes) return false;
   } catch (err) {
     // The stage is progress, not state: a locked database must not stop the work.
     console.warn(`[WORKSPACE] Could not record stage "${stage}" for ${workspaceId}:`, err);
-    return;
+    return false;
   }
   invalidate(["workspaces"]);
+  return true;
 }
 
 /** The next stage (worktree), or a start failure, publishes the recorded fetch outcome. */
@@ -106,11 +111,13 @@ export function recordFetchOutcome(
   workspaceId: string,
   issue: InitFetchIssue | null,
   token: AbortSignal
-): void {
-  if (!ownsAttempt(workspaceId, token)) return;
-  getDatabase()
-    .prepare("UPDATE workspaces SET init_fetch_issue = ? WHERE id = ? AND state = 'initializing'")
-    .run(issue, workspaceId);
+): boolean {
+  if (!ownsAttempt(workspaceId, token)) return false;
+  return (
+    getDatabase()
+      .prepare("UPDATE workspaces SET init_fetch_issue = ? WHERE id = ? AND state = 'initializing'")
+      .run(issue, workspaceId).changes > 0
+  );
 }
 
 /** The checkout publishes after starting setup so the first turn sees its status. */
@@ -225,7 +232,7 @@ export function claimLocalRetry(workspaceId: string) {
  * instead: deleting it would take its chats with it. A cloud workspace whose
  * computer exists is the platform's to remove, so it is archived too.
  */
-export function deleteFailedWorkspace(workspaceId: string): void {
+export function deleteFailedWorkspace(workspaceId: string): boolean {
   const db = getDatabase();
   const row = db.prepare(`${START_ROW} WHERE w.id = ?`).get(workspaceId) as StartRow | undefined;
   if (!row) throw new NotFoundError("Workspace not found");
@@ -238,6 +245,7 @@ export function deleteFailedWorkspace(workspaceId: string): void {
     .run(workspaceId);
   if (!deleted.changes) throw new ConflictError("This workspace has chats. Archive it instead.");
   invalidate(["workspaces", "sessions"]);
+  return true;
 }
 
 export function runningSetups() {
@@ -263,25 +271,26 @@ export function setSetupStatus(
   workspaceId: string,
   status: SetupStatus,
   failure?: SetupFailure
-): void {
+): boolean {
   const update = getDatabase()
     .prepare(
       "UPDATE workspaces SET setup_status = ?, error_message = ?, error_detail = ? WHERE id = ?"
     )
     .run(status, failure?.message ?? null, failure?.detail ?? null, workspaceId);
-  if (!update.changes) return;
+  if (!update.changes) return false;
   try {
     writeSetupStatusFile(workspaceId, status, failure?.exitCode);
   } finally {
     invalidate(["workspaces"]);
   }
+  return true;
 }
 
 const WORKSPACE_RESOURCES = ["workspaces", "sessions", "session"] as const;
 
 export function insertCloudWorkspace(
   row: StartBranches & { organization_id: string | null }
-): void {
+): boolean {
   const db = getDatabase();
   db.prepare(
     `INSERT INTO workspaces (
@@ -297,9 +306,10 @@ export function insertCloudWorkspace(
     row.organization_id
   );
   invalidate([...WORKSPACE_RESOURCES], {});
+  return true;
 }
 
-export function claimCloudRetry(workspaceId: string): void {
+export function claimCloudRetry(workspaceId: string): boolean {
   // The claim: two clicks, or two devices, provision it once.
   const claimed = getDatabase()
     .prepare(
@@ -311,6 +321,7 @@ export function claimCloudRetry(workspaceId: string): void {
     .run(workspaceId);
   if (claimed.changes === 0) throw new ConflictError("This workspace is not waiting for a retry.");
   invalidate([...WORKSPACE_RESOURCES], {});
+  return true;
 }
 
 export function failCloudStart(
@@ -318,30 +329,26 @@ export function failCloudStart(
   message: string,
   token: AbortSignal,
   detail: string | null = null
-): void {
-  if (!ownsAttempt(id, token)) return;
+): boolean {
+  if (!ownsAttempt(id, token)) return false;
   const updated = getDatabase()
     .prepare(
       "UPDATE workspaces SET state = 'error', error_message = ?, error_detail = ? WHERE id = ? AND state = 'initializing'"
     )
     .run(message, detail, id);
-  if (!updated.changes) return;
+  if (!updated.changes) return false;
   invalidate([...WORKSPACE_RESOURCES], {});
+  return true;
 }
 
 /** Cloud provisioning publishes after recording the token refresh for the computer. */
-export function attachCloudComputer(
-  id: string,
-  providerId: string,
-  mintedAt: number | null,
-  token: AbortSignal
-): boolean {
+export function attachCloudComputer(id: string, providerId: string, token: AbortSignal): boolean {
   if (!ownsAttempt(id, token)) return false;
   const attached = getDatabase()
     .prepare(
-      "UPDATE workspaces SET provider_workspace_id = ?, init_stage = 'creating cloud session', last_inline_mint_at = ? WHERE id = ? AND state = 'initializing'"
+      "UPDATE workspaces SET provider_workspace_id = ?, init_stage = 'creating cloud session' WHERE id = ? AND state = 'initializing'"
     )
-    .run(providerId, mintedAt, id);
+    .run(providerId, id);
   return attached.changes > 0;
 }
 
@@ -460,11 +467,12 @@ export function applyCloudStatus(workspaceId: string, data: CloudReport): boolea
   return row && !!fields;
 }
 
-export function setCloudWakeStage(workspaceId: string, stage: string | null): void {
-  getDatabase()
+export function setCloudWakeStage(workspaceId: string, stage: string | null): boolean {
+  const write = getDatabase()
     .prepare("UPDATE workspaces SET init_stage = ? WHERE id = ?")
     .run(stage, workspaceId);
   invalidate(["workspaces"], {});
+  return write.changes > 0;
 }
 
 // State changes for each workspace run in the order they are requested.
@@ -522,21 +530,26 @@ export function markRestored(workspaceId: string) {
   return row;
 }
 
-export function rollbackCloudRestore(workspaceId: string): void {
-  getDatabase().prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
+export function rollbackCloudRestore(workspaceId: string): boolean {
+  const write = getDatabase()
+    .prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?")
+    .run(workspaceId);
   invalidate(["workspaces"], {});
+  return write.changes > 0;
 }
 
 /** Resurface an archived adopted workspace and repoint its current session.
  *  Both membership and selection belong to the workspace list. */
-export function reviveAdoptedWorkspace(workspaceId: string, sessionId: string): void {
+export function reviveAdoptedWorkspace(workspaceId: string, sessionId: string): boolean {
   const revived = markAdoptedWorkspaceReady(workspaceId);
   const selected = getDatabase()
     .prepare(
       "UPDATE workspaces SET current_session_id = ?, updated_at = datetime('now') WHERE id = ? AND current_session_id IS NOT ?"
     )
     .run(sessionId, workspaceId, sessionId);
-  if (revived || selected.changes) invalidate(["workspaces"]);
+  if (!revived && !selected.changes) return false;
+  invalidate(["workspaces"]);
+  return true;
 }
 
 /** reviveAdoptedWorkspace publishes after selecting the chat. */
@@ -556,7 +569,7 @@ export function insertAdoptedWorkspace(
     WorkspaceRow,
     "id" | "repository_id" | "slug" | "title" | "provider_workspace_id" | "organization_id"
   >
-): void {
+): boolean {
   const db = getDatabase();
   db.prepare(
     `INSERT INTO workspaces (id, repository_id, slug, title, state, kind, provider_workspace_id, organization_id)
@@ -569,6 +582,7 @@ export function insertAdoptedWorkspace(
     row.provider_workspace_id,
     row.organization_id
   );
+  return true;
 }
 
 /** openAutomationRun publishes the chat pointer with the rest of the adoption after transcript backfill. */
@@ -576,17 +590,21 @@ export function attachAdoptedSession(
   workspaceId: string,
   sessionId: string,
   organizationId: string | null
-): void {
-  getDatabase()
-    .prepare(
-      "UPDATE workspaces SET current_session_id = ?, organization_id = COALESCE(organization_id, ?), updated_at = datetime('now') WHERE id = ?"
-    )
-    .run(sessionId, organizationId, workspaceId);
+): boolean {
+  return (
+    getDatabase()
+      .prepare(
+        "UPDATE workspaces SET current_session_id = ?, organization_id = COALESCE(organization_id, ?), updated_at = datetime('now') WHERE id = ?"
+      )
+      .run(sessionId, organizationId, workspaceId).changes > 0
+  );
 }
 
 /** The integration CLI seeds its private database without publishing a live read. */
-export function prepareWorkspaceFixture(db: ReturnType<typeof getDatabase>) {
-  return db.prepare(
-    `INSERT OR IGNORE INTO workspaces (id, repository_id, slug, state) VALUES (?, ?, 'cli-test', 'ready')`
-  );
+export function insertWorkspaceFixture(id: string, repositoryId: string): void {
+  getDatabase()
+    .prepare(
+      `INSERT OR IGNORE INTO workspaces (id, repository_id, slug, state) VALUES (?, ?, 'cli-test', 'ready')`
+    )
+    .run(id, repositoryId);
 }

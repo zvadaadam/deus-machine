@@ -1,4 +1,7 @@
-import { vi, describe, it, expect, beforeEach } from "vitest";
+import Database from "better-sqlite3";
+import { SCHEMA_SQL } from "@shared/schema";
+import { getDatabase } from "../../../src/lib/database";
+import { vi, describe, it, expect, afterEach, beforeEach } from "vitest";
 import fs from "fs";
 import * as api from "@shared/api/workspaces";
 import { operations } from "../../helpers";
@@ -412,28 +415,22 @@ describe("updateWorkspace", () => {
 });
 
 describe("cloud wake and archive ordering", () => {
-  function cloudRow() {
-    let state = "ready";
-    mockStmt.get.mockImplementation(() => ({
-      ...MOCK_CREATED_WORKSPACE,
-      kind: "cloud",
-      provider_workspace_id: "agnt-workspace",
-      root_path: null,
-      state,
-    }));
-    mockDb.prepare.mockImplementation((sql: string) => {
-      if (sql.startsWith("UPDATE workspaces SET state = 'archived'")) {
-        return {
-          run: () => {
-            state = "archived";
-            return { changes: 1 };
-          },
-        };
-      }
-      return mockStmt;
-    });
-    return () => state;
-  }
+  let db: Database.Database;
+  beforeEach(() => {
+    db = new Database(":memory:");
+    db.exec(SCHEMA_SQL);
+    db.exec(`
+      INSERT INTO repositories (id, name) VALUES ('repo-001','repo');
+      INSERT INTO workspaces (id, repository_id, slug, state, kind, provider_workspace_id)
+        VALUES ('ws-test-uuid','repo-001','work','ready','cloud','agnt-workspace');
+    `);
+    vi.mocked(getDatabase).mockReturnValue(db);
+  });
+  afterEach(() => {
+    vi.mocked(getDatabase).mockReset();
+    db.close();
+  });
+  const row = () => db.prepare("SELECT state FROM workspaces WHERE id='ws-test-uuid'").get();
 
   const archive = () => run(api.archiveWorkspace, { workspaceId: "ws-test-uuid" });
   // Settled rather than awaited: one of the two is expected to be refused.
@@ -444,7 +441,6 @@ describe("cloud wake and archive ordering", () => {
     );
 
   it("rechecks archived membership when a wake was queued behind Pause", async () => {
-    const state = cloudRow();
     let release!: () => void;
     cloud.pause.mockImplementationOnce(
       () =>
@@ -462,11 +458,10 @@ describe("cloud wake and archive ordering", () => {
       error: { statusCode: 400, message: "Workspace is archived — unarchive it first" },
     });
     expect(cloud.wake).not.toHaveBeenCalled();
-    expect(state()).toBe("archived");
+    expect(row()).toEqual({ state: "archived" });
   });
 
   it("finishes a prior wake before Pause so an archived workspace stays suspended", async () => {
-    const state = cloudRow();
     let running = false;
     let release!: () => void;
     cloud.wake.mockImplementationOnce(async () => {
@@ -487,7 +482,7 @@ describe("cloud wake and archive ordering", () => {
     release();
     const [woken] = await Promise.all([waking, archiving]);
     expect(woken).toEqual({ answer: { ok: true, status: "resuming" } });
-    expect(state()).toBe("archived");
+    expect(row()).toEqual({ state: "archived" });
     expect(running).toBe(false);
   });
 });

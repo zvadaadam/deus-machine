@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import Database from "better-sqlite3";
+import { SCHEMA_SQL } from "@shared/schema";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   config: vi.fn(),
@@ -6,13 +8,11 @@ const mocks = vi.hoisted(() => ({
   resume: vi.fn(),
   create: vi.fn(),
   environment: vi.fn(),
-  repository: vi.fn(),
-  run: vi.fn(),
+  invalidate: vi.fn(),
   announce: vi.fn(),
   connect: vi.fn(),
   live: vi.fn(),
   secret: vi.fn(),
-  workspace: { state: "ready", init_stage: null as string | null },
 }));
 vi.mock("@deus-hq/sdk", async (original) => ({
   ...(await original<typeof import("@deus-hq/sdk")>()),
@@ -35,26 +35,9 @@ vi.mock("../../../src/services/cloud-environment.service", () => ({
   getCloudEnvironmentInfo: mocks.environment,
   enableCloudEnvironmentSimulator: vi.fn(),
 }));
-vi.mock("../../../src/db", () => ({ getRepositoryById: mocks.repository }));
-vi.mock("../../../src/lib/database", () => ({
-  getDatabase: () => ({
-    prepare: (sql: string) => ({
-      run: (...args: unknown[]) => {
-        if (sql.startsWith("UPDATE workspaces SET init_stage =")) {
-          mocks.workspace.init_stage = args[0] as string | null;
-        }
-        return mocks.run(...args);
-      },
-      get: () =>
-        sql.includes("AS chat")
-          ? { chat: "session" }
-          : sql.includes("init_stage")
-            ? mocks.workspace
-            : { last_inline_mint_at: 0 },
-    }),
-  }),
-}));
-vi.mock("../../../src/services/query-engine", () => ({ invalidate: vi.fn() }));
+let db: Database.Database;
+vi.mock("../../../src/lib/database", () => ({ getDatabase: () => db }));
+vi.mock("../../../src/services/query-engine", () => ({ invalidate: mocks.invalidate }));
 
 import {
   clearGithubTokenRefreshFlights,
@@ -66,18 +49,34 @@ import { forgetGithubAnswers } from "../../../src/services/github-remote";
 beforeEach(() => {
   vi.resetAllMocks();
   forgetGithubAnswers();
-  mocks.workspace = { state: "ready", init_stage: null };
+  db = new Database(":memory:");
+  db.exec(SCHEMA_SQL);
+  db.exec(`
+    INSERT INTO repositories (id, name, git_origin_url) VALUES ('repo', 'repo', 'https://github.com/owner/repo');
+    INSERT INTO workspaces (id, repository_id, slug, kind, state, current_session_id, provider_workspace_id, last_inline_mint_at)
+      VALUES ('ws', 'repo', 'work', 'cloud', 'ready', 'session', 'vm', 0);
+    INSERT INTO sessions (id, workspace_id) VALUES ('session', 'ws');
+  `);
   clearGithubTokenRefreshFlights();
   mocks.config.mockReturnValue({ apiKey: "test", baseUrl: "https://cloud.test" });
-  mocks.repository.mockReturnValue({ git_origin_url: "https://github.com/owner/repo" });
   mocks.environment.mockResolvedValue({ configured: false });
   mocks.create.mockResolvedValue({ id: "vm", organizationId: "org" });
 });
 
+afterEach(() => db.close());
+
+const stageOfWorkspace = () => db.prepare("SELECT init_stage FROM workspaces WHERE id='ws'").get();
+
 describe("explicit cloud wake", () => {
-  it.each(["paused", "stopped", "error", "running", undefined])(
+  it.each([
+    ["paused", "resuming", "resuming"],
+    ["stopped", "resuming", "resuming"],
+    ["error", "resuming", "resuming"],
+    ["running", "running", null],
+    [undefined, "resuming", "resuming"],
+  ] as const)(
     "releases the hold for %s without requiring desktop mint context",
-    async (status) => {
+    async (status, response, stage) => {
       mocks.get.mockResolvedValue({ status });
       const result = await wakeCloudWorkspaceWithFeedback({
         id: "ws",
@@ -89,8 +88,8 @@ describe("explicit cloud wake", () => {
         baseUrl: "https://cloud.test",
       });
       expect(mocks.connect).toHaveBeenCalledWith("session");
-      expect(result).toEqual({ ok: true, status: status === "running" ? "running" : "resuming" });
-      if (status === "running") expect(mocks.run).toHaveBeenCalledWith(null, "ws");
+      expect(result).toEqual({ ok: true, status: response });
+      expect(stageOfWorkspace()).toEqual({ init_stage: stage });
     }
   );
 
@@ -104,7 +103,7 @@ describe("explicit cloud wake", () => {
         current_session_id: "session",
       })
     ).toEqual({ ok: false, status: "error", error: "provider unavailable" });
-    expect(mocks.run).toHaveBeenLastCalledWith("error", "ws");
+    expect(stageOfWorkspace()).toEqual({ init_stage: "error" });
     expect(mocks.connect).not.toHaveBeenCalled();
   });
 
@@ -119,14 +118,14 @@ describe("explicit cloud wake", () => {
         current_session_id: "session",
       })
     ).toEqual({ ok: false, status: "running" });
-    expect(mocks.run).not.toHaveBeenCalled();
+    expect(mocks.invalidate).not.toHaveBeenCalled();
     expect(mocks.announce).not.toHaveBeenCalled();
   });
 
   it.each(["error", "paused", "stopped", "resuming"])(
     "keeps a confirmed running computer available after clearing a stale %s stage",
     async (stage) => {
-      mocks.workspace.init_stage = stage;
+      db.prepare("UPDATE workspaces SET init_stage=? WHERE id='ws'").run(stage);
       mocks.get.mockResolvedValue({ status: "running" });
       mocks.live.mockReturnValue(true);
       mocks.resume.mockRejectedValue(new Error("resume unavailable"));
@@ -137,20 +136,24 @@ describe("explicit cloud wake", () => {
           current_session_id: "session",
         })
       ).toEqual({ ok: false, status: "running" });
-      expect(mocks.workspace.init_stage).toBeNull();
-      expect(mocks.run).toHaveBeenCalledExactlyOnceWith(null, "ws");
+      expect(stageOfWorkspace()).toEqual({ init_stage: null });
+      expect(mocks.invalidate).toHaveBeenCalledExactlyOnceWith(["workspaces"], {});
       expect(mocks.announce).not.toHaveBeenCalled();
     }
   );
 
-  it.each(["paused", "stopped", "error", null])(
+  it.each([
+    ["paused", "paused", "paused"],
+    ["stopped", "stopped", "stopped"],
+    ["error", "error", "error"],
+    [null, "paused", "error"],
+  ] as const)(
     "does not treat an open channel as proof that a %s computer is serving",
-    async (status) => {
+    async (status, before, expected) => {
       mocks.get.mockResolvedValue({ status });
-      mocks.workspace.init_stage = status ?? "paused";
+      db.prepare("UPDATE workspaces SET init_stage=? WHERE id='ws'").run(before);
       mocks.live.mockReturnValue(true);
       mocks.resume.mockRejectedValue(new Error("resume failed"));
-      const expected = status === "paused" || status === "stopped" ? status : "error";
       expect(
         await wakeCloudWorkspaceWithFeedback({
           id: "ws",
@@ -158,7 +161,7 @@ describe("explicit cloud wake", () => {
           current_session_id: "session",
         })
       ).toEqual({ ok: false, status: expected, error: "resume failed" });
-      expect(mocks.run).toHaveBeenLastCalledWith(expected, "ws");
+      expect(stageOfWorkspace()).toEqual({ init_stage: expected });
     }
   );
 
@@ -178,7 +181,7 @@ describe("explicit cloud wake", () => {
           current_session_id: "session",
         })
       ).toEqual({ ok: false, status: "error", error: "resume failed" });
-      expect(mocks.run).toHaveBeenLastCalledWith("error", "ws");
+      expect(stageOfWorkspace()).toEqual({ init_stage: "error" });
     }
   );
 });

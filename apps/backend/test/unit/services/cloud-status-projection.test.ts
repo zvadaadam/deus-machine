@@ -17,7 +17,6 @@ beforeEach(() => {
 });
 afterEach(() => db.close());
 
-const keep = null;
 const cases = [
   ["running", { status: "running" }, ["ready", null, null, null]],
   [
@@ -30,9 +29,9 @@ const cases = [
     { status: "provisioning", step: "cloning" },
     ["initializing", "cloning", null, null],
   ],
-  ...["paused", "stopped", "resuming"].map(
-    (status) => [status, { status }, ["ready", status, null, null]] as const
-  ),
+  ["paused", { status: "paused" }, ["ready", "paused", null, null]],
+  ["stopped", { status: "stopped" }, ["ready", "stopped", null, null]],
+  ["resuming", { status: "resuming" }, ["ready", "resuming", null, null]],
   [
     "specific error",
     { status: "error", errorMessage: "No capacity", reason: "quota", step: "clone" },
@@ -53,26 +52,64 @@ const cases = [
     { status: "error" },
     ["error", null, "The cloud computer reported an error.", null],
   ],
-  ["unknown", { status: "future" }, keep],
-  ["missing", {}, keep],
 ] as const;
 
-it.each(cases)("projects %s for each row shape", (_name, data, projected) => {
-  const read = db
+const unrecognized = [
+  ["unknown", { status: "future" }],
+  ["missing", {}],
+] as const;
+const ready = ["ready", "old step", "old reason", "old detail"] as const;
+const starting = ["initializing", "old step", "old reason", "old detail"] as const;
+const failed = ["error", "old step", "old reason", "old detail"] as const;
+const archived = ["archived", "old step", "old reason", "old detail"] as const;
+
+function project(
+  data: Parameters<typeof applyCloudStatus>[1],
+  before: readonly string[],
+  pointer: string | null,
+  computer: string | null
+) {
+  db.prepare(
+    "UPDATE workspaces SET state=?, init_stage=?, error_message=?, error_detail=?, current_session_id=?, provider_workspace_id=? WHERE id='w'"
+  ).run(...before, pointer, computer);
+  applyCloudStatus("w", data);
+  return db
     .prepare("SELECT state, init_stage, error_message, error_detail FROM workspaces WHERE id='w'")
-    .raw();
-  for (const state of ["ready", "initializing", "error", "archived"]) {
-    for (const pointer of [null, "elsewhere", "missing", "chat"]) {
-      for (const vm of [null, "vm"]) {
-        db.prepare(
-          "UPDATE workspaces SET state=?, init_stage='old step', error_message='old reason', error_detail='old detail', current_session_id=?, provider_workspace_id=? WHERE id='w'"
-        ).run(state, pointer, vm);
-        const before = read.get();
-        applyCloudStatus("w", data);
-        expect
-          .soft(read.get(), JSON.stringify({ state, pointer, vm }))
-          .toEqual(state === "archived" || pointer !== "chat" || !projected ? before : projected);
-      }
-    }
+    .raw()
+    .get();
+}
+
+it.each(cases)("projects %s on a visible workspace with its own chat", (_name, data, expected) => {
+  for (const before of [ready, starting, failed])
+    for (const computer of ["vm", null])
+      expect(project(data, before, "chat", computer)).toEqual(expected);
+});
+
+it.each(unrecognized)(
+  "keeps all four fields for a %s report with a selected chat",
+  (_name, data) => {
+    for (const before of [ready, starting, failed])
+      for (const computer of ["vm", null])
+        expect(project(data, before, "chat", computer)).toEqual(before);
   }
+);
+
+it.each([
+  ["archived with its own chat", archived, "chat"],
+  ["archived without a selection", archived, null],
+  ["archived with another workspace’s chat", archived, "elsewhere"],
+  ["archived with a missing chat", archived, "missing"],
+  ["ready without a selection", ready, null],
+  ["ready with another workspace’s chat", ready, "elsewhere"],
+  ["ready with a missing chat", ready, "missing"],
+  ["starting without a selection", starting, null],
+  ["starting with another workspace’s chat", starting, "elsewhere"],
+  ["starting with a missing chat", starting, "missing"],
+  ["failed without a selection", failed, null],
+  ["failed with another workspace’s chat", failed, "elsewhere"],
+  ["failed with a missing chat", failed, "missing"],
+] as const)("keeps a workspace %s for every report", (_name, before, pointer) => {
+  for (const [, data] of [...cases, ...unrecognized])
+    for (const computer of ["vm", null])
+      expect(project(data, before, pointer, computer)).toEqual(before);
 });

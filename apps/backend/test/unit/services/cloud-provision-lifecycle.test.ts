@@ -247,7 +247,7 @@ it("ignores another token even while the new start is initializing", async () =>
   const stale = new AbortController().signal;
   mock.invalidate.mockClear();
   try {
-    expect(attachCloudComputer(workspaceId, "other-vm", 10, stale)).toBe(false);
+    expect(attachCloudComputer(workspaceId, "other-vm", stale)).toBe(false);
     attachCloudChat(workspaceId, "other-chat", stale);
     failCloudStart(workspaceId, "other failure", stale);
     expect(row(workspaceId)).toEqual(before);
@@ -395,67 +395,75 @@ it("keeps Restore archived when the status read said running but resume failed a
   expect(row(workspaceId)).toMatchObject({ state: "archived" });
 });
 
+async function archivedComputer() {
+  const { workspaceId } = createCloudWorkspace({ repositoryId: "r" });
+  await vi.waitFor(() => expect(mock.connect).toHaveBeenCalledOnce());
+  await archiveWorkspace(workspaceId);
+  mock.status.mockResolvedValue({ status: "paused" });
+  return workspaceId;
+}
+
 it.each([
-  ["running", "ready", null, true],
-  ["provisioning", "initializing", "provisioning", true],
-  ["resuming", "ready", "resuming", true],
-  ["paused", "ready", "paused", false],
-  ["stopped", "ready", "stopped", false],
-  ["error", "error", null, false],
+  ["running", "ready", null],
+  ["provisioning", "initializing", "provisioning"],
+  ["resuming", "ready", "resuming"],
+  ["paused", "ready", "paused"],
+  ["stopped", "ready", "stopped"],
+  ["error", "error", null],
 ] as const)(
-  "restores after a successful resume and uses the %s report to settle a failed resume",
-  async (status, state, stage, comingUp) => {
-    for (const fails of [false, true]) {
-      const { workspaceId } = createCloudWorkspace({ repositoryId: "r" });
-      await vi.waitFor(() =>
-        expect(row(workspaceId)).toMatchObject({ current_session_id: expect.any(String) })
-      );
-      await archiveWorkspace(workspaceId);
-      mock.status.mockResolvedValue({ status: "paused" });
-      mock.resume.mockImplementationOnce(async () => {
-        report(workspaceId, status);
-        if (fails) throw new Error("superseded resume failure");
-      });
-      const restored = await unarchiveWorkspace(workspaceId).then(
-        () => true,
-        () => false
-      );
-      expect.soft(restored).toBe(!fails || comingUp);
-      expect.soft(row(workspaceId)).toMatchObject({
-        state: fails && !comingUp ? "archived" : state,
-        init_stage: stage,
-        current_session_id: expect.any(String),
-      });
-      if (!fails) {
-        report(workspaceId, "running");
-        expect.soft(row(workspaceId)).toMatchObject({ state: "ready", init_stage: null });
-      } else if (!comingUp && !restored) {
-        mock.resume.mockImplementationOnce(async () => report(workspaceId, "running"));
-        await unarchiveWorkspace(workspaceId);
-        expect.soft(row(workspaceId)).toMatchObject({ state: "ready" });
-      }
-    }
+  "a successful resume restores without overwriting the %s report",
+  async (status, state, stage) => {
+    const workspaceId = await archivedComputer();
+    mock.resume.mockImplementationOnce(async () => report(workspaceId, status));
+    await unarchiveWorkspace(workspaceId);
+    expect(row(workspaceId)).toMatchObject({
+      state,
+      init_stage: stage,
+      current_session_id: expect.any(String),
+    });
+    report(workspaceId, "running");
+    expect(row(workspaceId)).toMatchObject({ state: "ready", init_stage: null });
   }
 );
 
-it("records a credentials failure when waking a computer whose chat never opened", async () => {
-  mock.createSession.mockRejectedValueOnce(new Error("chat refused"));
-  const { workspaceId } = createCloudWorkspace({ repositoryId: "r" });
-  await vi.waitFor(() => expect(row(workspaceId)).toMatchObject({ state: "error" }));
-  const config = await import("../../../src/services/agent/cloud/config");
-  vi.spyOn(config, "requireCloudOrg").mockImplementationOnce(() => {
-    throw new Error("This cloud organization is not set up on this computer.");
+function failResumeAfterReport(workspaceId: string, status: string) {
+  mock.resume.mockImplementationOnce(async () => {
+    report(workspaceId, status);
+    throw new Error("superseded resume failure");
   });
-  await expect(wakeWorkspace(workspaceId)).rejects.toThrow(
-    "The cloud computer exists, but its chat did not open."
-  );
+}
+
+it.each([
+  ["running", "ready", null],
+  ["provisioning", "initializing", "provisioning"],
+  ["resuming", "ready", "resuming"],
+] as const)("a %s report keeps a failed resume open", async (status, state, stage) => {
+  const workspaceId = await archivedComputer();
+  failResumeAfterReport(workspaceId, status);
+  await unarchiveWorkspace(workspaceId);
   expect(row(workspaceId)).toMatchObject({
-    state: "error",
-    provider_workspace_id: "vm",
-    error_message: "The cloud computer exists, but its chat did not open.",
-    error_detail: "This cloud organization is not set up on this computer.",
+    state,
+    init_stage: stage,
+    current_session_id: expect.any(String),
   });
-  expect(mock.allocate).toHaveBeenCalledOnce();
+});
+
+it.each([
+  ["paused", "paused"],
+  ["stopped", "stopped"],
+  ["error", null],
+] as const)("a %s report after a failed resume leaves Restore available", async (status, stage) => {
+  const workspaceId = await archivedComputer();
+  failResumeAfterReport(workspaceId, status);
+  await expect(unarchiveWorkspace(workspaceId)).rejects.toThrow();
+  expect(row(workspaceId)).toMatchObject({
+    state: "archived",
+    init_stage: stage,
+    current_session_id: expect.any(String),
+  });
+  mock.resume.mockImplementationOnce(async () => report(workspaceId, "running"));
+  await unarchiveWorkspace(workspaceId);
+  expect(row(workspaceId)).toMatchObject({ state: "ready", init_stage: null });
 });
 
 it("distinguishes no report from a report that kept an earlier outcome", async () => {
