@@ -150,7 +150,7 @@ export async function getPrStatus(workspacePath: string): Promise<PrStatusRespon
       timeout: 3000,
     }).catch(() => undefined);
     if (remotes?.stdout.trim() === "") {
-      return { has_pr: false, conclusive: false, error: null };
+      return { has_pr: false, conclusive: false, no_remote: true, error: null };
     }
     // A custom remote name (or an inconclusive check) still lets gh resolve it.
   }

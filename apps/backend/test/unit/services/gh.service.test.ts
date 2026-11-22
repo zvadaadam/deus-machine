@@ -348,6 +348,7 @@ describe("getPrStatus", () => {
     expect(await getPrStatus("/workspace")).toEqual({
       has_pr: false,
       conclusive: false,
+      no_remote: true,
       error: null,
     });
     expect(mockExecFileAsync.mock.calls.map(([command]) => command)).toEqual(["git", "git"]);

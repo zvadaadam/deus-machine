@@ -71,7 +71,7 @@ export function PRActions({
   repoId,
 }: PRActionsProps) {
   const state = derivePRActionState(prStatus, ghStatus, targetBranch);
-  if (state.type === "unchecked") return null;
+  if (state.type === "no_remote") return null;
 
   return (
     <div className="flex items-center gap-1.5">
@@ -82,7 +82,7 @@ export function PRActions({
       {match(state)
         .with({ type: "gh_unavailable" }, (s) => <GhWarning reason={s.reason} />)
         .with({ type: "error" }, (s) => <ErrorWarning reason={s.reason} />)
-        .with({ type: "no_pr" }, () => (
+        .with({ type: "create_pr" }, () => (
           <CreatePRButton
             targetBranch={targetBranch}
             repoId={repoId}
@@ -334,7 +334,7 @@ function ActionButton({
 }
 
 // ---------------------------------------------------------------------------
-// CreatePRButton -- split button with branch selector (only for no-PR state)
+// CreatePRButton -- split button with branch selector
 // ---------------------------------------------------------------------------
 
 function CreatePRButton({

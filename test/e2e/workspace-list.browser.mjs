@@ -235,6 +235,15 @@ for (const mode of ["web", "desktop", "phone"]) {
   });
 }
 
+test("a detached HEAD with a remote still offers Create PR", async (t) => {
+  const page = await tab(t);
+  const ws = await start(remote, "Detached checkout");
+  execFileSync("git", ["switch", "--detach"], { cwd: ws.workspace_path, stdio: "pipe" });
+  await page.goto(`${baseUrl}/w/${ws.id}`);
+  await waitForPRRead(page, ws.id, false);
+  await page.getByRole("button", { name: "Create PR", exact: true }).waitFor();
+});
+
 test("the next PR poll discovers the remote without reloading", async (t) => {
   const page = await tab(t);
   const ws = await start(local, "PR polling");
@@ -245,12 +254,12 @@ test("the next PR poll discovers the remote without reloading", async (t) => {
   assert.equal(await button.count(), 0);
   // A custom remote is enough for gh; the project's recorded origin is still null.
   const git = (...args) => execFileSync("git", args, { cwd: ws.workspace_path, stdio: "pipe" });
-  git("remote", "add", "upstream", remote.git_origin_url);
+  git("remote", "add", "publish", remote.git_origin_url);
   try {
     await waitForPRRead(page, ws.id, true);
     await button.waitFor();
   } finally {
-    git("remote", "remove", "upstream");
+    git("remote", "remove", "publish");
   }
 });
 
