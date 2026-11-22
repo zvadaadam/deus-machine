@@ -3,6 +3,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 import { api } from "@shared/api";
+import type { AgentAuthAnswer, HarnessAuth } from "@shared/agent-auth";
+import { localSignIn, readLocalAgent } from "@/features/settings/lib/local-agent-login";
 import { useAgentAuthEvents } from "@/features/settings/api/settings.queries";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
@@ -85,6 +87,57 @@ it("discards a cold model read when sign-in finishes, including in a workspace w
     expect(client.getQueryState(closed)).toMatchObject({ data: undefined, isInvalidated: true });
   } finally {
     unsubscribe();
+    client.clear();
+  }
+});
+
+it("checks the newly installed agent's login when Settings reopens and then offers Sign in", async () => {
+  const client = observe();
+  const key = queryKeys.settings.agentAuth;
+  const claude: HarnessAuth = { harness: "claude-code", state: "signed_in", methods: [] };
+  const before: AgentAuthAnswer = {
+    clis: [{ harness: "gemini", state: "missing" }],
+    auth: [
+      claude,
+      { harness: "gemini", state: "unknown", methods: [], error: "The CLI is not installed yet." },
+    ],
+    logins: [],
+  };
+  client.setQueryData(key, before);
+  const after = Promise.withResolvers<AgentAuthAnswer>();
+  const read = vi.fn(() => after.promise);
+  const settings = new QueryObserver(client, { queryKey: key, queryFn: read, staleTime: 60_000 });
+  const closeSettings = settings.subscribe(() => {});
+  closeSettings();
+  const [cli] = vi.mocked(useStream).mock.calls;
+  cli![2]({ harness: "gemini", phase: "ready", version: "1.5.14", receivedBytes: 100 });
+  expect(read).not.toHaveBeenCalled();
+
+  const close = settings.subscribe(() => {});
+  try {
+    expect(read).toHaveBeenCalledOnce();
+    expect(readLocalAgent(settings.getCurrentResult(), "gemini").status).toBe("checking");
+    expect(readLocalAgent(settings.getCurrentResult(), "claude-code").status).toBe("signed-in");
+    const auth: HarnessAuth = {
+      harness: "gemini",
+      state: "signed_out",
+      methods: [
+        { id: "google", kind: "browser", credential: "subscription", label: "Google account" },
+      ],
+    };
+    after.resolve({
+      ...before,
+      clis: [{ harness: "gemini", state: "ready" }],
+      auth: [claude, auth],
+    });
+    await vi.waitFor(() =>
+      expect(localSignIn(readLocalAgent(settings.getCurrentResult(), "gemini"))).toEqual({
+        kind: "start",
+        auth,
+      })
+    );
+  } finally {
+    close();
     client.clear();
   }
 });

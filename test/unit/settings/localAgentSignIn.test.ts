@@ -154,7 +154,7 @@ describe("Gemini in Settings", () => {
     "shows the CLI and login the engine reports (%j)",
     (cli, auth, labels) => {
       const state = readLocalAgent(
-        { data: { clis: [cli], auth: [auth], logins: [] }, isLoading: false, isError: false },
+        { data: { clis: [cli], auth: [auth], logins: [] }, isFetching: false, isError: false },
         "gemini"
       );
       const html = renderToStaticMarkup(createElement(LocalAgentRow, { harness: "gemini", state }));

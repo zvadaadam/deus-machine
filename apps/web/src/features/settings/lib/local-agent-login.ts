@@ -20,13 +20,12 @@ export function accountLine(auth: HarnessAuth): string {
 
 /** An unknown login, or one the read could not get, is not a signed-out one. */
 export function readLocalAgent(
-  query: { data?: AgentAuthAnswer; isLoading: boolean; isError: boolean },
+  query: { data?: AgentAuthAnswer; isFetching: boolean; isError: boolean },
   harness: AgentHarness
 ): LocalAgentState {
-  if (query.isLoading) return { status: "checking" };
-  if (query.isError || query.data?.error) return { status: "failed" };
+  const answer = query.isError || query.data?.error ? undefined : query.data;
   // The CLI first: a login read from a CLI not installed yet says nothing.
-  const cli = query.data?.clis.find((candidate) => candidate.harness === harness);
+  const cli = answer?.clis.find((candidate) => candidate.harness === harness);
   if (cli?.state === "installing") {
     return {
       status: "installing",
@@ -40,12 +39,13 @@ export function readLocalAgent(
   if (cli?.state === "missing" || cli?.state === "failed") {
     return { status: "not-installed", ...(cli.error && { error: cli.error }) };
   }
-  const auth = query.data?.auth.find((candidate) => candidate.harness === harness);
+  const auth = answer?.auth.find((candidate) => candidate.harness === harness);
   if (!auth || auth.state === "unknown") {
-    return { status: "failed" };
+    // The CLI can be ready while its first login read is still under way.
+    return { status: query.isFetching ? "checking" : "failed" };
   }
   if (auth.state === "signed_in") return { status: "signed-in", auth, account: accountLine(auth) };
-  const login = query.data?.logins.find((candidate) => candidate.harness === harness);
+  const login = answer?.logins.find((candidate) => candidate.harness === harness);
   return { status: "signed-out", auth, ...(login && { login }) };
 }
 

@@ -6,7 +6,7 @@ import type { AgentAuthAnswer, HarnessAuth, HarnessCli } from "@shared/agent-aut
 
 const auth = vi.hoisted(() => ({
   data: undefined as AgentAuthAnswer | undefined,
-  isLoading: false,
+  isFetching: false,
   isError: false,
 }));
 vi.mock("@/features/settings/api/settings.queries", () => ({
@@ -29,7 +29,7 @@ const clis: HarnessCli[] = [
 ];
 
 beforeEach(() => {
-  auth.isLoading = false;
+  auth.isFetching = false;
   auth.isError = false;
   auth.data = { auth: [claude()], clis, logins: [] };
 });
@@ -103,7 +103,7 @@ describe("onboarding Claude account status", () => {
 
   it("waits for the login read before offering an action", () => {
     auth.data = undefined;
-    auth.isLoading = true;
+    auth.isFetching = true;
     const html = render();
     expect(html).toContain("Checking…");
     expect(html).not.toContain(">Sign in</button>");

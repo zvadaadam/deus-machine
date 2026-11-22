@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { LoginError, type AgentServerClient, type LoginHandle } from "@zvada/agent-server/client";
+import { AgentServerClient, LoginError, type LoginHandle } from "@zvada/agent-server/client";
+import { AgentRuntime, createAgentRegistry } from "@zvada/agent-server/core";
+import { AgentServer } from "@zvada/agent-server/server";
+import { channelPair } from "@zvada/agent-server/protocol";
 import type {
   AuthUpdated,
   HarnessAuth,
@@ -96,6 +99,45 @@ describe("LocalAgents", () => {
     client.listModels.mockClear();
     await logins.models();
     expect(client.listModels.mock.calls).toEqual(LOCAL_HARNESSES.map((harness) => [{ harness }]));
+  });
+
+  it("keeps the other agents' logins when one CLI is slow and then fails to answer", async () => {
+    const registry = createAgentRegistry({ harnesses: [...LOCAL_HARNESSES] });
+    vi.spyOn(registry.provisioner!, "status").mockResolvedValue({
+      state: "ready",
+      source: "cache",
+      path: "/fixture/cli",
+    });
+    for (const harness of LOCAL_HARNESSES) {
+      const login = registry.getAgent(harness).login!;
+      vi.spyOn(login, "methods").mockResolvedValue([]);
+      vi.spyOn(login, "status").mockResolvedValue({ state: "signed_out" });
+    }
+    const slow = Promise.withResolvers<never>();
+    const status = vi.mocked(registry.getAgent("gemini").login!.status);
+    status.mockReturnValue(slow.promise);
+    const server = new AgentServer(new AgentRuntime(registry));
+    const wire = channelPair();
+    server.attach(wire.server);
+    const client = await AgentServerClient.attach(wire.client);
+    const agents = new LocalAgents(client);
+    try {
+      const answer = agents.status();
+      await vi.waitFor(() => expect(status).toHaveBeenCalledOnce());
+      slow.reject(new Error("Could not read this login"));
+      const { auth, clis, error } = await answer;
+      expect(error).toBeUndefined();
+      expect(clis.map((cli) => cli.state)).toEqual(["ready", "ready", "ready"]);
+      expect(auth).toEqual([
+        { harness: "claude-code", state: "signed_out", methods: [] },
+        { harness: "codex-app-server", state: "signed_out", methods: [] },
+        { harness: "gemini", state: "unknown", methods: [], error: "Could not read this login" },
+      ]);
+    } finally {
+      agents.dispose();
+      await client.close();
+      await server.shutdown();
+    }
   });
 
   it("reads only the named CLI when a start needs its model", async () => {
