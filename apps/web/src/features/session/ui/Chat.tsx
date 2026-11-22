@@ -94,7 +94,8 @@ export function Chat({
   const directWeb = isCloudDirectWebMode();
   // A new chat opens a tab through the Mac backend, which the hosted web cannot reach.
   const retryInNewChat = directWeb ? undefined : onRetryInNewChat;
-  const working = ACTIVE_TURN_STATUSES.includes(sessionStatus);
+  const active = ACTIVE_TURN_STATUSES.includes(sessionStatus);
+  const working = sessionStatus === "working";
 
   // --- Message entrance animation tracking ---
   // Counter-based: only the turn at index > maxAnimatedTurnIndex gets the
@@ -132,8 +133,8 @@ export function Chat({
     activity,
     lastRole,
   } = useMemo(
-    () => buildChatTimeline(messages, compactions, working, cloudEnvEntries, turns, workspaceStart),
-    [messages, compactions, working, cloudEnvEntries, turns, workspaceStart]
+    () => buildChatTimeline(messages, compactions, active, cloudEnvEntries, turns, workspaceStart),
+    [messages, compactions, active, cloudEnvEntries, turns, workspaceStart]
   );
 
   /**
@@ -145,13 +146,13 @@ export function Chat({
    * is also what a non-working session shows.
    */
   const agentSubState = useMemo((): CircularPixelGridVariant => {
-    if (sessionStatus !== "working") return "generating";
+    if (!working) return "generating";
     return match(activity)
       .with("thinking", () => "thinking" as const)
       .with("tool_running", () => "toolExecuting" as const)
       .with("tool_failed", () => "error" as const)
       .otherwise(() => "generating" as const);
-  }, [sessionStatus, activity]);
+  }, [working, activity]);
 
   // Advance maxAnimatedTurnIndex after commit (useEffect runs once per commit,
   // not twice in StrictMode). During render, shouldAnimate reads the ref purely.
@@ -237,7 +238,7 @@ export function Chat({
   // The working indicator sits tighter under a user message than under a
   // finished assistant turn.
   const indicatorMarginClass = lastRole === "user" ? "mt-0" : "mt-1";
-  const showSessionError = !!errorMessage && (sessionStatus === "error" || working);
+  const showSessionError = !!errorMessage && (sessionStatus === "error" || active);
 
   return (
     <div className={cn("relative min-h-0 flex-1", className)}>
@@ -256,7 +257,7 @@ export function Chat({
             <Skeleton className="h-4 w-[90%]" />
             <Skeleton className="h-4 w-[80%]" />
           </div>
-        ) : timeline.length === 0 && !showSessionError && sessionStatus !== "working" ? (
+        ) : timeline.length === 0 && !showSessionError && !working ? (
           <WorkspaceEmptyState
             repoName={workspaceRepoName}
             parentBranch={workspaceParentBranch}
@@ -433,7 +434,7 @@ export function Chat({
                 )}
               </AnimatePresence>
               <AnimatePresence>
-                {sessionStatus === "working" && (
+                {working && (
                   <m.div
                     key="working-indicator"
                     initial={{ opacity: 0 }}
