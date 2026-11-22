@@ -13,7 +13,7 @@ import { PROVIDER_ACCOUNT_CATEGORY } from "@shared/lib/send-refusal";
 
 import { AgentHarnessSchema, type AgentHarness } from "@shared/enums";
 import { getAgentLabel } from "@/shared/agents";
-import { useAgentAuth, useAgentAuthEvents } from "@/features/settings/api/settings.queries";
+import { useAgentAuth } from "@/features/settings/api/settings.queries";
 import {
   localSignIn,
   readLocalAgent,
@@ -96,7 +96,6 @@ export function SessionErrorCard({
 /** Only a local authentication error needs the local CLI's sign-in methods. */
 function LoginAction({ harness }: { harness: AgentHarness }) {
   const auth = useAgentAuth();
-  useAgentAuthEvents();
   const [busy, setBusy] = useState(false);
   const signIn = localSignIn(readLocalAgent(auth, harness));
   if (!signIn) return <AIProvidersButton />;

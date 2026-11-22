@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { useAgentAuth, useAgentAuthEvents } from "../../api/settings.queries";
+import { useAgentAuth } from "../../api/settings.queries";
 import type { SettingsSectionProps } from "./types";
 import { readThinkingLevel } from "@shared/protocol";
 import { LOCAL_HARNESSES } from "@shared/harnesses";
@@ -24,7 +24,6 @@ export function AISection({
   cloudOnly = false,
 }: SettingsSectionProps & { cloudOnly?: boolean }) {
   const agentAuthQuery = useAgentAuth(!cloudOnly);
-  useAgentAuthEvents();
 
   if (cloudOnly) {
     return (

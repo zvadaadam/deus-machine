@@ -10,7 +10,6 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("@/features/settings/api/settings.queries", () => ({
   useAgentAuth: () => ({ ...state, isLoading: false, isFetching: false, refetch: vi.fn() }),
-  useAgentAuthEvents: () => {},
 }));
 vi.mock("@/features/settings/ui/sections/ProviderAccounts", () => ({
   ProviderAccounts: () => null,

@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import type { AgentAuthAnswer, HarnessCliProgress } from "@shared/agent-auth";
 import { api } from "@shared/api";
 import { call } from "@/platform/ws";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useStream } from "@/shared/hooks/useStream";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { track } from "@/platform/analytics";
@@ -28,7 +29,7 @@ export function useSettings() {
 }
 
 /**
- * Each local agent's login (Claude Code / Codex), as the engine reads it from
+ * Each local agent's login, as the engine reads it from
  * the agent's CLI, and the sign-ins under way
  */
 export function useAgentAuth(enabled = true) {
@@ -77,37 +78,35 @@ export function useDefaultThinkingLevel(): ThinkingLevel {
  */
 export function useAgentAuthEvents(): void {
   const queryClient = useQueryClient();
-  // Whatever changed while the connection was away, the status says it.
-  const readAgain = () =>
+  const filter = isCloudDirectWebMode() ? null : {};
+  const readLogin = () =>
     void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentAuth });
+  const readLoginAndModels = () => {
+    readLogin();
+    void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentModels });
+  };
   useStream(
     api.agentCliProgress,
-    {},
+    filter,
     (progress) => {
       queryClient.setQueryData<AgentAuthAnswer>(queryKeys.settings.agentAuth, (answer) =>
         answer ? withProgress(answer, progress) : answer
       );
-      if (progress.phase === "ready" || progress.phase === "failed") readAgain();
-      // A CLI not installed lists no models (the engine answers its catalog):
-      // once it is, its own list is read.
-      if (progress.phase === "ready") {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentModels });
-      }
+      if (progress.phase === "ready") readLoginAndModels();
+      if (progress.phase === "failed") readLogin();
     },
-    readAgain
+    readLoginAndModels
   );
   useStream(
     api.agentAuthChanges,
-    {},
+    filter,
     ({ login }) => {
-      readAgain();
-      // Another login lists other models.
-      void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentModels });
+      readLoginAndModels();
       if (login && (login.outcome === "failed" || login.outcome === "expired")) {
         toast.error(login.error ?? "The sign-in didn’t finish");
       }
     },
-    readAgain
+    readLoginAndModels
   );
 }
 
