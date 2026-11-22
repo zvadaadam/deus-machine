@@ -17,7 +17,6 @@ import {
 } from "@shared/models";
 import { readThinkingLevel, type ThinkingLevel } from "@shared/protocol";
 import type { SessionTurn } from "@shared/types/session";
-import { AgentServerDisconnectedError } from "../../lib/errors";
 import { runAsThisComputer as run } from "../query-engine";
 import { getSetting } from "../settings.service";
 
@@ -31,19 +30,17 @@ function defaultThinking() {
   return readThinkingLevel(getSetting("default_thinking_level")) ?? DEFAULT_THINKING_LEVEL;
 }
 
-/** Only a choice the person left to Deus can come from the catalog while the engine is down. */
-async function chooseModel(
-  harness: AgentHarness,
-  workspaceId: string | undefined,
-  choice: Pick<StartInput, "model" | "thinkingLevel"> = {}
-) {
+/** Only a choice left to Deus can come from the catalog when the list cannot be read. */
+async function chooseModel(harness: AgentHarness, input: StartInput) {
   let lists: readonly HarnessModels[];
   try {
-    lists = (await run(agentModels, { harness, workspaceId })).lists;
+    lists = (await run(agentModels, { harness, workspaceId: input.workspace?.id })).lists;
   } catch {
-    if (choice.model || choice.thinkingLevel)
-      throw new AgentServerDisconnectedError("The model could not be checked right now.");
-    lists = CATALOG_MODEL_LISTS;
+    if (!input.model && !input.thinkingLevel) {
+      const model = defaultModelId(CATALOG_MODEL_LISTS, harness);
+      if (model) return { model };
+    }
+    return { reason: "the model list could not be read right now." };
   }
   const own = lists.find((list) => list.harness === harness);
   const fallback = defaultModelId(lists, harness);
@@ -53,7 +50,7 @@ async function chooseModel(
       reason: `${harness} offered no models${why}. Ask the person to install or sign in to the agent in Settings → AI.`,
     };
   }
-  const model = choice.model ?? fallback;
+  const model = input.model ?? fallback;
   const row = findModel(lists, harness, model)?.row;
   const levels = own?.source === "live" ? row?.thinking.levels : undefined;
   return { model, row, levels };
@@ -63,7 +60,7 @@ export async function startSettings(
   harness: AgentHarness,
   input: StartInput
 ): Promise<TurnSettings> {
-  const pick = await chooseModel(harness, input.workspace?.id, input);
+  const pick = await chooseModel(harness, input);
   if (pick.reason !== undefined)
     throw new OperatorError("unsupported", `start_session: ${pick.reason} Nothing was started.`);
   const { model, row, levels } = pick;

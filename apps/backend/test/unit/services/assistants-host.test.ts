@@ -803,11 +803,16 @@ describe("through MCP and as a chat's own tools", () => {
     expect(state.sent.map((s) => s.input.model)).toEqual([model, model]);
   });
 
-  it.each([{ model: "opus" }, { thinking: "high" }])(
-    "refuses an explicit choice it could not check: %o",
+  it.each([
+    { model: "opus" },
+    { thinking: "high" },
+    { agent: "Gemini" },
+    { agent: "Gemini", model: "gemini-4-neon" },
+  ])(
+    "refuses a start when the list read fails and the catalog cannot choose for it: %o",
     async (choice) => {
       state.ops.agentModels = () => {
-        throw new Error("Agent server not connected");
+        throw new Error("Model-list request timed out");
       };
       const before = state.db.prepare("SELECT id FROM sessions").all();
       await expect(
@@ -818,9 +823,8 @@ describe("through MCP and as a chat's own tools", () => {
         )
       ).rejects.toMatchObject({
         code: "unsupported",
-        message: expect.stringMatching(
-          /models? could not be checked right now.*Nothing was (sent or )?started/i
-        ),
+        message:
+          "refused (unsupported): start_session: the model list could not be read right now. Nothing was started.",
       });
       expect(state.db.prepare("SELECT id FROM sessions").all()).toEqual(before);
       expect(state.sent).toHaveLength(0);

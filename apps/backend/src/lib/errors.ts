@@ -50,7 +50,7 @@ export class ChatBusyError extends ConflictError {
 }
 
 export class AgentServerDisconnectedError extends AppError {
-  constructor(readonly reason?: string) {
+  constructor() {
     super(503, "Agent server is disconnected");
     this.name = "AgentServerDisconnectedError";
   }
