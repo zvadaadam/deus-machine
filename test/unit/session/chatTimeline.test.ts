@@ -14,6 +14,7 @@ import {
   type AssistantTurnData,
   type Turn,
 } from "../../../apps/web/src/features/session/lib/chatTimeline";
+import { createOptimisticUserMessage } from "../../../apps/web/src/features/session/lib/optimisticMessage";
 import type { Compaction, Message } from "../../../shared/types/session";
 
 function message(overrides: Partial<Message> & { id: string; turn_id: string }): Message {
@@ -235,6 +236,52 @@ describe("buildChatTimeline", () => {
     sent_at: "2026-08-14T10:00:00.000Z",
   });
   const reply = withText({ id: "a-1", turn_id: "turn-1", sent_at: "2026-08-14T10:00:05.000Z" });
+
+  it("keeps the recorded turn open while a new send's bubble is pending", () => {
+    const pending = createOptimisticUserMessage({
+      sessionId: reply.session_id,
+      turnId: "pending",
+      content: "Another question",
+    });
+    const { items } = buildChatTimeline(
+      [reply, pending],
+      [compaction({ turn_id: "turn-1" })],
+      true,
+      [],
+      [{ turnId: "turn-1", startedAt: 1 }]
+    );
+    expect(items).toMatchObject([
+      { type: "assistant", turnId: "turn-1", isOpen: true },
+      { type: "user", message: { id: pending.id } },
+    ]);
+  });
+
+  it("holds a completed compaction before the running turn has a message", () => {
+    const { items } = buildChatTimeline(
+      [],
+      [compaction({ turn_id: "turn-1" })],
+      true,
+      [],
+      [{ turnId: "turn-1", startedAt: 1 }]
+    );
+    expect(items).toEqual([]);
+  });
+
+  it("holds the newest message's divider before its first part arrives", () => {
+    const shell = message({ id: "a-2", turn_id: "turn-2", parts: [] });
+    const marker = compaction({ turn_id: "turn-2" });
+    const { items } = buildChatTimeline(
+      [reply, shell],
+      [marker],
+      false,
+      [],
+      [
+        { turnId: "turn-2", startedAt: 2 },
+        { turnId: "turn-1", endedAt: 1 },
+      ]
+    );
+    expect(items).toMatchObject([{ type: "assistant", turnId: "turn-1", isOpen: false }]);
+  });
 
   it("shows the earlier turn's footer and divider after a later turn settles without reading its activity", () => {
     const later = withText({ id: "a-2", turn_id: "turn-2" });

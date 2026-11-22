@@ -81,7 +81,12 @@ export function buildChatTimeline(
   start?: WorkspaceStart
 ): ChatTimeline {
   const rendered = renderableMessages(messages);
-  const conversation = conversationView(rendered, working, records);
+  const conversation = conversationView(
+    rendered,
+    working,
+    records,
+    messages.at(-1)?.turn_id ?? null
+  );
   const openTurnId = conversation.turns.find((turn) => turn.status === "active")?.turnId;
   const grouped = groupTurns(conversation, rendered, records, openTurnId);
   const items = insertCloudEnv(insertCompactions(grouped, compactions, openTurnId), envEntries);

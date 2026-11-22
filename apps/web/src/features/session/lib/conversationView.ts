@@ -22,10 +22,15 @@
 import type { ConversationMessage, ConversationState } from "@shared/protocol-types";
 import type { Message, SessionTurn } from "../types";
 
+function isUnfinished(turn: SessionTurn): boolean {
+  return turn.endedAt === undefined && !turn.stopReason;
+}
+
 export function conversationView(
   messages: Message[],
   working: boolean,
-  records: readonly SessionTurn[] = []
+  records: readonly SessionTurn[] = [],
+  newestTurnId = messages.at(-1)?.turn_id
 ): ConversationState {
   const timeline: ConversationMessage[] = messages.map((message) => ({
     kind: "message",
@@ -40,20 +45,19 @@ export function conversationView(
     startedAt: message.sent_at ? Date.parse(message.sent_at) : 0,
   }));
 
-  // A later turn settles its predecessor even if its end never arrived.
-  const latest = records.at(-1);
-  const messageTurnId = messages.at(-1)?.turn_id;
-  let open: SessionTurn | undefined;
-  if (latest && latest.endedAt === undefined && !latest.stopReason) {
-    open = latest;
-  } else if (working && messageTurnId && !records.some((turn) => turn.turnId === messageTurnId)) {
-    open = { turnId: messageTurnId };
-  }
+  // An unfinished last record wins. A replay can append an older end, so otherwise use the
+  // newest message's record, or the chat's working status until that record arrives.
+  const last = records.at(-1);
+  const record =
+    last && isUnfinished(last) ? last : records.find((turn) => turn.turnId === newestTurnId);
+  const turnId = record?.turnId ?? newestTurnId;
+  const open = record ? isUnfinished(record) : working;
   return {
     timeline,
-    turns: open
-      ? [{ turnId: open.turnId, startedAt: open.startedAt ?? 0, status: "active", errors: [] }]
-      : [],
+    turns:
+      turnId && open
+        ? [{ turnId, startedAt: record?.startedAt ?? 0, status: "active", errors: [] }]
+        : [],
     permissions: [],
     elicitations: [],
     totals: { input: 0, output: 0 },
