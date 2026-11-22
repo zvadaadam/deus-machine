@@ -72,6 +72,10 @@ export function registerAllTools() {
   toolRegistry.register("Edit", EditToolRenderer);
   toolRegistry.register("Write", WriteToolRenderer);
   toolRegistry.register("Bash", BashToolRenderer);
+  // A monitor keeps running. Its input shows the description and timeout alongside the command.
+  toolRegistry.register("Monitor", DefaultToolRenderer);
+  // The edit addresses a notebook cell. Its input identifies the cell and its source.
+  toolRegistry.register("NotebookEdit", DefaultToolRenderer);
   toolRegistry.register("Read", ReadToolRenderer);
   toolRegistry.register("Grep", GrepToolRenderer);
   toolRegistry.register("TodoWrite", TodoWriteToolRenderer);

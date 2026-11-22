@@ -1,5 +1,6 @@
 import { toast } from "sonner";
-import type { AgentAuthAnswer, AuthLogin, HarnessAuth, LocalHarness } from "@shared/agent-auth";
+import type { AgentAuthAnswer, AuthLogin, HarnessAuth } from "@shared/agent-auth";
+import type { AgentHarness } from "@shared/enums";
 import { api } from "@shared/api";
 import { openExternalPending } from "@/platform/native/window";
 import { call } from "@/platform/ws";
@@ -20,7 +21,7 @@ export function accountLine(auth: HarnessAuth): string {
 /** An unknown login, or one the read could not get, is not a signed-out one. */
 export function readLocalAgent(
   query: { data?: AgentAuthAnswer; isLoading: boolean; isError: boolean },
-  harness: LocalHarness
+  harness: AgentHarness
 ): LocalAgentState {
   if (query.isLoading) return { status: "checking" };
   if (query.isError || query.data?.error) return { status: "failed" };
@@ -83,7 +84,7 @@ export function localSignIn(state: LocalAgentState) {
  * CLI's own sign-in opens in the browser, and its end arrives as
  * The `agentAuthChanges` stream.
  */
-export async function signInLocalAgent(harness: LocalHarness, auth: HarnessAuth): Promise<void> {
+export async function signInLocalAgent(harness: AgentHarness, auth: HarnessAuth): Promise<void> {
   const method = browserSignIn(auth);
   if (!method) return;
   // A browser opens a tab only while it handles the click: take it now, blank,
@@ -122,7 +123,7 @@ export async function cancelLocalSignIn(loginId: string): Promise<void> {
   await call(api.agentLoginCancel, { loginId }).catch(() => {});
 }
 
-export async function signOutLocalAgent(harness: LocalHarness): Promise<void> {
+export async function signOutLocalAgent(harness: AgentHarness): Promise<void> {
   try {
     await call(api.agentLogout, { harness });
   } catch (error) {

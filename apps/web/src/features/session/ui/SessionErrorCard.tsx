@@ -11,8 +11,7 @@ import { Button } from "@/components/ui/button";
 import { uiActions } from "@/shared/stores/uiStore";
 import { PROVIDER_ACCOUNT_CATEGORY } from "@shared/lib/send-refusal";
 
-import { getAgentLabel } from "@/shared/agents";
-import type { LocalHarness } from "@shared/agent-auth";
+import { getAgentLabel, type AgentHarness } from "@/shared/agents";
 import { useAgentAuth, useAgentAuthEvents } from "@/features/settings/api/settings.queries";
 import {
   localSignIn,
@@ -40,7 +39,7 @@ interface SessionErrorCardProps {
   message: string;
   /** Structured error category (e.g. "auth", "rate_limit", "_provider_account"). */
   category?: string;
-  agentHarness?: LocalHarness | null;
+  agentHarness?: AgentHarness | null;
   cloud?: boolean;
   onRetryInNewChat?: () => void;
 }
@@ -100,7 +99,7 @@ export function SessionErrorCard({
 }
 
 /** Only a local authentication error needs the local CLI's sign-in methods. */
-function LoginAction({ harness }: { harness: LocalHarness }) {
+function LoginAction({ harness }: { harness: AgentHarness }) {
   const auth = useAgentAuth();
   useAgentAuthEvents();
   const [busy, setBusy] = useState(false);

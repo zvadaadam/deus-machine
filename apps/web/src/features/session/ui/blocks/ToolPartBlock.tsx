@@ -28,21 +28,19 @@ function parsePartialInput(partialInput: string): Record<string, unknown> {
   }
 }
 
-/**
- * The cards a part draws. Codex's own tools are drawn as Claude's: a command
- * as Bash, a patch as an Edit, MultiEdit (several hunks) or Write (a new
- * file) per file. Parts saved before the engine said `command` and `diff`
- * keep the generic card.
- */
+/** A registered card takes the tool's own input. Other tools can describe a command or file changes. */
 export function toToolUseBlocks(part: ToolPart): ToolUseBlock[] {
+  const toolUse = toToolUseBlock(part);
+  if (toolRegistry.has(toolUse.name)) return [toolUse];
+
   const card = (name: string, input: Record<string, unknown>, id = part.toolCallId) => ({
     type: "tool_use" as const,
     id,
     name,
     input,
   });
-  if (part.toolName === "shell" && part.command) return [card("Bash", { command: part.command })];
-  const patch = part.toolName === "apply_patch" && part.state.status === "completed" && part.state;
+  if (part.command) return [card("Bash", { command: part.command })];
+  const patch = part.state.status === "completed" && part.state;
   const diffs = patch
     ? (patch.content ?? []).flatMap((item) => (item.type === "diff" ? [item] : []))
     : [];
@@ -77,7 +75,7 @@ export function toToolUseBlocks(part: ToolPart): ToolUseBlock[] {
         : card("Edit", { file_path, ...edits[0] }, id);
     });
   }
-  return [toToolUseBlock(part)];
+  return [toolUse];
 }
 
 function toToolUseBlock(part: ToolPart): ToolUseBlock {

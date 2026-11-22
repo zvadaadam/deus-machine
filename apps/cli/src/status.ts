@@ -7,6 +7,7 @@ import { c, sym, blank, divider, kv, error, hint } from "./ui.js";
 import { readServerInfo } from "./config.js";
 import { httpGet } from "./lib/http.js";
 import { formatUptime, formatTimeAgo } from "./lib/format.js";
+import { harnessInfo } from "../../../shared/harnesses";
 
 interface HealthResponse {
   status: string;
@@ -31,11 +32,6 @@ interface AgentAuthResponse {
   auth?: { harness: string; state: string; label?: string; email?: string }[];
   clis?: { harness: string; state: string }[];
 }
-
-const AGENT_NAMES: Record<string, string> = {
-  "claude-code": "Claude Code",
-  "codex-app-server": "Codex",
-};
 
 /** Show server status */
 export async function showStatus(): Promise<void> {
@@ -116,7 +112,7 @@ export async function showStatus(): Promise<void> {
       } else {
         status = c.yellow("not signed in");
       }
-      kv(AGENT_NAMES[agent.harness] ?? agent.harness, status, 14);
+      kv(harnessInfo(agent.harness)?.label ?? agent.harness, status, 14);
     }
   }
 

@@ -4,6 +4,7 @@
 // (`hostTools`), and deus's Claude embed-tier options (tool policy, checkpoint hooks).
 
 import { AgentRuntime, createAgentRegistry, type AgentRegistry } from "@zvada/agent-server/core";
+import { LOCAL_HARNESSES } from "@shared/enums";
 import { deusTools } from "../deus-tools";
 import { chatTools } from "../../host-link";
 import { trackedSessions } from "../../session-tracker";
@@ -25,7 +26,7 @@ async function checkpointHook(
 
 export function getRegistry(): AgentRegistry {
   registry ??= createAgentRegistry({
-    harnesses: ["claude-code", "codex-app-server"],
+    harnesses: [...LOCAL_HARNESSES],
     // Deterministic CLIs: always the engine's tested pins (sha-verified,
     // cached downloads), never whatever binary the host happens to have.
     // Operator escape hatches ($CLAUDE_CLI_PATH / $CODEX_CLI_PATH) still win.

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@shared/api";
+import { CLOUD_HARNESSES, LOCAL_HARNESSES } from "@shared/enums";
 import { call } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
@@ -43,13 +44,20 @@ export function useModelListsState(chat: { cloud: boolean; workspaceId?: string 
   });
   const cloud = useCloudModels({ enabled: chat.cloud });
 
-  const lists = chat.cloud ? cloud.data?.lists : local.data?.lists;
+  const harnesses = chat.cloud ? CLOUD_HARNESSES : LOCAL_HARNESSES;
+  const answer = chat.cloud ? cloud.data?.lists : local.data?.lists;
+  const source = answer?.length ? answer : CATALOG_MODEL_LISTS;
   return {
-    lists: lists?.length ? lists : CATALOG_MODEL_LISTS,
-    live: (harness) =>
-      chat.cloud
-        ? // The platform's row for this harness is authoritative, whatever its source.
-          cloud.data?.lists?.some((list) => list.harness === harness) === true
-        : local.data?.lists?.find((list) => list.harness === harness)?.source === "live",
+    // A partial answer keeps the missing harness's tab, including a saved selection in it.
+    lists: harnesses.map(
+      (harness) => source.find((list) => list.harness === harness) ?? { harness, models: [] }
+    ),
+    live: (harness) => {
+      const list = answer?.find((entry) => entry.harness === harness);
+      // A platform row is authoritative whatever its source.
+      return (
+        !!list && harnesses.some((id) => id === harness) && (chat.cloud || list.source === "live")
+      );
+    },
   };
 }

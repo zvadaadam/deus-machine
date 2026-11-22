@@ -14,12 +14,8 @@ import {
   type HarnessAuth,
   type ModelList,
 } from "@zvada/agent-server/protocol";
-import {
-  LOCAL_HARNESSES,
-  type AgentAuthAnswer,
-  type AgentSignInAnswer,
-  type LocalHarness,
-} from "@shared/agent-auth";
+import type { AgentAuthAnswer, AgentSignInAnswer } from "@shared/agent-auth";
+import { LOCAL_HARNESSES, type AgentHarness } from "@shared/enums";
 import { agentAuthChanges, agentCliProgress } from "@shared/api/settings";
 import { ValidationError } from "../../lib/errors";
 import { publish } from "../streams";
@@ -83,7 +79,7 @@ export class LocalAgents {
    * terminal's, another app's) is picked up and nothing opens. Otherwise the
    * CLI's own sign-in starts.
    */
-  async signIn(harness: LocalHarness, method: string, apiKey?: string): Promise<AgentSignInAnswer> {
+  async signIn(harness: AgentHarness, method: string, apiKey?: string): Promise<AgentSignInAnswer> {
     if (!apiKey) {
       const [auth] = await this.client.authStatus({ harnesses: [harness] });
       const chosen = auth?.methods.find((candidate) => candidate.id === method);
@@ -125,7 +121,7 @@ export class LocalAgents {
   }
 
   /** The CLI's own sign-out: the terminal's login too, as it is the same one. */
-  logout(harness: LocalHarness): Promise<HarnessAuth> {
+  logout(harness: AgentHarness): Promise<HarnessAuth> {
     return this.client.logout(harness);
   }
 

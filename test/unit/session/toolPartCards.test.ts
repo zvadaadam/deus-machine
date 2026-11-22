@@ -1,8 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { ToolPart } from "@shared/protocol-types";
-
-vi.mock("@/features/session/ui/tools/registerTools", () => ({}));
-const { toToolUseBlocks } = await import("@/features/session/ui/blocks/ToolPartBlock");
+import { toToolUseBlocks } from "@/features/session/ui/blocks/ToolPartBlock";
+import { toolRegistry } from "@/features/session/ui/tools/ToolRegistry";
+import { BashToolRenderer, DefaultToolRenderer } from "@/features/session/ui/tools/renderers";
 
 function part(overrides: Partial<ToolPart>): ToolPart {
   return {
@@ -92,6 +92,62 @@ describe("a Codex tool drawn as Claude's card", () => {
     const shell = part({ state: { status: "completed", input: { command: "ls" }, output: "" } });
     expect(toToolUseBlocks(shell)).toMatchObject([{ name: "shell", input: { command: "ls" } }]);
     expect(toToolUseBlocks(patch([]))).toMatchObject([{ name: "apply_patch" }]);
+  });
+});
+
+describe("a tool's own card and the fields an unregistered tool carries", () => {
+  it("keeps a monitor's description and timeout and a Bash call's full input", () => {
+    for (const [toolName, input, renderer] of [
+      [
+        "Monitor",
+        { command: "tail -f log", description: "Watch the log", timeout_ms: 1000 },
+        DefaultToolRenderer,
+      ],
+      [
+        "Bash",
+        { command: "ls", description: "List files", run_in_background: true },
+        BashToolRenderer,
+      ],
+    ] as const) {
+      const call = part({
+        toolName,
+        command: input.command,
+        state: { status: "in_progress", input, time: { start: 1 } },
+      });
+      expect(toToolUseBlocks(call)).toEqual([
+        { type: "tool_use", id: "call-1", name: toolName, input },
+      ]);
+      expect(toolRegistry.getRenderer(toolName)).toBe(renderer);
+    }
+  });
+
+  it("keeps the cell input of a notebook edit that returns a diff", () => {
+    const input = { notebook_path: "/w/n.ipynb", cell_id: "c1", new_source: "x = 2" };
+    const call = part({
+      toolName: "NotebookEdit",
+      kind: "edit",
+      state: {
+        status: "completed",
+        input,
+        output: "",
+        time: { start: 1, end: 2 },
+        content: [{ type: "diff", path: input.notebook_path, oldText: "x = 1", newText: "x = 2" }],
+      },
+    });
+    expect(toToolUseBlocks(call)).toEqual([
+      { type: "tool_use", id: "call-1", name: "NotebookEdit", input },
+    ]);
+    expect(toolRegistry.getRenderer(call.toolName)).toBe(DefaultToolRenderer);
+  });
+
+  it("draws an unregistered tool from its command or file diff", () => {
+    expect(toToolUseBlocks(part({ toolName: "command_tool", command: "pwd" }))).toMatchObject([
+      { name: "Bash", input: { command: "pwd" } },
+    ]);
+    const edit = patch([{ type: "diff", path: "/w/n", newText: "hello" }]);
+    expect(toToolUseBlocks({ ...edit, toolName: "file_tool" })).toMatchObject([
+      { name: "Write", input: { file_path: "/w/n", content: "hello" } },
+    ]);
   });
 });
 

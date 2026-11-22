@@ -8,8 +8,8 @@
 // engine's catalog). Before an answer arrives, and when none can, a picker
 // shows the catalog the embedded engine was built with.
 //
-// What is Deus's own stays here: the names it shows for the harnesses, and the
-// model and thinking level a new chat starts on.
+// Each harness's preferences live in harnesses.ts. This file chooses a model
+// and thinking level from what a list offers.
 
 import {
   CATALOG_MODELS,
@@ -19,8 +19,8 @@ import {
   type ModelList,
   type ThinkingLevel,
 } from "@zvada/agent-server/protocol";
-import { LOCAL_HARNESSES, type LocalHarness } from "./agent-auth";
-import { AgentHarnessSchema, type AgentHarness } from "./enums";
+import { AgentHarnessSchema, LOCAL_HARNESSES, type AgentHarness } from "./enums";
+import { HARNESSES, harnessInfo } from "./harnesses";
 import type { SessionTurn } from "./types/session";
 
 export type { ModelDescriptor, ModelList };
@@ -38,15 +38,6 @@ export interface AgentModelsAnswer {
 
 // ── What Deus chooses ──────────────────────────────────────────────────────
 
-/** The harnesses a picker groups its models under, in order. */
-export const PICKER_HARNESSES: readonly LocalHarness[] = LOCAL_HARNESSES;
-
-/** The name each harness is shown under. */
-export const HARNESS_LABELS: Record<AgentHarness, string> = {
-  "claude-code": "Claude Code",
-  "codex-app-server": "Codex",
-};
-
 /**
  * The harness `name` means: its id, its name, or its name's first word
  * ("claude-code", "Claude Code", "Claude"; "codex-app-server", "Codex"), in
@@ -55,24 +46,14 @@ export const HARNESS_LABELS: Record<AgentHarness, string> = {
 export function harnessNamed(name: string): AgentHarness | undefined {
   const key = (text: string) => text.toLowerCase().replace(/[\s_-]+/g, "");
   const wanted = key(name);
-  const named = Object.entries(HARNESS_LABELS) as [AgentHarness, string][];
-  return named.find(([id, label]) =>
-    [id, label, label.split(" ")[0]!].some((said) => key(said) === wanted)
-  )?.[0];
+  return LOCAL_HARNESSES.find((id) => {
+    const { label } = HARNESSES[id];
+    return [id, label, label.split(" ")[0]!].some((said) => key(said) === wanted);
+  });
 }
 
 export const DEFAULT_AGENT_HARNESS = "claude-code" satisfies AgentHarness;
 export const DEFAULT_THINKING_LEVEL: ThinkingLevel = "high";
-
-/**
- * The models Deus prefers for a new chat, best first. The first one a list
- * offers is used; a harness with none takes its own default. These are the
- * vendor's aliases, so the choice follows its newest model (Opus 5.5 today).
- */
-const PREFERRED_MODELS: Record<LocalHarness, readonly string[]> = {
-  "claude-code": ["opus"],
-  "codex-app-server": [],
-};
 
 // ── Lists ──────────────────────────────────────────────────────────────────
 
@@ -203,7 +184,7 @@ export function defaultModelId(
   harness: string
 ): string | undefined {
   const rows = pickerModels(lists, harness);
-  const preferred = PREFERRED_MODELS[harness as LocalHarness] ?? [];
+  const preferred = harnessInfo(harness)?.preferredModels ?? [];
   for (const id of preferred) if (rows.some((row) => row.id === id)) return id;
   // Claude marks its account-default alias; the row that runs the same model is the pick.
   const marked = allModels(lists, harness).find((row) => row.isDefault);

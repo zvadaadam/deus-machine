@@ -9,12 +9,12 @@ import {
   type LocalAgentState,
 } from "@/features/settings/lib/local-agent-login";
 import { LoginCodeForm } from "@/features/settings/ui/sections/LoginCodeForm";
-import type { LocalHarness } from "@shared/agent-auth";
+import { LOCAL_HARNESSES, type AgentHarness } from "@shared/enums";
+import { HARNESSES } from "@shared/harnesses";
 
-const AGENTS: { harness: LocalHarness; name: string; description: string }[] = [
-  { harness: "claude-code", name: "Claude Code", description: "Anthropic's coding agent" },
-  { harness: "codex-app-server", name: "Codex", description: "OpenAI's coding agent" },
-];
+const agentNames = new Intl.ListFormat("en", { type: "disjunction" }).format(
+  LOCAL_HARNESSES.map((harness) => HARNESSES[harness].label)
+);
 
 interface AIToolsCheckStepProps {
   onNext: () => void;
@@ -42,7 +42,7 @@ export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
   const auth = useAgentAuth();
   useAgentAuthEvents();
 
-  function row(harness: LocalHarness) {
+  function row(harness: AgentHarness) {
     const state = readLocalAgent(auth, harness);
     const signIn = localSignIn(state);
     let action;
@@ -81,11 +81,12 @@ export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
       </div>
 
       <div className="flex flex-col gap-3">
-        {AGENTS.map(({ harness, name, description }) => {
+        {LOCAL_HARNESSES.map((harness) => {
+          const { label, vendor } = HARNESSES[harness];
           const { codeLoginId, ...props } = row(harness);
           return (
             <div key={harness} className="flex flex-col gap-2">
-              <CliStatusRow name={name} description={description} {...props} />
+              <CliStatusRow name={label} description={`${vendor}'s coding agent`} {...props} />
               {codeLoginId !== undefined && <LoginCodeForm loginId={codeLoginId} />}
             </div>
           );
@@ -93,8 +94,8 @@ export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
       </div>
 
       <p className="text-onboarding-foreground/30 text-xs">
-        Already signed in to Claude Code or Codex? Continue with that account. Otherwise, sign in to
-        at least one tool above. You can finish this later in Settings.
+        Already signed in to {agentNames}? Continue with that account. Otherwise, sign in to at
+        least one tool above. You can finish this later in Settings.
       </p>
 
       <div className="flex items-center gap-3 pt-2">

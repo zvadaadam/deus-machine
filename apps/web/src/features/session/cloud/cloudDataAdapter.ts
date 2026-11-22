@@ -15,7 +15,12 @@
 import type { RepoGroup, Workspace } from "@shared/types/workspace";
 import type { Session } from "@shared/types/session";
 import type { CloudOrganizations } from "@shared/types/environment-secrets";
-import type { SessionStatus, WorkspaceState } from "@shared/enums";
+import {
+  CLOUD_HARNESSES,
+  type AgentHarness,
+  type SessionStatus,
+  type WorkspaceState,
+} from "@shared/enums";
 import { toast } from "sonner";
 import { setQueryRequestInterceptor } from "@/platform/ws";
 import { getRuntimeClient, onRuntimeChange } from "@/platform/ws/query-protocol-client";
@@ -50,13 +55,9 @@ interface AgntSession {
   organization_id?: string;
 }
 
-const KNOWN_HARNESSES = new Set(["claude-code", "codex-app-server"]);
-
-/** Discovery's harness, defended to the enum — legacy rows default to claude. */
-function mapHarness(harness: string | null | undefined): import("@/shared/agents").AgentHarness {
-  return (
-    harness && KNOWN_HARNESSES.has(harness) ? harness : "claude-code"
-  ) as import("@/shared/agents").AgentHarness;
+/** Discovery defaults to Claude for a cloud row without a recognized harness. */
+function mapHarness(harness: string | null | undefined): AgentHarness {
+  return CLOUD_HARNESSES.find((id) => id === harness) ?? "claude-code";
 }
 
 /** A 401 from agnt — the deus_cloud_session lapsed; the caller re-triggers login. */

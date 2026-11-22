@@ -7,6 +7,7 @@
 // Both are exported from this file.
 
 import { z } from "zod";
+import { HARNESSES } from "./harnesses";
 
 // ── Session ──────────────────────────────────────────────────────────────
 
@@ -80,6 +81,9 @@ export const STATUS_RANK: Record<WorkspaceStatus, number> = {
 
 // ── Agent ────────────────────────────────────────────────────────────────
 
+export const LOCAL_HARNESSES = Object.keys(HARNESSES) as readonly (keyof typeof HARNESSES)[];
+export const CLOUD_HARNESSES = LOCAL_HARNESSES.filter((id) => HARNESSES[id].cloudProvider !== null);
+
 /**
  * The agent harness bound to a session: the SDK/CLI wrapper that owns the
  * agent process lifecycle. These are the @zvada/agent-server engine ids
@@ -92,7 +96,7 @@ export const STATUS_RANK: Record<WorkspaceStatus, number> = {
  *
  * Display names ("Claude", "Codex") are a frontend concern, never wire values.
  */
-export const AgentHarnessSchema = z.enum(["claude-code", "codex-app-server"]);
+export const AgentHarnessSchema = z.enum(LOCAL_HARNESSES);
 export type AgentHarness = z.infer<typeof AgentHarnessSchema>;
 
 // ── Automations ──────────────────────────────────────────────────────────

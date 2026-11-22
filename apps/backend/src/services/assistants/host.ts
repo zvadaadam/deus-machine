@@ -55,11 +55,11 @@ import { agentModels } from "@shared/api/settings";
 import { uuidv7 } from "@shared/lib/uuid";
 import * as workspaces from "@shared/api/workspaces";
 import { ACTIVE_TURN_STATUSES, type AgentHarness } from "@shared/enums";
+import { HARNESSES } from "@shared/harnesses";
 import { githubRepoSlug } from "@shared/git-origin";
 import {
   CATALOG_MODEL_LISTS,
   DEFAULT_AGENT_HARNESS,
-  HARNESS_LABELS,
   defaultModelId,
   findModel,
   harnessNamed,
@@ -255,8 +255,8 @@ export const whereSentence = () =>
   `These are the coding agents on the computer ${JSON.stringify(getServerName())} itself: its own workspaces and their chats. Cloud workspaces are not listed here.`;
 
 /** The agents a start may name, as a refusal lists them: `"claude-code" (Claude Code) and …`. */
-const AGENT_NAMES = Object.entries(HARNESS_LABELS)
-  .map(([id, label]) => `${JSON.stringify(id)} (${label})`)
+const AGENT_NAMES = Object.entries(HARNESSES)
+  .map(([id, { label }]) => `${JSON.stringify(id)} (${label})`)
   .join(" and ");
 
 /** What a chat the host could not deliver its first task to says, the reason kept safe. */
@@ -761,10 +761,7 @@ export function createDeusHost(): DeusHost {
               "invalid_input",
               `start_session: model: ${JSON.stringify(input.model)} is not one ${agentHarness} offers here; list_models names them. Nothing was started.`
             );
-          // Levels are judged only by what this computer's CLI listed: a catalog's are
-          // provisional. Claude's `off` is not judged: it reads it as no extended thinking
-          // on any model, though its rows list only effort levels. Codex lists `off` where
-          // a model takes it, and runs an unlisted one as another level, so it is judged.
+          // Only the levels this computer's CLI listed are authoritative.
           const levels =
             own?.source === "live"
               ? findModel(lists, agentHarness, model)?.row.thinking.levels
@@ -774,7 +771,7 @@ export function createDeusHost(): DeusHost {
             level &&
             levels &&
             !levels.includes(level) &&
-            !(level === "off" && agentHarness === "claude-code")
+            !(level === "off" && HARNESSES[agentHarness].acceptsUnlistedOff)
           )
             throw new OperatorError(
               "invalid_input",

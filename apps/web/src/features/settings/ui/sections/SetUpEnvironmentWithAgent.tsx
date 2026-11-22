@@ -9,6 +9,7 @@ import { getStoredModel } from "@/features/session/lib/modelPreference";
 import { getAgentHarnessForModel, getModelId, modelLabel } from "@/shared/agents";
 import { useModelLists } from "@/shared/hooks/useModelLists";
 import { defaultProviderAccount } from "@shared/types/provider-account";
+import { HARNESSES } from "@shared/harnesses";
 import { useProviderAccounts } from "../../api/provider-accounts.queries";
 
 export function SetUpEnvironmentWithAgent({
@@ -29,27 +30,26 @@ export function SetUpEnvironmentWithAgent({
   const requestEnvSetup = useUIStore((state) => state.requestEnvSetup);
   const model = getStoredModel();
   const harness = getAgentHarnessForModel(model);
-  const provider = harness === "claude-code" ? "claude" : "codex";
+  const { cloudProvider: provider, label: agentLabel } = HARNESSES[harness];
   const label = modelLabel(
     useModelLists({ cloud: location === "cloud" }),
     harness,
     getModelId(model)
   );
-  const cloudBlocked = session.data?.vaultLocked
-    ? "Unlock your keyring, then reopen Deus."
-    : (cloudNotReady(organizations, organizationId) ??
-      (providers.isError
-        ? "Couldn't check your AI accounts. Try again in AI Providers."
-        : providers.isPending
-          ? "Checking your AI accounts…"
-          : defaultProviderAccount(providers.data, provider)?.status !== "connected"
-            ? `Connect a ${provider === "claude" ? "Claude" : "Codex"} account in AI Providers to use ${label}.`
-            : null));
-  const blocked = !repoId
-    ? "Add this repository to Deus to start a setup workspace."
-    : location === "cloud"
-      ? cloudBlocked
-      : null;
+  function setupProblem() {
+    if (!repoId) return "Add this repository to Deus to start a setup workspace.";
+    if (location === "local") return null;
+    if (session.data?.vaultLocked) return "Unlock your keyring, then reopen Deus.";
+    const notReady = cloudNotReady(organizations, organizationId);
+    if (notReady) return notReady;
+    if (!provider) return `${agentLabel} runs only on this computer.`;
+    if (providers.isError) return "Couldn't check your AI accounts. Try again in AI Providers.";
+    if (providers.isPending) return "Checking your AI accounts…";
+    if (defaultProviderAccount(providers.data, provider)?.status === "connected") return null;
+    const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
+    return `Connect a ${providerName} account in AI Providers to use ${label}.`;
+  }
+  const blocked = setupProblem();
   return (
     <Tooltip>
       <TooltipTrigger asChild>

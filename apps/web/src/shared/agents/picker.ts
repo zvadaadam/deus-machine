@@ -4,15 +4,14 @@
 // chat ran, one the other lane lists), so a picker never hides what is selected.
 
 import {
-  HARNESS_LABELS,
-  PICKER_HARNESSES,
   modelLabel,
   modelValue,
   parseModelValue,
   pickerModels,
   type HarnessModels,
 } from "@shared/models";
-import type { AgentHarness } from "@shared/enums";
+import { AgentHarnessSchema, type AgentHarness } from "@shared/enums";
+import { HARNESSES } from "@shared/harnesses";
 
 export interface PickerOption {
   /** The picker value: `harness:model`. */
@@ -38,7 +37,10 @@ export interface ModelPickerView {
 export function modelPickerView(lists: readonly HarnessModels[], model: string): ModelPickerView {
   const current = parseModelValue(model);
   let selected: PickerOption | undefined;
-  const groups = PICKER_HARNESSES.map((agentHarness): PickerGroup => {
+  const groups = lists.flatMap(({ harness }): PickerGroup[] => {
+    const parsed = AgentHarnessSchema.safeParse(harness);
+    if (!parsed.success) return [];
+    const agentHarness = parsed.data;
     const options = pickerModels(lists, agentHarness).map(
       (row): PickerOption => ({
         value: modelValue(agentHarness, row.id),
@@ -58,7 +60,7 @@ export function modelPickerView(lists: readonly HarnessModels[], model: string):
         options.unshift(selected);
       }
     }
-    return { agentHarness, label: HARNESS_LABELS[agentHarness], options };
+    return [{ agentHarness, label: HARNESSES[agentHarness].label, options }];
   });
   return { groups, selected };
 }

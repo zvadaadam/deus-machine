@@ -7,7 +7,6 @@
 // can change; another harness needs a new chat.
 
 import {
-  HARNESS_LABELS,
   continuedThinkingLevel,
   defaultModelValue,
   latestTurnExecution,
@@ -15,13 +14,13 @@ import {
   parseModelValue,
 } from "@shared/models";
 import type { AgentHarness } from "@shared/enums";
+import { HARNESSES } from "@shared/harnesses";
 import type { ThinkingLevel } from "@shared/protocol";
 import type { SessionTurn } from "@shared/types/session";
 
 export {
   DEFAULT_MODEL,
   DEFAULT_THINKING_LEVEL,
-  PICKER_HARNESSES,
   composerThinking,
   fitThinkingLevel,
   modelLabel,
@@ -35,7 +34,7 @@ export type { AgentHarness } from "@shared/enums";
 export type { ThinkingLevel } from "@shared/protocol";
 
 export function getAgentLabel(agentHarness: AgentHarness): string {
-  return HARNESS_LABELS[agentHarness];
+  return HARNESSES[agentHarness]?.label;
 }
 
 /** The picker value a stored one names today; undefined when it names no harness Deus runs. */
