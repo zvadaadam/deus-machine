@@ -36,6 +36,7 @@ import { useWorkspaceStore, workspaceLayoutActions } from "@/features/workspace/
 import { openNewWorkspace } from "@/features/workspace/lib/newWorkspace";
 import { pendingFirstMessages } from "@/features/workspace/store/workspaceStartStore";
 import { useFirstMessageDelivery } from "@/features/session/hooks/useFirstMessageDelivery";
+import { simulatorStoreActions } from "@/features/simulator/store";
 import { useSidebarStore } from "@/features/sidebar/store";
 import { useWindowPlace } from "@/features/sidebar/hooks/useWindowPlace";
 import { offersNewFromBranch } from "@/features/sidebar/lib/location";
@@ -295,6 +296,7 @@ export function MainLayout() {
       }, tempo.moderate.duration * 1000);
       try {
         await archive(workspaceId);
+        simulatorStoreActions.clearWorkspaceSession(workspaceId);
         if (useWorkspaceStore.getState().selectedWorkspaceId === workspaceId) selectWorkspace(null);
         toast.success("Workspace archived", {
           id: toastId,
