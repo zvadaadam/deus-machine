@@ -12,6 +12,8 @@
  *      cache → UI updates
  */
 
+import type { WorkspaceKind } from "@shared/enums";
+import { canPlan } from "@shared/harnesses";
 import { useCallback } from "react";
 import { toast } from "sonner";
 import { newTurnId, useSendMessage, useStopSession } from "../api/session.queries";
@@ -25,6 +27,7 @@ interface UseSessionActionsProps {
   sessionId: string;
   model?: string;
   workspaceId?: string;
+  workspaceKind?: WorkspaceKind | null;
   /** Branch PR prompts target (defaults to "main"). */
   targetBranch?: string;
   /** Fires after a successful send. */
@@ -47,6 +50,7 @@ export function useSessionActions({
   sessionId,
   model,
   workspaceId,
+  workspaceKind,
   targetBranch = "main",
   onMessageSent,
 }: UseSessionActionsProps): UseSessionActionsReturn {
@@ -63,16 +67,18 @@ export function useSessionActions({
       const content = customContent || composer.draft.trim();
       if (!content) return false;
 
+      const agentHarness = getAgentHarnessForModel(model);
       try {
         await sendMessageMutation.mutateAsync({
           sessionId,
           content,
           model: getModelId(model),
-          agentHarness: getAgentHarnessForModel(model),
+          agentHarness,
           // The send's correlation key: it seeds the optimistic bubble AND
           // becomes the engine's turnId, so the user echo comes back matchable.
           turnId: newTurnId(),
-          permissionMode: composer.planModeEnabled ? "plan" : undefined,
+          permissionMode:
+            composer.planModeEnabled && canPlan(agentHarness, workspaceKind) ? "plan" : undefined,
           thinkingLevel: composer.thinkingLevel,
         });
       } catch (error) {
@@ -89,7 +95,7 @@ export function useSessionActions({
       }
       return true;
     },
-    [sessionId, model, sendMessageMutation, onMessageSent]
+    [sessionId, model, workspaceKind, sendMessageMutation, onMessageSent]
   );
 
   const stopSession = useCallback(async () => {

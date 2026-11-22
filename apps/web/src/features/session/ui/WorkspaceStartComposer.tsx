@@ -1,4 +1,5 @@
 /** This workspace has no chat yet. Its draft moves to the first chat when it opens. */
+import { canPlan } from "@shared/harnesses";
 import type { Workspace } from "@/shared/types";
 import { useStore } from "zustand";
 import { useChatModel } from "@/shared/hooks/useModelLists";
@@ -29,7 +30,7 @@ export function WorkspaceStartComposer({ workspace }: { workspace: Workspace }) 
       message,
       model: selection.model,
       thinkingLevel: composer.thinkingLevel,
-      planMode: composer.planModeEnabled,
+      planMode: composer.planModeEnabled && canPlan(selection.agentHarness, workspace.kind),
     });
     return true;
   };

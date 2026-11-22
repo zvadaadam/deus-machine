@@ -2,6 +2,7 @@
 // The harnesses Deus runs and what it chooses for each.
 
 import type { AgentHarness as EngineHarness } from "@zvada/agent-server/protocol";
+import type { AgentHarness, WorkspaceKind } from "./enums";
 import type { ProviderId } from "./types/provider-account";
 
 interface Harness {
@@ -15,6 +16,8 @@ interface Harness {
   cloudProvider: ProviderId | null;
   /** Whether the harness accepts thinking level `off` when a model's list omits it. */
   acceptsUnlistedOff: boolean;
+  /** False when a planning turn can end without giving the person a plan to read. */
+  supportsPlanMode: boolean;
 }
 
 /** The harnesses Deus runs, in the order it offers them. */
@@ -29,6 +32,7 @@ export const HARNESSES = {
     cloudProvider: "claude",
     // Off disables extended thinking on any model. The model rows list only effort levels.
     acceptsUnlistedOff: true,
+    supportsPlanMode: true,
   },
   "codex-app-server": {
     label: "Codex",
@@ -40,6 +44,7 @@ export const HARNESSES = {
     cloudProvider: "codex",
     // Codex lists off where a model takes it and runs an unlisted level as another.
     acceptsUnlistedOff: false,
+    supportsPlanMode: true,
   },
 } as const satisfies Partial<Record<EngineHarness, Harness>>;
 
@@ -48,6 +53,11 @@ export const LOCAL_HARNESSES = Object.keys(HARNESSES) as readonly (keyof typeof 
 
 /** A harness runs in Deus Cloud when it names a provider account there. */
 export const CLOUD_HARNESSES = LOCAL_HARNESSES.filter((id) => HARNESSES[id].cloudProvider !== null);
+
+/** Cloud turns run with full access. A local chat can plan when its harness supports it. */
+export function canPlan(harness: AgentHarness, workspaceKind?: WorkspaceKind | null): boolean {
+  return workspaceKind !== "cloud" && HARNESSES[harness].supportsPlanMode;
+}
 
 /** Settings and model lists can come from a build that knows other harnesses. */
 export function harnessInfo(id: string): Harness | undefined {

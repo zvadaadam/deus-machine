@@ -21,6 +21,7 @@ import { useEffect } from "react";
 import type { SessionStatus } from "@/shared/types";
 import { agentConfigOf } from "@/features/workspace/lib/reach";
 import { locationOf } from "@/features/sidebar/lib/location";
+import { canPlan } from "@shared/harnesses";
 import { ACTIVE_TURN_STATUSES, type WorkspaceKind } from "@shared/enums";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
@@ -397,8 +398,7 @@ export function MessageInput({
     if (setupLocation) onSend(setupEnvironmentPrompt(setupLocation));
   };
 
-  // Local chats plan, on either agent; cloud sidecars run bypass.
-  const showPlanMode = workspaceKind !== "cloud";
+  const showPlanMode = canPlan(agentHarness, workspaceKind);
   return (
     <div className={cn("relative z-20 shrink-0 px-2 pb-2", className)}>
       <AnimatePresence initial={false}>

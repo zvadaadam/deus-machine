@@ -5,6 +5,7 @@ const first = { message: "fix the login page", model: "opus" };
 const starting = {
   id: "a",
   state: "initializing",
+  kind: "worktree",
   current_session_id: null,
   latest_message_sent_at: null,
   session_status: null,
@@ -21,6 +22,14 @@ describe("the message typed before its workspace existed", () => {
     expect(dueFirstMessages([ready], { a: first })).toEqual([
       { workspaceId: "a", sessionId: "chat-a", first },
     ]);
+  });
+
+  it("honors a waiting plan in a local chat and drops it on a cloud delivery", () => {
+    const planned = { ...first, model: "codex-app-server:gpt-6.1-sol", planMode: true };
+    expect(dueFirstMessages([ready], { a: planned })[0].first.planMode).toBe(true);
+    expect(dueFirstMessages([{ ...ready, kind: "cloud" }], { a: planned })[0].first.planMode).toBe(
+      false
+    );
   });
 
   it("goes to its own workspace, whichever others are ready", () => {

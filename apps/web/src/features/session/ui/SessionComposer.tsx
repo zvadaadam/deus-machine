@@ -117,6 +117,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
       sessionId,
       model: needsHistory ? undefined : selection.model,
       workspaceId: workspaceId ?? undefined,
+      workspaceKind: session?.workspace_kind,
       targetBranch: targetBranch ?? "main",
       onMessageSent: onSendComplete,
     });
