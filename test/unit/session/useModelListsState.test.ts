@@ -49,6 +49,22 @@ describe("whether a chat's model list is live", () => {
 });
 
 describe("the harnesses a picker offers", () => {
+  it("shows the reason from the empty harness even when a chat remembers one of its models", () => {
+    const error = "The fixture CLI is not installed yet.";
+    state.local = { lists: [{ harness: "scripted", source: "catalog", models: [], error }] };
+    const { lists } = useModelListsState({ cloud: false });
+    expect(lists.find((list) => list.harness === "scripted")).toMatchObject({
+      source: "catalog",
+      error,
+    });
+    for (const model of ["claude-code:opus", "scripted:previous"]) {
+      const group = modelPickerView(lists, model).groups.find(
+        (group) => group.label === "Local fixture"
+      );
+      expect(group?.emptyReason).toBe(error);
+    }
+  });
+
   it.each(["answer", "catalog"])(
     "keeps a local-only harness off the cloud picker with the %s",
     (source) => {

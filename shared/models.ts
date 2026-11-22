@@ -26,7 +26,7 @@ import type { SessionTurn } from "./types/session";
 export type { ModelDescriptor, ModelList };
 
 /** One harness's models: the part of a list a picker reads. */
-export interface HarnessModels {
+export interface HarnessModels extends Pick<ModelList, "source" | "error"> {
   readonly harness: string;
   readonly models: readonly ModelDescriptor[];
 }
@@ -63,6 +63,7 @@ const ACCOUNT_DEFAULT_MODEL = "default";
 /** The lists the embedded engine was built with. */
 export const CATALOG_MODEL_LISTS: readonly HarnessModels[] = LOCAL_HARNESSES.map((harness) => ({
   harness,
+  source: "catalog",
   models: CATALOG_MODELS.filter((model) => model.harness === harness),
 }));
 

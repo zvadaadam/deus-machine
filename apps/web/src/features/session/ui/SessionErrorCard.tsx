@@ -22,14 +22,7 @@ import { LoginCodeForm } from "@/features/settings/ui/sections/LoginCodeForm";
 
 function AIProvidersButton() {
   return (
-    <Button
-      variant="outline"
-      size="xs"
-      onClick={() => {
-        uiActions.setActiveSettingsSection("ai");
-        uiActions.openSettings();
-      }}
-    >
+    <Button variant="outline" size="xs" onClick={uiActions.openAISettings}>
       Open AI Providers
     </Button>
   );

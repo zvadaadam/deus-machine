@@ -18,6 +18,7 @@ import {
   type ThinkingLevel,
 } from "@/shared/agents";
 import { modelPickerView } from "@/shared/agents/picker";
+import { uiActions } from "@/shared/stores/uiStore";
 
 interface ModelPickerProps {
   model: string;
@@ -132,10 +133,21 @@ export function ModelPicker({
         <div className="flex min-h-0 flex-1">
           <div className="relative isolate min-w-0 flex-1 overflow-y-auto p-1">
             <DropdownMenuGlide />
-            {otherAgent && (
-              <DropdownMenuLabel className="text-text-muted text-xs font-normal">
-                {keepsAgent ? "This chat keeps its agent" : "Opens a new chat"}
-              </DropdownMenuLabel>
+            {shownGroup?.emptyReason ? (
+              <>
+                <DropdownMenuLabel className="text-text-muted text-xs font-normal break-words">
+                  {shownGroup.emptyReason}
+                </DropdownMenuLabel>
+                <DropdownMenuItem onSelect={uiActions.openAISettings}>
+                  Open AI Settings
+                </DropdownMenuItem>
+              </>
+            ) : (
+              otherAgent && (
+                <DropdownMenuLabel className="text-text-muted text-xs font-normal">
+                  {keepsAgent ? "This chat keeps its agent" : "Opens a new chat"}
+                </DropdownMenuLabel>
+              )
             )}
             {shownGroup?.options.map((option) => {
               const isSelected = selected?.value === option.value;
@@ -162,36 +174,38 @@ export function ModelPicker({
             })}
           </div>
 
-          <div className="border-border-subtle relative isolate w-36 shrink-0 overflow-y-auto border-l p-1">
-            <DropdownMenuGlide />
-            <DropdownMenuLabel className="text-text-muted text-xs font-normal">
-              Thinking
-            </DropdownMenuLabel>
-            {hasThinking ? (
-              // Rows like the models': the name under the title, the mark on the right.
-              <div role="group" aria-label="Thinking effort">
-                {thinkingLevels.map((level) => {
-                  const isSelected = level === thinkingLevel;
-                  return (
-                    <DropdownMenuItem
-                      key={level}
-                      role="menuitemradio"
-                      aria-checked={isSelected}
-                      onSelect={() => onThinkingLevelChange(level)}
-                      className={isSelected ? "text-text-primary" : "text-text-secondary"}
-                    >
-                      <span className="font-normal">{thinkingLevelLabel(level)}</span>
-                      {isSelected && <Check className="text-text-primary ml-auto size-3" />}
-                    </DropdownMenuItem>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-text-muted px-2 py-1.5 text-xs text-pretty">
-                {modelLabel} has no thinking control.
-              </p>
-            )}
-          </div>
+          {!shownGroup?.emptyReason && (
+            <div className="border-border-subtle relative isolate w-36 shrink-0 overflow-y-auto border-l p-1">
+              <DropdownMenuGlide />
+              <DropdownMenuLabel className="text-text-muted text-xs font-normal">
+                Thinking
+              </DropdownMenuLabel>
+              {hasThinking ? (
+                // Rows like the models': the name under the title, the mark on the right.
+                <div role="group" aria-label="Thinking effort">
+                  {thinkingLevels.map((level) => {
+                    const isSelected = level === thinkingLevel;
+                    return (
+                      <DropdownMenuItem
+                        key={level}
+                        role="menuitemradio"
+                        aria-checked={isSelected}
+                        onSelect={() => onThinkingLevelChange(level)}
+                        className={isSelected ? "text-text-primary" : "text-text-secondary"}
+                      >
+                        <span className="font-normal">{thinkingLevelLabel(level)}</span>
+                        {isSelected && <Check className="text-text-primary ml-auto size-3" />}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-text-muted px-2 py-1.5 text-xs text-pretty">
+                  {modelLabel} has no thinking control.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </DropdownMenuContent>
     </DropdownMenu>

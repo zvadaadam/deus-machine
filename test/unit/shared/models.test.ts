@@ -29,6 +29,7 @@ const row = (
 const lists: HarnessModels[] = [
   {
     harness: "claude-code",
+    source: "live",
     models: [
       row("claude-code", "default", "Default (recommended)", ["low", "high"], {
         resolvedId: "claude-opus-5-5",
@@ -43,6 +44,7 @@ const lists: HarnessModels[] = [
   },
   {
     harness: "codex-app-server",
+    source: "live",
     models: [
       row("codex-app-server", "gpt-next", "GPT-Next", ["low", "high"]),
       row("codex-app-server", "gpt-6.1-sol", "GPT-6.1-Sol", ["low", "medium", "high", "ultra"], {

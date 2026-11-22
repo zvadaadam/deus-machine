@@ -11,7 +11,7 @@ import { useCloudModels } from "./useCloudModels";
  * The models a chat's pickers offer. A cloud chat gets the platform's lists; a
  * local one gets what this computer's CLIs list for its login, asked for the
  * workspace's folder. Before an answer arrives, and when none can be had, the
- * engine's own catalog: the same shape, so a picker is never empty.
+ * engine's own catalog, which may have no rows for a harness.
  *
  * Local lists sit under one key prefix, which a login change invalidates
  * (useAgentAuthEvents); the engine reads the CLI again after one.
@@ -50,7 +50,12 @@ export function useModelListsState(chat: { cloud: boolean; workspaceId?: string 
   return {
     // A partial answer keeps the missing harness's tab, including a saved selection in it.
     lists: harnesses.map(
-      (harness) => source.find((list) => list.harness === harness) ?? { harness, models: [] }
+      (harness) =>
+        source.find((list) => list.harness === harness) ?? {
+          harness,
+          source: "catalog",
+          models: [],
+        }
     ),
     live: (harness) => {
       const list = answer?.find((entry) => entry.harness === harness);

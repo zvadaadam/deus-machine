@@ -26,6 +26,7 @@ export interface PickerGroup {
   agentHarness: AgentHarness;
   label: string;
   options: PickerOption[];
+  emptyReason?: string;
 }
 
 export interface ModelPickerView {
@@ -37,7 +38,7 @@ export interface ModelPickerView {
 export function modelPickerView(lists: readonly HarnessModels[], model: string): ModelPickerView {
   const current = parseModelValue(model);
   let selected: PickerOption | undefined;
-  const groups = lists.flatMap(({ harness }): PickerGroup[] => {
+  const groups = lists.flatMap(({ harness, error }): PickerGroup[] => {
     const parsed = AgentHarnessSchema.safeParse(harness);
     if (!parsed.success) return [];
     const agentHarness = parsed.data;
@@ -49,6 +50,7 @@ export function modelPickerView(lists: readonly HarnessModels[], model: string):
         agentHarness,
       })
     );
+    const emptyReason = options.length ? undefined : error || "No models available.";
     if (current?.harness === agentHarness) {
       selected = options.find((option) => option.value === modelValue(agentHarness, current.model));
       if (!selected) {
@@ -60,7 +62,7 @@ export function modelPickerView(lists: readonly HarnessModels[], model: string):
         options.unshift(selected);
       }
     }
-    return [{ agentHarness, label: HARNESSES[agentHarness].label, options }];
+    return [{ agentHarness, label: HARNESSES[agentHarness].label, options, emptyReason }];
   });
   return { groups, selected };
 }
