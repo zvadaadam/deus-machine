@@ -21,7 +21,7 @@ const repository = crypto.randomUUID(),
   workspace = crypto.randomUUID(),
   session = crypto.randomUUID();
 const repo = path.join(directory, "repository");
-await mkdir(repo);
+await mkdir(path.join(repo, ".deus", "network"), { recursive: true });
 execFileSync("git", ["init", "-b", "main", repo], { stdio: "pipe" });
 const db = new Database(path.join(directory, "deus.db"));
 db.exec(SCHEMA_SQL);
