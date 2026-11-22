@@ -47,6 +47,8 @@ it("shows the same model read in the picker and on Send, and offers Settings onl
     const html = render();
     const menu = html.match(/<section>.*?<\/section>/s)?.[0];
     expect(menu).toContain(message);
+    expect(menu).toContain("Thinking");
+    expect(menu).not.toContain("has no thinking control.");
     expect(menu?.includes("Open AI Settings")).toBe(offersSettings);
     const send = html.match(/<button[^>]*aria-label="Send message"[^>]*>/)?.[0];
     expect(send).toContain('disabled=""');
@@ -85,7 +87,7 @@ it("shows the same model read in the picker and on Send, and offers Settings onl
     ],
   });
   const ready = render();
-  expect(ready).toContain("Gemini 4 Neon");
+  expect(ready).toContain("Gemini 4 Neon has no thinking control.");
   expect(ready).not.toContain("Open AI Settings");
   expect(ready).toContain('title="Send message (Enter)"');
   client.clear();
@@ -108,5 +110,31 @@ it("keeps the chat's Thinking column beside an empty model list", () => {
   expect(html).toContain("Sign in to see models.");
   expect(html).toContain("Open AI Settings");
   expect(html).toContain("Thinking");
-  expect(html).toContain("has no thinking control.");
+  expect(html).not.toContain("has no thinking control.");
+});
+
+it("keeps a remembered model in the picker without offering another model's thinking levels", () => {
+  const html = renderToStaticMarkup(
+    createElement(ModelPicker, {
+      agentHarness: "gemini",
+      model: "gemini:remembered",
+      lists: [
+        {
+          harness: "gemini",
+          source: "live",
+          models: [
+            { harness: "gemini", id: "other", label: "Other", thinking: { levels: ["high"] } },
+          ],
+        },
+      ],
+      thinkingLevel: "high",
+      thinkingLevels: ["high"],
+      hasMessages: true,
+      onThinkingLevelChange: () => {},
+    })
+  );
+  expect(html).toContain("remembered");
+  expect(html).toContain("Thinking");
+  expect(html).not.toContain('aria-label="Thinking effort"');
+  expect(html).not.toContain("has no thinking control.");
 });

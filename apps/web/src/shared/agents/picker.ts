@@ -4,6 +4,7 @@
 // chat ran, one the other lane lists), so a picker never hides what is selected.
 
 import {
+  findModel,
   modelLabel,
   modelValue,
   parseModelValue,
@@ -12,6 +13,7 @@ import {
 } from "@shared/models";
 import { AgentHarnessSchema, type AgentHarness } from "@shared/enums";
 import { HARNESSES } from "@shared/harnesses";
+import type { ThinkingLevel } from "@shared/protocol";
 
 export interface PickerModelList extends HarnessModels {
   /** The query's state when the engine has supplied no list for this agent. */
@@ -45,6 +47,8 @@ export interface ModelPickerView {
   groups: PickerGroup[];
   /** The selected value as its group lists it; undefined when it names no harness. */
   selected?: PickerOption;
+  /** The selected model's declared levels, absent until its row is known. */
+  listedLevels?: readonly ThinkingLevel[];
 }
 
 export function modelPickerView(
@@ -79,5 +83,7 @@ export function modelPickerView(
     }
     return [{ agentHarness, label: HARNESSES[agentHarness].label, options, empty }];
   });
-  return { groups, selected };
+  const listedLevels =
+    current && findModel(lists, current.harness, current.model)?.row.thinking.levels;
+  return { groups, selected, listedLevels };
 }

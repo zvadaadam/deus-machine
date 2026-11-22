@@ -66,7 +66,7 @@ export function ModelPicker({
   // The agent whose models are shown: the chat's own until another is looked at.
   const [lookedAt, setLookedAt] = useState<AgentHarness | null>(null);
   if (!currentAgent) return null;
-  const { groups, selected } = modelPickerView(lists, model);
+  const { groups, selected, listedLevels } = modelPickerView(lists, model);
   const modelLabel = selected?.label ?? model ?? getAgentLabel(currentAgent);
   const shownAgent = lookedAt ?? currentAgent;
   const shownGroup = groups.find((group) => group.agentHarness === shownAgent) ?? groups[0];
@@ -184,10 +184,10 @@ export function ModelPicker({
             <DropdownMenuLabel className="text-text-muted text-xs font-normal">
               Thinking
             </DropdownMenuLabel>
-            {hasThinking ? (
+            {listedLevels?.length ? (
               // Rows like the models': the name under the title, the mark on the right.
               <div role="group" aria-label="Thinking effort">
-                {thinkingLevels.map((level) => {
+                {listedLevels.map((level) => {
                   const isSelected = level === thinkingLevel;
                   return (
                     <DropdownMenuItem
@@ -204,9 +204,11 @@ export function ModelPicker({
                 })}
               </div>
             ) : (
-              <p className="text-text-muted px-2 py-1.5 text-xs text-pretty">
-                {modelLabel} has no thinking control.
-              </p>
+              listedLevels && (
+                <p className="text-text-muted px-2 py-1.5 text-xs text-pretty">
+                  {modelLabel} has no thinking control.
+                </p>
+              )
             )}
           </div>
         </div>
