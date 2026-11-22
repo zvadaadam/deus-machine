@@ -89,12 +89,13 @@ When debugging agent-server behavior (event shapes, turn admission, cancel seman
 - `node_modules/@zvada/agent-server/src/` — the package ships its readable TypeScript source beside the compiled `dist/`: the desktop app's `deus-runtime` (compiled by Bun) carries the source; Node (`dev`, `dev:web`, the tests) loads the compiled JavaScript, and so does the npm CLI's `server.bundled.cjs` (`bun build --target=node`). The source is the fastest reference and always matches the installed version.
 - Local clone at `~/Developer/agent-server` (Conductor-managed; work lives on branches/origin, the main checkout is a stale empty worktree) and https://github.com/zvadaadam/agent-server for history, DESIGN.md, and plans/.
 - Engine bugs belong upstream (branch + PR there, then bump the pin here); deus consumes the engine protocol natively (no translate layer) — consumer-side behavior lives in the backend's `services/agent/` fold-and-persist path and the frontend's `agentEventFold` projection.
-- `shared/harnesses.ts` owns the agents Deus offers, their labels, model preferences, app-server names, cloud providers, thinking and Plan support. To offer another harness the engine provides, add its row there and its logo in `apps/web/src/assets/agents/`.
+- `shared/harnesses.ts` owns the agents Deus offers, their labels, model preferences, app-server names, cloud providers, thinking and Plan support. To offer another harness the engine provides, add its row there and its logo in `apps/web/src/assets/agents/`. The packaged smoke (`scripts/runtime/smoke/engine-ready.cjs`) keeps its own list of the agents it expects to start. Add the new id there so it checks the whole set independently.
 - Deus keeps no list of models. A local picker reads this computer's CLIs for its login (`models/list` through `agentModels`). A cloud picker reads the platform (`cloudModels`). While a list is pending or the CLI is missing, the picker uses the engine's catalog. A read installs nothing. The picker asks again after installation. `shared/models.ts` selects the starting model and thinking level from those lists.
 
 **Gemini** runs locally through Antigravity's `agy`. The engine downloads its pinned CLI on first use.
 Google's terms do not grant redistribution. The person signs in with their own Antigravity account
-in Settings → AI Providers or onboarding. Gemini has models only in the live list for that account.
+in Settings → AI or onboarding. The engine’s catalog has no Gemini models. Its picker tab stays empty
+until `agy` is installed and signed in, then lists the models that account can run.
 Its chats have no Plan toggle. Deus declines a question from its question form. Deus tool cards
 show the call's input and status without result text. Gemini takes instructions once per conversation.
 

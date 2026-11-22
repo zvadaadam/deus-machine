@@ -82,7 +82,7 @@ describe("the harnesses a picker offers", () => {
     });
   });
 
-  it("Home shows and sends the cloud default and keeps the saved pick for a local start", () => {
+  it("Home resolves its saved local pick and the cloud default without changing the preference", () => {
     state.cloud = state.local = undefined;
     const storage = new Map<string, string>();
     const setItem = vi.fn((key: string, value: string) => storage.set(key, value));

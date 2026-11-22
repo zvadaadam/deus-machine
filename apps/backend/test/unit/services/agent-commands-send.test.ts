@@ -411,7 +411,13 @@ describeWithDb("sendMessage", () => {
 
       await expect(sendWith(agent, "turn-1", model)).resolves.toEqual({ turnId: "turn-1" });
       expect(harness()).toBe(agent);
-      expect(startTurn.mock.calls[0][2]).toBe(agent);
+      expect(startTurn).toHaveBeenCalledWith(
+        SESSION,
+        "turn-1",
+        agent,
+        "hello",
+        expect.objectContaining({ model })
+      );
     });
 
     it("does NOT move for a second client's send inside the echo-only window", async () => {

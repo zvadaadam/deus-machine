@@ -99,7 +99,7 @@ describe("composer history restoration", () => {
     );
   });
 
-  it("follows the account’s marked Codex default when the live list arrives", () => {
+  it("passes the catalog or live Codex default to an empty chat's input and send action", () => {
     state.turns = [];
     render();
     const harness = "codex-app-server";
