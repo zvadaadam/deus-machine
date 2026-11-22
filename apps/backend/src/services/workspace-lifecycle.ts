@@ -239,6 +239,7 @@ export function deleteFailedWorkspace(workspaceId: string): void {
     .prepare(`DELETE FROM workspaces WHERE id = ? AND ${FAILED_TO_START}`)
     .run(workspaceId);
   if (!deleted.changes) throw new ConflictError("This workspace has chats. Archive it instead.");
+  cloudReports.delete(workspaceId);
   invalidate(["workspaces", "sessions"]);
 }
 
@@ -415,42 +416,50 @@ function projectCloudStatus(data: CloudReport, row: { archived: boolean; hasChat
   }
 }
 
-type WakeReport = { outcome?: { ok: boolean; status: string; error?: string } };
-const cloudReports = new Map<string, WakeReport>();
+type CloudOutcome = { ok: boolean; status: string; error?: string };
+const cloudReports = new Map<
+  string,
+  { count: number; lastWrite?: { number: number; outcome: CloudOutcome } }
+>();
 
 export function watchCloudReports(id: string) {
-  const before = cloudReports.get(id);
-  return (): WakeReport | undefined => {
+  const since = cloudReports.get(id)?.count ?? 0;
+  return (): { outcome?: CloudOutcome } | undefined => {
     const latest = cloudReports.get(id);
-    if (latest === before) return;
-    // An unknown report arrived, but no report since this watch changed the row.
-    return latest?.outcome === before?.outcome ? {} : latest;
+    if (!latest || latest.count <= since) return;
+    return latest.lastWrite && latest.lastWrite.number > since
+      ? { outcome: latest.lastWrite.outcome }
+      : {};
   };
 }
 
 /** The driver parks a sleeping computer's simulator before publishing. */
 export function applyCloudStatus(workspaceId: string, data: CloudReport): void {
   const row = cloudWorkspaceChat(workspaceId);
-  const fields =
-    row &&
-    projectCloudStatus(data, {
-      archived: row.state === "archived",
-      hasChat: !!row.chat,
-    });
-  let outcome = cloudReports.get(workspaceId)?.outcome;
+  if (!row) return;
+  const fields = projectCloudStatus(data, {
+    archived: row.state === "archived",
+    hasChat: !!row.chat,
+  });
+  const previous = cloudReports.get(workspaceId);
+  const count = (previous?.count ?? 0) + 1;
+  let lastWrite = previous?.lastWrite;
   if (fields && data.status) {
     getDatabase()
       .prepare(
         "UPDATE workspaces SET state = ?, init_stage = ?, error_message = ?, error_detail = ? WHERE id = ?"
       )
       .run(...fields, workspaceId);
-    outcome = {
-      ok: ["running", "provisioning", "resuming"].includes(data.status),
-      status: data.status,
-      error: fields[2] ?? undefined,
+    lastWrite = {
+      number: count,
+      outcome: {
+        ok: ["running", "provisioning", "resuming"].includes(data.status),
+        status: data.status,
+        error: fields[2] ?? undefined,
+      },
     };
   }
-  cloudReports.set(workspaceId, { outcome });
+  cloudReports.set(workspaceId, { count, lastWrite });
 }
 
 export function setCloudWakeStage(workspaceId: string, stage: string | null): void {

@@ -1,7 +1,11 @@
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { SCHEMA_SQL } from "@shared/schema";
-import { applyCloudStatus } from "../../../src/services/workspace-lifecycle";
+import {
+  applyCloudStatus,
+  deleteFailedWorkspace,
+  watchCloudReports,
+} from "../../../src/services/workspace-lifecycle";
 
 let db: Database.Database;
 vi.mock("../../../src/lib/database", () => ({ getDatabase: () => db }));
@@ -16,6 +20,18 @@ beforeEach(() => {
     INSERT INTO sessions (id, workspace_id) VALUES ('chat','w'), ('elsewhere','other');`);
 });
 afterEach(() => db.close());
+
+it("ignores reports after the workspace row is gone", () => {
+  db.exec(
+    "INSERT INTO workspaces (id, repository_id, slug, kind, state) VALUES ('unstarted', 'repo', 'work', 'cloud', 'error')"
+  );
+  const news = watchCloudReports("unstarted");
+  applyCloudStatus("unstarted", { status: "paused" });
+  expect(news()).toEqual({});
+  deleteFailedWorkspace("unstarted");
+  applyCloudStatus("unstarted", { status: "running" });
+  expect(news()).toBeUndefined();
+});
 
 const cases = [
   ["running", { status: "running" }, ["ready", null, null, null]],
