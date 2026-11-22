@@ -39,6 +39,7 @@ describe("withWorkspace middleware", () => {
       root_path: "/repo",
       slug: "tokyo",
       default_branch: "main",
+      start_recoverable: 1,
     });
 
     const app = createTestApp();
@@ -51,6 +52,7 @@ describe("withWorkspace middleware", () => {
       root_path: "/repo",
       slug: "tokyo",
       default_branch: "main",
+      start_recoverable: true,
     });
     expect(body.workspacePath).toBe("/repo/.deus/tokyo");
   });
@@ -71,6 +73,7 @@ describe("withWorkspace middleware", () => {
       id: "ws-1",
       root_path: null,
       slug: "tokyo",
+      start_recoverable: 0,
     });
 
     const app = createTestApp();
@@ -86,6 +89,7 @@ describe("withWorkspace middleware", () => {
       id: "ws-1",
       root_path: "/repo",
       slug: null,
+      start_recoverable: 0,
     });
 
     const app = createTestApp();
@@ -102,6 +106,7 @@ describe("withWorkspace middleware", () => {
       root_path: "/projects",
       slug: "paris",
       default_branch: "develop",
+      start_recoverable: 0,
     });
 
     const app = createTestApp();

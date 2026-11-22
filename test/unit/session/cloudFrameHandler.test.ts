@@ -558,6 +558,8 @@ describe("makeCloudFrameHandler", () => {
       { type: "assistant", turnId: "t2", isOpen: false },
       { type: "compaction", compaction: { compaction_id: "c2" } },
     ]);
+    const page = qc.getQueryData<PaginatedMessages>(messagesKey(SESSION))!;
+    expect(page.turns.map((turn) => turn.turnId)).toEqual(["t1", "old", "Old", "t2"]);
   });
 
   it("projects a LIVE session.compaction into the page (not just a refetch)", () => {
