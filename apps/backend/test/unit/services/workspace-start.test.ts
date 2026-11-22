@@ -496,12 +496,12 @@ describe("workspaces a previous process was still starting", () => {
     expect(warn).toHaveBeenCalledOnce();
   });
 
-  it("recovers interrupted workspaces even when the temp directory cannot hold a file", () => {
+  it("recovers interrupted workspaces even when the temp directory cannot hold a file", async () => {
     add("w", "vega", { state: "ready", setup_status: "running" });
     add("early", "lyra", { init_stage: "fetch" });
     vi.stubEnv("TMPDIR", path.join(root, "tracked.txt"));
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(failInterruptedWorkspaces()).toBe(1);
+    expect(await failInterruptedWorkspaces()).toBe(1);
     expect(row("w")).toMatchObject({
       state: "ready",
       setup_status: "failed",
@@ -520,8 +520,7 @@ describe("workspaces a previous process was still starting", () => {
       add("early", "lyra", { init_stage: "fetch" });
       fs.mkdirSync(workspacePath("lyra"), { recursive: true });
 
-      expect(failInterruptedWorkspaces()).toBe(2);
-      await lifecycle.changeWorkspaceState("made", async () => {});
+      expect(await failInterruptedWorkspaces()).toBe(2);
 
       for (const id of ["made", "early"]) {
         expect(row(id)).toMatchObject({
@@ -529,8 +528,8 @@ describe("workspaces a previous process was still starting", () => {
           error_message: "Deus closed before this workspace was ready.",
         });
       }
-      await vi.waitFor(() => expect(fs.existsSync(workspacePath("vega"))).toBe(false));
-      await vi.waitFor(() => expect(branches()).toEqual(["main"]));
+      expect(fs.existsSync(workspacePath("vega"))).toBe(false);
+      expect(branches()).toEqual(["main"]);
       expect(fs.existsSync(workspacePath("lyra"))).toBe(true);
       // Either can be started again.
       await retryWorkspaceInit("made");
@@ -543,8 +542,8 @@ describe("workspaces a previous process was still starting", () => {
     const error = new Error("cannot remove checkout");
     vi.spyOn(fs.promises, "rm").mockRejectedValueOnce(error);
     const warn = vi.spyOn(console, "warn");
-    expect(failInterruptedWorkspaces()).toBe(1);
-    await lifecycle.changeWorkspaceState("w", async () => {});
+    expect(await failInterruptedWorkspaces()).toBe(1);
+
     expect(warn).toHaveBeenCalledWith("[WORKSPACE] Could not remove what w left behind:", error);
     expect(row("w")).toMatchObject({
       state: "error",
@@ -562,13 +561,12 @@ describe("workspaces a previous process was still starting", () => {
       vi.resetModules();
       const groups = await import("../../../src/lib/process-groups");
       const init = await import("../../../src/services/workspace-init.service");
-      const queue = await import("../../../src/services/workspace-lifecycle");
       vi.spyOn(fs.promises, "rm").mockImplementationOnce(async () => {
         groups.stopProcessGroups();
         if (result === "rejects") throw new Error("cannot remove checkout");
       });
-      expect(init.failInterruptedWorkspaces()).toBe(1);
-      await queue.changeWorkspaceState("w", async () => {});
+      expect(await init.failInterruptedWorkspaces()).toBe(0);
+
       expect(row("w")).toMatchObject({
         state: "initializing",
         init_stage: "worktree",
@@ -576,8 +574,8 @@ describe("workspaces a previous process was still starting", () => {
       });
       expect(branches()).toContain("test-user/vega");
 
-      expect(failInterruptedWorkspaces()).toBe(1);
-      await lifecycle.changeWorkspaceState("w", async () => {});
+      expect(await failInterruptedWorkspaces()).toBe(1);
+
       expect(row("w")).toMatchObject({
         state: "error",
         error_message: "Deus closed before this workspace was ready.",
@@ -586,14 +584,14 @@ describe("workspaces a previous process was still starting", () => {
     }
   );
 
-  it("leave a cloud workspace alone once its session can report, and fail a setup nobody runs", () => {
+  it("leave a cloud workspace alone once its session can report, and fail a setup nobody runs", async () => {
     add("ready", "vega", { state: "ready", setup_status: "running" });
     add("cloud-live", "lyra", { kind: "cloud", provider_workspace_id: "vm" });
     db().prepare("INSERT INTO sessions (id, workspace_id) VALUES ('s', 'cloud-live')").run();
     db().prepare("UPDATE workspaces SET current_session_id = 's' WHERE id = 'cloud-live'").run();
     add("cloud-lost", "mira", { kind: "cloud" });
 
-    expect(failInterruptedWorkspaces()).toBe(1);
+    expect(await failInterruptedWorkspaces()).toBe(1);
 
     expect(row("cloud-live").state).toBe("initializing");
     expect(row("cloud-lost")).toMatchObject({
@@ -877,8 +875,8 @@ exec "$REAL_GIT" "$@"
       current_session_id: null,
     });
     expect(branches()).toContain("test-user/vega");
-    expect(failInterruptedWorkspaces()).toBe(1);
-    await lifecycle.changeWorkspaceState("w", async () => {});
+    expect(await failInterruptedWorkspaces()).toBe(1);
+
     expect(row("w")).toMatchObject({
       state: "error",
       error_message: "Deus closed before this workspace was ready.",
@@ -932,12 +930,10 @@ exec "$REAL_GIT" "$@"
         return rm(...args);
       });
       try {
-        const first = failed ? initializeWorkspace(ctx) : undefined;
+        const first = failed ? initializeWorkspace(ctx) : failInterruptedWorkspaces();
         if (failed) {
           await removing.promise;
           db().exec("DROP TRIGGER refuse_chat");
-        } else {
-          expect(failInterruptedWorkspaces()).toBe(1);
         }
         const requests = Promise.allSettled([1, 2].map(async () => retryWorkspaceInit("w")));
         await removing.promise;
@@ -948,7 +944,7 @@ exec "$REAL_GIT" "$@"
 
         release.resolve();
         const results = await requests;
-        await first;
+        expect(await first).toBe(failed ? undefined : 1);
         expect(results.map((r) => r.status)).toEqual(["fulfilled", "rejected"]);
         await vi.waitFor(() => expect(row("w").state).toBe("ready"), { timeout: 5000 });
         expect(stateDuringCleanup).toBe("initializing");

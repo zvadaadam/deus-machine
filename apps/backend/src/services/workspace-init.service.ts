@@ -135,30 +135,34 @@ export function retryWorkspaceInit(workspaceId: string) {
  * A cloud workspace with a session is left alone: its computer is provisioned
  * by the platform, which reports through the session's channel.
  */
-export function failInterruptedWorkspaces(): number {
+export async function failInterruptedWorkspaces(): Promise<number> {
   for (const row of runningSetups()) {
     setSetupStatus(row.id, "failed", { message: SETUP_INTERRUPTED });
   }
-  let failed = 0;
-  for (const row of interruptedStarts()) {
-    const cloud = row.kind === "cloud";
-    const fail = () =>
-      failInterruptedStart(row.id, row.init_stage ?? "fetch", {
-        message: cloud
-          ? "Deus closed before the cloud computer was ready."
-          : "Deus closed before this workspace was ready.",
-        detail: null,
-      });
-    if (!cloud && row.root_path && row.git_branch && OWNS_WORKTREE.has(row.init_stage ?? "")) {
+  const results = await Promise.allSettled(
+    interruptedStarts().map(async (row) => {
+      const cloud = row.kind === "cloud";
+      const fail = () =>
+        failInterruptedStart(row.id, row.init_stage ?? "fetch", {
+          message: cloud
+            ? "Deus closed before the cloud computer was ready."
+            : "Deus closed before this workspace was ready.",
+          detail: null,
+        });
+      if (cloud || !row.root_path || !row.git_branch || !OWNS_WORKTREE.has(row.init_stage ?? ""))
+        return fail();
       const { root_path, git_branch } = row;
-      void changeWorkspaceState(row.id, async () => {
+      return changeWorkspaceState(row.id, async () => {
         await removeWorktree(root_path, computeWorkspacePath(row), git_branch).catch((err) =>
           console.warn(`[WORKSPACE] Could not remove what ${row.id} left behind:`, err)
         );
-        if (!processGroupsStopped()) fail();
-      }).catch((err) => console.warn(`[WORKSPACE] Recovery failed for ${row.id}:`, err));
-    } else fail();
-    failed++;
+        return !processGroupsStopped() && fail();
+      });
+    })
+  );
+  for (const result of results) {
+    if (result.status === "rejected")
+      console.warn("[WORKSPACE] Could not recover an interrupted start:", result.reason);
   }
-  return failed;
+  return results.filter((result) => result.status === "fulfilled" && result.value).length;
 }

@@ -152,8 +152,8 @@ export function failInterruptedStart(
   workspaceId: string,
   stage: string,
   failure: StartFailure
-): void {
-  if (!attempts.has(workspaceId)) writeStartFailure(workspaceId, stage, failure);
+): boolean {
+  return !attempts.has(workspaceId) && writeStartFailure(workspaceId, stage, failure);
 }
 
 function writeStartFailure(workspaceId: string, stage: string, failure: StartFailure): boolean {
