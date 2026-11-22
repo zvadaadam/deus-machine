@@ -94,7 +94,7 @@ vi.mock("../../../src/services/workspace-checkout", () => ({
   },
   initializeWorkspace: async () => {},
 }));
-vi.mock("../../../src/services/settings.service", () => ({ getSetting: () => undefined }));
+vi.mock("../../../src/services/settings.service", () => ({ getSetting: vi.fn() }));
 vi.mock("../../../src/services/assistants/feedback", () => ({
   FEEDBACK_CATEGORIES: ["tool", "mcp", "ux", "docs", "model", "other"],
   FeedbackNotSent: class extends Error {},
@@ -129,6 +129,7 @@ import {
 import { persistSessionTitle } from "../../../src/services/agent/persistence";
 import { deleteFailedWorkspace } from "../../../src/services/workspace-lifecycle";
 import { createDeusHost } from "../../../src/services/assistants/host";
+import { getSetting } from "../../../src/services/settings.service";
 import { _resetOperator, withSessionTools } from "../../../src/services/assistants/operator";
 import { READ_ONLY } from "../../../src/services/assistants/sentences";
 import { assistantCaller, operations } from "../../helpers";
@@ -338,16 +339,11 @@ describe("sending and starting", () => {
     });
   });
 
-  it("quotes an empty list before creating a chat or sending a model-less continuation", async () => {
+  it("quotes an empty list before creating a workspace or a chat", async () => {
     const host = createDeusHost();
     const why = "The fixture CLI is signed out.";
     const read = vi.fn(() => ({
-      lists: ["codex-app-server", "gemini"].map((harness) => ({
-        harness,
-        models: [],
-        source: "catalog",
-        error: why,
-      })),
+      lists: [{ harness: "codex-app-server", models: [], source: "catalog", error: why }],
     }));
     state.ops.agentModels = read;
     const sessionsBefore = state.db.prepare("SELECT id FROM sessions").all();
@@ -369,20 +365,56 @@ describe("sending and starting", () => {
       ),
     });
     expect(state.db.prepare("SELECT id FROM sessions").all()).toEqual(sessionsBefore);
-    state.db.prepare("UPDATE sessions SET agent_harness = 'gemini' WHERE id = 's-lead'").run();
-    await expect(
-      host.send(LEAD as never, "s-lead", { turnId: "t", message: "continue", origin: LEAD })
-    ).rejects.toMatchObject({
-      code: "unsupported",
-      message: expect.stringContaining(
-        `("${why}"). Ask the person to install or sign in to the agent in Settings → AI. Nothing was sent.`
-      ),
-    });
     expect(read.mock.calls).toEqual([
       [{ harness: "codex-app-server", workspaceId: undefined }],
       [{ harness: "codex-app-server", workspaceId: "w-lead" }],
-      [{ harness: "gemini", workspaceId: "w-lead" }],
     ]);
+    expect(state.sent).toHaveLength(0);
+  });
+
+  it("sends to a fresh Codex chat on its catalog model and the person's thinking level while discovery is pending", async () => {
+    state.db
+      .prepare("UPDATE sessions SET agent_harness = 'codex-app-server' WHERE id = 's-lead'")
+      .run();
+    const pending = Promise.withResolvers<{ lists: [] }>();
+    const read = vi.fn(() => pending.promise);
+    state.ops.agentModels = read;
+    vi.mocked(getSetting).mockReturnValueOnce("ultra");
+    try {
+      const reply = await createOperator(createDeusHost()).call(
+        "send_message",
+        { session: "lead:1", message: "continue", wait: 0 },
+        assistantWho()
+      );
+      expect(reply).toMatch(/^sent to /);
+      expect(state.sent).toHaveLength(1);
+      expect(state.sent[0].input).toMatchObject({
+        model: defaultModelId(CATALOG_MODEL_LISTS, "codex-app-server"),
+        thinkingLevel: "ultra",
+      });
+      expect(read).not.toHaveBeenCalled();
+    } finally {
+      pending.resolve({ lists: [] });
+    }
+  });
+
+  it("refuses a follow-up before discovery when the chat has neither a recorded model nor a catalog model", async () => {
+    state.db.prepare("UPDATE sessions SET agent_harness = 'gemini' WHERE id = 's-lead'").run();
+    const read = vi.fn(state.ops.agentModels);
+    state.ops.agentModels = read;
+    await expect(
+      createOperator(createDeusHost()).call(
+        "send_message",
+        { session: "lead:1", message: "continue", wait: 0 },
+        assistantWho()
+      )
+    ).rejects.toMatchObject({
+      code: "unsupported",
+      message: expect.stringMatching(
+        /has not run a turn yet.*choose a model for Gemini in the chat.*start_session with a model.*Nothing was sent/
+      ),
+    });
+    expect(read).not.toHaveBeenCalled();
     expect(state.sent).toHaveLength(0);
   });
 

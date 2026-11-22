@@ -719,7 +719,7 @@ export function createDeusHost(): DeusHost {
         if (firsts.has(sessionId))
           throw new Refused({ code: "busy", sessions: [sessionId], state: "setting_up" });
         const { turns } = await run(sessions.messages, { sessionId, limit: 50 });
-        const settings = await continuedSettings(harness, turns, session.workspace_id);
+        const settings = continuedSettings(harness, turns);
         mayTouch(caller, sessionId);
         try {
           await sendMessage({ sessionId, content: message, turnId, ...settings }, origin);

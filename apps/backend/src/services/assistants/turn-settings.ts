@@ -91,26 +91,21 @@ export async function startSettings(
   };
 }
 
-export async function continuedSettings(
+export function continuedSettings(
   harness: AgentHarness,
-  turns: readonly SessionTurn[],
-  workspaceId: string
-): Promise<TurnSettings> {
+  turns: readonly SessionTurn[]
+): TurnSettings {
   const latest = latestTurnExecution(harness, turns);
-  if (latest?.model)
-    return {
-      agentHarness: harness,
-      model: latest.model,
-      thinkingLevel: continuedThinkingLevel(latest) ?? defaultThinking(),
-    };
-
-  const pick = await chooseModel(harness, workspaceId);
-  if (pick.reason !== undefined)
-    throw new OperatorError("unsupported", `send_message: ${pick.reason} Nothing was sent.`);
-  const fallback = defaultThinking();
+  // A fresh chat takes the catalog default because a send cannot wait for the account default its composer shows.
+  const model = latest?.model ?? defaultModelId(CATALOG_MODEL_LISTS, harness);
+  if (!model)
+    throw new OperatorError(
+      "unsupported",
+      `send_message: this chat has not run a turn yet. Ask the person to choose a model for ${HARNESSES[harness].label} in the chat, or use start_session with a model. Nothing was sent.`
+    );
   return {
     agentHarness: harness,
-    model: pick.model,
-    thinkingLevel: composerThinking(fallback, pick.levels, fallback),
+    model,
+    thinkingLevel: continuedThinkingLevel(latest) ?? defaultThinking(),
   };
 }
