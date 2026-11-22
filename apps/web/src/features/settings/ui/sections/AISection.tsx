@@ -9,9 +9,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { useAgentAuth, useAgentAuthEvents } from "../../api/settings.queries";
+import { useAgentAuth } from "../../api/settings.queries";
 import type { SettingsSectionProps } from "./types";
 import { readThinkingLevel } from "@shared/protocol";
+import { LOCAL_HARNESSES } from "@shared/harnesses";
 import { DEFAULT_THINKING_LEVEL } from "@/shared/agents";
 import { ProviderAccounts } from "./ProviderAccounts";
 import { LocalAgentRow } from "./LocalAgentRow";
@@ -23,7 +24,6 @@ export function AISection({
   cloudOnly = false,
 }: SettingsSectionProps & { cloudOnly?: boolean }) {
   const agentAuthQuery = useAgentAuth(!cloudOnly);
-  useAgentAuthEvents();
 
   if (cloudOnly) {
     return (
@@ -68,18 +68,13 @@ export function AISection({
           Local agents use their own CLI login. Cloud account defaults do not change it.
         </p>
       </div>
-      <LocalAgentRow
-        harness="claude-code"
-        title="Claude Code"
-        vendor="Anthropic"
-        state={readLocalAgent(agentAuthQuery, "claude-code")}
-      />
-      <LocalAgentRow
-        harness="codex-app-server"
-        title="Codex"
-        vendor="OpenAI"
-        state={readLocalAgent(agentAuthQuery, "codex-app-server")}
-      />
+      {LOCAL_HARNESSES.map((harness) => (
+        <LocalAgentRow
+          key={harness}
+          harness={harness}
+          state={readLocalAgent(agentAuthQuery, harness)}
+        />
+      ))}
       <div className="space-y-4">
         <Separator />
 

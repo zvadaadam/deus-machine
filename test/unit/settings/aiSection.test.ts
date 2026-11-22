@@ -10,7 +10,6 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("@/features/settings/api/settings.queries", () => ({
   useAgentAuth: () => ({ ...state, isLoading: false, isFetching: false, refetch: vi.fn() }),
-  useAgentAuthEvents: () => {},
 }));
 vi.mock("@/features/settings/ui/sections/ProviderAccounts", () => ({
   ProviderAccounts: () => null,
@@ -121,7 +120,7 @@ describe("local agent status", () => {
     (failure) => {
       state.data = { auth: [claude({}), codex], clis: ready, logins: [] };
       if (failure === "request") state.isError = true;
-      if (failure === "envelope") state.data.error = "Agent server not connected";
+      if (failure === "envelope") state.data.error = "Agent server is disconnected";
       if (failure === "unknown")
         state.data.auth[0] = claude({ state: "unknown", error: "timed out" });
       const html = render();

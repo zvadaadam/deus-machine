@@ -1,6 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { PassThrough } from "node:stream";
 import { Hono } from "hono";
+import { AgentServerDisconnectedError } from "../../../src/lib/errors";
 import { errorHandler } from "../../../src/middleware/error-handler";
 
 // The routes that are still fetched over HTTP. What the operations answer is
@@ -46,11 +47,11 @@ describe("GET /settings/agent-auth", () => {
 
   it("answers why the engine could not be asked, with a 200", async () => {
     vi.mocked(getLocalAgents).mockImplementation(() => {
-      throw new Error("Agent server not connected");
+      throw new AgentServerDisconnectedError();
     });
     const res = await app.request("/settings/agent-auth");
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ auth: [], error: "Agent server not connected" });
+    expect(await res.json()).toMatchObject({ auth: [], error: "Agent server is disconnected" });
   });
 });
 

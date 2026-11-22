@@ -21,6 +21,10 @@ class ToolRendererRegistry {
     this.renderers.set(toolName, renderer);
   }
 
+  has(toolName: string): boolean {
+    return this.renderers.has(toolName);
+  }
+
   /**
    * Set the default renderer (fallback for unknown tools)
    */

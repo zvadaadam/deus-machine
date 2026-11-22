@@ -309,6 +309,7 @@ export function SessionPanel({
             ref={composerRef}
             sessionId={sessionId}
             workspaceId={workspaceId}
+            workspaceKind={workspaceKind}
             workspacePath={workspacePath}
             targetBranch={workspaceParentBranch ?? undefined}
             initialModel={initialModel}
@@ -410,6 +411,7 @@ export function SessionPanel({
                   ref={composerRef}
                   sessionId={sessionId}
                   workspaceId={workspaceId}
+                  workspaceKind={workspaceKind}
                   workspacePath={workspacePath}
                   targetBranch={workspaceParentBranch ?? undefined}
                   initialModel={initialModel}

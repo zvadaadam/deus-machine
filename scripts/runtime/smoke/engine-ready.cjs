@@ -1,9 +1,9 @@
 // The backend runs the agent engine in its own process and, once its client
 // has initialized the engine, says which harnesses it registered:
-//   [AgentService] Engine started, agents: [claude-code, codex-app-server]
+//   [AgentService] Engine started, agents: [claude-code, codex-app-server, gemini]
 // (before it prints [BACKEND_PORT]).
 
-const DEFAULT_REQUIRED_HARNESSES = ["claude-code", "codex-app-server"];
+const DEFAULT_REQUIRED_HARNESSES = ["claude-code", "codex-app-server", "gemini"];
 const ENGINE_STARTED = /\[AgentService\] Engine started, agents: \[([^\]\n]*)\]/;
 
 function assertEngineStarted(output, requiredHarnesses = DEFAULT_REQUIRED_HARNESSES) {

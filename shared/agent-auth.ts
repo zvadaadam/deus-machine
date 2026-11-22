@@ -3,7 +3,6 @@
 // its login, read from the CLI, signed in through the CLI's own flow
 // (`auth/*`). Deus shows them and starts installs and sign-ins.
 import type {
-  AgentHarness,
   AuthLogin,
   AuthLoginEnd,
   HarnessAuth,
@@ -18,13 +17,6 @@ export type {
   HarnessCli,
   HarnessCliProgress,
 } from "@zvada/agent-server/protocol";
-
-/** The harnesses Deus runs on this computer. */
-export const LOCAL_HARNESSES = [
-  "claude-code",
-  "codex-app-server",
-] as const satisfies readonly AgentHarness[];
-export type LocalHarness = (typeof LOCAL_HARNESSES)[number];
 
 /** `agentAuth`: each harness's CLI and login, and the sign-ins under way. */
 export interface AgentAuthAnswer {

@@ -4,8 +4,7 @@
 // chat ran, one the other lane lists), so a picker never hides what is selected.
 
 import {
-  HARNESS_LABELS,
-  PICKER_HARNESSES,
+  findModel,
   modelLabel,
   modelValue,
   parseModelValue,
@@ -13,6 +12,20 @@ import {
   type HarnessModels,
 } from "@shared/models";
 import type { AgentHarness } from "@shared/enums";
+import { HARNESSES, knownHarness } from "@shared/harnesses";
+import type { ThinkingLevel } from "@shared/protocol";
+
+export interface PickerModelList extends HarnessModels {
+  /** The query's state while the lane has no answer. */
+  unanswered?: "pending" | "unavailable";
+}
+
+export function emptyModelList(list?: PickerModelList) {
+  if (list?.unanswered === "pending") return { message: "Reading models…", openSettings: false };
+  if (!list || list.unanswered === "unavailable")
+    return { message: "Could not read the model list.", openSettings: false };
+  return { message: list.error || "No models available.", openSettings: true };
+}
 
 export interface PickerOption {
   /** The picker value: `harness:model`. */
@@ -27,18 +40,26 @@ export interface PickerGroup {
   agentHarness: AgentHarness;
   label: string;
   options: PickerOption[];
+  empty?: ReturnType<typeof emptyModelList>;
 }
 
 export interface ModelPickerView {
   groups: PickerGroup[];
   /** The selected value as its group lists it; undefined when it names no harness. */
   selected?: PickerOption;
+  /** The selected model's declared levels, absent until its row is known. */
+  listedLevels?: readonly ThinkingLevel[];
 }
 
-export function modelPickerView(lists: readonly HarnessModels[], model: string): ModelPickerView {
-  const current = parseModelValue(model);
+export function modelPickerView(
+  lists: readonly PickerModelList[],
+  model: string | undefined
+): ModelPickerView {
+  const current = model ? parseModelValue(model) : undefined;
   let selected: PickerOption | undefined;
-  const groups = PICKER_HARNESSES.map((agentHarness): PickerGroup => {
+  const groups = lists.flatMap((list): PickerGroup[] => {
+    const agentHarness = knownHarness(list.harness);
+    if (!agentHarness) return [];
     const options = pickerModels(lists, agentHarness).map(
       (row): PickerOption => ({
         value: modelValue(agentHarness, row.id),
@@ -47,6 +68,7 @@ export function modelPickerView(lists: readonly HarnessModels[], model: string):
         agentHarness,
       })
     );
+    const empty = options.length ? undefined : emptyModelList(list);
     if (current?.harness === agentHarness) {
       selected = options.find((option) => option.value === modelValue(agentHarness, current.model));
       if (!selected) {
@@ -58,7 +80,9 @@ export function modelPickerView(lists: readonly HarnessModels[], model: string):
         options.unshift(selected);
       }
     }
-    return { agentHarness, label: HARNESS_LABELS[agentHarness], options };
+    return [{ agentHarness, label: HARNESSES[agentHarness].label, options, empty }];
   });
-  return { groups, selected };
+  const listedLevels =
+    current && findModel(lists, current.harness, current.model)?.row.thinking.levels;
+  return { groups, selected, listedLevels };
 }

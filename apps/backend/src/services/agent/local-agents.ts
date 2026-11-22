@@ -14,12 +14,9 @@ import {
   type HarnessAuth,
   type ModelList,
 } from "@zvada/agent-server/protocol";
-import {
-  LOCAL_HARNESSES,
-  type AgentAuthAnswer,
-  type AgentSignInAnswer,
-  type LocalHarness,
-} from "@shared/agent-auth";
+import type { AgentAuthAnswer, AgentSignInAnswer } from "@shared/agent-auth";
+import type { AgentHarness } from "@shared/enums";
+import { LOCAL_HARNESSES } from "@shared/harnesses";
 import { agentAuthChanges, agentCliProgress } from "@shared/api/settings";
 import { ValidationError } from "../../lib/errors";
 import { publish } from "../streams";
@@ -65,15 +62,16 @@ export class LocalAgents {
    * when a login changes). A CLI that does not answer gets the engine's own
    * catalog, with the reason. No `env`, as for `status`.
    */
-  models(cwd?: string): Promise<ModelList[]> {
+  models(cwd?: string, harness?: AgentHarness): Promise<ModelList[]> {
+    const harnesses = harness ? [harness] : LOCAL_HARNESSES;
     return Promise.all(
-      LOCAL_HARNESSES.map((harness) => this.client.listModels({ harness, ...(cwd && { cwd }) }))
+      harnesses.map((id) => this.client.listModels({ harness: id, ...(cwd && { cwd }) }))
     );
   }
 
-  /** Install the CLIs turns run, now: answered at once, the install told on `agentCliProgress`. */
-  prepareClis(): void {
-    this.client.prepareClis([...LOCAL_HARNESSES]).catch((error: unknown) => {
+  /** Start this agent's install. The engine reports progress on `agentCliProgress`. */
+  prepareCli(harness: AgentHarness): void {
+    this.client.prepareClis([harness]).catch((error: unknown) => {
       console.warn("[LocalAgents] CLI install failed:", error);
     });
   }
@@ -83,7 +81,7 @@ export class LocalAgents {
    * terminal's, another app's) is picked up and nothing opens. Otherwise the
    * CLI's own sign-in starts.
    */
-  async signIn(harness: LocalHarness, method: string, apiKey?: string): Promise<AgentSignInAnswer> {
+  async signIn(harness: AgentHarness, method: string, apiKey?: string): Promise<AgentSignInAnswer> {
     if (!apiKey) {
       const [auth] = await this.client.authStatus({ harnesses: [harness] });
       const chosen = auth?.methods.find((candidate) => candidate.id === method);
@@ -125,7 +123,7 @@ export class LocalAgents {
   }
 
   /** The CLI's own sign-out: the terminal's login too, as it is the same one. */
-  logout(harness: LocalHarness): Promise<HarnessAuth> {
+  logout(harness: AgentHarness): Promise<HarnessAuth> {
     return this.client.logout(harness);
   }
 

@@ -1,20 +1,25 @@
 // backend/src/services/assistants/turn-settings.ts
-// The agent, model, thinking level and permission mode an assistant's message
-// runs with: the ones the app's own composer would send to continue that chat
-// (apps/web: SessionComposer seeds the latest turn's model and thinking level,
-// with plan mode off).
+// The settings an operator's first message or follow-up takes to the engine.
 
+import { OperatorError, type StartInput } from "@zvada/agent-server/operator";
+import { agentModels } from "@shared/api/settings";
 import type { AgentHarness } from "@shared/enums";
+import { HARNESSES } from "@shared/harnesses";
 import {
+  CATALOG_MODEL_LISTS,
   DEFAULT_THINKING_LEVEL,
+  composerThinking,
   continuedThinkingLevel,
-  defaultModelValue,
+  findModel,
   latestTurnExecution,
-  modelValue,
-  parseModelValue,
+  defaultModelId,
+  modelForSession,
+  type HarnessModels,
 } from "@shared/models";
 import { readThinkingLevel, type ThinkingLevel } from "@shared/protocol";
 import type { SessionTurn } from "@shared/types/session";
+import { runAsThisComputer as run } from "../query-engine";
+import { getSetting } from "../settings.service";
 
 export interface TurnSettings {
   agentHarness: AgentHarness;
@@ -22,30 +27,83 @@ export interface TurnSettings {
   thinkingLevel: ThinkingLevel;
 }
 
-/**
- * - Agent: the chat's own (a chat keeps its agent once it has messages).
- * - Model and thinking: the ones its latest turn on that agent ran
- *   (`latestTurnExecution`); a chat with none starts on the agent's default
- *   model (`defaultModelValue`) and the person's default level (Settings, AI),
- *   else Deus's. The engine runs the nearest level the model has.
- * - Permission mode: none, the composer's own (plan mode off), so the agent
- *   runs with the full access Deus gives every chat.
- */
-export function turnSettings(
+function defaultThinking() {
+  return readThinkingLevel(getSetting("default_thinking_level")) ?? DEFAULT_THINKING_LEVEL;
+}
+
+/** Only a choice left to Deus can come from the catalog when the list cannot be read. */
+async function chooseModel(harness: AgentHarness, input: StartInput) {
+  let lists: readonly HarnessModels[];
+  try {
+    lists = (await run(agentModels, { harness, workspaceId: input.workspace?.id })).lists;
+  } catch {
+    if (!input.model && !input.thinkingLevel) {
+      const model = defaultModelId(CATALOG_MODEL_LISTS, harness);
+      if (model) return { model };
+    }
+    return { reason: "the model list could not be read right now." };
+  }
+  const own = lists.find((list) => list.harness === harness);
+  const fallback = defaultModelId(lists, harness);
+  if (!fallback) {
+    const why = own?.error ? ` (${JSON.stringify(own.error)})` : "";
+    return {
+      reason: `no models are available to choose for ${HARNESSES[harness].label}${why}. Ask the person to check the agent in Settings → AI Providers.`,
+    };
+  }
+  const model = input.model ?? fallback;
+  const row = findModel(lists, harness, model)?.row;
+  const levels = own?.source === "live" ? row?.thinking.levels : undefined;
+  return { model, row, levels };
+}
+
+export async function startSettings(
   harness: AgentHarness,
-  turns: readonly SessionTurn[],
-  defaultThinking: unknown
-): TurnSettings {
-  const latest = latestTurnExecution(harness, turns);
-  const selection =
-    (latest?.model && parseModelValue(modelValue(harness, latest.model))) ||
-    parseModelValue(defaultModelValue(harness))!;
+  input: StartInput
+): Promise<TurnSettings> {
+  const pick = await chooseModel(harness, input);
+  if (pick.reason !== undefined)
+    throw new OperatorError("unsupported", `start_session: ${pick.reason} Nothing was started.`);
+  const { model, row, levels } = pick;
+  if (input.model && !row)
+    throw new OperatorError(
+      "invalid_input",
+      `start_session: model: ${JSON.stringify(input.model)} is not one ${harness} offers here; list_models names them. Nothing was started.`
+    );
+  const level = input.thinkingLevel;
+  if (
+    level &&
+    levels &&
+    !levels.includes(level) &&
+    !(level === "off" && HARNESSES[harness].acceptsUnlistedOff)
+  )
+    throw new OperatorError(
+      "invalid_input",
+      `start_session: thinking: ${JSON.stringify(level)} is not a level ${model} offers; ${levels.length ? `its levels are ${levels.map((l) => JSON.stringify(l)).join(", ")}` : "it has no thinking levels"}. Nothing was started.`
+    );
+  const fallback = defaultThinking();
   return {
-    agentHarness: selection.harness,
-    model: selection.model,
-    thinkingLevel:
-      continuedThinkingLevel(latest) ??
-      readThinkingLevel(defaultThinking) ??
-      DEFAULT_THINKING_LEVEL,
+    agentHarness: harness,
+    model,
+    thinkingLevel: level ?? composerThinking(fallback, levels, fallback),
+  };
+}
+
+export function continuedSettings(
+  harness: AgentHarness,
+  turns: readonly SessionTurn[]
+): TurnSettings {
+  // The operator does not pass its cutoff, so a send falls back to the catalog, the only list that needs no read.
+  const model = modelForSession(harness, turns, CATALOG_MODEL_LISTS);
+  if (!model)
+    throw new OperatorError(
+      "unsupported",
+      `send_message: this chat has no recorded model. Ask the person to choose a model for ${HARNESSES[harness].label} in the chat, or use start_session with a model. Nothing was sent.`
+    );
+  const latest = latestTurnExecution(harness, turns);
+  return {
+    agentHarness: harness,
+    model,
+    thinkingLevel: continuedThinkingLevel(latest) ?? defaultThinking(),
   };
 }

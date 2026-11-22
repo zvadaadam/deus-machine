@@ -54,14 +54,13 @@ import * as sessions from "@shared/api/sessions";
 import { agentModels } from "@shared/api/settings";
 import { uuidv7 } from "@shared/lib/uuid";
 import * as workspaces from "@shared/api/workspaces";
-import { ACTIVE_TURN_STATUSES, type AgentHarness } from "@shared/enums";
+import { ACTIVE_TURN_STATUSES } from "@shared/enums";
+import { HARNESSES, knownHarness } from "@shared/harnesses";
 import { githubRepoSlug } from "@shared/git-origin";
 import {
   CATALOG_MODEL_LISTS,
   DEFAULT_AGENT_HARNESS,
-  HARNESS_LABELS,
   defaultModelId,
-  findModel,
   harnessNamed,
   pickerModels,
 } from "@shared/models";
@@ -84,9 +83,8 @@ import { answer as answerToolRequest, pendingFor } from "../agent/tool-relay";
 import { sendMessage, stopSession } from "../agent/turns";
 import { invalidate, onInvalidate, runAsThisComputer as run } from "../query-engine";
 import { getServerName } from "../server-name";
-import { getSetting } from "../settings.service";
 import { assertMayWrite, refusalFor, storedAccess } from "./access";
-import { turnSettings } from "./turn-settings";
+import { continuedSettings, startSettings, type TurnSettings } from "./turn-settings";
 import { replyFor, waitingOf } from "./waiting";
 
 /** How long a first task waits for its workspace to be ready. */
@@ -195,6 +193,7 @@ interface Held {
   caller: Who;
   workspaceId: string;
   input: StartInput;
+  settings: TurnSettings;
   unwatch: () => void;
   /** When it was held: one held past SETUP_LIMIT_MS is not sent. */
   since: number;
@@ -255,9 +254,9 @@ export const whereSentence = () =>
   `These are the coding agents on the computer ${JSON.stringify(getServerName())} itself: its own workspaces and their chats. Cloud workspaces are not listed here.`;
 
 /** The agents a start may name, as a refusal lists them: `"claude-code" (Claude Code) and …`. */
-const AGENT_NAMES = Object.entries(HARNESS_LABELS)
-  .map(([id, label]) => `${JSON.stringify(id)} (${label})`)
-  .join(" and ");
+const AGENT_NAMES = new Intl.ListFormat("en").format(
+  Object.entries(HARNESSES).map(([id, { label }]) => `${JSON.stringify(id)} (${label})`)
+);
 
 /** What a chat the host could not deliver its first task to says, the reason kept safe. */
 const NOT_DELIVERED = "Its first task could not be delivered.";
@@ -351,7 +350,7 @@ export function createDeusHost(): DeusHost {
           current: row.current_session_id ? row.current_session_id === id : chat === 1,
           status,
           startedBy: readOrigin(row.s_started_by ?? (row.session_id ? null : row.ws_started_by)),
-          ...(row.agent_harness ? { harness: row.agent_harness as AgentHarness } : {}),
+          harness: knownHarness(row.agent_harness),
           ...(title ? { title } : {}),
           ...(activity ? { lastActivityAt: activity } : {}),
           ...(status === "error" && error ? { error } : {}),
@@ -421,22 +420,21 @@ export function createDeusHost(): DeusHost {
       throw new Refused({ code: "archived", sessions: [sessionId] });
   }
 
-  /**
-   * An archive may be made now: the caller allowed; no member being set up or
-   * still working or waiting (a stop must be confirmed first; `not_yours` for
-   * one the caller did not start); no member that started a session not
-   * archived, in its own workspace or another, lineage as the package reads it.
-   */
+  /** A busy refusal lets the operator stop the caller's turns. Check everything a stop cannot change first. */
   function mayArchive(caller: Who, members: readonly Entry[], all: readonly Entry[]) {
     assertMayWrite(appCaller(caller));
-    for (const m of members) {
-      if (m.status === "setting_up")
-        throw new Refused({ code: "busy", sessions: [m.id], state: "setting_up" });
-      if (m.status === "working" || m.status === "needs_input") {
-        const code = sameOrigin(m.startedBy, originOf(caller)) ? "busy" : "not_yours";
-        throw new Refused({ code, sessions: [m.id], state: m.status });
-      }
-    }
+    const starting = members.find((m) => m.status === "setting_up");
+    if (starting) throw new Refused({ code: "busy", sessions: [starting.id], state: "setting_up" });
+    const active = members.filter((m) => m.status === "working" || m.status === "needs_input");
+    const origin = originOf(caller);
+    const others = active.filter((m) => !sameOrigin(m.startedBy, origin));
+    if (others.length)
+      throw new Refused({
+        code: "not_yours",
+        sessions: others.map((m) => m.id),
+        state: others[0]!.status,
+      });
+
     const ids = new Set(members.map((m) => m.id));
     const children = all.filter(
       (e) =>
@@ -444,36 +442,29 @@ export function createDeusHost(): DeusHost {
     );
     if (children.length)
       throw new Refused({ code: "has_children", sessions: children.map((c) => c.id) });
+    // The operator words the refusal for the first named member and checks each turn before stopping it.
+    if (active.length)
+      throw new Refused({
+        code: "busy",
+        sessions: active.map((m) => m.id),
+        state: active[0]!.status,
+      });
   }
 
   // ---- the first task ---------------------------------------------------------------
-
-  /** The turn settings a chat's first message runs with: what the start named, else the composer's defaults. */
-  function settingsFor(input: StartInput) {
-    // By its id or as people say it ("Claude", "claude code", "Codex").
-    const harness =
-      input.harness === undefined ? DEFAULT_AGENT_HARNESS : harnessNamed(input.harness);
-    if (!harness)
-      throw new OperatorError(
-        "invalid_input",
-        `start_session: agent: ${JSON.stringify(input.harness)} does not run here; the agents are ${AGENT_NAMES}. Nothing was started.`
-      );
-    const defaults = turnSettings(harness, [], getSetting("default_thinking_level"));
-    return {
-      agentHarness: harness,
-      model: input.model ?? defaults.model,
-      thinkingLevel: input.thinkingLevel ?? defaults.thinkingLevel,
-    };
-  }
 
   /**
    * Send a chat's first task as the turn the package minted, with its title;
    * one that cannot be delivered leaves the chat in error, with a safe reason
    * its entry and view show.
    */
-  async function sendFirst(caller: Who, sessionId: string, input: StartInput) {
+  async function sendFirst(
+    caller: Who,
+    sessionId: string,
+    input: StartInput,
+    settings: TurnSettings
+  ) {
     try {
-      const settings = settingsFor(input);
       mayTouch(caller, sessionId);
       if (input.title) {
         // The chat takes it; its workspace only when this is its first chat (a side chat
@@ -536,7 +527,7 @@ export function createDeusHost(): DeusHost {
           return;
         }
         entry.unwatch();
-        entry.sending = sendFirst(held.caller, sessionId, held.input)
+        entry.sending = sendFirst(held.caller, sessionId, held.input, held.settings)
           .catch(() => {})
           .finally(() => {
             firsts.delete(sessionId);
@@ -713,15 +704,16 @@ export function createDeusHost(): DeusHost {
         const session = getSessionRaw(getDatabase(), sessionId);
         if (!session)
           throw new OperatorError("not_found", "That session is gone. Nothing was sent.");
+        const harness = knownHarness(session.agent_harness);
+        if (!harness)
+          throw new OperatorError(
+            "unsupported",
+            `send_message: this chat's agent ${JSON.stringify(session.agent_harness)} does not run here. Nothing was sent.`
+          );
         if (firsts.has(sessionId))
           throw new Refused({ code: "busy", sessions: [sessionId], state: "setting_up" });
-        // As the chat's composer would continue it: its latest turn's model and thinking.
         const { turns } = await run(sessions.messages, { sessionId, limit: 50 });
-        const settings = turnSettings(
-          session.agent_harness as AgentHarness,
-          turns,
-          getSetting("default_thinking_level")
-        );
+        const settings = continuedSettings(harness, turns);
         mayTouch(caller, sessionId);
         try {
           await sendMessage({ sessionId, content: message, turnId, ...settings }, origin);
@@ -751,36 +743,15 @@ export function createDeusHost(): DeusHost {
           );
         }
         // The agent, model and thinking level before anything is made.
-        const { agentHarness, model } = settingsFor(input);
-        if (input.model || input.thinkingLevel) {
-          const lists = await run(agentModels, {}).then((answer) => answer.lists);
-          const own = lists.find((l) => l.harness === agentHarness);
-          const known = own?.models.length ? lists : CATALOG_MODEL_LISTS;
-          if (input.model && !findModel(known, agentHarness, model))
-            throw new OperatorError(
-              "invalid_input",
-              `start_session: model: ${JSON.stringify(input.model)} is not one ${agentHarness} offers here; list_models names them. Nothing was started.`
-            );
-          // Levels are judged only by what this computer's CLI listed: a catalog's are
-          // provisional. Claude's `off` is not judged: it reads it as no extended thinking
-          // on any model, though its rows list only effort levels. Codex lists `off` where
-          // a model takes it, and runs an unlisted one as another level, so it is judged.
-          const levels =
-            own?.source === "live"
-              ? findModel(lists, agentHarness, model)?.row.thinking.levels
-              : undefined;
-          const level = input.thinkingLevel;
-          if (
-            level &&
-            levels &&
-            !levels.includes(level) &&
-            !(level === "off" && agentHarness === "claude-code")
-          )
-            throw new OperatorError(
-              "invalid_input",
-              `start_session: thinking: ${JSON.stringify(level)} is not a level ${model} offers; ${levels.length ? `its levels are ${levels.map((l) => JSON.stringify(l)).join(", ")}` : "it has no thinking levels"}. Nothing was started.`
-            );
-        }
+        // By its id or as people say it ("Claude", "claude code", "Codex").
+        const harness =
+          input.harness === undefined ? DEFAULT_AGENT_HARNESS : harnessNamed(input.harness);
+        if (!harness)
+          throw new OperatorError(
+            "invalid_input",
+            `start_session: agent: ${JSON.stringify(input.harness)} does not run here; the agents are ${AGENT_NAMES}. Nothing was started.`
+          );
+        const settings = await startSettings(harness, input);
         if (input.workspace) {
           const workspaceId = input.workspace.id;
           const sessionId = uuidv7();
@@ -789,7 +760,7 @@ export function createDeusHost(): DeusHost {
           db.transaction(() => {
             db.prepare(
               "INSERT INTO sessions (id, workspace_id, status, agent_harness, started_by, updated_at) VALUES (?, ?, 'idle', ?, ?, datetime('now'))"
-            ).run(sessionId, workspaceId, agentHarness, encodeOrigin(input.origin));
+            ).run(sessionId, workspaceId, harness, encodeOrigin(input.origin));
             db.prepare("UPDATE workspaces SET current_session_id = ? WHERE id = ?").run(
               sessionId,
               workspaceId
@@ -797,7 +768,7 @@ export function createDeusHost(): DeusHost {
           })();
           invalidate(["workspaces", "sessions"]);
           // Made: a first task that cannot be delivered is the chat's error, not a refusal.
-          await sendFirst(caller, sessionId, input).catch(() => {});
+          await sendFirst(caller, sessionId, input, settings).catch(() => {});
           return entryById(sessionId)!;
         }
         mayStart(caller, input);
@@ -805,7 +776,7 @@ export function createDeusHost(): DeusHost {
           { repository_id: input.project.id },
           { startedBy: input.origin, admit: () => mayStart(caller, input) }
         );
-        hold(firstSessionId, { caller, workspaceId, input });
+        hold(firstSessionId, { caller, workspaceId, input, settings });
         return entryById(firstSessionId)!;
       }),
 

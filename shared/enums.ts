@@ -7,6 +7,7 @@
 // Both are exported from this file.
 
 import { z } from "zod";
+import { LOCAL_HARNESSES } from "./harnesses";
 
 // ── Session ──────────────────────────────────────────────────────────────
 
@@ -92,7 +93,7 @@ export const STATUS_RANK: Record<WorkspaceStatus, number> = {
  *
  * Display names ("Claude", "Codex") are a frontend concern, never wire values.
  */
-export const AgentHarnessSchema = z.enum(["claude-code", "codex-app-server"]);
+export const AgentHarnessSchema = z.enum(LOCAL_HARNESSES);
 export type AgentHarness = z.infer<typeof AgentHarnessSchema>;
 
 // ── Automations ──────────────────────────────────────────────────────────

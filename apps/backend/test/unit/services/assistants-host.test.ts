@@ -6,10 +6,12 @@
 
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { z } from "zod";
 import { WireRequestError } from "@zvada/agent-server/client";
+import { createOperator } from "@zvada/agent-server/operator";
 import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
-import { CATALOG_MODEL_LISTS } from "@shared/models";
-import type { AnyOp } from "@shared/api/op";
+import { CATALOG_MODEL_LISTS, defaultModelId } from "@shared/models";
+import type { Op } from "@shared/api/op";
 import { SCHEMA_SQL } from "@shared/schema";
 
 const state = vi.hoisted(() => ({
@@ -36,10 +38,10 @@ const state = vi.hoisted(() => ({
 
 vi.mock("../../../src/lib/database", () => ({ getDatabase: () => state.db }));
 vi.mock("../../../src/services/query-engine", () => ({
-  runAsThisComputer: async (op: AnyOp, input: Record<string, unknown>) => {
+  runAsThisComputer: async (op: Op<string, z.ZodObject>, input: unknown) => {
     const answer = state.ops[op.name];
     if (!answer) throw new Error(`no stand-in for ${op.name}`);
-    return answer(input ?? {});
+    return answer(op.input.parse(input ?? {}));
   },
   onInvalidate: (listener: (resources: readonly string[]) => void) => {
     state.listeners.add(listener);
@@ -92,7 +94,7 @@ vi.mock("../../../src/services/workspace-checkout", () => ({
   },
   initializeWorkspace: async () => {},
 }));
-vi.mock("../../../src/services/settings.service", () => ({ getSetting: () => undefined }));
+vi.mock("../../../src/services/settings.service", () => ({ getSetting: vi.fn() }));
 vi.mock("../../../src/services/assistants/feedback", () => ({
   FEEDBACK_CATEGORIES: ["tool", "mcp", "ux", "docs", "model", "other"],
   FeedbackNotSent: class extends Error {},
@@ -127,6 +129,7 @@ import {
 import { persistSessionTitle } from "../../../src/services/agent/persistence";
 import { deleteFailedWorkspace } from "../../../src/services/workspace-lifecycle";
 import { createDeusHost } from "../../../src/services/assistants/host";
+import { getSetting } from "../../../src/services/settings.service";
 import { _resetOperator, withSessionTools } from "../../../src/services/assistants/operator";
 import { READ_ONLY } from "../../../src/services/assistants/sentences";
 import { assistantCaller, operations } from "../../helpers";
@@ -238,7 +241,7 @@ beforeEach(() => {
     archiveWorkspace: ({ workspaceId }) => {
       state.db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
     },
-    agentModels: () => ({ lists: [] }),
+    agentModels: () => ({ lists: CATALOG_MODEL_LISTS }),
   };
   state.listeners.clear();
   state.live.clear();
@@ -306,6 +309,161 @@ describe("chats as sessions", () => {
 });
 
 describe("sending and starting", () => {
+  it("resolves the account's default and thinking once before a held first delivery", async () => {
+    const host = createDeusHost();
+    const harness = "codex-app-server";
+    const lists = [
+      {
+        harness,
+        source: "live",
+        models: ["first", "account-pick"].map((id) => ({
+          harness,
+          id,
+          label: id,
+          isDefault: id === "account-pick",
+          thinking: { levels: ["low", "medium"] },
+        })),
+      },
+    ];
+    const read = vi.fn(() => ({ lists }));
+    state.ops.agentModels = read;
+    const entry = await host.start!(LEAD as never, startInput({ harness }));
+    expect(read).toHaveBeenCalledExactlyOnceWith({ harness, workspaceId: undefined });
+    ready(entry);
+    await vi.waitFor(() => expect(state.sent).toHaveLength(1));
+    expect(read).toHaveBeenCalledOnce();
+    expect(state.sent[0].input).toMatchObject({
+      agentHarness: harness,
+      model: "account-pick",
+      thinkingLevel: "medium",
+    });
+  });
+
+  it("quotes an empty list before creating a workspace or a chat", async () => {
+    const host = createDeusHost();
+    const why = "The CLI timed out while reading models.";
+    const read = vi.fn(() => ({
+      lists: [{ harness: "codex-app-server", models: [], source: "catalog", error: why }],
+    }));
+    state.ops.agentModels = read;
+    const sessionsBefore = state.db.prepare("SELECT id FROM sessions").all();
+    await expect(
+      host.start!(LEAD as never, startInput({ harness: "Codex" }))
+    ).rejects.toMatchObject({
+      code: "unsupported",
+    });
+    expect(state.created).toBe(0);
+    await expect(
+      host.start!(
+        LEAD as never,
+        startInput({ harness: "Codex", workspace: { id: "w-lead", name: "lead" } })
+      )
+    ).rejects.toMatchObject({
+      code: "unsupported",
+      message: expect.stringContaining(
+        `no models are available to choose for Codex ("${why}"). Ask the person to check the agent in Settings → AI Providers. Nothing was started.`
+      ),
+    });
+    expect(state.db.prepare("SELECT id FROM sessions").all()).toEqual(sessionsBefore);
+    expect(read.mock.calls).toEqual([
+      [{ harness: "codex-app-server", workspaceId: undefined }],
+      [{ harness: "codex-app-server", workspaceId: "w-lead" }],
+    ]);
+    expect(state.sent).toHaveLength(0);
+  });
+
+  it("sends to a fresh Codex chat on its catalog model and the person's thinking level while discovery is pending", async () => {
+    state.db
+      .prepare("UPDATE sessions SET agent_harness = 'codex-app-server' WHERE id = 's-lead'")
+      .run();
+    const pending = Promise.withResolvers<{ lists: [] }>();
+    const read = vi.fn(() => pending.promise);
+    state.ops.agentModels = read;
+    vi.mocked(getSetting).mockReturnValueOnce("ultra");
+    try {
+      const reply = await createOperator(createDeusHost()).call(
+        "send_message",
+        { session: "lead:1", message: "continue", wait: 0 },
+        assistantWho()
+      );
+      expect(reply).toMatch(/^sent to /);
+      expect(state.sent).toHaveLength(1);
+      expect(state.sent[0].input).toMatchObject({
+        model: defaultModelId(CATALOG_MODEL_LISTS, "codex-app-server"),
+        thinkingLevel: "ultra",
+      });
+      expect(read).not.toHaveBeenCalled();
+    } finally {
+      pending.resolve({ lists: [] });
+    }
+  });
+
+  it("refuses a follow-up before discovery when the chat has neither a recorded model nor a catalog model", async () => {
+    state.db.prepare("UPDATE sessions SET agent_harness = 'gemini' WHERE id = 's-lead'").run();
+    const read = vi.fn(state.ops.agentModels);
+    state.ops.agentModels = read;
+    await expect(
+      createOperator(createDeusHost()).call(
+        "send_message",
+        { session: "lead:1", message: "continue", wait: 0 },
+        assistantWho()
+      )
+    ).rejects.toMatchObject({
+      code: "unsupported",
+      message: expect.stringMatching(
+        /has no recorded model.*choose a model for Gemini in the chat.*start_session with a model.*Nothing was sent/
+      ),
+    });
+    expect(read).not.toHaveBeenCalled();
+    expect(state.sent).toHaveLength(0);
+  });
+
+  it("refuses to deliver to an unknown stored agent before reading settings or sending", async () => {
+    state.db
+      .prepare("UPDATE sessions SET agent_harness = 'future-agent' WHERE id = 's-lead'")
+      .run();
+    const host = createDeusHost();
+    const read = vi.fn(state.ops.agentModels);
+    state.ops.agentModels = read;
+    const history = vi.fn(state.ops.messages);
+    state.ops.messages = history;
+    await expect(
+      createOperator(host).call(
+        "send_message",
+        { session: "lead:1", message: "continue", wait: 0 },
+        assistantWho()
+      )
+    ).rejects.toMatchObject({
+      code: "unsupported",
+      message: expect.stringContaining('"future-agent" does not run here. Nothing was sent.'),
+    });
+    // The operator views the chat at preflight. The host's settings read asks for its last 50.
+    expect(history).not.toHaveBeenCalledWith(expect.objectContaining({ limit: 50 }));
+    expect(read).not.toHaveBeenCalled();
+    expect(state.sent).toHaveLength(0);
+  });
+
+  it("continues on the recorded model and thinking without asking for a list", async () => {
+    const host = createDeusHost();
+    const read = vi.fn();
+    state.ops.agentModels = read;
+    state.ops.messages = () => ({
+      turns: [
+        {
+          turnId: "t0",
+          execution: { harness: "claude-code", model: "older-model", thinkingLevel: "low" },
+        },
+      ],
+    });
+    await host.send(LEAD as never, "s-lead", { turnId: "t1", message: "continue", origin: LEAD });
+    expect(read).not.toHaveBeenCalled();
+    expect(state.sent[0].input).toMatchObject({
+      agentHarness: "claude-code",
+      model: "older-model",
+      thinkingLevel: "low",
+    });
+  });
+
   it("a send is the app's, with the minted turn id and the sender; a busy chat is refused as busy", async () => {
     const host = createDeusHost();
     await host.send(LEAD as never, "s-lead", { turnId: "t9", message: "hi", origin: LEAD });
@@ -498,6 +656,72 @@ describe("archiving one chat (the owner's ruling, 2026-11-20)", () => {
   });
 });
 
+describe("archiving a workspace with a running turn", () => {
+  const caller = {
+    ...LEAD,
+    turnId: "lead-turn",
+    harness: "claude-code",
+    permissionMode: "bypass_permissions",
+  } as const;
+  const target = { kind: "workspace", id: "w-work" } as const;
+  const worker = { kind: "session", sessionId: "s-work" } as const;
+  beforeEach(() => {
+    insertWorkspace("w-work", "work", { startedBy: LEAD });
+    insertChat("s-work", "w-work", LEAD);
+    state.live.set("s-work", "first");
+  });
+
+  it("refuses an unarchived child before asking to stop its parent", async () => {
+    insertChat("s-child", "w-lead", worker);
+    await expect(createDeusHost().archive!(caller, target)).rejects.toMatchObject({
+      refusal: { code: "has_children", sessions: ["s-child"] },
+    });
+  });
+
+  it("refuses another starter's working chat before asking to stop the caller's chat", async () => {
+    insertChat("s-other", "w-work");
+    state.live.set("s-other", "other-turn");
+    await expect(createDeusHost().archive!(caller, target)).rejects.toMatchObject({
+      refusal: { code: "not_yours", sessions: ["s-other"], state: "working" },
+    });
+  });
+
+  it.each(["working", "needs_input"])(
+    "names both of the caller's active chats when the first is %s",
+    async (status) => {
+      insertChat("s-second", "w-work", LEAD);
+      state.live.set("s-second", "second");
+      if (status === "needs_input") {
+        state.pending.push({
+          sessionId: "s-work",
+          requestId: "plan",
+          method: "exitPlanMode",
+          params: {},
+        });
+      }
+      await expect(createDeusHost().archive!(caller, target)).rejects.toMatchObject({
+        refusal: { code: "busy", sessions: ["s-work", "s-second"], state: status },
+      });
+    }
+  );
+
+  it("the operator leaves the turn running if a child starts between preflight and commit", async () => {
+    const host = createDeusHost();
+    const archive = host.archive!;
+    vi.spyOn(host, "archive").mockImplementationOnce((who, subject) => {
+      insertChat("s-child", "w-lead", worker);
+      return archive(who, subject);
+    });
+    await expect(
+      createOperator(host).call("archive", { workspaces: ["work"] }, caller)
+    ).rejects.toMatchObject({
+      code: "has_children",
+    });
+    expect(state.stopped).toEqual([]);
+    expect(state.live.get("s-work")).toBe("first");
+  });
+});
+
 describe("through MCP and as a chat's own tools", () => {
   const mcp = (message: unknown, caller: Caller) =>
     operations(handlers, caller)(api.agentMcp, { message }) as Promise<any>;
@@ -551,17 +775,85 @@ describe("through MCP and as a chat's own tools", () => {
     expect(text).not.toContain("Restart Deus");
   });
 
-  it("lists the engine's built-in models when the engine cannot answer", async () => {
+  it("lists catalog models and uses the catalog default for starts and sends when the engine is down", async () => {
     state.ops.agentModels = () => {
-      throw new Error("Agent server not connected");
+      throw new AgentServerDisconnectedError();
     };
     const { text, isError } = await call(LOCAL_CALLER, "list_models", {});
     expect(isError).toBe(false);
-    for (const { harness, models } of CATALOG_MODEL_LISTS) {
+    for (const {
+      harness,
+      models: [first],
+    } of CATALOG_MODEL_LISTS) {
+      if (!first) continue;
       expect(text).toContain(harness);
-      expect(text).toContain(models[0]!.id);
+      expect(text).toContain(first.id);
     }
+    const operator = createOperator(createDeusHost());
+    const who = assistantWho();
+    expect(
+      await operator.call(
+        "start_session",
+        { project: "demo-shop", workspace: "lead", message: "go", wait: 0 },
+        who
+      )
+    ).toContain('started "lead:');
+    await operator.call("send_message", { session: "lead:1", message: "continue", wait: 0 }, who);
+    const model = defaultModelId(CATALOG_MODEL_LISTS, "claude-code");
+    expect(state.sent.map((s) => s.input.model)).toEqual([model, model]);
   });
+
+  it.each([
+    { model: "opus" },
+    { thinking: "high" },
+    { agent: "Gemini" },
+    { agent: "Gemini", model: "gemini-4-neon" },
+  ])(
+    "refuses a start when the list read fails and the catalog cannot choose for it: %o",
+    async (choice) => {
+      state.ops.agentModels = () => {
+        throw new Error("Model-list request timed out");
+      };
+      const before = state.db.prepare("SELECT id FROM sessions").all();
+      await expect(
+        createOperator(createDeusHost()).call(
+          "start_session",
+          { project: "demo-shop", workspace: "lead", message: "go", ...choice },
+          assistantWho()
+        )
+      ).rejects.toMatchObject({
+        code: "unsupported",
+        message:
+          "refused (unsupported): start_session: the model list could not be read right now. Nothing was started.",
+      });
+      expect(state.db.prepare("SELECT id FROM sessions").all()).toEqual(before);
+      expect(state.sent).toHaveLength(0);
+    }
+  );
+
+  it.each([{}, { model: "gemini-4-neon" }])(
+    "explains an empty agent list before judging the requested model: %o",
+    async (choice) => {
+      state.ops.agentModels = () => ({
+        lists: [{ harness: "gemini", source: "catalog", models: [], error: "Sign-in required." }],
+      });
+      const before = state.db.prepare("SELECT id FROM sessions").all();
+      await expect(
+        createOperator(createDeusHost()).call(
+          "start_session",
+          { project: "demo-shop", workspace: "lead", agent: "Gemini", message: "go", ...choice },
+          assistantWho()
+        )
+      ).rejects.toMatchObject({
+        code: "unsupported",
+        message: expect.stringMatching(
+          /Sign-in required.*Settings → AI Providers.*Nothing was started/
+        ),
+      });
+      expect(state.db.prepare("SELECT id FROM sessions").all()).toEqual(before);
+      expect(state.sent).toHaveLength(0);
+    }
+  );
 
   it("retains the unknown outcome of unclassified wire errors", async () => {
     const args = { session: "lead:1", message: "go", wait: 1 };
@@ -969,12 +1261,12 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     await expect(
       host.start!(
         LEAD as never,
-        startInput({ workspace: { id: "w-lead", name: "lead" }, harness: "Gemini" })
+        startInput({ workspace: { id: "w-lead", name: "lead" }, harness: "gpt-pilot" })
       )
     ).rejects.toMatchObject({
       code: "invalid_input",
       message:
-        'refused (invalid_input): start_session: agent: "Gemini" does not run here; the agents are "claude-code" (Claude Code) and "codex-app-server" (Codex). Nothing was started.',
+        'refused (invalid_input): start_session: agent: "gpt-pilot" does not run here; the agents are "claude-code" (Claude Code), "codex-app-server" (Codex), and "gemini" (Gemini). Nothing was started.',
     });
   });
 
@@ -1107,6 +1399,80 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     await expect(start("gpt-5-mini")).resolves.toMatchObject({ workspace: { name: "lead" } });
     expect(state.sent.at(-1)).toMatchObject({
       input: { model: "gpt-5-mini", thinkingLevel: "off" },
+    });
+  });
+
+  it("accepts a window suffix for Claude and refuses an unlisted Gemini variant before making a chat", async () => {
+    const operator = createOperator(createDeusHost());
+    const start = (agent: string, model: string) =>
+      operator.call(
+        "start_session",
+        {
+          project: "demo-shop",
+          workspace: "lead",
+          message: "go",
+          agent,
+          model,
+          wait: 0,
+        },
+        assistantWho()
+      );
+    await expect(start("Claude", "opus[1m]")).resolves.toContain('started "lead:');
+    expect(state.sent.at(-1)?.input.model).toBe("opus[1m]");
+    const before = state.db.prepare("SELECT id FROM sessions").all();
+    state.ops.agentModels = () => ({
+      lists: [
+        {
+          harness: "gemini",
+          source: "live",
+          models: [
+            {
+              id: "gemini-4-neon",
+              harness: "gemini",
+              label: "Gemini 4 Neon",
+              thinking: { levels: ["low"] },
+            },
+          ],
+        },
+      ],
+    });
+    await expect(start("Gemini", "gemini-4-neon[1m]")).rejects.toMatchObject({
+      code: "invalid_input",
+      message: expect.stringContaining('"gemini-4-neon[1m]" is not one gemini offers here'),
+    });
+    expect(state.db.prepare("SELECT id FROM sessions").all()).toEqual(before);
+    expect(state.sent).toHaveLength(1);
+  });
+
+  it("starts Gemini on the account's default and judges off against its live list", async () => {
+    const host = createDeusHost();
+    state.ops.agentModels = () => ({
+      lists: [
+        {
+          harness: "gemini",
+          source: "live",
+          models: [
+            {
+              id: "gemini-4-neon",
+              harness: "gemini",
+              label: "Gemini 4 Neon",
+              isDefault: true,
+              thinking: { levels: ["low", "medium", "high", "xhigh"], default: "high" },
+            },
+          ],
+        },
+      ],
+    });
+    const input = { workspace: { id: "w-lead", name: "lead" }, harness: "gemini" };
+    await expect(
+      host.start!(LEAD as never, startInput({ ...input, thinkingLevel: "off" }))
+    ).rejects.toMatchObject({
+      code: "invalid_input",
+      message: expect.stringContaining('"off" is not a level gemini-4-neon offers'),
+    });
+    await host.start!(LEAD as never, startInput(input));
+    expect(state.sent.at(-1)).toMatchObject({
+      input: { agentHarness: "gemini", model: "gemini-4-neon" },
     });
   });
 

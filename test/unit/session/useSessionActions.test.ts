@@ -1,6 +1,10 @@
 import { QueryClient, type MutationObserverOptions } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useSessionActions } from "@/features/session/hooks/useSessionActions";
+import {
+  emptyComposer,
+  sessionComposerActions,
+} from "@/features/session/store/sessionComposerStore";
 import { registerDirectSession } from "@/features/session/cloud/directSessionRegistry";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { api } from "@shared/api";
@@ -176,6 +180,32 @@ describe("backend prompt delivery", () => {
       provider_session_id: null,
     }));
   }
+
+  it("sends with the newly picked agent even when the previous model had Plan on", async () => {
+    sessionComposerActions.seedIfAbsent(SESSION, emptyComposer("claude-code:opus", "high"));
+    try {
+      sessionComposerActions.togglePlanMode(SESSION);
+      const model = "gemini:gemini-4-neon";
+      sessionComposerActions.setModel(SESSION, model, undefined, "high");
+      const sent = await useSessionActions({
+        sessionId: SESSION,
+        model,
+        workspaceKind: "worktree",
+      }).sendMessage("hello");
+      expect(sent).toBe(true);
+      expect(state.call).toHaveBeenCalledWith(
+        api.sendMessage,
+        expect.objectContaining({
+          sessionId: SESSION,
+          agentHarness: "gemini",
+          model: "gemini-4-neon",
+          permissionMode: undefined,
+        })
+      );
+    } finally {
+      sessionComposerActions.discard(SESSION);
+    }
+  });
 
   it("does not resubmit a prompt after losing the reply", async () => {
     const { useSendMessage } = await import("@/features/session/api/session.queries");

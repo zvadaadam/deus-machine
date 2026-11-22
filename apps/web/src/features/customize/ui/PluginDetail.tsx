@@ -115,8 +115,8 @@ export function PluginDetail({
           </AsideGroup>
           <AsideGroup title="How it installs">
             <span className="text-text-tertiary leading-relaxed">
-              Its apps and skills reach every agent in every project. Apps that need an account can
-              be connected later. Removing the plugin keeps anything you added yourself.
+              Its apps and skills are available across your projects. You can connect apps that need
+              an account later. Removing the plugin keeps anything you added yourself.
             </span>
           </AsideGroup>
         </>

@@ -4,6 +4,7 @@ import { DEUS_TOOLS_SERVER, toolCardName } from "@shared/mcp-servers";
 import type { ToolPart, ToolResultContent, ToolStateCompleted } from "@shared/protocol-types";
 import type { ToolUseBlock, ToolResultBlock } from "../tools/types";
 import { toolRegistry } from "../tools/ToolRegistry";
+import { DefaultToolRenderer } from "../tools/renderers/DefaultToolRenderer";
 import { SubagentGroupBlock } from "./SubagentGroupBlock";
 import { useSession } from "../../context";
 
@@ -28,31 +29,39 @@ function parsePartialInput(partialInput: string): Record<string, unknown> {
   }
 }
 
-/**
- * The cards a part draws. Codex's own tools are drawn as Claude's: a command
- * as Bash, a patch as an Edit, MultiEdit (several hunks) or Write (a new
- * file) per file. Parts saved before the engine said `command` and `diff`
- * keep the generic card.
- */
-export function toToolUseBlocks(part: ToolPart): ToolUseBlock[] {
+type ToolCard = ToolUseBlock & { inputOnly?: true };
+
+/** A registered card takes the tool's own input. Other tools can describe a command or file changes. */
+export function toToolUseBlocks(part: ToolPart): ToolCard[] {
+  const toolUse = toToolUseBlock(part);
+  // Every Deus tool returns text, even for a clean workspace. A completed call
+  // with neither output nor content can show its input but has no result to draw.
+  if (
+    part.mcp?.server === DEUS_TOOLS_SERVER &&
+    part.state.status === "completed" &&
+    !part.state.output &&
+    !part.state.content?.length
+  ) {
+    return [{ ...toolUse, name: part.mcp.tool, inputOnly: true }];
+  }
+  if (toolRegistry.has(toolUse.name)) return [toolUse];
+
   const card = (name: string, input: Record<string, unknown>, id = part.toolCallId) => ({
     type: "tool_use" as const,
     id,
     name,
     input,
   });
-  if (part.toolName === "shell" && part.command) return [card("Bash", { command: part.command })];
-  const patch = part.toolName === "apply_patch" && part.state.status === "completed" && part.state;
-  const diffs = patch
-    ? (patch.content ?? []).flatMap((item) => (item.type === "diff" ? [item] : []))
-    : [];
-  if (patch && diffs.length > 0) {
-    // An update hunk's sides are its lines joined with the last one's newline
-    // dropped (the engine's `hunkDiff`), so each gets it back. A new file's
-    // `newText` and a deleted file's `oldText` are the file as it is.
-    const lines = (text?: string) => (text ? `${text}\n` : "");
+  if (part.command) return [card("Bash", { command: part.command })];
+  if (part.state.status !== "completed") return [toolUse];
+  const diffs = (part.state.content ?? []).flatMap((item) => (item.type === "diff" ? [item] : []));
+  if (diffs.length > 0) {
+    const { changes } = coerceToolInput(part.state.input);
+    const isPatch = Array.isArray(changes);
+    // A patch hunk joins lines without the last line's newline. Whole files carry their own.
+    const side = (text = "") => (isPatch && text ? `${text}\n` : text);
     const deleted = new Set(
-      [coerceToolInput(patch.input).changes].flat().flatMap((change: unknown) => {
+      (isPatch ? changes : []).flatMap((change: unknown) => {
         const { path, kind } = coerceToolInput(change);
         const type = typeof kind === "string" ? kind : coerceToolInput(kind).type;
         return type === "delete" ? [path] : [];
@@ -69,15 +78,15 @@ export function toToolUseBlocks(part: ToolPart): ToolUseBlock[] {
         return card("Edit", { file_path, old_string: first.oldText, new_string: "" }, id);
       }
       const edits = [first, ...rest].map((diff) => ({
-        old_string: lines(diff.oldText),
-        new_string: lines(diff.newText),
+        old_string: side(diff.oldText),
+        new_string: side(diff.newText),
       }));
       return rest.length > 0
         ? card("MultiEdit", { file_path, edits }, id)
         : card("Edit", { file_path, ...edits[0] }, id);
     });
   }
-  return [toToolUseBlock(part)];
+  return [toolUse];
 }
 
 function toToolUseBlock(part: ToolPart): ToolUseBlock {
@@ -175,10 +184,11 @@ function ToolRendererBridge({
   toolResult,
   isLoading,
 }: {
-  toolUse: ToolUseBlock;
+  toolUse: ToolCard;
   toolResult?: ToolResultBlock;
   isLoading: boolean;
 }) {
+  if (toolUse.inputOnly) return <DefaultToolRenderer toolUse={toolUse} />;
   const Renderer = toolRegistry.getRenderer(toolUse.name);
   return createElement(Renderer, { toolUse, toolResult, isLoading });
 }
@@ -191,7 +201,7 @@ export const ToolPartBlock = memo(function ToolPartBlock({ part }: ToolPartBlock
   const toolResult = useMemo(() => toToolResultBlock(part), [part]);
   const isLoading = part.state.status === "pending" || part.state.status === "in_progress";
 
-  const isAgentTool = part.kind === "task" || !!part.subagent;
+  const isAgentTool = !toolUse.inputOnly && (part.kind === "task" || !!part.subagent);
   if (isAgentTool && !insideSubagent && subagentMessages.has(part.toolCallId)) {
     return (
       <div className="w-full min-w-0">

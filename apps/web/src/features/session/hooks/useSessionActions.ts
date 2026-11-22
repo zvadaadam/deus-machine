@@ -1,9 +1,7 @@
 /**
  * useSessionActions — send/stop/compact/createPR for a session.
  *
- * Reads composer state (draft, model, thinking level, plan mode) from
- * `sessionComposerStore` at call time via getState(), so the hook's
- * callbacks don't go stale when the user changes model mid-edit.
+ * Sends with the model shown by the composer and its staged content.
  *
  * Message flow (agent-server-owns-send):
  *   1. user clicks send → useSendMessage routes through socket → agent-server
@@ -14,6 +12,8 @@
  *      cache → UI updates
  */
 
+import type { WorkspaceKind } from "@shared/enums";
+import { canPlan } from "@shared/harnesses";
 import { useCallback } from "react";
 import { toast } from "sonner";
 import { newTurnId, useSendMessage, useStopSession } from "../api/session.queries";
@@ -25,7 +25,9 @@ import { composerStore } from "../store/sessionComposerStore";
 
 interface UseSessionActionsProps {
   sessionId: string;
+  model?: string;
   workspaceId?: string;
+  workspaceKind?: WorkspaceKind | null;
   /** Branch PR prompts target (defaults to "main"). */
   targetBranch?: string;
   /** Fires after a successful send. */
@@ -46,7 +48,9 @@ interface UseSessionActionsReturn {
 
 export function useSessionActions({
   sessionId,
+  model,
   workspaceId,
+  workspaceKind,
   targetBranch = "main",
   onMessageSent,
 }: UseSessionActionsProps): UseSessionActionsReturn {
@@ -58,29 +62,23 @@ export function useSessionActions({
       if (sendMessageMutation.isPending) return false;
 
       const composer = composerStore().getState().composers[sessionId];
-      if (!composer) return false;
+      if (!composer || !model) return false;
 
       const content = customContent || composer.draft.trim();
       if (!content) return false;
 
+      const agentHarness = getAgentHarnessForModel(model);
       try {
-        // The composer's model in its full "harness:modelId" form, split here
-        // into runtime id + harness so callers never think about it. Kept
-        // INSIDE the try/catch because `getModelId` throws for unknown
-        // catalog entries — a stale stored model should surface a toast, not
-        // an unhandled promise rejection.
-        const effectiveModel = getModelId(composer.model);
-        const effectiveHarness = getAgentHarnessForModel(composer.model);
-
         await sendMessageMutation.mutateAsync({
           sessionId,
           content,
-          model: effectiveModel,
-          agentHarness: effectiveHarness,
+          model: getModelId(model),
+          agentHarness,
           // The send's correlation key: it seeds the optimistic bubble AND
           // becomes the engine's turnId, so the user echo comes back matchable.
           turnId: newTurnId(),
-          permissionMode: composer.planModeEnabled ? "plan" : undefined,
+          permissionMode:
+            composer.planModeEnabled && canPlan(agentHarness, workspaceKind) ? "plan" : undefined,
           thinkingLevel: composer.thinkingLevel,
         });
       } catch (error) {
@@ -97,7 +95,7 @@ export function useSessionActions({
       }
       return true;
     },
-    [sessionId, sendMessageMutation, onMessageSent]
+    [sessionId, model, workspaceKind, sendMessageMutation, onMessageSent]
   );
 
   const stopSession = useCallback(async () => {

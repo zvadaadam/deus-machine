@@ -1,17 +1,14 @@
-import { DEFAULT_MODEL, resolveModelSelection } from "@/shared/agents";
+import { resolveModelSelection } from "@/shared/agents";
 
 const LAST_MODEL_KEY = "deus:welcome-last-model";
 
-export function getStoredModel(): string {
-  // A stored value that names no harness Deus runs falls back to the default.
+export function getStoredModel(): string | undefined {
   try {
     const stored = localStorage.getItem(LAST_MODEL_KEY);
-    const resolved = stored ? resolveModelSelection(stored) : undefined;
-    if (resolved) return resolved;
+    return stored ? resolveModelSelection(stored) : undefined;
   } catch {
-    /* localStorage unavailable */
+    return undefined;
   }
-  return DEFAULT_MODEL;
 }
 
 export function setStoredModel(model: string) {

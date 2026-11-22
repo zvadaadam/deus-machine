@@ -15,6 +15,7 @@ import {
   type HarnessModels,
   type ModelDescriptor,
 } from "@shared/models";
+import { LOCAL_HARNESSES } from "@shared/harnesses";
 import { modelPickerView } from "@/shared/agents/picker";
 
 const row = (
@@ -29,6 +30,7 @@ const row = (
 const lists: HarnessModels[] = [
   {
     harness: "claude-code",
+    source: "live",
     models: [
       row("claude-code", "default", "Default (recommended)", ["low", "high"], {
         resolvedId: "claude-opus-5-5",
@@ -43,6 +45,7 @@ const lists: HarnessModels[] = [
   },
   {
     harness: "codex-app-server",
+    source: "live",
     models: [
       row("codex-app-server", "gpt-next", "GPT-Next", ["low", "high"]),
       row("codex-app-server", "gpt-6.1-sol", "GPT-6.1-Sol", ["low", "medium", "high", "ultra"], {
@@ -53,12 +56,10 @@ const lists: HarnessModels[] = [
 ];
 
 describe("the engine's catalog, as Deus reads it", () => {
-  it("lists both harnesses and starts a new chat on a model it lists", () => {
-    expect(CATALOG_MODEL_LISTS.map((list) => list.harness)).toEqual([
-      "claude-code",
-      "codex-app-server",
-    ]);
-    for (const { harness } of CATALOG_MODEL_LISTS) {
+  it("lists every local harness and starts a new chat on a model it lists", () => {
+    expect(CATALOG_MODEL_LISTS.map((list) => list.harness)).toEqual(LOCAL_HARNESSES);
+    expect(pickerModels(CATALOG_MODEL_LISTS, "gemini")).toEqual([]);
+    for (const harness of ["claude-code", "codex-app-server"] as const) {
       expect(pickerModels(CATALOG_MODEL_LISTS, harness).length).toBeGreaterThan(0);
     }
     const chosen = parseModelValue(DEFAULT_MODEL)!;
@@ -182,7 +183,14 @@ describe("a picker value", () => {
   });
 
   it("is refused when it names no harness Deus runs", () => {
-    for (const value of ["", "sonnet", "claude-code:", ":sonnet", "gemini:pro", "claude:sonnet"]) {
+    for (const value of [
+      "",
+      "sonnet",
+      "claude-code:",
+      ":sonnet",
+      "unknown-agent:pro",
+      "claude:sonnet",
+    ]) {
       expect(parseModelValue(value)).toBeUndefined();
     }
   });
@@ -244,7 +252,8 @@ describe("harnessNamed", () => {
       expect(harnessNamed(said)).toBe("claude-code");
     for (const said of ["codex-app-server", "Codex", "codex", "codex app server"])
       expect(harnessNamed(said)).toBe("codex-app-server");
-    for (const said of ["gemini", "", "claude-codex", "acp"])
+    expect(harnessNamed("Gemini")).toBe("gemini");
+    for (const said of ["unknown-agent", "", "claude-codex", "acp"])
       expect(harnessNamed(said)).toBeUndefined();
   });
 });

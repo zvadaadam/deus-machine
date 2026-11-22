@@ -4,6 +4,7 @@ import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 import { SlackIcon } from "@/shared/components/icons/SlackIcon";
 import { capabilities } from "@/platform/capabilities";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
+import { HARNESSES } from "@shared/harnesses";
 import type { SettingsSection } from "@shared/types/settings";
 
 interface SettingsNavigationItem {
@@ -51,7 +52,13 @@ export const settingsNavigation: SettingsNavigationItem[] = [
     label: "AI Providers",
     icon: Bot,
     cloudDirect: true,
-    keywords: ["model", "claude", "anthropic", "codex", "openai", "api", "key", "subscription"],
+    keywords: [
+      "model",
+      "api",
+      "key",
+      "subscription",
+      ...Object.values(HARNESSES).flatMap(({ label, vendor }) => [label, vendor]),
+    ],
   },
   { id: "cloud", label: "Cloud", icon: Cloud, keywords: ["connection", "setup", "sandbox"] },
   {

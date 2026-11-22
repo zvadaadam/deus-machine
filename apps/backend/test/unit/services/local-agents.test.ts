@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { LoginError, type AgentServerClient, type LoginHandle } from "@zvada/agent-server/client";
+import { AgentServerClient, LoginError, type LoginHandle } from "@zvada/agent-server/client";
+import { AgentRuntime, createAgentRegistry } from "@zvada/agent-server/core";
+import { AgentServer } from "@zvada/agent-server/server";
+import { channelPair } from "@zvada/agent-server/protocol";
 import type {
   AuthUpdated,
   HarnessAuth,
@@ -12,6 +15,7 @@ vi.mock("../../../src/services/streams", () => ({ publish: mockPublish }));
 
 import { LocalAgents } from "../../../src/services/agent/local-agents";
 import { agentAuthChanges, agentCliProgress } from "@shared/api/settings";
+import { LOCAL_HARNESSES } from "@shared/harnesses";
 import { published } from "../../helpers";
 
 const browser = { id: "claudeai", kind: "browser", label: "Claude", credential: "subscription" };
@@ -85,16 +89,65 @@ beforeEach(() => mockPublish.mockClear());
 describe("LocalAgents", () => {
   it("asks each harness's CLI for its models, for the folder a turn would run in", async () => {
     const { logins, client } = engine(signedIn);
-    await expect(logins.models("/repo/.deus/berlin")).resolves.toEqual([
-      expect.objectContaining({ harness: "claude-code", source: "live" }),
-      expect.objectContaining({ harness: "codex-app-server", source: "live" }),
-    ]);
-    expect(client.listModels.mock.calls).toEqual([
-      [{ harness: "claude-code", cwd: "/repo/.deus/berlin" }],
-      [{ harness: "codex-app-server", cwd: "/repo/.deus/berlin" }],
-    ]);
+    const cwd = "/repo/.deus/berlin";
+    await expect(logins.models(cwd)).resolves.toEqual(
+      LOCAL_HARNESSES.map((harness) => expect.objectContaining({ harness, source: "live" }))
+    );
+    expect(client.listModels.mock.calls).toEqual(
+      LOCAL_HARNESSES.map((harness) => [{ harness, cwd }])
+    );
+    client.listModels.mockClear();
     await logins.models();
-    expect(client.listModels).toHaveBeenLastCalledWith({ harness: "codex-app-server" });
+    expect(client.listModels.mock.calls).toEqual(LOCAL_HARNESSES.map((harness) => [{ harness }]));
+  });
+
+  it("keeps the other agents' logins when one CLI is slow and then fails to answer", async () => {
+    const registry = createAgentRegistry({ harnesses: [...LOCAL_HARNESSES] });
+    vi.spyOn(registry.provisioner!, "status").mockResolvedValue({
+      state: "ready",
+      source: "cache",
+      path: "/fixture/cli",
+    });
+    for (const harness of LOCAL_HARNESSES) {
+      const login = registry.getAgent(harness).login!;
+      vi.spyOn(login, "methods").mockResolvedValue([]);
+      vi.spyOn(login, "status").mockResolvedValue({ state: "signed_out" });
+    }
+    const slow = Promise.withResolvers<never>();
+    const status = vi.mocked(registry.getAgent("gemini").login!.status);
+    status.mockReturnValue(slow.promise);
+    const server = new AgentServer(new AgentRuntime(registry));
+    const wire = channelPair();
+    server.attach(wire.server);
+    const client = await AgentServerClient.attach(wire.client);
+    const agents = new LocalAgents(client);
+    try {
+      const answer = agents.status();
+      await vi.waitFor(() => expect(status).toHaveBeenCalledOnce());
+      slow.reject(new Error("Could not read this login"));
+      const { auth, clis, error } = await answer;
+      expect(error).toBeUndefined();
+      expect(clis.map((cli) => cli.state)).toEqual(["ready", "ready", "ready"]);
+      expect(auth).toEqual([
+        { harness: "claude-code", state: "signed_out", methods: [] },
+        { harness: "codex-app-server", state: "signed_out", methods: [] },
+        { harness: "gemini", state: "unknown", methods: [], error: "Could not read this login" },
+      ]);
+    } finally {
+      agents.dispose();
+      await client.close();
+      await server.shutdown();
+    }
+  });
+
+  it("reads only the named CLI when a start needs its model", async () => {
+    const { logins, client } = engine(signedIn);
+    const cwd = "/repo/.deus/berlin";
+    const harness = "claude-code";
+    await expect(logins.models(cwd, harness)).resolves.toEqual([
+      expect.objectContaining({ harness }),
+    ]);
+    expect(client.listModels).toHaveBeenCalledExactlyOnceWith({ harness, cwd });
   });
 
   it("picks up a login this computer already has, and opens nothing", async () => {
@@ -154,11 +207,11 @@ describe("LocalAgents", () => {
     expect((await logins.status()).logins).toEqual([]);
   });
 
-  it("reads each CLI with its login, and installs them on request without waiting", async () => {
+  it("reads each CLI with its login and prepares only the requested agent", async () => {
     const { logins, client, tellProgress } = engine(signedIn);
     await expect(logins.status()).resolves.toEqual({ auth: [signedIn], clis: [cli], logins: [] });
-    logins.prepareClis();
-    expect(client.prepareClis).toHaveBeenCalledWith(["claude-code", "codex-app-server"]);
+    logins.prepareCli("codex-app-server");
+    expect(client.prepareClis).toHaveBeenCalledExactlyOnceWith(["codex-app-server"]);
     const progress = {
       harness: "codex-app-server",
       version: "0.160.0",

@@ -12,7 +12,7 @@
 //    endpoint can delay a tool call but never a turn.
 //  - The agent's process and config files (Codex writes its MCP servers to
 //    disk) never hold a provider's token.
-//  - The config is the same every turn, so neither harness reconnects its
+//  - The config is the same every turn, so a harness need not reconnect its
 //    MCP servers because a token rotated.
 //
 // The same shape as the engine's API-key proxy (@zvada/agent-server/core/proxy),

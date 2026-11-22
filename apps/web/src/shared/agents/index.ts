@@ -7,21 +7,20 @@
 // can change; another harness needs a new chat.
 
 import {
-  HARNESS_LABELS,
+  DEFAULT_AGENT_HARNESS,
   continuedThinkingLevel,
-  defaultModelValue,
   latestTurnExecution,
   modelValue,
   parseModelValue,
 } from "@shared/models";
 import type { AgentHarness } from "@shared/enums";
+import { harnessInfo } from "@shared/harnesses";
 import type { ThinkingLevel } from "@shared/protocol";
 import type { SessionTurn } from "@shared/types/session";
 
 export {
   DEFAULT_MODEL,
   DEFAULT_THINKING_LEVEL,
-  PICKER_HARNESSES,
   composerThinking,
   fitThinkingLevel,
   modelLabel,
@@ -29,13 +28,12 @@ export {
   modelValue,
   pickerModels,
   thinkingLevelLabel,
-  type HarnessModels,
 } from "@shared/models";
 export type { AgentHarness } from "@shared/enums";
 export type { ThinkingLevel } from "@shared/protocol";
 
-export function getAgentLabel(agentHarness: AgentHarness): string {
-  return HARNESS_LABELS[agentHarness];
+export function getAgentLabel(agentHarness: string): string {
+  return harnessInfo(agentHarness)?.label ?? agentHarness;
 }
 
 /** The picker value a stored one names today; undefined when it names no harness Deus runs. */
@@ -45,7 +43,7 @@ export function resolveModelSelection(model: string): string | undefined {
 }
 
 export function getAgentHarnessForModel(model: string): AgentHarness {
-  return parseModelValue(model)?.harness ?? "claude-code";
+  return parseModelValue(model)?.harness ?? DEFAULT_AGENT_HARNESS;
 }
 
 /** The model id a picker value sends to the engine. Throws on a value that names no harness. */
@@ -55,26 +53,9 @@ export function getModelId(model: string): string {
   return parsed.model;
 }
 
-/** Fallback for a session with no recorded selection, preserving its harness. */
-export function getDefaultModelForHarness(agentHarness: AgentHarness): string {
-  return defaultModelValue(agentHarness);
-}
-
-/** Reopen with the last recorded selection; an empty session uses its harness default. */
-export function getModelForSession(
-  agentHarness: AgentHarness,
-  turns: readonly SessionTurn[]
-): string {
-  const model = latestTurnExecution(agentHarness, turns)?.model;
-  return (
-    (model && resolveModelSelection(modelValue(agentHarness, model))) ||
-    getDefaultModelForHarness(agentHarness)
-  );
-}
-
 /** Reopen on the last recorded thinking level; a chat with none uses `fallback`. */
 export function getThinkingForSession(
-  agentHarness: AgentHarness,
+  agentHarness: string,
   turns: readonly SessionTurn[],
   fallback: ThinkingLevel
 ): ThinkingLevel {

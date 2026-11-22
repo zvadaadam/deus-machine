@@ -1,5 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import * as api from "@shared/api/settings";
+import { ConnectionClosedError } from "@zvada/agent-server/client";
+import { AgentServerDisconnectedError } from "../../../src/lib/errors";
 import { operations } from "../../helpers";
 
 vi.mock("../../../src/services/settings.service", () => ({
@@ -48,7 +50,7 @@ const agents = vi.hoisted(() => ({
   connected: true,
   status: vi.fn(),
   models: vi.fn(),
-  prepareClis: vi.fn(),
+  prepareCli: vi.fn(),
   signIn: vi.fn(),
   complete: vi.fn(),
   cancel: vi.fn(),
@@ -57,8 +59,9 @@ const agents = vi.hoisted(() => ({
   folders: new Set<string>(),
 }));
 vi.mock("../../../src/services/agent", () => ({
+  isConnected: () => agents.connected,
   getLocalAgents: () => {
-    if (!agents.connected) throw new Error("Agent server not connected");
+    if (!agents.connected) throw new AgentServerDisconnectedError();
     return agents;
   },
 }));
@@ -361,7 +364,7 @@ describe("agentAuth", () => {
       auth: [],
       clis: [],
       logins: [],
-      error: "Agent server not connected",
+      error: "Agent server is disconnected",
     });
 
     agents.connected = true;
@@ -379,15 +382,42 @@ describe("agentModels", () => {
 
   it("answers what this computer's CLIs list", async () => {
     expect(await run(api.agentModels)).toEqual({ lists: LISTS });
-    expect(agents.models).toHaveBeenCalledWith(undefined);
+    expect(agents.models).toHaveBeenCalledWith(undefined, undefined);
   });
 
-  it("asks for a workspace's own folder, whose settings can narrow the list", async () => {
+  it("answers pending Home and workspace reads with a disconnect when the engine shuts down", async () => {
+    const pending = Promise.withResolvers<never>();
+    agents.models.mockReturnValue(pending.promise);
+    const home = run(api.agentModels);
+    const chat = run(api.agentModels, { workspaceId: "ws-1" });
+    expect(agents.models).toHaveBeenCalledTimes(2);
+    agents.connected = false;
+    pending.reject(new ConnectionClosedError("client closed"));
+    await Promise.all([
+      expect(home).rejects.toBeInstanceOf(AgentServerDisconnectedError),
+      expect(chat).rejects.toBeInstanceOf(AgentServerDisconnectedError),
+    ]);
+  });
+
+  it.each([
+    [true, new ConnectionClosedError("not connected")],
+    [false, new Error("Invalid model list")],
+  ] as const)(
+    "keeps the cause of any other failed read (connected: %s)",
+    async (connected, error) => {
+      agents.models.mockRejectedValue(error);
+      const answer = run(api.agentModels);
+      agents.connected = connected;
+      await expect(answer).rejects.toBe(error);
+    }
+  );
+
+  it("asks the named harness for a workspace's own folder", async () => {
     agents.workspace.mockReturnValue({ kind: "worktree", root_path: "/repo", slug: "berlin" });
     agents.folders.add("/repo/.deus/berlin");
-    await run(api.agentModels, { workspaceId: "ws-1" });
+    await run(api.agentModels, { workspaceId: "ws-1", harness: "claude-code" });
     expect(agents.workspace).toHaveBeenCalledWith(expect.anything(), "ws-1");
-    expect(agents.models).toHaveBeenCalledWith("/repo/.deus/berlin");
+    expect(agents.models).toHaveBeenCalledWith("/repo/.deus/berlin", "claude-code");
   });
 
   it("asks for no folder when the workspace has none on this computer", async () => {
@@ -399,7 +429,7 @@ describe("agentModels", () => {
     ]) {
       agents.workspace.mockReturnValue(workspace);
       await run(api.agentModels, { workspaceId: "ws-1" });
-      expect(agents.models).toHaveBeenLastCalledWith(undefined);
+      expect(agents.models).toHaveBeenLastCalledWith(undefined, undefined);
     }
   });
 });
@@ -443,9 +473,10 @@ describe("cloudModels", () => {
 describe("the local agents' CLIs and logins", () => {
   const auth = { harness: "claude-code", state: "signed_in", methods: [] };
 
-  it("starts the CLI install and answers at once", async () => {
-    expect(await run(api.agentPrepareClis)).toBeUndefined();
-    expect(agents.prepareClis).toHaveBeenCalledOnce();
+  it("starts only the named CLI install and refuses a request without a harness", async () => {
+    await expect(run(api.agentPrepareClis)).rejects.toMatchObject({ statusCode: 400 });
+    expect(await run(api.agentPrepareClis, { harness: "codex-app-server" })).toBeUndefined();
+    expect(agents.prepareCli).toHaveBeenCalledExactlyOnceWith("codex-app-server");
   });
 
   it("signs in with the method asked for, and answers what the engine did", async () => {
@@ -507,6 +538,6 @@ describe("the local agents' CLIs and logins", () => {
     agents.connected = false;
     await expect(
       run(api.agentSignIn, { harness: "claude-code", method: "claudeai" })
-    ).rejects.toThrow("Agent server not connected");
+    ).rejects.toBeInstanceOf(AgentServerDisconnectedError);
   });
 });

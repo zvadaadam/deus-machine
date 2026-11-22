@@ -1,7 +1,7 @@
 import { tempo } from "@/shared/lib/tempo";
 import { match } from "ts-pattern";
 import type { Compaction, Message, SessionTurn, SessionStatus } from "@/shared/types";
-import { ACTIVE_TURN_STATUSES, type AgentHarness, type WorkspaceKind } from "@shared/enums";
+import { ACTIVE_TURN_STATUSES, type WorkspaceKind } from "@shared/enums";
 import { MessageItem } from "./MessageItem";
 import { AssistantTurn } from "./AssistantTurn";
 import { CompactionChip } from "./CompactionChip";
@@ -34,7 +34,7 @@ interface ChatProps {
   errorMessage?: string | null;
   /** Structured error category from classifyError (e.g. "auth", "rate_limit") */
   errorCategory?: string;
-  agentHarness?: AgentHarness | null;
+  agentHarness?: string | null;
   latestMessageSentAt?: string | null;
   onRetryInNewChat?: () => void;
   /** True when there are older messages beyond the loaded window */

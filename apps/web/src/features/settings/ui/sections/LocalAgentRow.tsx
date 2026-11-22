@@ -2,10 +2,11 @@ import { useState } from "react";
 import { CheckCircle2, ExternalLink, Loader2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { openExternal } from "@/platform/native/window";
-import type { LocalHarness } from "@shared/agent-auth";
+import type { AgentHarness } from "@shared/enums";
+import { HARNESSES } from "@shared/harnesses";
 import {
   cancelLocalSignIn,
-  installLocalAgents,
+  installLocalAgent,
   localSignIn,
   signInLocalAgent,
   signOutLocalAgent,
@@ -62,16 +63,13 @@ function Badge({ state }: { state: LocalAgentState }) {
 /** A local agent: its login on this computer, and the sign-in the engine runs through its CLI. */
 export function LocalAgentRow({
   harness,
-  title,
-  vendor,
   state,
 }: {
-  harness: LocalHarness;
-  title: string;
-  vendor: string;
+  harness: AgentHarness;
   state: LocalAgentState;
 }) {
   const [busy, setBusy] = useState(false);
+  const { label, vendor } = HARNESSES[harness];
   const run = (action: () => Promise<void>) => {
     setBusy(true);
     void action().finally(() => setBusy(false));
@@ -84,7 +82,7 @@ export function LocalAgentRow({
     <div className="border-border-subtle space-y-3 rounded-lg border p-4">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium">{title}</p>
+          <p className="text-sm font-medium">{label}</p>
           <p className="text-muted-foreground text-sm">{vendor}</p>
           {state.status === "signed-in" && (
             <p className="text-muted-foreground mt-0.5 text-xs">{state.account}</p>
@@ -97,7 +95,7 @@ export function LocalAgentRow({
               variant="outline"
               size="xs"
               disabled={busy}
-              onClick={() => run(installLocalAgents)}
+              onClick={() => run(() => installLocalAgent(harness))}
             >
               {state.error ? "Try again" : "Install"}
             </Button>

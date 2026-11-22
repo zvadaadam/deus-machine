@@ -15,6 +15,7 @@ import type { ParsedInputOf } from "@shared/api/op";
 import { uuidv7 } from "@shared/lib/uuid";
 import { readPermissionMode, readThinkingLevel } from "@shared/protocol";
 import { readCloudTurnSelection, type CloudTurnSelection } from "@shared/cloud-models";
+import { canPlan, HARNESSES } from "@shared/harnesses";
 import { ACTIVE_TURN_STATUSES } from "@shared/enums";
 import { getDatabase } from "../../lib/database";
 import {
@@ -179,6 +180,8 @@ async function sendMessageOnce(
     });
     if (!read.ok) throw new ValidationError(read.message);
     cloudSelection = read.selection;
+  } else if (permissionMode === "plan" && !canPlan(agentHarness, workspace?.kind)) {
+    throw new ValidationError(`${HARNESSES[agentHarness].label} does not offer plan mode.`);
   }
 
   // New sessions default to Claude at creation time because the user may pick

@@ -37,6 +37,7 @@ import { openNewWorkspace } from "@/features/workspace/lib/newWorkspace";
 import { derivePRActionState } from "@/features/workspace/lib/prState";
 import { hasCheckout } from "@/features/workspace/lib/startState";
 import { pendingFirstMessages } from "@/features/workspace/store/workspaceStartStore";
+import { useAgentAuthEvents } from "@/features/settings/api/settings.queries";
 import { useFirstMessageDelivery } from "@/features/session/hooks/useFirstMessageDelivery";
 import { simulatorStoreActions } from "@/features/simulator/store";
 import { useSidebarStore } from "@/features/sidebar/store";
@@ -226,6 +227,7 @@ export function MainLayout() {
   // on screen. A start that fails keeps it: the workspace's start view shows
   // it, and a retry sends it.
   useFirstMessageDelivery(repoGroups, workspacesQuery.isSuccess);
+  useAgentAuthEvents();
 
   const handleStartWorkspace = useCallback(
     async (

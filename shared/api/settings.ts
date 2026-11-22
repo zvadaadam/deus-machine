@@ -1,13 +1,13 @@
 /** Settings: this computer's preferences, agent configuration, and the agents' logins and models. */
 
 import { z } from "zod";
-import {
-  LOCAL_HARNESSES,
-  type AgentAuthAnswer,
-  type AgentAuthEvent,
-  type AgentSignInAnswer,
-  type HarnessAuth,
+import type {
+  AgentAuthAnswer,
+  AgentAuthEvent,
+  AgentSignInAnswer,
+  HarnessAuth,
 } from "../agent-auth";
+import { AgentHarnessSchema } from "../enums";
 import type { CloudModelCatalog } from "../cloud-models";
 import type { CloudOrganizations } from "../types/environment-secrets";
 import type { AgentModelsAnswer } from "../models";
@@ -113,18 +113,16 @@ export const deleteAgentConfig = write({
 
 // ── The local agents: their CLIs, logins and models ────────────────────────
 
-const localHarness = z.enum(LOCAL_HARNESSES);
-
 /** Each local agent's CLI and login, and the sign-ins under way. */
 export const agentAuth = read({ name: "agentAuth", output: out<AgentAuthAnswer>() });
 
 /**
- * The models each local agent offers for this computer's login. A workspace
- * asks for its own folder, whose settings can narrow the list.
+ * The models a local agent offers for this computer's login, or all agents'
+ * lists when no harness is named. A workspace asks for its own folder.
  */
 export const agentModels = read({
   name: "agentModels",
-  input: z.object({ workspaceId: z.string().optional() }),
+  input: z.object({ workspaceId: z.string().optional(), harness: AgentHarnessSchema.optional() }),
   output: out<AgentModelsAnswer>(),
 });
 
@@ -141,8 +139,14 @@ export const cloudOrganizations = live({
   output: out<CloudOrganizations>(),
 });
 
-/** Install the agents' CLIs now. Answers at once; progress arrives on `agentCliProgress`. */
-export const agentPrepareClis = write({ name: "agentPrepareClis", output: out<void>() });
+const localAgent = z.object({ harness: AgentHarnessSchema });
+
+/** Install one agent's CLI. Progress arrives on `agentCliProgress`. */
+export const agentPrepareClis = write({
+  name: "agentPrepareClis",
+  input: localAgent,
+  output: out<void>(),
+});
 
 /**
  * Sign a local agent in. A login this computer already has of that kind is
@@ -151,8 +155,7 @@ export const agentPrepareClis = write({ name: "agentPrepareClis", output: out<vo
  */
 export const agentSignIn = write({
   name: "agentSignIn",
-  input: z.object({
-    harness: localHarness,
+  input: localAgent.extend({
     method: z.string().min(1),
     apiKey: z.string().optional(),
   }),
@@ -175,7 +178,7 @@ export const agentLoginCancel = write({
 /** Sign a local agent out in its CLI: a terminal's login too, as it is the same one. */
 export const agentLogout = write({
   name: "agentLogout",
-  input: z.object({ harness: localHarness }),
+  input: localAgent,
   output: out<{ auth: HarnessAuth }>(),
 });
 

@@ -12,17 +12,19 @@ import {
 import { cn } from "@/shared/lib/utils";
 import { getAgentLogo } from "@/assets/agents";
 import {
+  getAgentLabel,
   thinkingLevelLabel,
   type AgentHarness,
-  type HarnessModels,
   type ThinkingLevel,
 } from "@/shared/agents";
-import { modelPickerView } from "@/shared/agents/picker";
+import { modelPickerView, type PickerModelList } from "@/shared/agents/picker";
+import { uiActions } from "@/shared/stores/uiStore";
 
 interface ModelPickerProps {
-  model: string;
-  /** The models to offer (useModelLists). */
-  lists: readonly HarnessModels[];
+  model: string | undefined;
+  agentHarness?: AgentHarness;
+  /** The models to offer and the status of an unanswered read. */
+  lists: readonly PickerModelList[];
   /** The level the chat runs, and the ones its model offers; none for a model with no thinking control. */
   thinkingLevel: ThinkingLevel;
   thinkingLevels: readonly ThinkingLevel[];
@@ -51,6 +53,7 @@ function AgentLogo({ type, className }: { type: AgentHarness; className: string 
  */
 export function ModelPicker({
   model,
+  agentHarness: currentAgent,
   lists,
   thinkingLevel,
   thinkingLevels,
@@ -60,11 +63,11 @@ export function ModelPicker({
   onOpenNewTab,
   side = "top",
 }: ModelPickerProps) {
-  const { groups, selected } = modelPickerView(lists, model);
-  const modelLabel = selected?.label ?? model;
-  const currentAgent = selected?.agentHarness ?? "claude-code";
   // The agent whose models are shown: the chat's own until another is looked at.
   const [lookedAt, setLookedAt] = useState<AgentHarness | null>(null);
+  if (!currentAgent) return null;
+  const { groups, selected, listedLevels } = modelPickerView(lists, model);
+  const modelLabel = selected?.label ?? model ?? getAgentLabel(currentAgent);
   const shownAgent = lookedAt ?? currentAgent;
   const shownGroup = groups.find((group) => group.agentHarness === shownAgent) ?? groups[0];
   // A started chat keeps its agent (the engine binds a session to one runtime):
@@ -74,6 +77,9 @@ export function ModelPicker({
   // Nowhere to open one (a workspace with no chat yet): those models are shown, not offered.
   const keepsAgent = otherAgent && !onOpenNewTab;
   const hasThinking = thinkingLevels.length > 0;
+  const currentLabel = hasThinking
+    ? `${modelLabel}, thinking ${thinkingLevelLabel(thinkingLevel)}`
+    : modelLabel;
 
   return (
     <DropdownMenu onOpenChange={(open) => !open && setLookedAt(null)}>
@@ -83,9 +89,7 @@ export function ModelPicker({
           size="sm"
           title="Model and thinking effort"
           aria-label={
-            hasThinking
-              ? `Select model, currently ${modelLabel}, thinking ${thinkingLevelLabel(thinkingLevel)}`
-              : `Select model, currently ${modelLabel}`
+            model ? `Select model, currently ${currentLabel}` : `Select a model for ${modelLabel}`
           }
           className="text-text-secondary data-[state=open]:bg-accent gap-1.5 px-2 text-sm focus-visible:ring-1 has-[>svg]:px-2"
         >
@@ -132,10 +136,23 @@ export function ModelPicker({
         <div className="flex min-h-0 flex-1">
           <div className="relative isolate min-w-0 flex-1 overflow-y-auto p-1">
             <DropdownMenuGlide />
-            {otherAgent && (
-              <DropdownMenuLabel className="text-text-muted text-xs font-normal">
-                {keepsAgent ? "This chat keeps its agent" : "Opens a new chat"}
-              </DropdownMenuLabel>
+            {shownGroup?.empty ? (
+              <>
+                <DropdownMenuLabel className="text-text-muted text-xs font-normal break-words">
+                  {shownGroup.empty.message}
+                </DropdownMenuLabel>
+                {shownGroup.empty.openSettings && (
+                  <DropdownMenuItem onSelect={uiActions.openAISettings}>
+                    Open AI Providers
+                  </DropdownMenuItem>
+                )}
+              </>
+            ) : (
+              otherAgent && (
+                <DropdownMenuLabel className="text-text-muted text-xs font-normal">
+                  {keepsAgent ? "This chat keeps its agent" : "Opens a new chat"}
+                </DropdownMenuLabel>
+              )
             )}
             {shownGroup?.options.map((option) => {
               const isSelected = selected?.value === option.value;
@@ -187,9 +204,11 @@ export function ModelPicker({
                 })}
               </div>
             ) : (
-              <p className="text-text-muted px-2 py-1.5 text-xs text-pretty">
-                {modelLabel} has no thinking control.
-              </p>
+              listedLevels?.length === 0 && (
+                <p className="text-text-muted px-2 py-1.5 text-xs text-pretty">
+                  {modelLabel} has no thinking control.
+                </p>
+              )
             )}
           </div>
         </div>

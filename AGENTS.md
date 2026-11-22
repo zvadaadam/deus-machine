@@ -6,7 +6,7 @@ Design inspiration: Linear, Vercel, Stripe, Perplexity. Dense, pro-consumer aest
 
 ## Tech Stack
 
-Electron desktop app + React frontend + Node.js backend. Monorepo under `apps/`.
+Electron desktop app + React frontend + Node.js backend. Monorepo under `apps/`. The local agent engine runs Claude Code, Codex and Gemini.
 
 - **Package manager: Bun.** Always `bun add`, `bun install`, `bun run`, `bunx`. Never npm or yarn — CI uses `bun install --frozen-lockfile`.
 - **Desktop + Mobile Web:** Primary target is Electron. Web version lives at the root domain (`deusmachine.ai` — the landing worker edge-routes `/` to the landing for new visitors and everything else to the app; `app.deusmachine.ai` stays a working alias (canonical 301 configured at the edge)) and also supports mobile via `MobileLayout`. Don't write `isElectronEnv` conditionals for feature parity.
@@ -45,7 +45,7 @@ bun run test:agent-server
 bun run dev:web
 ```
 
-`bun run dev:web` is the preferred cloud smoke because it rebuilds the Node native module ABI, starts the backend (which runs the agent engine in its process), and then starts Vite with the emitted backend port. Confirm the terminal shows `[AgentService] Engine started, agents: [claude-code, codex-app-server]`, `[BACKEND_PORT]...` and `Server ready!` before opening the frontend URL.
+`bun run dev:web` is the preferred cloud smoke because it rebuilds the Node native module ABI, starts the backend (which runs the agent engine in its process), and then starts Vite with the emitted backend port. Confirm the terminal shows `[AgentService] Engine started, agents: [claude-code, codex-app-server, gemini]`, `[BACKEND_PORT]...` and `Server ready!` before opening the frontend URL.
 
 For browser-based UI smoke tests, install the Playwright browser after dependencies are installed:
 
@@ -76,20 +76,29 @@ Backend ⊃ Agent engine (apps/agent-server/) — in process, the standard wire 
 
 **Backend (Hono)** — All business logic. DB reads/writes, config, agent event persistence, tool relay, PTY, file watching. Operations in `src/api/`, answered over the socket; the few HTTP routes under `/api`. Runs the agent engine in its own process. A request from this computer needs no token, so it must be addressed to `localhost`, `127.0.0.1` or `[::1]` and come from no page or a page whose origin is in `DEUS_WEB_ORIGINS`, which the launcher sets (`shared/web-origins.ts`; `middleware/loopback-origin-gate.ts`): the desktop passes its window's origin (`app://deus` packaged, served by `apps/desktop/main/app-protocol.ts`; Vite's in dev), `dev:web` and the e2e runners `LOOPBACK_WEB_ORIGINS`. A backend started without it trusts no page. The app opens no remote-debugging port; agents' browser tools run their own browser.
 
-**Agent engine** (`apps/agent-server/`) — Stateless. `@zvada/agent-server` with deus's seams: the Deus tools (one source, `deusTools`, with the session tools the backend adds beside them (`chatTools`), handed to the engine as `hostTools`: the engine gives them to every harness as the MCP server `deus_chat_tools`, in process for Claude and at its own loopback for Codex, and each call names the session, the turn and its mode), the tool policy, checkpoint hooks and titles. No DB access, no direct frontend communication; the tools reach the backend through `host-link.ts`, which the backend registers (`startEngine`). Keep blocking work off it: it shares the backend's event loop. A turn does not survive the process (the engine keeps turns in memory), so at engine start every local chat the database still shows working or waiting is settled as an error saying Deus quit mid-turn (`settleInterruptedSessions` in `services/agent/persistence.ts`; cloud chats are the platform's to settle).
+**Agent engine** (`apps/agent-server/`) — Stateless. `@zvada/agent-server` with deus's seams: the Deus tools (one source, `deusTools`, with the session tools the backend adds beside them (`chatTools`), handed to the engine as `hostTools`: the engine gives them to every harness as the MCP server `deus_chat_tools`, in process for Claude and at its own loopback for Codex and Gemini, and each call names the session, the turn and its mode), the tool policy, checkpoint hooks and titles. No DB access, no direct frontend communication; the tools reach the backend through `host-link.ts`, which the backend registers (`startEngine`). Keep blocking work off it: it shares the backend's event loop. A turn does not survive the process (the engine keeps turns in memory), so at engine start every local chat the database still shows working or waiting is settled as an error saying Deus quit mid-turn (`settleInterruptedSessions` in `services/agent/persistence.ts`; cloud chats are the platform's to settle).
 
 **Rule of thumb:** Needs native Electron API? → Main process. Everything else → Backend (or the engine's seams, for what a turn runs).
 
 ### The @zvada/agent-server package (upstream engine + wire)
 
-The agent-server runs on the upstream **[`@zvada/agent-server`](https://github.com/zvadaadam/agent-server)** package (same author as this repo): `/core` is the engine (AgentRuntime + Claude/Codex/ACP harness adapters), `/protocol` the zod wire contract, `/server` the JSON-RPC 2.0 wire (per-session `seq`, bounded replay, quick-ack turns), `/client` the typed consumer the backend uses. The backend serves the engine on an in-process channel (`apps/agent-server/index.ts`: `startEngine`, `beginTurnStart`, `beforeCancel`) and talks to it through `AgentLink` (`apps/backend/src/services/agent/client.ts`); the Deus tools' requests and titles are direct calls into the backend (`host-link.ts`). Cards read a tool's own name from its part (`mcp.tool`, `toolCardName`), never the harness's spelling.
+The agent-server runs on the upstream **[`@zvada/agent-server`](https://github.com/zvadaadam/agent-server)** package (same author as this repo): `/core` is the engine (AgentRuntime with Claude Code, Codex and the ACP adapter Gemini uses), `/protocol` the zod wire contract, `/server` the JSON-RPC 2.0 wire (per-session `seq`, bounded replay, quick-ack turns), `/client` the typed consumer the backend uses. The backend serves the engine on an in-process channel (`apps/agent-server/index.ts`: `startEngine`, `beginTurnStart`, `beforeCancel`) and talks to it through `AgentLink` (`apps/backend/src/services/agent/client.ts`); the Deus tools' requests and titles are direct calls into the backend (`host-link.ts`). Cards read a tool's own name from its part (`mcp.tool`, `toolCardName`), never the harness's spelling.
 
 When debugging agent-server behavior (event shapes, turn admission, cancel semantics, resume, provisioning), **read the package source — you have full access**:
 
 - `node_modules/@zvada/agent-server/src/` — the package ships its readable TypeScript source beside the compiled `dist/`: the desktop app's `deus-runtime` (compiled by Bun) carries the source; Node (`dev`, `dev:web`, the tests) loads the compiled JavaScript, and so does the npm CLI's `server.bundled.cjs` (`bun build --target=node`). The source is the fastest reference and always matches the installed version.
 - Local clone at `~/Developer/agent-server` (Conductor-managed; work lives on branches/origin, the main checkout is a stale empty worktree) and https://github.com/zvadaadam/agent-server for history, DESIGN.md, and plans/.
 - Engine bugs belong upstream (branch + PR there, then bump the pin here); deus consumes the engine protocol natively (no translate layer) — consumer-side behavior lives in the backend's `services/agent/` fold-and-persist path and the frontend's `agentEventFold` projection.
-- Deus keeps no list of models. A local chat's pickers read what this computer's CLIs list for its login (the engine's `models/list`, as `q:request agentModels`); a cloud chat's read the platform's (`cloudModels`, the same engine's catalog); before an answer, and while the harness's CLI is not installed (a read installs nothing; the list is read again when an install ends), the catalog the embedded engine was built with. `shared/models.ts` holds only Deus's own choices: the harness names and the model and thinking level a new chat starts on. A model missing from a picker is an engine pin to bump, not a row to add.
+- `shared/harnesses.ts` owns the agents Deus offers, their labels, model preferences, app-server names, cloud providers, thinking and Plan support. To offer another harness the engine provides, add its row there and its logo in `apps/web/src/assets/agents/`. The packaged smoke (`scripts/runtime/smoke/engine-ready.cjs`) keeps its own list of the agents it expects to start. Add the new id there so it checks the whole set independently.
+- Deus keeps no list of models. A local picker reads this computer's CLIs for its login (`models/list` through `agentModels`). A cloud picker reads the platform (`cloudModels`). While a list is pending or the CLI is missing, the picker uses the engine's catalog. A read installs nothing. The picker asks again after installation. `shared/models.ts` selects the starting model and thinking level from those lists.
+
+**Gemini** runs locally through Antigravity's `agy`. The engine downloads its pinned CLI on first use.
+Google's terms do not grant redistribution. The engine's catalog has no Gemini models.
+For a first Gemini chat, the person installs `agy` and signs in to their own Antigravity account
+in Settings → AI Providers or during onboarding. The picker then lists the models that account can run.
+A model already chosen or recorded stays visible while the list is unavailable.
+Its chats have no Plan toggle. Deus declines a question from its question form. Deus tool cards
+show the call's input and status without result text. Gemini takes instructions once per conversation.
 
 ### How agents drive a simulator (agent-device)
 
@@ -494,8 +503,11 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   host mutation re-reads what it depends on in the same synchronous step as
   its write (`mayStart`, `mayTouch`, `mayArchive`; a workspace's archive
   inside the app's archive queue). A chat's number is stored when it is
-  made (`sessions.chat`, a trigger) and never moves. A message continues the chat as its
-  composer would (`turn-settings.ts`). A project only in the cloud is refused
+  made (`sessions.chat`, a trigger) and never moves. A follow-up uses the chat's recorded
+  model as its composer would (`turn-settings.ts`). Without a recorded model, the host
+  uses the agent's default in the engine catalog (which can differ from the composer's
+  account default because a send does not wait for a model list) or refuses the
+  follow-up if the catalog has none. A project only in the cloud is refused
   at start with the `add_project` call that puts it here.
   `add_project(repository)` (`services/assistants/add-project.ts`, a write)
   takes a GitHub `owner/name` or an https or ssh address and nothing else. It
@@ -682,7 +694,7 @@ the catalog can move to a package the day Deus Cloud reads it too.
   process or config file (Codex writes its MCP servers to disk) holds a
   provider's token. Never put an account's token in a turn's `mcpServers`.
   Local (stdio) servers and servers with no account are named directly.
-  A Claude turn names an app's server by its id; a Codex turn names it
+  Gemini uses plain app ids. Claude reserves `computer` and `deus`. Codex uses
   `deus_<id>` (`shared/mcp-servers.ts`), since the engine refuses a Codex turn
   whose server shares a name with one in the person's own Codex config.
 - **OAuth** (`auth/mcp-oauth.ts`): signing in runs the MCP SDK's `auth()`

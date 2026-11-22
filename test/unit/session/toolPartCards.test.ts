@@ -1,8 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { SessionProvider } from "@/features/session/context";
 import type { ToolPart } from "@shared/protocol-types";
-
-vi.mock("@/features/session/ui/tools/registerTools", () => ({}));
-const { toToolUseBlocks } = await import("@/features/session/ui/blocks/ToolPartBlock");
+import { toToolUseBlocks } from "@/features/session/ui/blocks/ToolPartBlock";
+import { toolRegistry } from "@/features/session/ui/tools/ToolRegistry";
+import {
+  BashToolRenderer,
+  DefaultToolRenderer,
+  WriteToolRenderer,
+} from "@/features/session/ui/tools/renderers";
 
 function part(overrides: Partial<ToolPart>): ToolPart {
   return {
@@ -95,7 +102,130 @@ describe("a Codex tool drawn as Claude's card", () => {
   });
 });
 
+describe("whole files in Gemini's recorded tool parts", () => {
+  const small = "start\ncolor=blue\nend\n";
+  const large = Array.from(
+    { length: 320 },
+    (_, i) => `row ${String(i + 1).padStart(3, "0")} | ${i === 159 ? "before" : "fixture"}\n`
+  ).join("");
+
+  it.each([
+    ["/w/small.txt", small, "color=blue", "color=green"],
+    ["/w/large.txt", large, "row 160 | before", "row 160 | after"],
+  ])("keeps both complete sides of the edit to %s", (path, oldText, target, replacement) => {
+    const newText = oldText.replace(target, replacement);
+    const edit = part({
+      toolName: "edit_file",
+      kind: "edit",
+      locations: [{ path }],
+      state: {
+        status: "completed",
+        time: { start: 1, end: 2 },
+        output: "",
+        input: { Path: path, Target: target, Replacement: replacement },
+        content: [{ type: "diff", path, oldText, newText }],
+      },
+    });
+    expect(toToolUseBlocks(edit)).toMatchObject([
+      { name: "Edit", input: { file_path: path, old_string: oldText, new_string: newText } },
+    ]);
+  });
+
+  it("writes the new file including its final newline", () => {
+    const path = "/w/small.txt";
+    const write = part({
+      toolName: "write_file",
+      kind: "edit",
+      locations: [{ path }],
+      state: {
+        status: "completed",
+        time: { start: 1, end: 2 },
+        output: "",
+        input: { Path: path, Overwrite: true, Content: small },
+        content: [{ type: "diff", path, newText: small }],
+      },
+    });
+    expect(toToolUseBlocks(write)).toMatchObject([
+      { name: "Write", input: { file_path: path, content: small } },
+    ]);
+  });
+});
+
+describe("a tool's own card and the fields an unregistered tool carries", () => {
+  it("keeps a monitor's description and timeout and a Bash call's full input", () => {
+    for (const [toolName, input, renderer] of [
+      [
+        "Monitor",
+        { command: "tail -f log", description: "Watch the log", timeout_ms: 1000 },
+        DefaultToolRenderer,
+      ],
+      [
+        "Bash",
+        { command: "ls", description: "List files", run_in_background: true },
+        BashToolRenderer,
+      ],
+    ] as const) {
+      const call = part({
+        toolName,
+        command: input.command,
+        state: { status: "in_progress", input, time: { start: 1 } },
+      });
+      expect(toToolUseBlocks(call)).toEqual([
+        { type: "tool_use", id: "call-1", name: toolName, input },
+      ]);
+      expect(toolRegistry.getRenderer(toolName)).toBe(renderer);
+    }
+  });
+
+  it("keeps the cell input of a notebook edit that returns a diff", () => {
+    const input = { notebook_path: "/w/n.ipynb", cell_id: "c1", new_source: "x = 2" };
+    const call = part({
+      toolName: "NotebookEdit",
+      kind: "edit",
+      state: {
+        status: "completed",
+        input,
+        output: "",
+        time: { start: 1, end: 2 },
+        content: [{ type: "diff", path: input.notebook_path, oldText: "x = 1", newText: "x = 2" }],
+      },
+    });
+    expect(toToolUseBlocks(call)).toEqual([
+      { type: "tool_use", id: "call-1", name: "NotebookEdit", input },
+    ]);
+    expect(toolRegistry.getRenderer(call.toolName)).toBe(DefaultToolRenderer);
+  });
+
+  it("draws an unregistered tool from its command or file diff", () => {
+    expect(toToolUseBlocks(part({ toolName: "command_tool", command: "pwd" }))).toMatchObject([
+      { name: "Bash", input: { command: "pwd" } },
+    ]);
+    const edit = patch([{ type: "diff", path: "/w/n", newText: "hello" }]);
+    expect(toToolUseBlocks({ ...edit, toolName: "file_tool" })).toMatchObject([
+      { name: "Write", input: { file_path: "/w/n", content: "hello" } },
+    ]);
+  });
+});
+
 describe("a card's line counts", () => {
+  it("shows +3 for a three-line write ending in a newline", () => {
+    const html = renderToStaticMarkup(
+      createElement(SessionProvider, {
+        sessionStatus: "idle",
+        subagentMessages: new Map(),
+        children: createElement(WriteToolRenderer, {
+          toolUse: {
+            type: "tool_use",
+            id: "create",
+            name: "Write",
+            input: { file_path: "small.txt", content: "start\ncolor=blue\nend\n" },
+          },
+        }),
+      })
+    );
+    expect(html).toContain(">+3<");
+  });
+
   it("counts no line for an empty side and none after a final newline", async () => {
     const { computeDiffStats } = await import("@/features/session/ui/tools/utils/computeDiffStats");
     // A deleted two-line file with no final newline.
@@ -108,7 +238,17 @@ describe("a card's line counts", () => {
 
 describe("an MCP tool's card", () => {
   const mcp = (server: string, tool: string, toolName: string) =>
-    part({ toolName, kind: "other", mcp: { server, tool } } as Partial<ToolPart>);
+    part({
+      toolName,
+      kind: "other",
+      mcp: { server, tool },
+      state: {
+        status: "completed",
+        input: {},
+        output: "Page screenshot.",
+        time: { start: 1, end: 2 },
+      },
+    });
 
   it("is Deus's own card for a Deus tool, on both harnesses' spelling", () => {
     for (const toolName of [

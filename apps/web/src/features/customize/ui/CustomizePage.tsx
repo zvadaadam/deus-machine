@@ -5,8 +5,7 @@
  * Three views over one install system. Apps connect a service or local tool
  * (Connect → sign in or paste a key); plugins install a curated bundle of
  * apps and skills (Install → connect its apps when they are needed); skills
- * add a workflow the agent can follow (Add). Everything installed here
- * reaches every agent, Claude and Codex, in every project.
+ * add a workflow Claude and Codex can follow in any project.
  *
  * Opening an item replaces the catalog with its page (48b–48e) instead of a
  * dialog; the catalog stays mounted underneath, so going back keeps the
@@ -160,7 +159,7 @@ export function CustomizePage() {
               <div className="flex flex-col gap-1">
                 <h1 className="text-text-primary text-xl font-semibold">Customize</h1>
                 <p className="text-text-tertiary text-sm">
-                  Apps, plugins and skills for every agent, in every project.
+                  Manage apps, plugins and skills across your projects.
                 </p>
               </div>
               <DropdownMenu>

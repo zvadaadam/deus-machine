@@ -53,6 +53,7 @@ import { openWith } from "../streams";
 import { agentDeviceFor } from "../simulator-context";
 import { setupForTurn } from "../project-environment.service";
 import { handleAutomationToolRequest } from "../automations";
+import { AgentServerDisconnectedError } from "../../lib/errors";
 import { requireParam } from "../../lib/query-params";
 
 // ---- Singleton ----
@@ -336,7 +337,7 @@ async function askQuestions(event: ElicitationRequestedEvent): Promise<Elicitati
 
 /** The local agents' CLIs and logins, once the agent-server is connected. */
 export function getLocalAgents(): LocalAgents {
-  if (!localAgents) throw new Error("Agent server not connected");
+  if (!localAgents) throw new AgentServerDisconnectedError();
   return localAgents;
 }
 

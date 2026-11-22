@@ -1,51 +1,47 @@
 import { describe, it, expect } from "vitest";
+import { getThinkingForSession } from "@/shared/agents";
 import {
-  getDefaultModelForHarness,
-  getModelForSession,
-  getThinkingForSession,
-  getAgentHarnessForModel,
+  CATALOG_MODEL_LISTS,
   DEFAULT_MODEL,
-} from "@/shared/agents";
+  modelForSession,
+  modelValue,
+  type ModelDescriptor,
+} from "@shared/models";
 import type { SessionTurn } from "@shared/types/session";
 
-describe("getDefaultModelForHarness (the composer seed for a reopened session)", () => {
-  it("round-trips through the harness the send path derives from the model", () => {
-    for (const harness of ["claude-code", "codex-app-server"] as const) {
-      const model = getDefaultModelForHarness(harness);
-      expect(model.startsWith(`${harness}:`)).toBe(true);
-      expect(getAgentHarnessForModel(model)).toBe(harness);
-    }
-  });
-
-  it("agrees with the global default for the default harness", () => {
-    expect(getDefaultModelForHarness("claude-code")).toBe(DEFAULT_MODEL);
-  });
-});
-
-describe("reopened conversation model", () => {
+describe("the model a chat continues on", () => {
   const turn = (startedAt: number, model: string): SessionTurn => ({
     turnId: String(startedAt),
     startedAt,
     execution: { harness: "codex-app-server", model },
   });
 
-  it("uses the latest recorded choice even when history arrives out of order", () => {
+  it("uses the latest recorded model even when unlisted or history arrives out of order", () => {
+    expect(modelForSession("codex-app-server", [turn(2, "old-model"), turn(1, "other")], [])).toBe(
+      "old-model"
+    );
+  });
+
+  it("takes its own harness default when all recorded choices belong to another", () => {
+    const model = modelForSession("claude-code", [turn(1, "other")], CATALOG_MODEL_LISTS);
+    expect(modelValue("claude-code", model!)).toBe(DEFAULT_MODEL);
+  });
+
+  it("takes the marked account model when a harness has no catalog rows", () => {
+    const harness = "scripted";
+    const models: ModelDescriptor[] = ["small", "large"].map((id) => ({
+      harness,
+      id,
+      label: id,
+      isDefault: id === "large",
+      thinking: { levels: ["low", "high"] },
+    }));
+    expect(modelForSession(harness, [], CATALOG_MODEL_LISTS)).toBeUndefined();
+    const lists = [{ harness, source: "live" as const, models }];
+    expect(modelForSession(harness, [], lists)).toBe("large");
     expect(
-      getModelForSession("codex-app-server", [turn(2, "gpt-5.6-sol"), turn(1, "gpt-6-astra")])
-    ).toBe("codex-app-server:gpt-5.6-sol");
-  });
-
-  it("keeps a recorded model no list names: it is what the chat ran", () => {
-    expect(getModelForSession("codex-app-server", [turn(1, "older-model")])).toBe(
-      "codex-app-server:older-model"
-    );
-  });
-
-  it("uses the session harness default when its harness recorded no selection", () => {
-    expect(getModelForSession("codex-app-server", [])).toBe(
-      getDefaultModelForHarness("codex-app-server")
-    );
-    expect(getModelForSession("claude-code", [turn(1, "gpt-5.6-sol")])).toBe(DEFAULT_MODEL);
+      modelForSession(harness, [{ turnId: "1", execution: { harness, model: "retired" } }], lists)
+    ).toBe("retired");
   });
 });
 

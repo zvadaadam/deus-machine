@@ -13,6 +13,7 @@ import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { OperatorError } from "@zvada/agent-server/operator";
 import type { AnyOp } from "@shared/api/op";
+import { CATALOG_MODEL_LISTS } from "@shared/models";
 import { SCHEMA_SQL } from "@shared/schema";
 
 const state = vi.hoisted(() => ({
@@ -224,6 +225,9 @@ beforeEach(() => {
   state.run = (op, input) =>
     registry.run(op.name, op.kind as never, input, { caller: LOCAL_CALLER });
   state.ops = {
+    agentModels: ({ harness }) => ({
+      lists: CATALOG_MODEL_LISTS.filter((list) => !harness || list.harness === harness),
+    }),
     workspaces: () => [],
     createWorkspace: () => ({ workspaceId: "w-new" }),
     workspace: () => ({

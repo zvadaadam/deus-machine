@@ -11,9 +11,10 @@ import { Button } from "@/components/ui/button";
 import { uiActions } from "@/shared/stores/uiStore";
 import { PROVIDER_ACCOUNT_CATEGORY } from "@shared/lib/send-refusal";
 
+import type { AgentHarness } from "@shared/enums";
+import { knownHarness } from "@shared/harnesses";
 import { getAgentLabel } from "@/shared/agents";
-import type { LocalHarness } from "@shared/agent-auth";
-import { useAgentAuth, useAgentAuthEvents } from "@/features/settings/api/settings.queries";
+import { useAgentAuth } from "@/features/settings/api/settings.queries";
 import {
   localSignIn,
   readLocalAgent,
@@ -23,14 +24,7 @@ import { LoginCodeForm } from "@/features/settings/ui/sections/LoginCodeForm";
 
 function AIProvidersButton() {
   return (
-    <Button
-      variant="outline"
-      size="xs"
-      onClick={() => {
-        uiActions.setActiveSettingsSection("ai");
-        uiActions.openSettings();
-      }}
-    >
+    <Button variant="outline" size="xs" onClick={uiActions.openAISettings}>
       Open AI Providers
     </Button>
   );
@@ -40,7 +34,7 @@ interface SessionErrorCardProps {
   message: string;
   /** Structured error category (e.g. "auth", "rate_limit", "_provider_account"). */
   category?: string;
-  agentHarness?: LocalHarness | null;
+  agentHarness?: string | null;
   cloud?: boolean;
   onRetryInNewChat?: () => void;
 }
@@ -63,8 +57,9 @@ export function SessionErrorCard({
     .otherwise(() => (agentHarness ? `${getAgentLabel(agentHarness)} Error` : "Error"));
 
   let action;
-  if (category === "auth" && !cloud && agentHarness) {
-    action = <LoginAction harness={agentHarness} />;
+  if (category === "auth" && !cloud) {
+    const harness = knownHarness(agentHarness);
+    action = harness ? <LoginAction harness={harness} /> : <AIProvidersButton />;
   } else if (category === "auth" || category === PROVIDER_ACCOUNT_CATEGORY) {
     action = <AIProvidersButton />;
   } else if (onRetryInNewChat) {
@@ -100,9 +95,8 @@ export function SessionErrorCard({
 }
 
 /** Only a local authentication error needs the local CLI's sign-in methods. */
-function LoginAction({ harness }: { harness: LocalHarness }) {
+function LoginAction({ harness }: { harness: AgentHarness }) {
   const auth = useAgentAuth();
-  useAgentAuthEvents();
   const [busy, setBusy] = useState(false);
   const signIn = localSignIn(readLocalAgent(auth, harness));
   if (!signIn) return <AIProvidersButton />;

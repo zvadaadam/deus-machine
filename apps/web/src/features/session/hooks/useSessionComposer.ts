@@ -1,6 +1,6 @@
 import { useStore } from "zustand";
 import { useEffect, useMemo } from "react";
-import { DEFAULT_MODEL, DEFAULT_THINKING_LEVEL, type ThinkingLevel } from "@/shared/agents";
+import { DEFAULT_THINKING_LEVEL, type ThinkingLevel } from "@/shared/agents";
 import {
   composerStore,
   composerTarget,
@@ -9,7 +9,7 @@ import {
 } from "../store/sessionComposerStore";
 
 interface ComposerOptions {
-  initialModel: string;
+  initialModel?: string;
   initialThinking?: ThinkingLevel;
   defaultThinking: ThinkingLevel;
 }
@@ -17,7 +17,6 @@ interface ComposerOptions {
 export function useSessionComposer(
   id: string,
   { initialModel, initialThinking, defaultThinking }: ComposerOptions = {
-    initialModel: DEFAULT_MODEL,
     defaultThinking: DEFAULT_THINKING_LEVEL,
   }
 ) {

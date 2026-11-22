@@ -7,7 +7,6 @@
  */
 
 import type {
-  AgentHarness,
   AutomationPausedReason,
   AutomationRunStatus,
   AutomationRunTrigger,
@@ -139,7 +138,7 @@ export interface WorkspaceWithDetailsRow {
 export interface SessionRow {
   id: string;
   workspace_id: string;
-  agent_harness: AgentHarness;
+  agent_harness: string;
   agent_session_id: string | null;
   /** agnt session id for cloud-workspace sessions (null for local). */
   provider_session_id: string | null;

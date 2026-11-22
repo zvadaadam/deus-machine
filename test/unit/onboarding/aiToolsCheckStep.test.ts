@@ -6,7 +6,7 @@ import type { AgentAuthAnswer, HarnessAuth, HarnessCli } from "@shared/agent-aut
 
 const auth = vi.hoisted(() => ({
   data: undefined as AgentAuthAnswer | undefined,
-  isLoading: false,
+  isFetching: false,
   isError: false,
 }));
 vi.mock("@/features/settings/api/settings.queries", () => ({
@@ -25,10 +25,11 @@ const claude = (overrides: Partial<HarnessAuth> = {}): HarnessAuth => ({
 const clis: HarnessCli[] = [
   { harness: "claude-code", state: "ready", version: "0.3.288", source: "cache" },
   { harness: "codex-app-server", state: "missing" },
+  { harness: "gemini", state: "missing" },
 ];
 
 beforeEach(() => {
-  auth.isLoading = false;
+  auth.isFetching = false;
   auth.isError = false;
   auth.data = { auth: [claude()], clis, logins: [] };
 });
@@ -95,13 +96,14 @@ describe("onboarding Claude account status", () => {
 
   it("offers to install an agent whose CLI the engine has not installed", () => {
     const html = render();
-    expect(html).toContain("Not installed yet");
-    expect(html).toContain(">Install</button>");
+    expect(html).toContain(">Gemini</p>");
+    expect(html.match(/>Not installed yet</g)).toHaveLength(2);
+    expect(html.match(/>Install<\/button>/g)).toHaveLength(2);
   });
 
   it("waits for the login read before offering an action", () => {
     auth.data = undefined;
-    auth.isLoading = true;
+    auth.isFetching = true;
     const html = render();
     expect(html).toContain("Checking…");
     expect(html).not.toContain(">Sign in</button>");
@@ -117,7 +119,7 @@ describe("onboarding Claude account status", () => {
         logins: [],
       };
       if (failure === "request") auth.isError = true;
-      if (failure === "envelope") auth.data.error = "Agent server not connected";
+      if (failure === "envelope") auth.data.error = "Agent server is disconnected";
       if (failure === "unknown") auth.data.auth[0] = claude({ state: "unknown" });
       const html = render();
       expect(html).toContain("Couldn’t check account");

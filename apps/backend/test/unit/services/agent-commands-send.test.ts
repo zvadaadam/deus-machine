@@ -235,6 +235,22 @@ describeWithDb("sendMessage", () => {
     }
   );
 
+  it("refuses a Gemini plan before admitting the turn or switching the chat's agent", async () => {
+    const startTurn = vi.spyOn(agentService, "startTurn");
+    const before = db.prepare("SELECT * FROM sessions WHERE id = ?").get(SESSION);
+    await expect(
+      sendMessage({
+        sessionId: SESSION,
+        content: "plan the migration",
+        agentHarness: "gemini",
+        model: "gemini-4-neon",
+        permissionMode: "plan",
+      })
+    ).rejects.toThrow("Gemini does not offer plan mode.");
+    expect(startTurn).not.toHaveBeenCalled();
+    expect(db.prepare("SELECT * FROM sessions WHERE id = ?").get(SESSION)).toEqual(before);
+  });
+
   it("REJECTS the send when the agent server is disconnected", async () => {
     vi.spyOn(agentService, "isConnected").mockReturnValue(false);
     const startTurn = vi.spyOn(agentService, "startTurn");
@@ -366,11 +382,15 @@ describeWithDb("sendMessage", () => {
   // status is already "working" while `message_count` is still 0, because the
   // user row is written by the engine's echo and not by this command.
   describe("the harness binding", () => {
-    const sendWith = (harness: "claude-code" | "codex-app-server", turnId: string) =>
+    const sendWith = (
+      harness: InputOf<typeof api.sendMessage>["agentHarness"],
+      turnId: string,
+      model = "gpt-5.5-codex"
+    ) =>
       sendMessage({
         sessionId: SESSION,
         content: "hello",
-        model: "gpt-5.5-codex",
+        model,
         agentHarness: harness,
         turnId,
       });
@@ -382,14 +402,22 @@ describeWithDb("sendMessage", () => {
         }
       ).agent_harness;
 
-    it("moves to the harness of a send that is admitted", async () => {
+    it.each([
+      ["codex-app-server", "gpt-5.5-codex"],
+      ["gemini", "gemini-4-neon"],
+    ] as const)("opens the first turn on the selected %s model", async (agent, model) => {
       vi.spyOn(agentService, "isConnected").mockReturnValue(true);
       const startTurn = vi.spyOn(agentService, "startTurn").mockResolvedValue(undefined as never);
 
-      await expect(sendWith("codex-app-server", "turn-1")).resolves.toEqual({ turnId: "turn-1" });
-
-      expect(harness()).toBe("codex-app-server");
-      expect(startTurn.mock.calls[0][2]).toBe("codex-app-server");
+      await expect(sendWith(agent, "turn-1", model)).resolves.toEqual({ turnId: "turn-1" });
+      expect(harness()).toBe(agent);
+      expect(startTurn).toHaveBeenCalledWith(
+        SESSION,
+        "turn-1",
+        agent,
+        "hello",
+        expect.objectContaining({ model })
+      );
     });
 
     it("does NOT move for a second client's send inside the echo-only window", async () => {

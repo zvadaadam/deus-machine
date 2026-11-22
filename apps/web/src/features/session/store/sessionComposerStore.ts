@@ -41,7 +41,8 @@ function stagedContent(row: KeptDraft = storedRow.parse({})): StagedContent {
 }
 
 interface ComposerState extends StagedContent {
-  model: string;
+  /** An explicit pick. History and list defaults are read when the chat is shown. */
+  model?: string;
   thinkingLevel: ThinkingLevel;
   planModeEnabled: boolean;
 }
@@ -52,7 +53,10 @@ interface State {
   pendingContent: Record<string, StagedContent>;
 }
 
-export function emptyComposer(model: string, thinkingLevel: ThinkingLevel): ComposerState {
+export function emptyComposer(
+  model: string | undefined,
+  thinkingLevel: ThinkingLevel
+): ComposerState {
   return { ...stagedContent(), model, thinkingLevel, planModeEnabled: false };
 }
 

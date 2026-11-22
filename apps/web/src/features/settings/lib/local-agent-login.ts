@@ -1,5 +1,6 @@
 import { toast } from "sonner";
-import type { AgentAuthAnswer, AuthLogin, HarnessAuth, LocalHarness } from "@shared/agent-auth";
+import type { AgentAuthAnswer, AuthLogin, HarnessAuth } from "@shared/agent-auth";
+import type { AgentHarness } from "@shared/enums";
 import { api } from "@shared/api";
 import { openExternalPending } from "@/platform/native/window";
 import { call } from "@/platform/ws";
@@ -19,13 +20,12 @@ export function accountLine(auth: HarnessAuth): string {
 
 /** An unknown login, or one the read could not get, is not a signed-out one. */
 export function readLocalAgent(
-  query: { data?: AgentAuthAnswer; isLoading: boolean; isError: boolean },
-  harness: LocalHarness
+  query: { data?: AgentAuthAnswer; isFetching: boolean; isError: boolean },
+  harness: AgentHarness
 ): LocalAgentState {
-  if (query.isLoading) return { status: "checking" };
-  if (query.isError || query.data?.error) return { status: "failed" };
+  const answer = query.isError || query.data?.error ? undefined : query.data;
   // The CLI first: a login read from a CLI not installed yet says nothing.
-  const cli = query.data?.clis.find((candidate) => candidate.harness === harness);
+  const cli = answer?.clis.find((candidate) => candidate.harness === harness);
   if (cli?.state === "installing") {
     return {
       status: "installing",
@@ -39,12 +39,13 @@ export function readLocalAgent(
   if (cli?.state === "missing" || cli?.state === "failed") {
     return { status: "not-installed", ...(cli.error && { error: cli.error }) };
   }
-  const auth = query.data?.auth.find((candidate) => candidate.harness === harness);
+  const auth = answer?.auth.find((candidate) => candidate.harness === harness);
   if (!auth || auth.state === "unknown") {
-    return { status: "failed" };
+    // The CLI can be ready while its first login read is still under way.
+    return { status: query.isFetching ? "checking" : "failed" };
   }
   if (auth.state === "signed_in") return { status: "signed-in", auth, account: accountLine(auth) };
-  const login = query.data?.logins.find((candidate) => candidate.harness === harness);
+  const login = answer?.logins.find((candidate) => candidate.harness === harness);
   return { status: "signed-out", auth, ...(login && { login }) };
 }
 
@@ -53,10 +54,10 @@ function reasonOf(error: unknown, otherwise: string): string {
   return (error instanceof Error && error.message) || otherwise;
 }
 
-/** Install the agents' CLIs now; the install is followed on the `agentCliProgress` stream. */
-export async function installLocalAgents(): Promise<void> {
+/** Install the selected agent's CLI. */
+export async function installLocalAgent(harness: AgentHarness): Promise<void> {
   try {
-    await call(api.agentPrepareClis);
+    await call(api.agentPrepareClis, { harness });
   } catch (error) {
     toast.error(reasonOf(error, "Couldn’t start the install"));
   }
@@ -83,7 +84,7 @@ export function localSignIn(state: LocalAgentState) {
  * CLI's own sign-in opens in the browser, and its end arrives as
  * The `agentAuthChanges` stream.
  */
-export async function signInLocalAgent(harness: LocalHarness, auth: HarnessAuth): Promise<void> {
+export async function signInLocalAgent(harness: AgentHarness, auth: HarnessAuth): Promise<void> {
   const method = browserSignIn(auth);
   if (!method) return;
   // A browser opens a tab only while it handles the click: take it now, blank,
@@ -122,7 +123,7 @@ export async function cancelLocalSignIn(loginId: string): Promise<void> {
   await call(api.agentLoginCancel, { loginId }).catch(() => {});
 }
 
-export async function signOutLocalAgent(harness: LocalHarness): Promise<void> {
+export async function signOutLocalAgent(harness: AgentHarness): Promise<void> {
   try {
     await call(api.agentLogout, { harness });
   } catch (error) {

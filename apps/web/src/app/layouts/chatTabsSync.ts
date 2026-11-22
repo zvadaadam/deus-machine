@@ -6,7 +6,7 @@
  * changed, the same arrays come back, so React sees no update.
  */
 
-import { getAgentLabel, type AgentHarness } from "@/shared/agents";
+import { getAgentLabel } from "@/shared/agents";
 import type { Session } from "@/features/session/types";
 import type {
   ChatTab,
@@ -26,7 +26,7 @@ export function getOpenSessionIds(tabs: ChatTab[]): Set<string> {
   return ids;
 }
 
-export function buildStartedChatLabel(agentHarness: AgentHarness, sequence: number): string {
+export function buildStartedChatLabel(agentHarness: string, sequence: number): string {
   return `${getAgentLabel(agentHarness)} #${sequence}`;
 }
 
@@ -56,7 +56,7 @@ export function sessionToTab(session: Session, sequence: number): SessionChatTab
 }
 
 /** Keep existing labels stable when chats start out of order or tabs close. */
-export function nextStartedChatLabel(tabs: ChatTab[], agentHarness: AgentHarness): string {
+export function nextStartedChatLabel(tabs: ChatTab[], agentHarness: string): string {
   const labels = new Set(tabs.filter((tab) => tab.hasStarted).map((tab) => tab.label));
   let sequence = 1;
   while (labels.has(buildStartedChatLabel(agentHarness, sequence))) sequence++;

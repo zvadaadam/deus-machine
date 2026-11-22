@@ -218,6 +218,11 @@ export const uiActions = {
     useUIStore.getState().requestNewWorkspace(request),
   clearNewWorkspaceRequest: () => useUIStore.getState().clearNewWorkspaceRequest(),
   openSettings: () => useUIStore.getState().openSettings(),
+  openAISettings: () => {
+    const state = useUIStore.getState();
+    state.setActiveSettingsSection("ai");
+    state.openSettings();
+  },
   openEnvironmentSettings: (repoId: string, location: "local" | "cloud") =>
     useUIStore.getState().openEnvironmentSettings(repoId, location),
   closeSettings: () => useUIStore.getState().closeSettings(),

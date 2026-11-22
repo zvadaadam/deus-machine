@@ -8,8 +8,8 @@
 // engine's catalog). Before an answer arrives, and when none can, a picker
 // shows the catalog the embedded engine was built with.
 //
-// What is Deus's own stays here: the names it shows for the harnesses, and the
-// model and thinking level a new chat starts on.
+// Each harness's preferences live in harnesses.ts. This file chooses a model
+// and thinking level from what a list offers.
 
 import {
   CATALOG_MODELS,
@@ -19,14 +19,14 @@ import {
   type ModelList,
   type ThinkingLevel,
 } from "@zvada/agent-server/protocol";
-import { LOCAL_HARNESSES, type LocalHarness } from "./agent-auth";
-import { AgentHarnessSchema, type AgentHarness } from "./enums";
+import type { AgentHarness } from "./enums";
+import { HARNESSES, LOCAL_HARNESSES, harnessInfo, knownHarness } from "./harnesses";
 import type { SessionTurn } from "./types/session";
 
 export type { ModelDescriptor, ModelList };
 
 /** One harness's models: the part of a list a picker reads. */
-export interface HarnessModels {
+export interface HarnessModels extends Pick<ModelList, "source" | "error"> {
   readonly harness: string;
   readonly models: readonly ModelDescriptor[];
 }
@@ -38,15 +38,6 @@ export interface AgentModelsAnswer {
 
 // ── What Deus chooses ──────────────────────────────────────────────────────
 
-/** The harnesses a picker groups its models under, in order. */
-export const PICKER_HARNESSES: readonly LocalHarness[] = LOCAL_HARNESSES;
-
-/** The name each harness is shown under. */
-export const HARNESS_LABELS: Record<AgentHarness, string> = {
-  "claude-code": "Claude Code",
-  "codex-app-server": "Codex",
-};
-
 /**
  * The harness `name` means: its id, its name, or its name's first word
  * ("claude-code", "Claude Code", "Claude"; "codex-app-server", "Codex"), in
@@ -55,24 +46,14 @@ export const HARNESS_LABELS: Record<AgentHarness, string> = {
 export function harnessNamed(name: string): AgentHarness | undefined {
   const key = (text: string) => text.toLowerCase().replace(/[\s_-]+/g, "");
   const wanted = key(name);
-  const named = Object.entries(HARNESS_LABELS) as [AgentHarness, string][];
-  return named.find(([id, label]) =>
-    [id, label, label.split(" ")[0]!].some((said) => key(said) === wanted)
-  )?.[0];
+  return LOCAL_HARNESSES.find((id) => {
+    const { label } = HARNESSES[id];
+    return [id, label, label.split(" ")[0]!].some((said) => key(said) === wanted);
+  });
 }
 
 export const DEFAULT_AGENT_HARNESS = "claude-code" satisfies AgentHarness;
 export const DEFAULT_THINKING_LEVEL: ThinkingLevel = "high";
-
-/**
- * The models Deus prefers for a new chat, best first. The first one a list
- * offers is used; a harness with none takes its own default. These are the
- * vendor's aliases, so the choice follows its newest model (Opus 5.5 today).
- */
-const PREFERRED_MODELS: Record<LocalHarness, readonly string[]> = {
-  "claude-code": ["opus"],
-  "codex-app-server": [],
-};
 
 // ── Lists ──────────────────────────────────────────────────────────────────
 
@@ -82,6 +63,7 @@ const ACCOUNT_DEFAULT_MODEL = "default";
 /** The lists the embedded engine was built with. */
 export const CATALOG_MODEL_LISTS: readonly HarnessModels[] = LOCAL_HARNESSES.map((harness) => ({
   harness,
+  source: "catalog",
   models: CATALOG_MODELS.filter((model) => model.harness === harness),
 }));
 
@@ -112,6 +94,7 @@ export function findModel(
   const models = allModels(lists, harness);
   const row = models.find((listed) => listed.id === model);
   if (row) return { row };
+  if (!harnessInfo(harness)?.acceptsWindowSuffix) return undefined;
   const window = WINDOW_SUFFIX.exec(model)?.[1];
   if (!window) return undefined;
   const base = models.find((listed) => listed.id === model.replace(WINDOW_SUFFIX, ""));
@@ -203,7 +186,7 @@ export function defaultModelId(
   harness: string
 ): string | undefined {
   const rows = pickerModels(lists, harness);
-  const preferred = PREFERRED_MODELS[harness as LocalHarness] ?? [];
+  const preferred = harnessInfo(harness)?.preferredModels ?? [];
   for (const id of preferred) if (rows.some((row) => row.id === id)) return id;
   // Claude marks its account-default alias; the row that runs the same model is the pick.
   const marked = allModels(lists, harness).find((row) => row.isDefault);
@@ -235,20 +218,15 @@ export function parseModelValue(
     const fallback = defaultModelId(CATALOG_MODEL_LISTS, "codex-app-server");
     return fallback ? { harness: "codex-app-server", model: fallback } : undefined;
   }
-  const harness = AgentHarnessSchema.safeParse(prefix);
-  return harness.success ? { harness: harness.data, model } : undefined;
+  const harness = knownHarness(prefix);
+  return harness ? { harness, model } : undefined;
 }
 
-/** The picker value a new chat on `harness` starts on, from the engine's own catalog. */
-export function defaultModelValue(harness: AgentHarness): string {
-  const model = defaultModelId(CATALOG_MODEL_LISTS, harness);
-  // A harness this build does not know (a chat another build wrote): the
-  // chat still opens, on the default model, and a send says it cannot switch.
-  return model ? modelValue(harness, model) : DEFAULT_MODEL;
-}
-
-/** The model a new chat starts on. */
-export const DEFAULT_MODEL = defaultModelValue(DEFAULT_AGENT_HARNESS);
+/** An unbound chat starts on Claude, which ships model rows in the engine's catalog. */
+export const DEFAULT_MODEL = modelValue(
+  DEFAULT_AGENT_HARNESS,
+  defaultModelId(CATALOG_MODEL_LISTS, DEFAULT_AGENT_HARNESS)!
+);
 
 /**
  * The model and thinking level a chat continues on: those its latest turn on
@@ -257,7 +235,7 @@ export const DEFAULT_MODEL = defaultModelValue(DEFAULT_AGENT_HARNESS);
  * the defaults.
  */
 export function latestTurnExecution(
-  harness: AgentHarness,
+  harness: string,
   turns: readonly Pick<SessionTurn, "execution" | "startedAt" | "endedAt">[]
 ): SessionTurn["execution"] {
   let latest: (typeof turns)[number] | undefined;
@@ -267,6 +245,15 @@ export function latestTurnExecution(
     if (!latest || at(turn) > at(latest)) latest = turn;
   }
   return latest?.execution;
+}
+
+/** Without an explicit pick, continue on the recorded model or take this harness's own default. */
+export function modelForSession(
+  harness: string,
+  turns: readonly SessionTurn[],
+  lists: readonly HarnessModels[]
+): string | undefined {
+  return latestTurnExecution(harness, turns)?.model ?? defaultModelId(lists, harness);
 }
 
 /**

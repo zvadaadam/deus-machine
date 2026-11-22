@@ -75,7 +75,8 @@ export interface PaginatedMessages {
 export interface Session {
   id: string;
   workspace_id: string;
-  agent_harness: import("../enums").AgentHarness;
+  /** A chat written by another build can name a harness this one does not run. */
+  agent_harness: string;
   agent_session_id?: string | null;
   /** agnt cloud session id — the direct lane connects to this (cloud only). */
   provider_session_id?: string | null;

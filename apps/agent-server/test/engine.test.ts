@@ -5,15 +5,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentServerClient } from "@zvada/agent-server/client";
 import type { LifecycleEvent, TurnStartParams } from "@zvada/agent-server/protocol";
+import { LOCAL_HARNESSES } from "@shared/harnesses";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 
 const { mockCheckpoint } = vi.hoisted(() => ({ mockCheckpoint: vi.fn(async () => {}) }));
 vi.mock("../agents/core/checkpoint", () => ({ createCheckpoint: mockCheckpoint }));
-vi.mock("../agents/core/engine", () => ({
-  getRuntime: () => {
-    throw new Error("tests pass a runtime");
-  },
-}));
 
 import { beforeCancel, beginTurnStart, startEngine, stopEngine } from "../index";
 import { HostRpc, notifyTitle } from "../host-link";
@@ -25,7 +21,7 @@ const T = 1_700_000_000_000;
 function fakeRuntime(hang = false) {
   const started: TurnStartParams[] = [];
   const runtime = {
-    harnesses: ["claude-code", "codex-app-server"],
+    harnesses: LOCAL_HARNESSES,
     capabilities: () => ({
       multiTurn: true,
       sessionResume: true,
@@ -112,11 +108,19 @@ describe("the engine in the backend's process", () => {
     await stopEngine();
   });
 
-  it("handshakes on the standard wire and reports the two deus harnesses", async () => {
-    await open();
+  it("starts all three local harnesses on the standard wire", async () => {
+    client = await AgentServerClient.attach(startEngine(host));
     const init = await client.initialize();
-    expect(Object.keys(init.harnesses).sort()).toEqual(["claude-code", "codex-app-server"]);
+    expect(Object.keys(init.harnesses).sort()).toEqual([
+      "claude-code",
+      "codex-app-server",
+      "gemini",
+    ]);
     expect(init.server.name).toBe("deus-agent-server");
+  });
+
+  it("reads the runtime login through the wire", async () => {
+    await open();
     await expect(client.authStatus({ harnesses: ["claude-code"] })).resolves.toEqual([
       { harness: "claude-code", state: "signed_out", methods: [] },
     ]);
