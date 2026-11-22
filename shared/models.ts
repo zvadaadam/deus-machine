@@ -98,6 +98,7 @@ export function findModel(
   const models = allModels(lists, harness);
   const row = models.find((listed) => listed.id === model);
   if (row) return { row };
+  if (!harnessInfo(harness)?.acceptsWindowSuffix) return undefined;
   const window = WINDOW_SUFFIX.exec(model)?.[1];
   if (!window) return undefined;
   const base = models.find((listed) => listed.id === model.replace(WINDOW_SUFFIX, ""));

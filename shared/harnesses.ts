@@ -10,6 +10,8 @@ interface Harness {
   vendor: string;
   /** Vendor aliases in order of preference for a new chat. With no match, use the harness's default. */
   preferredModels: readonly string[];
+  /** A window suffix such as `[1m]` selects a context size on a listed model. */
+  acceptsWindowSuffix: boolean;
   /** How a turn names an installed app's MCP server. */
   appServers: { prefix: string } | { reserved: readonly string[] };
   /** The provider account a cloud turn needs. A harness with none runs only on this computer. */
@@ -27,6 +29,7 @@ export const HARNESSES = {
     vendor: "Anthropic",
     // The alias follows the newest Opus the account offers.
     preferredModels: ["opus"],
+    acceptsWindowSuffix: true,
     // Apps keep their ids. The harness owns "computer" and cards read "deus" as Deus's own tools.
     appServers: { reserved: ["computer", "deus"] },
     cloudProvider: "claude",
@@ -38,6 +41,7 @@ export const HARNESSES = {
     label: "Codex",
     vendor: "OpenAI",
     preferredModels: [],
+    acceptsWindowSuffix: false,
     // Codex merges a server with its namesake in the person's config. The engine refuses that collision.
     // App ids have no underscore, so a prefixed name is distinct from the person's app id.
     appServers: { prefix: "deus_" },
@@ -50,6 +54,7 @@ export const HARNESSES = {
     label: "Gemini",
     vendor: "Google",
     preferredModels: [],
+    acceptsWindowSuffix: false,
     appServers: { reserved: [] },
     cloudProvider: null,
     acceptsUnlistedOff: false,

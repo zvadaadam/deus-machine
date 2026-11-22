@@ -1363,6 +1363,48 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     });
   });
 
+  it("accepts a window suffix for Claude and refuses an unlisted Gemini variant before making a chat", async () => {
+    const operator = createOperator(createDeusHost());
+    const start = (agent: string, model: string) =>
+      operator.call(
+        "start_session",
+        {
+          project: "demo-shop",
+          workspace: "lead",
+          message: "go",
+          agent,
+          model,
+          wait: 0,
+        },
+        assistantWho()
+      );
+    await expect(start("Claude", "opus[1m]")).resolves.toContain('started "lead:');
+    expect(state.sent.at(-1)?.input.model).toBe("opus[1m]");
+    const before = state.db.prepare("SELECT id FROM sessions").all();
+    state.ops.agentModels = () => ({
+      lists: [
+        {
+          harness: "gemini",
+          source: "live",
+          models: [
+            {
+              id: "gemini-4-neon",
+              harness: "gemini",
+              label: "Gemini 4 Neon",
+              thinking: { levels: ["low"] },
+            },
+          ],
+        },
+      ],
+    });
+    await expect(start("Gemini", "gemini-4-neon[1m]")).rejects.toMatchObject({
+      code: "invalid_input",
+      message: expect.stringContaining('"gemini-4-neon[1m]" is not one gemini offers here'),
+    });
+    expect(state.db.prepare("SELECT id FROM sessions").all()).toEqual(before);
+    expect(state.sent).toHaveLength(1);
+  });
+
   it("starts Gemini on the account's default and judges off against its live list", async () => {
     const host = createDeusHost();
     state.ops.agentModels = () => ({
