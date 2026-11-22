@@ -154,11 +154,11 @@ describe("LocalAgents", () => {
     expect((await logins.status()).logins).toEqual([]);
   });
 
-  it("reads each CLI with its login, and installs them on request without waiting", async () => {
+  it("reads each CLI with its login and prepares only the requested agent", async () => {
     const { logins, client, tellProgress } = engine(signedIn);
     await expect(logins.status()).resolves.toEqual({ auth: [signedIn], clis: [cli], logins: [] });
-    logins.prepareClis();
-    expect(client.prepareClis).toHaveBeenCalledWith(["claude-code", "codex-app-server"]);
+    logins.prepareCli("codex-app-server");
+    expect(client.prepareClis).toHaveBeenCalledExactlyOnceWith(["codex-app-server"]);
     const progress = {
       harness: "codex-app-server",
       version: "0.160.0",

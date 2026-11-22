@@ -139,8 +139,14 @@ export const cloudOrganizations = live({
   output: out<CloudOrganizations>(),
 });
 
-/** Install the agents' CLIs now. Answers at once; progress arrives on `agentCliProgress`. */
-export const agentPrepareClis = write({ name: "agentPrepareClis", output: out<void>() });
+const localAgent = z.object({ harness: AgentHarnessSchema });
+
+/** Install one agent's CLI. Progress arrives on `agentCliProgress`. */
+export const agentPrepareClis = write({
+  name: "agentPrepareClis",
+  input: localAgent,
+  output: out<void>(),
+});
 
 /**
  * Sign a local agent in. A login this computer already has of that kind is
@@ -149,8 +155,7 @@ export const agentPrepareClis = write({ name: "agentPrepareClis", output: out<vo
  */
 export const agentSignIn = write({
   name: "agentSignIn",
-  input: z.object({
-    harness: AgentHarnessSchema,
+  input: localAgent.extend({
     method: z.string().min(1),
     apiKey: z.string().optional(),
   }),
@@ -173,7 +178,7 @@ export const agentLoginCancel = write({
 /** Sign a local agent out in its CLI: a terminal's login too, as it is the same one. */
 export const agentLogout = write({
   name: "agentLogout",
-  input: z.object({ harness: AgentHarnessSchema }),
+  input: localAgent,
   output: out<{ auth: HarnessAuth }>(),
 });
 

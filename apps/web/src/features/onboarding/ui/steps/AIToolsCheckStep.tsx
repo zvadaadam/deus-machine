@@ -2,7 +2,7 @@ import { match } from "ts-pattern";
 import { CliStatusRow } from "../components/CliStatusRow";
 import { useAgentAuth, useAgentAuthEvents } from "@/features/settings/api/settings.queries";
 import {
-  installLocalAgents,
+  installLocalAgent,
   localSignIn,
   readLocalAgent,
   signInLocalAgent,
@@ -51,7 +51,7 @@ export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
     } else if (state.status === "not-installed") {
       action = {
         label: state.error ? "Try again" : "Install",
-        run: () => void installLocalAgents(),
+        run: () => void installLocalAgent(harness),
       };
     }
     return {

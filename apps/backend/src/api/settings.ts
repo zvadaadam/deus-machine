@@ -133,7 +133,7 @@ export default [
 
   handle(api.cloudOrganizations, () => getCloudOrganizations()),
 
-  handle(api.agentPrepareClis, () => getLocalAgents().prepareClis()),
+  handle(api.agentPrepareClis, ({ harness }) => getLocalAgents().prepareCli(harness)),
   handle(api.agentSignIn, ({ harness, method, apiKey }) =>
     getLocalAgents().signIn(harness, method, apiKey?.trim() || undefined)
   ),

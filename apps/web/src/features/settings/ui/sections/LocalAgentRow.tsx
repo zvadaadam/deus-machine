@@ -6,7 +6,7 @@ import type { AgentHarness } from "@shared/enums";
 import { HARNESSES } from "@shared/harnesses";
 import {
   cancelLocalSignIn,
-  installLocalAgents,
+  installLocalAgent,
   localSignIn,
   signInLocalAgent,
   signOutLocalAgent,
@@ -95,7 +95,7 @@ export function LocalAgentRow({
               variant="outline"
               size="xs"
               disabled={busy}
-              onClick={() => run(installLocalAgents)}
+              onClick={() => run(() => installLocalAgent(harness))}
             >
               {state.error ? "Try again" : "Install"}
             </Button>

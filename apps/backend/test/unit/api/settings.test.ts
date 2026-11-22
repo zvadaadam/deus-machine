@@ -48,7 +48,7 @@ const agents = vi.hoisted(() => ({
   connected: true,
   status: vi.fn(),
   models: vi.fn(),
-  prepareClis: vi.fn(),
+  prepareCli: vi.fn(),
   signIn: vi.fn(),
   complete: vi.fn(),
   cancel: vi.fn(),
@@ -443,9 +443,10 @@ describe("cloudModels", () => {
 describe("the local agents' CLIs and logins", () => {
   const auth = { harness: "claude-code", state: "signed_in", methods: [] };
 
-  it("starts the CLI install and answers at once", async () => {
-    expect(await run(api.agentPrepareClis)).toBeUndefined();
-    expect(agents.prepareClis).toHaveBeenCalledOnce();
+  it("starts only the named CLI install and refuses a request without a harness", async () => {
+    await expect(run(api.agentPrepareClis)).rejects.toMatchObject({ statusCode: 400 });
+    expect(await run(api.agentPrepareClis, { harness: "codex-app-server" })).toBeUndefined();
+    expect(agents.prepareCli).toHaveBeenCalledExactlyOnceWith("codex-app-server");
   });
 
   it("signs in with the method asked for, and answers what the engine did", async () => {

@@ -54,10 +54,10 @@ function reasonOf(error: unknown, otherwise: string): string {
   return (error instanceof Error && error.message) || otherwise;
 }
 
-/** Install the agents' CLIs now; the install is followed on the `agentCliProgress` stream. */
-export async function installLocalAgents(): Promise<void> {
+/** Install the selected agent's CLI. */
+export async function installLocalAgent(harness: AgentHarness): Promise<void> {
   try {
-    await call(api.agentPrepareClis);
+    await call(api.agentPrepareClis, { harness });
   } catch (error) {
     toast.error(reasonOf(error, "Couldn’t start the install"));
   }

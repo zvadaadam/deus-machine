@@ -15,7 +15,7 @@ vi.mock("@/platform/ws", () => ({ call }));
 vi.mock("@/platform/native/window", () => ({ openExternalPending }));
 vi.mock("sonner", () => ({ toast }));
 
-import { signInLocalAgent } from "@/features/settings/lib/local-agent-login";
+import { installLocalAgent, signInLocalAgent } from "@/features/settings/lib/local-agent-login";
 
 const browser = { id: "claudeai", kind: "browser", label: "Claude", credential: "subscription" };
 const signedOut = {
@@ -25,6 +25,13 @@ const signedOut = {
 } as HarnessAuth;
 
 beforeEach(() => vi.clearAllMocks());
+
+it("asks to install only the agent whose row was pressed", async () => {
+  await installLocalAgent("codex-app-server");
+  expect(call).toHaveBeenCalledExactlyOnceWith(api.agentPrepareClis, {
+    harness: "codex-app-server",
+  });
+});
 
 describe("signInLocalAgent", () => {
   it("takes the tab during the click, and sends it to the sign-in page once the backend answers", async () => {

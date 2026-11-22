@@ -68,9 +68,9 @@ export class LocalAgents {
     );
   }
 
-  /** Install the CLIs turns run, now: answered at once, the install told on `agentCliProgress`. */
-  prepareClis(): void {
-    this.client.prepareClis([...LOCAL_HARNESSES]).catch((error: unknown) => {
+  /** Start this agent's install. The engine reports progress on `agentCliProgress`. */
+  prepareCli(harness: AgentHarness): void {
+    this.client.prepareClis([harness]).catch((error: unknown) => {
       console.warn("[LocalAgents] CLI install failed:", error);
     });
   }
