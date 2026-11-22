@@ -498,9 +498,6 @@ export function HomeView({
               )}
             />
 
-            {selection.unavailable && (
-              <p className="text-text-muted px-4 pb-1 text-xs">{selection.unavailable}</p>
-            )}
             {/* Bottom toolbar — model picker (left) + send button (right) */}
             <div className="flex items-center justify-between px-1.5 pt-0.5 pb-2">
               <ModelPicker
