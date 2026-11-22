@@ -43,6 +43,24 @@ describe("whether a chat's model list is live", () => {
 });
 
 describe("the harnesses a picker offers", () => {
+  it.each([false, true])(
+    "shows an empty tab for a harness omitted from a successful model read (cloud: %s)",
+    (cloud) => {
+      state.local = state.cloud = {
+        lists: [{ harness: "claude-code", source: "catalog", models: [] }],
+      };
+      const { lists, unavailable } = useChatModel({ cloud, harness: "codex-app-server" });
+      expect(unavailable).toBe("No models available.");
+      expect(modelPickerView(lists, undefined).groups).toContainEqual(
+        expect.objectContaining({
+          agentHarness: "codex-app-server",
+          options: [],
+          empty: { message: unavailable, openSettings: true },
+        })
+      );
+    }
+  );
+
   it("shows the reason from the empty harness even when a chat remembers one of its models", () => {
     const error = "The CLI is not installed yet.";
     state.local = { lists: [{ harness: "gemini", source: "catalog", models: [], error }] };

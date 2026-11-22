@@ -16,7 +16,7 @@ import { HARNESSES } from "@shared/harnesses";
 import type { ThinkingLevel } from "@shared/protocol";
 
 export interface PickerModelList extends HarnessModels {
-  /** The query's state when the engine has supplied no list for this agent. */
+  /** The query's state while the lane has no answer. */
   unanswered?: "pending" | "unavailable";
 }
 

@@ -104,7 +104,9 @@ export function useModelListsState(chat: ModelScope): ModelListsState {
         harness,
         source: "catalog",
         models: catalog.find((entry) => entry.harness === harness)?.models ?? [],
-        unanswered: query.isPending && query.isEnabled ? "pending" : "unavailable",
+        ...(!answer && {
+          unanswered: query.isPending && query.isEnabled ? "pending" : "unavailable",
+        }),
       };
     }),
     live: (harness) => {
