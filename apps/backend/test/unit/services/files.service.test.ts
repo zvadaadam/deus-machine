@@ -1,275 +1,147 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
-
-const { mockExecFileSync, mockReaddirSync, mockStatSync, mockReadFileSync } = vi.hoisted(() => ({
-  mockExecFileSync: vi.fn(),
-  mockReaddirSync: vi.fn(),
-  mockStatSync: vi.fn(),
-  mockReadFileSync: vi.fn(),
-}));
-
-vi.mock("child_process", () => ({
-  execFileSync: mockExecFileSync,
-}));
-
-vi.mock("fs", () => ({
-  default: {
-    readdirSync: mockReaddirSync,
-    statSync: mockStatSync,
-    readFileSync: mockReadFileSync,
-    existsSync: vi.fn(() => false),
-  },
-  readdirSync: mockReaddirSync,
-  statSync: mockStatSync,
-  readFileSync: mockReadFileSync,
-}));
-
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import * as git from "@shared/lib/git-process";
 import {
-  scanWorkspaceFiles,
-  readTextFile,
+  clearCache,
   fuzzySearchFiles,
   invalidateCache,
-  clearCache,
+  listTopFiles,
+  readTextFile,
+  scanWorkspaceFiles,
 } from "../../../src/services/files.service";
 
-describe("files.service", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    clearCache();
-  });
+let root: string;
+beforeEach(() => {
+  root = mkdtempSync(path.join(tmpdir(), "deus-files-"));
+});
+afterEach(() => {
+  clearCache();
+  rmSync(root, { recursive: true, force: true });
+});
 
-  afterEach(() => {
-    clearCache();
-  });
+function write(file: string, text: string | Buffer = "") {
+  const full = path.join(root, file);
+  mkdirSync(path.dirname(full), { recursive: true });
+  writeFileSync(full, text);
+  return full;
+}
 
-  describe("scanWorkspaceFiles (git mode)", () => {
-    it("returns a tree from git ls-files output", () => {
-      mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
-        if (args[0] === "rev-parse") return ".git";
-        if (args[0] === "ls-files") return "src/app.ts\0src/index.ts\0README.md\0";
-        return "";
-      });
-      mockStatSync.mockReturnValue({ size: 1024 });
+it("lists tracked and untracked files, including ignored project settings and names with newlines", async () => {
+  execFileSync("git", ["init", "-q", root]);
+  expect(await scanWorkspaceFiles(root)).toEqual({ files: [], totalFiles: 0, totalSize: 0 });
+  const tracked = write("src/auth/a\nb.ts", "text");
+  execFileSync("git", ["-C", root, "add", "--", "src"]);
+  const ignore = ".deus/\n*.tmp\n";
+  write(".gitignore", ignore);
+  write(".deus/environment.json", "{}");
+  write(".deus/private");
+  write("ignored.tmp");
+  write("src/auth/untracked.ts", "123");
+  rmSync(tracked);
+  invalidateCache(root);
 
-      const result = scanWorkspaceFiles("/workspace");
+  const tree = await scanWorkspaceFiles(root);
+  expect(tree.totalFiles).toBe(4);
+  expect(tree.totalSize).toBe(ignore.length + 2 + 3);
+  expect(tree.files.map((file) => file.path)).toEqual([".deus", "src", ".gitignore"]);
+  expect(tree.files[1].children?.[0].children).toEqual([
+    { name: "a\nb.ts", path: "src/auth/a\nb.ts", type: "file", size: 0 },
+    { name: "untracked.ts", path: "src/auth/untracked.ts", type: "file", size: 3 },
+  ]);
+});
 
-      expect(result.totalFiles).toBe(3);
-      expect(result.files).toHaveLength(2); // 'src' dir + README.md file
-
-      const srcDir = result.files.find((n) => n.name === "src");
-      expect(srcDir).toBeDefined();
-      expect(srcDir!.type).toBe("directory");
-      expect(srcDir!.children).toHaveLength(2);
-      expect(srcDir!.children![0].name).toBe("app.ts");
-      expect(srcDir!.children![1].name).toBe("index.ts");
-
-      const readme = result.files.find((n) => n.name === "README.md");
-      expect(readme).toBeDefined();
-      expect(readme!.type).toBe("file");
-      expect(readme!.size).toBe(1024);
+it("lists and counts a nested file once during an edit/edit merge conflict", async () => {
+  const file = "src/conflict.txt";
+  const run = (...args: string[]) =>
+    execFileSync("git", args, {
+      cwd: root,
+      encoding: "utf8",
+      stdio: "pipe",
+      env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" },
     });
+  const commit = (version: string) => {
+    write(file, version + "\n");
+    run("add", file);
+    run("commit", "-qm", version);
+  };
+  run("init", "-qb", "main");
+  run("config", "user.name", "Files Test");
+  run("config", "user.email", "files@example.test");
+  commit("base");
+  run("switch", "-qc", "topic");
+  commit("theirs");
+  run("switch", "main");
+  commit("ours");
+  expect(() => run("merge", "topic")).toThrow();
+  expect(run("ls-files", "--unmerged").trimEnd().split("\n")).toHaveLength(3);
 
-    it("sorts directories before files, both alphabetically", () => {
-      mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
-        if (args[0] === "rev-parse") return ".git";
-        if (args[0] === "ls-files") return "zebra.ts\0alpha.ts\0src/b.ts\0lib/a.ts\0";
-        return "";
-      });
-      mockStatSync.mockReturnValue({ size: 100 });
+  const tree = await scanWorkspaceFiles(root);
+  expect(tree.files[0].children?.map((node) => node.path)).toEqual([file]);
+  expect(tree.totalFiles).toBe(1);
+  expect(tree.totalSize).toBe(statSync(path.join(root, file)).size);
+});
 
-      const result = scanWorkspaceFiles("/workspace");
+it("shares a pending scan and honours invalidation before that scan finishes", async () => {
+  const first = Promise.withResolvers<string>();
+  const read = vi
+    .spyOn(git, "runGit")
+    .mockReturnValueOnce(first.promise)
+    .mockResolvedValueOnce("fresh\0");
+  const old = scanWorkspaceFiles(root);
+  const shared = scanWorkspaceFiles(root);
+  expect(read).toHaveBeenCalledOnce();
+  invalidateCache(root);
+  const fresh = await scanWorkspaceFiles(root);
+  first.resolve("old\0");
 
-      expect(result.files.map((n) => n.name)).toEqual(["lib", "src", "alpha.ts", "zebra.ts"]);
-    });
+  expect((await old).files[0].path).toBe("old");
+  expect(await shared).toBe(await old);
+  expect((await scanWorkspaceFiles(root)).files[0].path).toBe("fresh");
+  expect(await scanWorkspaceFiles(root)).toBe(fresh);
+  expect(read).toHaveBeenCalledTimes(2);
+});
 
-    it("caches results for 15 seconds", () => {
-      mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
-        if (args[0] === "rev-parse") return ".git";
-        if (args[0] === "ls-files") return "file.ts\0";
-        return "";
-      });
-      mockStatSync.mockReturnValue({ size: 100 });
+it("walks folders when git cannot list files, and skips dependency folders", async () => {
+  write("src/index.ts");
+  write("app.ts");
+  write("node_modules/private.ts");
+  const tree = await scanWorkspaceFiles(root);
+  expect(tree.totalFiles).toBe(2);
+  expect(tree.files.map((file) => file.name)).toEqual(["src", "app.ts"]);
+});
 
-      const result1 = scanWorkspaceFiles("/workspace");
-      const result2 = scanWorkspaceFiles("/workspace");
+it("uses the directory walk when ls-files exceeds its output limit", async () => {
+  execFileSync("git", ["init", "-q", root]);
+  write(".gitignore", "ignored.txt\n");
+  write("ignored.txt");
+  const run = git.runGit;
+  const list = vi
+    .spyOn(git, "runGit")
+    .mockImplementationOnce((args, options) => run(args, { ...options, maxOutputBytes: 1 }));
 
-      // Second call should use cache — only 2 execFileSync calls total
-      expect(mockExecFileSync).toHaveBeenCalledTimes(2);
-      expect(result1).toBe(result2);
-    });
+  const tree = await scanWorkspaceFiles(root);
+  expect(list.mock.calls[0][1].maxOutputBytes).toBe(50 * 1024 * 1024);
+  expect(tree.files.map((file) => file.path)).toContain("ignored.txt");
+});
 
-    it("invalidates cache when requested", () => {
-      mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
-        if (args[0] === "rev-parse") return ".git";
-        if (args[0] === "ls-files") return "file.ts\0";
-        return "";
-      });
-      mockStatSync.mockReturnValue({ size: 100 });
+it("ranks file mentions by depth or query and honours the limit", async () => {
+  execFileSync("git", ["init", "-q", root]);
+  write("app.ts");
+  write("src/app.ts");
+  write("lib/other.js");
+  expect((await listTopFiles(root, 1)).map((file) => file.path)).toEqual(["app.ts"]);
+  expect((await fuzzySearchFiles(root, "app", 2)).map((file) => file.path)).toEqual([
+    "app.ts",
+    "src/app.ts",
+  ]);
+  expect(await fuzzySearchFiles(root, "app", 1)).toHaveLength(1);
+  expect(await fuzzySearchFiles(root, "zzzz")).toEqual([]);
+});
 
-      scanWorkspaceFiles("/workspace");
-      invalidateCache("/workspace");
-      scanWorkspaceFiles("/workspace");
-
-      expect(mockExecFileSync).toHaveBeenCalledTimes(4);
-    });
-
-    it("handles empty git repos", () => {
-      mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
-        if (args[0] === "rev-parse") return ".git";
-        if (args[0] === "ls-files") return "";
-        return "";
-      });
-
-      const result = scanWorkspaceFiles("/workspace");
-
-      expect(result.files).toEqual([]);
-      expect(result.totalFiles).toBe(0);
-      expect(result.totalSize).toBe(0);
-    });
-
-    it("handles stat failures gracefully (deleted files)", () => {
-      mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
-        if (args[0] === "rev-parse") return ".git";
-        if (args[0] === "ls-files") return "exists.ts\0deleted.ts\0";
-        return "";
-      });
-      mockStatSync.mockImplementation((filePath: string) => {
-        if (filePath.includes("deleted.ts")) throw new Error("ENOENT");
-        return { size: 500 };
-      });
-
-      const result = scanWorkspaceFiles("/workspace");
-
-      expect(result.totalFiles).toBe(2);
-      expect(result.totalSize).toBe(500);
-    });
-
-    it("builds nested directory trees correctly", () => {
-      mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
-        if (args[0] === "rev-parse") return ".git";
-        if (args[0] === "ls-files")
-          return "src/features/auth/login.ts\0src/features/auth/types.ts\0src/app.ts\0";
-        return "";
-      });
-      mockStatSync.mockReturnValue({ size: 100 });
-
-      const result = scanWorkspaceFiles("/workspace");
-
-      expect(result.totalFiles).toBe(3);
-      const srcDir = result.files.find((n) => n.name === "src");
-      expect(srcDir?.type).toBe("directory");
-
-      const featuresDir = srcDir?.children?.find((n) => n.name === "features");
-      expect(featuresDir?.type).toBe("directory");
-
-      const authDir = featuresDir?.children?.find((n) => n.name === "auth");
-      expect(authDir?.type).toBe("directory");
-      expect(authDir?.children?.map((n) => n.name)).toEqual(["login.ts", "types.ts"]);
-    });
-  });
-
-  describe("scanWorkspaceFiles (readdir fallback)", () => {
-    it("falls back to readdir when not a git repo", () => {
-      mockExecFileSync.mockImplementation(() => {
-        throw new Error("not a git repository");
-      });
-
-      mockReaddirSync.mockImplementation((dir: string) => {
-        if (dir === "/workspace") {
-          return [
-            {
-              name: "src",
-              isDirectory: () => true,
-              isFile: () => false,
-              isSymbolicLink: () => false,
-            },
-            {
-              name: "app.ts",
-              isDirectory: () => false,
-              isFile: () => true,
-              isSymbolicLink: () => false,
-            },
-            {
-              name: "node_modules",
-              isDirectory: () => true,
-              isFile: () => false,
-              isSymbolicLink: () => false,
-            },
-          ];
-        }
-        if (dir.endsWith("/src")) {
-          return [
-            {
-              name: "index.ts",
-              isDirectory: () => false,
-              isFile: () => true,
-              isSymbolicLink: () => false,
-            },
-          ];
-        }
-        return [];
-      });
-      mockStatSync.mockReturnValue({ size: 200 });
-
-      const result = scanWorkspaceFiles("/workspace");
-
-      expect(result.totalFiles).toBe(2);
-      const nodeModules = result.files.find((n) => n.name === "node_modules");
-      expect(nodeModules).toBeUndefined();
-    });
-  });
-
-  describe("fuzzySearchFiles", () => {
-    it("finds files matching a query", () => {
-      mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
-        if (args[0] === "rev-parse") return ".git";
-        if (args[0] === "ls-files")
-          return "src/app.ts\0src/utils/helpers.ts\0README.md\0package.json\0";
-        return "";
-      });
-
-      const results = fuzzySearchFiles("/workspace", "app", 10);
-
-      expect(results.length).toBeGreaterThan(0);
-      expect(results[0].path).toBe("src/app.ts");
-      expect(results[0].name).toBe("app.ts");
-    });
-
-    it("respects limit parameter", () => {
-      mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
-        if (args[0] === "rev-parse") return ".git";
-        if (args[0] === "ls-files") return "a.ts\0b.ts\0c.ts\0d.ts\0e.ts\0";
-        return "";
-      });
-
-      const results = fuzzySearchFiles("/workspace", "t", 2);
-      expect(results.length).toBeLessThanOrEqual(2);
-    });
-
-    it("returns empty for non-matching query", () => {
-      mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
-        if (args[0] === "rev-parse") return ".git";
-        if (args[0] === "ls-files") return "src/app.ts\0";
-        return "";
-      });
-
-      const results = fuzzySearchFiles("/workspace", "zzzzz", 10);
-      expect(results).toEqual([]);
-    });
-  });
-
-  describe("readTextFile", () => {
-    it("reads a text file", () => {
-      mockReadFileSync.mockReturnValue(Buffer.from("hello world\n"));
-      const content = readTextFile("/workspace/file.ts");
-      expect(content).toBe("hello world\n");
-    });
-
-    it("returns null for binary files", () => {
-      const binary = Buffer.alloc(100);
-      binary[50] = 0;
-      mockReadFileSync.mockReturnValue(binary);
-      const content = readTextFile("/workspace/image.png");
-      expect(content).toBeNull();
-    });
-  });
+it("reads text and declines binary content", () => {
+  expect(readTextFile(write("file.ts", "hello world\n"))).toBe("hello world\n");
+  expect(readTextFile(write("image.png", Buffer.from([65, 0, 65])))).toBeNull();
 });

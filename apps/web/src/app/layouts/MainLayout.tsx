@@ -476,7 +476,7 @@ export function MainLayout() {
               ? () => archiveWorkspace(selectedWorkspace.id)
               : undefined
           }
-          prState={derivePRActionState(prStatusQuery, ghIdentity)}
+          prState={derivePRActionState(prStatusQuery, ghIdentity, selectedWorkspace)}
           onOpenProject={repoActions.handleOpenProject}
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
           onStartNewProject={() => repoActions.setShowStartNewModal(true)}

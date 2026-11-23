@@ -5,8 +5,8 @@ import fs from "fs";
 import path from "path";
 import type { InitFetchIssue } from "@shared/enums";
 import { getDatabase } from "../lib/database";
-import { GitError, runGit } from "../lib/git-process";
-import { processGroupsStopped } from "../lib/process-groups";
+import { GitError, runGit } from "@shared/lib/git-process";
+import { processGroupsStopped } from "@shared/lib/process-groups";
 import {
   advanceLocalStage,
   failStart,

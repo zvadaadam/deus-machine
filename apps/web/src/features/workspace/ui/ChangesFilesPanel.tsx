@@ -3,13 +3,12 @@
  *
  * Renders inside the Code panel's "Changes" view (pinned mode + minimap hover).
  * Files are grouped by directory with collapsible folder headers.
- * Color dots indicate change status: green=added, yellow=modified, red=deleted.
  */
 
 import { useState, useMemo, useCallback } from "react";
 import { ChevronDown, ChevronRight, Folder } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
-import { getChangeStatus, STATUS_BG, fileChangePath } from "../lib/workspace.utils";
+import { fileChangeLabel, STATUS_BG } from "../lib/workspace.utils";
 import { PierreFileIcon } from "@/features/file-browser/lib/pierreIcons";
 import type { FileChange } from "@/shared/types";
 
@@ -19,57 +18,32 @@ interface ChangesFilesPanelProps {
   onFileClick: (path: string) => void;
 }
 
-interface FileEntry {
-  path: string;
-  name: string;
-  status: "added" | "modified" | "deleted";
-  additions: number;
-  deletions: number;
-}
-
 interface FolderGroup {
   folder: string;
-  files: FileEntry[];
+  files: FileChange[];
 }
 
 /** Group flat file changes into folder groups */
 function groupByFolder(fileChanges: FileChange[]): FolderGroup[] {
-  const folderMap = new Map<string, FileEntry[]>();
+  const folderMap = new Map<string, FileChange[]>();
 
   for (const change of fileChanges) {
-    const path = fileChangePath(change);
-    if (!path) continue;
-
-    const lastSlash = path.lastIndexOf("/");
-    const folder = lastSlash > 0 ? path.substring(0, lastSlash) : "";
-    const name = lastSlash > 0 ? path.substring(lastSlash + 1) : path;
-
+    const folder = change.file.substring(0, change.file.lastIndexOf("/"));
     const files = folderMap.get(folder) ?? [];
-    files.push({
-      path,
-      name,
-      status: getChangeStatus(change),
-      additions: change.additions,
-      deletions: change.deletions,
-    });
+    files.push(change);
     folderMap.set(folder, files);
   }
 
-  // Sort folders alphabetically, root files ("") last
-  const groups: FolderGroup[] = [];
-  const sortedFolders = [...folderMap.keys()].sort((a, b) => {
+  // Root files follow the folders.
+  const groups = Array.from(folderMap, ([folder, files]) => ({
+    folder,
+    files: files.sort((a, b) => a.file.localeCompare(b.file)),
+  }));
+  return groups.sort(({ folder: a }, { folder: b }) => {
     if (a === "") return 1;
     if (b === "") return -1;
     return a.localeCompare(b);
   });
-
-  for (const folder of sortedFolders) {
-    const files = folderMap.get(folder)!;
-    files.sort((a, b) => a.name.localeCompare(b.name));
-    groups.push({ folder, files });
-  }
-
-  return groups;
 }
 
 export function ChangesFilesPanel({
@@ -99,7 +73,7 @@ export function ChangesFilesPanel({
       <div className="flex-1 overflow-y-auto py-1">
         {groups.map((group) => (
           <FolderGroupView
-            key={group.folder || "__root__"}
+            key={group.folder}
             group={group}
             collapsed={collapsedFolders.has(group.folder)}
             onToggle={toggleFolder}
@@ -148,43 +122,53 @@ function FolderGroupView({
 
       {/* Files — hidden when folder is collapsed */}
       {!collapsed &&
-        group.files.map((file) => (
-          <button
-            key={file.path}
-            type="button"
-            onClick={() => onFileClick(file.path)}
-            className={cn(
-              "control-interaction flex h-6 w-full items-center gap-1.5 text-left",
-              isRoot ? "px-3" : "pr-3 pl-8",
-              selectedFile === file.path
-                ? "bg-bg-elevated text-text-secondary"
-                : "text-text-muted hover:text-text-secondary"
-            )}
-          >
-            <span
-              className={cn("h-1.5 w-1.5 flex-shrink-0 rounded-full", STATUS_BG[file.status])}
-            />
-            <PierreFileIcon
-              fileName={file.name}
-              size={13}
-              className="text-text-muted/70 flex-shrink-0"
-            />
-            <span
+        group.files.map((change) => {
+          const name = change.file.slice(change.file.lastIndexOf("/") + 1);
+          const label = fileChangeLabel(change);
+          return (
+            <button
+              key={change.file}
+              type="button"
+              onClick={() => onFileClick(change.file)}
+              title={label}
+              aria-label={label}
               className={cn(
-                "min-w-0 flex-1 truncate text-xs",
-                file.status === "deleted" && "line-through opacity-50"
+                "control-interaction flex h-6 w-full items-center gap-1.5 text-left",
+                isRoot ? "px-3" : "pr-3 pl-8",
+                selectedFile === change.file
+                  ? "bg-bg-elevated text-text-secondary"
+                  : "text-text-muted hover:text-text-secondary"
               )}
             >
-              {file.name}
-            </span>
-            {(file.additions > 0 || file.deletions > 0) && (
-              <span className="flex flex-shrink-0 items-center gap-1 font-mono text-[10px] tabular-nums opacity-50">
-                {file.additions > 0 && <span className="text-success">+{file.additions}</span>}
-                {file.deletions > 0 && <span className="text-destructive">-{file.deletions}</span>}
+              <span
+                className={cn("h-1.5 w-1.5 flex-shrink-0 rounded-full", STATUS_BG[change.status])}
+              />
+              <PierreFileIcon
+                fileName={name}
+                size={13}
+                className="text-text-muted/70 flex-shrink-0"
+              />
+              <span
+                className={cn(
+                  "min-w-0 flex-1 truncate text-xs",
+                  change.status === "deleted" && "line-through opacity-50"
+                )}
+              >
+                {name}
               </span>
-            )}
-          </button>
-        ))}
+              {(change.additions > 0 || change.deletions > 0) && (
+                <span className="flex flex-shrink-0 items-center gap-1 font-mono text-[10px] tabular-nums opacity-50">
+                  {change.additions > 0 && (
+                    <span className="text-success">+{change.additions}</span>
+                  )}
+                  {change.deletions > 0 && (
+                    <span className="text-destructive">-{change.deletions}</span>
+                  )}
+                </span>
+              )}
+            </button>
+          );
+        })}
     </div>
   );
 }

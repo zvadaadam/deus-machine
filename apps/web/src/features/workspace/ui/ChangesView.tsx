@@ -36,7 +36,6 @@ import {
   changesFilterLabel,
   type ChangesFilter,
 } from "../lib/changesFilter";
-import { fileChangePath } from "../lib/workspace.utils";
 import { cloudGateStage } from "../lib/cloudPresence";
 import { CloudSandboxGate } from "./CloudSandboxGate";
 import type { Workspace } from "@/shared/types";
@@ -90,9 +89,7 @@ export function ChangesView({
 
   useEffect(() => {
     if (!navigationRequest) return;
-    const targetExists = filteredFileChanges.some(
-      (fileChange) => fileChangePath(fileChange) === navigationRequest.path
-    );
+    const targetExists = filteredFileChanges.some(({ file }) => file === navigationRequest.path);
     if (!targetExists) return;
     diffViewerRef.current?.scrollToFile(navigationRequest.path);
     workspaceLayoutActions.setPendingFileNavigation(workspace.id, null);

@@ -81,19 +81,6 @@ vi.mock("../../../src/services/agent/cloud/driver", async (importOriginal) => ({
   ensureCloudSession: (...args: unknown[]) => driver.ensureCloudSession(...args),
 }));
 
-vi.mock("../../../src/services/git.service", () => ({
-  detectDefaultBranch: vi.fn<(...args: any[]) => any>(async () => "main"),
-  getDiffStats: vi.fn<(...args: any[]) => any>(async () => ({ additions: 0, deletions: 0 })),
-  getDiffFiles: vi.fn<(...args: any[]) => any>(async () => ({
-    files: [],
-    truncated: false,
-    total_count: 0,
-  })),
-  getMergeBase: vi.fn<(...args: any[]) => any>(async () => "abc123"),
-  getGitFileContent: vi.fn<(...args: any[]) => any>(async () => null),
-  resolveWorkspaceRelativePath: vi.fn<(...args: any[]) => any>((p: string) => p),
-}));
-
 vi.mock("child_process", () => ({
   execFile: vi.fn<(...args: any[]) => any>(),
   spawn: vi.fn<(...args: any[]) => any>(),

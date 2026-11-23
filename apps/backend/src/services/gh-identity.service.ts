@@ -4,7 +4,7 @@ import type { GhCliStatus } from "@shared/types/github";
 import { spawn } from "node:child_process";
 import os from "node:os";
 import { AppError } from "../lib/errors";
-import { trackProcessGroup } from "../lib/process-groups";
+import { trackProcessGroup } from "@shared/lib/process-groups";
 import { ghChildEnv, runGh } from "./gh.service";
 
 interface GhApiUser {

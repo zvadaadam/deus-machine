@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/node";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
 import { initDatabase, closeDatabase, DB_PATH } from "./lib/database";
-import { stopProcessGroups } from "./lib/process-groups";
+import { stopProcessGroups } from "@shared/lib/process-groups";
 import {
   closeAll as closeAllWsConnections,
   onDeviceConnectionsChange,

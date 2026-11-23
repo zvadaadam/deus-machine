@@ -1,5 +1,6 @@
 import { vi, describe, it, expect } from "vitest";
 import * as api from "@shared/api/workspaces";
+import { GitError } from "@shared/lib/git-process";
 import { operations } from "../../helpers";
 
 // The diff operations through the real handler → resolveNode →
@@ -26,19 +27,25 @@ vi.mock("../../../src/middleware/workspace-loader", () => ({
 
 const git = vi.hoisted(() => ({
   getDiffStats: vi.fn(async () => ({ additions: 3, deletions: 1 })),
-  getDiffFiles: vi.fn(async () => [{ file: "a.ts", additions: 3, deletions: 1 }]),
+  getDiffFiles: vi.fn(async () => [
+    { file: "a.ts", status: "renamed", previous_path: "b.ts", additions: 3, deletions: 1 },
+  ]),
   resolveParentBranch: vi.fn(async () => "main"),
-  resolveWorkspaceRelativePath: vi.fn((_p: string, f: string) => f),
-  getFileDiff: vi.fn(async () => "@@ local diff @@"),
-  extractDiffInfo: vi.fn(() => ({ isNew: true, isDeleted: false, oldPath: "", newPath: "" })),
-  getMergeBase: vi.fn(async () => "base"),
-  getGitFileContent: vi.fn(async () => ""),
+  getFileDiff: vi.fn(async () => ({
+    file: "a.ts",
+    diff: "@@ local diff @@",
+    old_content: "old",
+    new_content: "new",
+  })),
 }));
-vi.mock("../../../src/services/git.service", () => git);
+vi.mock("../../../src/services/git.service", async (actual) => ({
+  ...(await actual<typeof import("../../../src/services/git.service")>()),
+  ...git,
+}));
 
 const cloud = vi.hoisted(() => ({
   getCloudDiffSummary: vi.fn(async () => ({
-    files: [{ type: "M", path: "x.ts", additions: 2, deletions: 5 }],
+    files: [{ type: "CREATE", path: "x.ts", additions: 2, deletions: 5 }],
   })),
   getCloudDiffFile: vi.fn(async () => ({ path: "x.ts", diff: "@@ cloud diff @@" })),
   requestCloudFs: vi.fn(async () => ({ content: "cloud-bytes" })),
@@ -75,22 +82,26 @@ describe("diff operations (through NodeDriver)", () => {
   it("local diffFiles → git lane", async () => {
     setLocal();
     expect(await run(api.diffFiles, local)).toEqual({
-      files: [{ file: "a.ts", additions: 3, deletions: 1 }],
+      files: [
+        { file: "a.ts", status: "renamed", previous_path: "b.ts", additions: 3, deletions: 1 },
+      ],
     });
   });
 
-  it("local diffFile → the four fields", async () => {
+  it("local diffFile returns the patch and both contents", async () => {
     setLocal();
-    expect(await run(api.diffFile, { ...local, file: "a.ts" })).toMatchObject({
+    expect(await run(api.diffFile, { ...local, file: "a.ts" })).toEqual({
       file: "a.ts",
       diff: "@@ local diff @@",
+      old_content: "old",
+      new_content: "new",
     });
   });
 
   it("reports a failed local comparison to every diff operation without exposing git's paths", async () => {
     setLocal();
     git.resolveParentBranch.mockRejectedValue(
-      Object.assign(new Error("git in a private folder"), { killed: true })
+      new GitError(["diff"], { stderr: "git in a private folder", timedOut: true })
     );
     try {
       for (const result of [
@@ -121,17 +132,24 @@ describe("diff operations (through NodeDriver)", () => {
   it("cloud diffFiles maps path→file", async () => {
     setCloud();
     expect(await run(api.diffFiles, inCloud)).toEqual({
-      files: [{ file: "x.ts", additions: 2, deletions: 5 }],
+      files: [{ file: "x.ts", status: "added", additions: 2, deletions: 5 }],
     });
   });
 
   it("cloud diffFile returns diff + fs content", async () => {
     setCloud();
+    vi.clearAllMocks();
     expect(await run(api.diffFile, { ...inCloud, file: "x.ts" })).toEqual({
       file: "x.ts",
       diff: "@@ cloud diff @@",
       old_content: null,
       new_content: "cloud-bytes",
+    });
+    expect(cloud.getCloudDiffSummary).not.toHaveBeenCalled();
+    expect(cloud.getCloudDiffFile).toHaveBeenCalledExactlyOnceWith("sess-1", "x.ts", "DIFF");
+    expect(cloud.requestCloudFs).toHaveBeenCalledExactlyOnceWith("sess-1", {
+      op: "read",
+      path: "x.ts",
     });
   });
 

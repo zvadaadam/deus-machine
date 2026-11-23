@@ -28,6 +28,7 @@ import {
   type CloneAddress,
 } from "../../lib/clone-address";
 import { AppError, ConflictError } from "../../lib/errors";
+import { homeRelative } from "./home-relative";
 import { refusalSentence, type DeusHost, type Who } from "./host";
 
 /** A call answers "still cloning" this long before its deadline, so the answer arrives. */
@@ -60,7 +61,7 @@ interface Flight {
 function answerFor(address: CloneAddress, added: Added): string {
   const { how } = added;
   const name = quoted(added.name);
-  const where = quoted(added.folder);
+  const where = quoted(homeRelative(added.folder));
   const start = callHint("start_session", { project: added.name, message: "<the first task>" });
   if (how === "here") {
     return `${name} is already a project on this computer, in ${where}. Nothing was cloned.\n  ${start}`;
@@ -73,17 +74,23 @@ function answerFor(address: CloneAddress, added: Added): string {
 
 /** What a failed add answers: a refusal in our words, or git's words quoted. */
 function failureFor(address: CloneAddress, error: unknown): Error {
-  if (error instanceof OperatorError) return error;
+  if (error instanceof OperatorError) {
+    const message = homeRelative(error.message, "diagnostic");
+    return message === error.message ? error : OperatorError.said(error.code, message);
+  }
   // Not a refusal: a bug, reported by the tool source, and an assistant told only that it failed.
   if (!(error instanceof AppError)) {
     return error instanceof Error ? error : new Error(String(error));
   }
   // Ours (access, a folder taken meanwhile): said as written.
   if (error.statusCode !== 500)
-    return new OperatorError("unsupported", `${error.message} Nothing was added.`);
+    return new OperatorError(
+      "unsupported",
+      `${homeRelative(error.message, "diagnostic")} Nothing was added.`
+    );
   return new OperatorError(
     "unsupported",
-    `could not clone ${quoted(address.url)}. Nothing was added. git said:\n${quote(error.message)}`
+    `could not clone ${quoted(address.url)}. Nothing was added. git said:\n${quote(homeRelative(error.message, "diagnostic"))}`
   );
 }
 
@@ -115,7 +122,7 @@ export function addProjectTool(host: DeusHost) {
     if (inspected.root_path !== fs.realpathSync.native(folder)) {
       throw new OperatorError(
         "unsupported",
-        `The folder ${quoted(folder)} is inside another repository. Nothing was added.`
+        `The folder ${quoted(homeRelative(folder))} is inside another repository. Nothing was added.`
       );
     }
     const origin = inspected.git_origin_url;
@@ -123,7 +130,7 @@ export function addProjectTool(host: DeusHost) {
       const why = origin ? "it has a different origin" : "git reported no origin";
       throw new OperatorError(
         "unsupported",
-        `Could not add ${quoted(address.url)} from ${quoted(folder)}: ${why}.`
+        `Could not add ${quoted(address.url)} from ${quoted(homeRelative(folder))}: ${why}.`
       );
     }
 
@@ -147,7 +154,7 @@ export function addProjectTool(host: DeusHost) {
       if (held.settledAt === undefined) {
         throw new OperatorError(
           "unsupported",
-          `The folder ${quoted(folder)} is being cloned for another repository. Nothing was cloned; no other folder is used.`
+          `The folder ${quoted(homeRelative(folder))} is being cloned for another repository. Nothing was cloned; no other folder is used.`
         );
       }
     }
@@ -214,7 +221,7 @@ export function addProjectTool(host: DeusHost) {
       if (!(await ended(flight, seconds))) {
         const doing =
           flight.phase === "cloning"
-            ? `still cloning ${quoted(address.url)} into ${quoted(folder)}.`
+            ? `still cloning ${quoted(address.url)} into ${quoted(homeRelative(folder))}.`
             : `still adding ${quoted(address.url)}.`;
         return `${doing} Call add_project again with the same repository for the outcome; nothing is cloned twice.\n  ${callHint("add_project", { repository })}`;
       }
@@ -230,7 +237,7 @@ export function addProjectTool(host: DeusHost) {
         else throw error;
         throw new OperatorError(
           error instanceof OperatorError ? error.code : "failed",
-          `Cloned into ${quoted(folder)}, but could not add the project.${reason ? ` ${reason}` : ""}`,
+          `Cloned into ${quoted(homeRelative(folder))}, but could not add the project.${reason ? ` ${homeRelative(reason, "diagnostic")}` : ""}`,
           { next: callHint("add_project", { repository }) }
         );
       }

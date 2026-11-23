@@ -57,7 +57,7 @@ import {
 import * as lifecycle from "../../../src/services/workspace-lifecycle";
 import { setupFile } from "../../../src/services/setup-status";
 import { buildWorkspaceContext } from "../../../src/services/agent/workspace-context";
-import { GitError, runGit } from "../../../src/lib/git-process";
+import { GitError, runGit } from "@shared/lib/git-process";
 import { CELESTIAL_NAMES } from "../../../src/services/workspace.service";
 
 let scratch: string;
@@ -173,7 +173,7 @@ describe("starting a workspace", () => {
         current_session_id: session,
       });
       db().prepare("INSERT INTO sessions (id, workspace_id) VALUES ('sibling', 'w')").run();
-      writeProjectFile(cwd, { version: 1, local: { setup: "echo repaired" } });
+      await writeProjectFile(cwd, { version: 1, local: { setup: "echo repaired" } });
       for (const id of [session, "sibling"]) {
         const running = brief(id);
         expect(running).toContain("  | touch started;");
@@ -419,8 +419,8 @@ describe("a start that fails", () => {
   it("stops what is still running when the backend stops, and starts nothing after", async () => {
     // A module of its own: once stopped it stays stopped, as the backend does.
     vi.resetModules();
-    const git = await import("../../../src/lib/git-process");
-    const groups = await import("../../../src/lib/process-groups");
+    const git = await import("@shared/lib/git-process");
+    const groups = await import("@shared/lib/process-groups");
     const pidFile = path.join(scratch, "pid");
     const running = git
       .runGit(["-c", `alias.wait=!sh -c 'sleep 30 & echo $! > "${pidFile}"; wait'`, "wait"], {
@@ -451,7 +451,7 @@ describe("a start Deus closed in the middle of", () => {
     setupScript("touch started; sleep 30");
     // Modules of their own: once stopped they stay stopped, as the backend does.
     vi.resetModules();
-    const groups = await import("../../../src/lib/process-groups");
+    const groups = await import("@shared/lib/process-groups");
     const init = await import("../../../src/services/workspace-checkout");
     await init.initializeWorkspace(add("w", "vega"));
     await vi.waitFor(() =>
@@ -560,7 +560,7 @@ describe("workspaces a previous process was still starting", () => {
       add("w", "vega", { init_stage: "worktree" });
       git("worktree", "add", "-q", "-b", "test-user/vega", workspacePath("vega"), "main");
       vi.resetModules();
-      const groups = await import("../../../src/lib/process-groups");
+      const groups = await import("@shared/lib/process-groups");
       const init = await import("../../../src/services/workspace-init.service");
       vi.spyOn(fs.promises, "rm").mockImplementationOnce(async () => {
         groups.stopProcessGroups();
@@ -686,7 +686,7 @@ it("seeds a ready integration CLI workspace once, without publishing", () => {
 
 describe("why origin's latest was not fetched", () => {
   const said = (stderr: string, timedOut = false) =>
-    fetchIssue(new GitError(["fetch", "origin", "main"], stderr, timedOut));
+    fetchIssue(new GitError(["fetch", "origin", "main"], { stderr, timedOut }));
 
   it("tells offline from sign-in from the rest", () => {
     expect(said("fatal: unable to access 'x': Could not resolve host: github.com")).toBe("offline");
@@ -860,7 +860,7 @@ exec "$REAL_GIT" "$@"
   it("recovers the durable session stage if first-chat cleanup is interrupted", async () => {
     // Stop only this checkout's process groups. Recovery uses the next backend's live groups.
     vi.resetModules();
-    const groups = await import("../../../src/lib/process-groups");
+    const groups = await import("@shared/lib/process-groups");
     const checkout = await import("../../../src/services/workspace-checkout");
     const ctx = add("w", "vega");
     refuseChatInsert();

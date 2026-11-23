@@ -57,6 +57,10 @@ vi.mock("../../../src/services/assistants/store", () => ({
 vi.mock("../../../src/services/cloud-workspace-init.service", () => ({
   resolveCloudRepoAccess: vi.fn(),
 }));
+vi.mock("../../../src/services/workspace-checkout", async (read) => ({
+  ...(await read<typeof import("../../../src/services/workspace-checkout")>()),
+  initializeWorkspace: vi.fn(),
+}));
 vi.mock("../../../src/services/agent/cloud/config", () => ({ defaultCloudOrgId: () => null }));
 vi.mock("../../../src/services/cloud-settings.service", () => ({ listAccessibleRepos: vi.fn() }));
 vi.mock("../../../src/services/github-remote", () => ({
@@ -78,9 +82,9 @@ import { LOCAL_CALLER, Registry, type Caller } from "../../../src/api/registry";
 import handlers from "../../../src/api/assistants";
 import repoHandlers from "../../../src/api/repos";
 import * as api from "@shared/api/assistants";
-import { createDeusHost } from "../../../src/services/assistants/host";
 import { _resetOperator } from "../../../src/services/assistants/operator";
 import { NOT_ALLOWED_YET, READ_ONLY } from "../../../src/services/assistants/sentences";
+import { homeRelative } from "../../../src/services/assistants/home-relative";
 import { CLONE_REFUSALS } from "../../../src/lib/clone-address";
 import { AppError, ConflictError } from "../../../src/lib/errors";
 import { assistantCaller as assistant, operations } from "../../helpers";
@@ -113,6 +117,7 @@ for arg in "$@"; do
     echo "Cloning into '$last'..." >&2
     case "$url" in
       *missing*)
+        echo "cannot write to '$last'." >&2
         echo "remote: Repository not found." >&2
         echo "fatal: repository '$url/' not found" >&2
         exit 128 ;;
@@ -182,6 +187,7 @@ async function callTool(caller: Caller, name: string, args: Record<string, unkno
     caller
   );
   const text = reply.result.content[0]!.text;
+  expect.soft(text).not.toContain(home);
   if (reply.result.isError) throw new Error(text);
   return text;
 }
@@ -203,9 +209,11 @@ beforeAll(() => {
   release = path.join(scratch, "release");
   writeFakeGit(bin);
   process.env.PATH = `${bin}:${ORIGINAL.PATH}`;
+  vi.stubEnv("GIT_ALLOW_PROTOCOL", "file");
 });
 
 afterAll(() => {
+  vi.unstubAllEnvs();
   process.env.HOME = ORIGINAL.HOME;
   process.env.PATH = ORIGINAL.PATH;
   fs.rmSync(scratch, { recursive: true, force: true });
@@ -227,32 +235,6 @@ beforeEach(() => {
   state.ops = {
     agentModels: ({ harness }) => ({
       lists: CATALOG_MODEL_LISTS.filter((list) => !harness || list.harness === harness),
-    }),
-    workspaces: () => [],
-    createWorkspace: () => ({ workspaceId: "w-new" }),
-    workspace: () => ({
-      id: "w-new",
-      repository_id: "repo-1",
-      slug: "voyager",
-      title: null,
-      git_branch: "lab/voyager",
-      git_target_branch: "main",
-      kind: "worktree",
-      provider_workspace_id: null,
-      organization_id: null,
-      state: "initializing",
-      status: "in-progress",
-      current_session_id: null,
-      session_status: null,
-      session_error_category: null,
-      session_error_message: null,
-      latest_message_sent_at: null,
-      updated_at: "2026-11-16 12:00:00",
-      repo_name: "widget",
-      root_path: path.join(developer, "widget"),
-      workspace_path: path.join(developer, "widget/.deus/voyager"),
-      setup_status: "none",
-      error_message: null,
     }),
   };
   _resetOperator();
@@ -315,7 +297,7 @@ describe("the address", () => {
     expect(args!.slice(args!.indexOf("--"))).toEqual(["--", url, folder]);
     expect(args).not.toContain("--recurse-submodules");
     expect(answer).toBe(
-      `cloned ${JSON.stringify(url)} into ${JSON.stringify(folder)} and added it as the project ${JSON.stringify(name)}.\n` +
+      `cloned ${JSON.stringify(url)} into "~/Developer/${name}" and added it as the project ${JSON.stringify(name)}.\n` +
         `  -> start_session(project: ${JSON.stringify(name)}, message: "<the first task>")`
     );
   });
@@ -347,12 +329,25 @@ describe("the address", () => {
 });
 
 describe("what is already here", () => {
+  it("shows the home as ~ and leaves other folders with similar names alone", () => {
+    expect(homeRelative(home)).toBe("~");
+    const sibling = home + "-backup/Developer/widget";
+    expect(homeRelative(sibling)).toBe(sibling);
+    expect(homeRelative(`${home}/one, ${home}/two, ${sibling}`, "diagnostic")).toBe(
+      `~/one, ~/two, ${sibling}`
+    );
+    const elsewhere = path.join("/Volumes/archive", home, "widget");
+    expect(homeRelative(elsewhere)).toBe(elsewhere);
+    const diagnostic = `Cannot open '${elsewhere}'.`;
+    expect(homeRelative(diagnostic, "diagnostic")).toBe(diagnostic);
+  });
+
   it("a project for that repository is returned, and nothing is cloned", async () => {
     const folder = path.join(home, "code", "widget");
     insertProject("widget", folder, "git@github.com:acme/widget.git");
     const answer = await addProject("https://github.com/acme/widget");
     expect(answer).toBe(
-      `"widget" is already a project on this computer, in ${JSON.stringify(folder)}. Nothing was cloned.\n` +
+      `"widget" is already a project on this computer, in "~/code/widget". Nothing was cloned.\n` +
         `  -> start_session(project: "widget", message: "<the first task>")`
     );
     expect(clones()).toEqual([]);
@@ -363,7 +358,7 @@ describe("what is already here", () => {
     const folder = path.join(developer, "widget");
     gitFolder(folder, "https://github.com/acme/widget.git");
     const answer = await addProject("git@github.com:acme/widget.git");
-    expect(answer).toContain(`added "widget" from ${JSON.stringify(folder)}`);
+    expect(answer).toContain(`added "widget" from "~/Developer/widget"`);
     expect(answer).toContain("Nothing was cloned.");
     expect(clones()).toEqual([]);
     expect(projects()).toEqual([
@@ -432,9 +427,7 @@ describe("what is already here", () => {
     insertProject("", "", origin);
     state.db.exec(SCHEMA_SQL);
 
-    expect(await addProject("acme/widget")).toContain(
-      `added "widget" from ${JSON.stringify(folder)}`
-    );
+    expect(await addProject("acme/widget")).toContain(`added "widget" from "~/Developer/widget"`);
     expect(projects()).toEqual([
       { name: "", root_path: "", git_origin_url: origin },
       { name: "widget", root_path: folder, git_origin_url: origin },
@@ -457,14 +450,13 @@ describe("the same folder added meanwhile (H18)", () => {
 
 describe("a clone", () => {
   it("reports the refusal reason and gives the clone retry hint once", async () => {
-    const folder = path.join(developer, "widget");
     const reason = "The folder could not be registered.";
     const next = '-> add_project(repository: "acme/widget")';
     state.ops.addRepo = () => {
-      throw new OperatorError("unsupported", reason, { next });
+      throw new OperatorError("unsupported", `${reason} See ${developer}.`, { next });
     };
     await expect(addProject("acme/widget")).rejects.toMatchObject({
-      message: `refused (unsupported): Cloned into ${JSON.stringify(folder)}, but could not add the project. ${reason}\n  ${next}`,
+      message: `refused (unsupported): Cloned into "~/Developer/widget", but could not add the project. ${reason} See ~/Developer.\n  ${next}`,
     });
   });
 
@@ -476,7 +468,7 @@ describe("a clone", () => {
         throw new ConflictError("The folder could not be registered.");
       };
       await expect(addProject("acme/widget")).rejects.toThrow(
-        `Cloned into ${JSON.stringify(folder)}, but could not add the project. The folder could not be registered.\n  -> add_project(`
+        `Cloned into "~/Developer/widget", but could not add the project. The folder could not be registered.\n  -> add_project(`
       );
       expect(fs.existsSync(path.join(folder, ".git"))).toBe(true);
       delete state.ops[op];
@@ -540,6 +532,7 @@ describe("a clone", () => {
   it("that fails answers with git's words quoted, and adds nothing", async () => {
     await expect(addProject("acme/missing")).rejects.toThrow(
       'could not clone "https://github.com/acme/missing". Nothing was added. git said:\n' +
+        "  | cannot write to '~/Developer/missing'.\n" +
         "  | remote: Repository not found.\n" +
         "  | fatal: repository 'https://github.com/acme/missing/' not found"
     );
@@ -551,10 +544,9 @@ describe("a clone", () => {
   });
 
   it("still running at the caller's limit is said so; a second call joins it, and one after it ends hears the outcome", async () => {
-    const folder = path.join(developer, "slow");
     const first = await addProject("acme/slow", ending(7));
     expect(first).toBe(
-      `still cloning "https://github.com/acme/slow" into ${JSON.stringify(folder)}. Call add_project again with the same repository for the outcome; nothing is cloned twice.\n` +
+      `still cloning "https://github.com/acme/slow" into "~/Developer/slow". Call add_project again with the same repository for the outcome; nothing is cloned twice.\n` +
         '  -> add_project(repository: "acme/slow")'
     );
     // Another form of the same address joins the clone in flight.
@@ -565,7 +557,7 @@ describe("a clone", () => {
 
     fs.writeFileSync(release, "");
     const third = await addProject("acme/slow", assistant());
-    expect(third).toContain(`cloned "https://github.com/acme/slow" into ${JSON.stringify(folder)}`);
+    expect(third).toContain(`cloned "https://github.com/acme/slow" into "~/Developer/slow"`);
     expect(clones()).toHaveLength(1);
     expect(projects()).toHaveLength(1);
     // Heard: the next call finds the project.
@@ -575,7 +567,7 @@ describe("a clone", () => {
   it("in flight refuses another repository that would take the same folder", async () => {
     await addProject("acme/slow", ending(7));
     await expect(addProject("other/slow", ending(7))).rejects.toThrow(
-      `The folder ${JSON.stringify(path.join(developer, "slow"))} is being cloned for another repository.`
+      `The folder "~/Developer/slow" is being cloned for another repository.`
     );
     fs.writeFileSync(release, "");
     await expect(addProject("acme/slow")).resolves.toContain("cloned");

@@ -1,165 +1,85 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-
-const { mockExecFile } = vi.hoisted(() => ({
-  mockExecFile: vi.fn(),
-}));
-vi.mock("child_process", () => ({
-  execFile: mockExecFile,
-}));
-
-/** git answers each call in turn: an output, or an error. */
-function gitAnswers(...answers: Array<string | Error>) {
-  mockExecFile.mockImplementation(
-    (
-      _cmd: string,
-      _args: string[],
-      _opts: unknown,
-      done: (e: Error | null, out: string) => void
-    ) => {
-      const next = answers.length > 1 ? answers.shift() : answers[0];
-      if (next instanceof Error) done(next, "");
-      else done(null, next ?? "");
-    }
-  );
-}
-
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createCheckpoint } from "../agents/core/checkpoint";
 
-describe("createCheckpoint", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+let cwd: string;
+const git = (...args: string[]) =>
+  execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe" }).trim();
+beforeEach(() => {
+  cwd = mkdtempSync(path.join(tmpdir(), "deus-checkpoint-"));
+  vi.stubEnv("GIT_CONFIG_GLOBAL", path.join(cwd, "no-global-config"));
+  vi.stubEnv("GIT_CONFIG_NOSYSTEM", "1");
+  git("init", "-q", "-b", "main");
+  git("config", "user.name", "Checkpoint Test");
+  git("config", "user.email", "test@example.test");
+  writeFileSync(path.join(cwd, "file"), "initial");
+  git("add", "file");
+  git("commit", "-qm", "first");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+  rmSync(cwd, { recursive: true, force: true });
+});
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+it.each(["start", "end"] as const)(
+  "records HEAD and the staged tree in a private %s ref",
+  async (type) => {
+    writeFileSync(path.join(cwd, "file"), "staged");
+    git("add", "file");
+    writeFileSync(path.join(cwd, "file"), "unstaged");
+    const head = git("rev-parse", "HEAD");
+    const tree = git("write-tree");
+    const id = `session-sess-turn-turn-${type}`;
+    const ref = `refs/deus-checkpoints/${id}`;
 
-  it("creates a start checkpoint with correct git commands", async () => {
-    gitAnswers("abc123def456\n", "tree123\n", "commit456\n", ""); // update-ref
+    await createCheckpoint("sess", "turn", type, cwd, "test");
 
-    await createCheckpoint("sess-1", "turn-1", "start", "/test/repo", "test");
-
-    expect(mockExecFile).toHaveBeenCalledWith(
-      "git",
-      ["rev-parse", "HEAD"],
-      {
-        cwd: "/test/repo",
-        encoding: "utf-8",
-        timeout: 15_000,
-      },
-      expect.any(Function)
+    expect(git("rev-parse", `${ref}^`)).toBe(head);
+    expect(git("rev-parse", `${ref}^{tree}`)).toBe(tree);
+    expect(git("show", `${ref}:file`)).toBe("staged");
+    expect(git("log", "-1", "--format=%B", ref)).toContain(
+      `checkpoint:${id}\nhead ${head}\nindex-tree ${tree}\ncreated `
     );
+    expect(git("rev-parse", "HEAD")).toBe(head);
+  }
+);
 
-    expect(mockExecFile).toHaveBeenCalledWith(
-      "git",
-      ["write-tree"],
-      {
-        cwd: "/test/repo",
-        encoding: "utf-8",
-        timeout: 15_000,
-      },
-      expect.any(Function)
-    );
+it("skips an unmerged index and checkpoints it as soon as the conflict is staged", async () => {
+  git("switch", "-qc", "side");
+  writeFileSync(path.join(cwd, "file"), "side");
+  git("commit", "-qam", "side");
+  git("switch", "-q", "main");
+  writeFileSync(path.join(cwd, "file"), "main");
+  git("commit", "-qam", "main");
+  expect(() => git("merge", "side")).toThrow();
+  const nested = path.join(cwd, "src");
+  mkdirSync(nested);
+  git("config", "diff.relative", "true");
+  const log = vi.spyOn(console, "log");
+  const error = vi.spyOn(console, "error");
 
-    expect(mockExecFile).toHaveBeenCalledWith(
-      "git",
-      expect.arrayContaining(["commit-tree", "tree123", "-p", "abc123def456"]),
-      expect.objectContaining({ cwd: "/test/repo" }),
-      expect.any(Function)
-    );
+  await createCheckpoint("sess", "turn", "start", nested, "test");
+  expect(log).toHaveBeenCalledWith("test Checkpoint start skipped: unmerged index");
+  expect(error).not.toHaveBeenCalled();
+  expect(git("for-each-ref", "refs/deus-checkpoints/")).toBe("");
 
-    expect(mockExecFile).toHaveBeenCalledWith(
-      "git",
-      expect.arrayContaining([
-        "update-ref",
-        "refs/deus-checkpoints/session-sess-1-turn-turn-1-start",
-        "commit456",
-      ]),
-      expect.objectContaining({ cwd: "/test/repo" }),
-      expect.any(Function)
-    );
-  });
+  writeFileSync(path.join(cwd, "file"), "resolved");
+  git("add", "file");
+  await createCheckpoint("sess", "turn", "end", cwd, "test");
+  expect(git("show", "refs/deus-checkpoints/session-sess-turn-turn-end:file")).toBe("resolved");
+});
 
-  it("creates an end checkpoint", async () => {
-    gitAnswers("headref\n", "treeref\n", "commitref\n", "");
-
-    await createCheckpoint("sess-2", "turn-5", "end", "/workspace", "handler");
-
-    expect(mockExecFile).toHaveBeenCalledWith(
-      "git",
-      expect.arrayContaining([
-        "update-ref",
-        "refs/deus-checkpoints/session-sess-2-turn-turn-5-end",
-      ]),
-      expect.any(Object),
-      expect.any(Function)
-    );
-  });
-
-  it("includes checkpoint metadata in commit message", async () => {
-    gitAnswers("headref\n", "treeref\n", "commitref\n", "");
-
-    await createCheckpoint("sess-1", "turn-1", "start", "/repo", "test");
-
-    const commitTreeArgs = mockExecFile.mock.calls[2][1];
-    const messageIdx = commitTreeArgs.indexOf("-m");
-    const commitMessage = commitTreeArgs[messageIdx + 1];
-    expect(commitMessage).toContain("checkpoint:session-sess-1-turn-turn-1-start");
-  });
-
-  it("skips checkpoint for unresolved git state", async () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const mergeError = new Error(
-      "Command failed: git write-tree\nfile.txt: unmerged (123)\nfatal: git-write-tree: error building trees"
-    );
-    gitAnswers(mergeError);
-
-    await expect(
-      createCheckpoint("sess-1", "turn-1", "start", "/repo", "test")
-    ).resolves.toBeUndefined();
-    expect(logSpy.mock.calls.some(([message]) => String(message).includes("skipped"))).toBe(true);
-    expect(errorSpy).not.toHaveBeenCalled();
-  });
-
-  it("skips checkpoint when merge message is present", async () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const mergeError = new Error("fatal: merge in progress");
-    gitAnswers(mergeError);
-
-    await expect(
-      createCheckpoint("sess-1", "turn-1", "start", "/repo", "test")
-    ).resolves.toBeUndefined();
-    expect(logSpy.mock.calls.some(([message]) => String(message).includes("skipped"))).toBe(true);
-    expect(errorSpy).not.toHaveBeenCalled();
-  });
-
-  it("does not treat unrelated status 128 failures as merge state", async () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const error = new Error("fatal: repository corrupt");
-    (error as Error & { status?: number }).status = 128;
-    gitAnswers(error);
-
-    await expect(
-      createCheckpoint("sess-1", "turn-1", "start", "/repo", "test")
-    ).resolves.toBeUndefined();
-    expect(logSpy.mock.calls.some(([message]) => String(message).includes("skipped"))).toBe(false);
-    expect(errorSpy).toHaveBeenCalledWith(
-      "test Checkpoint start failed:",
-      "fatal: repository corrupt"
-    );
-  });
-
-  it("logs error for non-merge failures", async () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const error = new Error("permission denied");
-    gitAnswers(error);
-
-    await expect(
-      createCheckpoint("sess-1", "turn-1", "start", "/repo", "test")
-    ).resolves.toBeUndefined();
-    expect(errorSpy).toHaveBeenCalledWith("test Checkpoint start failed:", "permission denied");
-  });
+it("reports a broken index object even when the file is named unmerged", async () => {
+  const missing = "1".repeat(git("rev-parse", "HEAD").length);
+  git("update-index", "--add", "--cacheinfo", "100644", missing, "unmerged");
+  const error = vi.spyOn(console, "error");
+  await createCheckpoint("sess", "turn", "start", cwd, "test");
+  expect(error).toHaveBeenCalledWith(
+    "test Checkpoint start failed:",
+    expect.stringContaining("git write-tree")
+  );
+  expect(git("for-each-ref", "refs/deus-checkpoints/")).toBe("");
 });

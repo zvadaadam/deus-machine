@@ -38,7 +38,7 @@ const git = (...args: string[]) =>
 const workspaceId = "environment-test";
 const statusFile = () => fs.readFileSync(setupFile(workspaceId, "status"), "utf8");
 function project(recipe: ProjectEnvironment) {
-  writeProjectFile(root, recipe);
+  return writeProjectFile(root, recipe);
 }
 function row() {
   return mocks.db!.prepare("SELECT * FROM workspaces WHERE id = ?").get(workspaceId) as Record<
@@ -95,7 +95,7 @@ afterEach(() => {
 
 describe("local project environment journey", () => {
   it("checks out a real branch, copies local secrets before setup, runs one local script and preserves tracked changes", async () => {
-    project({
+    await project({
       version: 1,
       setup: "exit 99",
       local: {
@@ -138,7 +138,7 @@ describe("local project environment journey", () => {
   });
   it("uses saved defaults only when this checkout has no file, never another branch's file", async () => {
     const directory = await initialize();
-    project({ version: 1, setup: "exit 89" }); // Main checkout edited after the workspace branched.
+    await project({ version: 1, setup: "exit 89" }); // Main checkout edited after the workspace branched.
     mocks.cloud.mockReturnValue({ baseUrl: "https://cloud.test", apiKey: "key" });
     mocks.saved.mockResolvedValue({
       configured: true,
@@ -146,7 +146,7 @@ describe("local project environment journey", () => {
     });
     await prepareLocalEnvironment(workspaceId, directory, "https://github.com/test/app");
     expect(fs.readFileSync(path.join(directory, "saved.txt"), "utf8")).toBe("saved");
-    writeProjectFile(directory, { version: 1 });
+    await writeProjectFile(directory, { version: 1 });
     expect(
       (await readLocalProjectEnvironment(directory, "https://github.com/test/app")).project
     ).toEqual({ version: 1 });
@@ -179,7 +179,7 @@ describe("local project environment journey", () => {
       const first = prepareLocalEnvironment(workspaceId, directory, "https://github.com/test/app");
       expect(mocks.saved).toHaveBeenCalledOnce();
       await stopWorkspaceSetup(workspaceId);
-      writeProjectFile(directory, {
+      await writeProjectFile(directory, {
         version: 1,
         setup: "touch running; while [ ! -f finish ]; do sleep 0.05; done",
       });
@@ -215,7 +215,7 @@ describe("local project environment journey", () => {
     expect(row()).toMatchObject({ state: "ready", setup_status: "failed" });
     expect(row().error_message).toContain("invalid JSON");
     expect(mocks.saved).not.toHaveBeenCalled();
-    writeProjectFile(directory, { version: 1, setup: "printf repaired > proof.txt" });
+    await writeProjectFile(directory, { version: 1, setup: "printf repaired > proof.txt" });
     await prepareLocalEnvironment(workspaceId, directory);
     expect(row().setup_status).toBe("completed");
     expect(fs.readFileSync(path.join(directory, "proof.txt"), "utf8")).toBe("repaired");
@@ -227,7 +227,7 @@ describe("local project environment journey", () => {
       "Local repository folder not found"
     );
     expect(mocks.saved).not.toHaveBeenCalled();
-    expect(() => project({ version: 1 })).toThrow("Local repository folder not found");
+    await expect(project({ version: 1 })).rejects.toThrow("Local repository folder not found");
     expect(fs.existsSync(root)).toBe(false);
   });
   it("fails on unavailable saved settings and missing required names without exposing values", async () => {
@@ -236,7 +236,7 @@ describe("local project environment journey", () => {
     const directory = await initialize();
     expect(row().setup_status).toBe("failed");
     expect(row().error_message).toContain("cloud connection");
-    writeProjectFile(directory, {
+    await writeProjectFile(directory, {
       version: 1,
       requiredEnv: ["MISSING_TEST_KEY"],
       env: { APP_SECRET: "never-print-me" },
@@ -246,7 +246,7 @@ describe("local project environment journey", () => {
     expect(JSON.stringify(row())).not.toContain("never-print-me");
   });
   it("runs multiline shell scripts with shared state and stops on a failing command", async () => {
-    project({
+    await project({
       version: 1,
       setup: "mkdir nested\ncd nested\nprintf done > proof.txt\nfalse\nprintf bad > unexpected.txt",
     });
@@ -258,7 +258,7 @@ describe("local project environment journey", () => {
   it.each([1, 2])(
     "keeps the last two non-empty setup lines from fd %i on a failed exit",
     async (fd) => {
-      project({
+      await project({
         version: 1,
         setup: `printf 'earlier step\\n  compiling  \\r\\n\\n\\033[31mmissing <tool>\\033[0m\\n    \\n\\033[0m' >&${fd}\nexit 1`,
       });
@@ -270,7 +270,7 @@ describe("local project environment journey", () => {
         error_detail: "compiling\nmissing <tool>",
       });
       expect(statusFile()).toBe("failed 1\n");
-      writeProjectFile(directory, { version: 1, setup: "exit 1" });
+      await writeProjectFile(directory, { version: 1, setup: "exit 1" });
       await prepareLocalEnvironment(workspaceId, directory);
       expect(row()).toMatchObject({
         setup_status: "failed",
@@ -282,10 +282,10 @@ describe("local project environment journey", () => {
   it("clips a complete line within the window without splitting a Unicode character", async () => {
     const suffix = "x".repeat(392) + " failed";
     const output = "x".repeat(600) + "🛠" + suffix;
-    project({ version: 1, setup: `printf '%s\\n' '${output}'\nexit 1` });
+    await project({ version: 1, setup: `printf '%s\\n' '${output}'\nexit 1` });
     await prepareLocalEnvironment(workspaceId, root);
     expect(row().error_detail).toBe(suffix);
-    project({ version: 1, setup: "true" });
+    await project({ version: 1, setup: "true" });
     await prepareLocalEnvironment(workspaceId, root);
     expect(row()).toMatchObject({
       setup_status: "completed",
@@ -294,12 +294,12 @@ describe("local project environment journey", () => {
     });
   });
   it("drops the cut first line of a log window and keeps the complete diagnostic", async () => {
-    project({ version: 1, setup: "printf '%05000d\\nMissing compiler' 0\nexit 1" });
+    await project({ version: 1, setup: "printf '%05000d\\nMissing compiler' 0\nexit 1" });
     await prepareLocalEnvironment(workspaceId, root);
     expect(row().error_detail).toBe("Missing compiler");
   });
   it("uses the plain sentence for one 16 KB line ending in 6,000 spaces", async () => {
-    project({ version: 1, setup: "printf '%010000d failed%6000s' 0 ''\nexit 1" });
+    await project({ version: 1, setup: "printf '%010000d failed%6000s' 0 ''\nexit 1" });
     await prepareLocalEnvironment(workspaceId, root);
     expect(row()).toMatchObject({
       error_message: "Setup exited with code 1. View the setup log for details.",
@@ -307,7 +307,7 @@ describe("local project environment journey", () => {
     });
   });
   it("uses the plain sentence when the finished log cannot be read", async () => {
-    project({ version: 1, setup: "echo 'Missing compiler'\nexit 1" });
+    await project({ version: 1, setup: "echo 'Missing compiler'\nexit 1" });
     vi.spyOn(fs.promises, "open").mockRejectedValueOnce(new Error("log was removed"));
     await prepareLocalEnvironment(workspaceId, root);
     expect(row()).toMatchObject({
@@ -318,7 +318,7 @@ describe("local project environment journey", () => {
   it.each(["timeout", "archive"])(
     "settles a setup on %s while a detached helper holds its pipes",
     async (end) => {
-      project({
+      await project({
         version: 1,
         setup: `printf 'earlier\\ninstalling\\n\\033[31mMissing compiler\\033[0m\\n'
       exec node -e 'const helper = require("node:child_process").spawn("sleep", ["30"], { detached: true, stdio: "inherit" });
@@ -411,7 +411,7 @@ describe("local project environment journey", () => {
   it("stops a setup that is still running when the backend stops, and starts none after", async () => {
     // Modules of their own: once stopped they stay stopped, as the backend does.
     vi.resetModules();
-    const groups = await import("../../../src/lib/process-groups");
+    const groups = await import("@shared/lib/process-groups");
     const environment = await import("../../../src/services/project-environment.service");
     const pidFile = path.join(root, "setup-child");
     const setup = environment
@@ -430,7 +430,7 @@ describe("local project environment journey", () => {
       environment.runSetupCommand(workspaceId, "true", root, process.env)
     ).rejects.toThrow("Deus is closing.");
     // A recipe that resolves after shutdown cannot spawn; its durable status still explains the stop.
-    project({ version: 1, setup: "touch unexpected" });
+    await project({ version: 1, setup: "touch unexpected" });
     await environment.prepareLocalEnvironment(workspaceId, root);
     expect(row()).toMatchObject({
       setup_status: "failed",
@@ -439,22 +439,25 @@ describe("local project environment journey", () => {
     expect(statusFile()).toBe("failed\n");
     expect(fs.existsSync(path.join(root, "unexpected"))).toBe(false);
   });
-  it("makes a saved recipe publishable while retaining ignored workspace data", () => {
+  it("makes a saved recipe publishable while retaining ignored workspace data", async () => {
     fs.writeFileSync(path.join(root, ".gitignore"), ".deus/\n");
-    project({ version: 1, setup: "echo setup" });
+    await Promise.all([project({ version: 1 }), project({ version: 1, setup: "echo setup" })]);
+    expect(
+      fs.readFileSync(path.join(root, ".gitignore"), "utf8").split("!/.deus/environment.json")
+    ).toHaveLength(2);
     fs.mkdirSync(path.join(root, ".deus/other-workspace"));
     fs.writeFileSync(path.join(root, ".deus/other-workspace/private"), "private");
     const files = git("ls-files", "--others", "--exclude-standard");
     expect(files).toContain(".deus/environment.json");
     expect(files).not.toContain("other-workspace");
   });
-  it("rejects symlinks when reading or saving repository configuration", () => {
+  it("rejects symlinks when reading or saving repository configuration", async () => {
     const outside = path.join(root, "outside.json");
     fs.writeFileSync(outside, '{"version":1}');
     fs.mkdirSync(path.join(root, ".deus"));
     fs.symlinkSync(outside, path.join(root, ".deus/environment.json"));
     expect(() => readProjectFile(root)).toThrow("symbolic link");
-    expect(() => project({ version: 1, setup: "echo wrong" })).toThrow("symbolic link");
+    await expect(project({ version: 1, setup: "echo wrong" })).rejects.toThrow("symbolic link");
     expect(fs.readFileSync(outside, "utf8")).toBe('{"version":1}');
   });
   it("merges public defaults with local dotenv for setup and terminal processes without changing parent env", () => {

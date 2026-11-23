@@ -40,7 +40,7 @@ import { getServerName } from "../server-name";
 import { currentHost } from "./access";
 import { addProjectTool } from "./add-project";
 import { FEEDBACK_CATEGORIES, FeedbackNotSent, sendFeedback } from "./feedback";
-import { createDeusHost, refusing, whereSentence, type DeusHost } from "./host";
+import { createDeusHost, formatFileChange, refusing, whereSentence, type DeusHost } from "./host";
 import * as store from "./store";
 
 /** One file's diff is cut here: enough to review a change, not a whole regenerated file. */
@@ -87,9 +87,10 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
           workspaceId,
         });
         if (file) {
-          // Only a changed file: the diff of an unchanged one is the whole file,
-          // and that may be a secret git ignores (.env).
-          const listed = files.find((f) => normal(f.file) === normal(file));
+          const literal = path.posix.normalize(file);
+          const listed =
+            files.find((f) => f.file === literal) ??
+            files.find((f) => normal(f.file) === normal(file));
           if (!listed) {
             throw new OperatorError(
               "not_found",
@@ -101,7 +102,12 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
             workspaceId,
             file: listed.file,
           });
-          if (!diff.trim()) return `${quoted(listed.file)}: no changes`;
+          if (!diff.trim()) {
+            if (listed.previous_path && !listed.additions && !listed.deletions) {
+              return `${quoted(listed.file)} was renamed from ${quoted(listed.previous_path)}. Its content is unchanged.`;
+            }
+            return `${quoted(listed.file)} has no content patch.`;
+          }
           const cut = diff.length > DIFF_LIMIT;
           return [
             `diff of ${quoted(listed.file)} (+${listed.additions} -${listed.deletions}):`,
@@ -114,7 +120,7 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
         const shown = files.slice(0, FILES_LIMIT);
         return [
           `${name}: ${total} file(s) changed`,
-          ...shown.map((f) => `  ${quoted(f.file)}  +${f.additions} -${f.deletions}`),
+          ...shown.map((change) => `  ${formatFileChange(change)}`),
           ...(total > shown.length ? [`  (and ${total - shown.length} more)`] : []),
           `  ${callHint("read_changes", { session, file: shown[0]!.file })}`,
         ].join("\n");

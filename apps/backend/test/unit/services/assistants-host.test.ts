@@ -5,6 +5,8 @@
 // reached through MCP (`agentMcp`) and as a chat's own.
 
 import Database from "better-sqlite3";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { z } from "zod";
 import { WireRequestError } from "@zvada/agent-server/client";
@@ -732,6 +734,26 @@ describe("through MCP and as a chat's own tools", () => {
     );
     return { text: reply.result.content[0].text as string, isError: reply.result.isError === true };
   };
+
+  it("shows the home-relative folder when a workspace fails to start and keeps the stored error", async () => {
+    const folder = join(homedir(), "Developer", "shop");
+    const error = `The project folder is missing: ${folder}.`;
+    insertWorkspace("w-missing", "missing", { state: "error", first: "s-missing" });
+    state.db.prepare("UPDATE workspaces SET error_message = ? WHERE id = 'w-missing'").run(error);
+
+    const caller = assistantCaller();
+    const status = await call(caller, "wait_for_sessions", { sessions: ["missing:1"], wait: 1 });
+    const refusal = await call(caller, "send_message", { session: "missing:1", message: "go" });
+    expect(status.isError).toBe(false);
+    expect(refusal.isError).toBe(true);
+    for (const { text } of [status, refusal]) {
+      expect(text).toContain(`The project folder is missing: ${join("~", "Developer", "shop")}.`);
+      expect(text).not.toContain(homedir());
+    }
+    expect(
+      state.db.prepare("SELECT error_message FROM workspaces WHERE id = 'w-missing'").pluck().get()
+    ).toBe(error);
+  });
 
   it("says when a diff cannot be read, including in a settled turn's outcome", async () => {
     const why = "Could not read the changes: git returned no merge base.";
@@ -1824,16 +1846,43 @@ describe("what still lives in Deus (H18, H19)", () => {
     expect(state.feedback).toHaveLength(1);
   });
 
-  it("read_changes shows only a changed file: an unchanged one (a secret git ignores) is refused", async () => {
+  it("lists a rename in outcomes and read_changes, which opens its destination", async () => {
+    const file = "folder/café\nnotes.txt";
+    const previous = 'folder/old\n"name".txt';
+    const shownFile = '"folder/café notes.txt"';
+    const shownPrevious = '"folder/old \\"name\\".txt"';
+    let additions = 1;
     state.ops.diffFiles = () => ({
-      files: [{ file: "src/a.ts", additions: 1, deletions: 0 }],
-      total_count: 1,
+      files: [
+        { file: file.replace("/", "\\"), status: "modified", additions: 0, deletions: 2 },
+        { file, previous_path: previous, status: "renamed", additions, deletions: 0 },
+      ],
+      truncated: true,
+      total_count: 3,
     });
-    state.ops.diffFile = () => ({ diff: "+x" });
-    const refused = await call(LOCAL_CALLER, "read_changes", { session: "lead", file: ".env" });
-    expect(refused.isError).toBe(true);
-    expect(refused.text).toContain("is not one of");
-    const shown = await call(LOCAL_CALLER, "read_changes", { session: "lead", file: "./src/a.ts" });
-    expect(shown.text).toContain("diff of");
+    const open = vi.fn(() => ({ diff: "+x" }));
+    state.ops.diffFile = open;
+    const listed = await call(LOCAL_CALLER, "read_changes", { session: "lead" });
+    const modified = '"folder\\\\café notes.txt" +0 -2';
+    const renamed = `${shownFile} (renamed from ${shownPrevious}) +1 -0`;
+    const waited = await call(LOCAL_CALLER, "wait_for_sessions", { sessions: ["lead"], wait: 0 });
+    expect(waited.text.split("\n")).toContain(`  changes: ${modified}, ${renamed}, and 1 more`);
+    expect(listed.text).toContain(`\n  ${modified}\n  ${renamed}\n  (and 1 more)\n`);
+    for (const name of [previous, ".env"]) {
+      const refused = await call(LOCAL_CALLER, "read_changes", { session: "lead", file: name });
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain("is not one of");
+    }
+    expect(open).not.toHaveBeenCalled();
+    const shown = await call(LOCAL_CALLER, "read_changes", { session: "lead", file: `./${file}` });
+    expect(shown.text).toContain(`diff of ${shownFile}`);
+    expect(shown.text).toContain("  | +x");
+    expect(open).toHaveBeenCalledWith({ workspaceId: "w-lead", file });
+    additions = 0;
+    open.mockReturnValue({ diff: "" });
+    const pure = await call(LOCAL_CALLER, "read_changes", { session: "lead", file });
+    expect(pure.text).toContain(
+      `${shownFile} was renamed from ${shownPrevious}. Its content is unchanged.`
+    );
   });
 });

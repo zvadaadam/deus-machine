@@ -16,13 +16,14 @@ export interface CheckDetail {
  */
 export interface PRStatus {
   has_pr: boolean;
-  /** True when GitHub was actually queried — `has_pr: false` without it means "couldn't check". */
+  /** The lookup found a PR or ruled one out in every repository checked. */
   conclusive?: boolean;
   /** Set only when `git remote` lists no remotes for the local checkout. */
   no_remote?: true;
   pr_number?: number;
   pr_title?: string;
   pr_url?: string;
+  base_branch?: string;
   pr_state?: "open" | "merged" | "closed";
   merge_status?: "ready" | "blocked" | "merged";
   is_draft?: boolean;
@@ -35,7 +36,7 @@ export interface PRStatus {
   /** Per-check breakdown from statusCheckRollup */
   checks?: CheckDetail[];
   review_status?: "approved" | "changes_requested" | "review_required" | "none";
-  error?: "gh_not_installed" | "gh_not_authenticated" | "timeout" | "network" | null;
+  error?: "gh_not_installed" | "gh_not_authenticated" | "timeout" | "unknown" | null;
 }
 
 /**

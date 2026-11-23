@@ -1,47 +1,12 @@
-/**
- * Unified File Browser Panel
- * Single tree view for all files + change indicators.
- * Replaces the old two-tab (Changes / All files) approach.
- */
-
-import {
-  FolderOpen,
-  Loader2,
-  GitBranch,
-  FileCode,
-  Check,
-  RefreshCw,
-  Search,
-  SlidersHorizontal,
-  ChevronDown,
-  X,
-} from "lucide-react";
-import { useState, useMemo, useRef, useEffect } from "react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { api } from "@shared/api";
-import { call } from "@/platform/ws";
+import { FileCode, FolderOpen, Loader2, RefreshCw, Search, X } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useFiles } from "../api/useFiles";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
-import { getErrorMessage } from "@shared/lib/errors";
 import { FileTree } from "./components/FileTree";
 import { cn } from "@/shared/lib/utils";
-import {
-  CHANGES_FILTER_OPTIONS,
-  changesFilterLabel,
-  type ChangesFilter,
-} from "@/features/workspace/lib/changesFilter";
 import type { Workspace, FileChange } from "@/shared/types";
 import type { FileTreeNode } from "../types";
 import type { PendingFileNavigation } from "@/features/workspace/store/workspaceLayoutStore";
-
-type FilterMode = "all" | "changes";
 
 const EMPTY_FILE_CHANGES: FileChange[] = [];
 
@@ -49,14 +14,6 @@ interface FileBrowserPanelProps {
   selectedWorkspace: Workspace | null;
   /** Git diff file changes — overlaid onto the tree as +N/-N indicators */
   fileChanges?: FileChange[];
-  /** Uncommitted-only file changes (HEAD → workdir) */
-  uncommittedFiles?: FileChange[];
-  /** Last-turn file changes (checkpoint → workdir) */
-  lastTurnFiles?: FileChange[];
-  /** True if the file changes list was truncated (too many files) */
-  fileChangesTruncated?: boolean;
-  /** Total number of changed files (before truncation) */
-  fileChangesTotalCount?: number;
   /** Controlled selection path */
   selectedFilePath?: string | null;
   /** Called when any file is clicked */
@@ -65,97 +22,32 @@ interface FileBrowserPanelProps {
   revealRequest?: PendingFileNavigation | null;
   /** Called after a reveal request has been applied to the tree */
   onRevealConsumed?: (requestId: string) => void;
-  /** Action at the end of the existing search/filter row. */
-  toolbarAction?: React.ReactNode;
-  /** Controlled filter mode — when provided, component uses this instead of local state */
-  filterMode?: FilterMode;
-  /** Called when user changes the filter tab (Changes / All files) */
-  onFilterModeChange?: (mode: FilterMode) => void;
-  /** Hide the internal tab toggle (when parent handles tab switching) */
-  hideTabToggle?: boolean;
+  /** Action at the end of the search field. */
+  toolbarAction?: ReactNode;
 }
 
-/**
- * Overlay change data (additions/deletions) from git diff onto the IPC-scanned tree.
- * Builds a path→change lookup and walks the tree to decorate matching files.
- */
+/** Join the scanned tree to the diff by the file's current path. */
 function enrichTreeWithChanges(nodes: FileTreeNode[], changes: FileChange[]): FileTreeNode[] {
   if (changes.length === 0) return nodes;
 
-  const changeMap = new Map<string, FileChange>();
-  for (const c of changes) {
-    const path = c.file || c.file_path || "";
-    if (path) changeMap.set(path, c);
-  }
+  const changeMap = new Map(changes.map((change) => [change.file, change]));
 
   function walk(nodeList: FileTreeNode[]): FileTreeNode[] {
     return nodeList.map((node) => {
-      if (node.type === "file") {
-        const change = changeMap.get(node.path);
-        if (change) {
-          const status =
-            change.additions > 0 && change.deletions === 0
-              ? "added"
-              : change.deletions > 0 && change.additions === 0
-                ? "deleted"
-                : "modified";
-          return {
-            ...node,
-            additions: change.additions,
-            deletions: change.deletions,
-            change_status: status as "added" | "modified" | "deleted",
-            committed: change.committed,
-          };
-        }
-        return node;
-      }
-      // Directory: recurse into children
-      if (node.children) {
-        return { ...node, children: walk(node.children) };
-      }
-      return node;
+      if (node.children) return { ...node, children: walk(node.children) };
+      const change = changeMap.get(node.path);
+      if (!change || node.type !== "file") return node;
+      return {
+        ...node,
+        additions: change.additions,
+        deletions: change.deletions,
+        change_status: change.status,
+        previous_path: change.previous_path,
+      };
     });
   }
 
   return walk(nodes);
-}
-
-/** Filter tree to only files with actual diff changes (and their ancestor directories).
- *
- * Uses `change_status` (set by enrichTreeWithChanges from diff query results): the
- * file scan carries no git status.
- */
-function filterToChangedOnly(nodes: FileTreeNode[]): FileTreeNode[] {
-  return nodes.reduce((acc, node) => {
-    if (node.type === "file") {
-      if (node.change_status) {
-        acc.push(node);
-      }
-    } else if (node.children) {
-      const filtered = filterToChangedOnly(node.children);
-      if (filtered.length > 0) {
-        acc.push({ ...node, children: filtered });
-      }
-    }
-    return acc;
-  }, [] as FileTreeNode[]);
-}
-
-/** Filter tree to only files matching a specific change set */
-function filterToChangeSet(nodes: FileTreeNode[], allowedPaths: Set<string>): FileTreeNode[] {
-  return nodes.reduce((acc, node) => {
-    if (node.type === "file") {
-      if (allowedPaths.has(node.path)) {
-        acc.push(node);
-      }
-    } else if (node.children) {
-      const filtered = filterToChangeSet(node.children, allowedPaths);
-      if (filtered.length > 0) {
-        acc.push({ ...node, children: filtered });
-      }
-    }
-    return acc;
-  }, [] as FileTreeNode[]);
 }
 
 /** Filter tree by search query (case-insensitive name match, preserving ancestor dirs) */
@@ -181,65 +73,21 @@ function filterTreeBySearch(nodes: FileTreeNode[], query: string): FileTreeNode[
   }, [] as FileTreeNode[]);
 }
 
-/** Build a Set of file paths from a FileChange array */
-function buildPathSet(changes: FileChange[]): Set<string> {
-  const set = new Set<string>();
-  for (const c of changes) {
-    const p = c.file || c.file_path || "";
-    if (p) set.add(p);
-  }
-  return set;
-}
-
 export function FileBrowserPanel({
   selectedWorkspace,
   fileChanges = EMPTY_FILE_CHANGES,
-  uncommittedFiles,
-  lastTurnFiles,
-  fileChangesTruncated,
-  fileChangesTotalCount,
   selectedFilePath,
-  onFileClick: onFileClickProp,
+  onFileClick,
   revealRequest,
   onRevealConsumed,
   toolbarAction,
-  filterMode: controlledFilterMode,
-  onFilterModeChange,
-  hideTabToggle = false,
 }: FileBrowserPanelProps) {
-  // Controlled when parent provides filterMode, uncontrolled fallback otherwise.
-  const [localFilterMode, setLocalFilterMode] = useState<FilterMode>("changes");
-  const filterMode = controlledFilterMode ?? localFilterMode;
-  const setFilterMode = onFilterModeChange ?? setLocalFilterMode;
-  const [changesFilter, setChangesFilter] = useState<ChangesFilter>("all-changes");
   const [searchQuery, setSearchQuery] = useState("");
-  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const workspaceId = selectedWorkspace?.id ?? null;
   // Cloud trees ride the same route now — the backend branches on kind and
   // serves the sandbox tree over the fs channel.
   const { data, isLoading, isFetching, error, refetch } = useFiles(workspaceId);
-
-  const handleFileClick = (path: string) => {
-    onFileClickProp?.(path);
-  };
-
-  const handleRefresh = async () => {
-    if (!workspaceId) return;
-    try {
-      await call(api.invalidateFileCache, { workspaceId });
-      await refetch({ throwOnError: true });
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-    }
-  };
-
-  // Focus search input when it appears
-  useEffect(() => {
-    if (filterMode === "all" && searchInputRef.current) {
-      searchInputRef.current.focus();
-    }
-  }, [filterMode]);
 
   useEffect(() => {
     if (!revealRequest?.requestId) return;
@@ -247,58 +95,14 @@ export function FileBrowserPanel({
     setSearchQuery("");
   }, [revealRequest?.requestId]);
 
-  // Clear search when switching away from All tab
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: clear search on filter change
-    if (filterMode !== "all") setSearchQuery("");
-  }, [filterMode]);
-
-  // Path sets for sub-filters
-  const uncommittedPaths = useMemo(
-    () => (uncommittedFiles ? buildPathSet(uncommittedFiles) : null),
-    [uncommittedFiles]
+  const enrichedTree = useMemo(
+    () => enrichTreeWithChanges(data?.files ?? [], fileChanges),
+    [data, fileChanges]
   );
-  const lastTurnPaths = useMemo(
-    () => (lastTurnFiles ? buildPathSet(lastTurnFiles) : null),
-    [lastTurnFiles]
+  const filteredFiles = useMemo(
+    () => (searchQuery ? filterTreeBySearch(enrichedTree, searchQuery) : enrichedTree),
+    [enrichedTree, searchQuery]
   );
-
-  // Enrich tree with change data + committed flag
-  const enrichedTree = useMemo(() => {
-    if (!data) return [];
-
-    // Tag committed status: files NOT in uncommitted set are committed
-    const taggedChanges = fileChanges.map((c) => {
-      const path = c.file || c.file_path || "";
-      const isUncommitted = uncommittedPaths ? uncommittedPaths.has(path) : undefined;
-      return {
-        ...c,
-        committed: isUncommitted !== undefined ? !isUncommitted : undefined,
-      };
-    });
-
-    return enrichTreeWithChanges(data.files, taggedChanges);
-  }, [data, fileChanges, uncommittedPaths]);
-
-  // Apply filter mode + sub-filter + search
-  const filteredFiles = useMemo(() => {
-    if (filterMode === "all") {
-      // All files with optional search
-      return searchQuery ? filterTreeBySearch(enrichedTree, searchQuery) : enrichedTree;
-    }
-
-    // Changes mode — apply sub-filter
-    const changedOnly = filterToChangedOnly(enrichedTree);
-
-    if (changesFilter === "uncommitted" && uncommittedPaths) {
-      return filterToChangeSet(changedOnly, uncommittedPaths);
-    }
-    if (changesFilter === "last-turn" && lastTurnPaths) {
-      return filterToChangeSet(changedOnly, lastTurnPaths);
-    }
-
-    return changedOnly;
-  }, [enrichedTree, filterMode, searchQuery, changesFilter, uncommittedPaths, lastTurnPaths]);
 
   const status = !selectedWorkspace ? (
     <div className="animate-fade-in-up flex flex-1 flex-col items-center justify-center gap-3">
@@ -329,144 +133,49 @@ export function FileBrowserPanel({
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Header: tab toggle (left) + filter dropdown (right) — hidden when parent manages tabs */}
-      {!hideTabToggle && (
-        <div className="flex h-9 flex-shrink-0 items-center justify-between px-3">
-          {/* Tab toggle: Changes | All files */}
-          <div className="flex items-center gap-0.5">
-            <button
-              onClick={() => setFilterMode("changes")}
-              className={cn(
-                "control-interaction rounded-lg px-2 py-1 text-sm",
-                filterMode === "changes"
-                  ? "bg-muted text-secondary-foreground font-medium"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Changes
-            </button>
-            <button
-              onClick={() => setFilterMode("all")}
-              className={cn(
-                "control-interaction rounded-lg px-2 py-1 text-sm",
-                filterMode === "all"
-                  ? "bg-muted text-secondary-foreground font-medium"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              All files
-            </button>
-          </div>
-
-          {/* Right-side actions — visible in Changes mode */}
-          {filterMode === "changes" && (
-            <div className="flex items-center gap-1">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="control-interaction text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-lg py-1 text-sm">
-                    <SlidersHorizontal className="h-[11px] w-[11px]" />
-                    <span>{changesFilterLabel(changesFilter)}</span>
-                    <ChevronDown className="h-[10px] w-[10px]" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-[140px]">
-                  {CHANGES_FILTER_OPTIONS.map(([value, label]) => (
-                    <DropdownMenuItem
-                      key={value}
-                      onClick={() => setChangesFilter(value)}
-                      className="gap-2 text-xs"
-                    >
-                      <Check
-                        className={cn(
-                          "h-3 w-3",
-                          changesFilter === value ? "opacity-100" : "opacity-0"
-                        )}
-                      />
-                      {label}
-                    </DropdownMenuItem>
-                  ))}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleRefresh} className="gap-2 text-xs">
-                    <RefreshCw className="h-3 w-3" />
-                    Refresh files
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Search bar — only for All files tab */}
-      {filterMode === "all" && (
-        <div className="border-border/30 flex h-10 shrink-0 items-center gap-1.5 border-b px-2">
-          <Search className="text-muted-foreground/40 h-3 w-3 flex-shrink-0" />
-          <input
-            ref={searchInputRef}
-            type="text"
-            placeholder="Filter files..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="text-foreground placeholder:text-muted-foreground/40 h-5 min-w-0 flex-1 bg-transparent text-xs outline-none"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery("")}
-              className="text-muted-foreground/40 hover:text-muted-foreground flex-shrink-0"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          )}
-          {toolbarAction}
-        </div>
-      )}
+      <div className="border-border/30 flex h-10 shrink-0 items-center gap-1.5 border-b px-2">
+        <Search className="text-muted-foreground/40 h-3 w-3 flex-shrink-0" />
+        <input
+          autoFocus
+          type="text"
+          placeholder="Filter files..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="text-foreground placeholder:text-muted-foreground/40 h-5 min-w-0 flex-1 bg-transparent text-xs outline-none"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery("")}
+            className="text-muted-foreground/40 hover:text-muted-foreground flex-shrink-0"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+        {toolbarAction}
+      </div>
 
       {status ?? (
-        <>
-          {/* Truncation warning — shown when diff has too many files */}
-          {fileChangesTruncated && filterMode === "changes" && (
-            <div className="border-border/30 bg-muted/20 border-b px-2.5 py-1.5">
-              <p className="text-muted-foreground text-xs">
-                Showing {fileChanges.length.toLocaleString()} of{" "}
-                {(fileChangesTotalCount ?? 0).toLocaleString()} changed files
+        <div className="flex-1 overflow-hidden py-1">
+          {filteredFiles.length > 0 ? (
+            <FileTree
+              nodes={filteredFiles}
+              selectedPath={selectedFilePath}
+              onFileClick={onFileClick}
+              revealPath={revealRequest?.path ?? null}
+              revealRequestId={revealRequest?.requestId ?? null}
+              onRevealConsumed={onRevealConsumed}
+            />
+          ) : (
+            <div className="animate-fade-in-up flex flex-col items-center justify-center gap-3 py-12">
+              <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
+                <FolderOpen className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
+              </div>
+              <p className="text-muted-foreground/60 text-xs">
+                {searchQuery ? "No matching files" : "No files found"}
               </p>
             </div>
           )}
-
-          {/* File Tree — Pierre virtualizes internally; remount on mode change
-          so defaultExpanded takes effect at construction. */}
-          <div className="flex-1 overflow-hidden py-1">
-            {filteredFiles.length > 0 ? (
-              <FileTree
-                key={filterMode}
-                nodes={filteredFiles}
-                selectedPath={selectedFilePath}
-                onFileClick={handleFileClick}
-                defaultExpanded={filterMode === "changes"}
-                revealPath={revealRequest?.path ?? null}
-                revealRequestId={revealRequest?.requestId ?? null}
-                onRevealConsumed={onRevealConsumed}
-              />
-            ) : (
-              <div className="animate-fade-in-up flex flex-col items-center justify-center gap-3 py-12">
-                <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
-                  {filterMode === "changes" ? (
-                    <GitBranch className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
-                  ) : (
-                    <FolderOpen className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
-                  )}
-                </div>
-                <p className="text-muted-foreground/60 text-xs">
-                  {filterMode === "changes"
-                    ? "No file changes detected"
-                    : searchQuery
-                      ? "No matching files"
-                      : "No files found"}
-                </p>
-              </div>
-            )}
-          </div>
-        </>
+        </div>
       )}
     </div>
   );

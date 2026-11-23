@@ -7,7 +7,7 @@ import type { Origin } from "@zvada/agent-server/protocol";
 import { encodeOrigin, getRepositoryById } from "../db";
 import { getDatabase } from "../lib/database";
 import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
-import { processGroupsStopped } from "../lib/process-groups";
+import { processGroupsStopped } from "@shared/lib/process-groups";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
 import { invalidate } from "./query-engine";
 import { cloudAccount } from "./agent/cloud/config";
