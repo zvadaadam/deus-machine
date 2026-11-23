@@ -84,6 +84,7 @@ import { sendMessage, stopSession } from "../agent/turns";
 import { invalidate, onInvalidate, runAsThisComputer as run } from "../query-engine";
 import { getServerName } from "../server-name";
 import { assertMayWrite, refusalFor, storedAccess } from "./access";
+import { homeRelative } from "./home-relative";
 import { continuedSettings, startSettings, type TurnSettings } from "./turn-settings";
 import { replyFor, waitingOf } from "./waiting";
 
@@ -353,7 +354,7 @@ export function createDeusHost(): DeusHost {
           harness: knownHarness(row.agent_harness),
           ...(title ? { title } : {}),
           ...(activity ? { lastActivityAt: activity } : {}),
-          ...(status === "error" && error ? { error } : {}),
+          ...(status === "error" && error ? { error: homeRelative(error, "diagnostic") } : {}),
           ...(root ? { root } : {}),
         },
       ];

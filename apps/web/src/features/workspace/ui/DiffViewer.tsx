@@ -7,7 +7,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { FileDiff } from "@pierre/diffs/react";
 import type { DiffLineAnnotation } from "@pierre/diffs/react";
 import { getSingularPatch, parseDiffFromFile } from "@pierre/diffs";
-import type { FileContents, FileDiffMetadata } from "@pierre/diffs";
+import type { FileDiffMetadata } from "@pierre/diffs";
+import type { FileDiff as WorkspaceFileDiff } from "@shared/api/workspaces";
+import type { FileChange } from "@shared/types/workspace";
 import { useDiffOptions } from "@/shared/lib/diffOptions";
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import { serializeDiffCommentReference } from "@/features/session/lib/parseDiffCommentTags";
@@ -15,10 +17,8 @@ import { workspaceLayoutActions } from "@/features/workspace/store";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 
 interface DiffViewerProps {
-  filePath?: string;
-  diff?: string;
-  oldContent?: string | null;
-  newContent?: string | null;
+  fileChange: FileChange;
+  data?: WorkspaceFileDiff;
   isLoading?: boolean;
   error?: string | null;
   onClose?: () => void;
@@ -60,10 +60,8 @@ interface DiffCommentMeta {
 }
 
 export function DiffViewer({
-  filePath = "",
-  diff = "",
-  oldContent = null,
-  newContent = null,
+  fileChange,
+  data,
   isLoading = false,
   error: errorProp = null,
   onClose,
@@ -83,50 +81,50 @@ export function DiffViewer({
 
   const baseDiffOptions = useDiffOptions<DiffCommentMeta>();
 
+  const filePath = fileChange.file;
+  const diff = data?.diff ?? "";
   const diffIsEmpty = diff.trim().length === 0;
   const hasContent = !isLoading && !errorProp && !diffIsEmpty;
 
-  const { displayFileDiff, canExpand } = useMemo(() => {
-    if (!diff.trim()) return { displayFileDiff: null, canExpand: false };
-    const fallbackName = filePath || "file";
-    const diffPaths = extractDiffPaths(diff);
-    const oldName = diffPaths.oldPath || fallbackName;
-    const newName = diffPaths.newPath || fallbackName;
-
-    // Full-file parsing: when old + new content are available, use parseDiffFromFile
-    // so the diff component has full context for expanding collapsed unchanged lines.
-    const oldFile: FileContents | null =
-      oldContent != null ? { name: oldName, contents: oldContent } : null;
-    const newFile: FileContents | null =
-      newContent != null ? { name: newName, contents: newContent } : null;
-    if (oldFile && newFile) {
+  const displayFileDiff = useMemo(() => {
+    if (!data || diffIsEmpty) return null;
+    const { file, previous_path, status } = fileChange;
+    const { old_content, new_content } = data;
+    let parsed: FileDiffMetadata | undefined;
+    if (old_content != null && new_content != null && old_content !== new_content) {
       try {
-        const generated = parseDiffFromFile(oldFile, newFile);
-        // Only use if it has hunks. Metadata-only changes (renames, chmod)
-        // produce zero hunks — fall back to getSingularPatch for those.
-        if (generated.hunks.length > 0) {
-          return { displayFileDiff: applyDisplayNames(generated, fallbackName), canExpand: true };
-        }
+        const full = parseDiffFromFile(
+          { name: previous_path ?? file, contents: old_content },
+          { name: file, contents: new_content }
+        );
+        if (full.hunks.length) parsed = full;
       } catch (error) {
         console.warn("Failed to generate full diff, falling back to patch diff", error);
       }
     }
-
-    // Patch-only fallback — no full file context, so expand controls are dead.
     try {
-      return {
-        displayFileDiff: applyDisplayNames(getSingularPatch(diff), fallbackName),
-        canExpand: false,
-      };
+      // Pierre needs an unquoted diff --git header to read the hunks. Git supplies both names separately.
+      parsed ??= getSingularPatch(
+        data.diff.replace(/^diff --git [^\n]*/, "diff --git a/file b/file")
+      );
+      const types = {
+        added: "new",
+        modified: "change",
+        deleted: "deleted",
+        renamed:
+          parsed.hunks.length || parsed.type === "rename-changed"
+            ? "rename-changed"
+            : "rename-pure",
+      } as const;
+      return { ...parsed, name: file, prevName: previous_path, type: types[status] };
     } catch (error) {
       console.warn("Failed to parse patch diff", error);
-      return { displayFileDiff: null, canExpand: false };
+      return null;
     }
-  }, [diff, filePath, newContent, oldContent]);
+  }, [data, diffIsEmpty, fileChange]);
+  const canExpand = displayFileDiff?.isPartial === false;
 
   useEffect(() => {
-    // Reset comment state when file changes - intentional pattern for clearing related state
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setComments([]);
     setDraftComment(null);
     setShowAll(false);
@@ -551,87 +549,4 @@ function countDiffLines(fileDiff: FileDiffMetadata): number {
     total += hunk.additionCount + hunk.deletionCount;
   }
   return total;
-}
-
-function applyDisplayNames(fileDiff: FileDiffMetadata, fallbackName: string): FileDiffMetadata {
-  const displayName = toBaseName(fileDiff.name || fallbackName);
-  const displayPrev = fileDiff.prevName ? toBaseName(fileDiff.prevName) : undefined;
-  return {
-    ...fileDiff,
-    name: displayName,
-    prevName: displayPrev,
-  };
-}
-
-function toBaseName(path: string): string {
-  const cleaned = normalizeGitPath(path);
-  const parts = cleaned.split("/");
-  return parts[parts.length - 1] || cleaned;
-}
-
-function extractDiffPaths(diff: string): { oldPath?: string; newPath?: string } {
-  let oldPath: string | undefined;
-  let newPath: string | undefined;
-  const lines = diff.split("\n");
-  for (const line of lines) {
-    if (line.startsWith("rename from ")) {
-      oldPath = normalizeGitPath(line.slice("rename from ".length));
-      continue;
-    }
-    if (line.startsWith("rename to ")) {
-      newPath = normalizeGitPath(line.slice("rename to ".length));
-      continue;
-    }
-    if (line.startsWith("diff --git ")) {
-      const tokens = splitGitDiffTokens(line.slice("diff --git ".length));
-      if (!oldPath && tokens[0]) oldPath = normalizeGitPath(tokens[0]);
-      if (!newPath && tokens[1]) newPath = normalizeGitPath(tokens[1]);
-      continue;
-    }
-    if (line.startsWith("--- ") || line.startsWith("+++ ")) {
-      const match = line.match(/^(---|\+\+\+)\s+([^\t\r\n]+)(.*)$/);
-      if (!match) continue;
-      const [, prefix, fileName] = match;
-      if (fileName === "/dev/null") {
-        continue;
-      }
-      if (prefix === "---" && !oldPath) {
-        oldPath = normalizeGitPath(fileName);
-      } else if (prefix === "+++" && !newPath) {
-        newPath = normalizeGitPath(fileName);
-      }
-    }
-    if (oldPath && newPath) {
-      break;
-    }
-  }
-  return { oldPath, newPath };
-}
-
-function splitGitDiffTokens(value: string): string[] {
-  const tokens: string[] = [];
-  let i = 0;
-  while (i < value.length && tokens.length < 2) {
-    while (value[i] === " ") i += 1;
-    if (i >= value.length) break;
-    if (value[i] === '"') {
-      let end = i + 1;
-      while (end < value.length && value[end] !== '"') end += 1;
-      tokens.push(value.slice(i, Math.min(end + 1, value.length)));
-      i = end + 1;
-    } else {
-      let end = i;
-      while (end < value.length && value[end] !== " ") end += 1;
-      tokens.push(value.slice(i, end));
-      i = end + 1;
-    }
-  }
-  return tokens;
-}
-
-function normalizeGitPath(pathToken: string): string {
-  if (!pathToken) return pathToken;
-  const unquoted =
-    pathToken.startsWith('"') && pathToken.endsWith('"') ? pathToken.slice(1, -1) : pathToken;
-  return unquoted.replace(/^a\//, "").replace(/^b\//, "");
 }

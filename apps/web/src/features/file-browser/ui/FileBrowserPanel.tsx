@@ -75,87 +75,49 @@ interface FileBrowserPanelProps {
   hideTabToggle?: boolean;
 }
 
-/**
- * Overlay change data (additions/deletions) from git diff onto the IPC-scanned tree.
- * Builds a path→change lookup and walks the tree to decorate matching files.
- */
-function enrichTreeWithChanges(nodes: FileTreeNode[], changes: FileChange[]): FileTreeNode[] {
+/** Join the scanned tree to the diff by the file's current path. */
+function enrichTreeWithChanges(
+  nodes: FileTreeNode[],
+  changes: FileChange[],
+  uncommittedPaths: Set<string> | null
+): FileTreeNode[] {
   if (changes.length === 0) return nodes;
 
-  const changeMap = new Map<string, FileChange>();
-  for (const c of changes) {
-    const path = c.file || c.file_path || "";
-    if (path) changeMap.set(path, c);
-  }
+  const changeMap = new Map(changes.map((change) => [change.file, change]));
 
   function walk(nodeList: FileTreeNode[]): FileTreeNode[] {
     return nodeList.map((node) => {
-      if (node.type === "file") {
-        const change = changeMap.get(node.path);
-        if (change) {
-          const status =
-            change.additions > 0 && change.deletions === 0
-              ? "added"
-              : change.deletions > 0 && change.additions === 0
-                ? "deleted"
-                : "modified";
-          return {
-            ...node,
-            additions: change.additions,
-            deletions: change.deletions,
-            change_status: status as "added" | "modified" | "deleted",
-            committed: change.committed,
-          };
-        }
-        return node;
-      }
-      // Directory: recurse into children
-      if (node.children) {
-        return { ...node, children: walk(node.children) };
-      }
-      return node;
+      if (node.children) return { ...node, children: walk(node.children) };
+      const change = changeMap.get(node.path);
+      if (!change || node.type !== "file") return node;
+      return {
+        ...node,
+        additions: change.additions,
+        deletions: change.deletions,
+        change_status: change.status,
+        previous_path: change.previous_path,
+        committed: uncommittedPaths ? !uncommittedPaths.has(node.path) : change.committed,
+      };
     });
   }
 
   return walk(nodes);
 }
 
-/** Filter tree to only files with actual diff changes (and their ancestor directories).
- *
- * Uses `change_status` (set by enrichTreeWithChanges from diff query results): the
- * file scan carries no git status.
- */
-function filterToChangedOnly(nodes: FileTreeNode[]): FileTreeNode[] {
-  return nodes.reduce((acc, node) => {
+function filterToChangedOnly(nodes: FileTreeNode[], paths: Set<string> | null): FileTreeNode[] {
+  return nodes.reduce<FileTreeNode[]>((acc, node) => {
     if (node.type === "file") {
-      if (node.change_status) {
+      if (node.change_status && (!paths || paths.has(node.path))) {
         acc.push(node);
       }
     } else if (node.children) {
-      const filtered = filterToChangedOnly(node.children);
+      const filtered = filterToChangedOnly(node.children, paths);
       if (filtered.length > 0) {
         acc.push({ ...node, children: filtered });
       }
     }
     return acc;
-  }, [] as FileTreeNode[]);
-}
-
-/** Filter tree to only files matching a specific change set */
-function filterToChangeSet(nodes: FileTreeNode[], allowedPaths: Set<string>): FileTreeNode[] {
-  return nodes.reduce((acc, node) => {
-    if (node.type === "file") {
-      if (allowedPaths.has(node.path)) {
-        acc.push(node);
-      }
-    } else if (node.children) {
-      const filtered = filterToChangeSet(node.children, allowedPaths);
-      if (filtered.length > 0) {
-        acc.push({ ...node, children: filtered });
-      }
-    }
-    return acc;
-  }, [] as FileTreeNode[]);
+  }, []);
 }
 
 /** Filter tree by search query (case-insensitive name match, preserving ancestor dirs) */
@@ -181,14 +143,8 @@ function filterTreeBySearch(nodes: FileTreeNode[], query: string): FileTreeNode[
   }, [] as FileTreeNode[]);
 }
 
-/** Build a Set of file paths from a FileChange array */
-function buildPathSet(changes: FileChange[]): Set<string> {
-  const set = new Set<string>();
-  for (const c of changes) {
-    const p = c.file || c.file_path || "";
-    if (p) set.add(p);
-  }
-  return set;
+function changedPaths(changes: FileChange[] | undefined) {
+  return changes ? new Set(changes.map(({ file }) => file)) : null;
 }
 
 export function FileBrowserPanel({
@@ -199,7 +155,7 @@ export function FileBrowserPanel({
   fileChangesTruncated,
   fileChangesTotalCount,
   selectedFilePath,
-  onFileClick: onFileClickProp,
+  onFileClick,
   revealRequest,
   onRevealConsumed,
   toolbarAction,
@@ -219,10 +175,6 @@ export function FileBrowserPanel({
   // Cloud trees ride the same route now — the backend branches on kind and
   // serves the sandbox tree over the fs channel.
   const { data, isLoading, isFetching, error, refetch } = useFiles(workspaceId);
-
-  const handleFileClick = (path: string) => {
-    onFileClickProp?.(path);
-  };
 
   const handleRefresh = async () => {
     if (!workspaceId) return;
@@ -254,31 +206,14 @@ export function FileBrowserPanel({
   }, [filterMode]);
 
   // Path sets for sub-filters
-  const uncommittedPaths = useMemo(
-    () => (uncommittedFiles ? buildPathSet(uncommittedFiles) : null),
-    [uncommittedFiles]
-  );
-  const lastTurnPaths = useMemo(
-    () => (lastTurnFiles ? buildPathSet(lastTurnFiles) : null),
-    [lastTurnFiles]
-  );
+  const uncommittedPaths = useMemo(() => changedPaths(uncommittedFiles), [uncommittedFiles]);
+  const lastTurnPaths = useMemo(() => changedPaths(lastTurnFiles), [lastTurnFiles]);
 
   // Enrich tree with change data + committed flag
-  const enrichedTree = useMemo(() => {
-    if (!data) return [];
-
-    // Tag committed status: files NOT in uncommitted set are committed
-    const taggedChanges = fileChanges.map((c) => {
-      const path = c.file || c.file_path || "";
-      const isUncommitted = uncommittedPaths ? uncommittedPaths.has(path) : undefined;
-      return {
-        ...c,
-        committed: isUncommitted !== undefined ? !isUncommitted : undefined,
-      };
-    });
-
-    return enrichTreeWithChanges(data.files, taggedChanges);
-  }, [data, fileChanges, uncommittedPaths]);
+  const enrichedTree = useMemo(
+    () => enrichTreeWithChanges(data?.files ?? [], fileChanges, uncommittedPaths),
+    [data, fileChanges, uncommittedPaths]
+  );
 
   // Apply filter mode + sub-filter + search
   const filteredFiles = useMemo(() => {
@@ -287,17 +222,12 @@ export function FileBrowserPanel({
       return searchQuery ? filterTreeBySearch(enrichedTree, searchQuery) : enrichedTree;
     }
 
-    // Changes mode — apply sub-filter
-    const changedOnly = filterToChangedOnly(enrichedTree);
-
-    if (changesFilter === "uncommitted" && uncommittedPaths) {
-      return filterToChangeSet(changedOnly, uncommittedPaths);
-    }
-    if (changesFilter === "last-turn" && lastTurnPaths) {
-      return filterToChangeSet(changedOnly, lastTurnPaths);
-    }
-
-    return changedOnly;
+    const paths = {
+      "all-changes": null,
+      uncommitted: uncommittedPaths,
+      "last-turn": lastTurnPaths,
+    };
+    return filterToChangedOnly(enrichedTree, paths[changesFilter]);
   }, [enrichedTree, filterMode, searchQuery, changesFilter, uncommittedPaths, lastTurnPaths]);
 
   const status = !selectedWorkspace ? (
@@ -441,7 +371,7 @@ export function FileBrowserPanel({
                 key={filterMode}
                 nodes={filteredFiles}
                 selectedPath={selectedFilePath}
-                onFileClick={handleFileClick}
+                onFileClick={onFileClick}
                 defaultExpanded={filterMode === "changes"}
                 revealPath={revealRequest?.path ?? null}
                 revealRequestId={revealRequest?.requestId ?? null}

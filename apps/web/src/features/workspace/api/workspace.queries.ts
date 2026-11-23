@@ -299,14 +299,7 @@ export function usePRStatus(
 export function useFileDiff(workspaceId: string | null, filePath: string | null) {
   return useQuery({
     queryKey: queryKeys.workspaces.diffFile(workspaceId || "", filePath || ""),
-    queryFn: async () => {
-      const result = await call(api.diffFile, { workspaceId: workspaceId!, file: filePath! });
-      return {
-        diff: result.diff ?? "",
-        oldContent: result.old_content ?? null,
-        newContent: result.new_content ?? null,
-      };
-    },
+    queryFn: () => call(api.diffFile, { workspaceId: workspaceId!, file: filePath! }),
     enabled: !!workspaceId && !!filePath,
     staleTime: 10000, // Cache for 10s since diffs are expensive
   });

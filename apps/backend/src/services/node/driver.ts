@@ -5,12 +5,16 @@
  */
 import path from "path";
 import fs from "fs";
-import { getErrorMessage, isExecError } from "@shared/lib/errors";
+import type { FileDiff } from "@shared/api/workspaces";
+import { getErrorMessage } from "@shared/lib/errors";
+import { GitError, runGit } from "@shared/lib/git-process";
 import type { FileMatch, FileTreeResponse } from "@shared/types/files";
-import { AppError, ConflictError, ValidationError } from "../../lib/errors";
+import type { DiffStats, FileChange, FileChangeStatus } from "@shared/types/workspace";
+import { ConflictError, ValidationError } from "../../lib/errors";
 import * as gitService from "../git.service";
 import * as filesService from "../files.service";
 import {
+  type CloudDiffSummary,
   getCloudDiffSummary,
   getCloudDiffFile,
   hasLiveCloudSession,
@@ -26,26 +30,20 @@ import {
 import { CLOUD_NODE_ID, workspaceNodeId } from "./index";
 import type { WorkspaceWithDetailsRow } from "../../db";
 
+type NodeWorkspace = Pick<
+  WorkspaceWithDetailsRow,
+  "kind" | "id" | "current_session_id" | "init_stage" | "git_target_branch" | "git_default_branch"
+>;
+
 // ─────────────────────────── result shapes ───────────────────────────
 
-export interface DiffStats {
-  additions: number;
-  deletions: number;
-}
-
 export interface DiffFilesResult {
-  files: Array<{ file: string; additions: number; deletions: number }>;
+  files: FileChange[];
 }
 
 /** A file diff with available contents. On failure, local reads throw and cloud reads return 502. */
 export type DiffFileOutcome =
-  | {
-      ok: true;
-      file: string;
-      diff: string;
-      old_content: string | null;
-      new_content: string | null;
-    }
+  | ({ ok: true } & FileDiff)
   | { ok: false; status: 502; body: Record<string, unknown> };
 
 /** A file read: text content, or a 422 "binary" outcome. Bad paths throw. */
@@ -70,7 +68,7 @@ export interface NodeDriver {
 /** Local worktree — git + fs against the on-disk workspace path. */
 class LocalNodeDriver implements NodeDriver {
   constructor(
-    private readonly workspace: WorkspaceWithDetailsRow,
+    private readonly workspace: NodeWorkspace,
     private readonly workspacePath: string
   ) {}
 
@@ -83,15 +81,19 @@ class LocalNodeDriver implements NodeDriver {
       );
       return await read(parent);
     } catch (error) {
-      if (error instanceof AppError) throw error;
+      if (!(error instanceof GitError)) throw error;
       // A git diagnostic can contain private paths or repository-controlled text.
-      const failure = isExecError(error) ? error : undefined;
-      let reason = failure?.code ? `git failed (${failure.code})` : "git could not finish the read";
-      if (failure?.killed) reason = "git timed out";
-      else if (failure?.stderr?.includes("not a git repository"))
-        reason = "the workspace is not a git repository";
-      else if (/unknown revision|not a valid (object|commit) name/i.test(failure?.stderr ?? ""))
-        reason = "the comparison branch could not be found";
+      let reason = "git timed out";
+      if (!error.timedOut) {
+        try {
+          await runGit(["rev-parse", "--git-dir"], { cwd: this.workspacePath, timeoutMs: 2000 });
+          reason =
+            error.code === null ? "git could not finish the read" : `git failed (${error.code})`;
+        } catch (probeError) {
+          if (!(probeError instanceof GitError)) throw probeError;
+          reason = "the workspace is not a git repository";
+        }
+      }
       throw new ConflictError(`Could not read the changes: ${reason}.`);
     }
   }
@@ -113,42 +115,10 @@ class LocalNodeDriver implements NodeDriver {
     const safeFilePath = gitService.resolveWorkspaceRelativePath(workspacePath, file);
     if (!safeFilePath) throw new ValidationError("Invalid file path");
 
-    return this.readChanges(async (parent) => {
-      const mergeBase = await gitService.getMergeBase(workspacePath, parent);
-      const output = await gitService.getFileDiff(workspacePath, mergeBase, safeFilePath);
-      const diffInfo = gitService.extractDiffInfo(output);
-      const safeOldPath =
-        gitService.resolveWorkspaceRelativePath(workspacePath, diffInfo.oldPath || safeFilePath) ||
-        safeFilePath;
-      const safeNewPath =
-        gitService.resolveWorkspaceRelativePath(workspacePath, diffInfo.newPath || safeFilePath) ||
-        safeFilePath;
-
-      let oldContent: string | null = null;
-      let newContent: string | null = null;
-
-      if (diffInfo.isNew) {
-        oldContent = "";
-      } else {
-        oldContent = await gitService.getGitFileContent(workspacePath, mergeBase, safeOldPath);
-      }
-
-      if (diffInfo.isDeleted) {
-        newContent = "";
-      } else {
-        // Read from working directory (not HEAD) since we diff merge-base against workdir
-        try {
-          const buf = await fs.promises.readFile(path.resolve(workspacePath, safeNewPath));
-          // Detect binary files (null bytes in first 8KB)
-          const sample = buf.subarray(0, 8192);
-          newContent = sample.includes(0) ? null : buf.toString("utf-8");
-        } catch {
-          newContent = await gitService.getGitFileContent(workspacePath, "HEAD", safeNewPath);
-        }
-      }
-
-      return { ok: true, file, diff: output, old_content: oldContent, new_content: newContent };
-    });
+    const diff = await this.readChanges((parent) =>
+      gitService.getFileDiff(workspacePath, parent, safeFilePath)
+    );
+    return { ok: true, ...diff };
   }
 
   async fsTree(): Promise<FileTreeResponse> {
@@ -205,6 +175,23 @@ class LocalNodeDriver implements NodeDriver {
 
 // ─────────────────────────── cloud sandbox ───────────────────────────
 
+const cloudStatus = new Map<string, FileChangeStatus>([
+  ["CREATE", "added"],
+  ["DELETE", "deleted"],
+  ["RENAME", "renamed"],
+]);
+
+function cloudFileChange(entry: CloudDiffSummary["files"][number]): FileChange {
+  const status = cloudStatus.get(entry.type) ?? "modified";
+  return {
+    file: entry.path,
+    status,
+    ...(status === "renamed" && entry.oldPath && { previous_path: entry.oldPath }),
+    additions: entry.additions ?? 0,
+    deletions: entry.deletions ?? 0,
+  };
+}
+
 /**
  * Cloud sandbox — live worktree over the session socket. A paused or
  * unreachable sandbox answers with the EMPTY shape, not an error: the Changes
@@ -212,19 +199,7 @@ class LocalNodeDriver implements NodeDriver {
  * live worktree to show.
  */
 class RemoteNodeDriver implements NodeDriver {
-  constructor(private readonly workspace: WorkspaceWithDetailsRow) {}
-
-  private async summary() {
-    if (!this.workspace.current_session_id) return null;
-    try {
-      return await getCloudDiffSummary(this.workspace.current_session_id);
-    } catch (err) {
-      console.warn(
-        `[Diff] cloud summary unavailable for ${this.workspace.id}: ${getErrorMessage(err)}`
-      );
-      return null;
-    }
-  }
+  constructor(private readonly workspace: NodeWorkspace) {}
 
   /**
    * The sidebar's numbers ask every ready workspace on mount and on focus. A
@@ -242,61 +217,44 @@ class RemoteNodeDriver implements NodeDriver {
     if (!sessionId || asleep || !hasLiveCloudSession(sessionId)) {
       return { additions: 0, deletions: 0 };
     }
-    const summary = await this.summary();
-    return (summary?.files ?? []).reduce(
-      (acc, f) => ({
-        additions: acc.additions + (f.additions ?? 0),
-        deletions: acc.deletions + (f.deletions ?? 0),
-      }),
-      { additions: 0, deletions: 0 }
-    );
+    return gitService.sumDiffStats((await this.diffFiles()).files);
   }
 
   async diffFiles(): Promise<DiffFilesResult> {
-    const summary = await this.summary();
-    return {
-      files: (summary?.files ?? []).map((f) => ({
-        file: f.path,
-        additions: f.additions ?? 0,
-        deletions: f.deletions ?? 0,
-      })),
-    };
+    const sessionId = this.workspace.current_session_id;
+    if (!sessionId) return { files: [] };
+    try {
+      const { files } = await getCloudDiffSummary(sessionId);
+      return { files: files.map(cloudFileChange) };
+    } catch (err) {
+      console.warn(
+        `[Diff] cloud summary unavailable for ${this.workspace.id}: ${getErrorMessage(err)}`
+      );
+      return { files: [] };
+    }
   }
 
   async diffFile(file: string): Promise<DiffFileOutcome> {
     const sessionId = this.workspace.current_session_id;
     if (!sessionId) return { ok: true, file, diff: "", old_content: null, new_content: null };
     try {
-      // Content rides the fs channel (its owner since Sprint T); the diff
-      // channel keeps only what it is named for. FILE/CONTENT is deprecated.
-      const [diffPart, contentPart] = await Promise.all([
+      const [diffPart, content] = await Promise.all([
         getCloudDiffFile(sessionId, file, "DIFF"),
-        // Content is enrichment, not a gate (see below): a read that REJECTS
-        // (transient fs error, an unreadable/deleted file) must not fail an
-        // available diff, so fall back to no content instead of rejecting the
-        // whole Promise.all.
-        (
-          requestCloudFs(sessionId, { op: "read", path: file }) as Promise<{
-            content?: string;
-            error?: string;
-          }>
-        ).catch(() => ({}) as { content?: string; error?: string }),
+        // A deleted or unreadable file still has a patch.
+        requestCloudFs(sessionId, { op: "read", path: file }).then(
+          ({ content }) => (typeof content === "string" ? content : null),
+          () => null
+        ),
       ]);
       if (diffPart.error) {
         throw new Error(diffPart.error);
       }
-      // Content is enrichment, not a gate — a deleted file has a diff and no
-      // bytes to read; failing the whole route hid the deletion entirely.
-      // old_content is not reconstructable from the live channel (Sprint 3
-      // serves it from fetched checkpoint objects); the diff text carries the
-      // change either way, and the viewer already tolerates null contents
-      // (binary files take the same shape locally).
       return {
         ok: true,
         file,
         diff: diffPart.diff ?? "",
         old_content: null,
-        new_content: contentPart.content ?? null,
+        new_content: content,
       };
     } catch (err) {
       return {
@@ -366,7 +324,7 @@ class RemoteNodeDriver implements NodeDriver {
  * remote. `workspacePath` is the on-disk path for local workspaces (`""` for
  * cloud, unused there).
  */
-export function resolveNode(workspace: WorkspaceWithDetailsRow, workspacePath: string): NodeDriver {
+export function resolveNode(workspace: NodeWorkspace, workspacePath: string): NodeDriver {
   return workspaceNodeId(workspace) === CLOUD_NODE_ID
     ? new RemoteNodeDriver(workspace)
     : new LocalNodeDriver(workspace, workspacePath);

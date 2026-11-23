@@ -4,7 +4,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { stopProcessGroups } from "../../../src/lib/process-groups";
+import { stopProcessGroups } from "@shared/lib/process-groups";
 import { ghLoginDone, logoutGh, startGhLogin } from "../../../src/services/gh-identity.service";
 
 let dir: string;

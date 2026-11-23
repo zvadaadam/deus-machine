@@ -11,7 +11,7 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
-import { fileChangePath } from "../lib/workspace.utils";
+import { fileChangeLabel } from "../lib/workspace.utils";
 import { DiffViewer } from "./DiffViewer";
 import { useFileDiff } from "../api/workspace.queries";
 import { PierreFileIcon } from "@/features/file-browser/lib/pierreIcons";
@@ -33,8 +33,8 @@ function ChangesDiffSectionInner({
   sectionRef,
   expandStateKey,
 }: ChangesDiffSectionProps) {
-  const filePath = fileChangePath(fileChange);
-  const fileName = filePath.slice(filePath.lastIndexOf("/") + 1) || filePath;
+  const filePath = fileChange.file;
+  const fileName = filePath.slice(filePath.lastIndexOf("/") + 1);
   // Collapse resets to false when expandStateKey changes (parent collapse-all/expand-all)
   const [collapsedState, setCollapsedState] = useState({ value: false, key: expandStateKey });
   const collapsed = collapsedState.key === expandStateKey ? collapsedState.value : false;
@@ -90,6 +90,8 @@ function ChangesDiffSectionInner({
       >
         <button
           type="button"
+          title={fileChangeLabel(fileChange)}
+          aria-expanded={!collapsed}
           onClick={() =>
             setCollapsedState((prev) => ({
               value: prev.key === expandStateKey ? !prev.value : true,
@@ -122,6 +124,12 @@ function ChangesDiffSectionInner({
             )}
           >
             {filePath}
+            {fileChange.previous_path && (
+              <span className="text-text-muted font-normal">
+                {" "}
+                (renamed from {fileChange.previous_path})
+              </span>
+            )}
           </span>
 
           {/* +N / -N stats */}
@@ -139,10 +147,8 @@ function ChangesDiffSectionInner({
       {/* Diff content — hidden when collapsed */}
       {!collapsed && (
         <DiffViewer
-          filePath={filePath}
-          diff={data?.diff ?? ""}
-          oldContent={data?.oldContent ?? null}
-          newContent={data?.newContent ?? null}
+          fileChange={fileChange}
+          data={data}
           isLoading={isNearVisible ? isLoading : true}
           error={error?.message}
           embedded
@@ -153,13 +159,4 @@ function ChangesDiffSectionInner({
   );
 }
 
-export const ChangesDiffSection = memo(ChangesDiffSectionInner, (prev, next) => {
-  return (
-    fileChangePath(prev.fileChange) === fileChangePath(next.fileChange) &&
-    prev.fileChange.additions === next.fileChange.additions &&
-    prev.fileChange.deletions === next.fileChange.deletions &&
-    prev.isActive === next.isActive &&
-    prev.workspaceId === next.workspaceId &&
-    prev.expandStateKey === next.expandStateKey
-  );
-});
+export const ChangesDiffSection = memo(ChangesDiffSectionInner);

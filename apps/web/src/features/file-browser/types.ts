@@ -3,6 +3,7 @@
  */
 
 import type { FileTreeNode as ScannedNode } from "@shared/types/files";
+import type { FileChangeStatus } from "@shared/types/workspace";
 
 export type { FileTreeResponse } from "@shared/types/files";
 
@@ -14,7 +15,8 @@ export interface FileTreeNode extends ScannedNode {
   /** Line deletions from git diff (overlaid from file changes data) */
   deletions?: number;
   /** Change status from git diff */
-  change_status?: "added" | "modified" | "deleted";
+  change_status?: FileChangeStatus;
+  previous_path?: string;
   /** true = committed (in HEAD), false = uncommitted (working dir only) */
   committed?: boolean;
 }

@@ -1,11 +1,11 @@
-import { execFileSync } from "child_process";
+import { runGit } from "@shared/lib/git-process";
 import fs from "fs";
 import path from "path";
 import { PROJECT_ENVIRONMENT_PATH } from "@deus-hq/api";
 import type { FileMatch, FileTreeNode, FileTreeResponse } from "@shared/types/files";
 
 /** In-memory cache with TTL to avoid rescanning on every request. */
-const scanCache = new Map<string, { data: FileTreeResponse; expiresAt: number }>();
+const scanCache = new Map<string, { data: Promise<FileTreeResponse>; expiresAt: number }>();
 const CACHE_TTL_MS = 15_000;
 const MAX_CACHE_ENTRIES = 8;
 
@@ -37,27 +37,11 @@ const GIT_TIMEOUT_MS = 20_000;
  * Scan workspace files using git ls-files (preferred) with fallback to readdir.
  * Returns a tree structure matching the FileTreeResponse shape the frontend expects.
  */
-export function scanWorkspaceFiles(workspacePath: string): FileTreeResponse {
-  // Check cache first
+export async function scanWorkspaceFiles(workspacePath: string): Promise<FileTreeResponse> {
   const cached = scanCache.get(workspacePath);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.data;
   }
-
-  let filePaths: string[];
-  try {
-    filePaths = scanWithGit(workspacePath);
-  } catch {
-    filePaths = scanWithReaddir(workspacePath);
-  }
-
-  // The recipe must remain editable even in projects that ignore the .deus folder.
-  if (
-    !filePaths.includes(PROJECT_ENVIRONMENT_PATH) &&
-    fs.existsSync(path.join(workspacePath, PROJECT_ENVIRONMENT_PATH))
-  )
-    filePaths.push(PROJECT_ENVIRONMENT_PATH);
-  const result = buildTree(workspacePath, filePaths);
 
   // Evict oldest if cache is full
   if (scanCache.size >= MAX_CACHE_ENTRIES) {
@@ -65,8 +49,17 @@ export function scanWorkspaceFiles(workspacePath: string): FileTreeResponse {
     if (oldest) scanCache.delete(oldest[0]);
   }
 
-  scanCache.set(workspacePath, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
-  return result;
+  // Publish the pending scan so invalidation during git's read also drops its result.
+  const entry = { data: readFileTree(workspacePath), expiresAt: Infinity };
+  scanCache.set(workspacePath, entry);
+  try {
+    const result = await entry.data;
+    entry.expiresAt = Date.now() + CACHE_TTL_MS;
+    return result;
+  } catch (error) {
+    if (scanCache.get(workspacePath) === entry) scanCache.delete(workspacePath);
+    throw error;
+  }
 }
 
 /** Invalidate cache for a specific workspace. */
@@ -79,32 +72,28 @@ export function clearCache(): void {
   scanCache.clear();
 }
 
-/**
- * Scan using `git ls-files` — fast, .gitignore-aware, works in worktrees.
- * Lists tracked files + untracked-but-not-ignored files.
- */
-function scanWithGit(workspacePath: string): string[] {
-  // Verify it's a git repo first
-  execFileSync("git", ["rev-parse", "--git-dir"], {
-    cwd: workspacePath,
-    encoding: "utf-8",
-    timeout: 2000,
-  });
+async function readFileTree(workspacePath: string): Promise<FileTreeResponse> {
+  const paths = await listWorkspacePaths(workspacePath);
+  // The recipe must remain editable even in projects that ignore the .deus folder.
+  if (
+    !paths.includes(PROJECT_ENVIRONMENT_PATH) &&
+    fs.existsSync(path.join(workspacePath, PROJECT_ENVIRONMENT_PATH))
+  )
+    paths.push(PROJECT_ENVIRONMENT_PATH);
+  return buildTree(workspacePath, paths);
+}
 
-  // List all tracked + untracked (non-ignored) files with null separator
-  const output = execFileSync(
-    "git",
-    ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-    { cwd: workspacePath, encoding: "utf-8", timeout: GIT_TIMEOUT_MS, maxBuffer: 50 * 1024 * 1024 }
-  ).toString();
-
-  if (!output) return [];
-
-  // Split on null bytes, filter empty strings
-  const paths = output.split("\0").filter(Boolean);
-
-  // Cap at max entries
-  return paths.length > MAX_ENTRIES ? paths.slice(0, MAX_ENTRIES) : paths;
+async function listWorkspacePaths(workspacePath: string): Promise<string[]> {
+  try {
+    const output = await runGit(["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
+      cwd: workspacePath,
+      timeoutMs: GIT_TIMEOUT_MS,
+      maxOutputBytes: 50 * 1024 * 1024,
+    });
+    return output.split("\0", MAX_ENTRIES).filter(Boolean);
+  } catch {
+    return scanWithReaddir(workspacePath);
+  }
 }
 
 /**
@@ -236,14 +225,11 @@ function sortTree(nodes: FileTreeNode[]): FileTreeNode[] {
  * Return the top N files, preferring shorter paths (more prominent files).
  * Used when the user opens the @ mention popover without typing a query yet.
  */
-export function listTopFiles(workspacePath: string, limit: number = 15): FileMatch[] {
-  let filePaths: string[];
-  try {
-    filePaths = scanWithGit(workspacePath);
-  } catch {
-    filePaths = scanWithReaddir(workspacePath);
-  }
-  return scoreTopFiles(filePaths, limit);
+export async function listTopFiles(
+  workspacePath: string,
+  limit: number = 15
+): Promise<FileMatch[]> {
+  return scoreTopFiles(await listWorkspacePaths(workspacePath), limit);
 }
 
 /** Depth/length scoring over ANY flat path list — cloud trees reuse this. */
@@ -260,24 +246,12 @@ export function scoreTopFiles(filePaths: string[], limit: number = 15): FileMatc
   return scored.slice(0, limit);
 }
 
-/**
- * Fuzzy search files by name/path.
- * Uses the cached flat file list from scanWorkspaceFiles and scores
- * each path against the query using a simple substring + position scoring.
- */
-export function fuzzySearchFiles(
+export async function fuzzySearchFiles(
   workspacePath: string,
   query: string,
   limit: number = 15
-): FileMatch[] {
-  // Get the flat file list from cache (or trigger a scan)
-  let filePaths: string[];
-  try {
-    filePaths = scanWithGit(workspacePath);
-  } catch {
-    filePaths = scanWithReaddir(workspacePath);
-  }
-  return fuzzySearchPaths(filePaths, query, limit);
+): Promise<FileMatch[]> {
+  return fuzzySearchPaths(await listWorkspacePaths(workspacePath), query, limit);
 }
 
 /** Subsequence scoring over ANY flat path list — cloud trees reuse this. */

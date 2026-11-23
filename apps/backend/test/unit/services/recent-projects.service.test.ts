@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -58,7 +58,7 @@ afterEach(() => {
 });
 
 describe("recent-projects.service", () => {
-  it("reads Claude project roots from JSONL session data", () => {
+  it("reads Claude project roots from JSONL session data", async () => {
     const tempRoot = createTempRoot();
     const homeDir = path.join(tempRoot, "home");
     const projectsDir = path.join(homeDir, ".claude", "projects");
@@ -78,17 +78,14 @@ describe("recent-projects.service", () => {
       `${JSON.stringify({ cwd: nestedWorkspace, type: "user" })}\n`
     );
 
-    const canonicalProjectRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd: actualProject,
-      encoding: "utf8",
-    }).trim();
+    const canonicalProjectRoot = realpathSync(actualProject);
 
-    expect(readClaudeProjects(projectsDir, { homeDir })).toEqual([
+    expect(await readClaudeProjects(projectsDir, { homeDir })).toEqual([
       { path: canonicalProjectRoot, name: "rabat-v3", source: "claude" },
     ]);
   });
 
-  it("prefers the newest cwd from the tail of reused Claude session logs", () => {
+  it("prefers the newest cwd from the tail of reused Claude session logs", async () => {
     const tempRoot = createTempRoot();
     const homeDir = path.join(tempRoot, "home");
     const projectsDir = path.join(homeDir, ".claude", "projects");
@@ -112,17 +109,14 @@ describe("recent-projects.service", () => {
       ].join("\n") + "\n"
     );
 
-    const canonicalNewProject = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd: newProject,
-      encoding: "utf8",
-    }).trim();
+    const canonicalNewProject = realpathSync(newProject);
 
-    expect(readClaudeProjects(projectsDir, { homeDir })).toEqual([
+    expect(await readClaudeProjects(projectsDir, { homeDir })).toEqual([
       { path: canonicalNewProject, name: "new-project", source: "claude" },
     ]);
   });
 
-  it("keeps the first full JSONL record when the suffix starts on a newline", () => {
+  it("keeps the first full JSONL record when the suffix starts on a newline", async () => {
     const tempRoot = createTempRoot();
     const homeDir = path.join(tempRoot, "home");
     const projectsDir = path.join(homeDir, ".claude", "projects");
@@ -139,17 +133,14 @@ describe("recent-projects.service", () => {
     const filler = "x".repeat(16 * 1024 - suffixPrefix.length);
     writeFileSync(sessionFile, "p".repeat(32) + suffixPrefix + filler);
 
-    const canonicalProject = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd: boundaryProject,
-      encoding: "utf8",
-    }).trim();
+    const canonicalProject = realpathSync(boundaryProject);
 
-    expect(readClaudeProjects(projectsDir, { homeDir })).toEqual([
+    expect(await readClaudeProjects(projectsDir, { homeDir })).toEqual([
       { path: canonicalProject, name: "boundary-project", source: "claude" },
     ]);
   });
 
-  it("orders Claude projects by newest session activity, not project directory mtime", () => {
+  it("orders Claude projects by newest session activity, not project directory mtime", async () => {
     const tempRoot = createTempRoot();
     const homeDir = path.join(tempRoot, "home");
     const projectsDir = path.join(homeDir, ".claude", "projects");
@@ -175,22 +166,16 @@ describe("recent-projects.service", () => {
     utimesSync(claudeProjectA, now - 300, now - 300);
     utimesSync(claudeProjectB, now, now);
 
-    const canonicalProjectA = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd: projectA,
-      encoding: "utf8",
-    }).trim();
-    const canonicalProjectB = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd: projectB,
-      encoding: "utf8",
-    }).trim();
+    const canonicalProjectA = realpathSync(projectA);
+    const canonicalProjectB = realpathSync(projectB);
 
-    expect(readClaudeProjects(projectsDir, { homeDir })).toEqual([
+    expect(await readClaudeProjects(projectsDir, { homeDir })).toEqual([
       { path: canonicalProjectA, name: "project-a", source: "claude" },
       { path: canonicalProjectB, name: "project-b", source: "claude" },
     ]);
   });
 
-  it("reads editor workspace entries from recent projects", () => {
+  it("reads editor workspace entries from recent projects", async () => {
     const tempRoot = createTempRoot();
     const homeDir = path.join(tempRoot, "home");
     const projectRoot = path.join(homeDir, "Developer", "workspace-project");
@@ -213,12 +198,9 @@ describe("recent-projects.service", () => {
       ],
     });
 
-    const canonicalProjectRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd: projectRoot,
-      encoding: "utf8",
-    }).trim();
+    const canonicalProjectRoot = realpathSync(projectRoot);
 
-    expect(listRecentProjects({ homeDir, limit: 5 })).toContainEqual({
+    expect(await listRecentProjects({ homeDir, limit: 5 })).toContainEqual({
       path: canonicalProjectRoot,
       name: "workspace-project",
       source: "cursor",

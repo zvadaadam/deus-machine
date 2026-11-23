@@ -110,13 +110,17 @@ export interface DiffStats {
   deletions: number;
 }
 
+export type FileChangeStatus = "added" | "modified" | "deleted" | "renamed";
+
 /**
  * File-level change information
  * Individual file modifications with line counts
  */
 export interface FileChange {
   file: string;
-  file_path?: string; // Some APIs use file_path instead
+  status: FileChangeStatus;
+  /** The source of a rename. `file` is its destination. */
+  previous_path?: string;
   additions: number;
   deletions: number;
   /** true = committed (in HEAD), false = uncommitted (working dir only), undefined = unknown */

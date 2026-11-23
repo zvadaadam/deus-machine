@@ -60,19 +60,19 @@ afterEach(() => {
 describe("the fileChanges subscription", () => {
   it("returns the current cached tree when the watch starts and when it publishes", async () => {
     const root = await mkdtemp(join(tmpdir(), "deus-watch-cache-"));
-    const tree = () => scanWorkspaceFiles(root).files.map((file) => file.path);
+    const tree = async () => (await scanWorkspaceFiles(root)).files.map((file) => file.path);
     try {
       execFileSync("git", ["init", "-q", root]);
-      expect(tree()).toEqual([]);
+      expect(await tree()).toEqual([]);
       await writeFile(join(root, "before-watch.txt"), "");
       load.mockReturnValueOnce({ workspacePath: root, workspace: { current_session_id: "chat" } });
       const frames = open("ui");
-      const atStart = tree();
+      const atStart = await tree();
       await writeFile(join(root, "during-watch.txt"), "");
       changed("during-watch.txt");
       vi.advanceTimersByTime(500);
       expect(frames.map((frame) => frame.type)).toEqual(["q:event"]);
-      expect({ atStart, afterEvent: tree() }).toEqual({
+      expect({ atStart, afterEvent: await tree() }).toEqual({
         atStart: ["before-watch.txt"],
         afterEvent: ["before-watch.txt", "during-watch.txt"],
       });

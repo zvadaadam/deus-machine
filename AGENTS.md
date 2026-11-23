@@ -300,10 +300,12 @@ progress channel: the desktop, the web app and a phone all follow it.
   that never started and refuses any other: a used one is archived.
 - A backend that stops mid-start leaves `initializing` rows nothing is working
   on. `failInterruptedWorkspaces` fails them at startup.
-- Git commands that can run long go through `lib/git-process.ts` (`runGit`):
-  no prompts, their own process group, and a timeout that stops the whole
-  group. An `execFile` timeout stops only git itself, and `git worktree add`'s
-  checkout child keeps writing; a worktree cut short stays locked, which only
+- Every git command the backend and the engine run goes through
+  `shared/lib/git-process.ts` (`runGit`; `git-process-fence.test.ts` holds
+  it): no prompts, `LC_ALL=C`, its own process group, and a timeout and an
+  output limit that stop the whole group. An `execFile` timeout stops only
+  git itself, and `git worktree add`'s checkout child keeps writing; a
+  worktree cut short stays locked, which only
   `git worktree remove --force --force` clears (`removeWorktree`).
 - A name is free only if the database, the `.deus` folder and the repository's
   branches all lack it; a name found taken is never reused or removed.
@@ -363,6 +365,12 @@ for the tools to show, so a workspace that failed to start (`failedToStart`)
 is the chat column alone. A workspace that is still starting can be opened
 from the sidebar; its row, the header chip and the chat word the step the
 same way (`workspaceStart(workspace).brief`, `SETUP_RUNNING`, `SETUP_FAILED`).
+
+The header's pull request button is one state (`derivePRActionState` in
+`features/workspace/lib/prState.ts`). Merge names the pull request's own
+base, not the workspace's target. A lookup that failed keeps what the
+workspace row last knew of the pull request, or offers Create PR with the
+reason beside it when none is known.
 
 The start page has the chat's composer (`WorkspaceStartComposer`), where the
 chat will have it, keyed by the workspace since there is no chat yet. One
@@ -515,14 +523,20 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   `~/Developer/<name>` when that folder is already its clone, refuses any other
   folder there in words, and otherwise runs the app's own clone and add
   (`gitClone`, `addRepo`, through `act`) into `~/Developer/<name>`, which
-  gives a folderless project its folder. A clone outlasting the call answers
+  gives a folderless project its folder. Its answers, and a failed start's
+  reason, name folders under the home folder as `~/…` (`home-relative.ts`);
+  what is stored stays absolute. A clone outlasting the call answers
   "still cloning"; a second call for that folder joins it, and the first call
   after it ends hears the outcome. The address rule (`lib/clone-address.ts`)
   is the app's clone's too: https or ssh only, no credentials, whitespace,
   control characters or leading `-`; git gets it after `--` through
   `runGit` with only the https and ssh transports allowed. `read_changes(file)` shows only a file in the
-  workspace's changed-files list (normalised paths): git prints a whole file
-  as the diff of an unchanged one, and that may be an ignored secret. What a
+  workspace's changed-files list (normalised paths), and the local diff read
+  refuses any other itself (`getFileDiff`): an unchanged file's diff would be
+  the whole file, and that may be an ignored secret. The list is git's own,
+  read NUL-delimited (`parseDiffFiles` in `services/git.service.ts`): one row
+  per path with git's status, a rename under its new name with the old one
+  beside it. Changes and Files show the same rows. What a
   repository wrote and names follow the package's untrusted-text rule
   (`quoted()`, `quote()`). An answer takes the one path a card's does
   (`tool-relay.ts` `answer`): whoever answers first, the others' question or

@@ -1,17 +1,3 @@
-/**
- * PR Actions -- right-side actions for the content panel header.
- *
- * Architecture: PRStatus (bag of optionals) -> derivePRActionState (pure function)
- * -> PRActionState (discriminated union) -> exhaustive match -> JSX.
- *
- * Each PR state maps to exactly one visual representation:
- *   - "#N" link + contextual action button, OR
- *   - "#N" link + status text (non-actionable), OR
- *   - Create PR split button (pre-PR)
- *
- * No redundant chips. The button IS the status indicator.
- */
-
 import {
   GitMerge,
   GitPullRequestCreate,
@@ -23,7 +9,6 @@ import {
   Loader2,
   MessageSquareWarning,
   FileWarning,
-  WifiOff,
 } from "lucide-react";
 import { match } from "ts-pattern";
 import { track } from "@/platform/analytics";
@@ -36,11 +21,7 @@ import {
   ADDRESS_REVIEW,
   MERGE_PR,
 } from "@/features/session/lib/sessionPrompts";
-import type { PRActionState } from "../lib/prState";
-
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
+import { mergeLabel, type PRActionState } from "../lib/prState";
 
 interface PRActionsProps {
   state: PRActionState;
@@ -52,10 +33,6 @@ interface PRActionsProps {
   workspaceId?: string;
   repoId?: string;
 }
-
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
 
 export function PRActions({
   state,
@@ -76,15 +53,18 @@ export function PRActions({
 
       {/* State-specific rendering: status text OR action button */}
       {match(state)
-        .with({ type: "gh_unavailable" }, (s) => <GhWarning reason={s.reason} />)
-        .with({ type: "error" }, (s) => <ErrorWarning reason={s.reason} />)
-        .with({ type: "create_pr" }, () => (
-          <CreatePRButton
-            targetBranch={targetBranch}
-            repoId={repoId}
-            onBranchSelect={onTargetBranchChange}
-            onCreatePR={onCreatePR}
-          />
+        .with({ type: "gh_unavailable" }, (s) => <PRWarning message={s.warning} tone="warning" />)
+        .with({ type: "linked" }, (s) => <PRWarning message={s.warning} tone="destructive" />)
+        .with({ type: "create_pr" }, ({ warning }) => (
+          <>
+            <CreatePRButton
+              targetBranch={targetBranch}
+              repoId={repoId}
+              onBranchSelect={onTargetBranchChange}
+              onCreatePR={onCreatePR}
+            />
+            {warning && <PRWarning message={warning} tone="destructive" />}
+          </>
         ))
         .with({ type: "ci_pending" }, (s) => (
           <StatusText
@@ -133,7 +113,7 @@ export function PRActions({
         .with({ type: "ready_to_merge" }, (s) => (
           <ActionButton
             icon={<GitMerge className="h-2.5 w-2.5" />}
-            label={`Merge into ${targetBranch}`}
+            label={mergeLabel(s.baseBranch)}
             variant="success"
             onClick={() => {
               if (workspaceId) {
@@ -189,56 +169,27 @@ function PRLink({ state }: { state: PRActionState }) {
 }
 
 // ---------------------------------------------------------------------------
-// GhWarning -- tooltip for unavailable/unauthenticated GitHub integration
+// PRWarning -- the reason the pull request could not be checked
 // ---------------------------------------------------------------------------
 
-function GhWarning({ reason }: { reason: "not_installed" | "not_authenticated" }) {
+function PRWarning({ message, tone }: { message: string; tone: "warning" | "destructive" }) {
   return (
     <Tooltip delayDuration={200}>
       <TooltipTrigger asChild>
         <button
           type="button"
-          aria-label="PR actions unavailable"
-          className="control-interaction bg-warning/10 text-warning flex cursor-help items-center gap-1 rounded-lg px-2 py-1"
+          aria-label={message}
+          className={cn(
+            "control-interaction flex cursor-help items-center gap-1 rounded-lg px-2 py-1",
+            tone === "warning" ? "bg-warning/10 text-warning" : "bg-destructive/10 text-destructive"
+          )}
         >
           <AlertTriangle className="h-3 w-3" />
           <span className="text-sm font-medium">PR</span>
         </button>
       </TooltipTrigger>
       <TooltipContent side="bottom">
-        <p className="text-xs">
-          {reason === "not_installed"
-            ? "GitHub integration unavailable — restart Deus and check Settings"
-            : "Connect GitHub in Settings to manage PRs"}
-        </p>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// ErrorWarning -- tooltip for GitHub connectivity errors
-// ---------------------------------------------------------------------------
-
-function ErrorWarning({ reason }: { reason: "timeout" | "network" }) {
-  return (
-    <Tooltip delayDuration={200}>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label="GitHub unreachable"
-          className="control-interaction bg-destructive/10 text-destructive flex cursor-help items-center gap-1 rounded-lg px-2 py-1"
-        >
-          <WifiOff className="h-3 w-3" />
-          <span className="text-sm font-medium">PR</span>
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="bottom">
-        <p className="text-xs">
-          {reason === "timeout"
-            ? "GitHub request timed out \u2014 will retry automatically"
-            : "Could not reach GitHub \u2014 will retry automatically"}
-        </p>
+        <p className="text-xs">{message}</p>
       </TooltipContent>
     </Tooltip>
   );

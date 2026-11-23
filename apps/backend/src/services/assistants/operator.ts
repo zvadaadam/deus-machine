@@ -87,9 +87,10 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
           workspaceId,
         });
         if (file) {
-          // Only a changed file: the diff of an unchanged one is the whole file,
-          // and that may be a secret git ignores (.env).
-          const listed = files.find((f) => normal(f.file) === normal(file));
+          const literal = path.posix.normalize(file);
+          const listed =
+            files.find((f) => f.file === literal) ??
+            files.find((f) => normal(f.file) === normal(file));
           if (!listed) {
             throw new OperatorError(
               "not_found",
@@ -114,7 +115,10 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
         const shown = files.slice(0, FILES_LIMIT);
         return [
           `${name}: ${total} file(s) changed`,
-          ...shown.map((f) => `  ${quoted(f.file)}  +${f.additions} -${f.deletions}`),
+          ...shown.map((f) => {
+            const from = f.previous_path ? ` (renamed from ${quoted(f.previous_path)})` : "";
+            return `  ${quoted(f.file)}${from}  +${f.additions} -${f.deletions}`;
+          }),
           ...(total > shown.length ? [`  (and ${total - shown.length} more)`] : []),
           `  ${callHint("read_changes", { session, file: shown[0]!.file })}`,
         ].join("\n");
