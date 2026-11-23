@@ -114,7 +114,8 @@ const gitStatus: Partial<Record<string, FileChangeStatus>> = {
 
 interface ChangedPath {
   change: FileChange;
-  raw?: { oldMode: string; newMode: string; oldOid: string };
+  oldMode?: string;
+  newMode?: string;
 }
 
 /** git diff --raw --numstat -z writes all raw records first, then the line counts. */
@@ -129,9 +130,9 @@ export function parseDiffFiles(output: string): Map<string, ChangedPath> {
     return file;
   };
   let header: RegExpExecArray | null;
-  while ((header = /^:(\d{6}) (\d{6}) ([a-f0-9]+) [a-f0-9]+ ([A-Z])\d*$/.exec(fields[i]))) {
+  while ((header = /^:(\d{6}) (\d{6}) [a-f0-9]+ [a-f0-9]+ ([A-Z])\d*$/.exec(fields[i]))) {
     i++;
-    const [, oldMode, newMode, oldOid, letter] = header;
+    const [, oldMode, newMode, letter] = header;
     const first = readPath();
     const file = letter === "R" || letter === "C" ? readPath() : first;
     const status = gitStatus[letter] ?? "modified";
@@ -139,16 +140,10 @@ export function parseDiffFiles(output: string): Map<string, ChangedPath> {
     const known = changes.get(file);
     if (known && (letter === "U" || (status === "modified" && known.change.status !== "modified")))
       continue;
-    changes.set(file, {
-      change: {
-        file,
-        status,
-        ...(letter === "R" && { previous_path: first }),
-        additions: 0,
-        deletions: 0,
-      },
-      raw: { oldMode, newMode, oldOid },
-    });
+    const change: FileChange = { file, status, additions: 0, deletions: 0 };
+    if (letter === "R") change.previous_path = first;
+    const hasSourceMode = letter !== "C" && !(letter === "U" && oldMode === "000000");
+    changes.set(file, { change, oldMode: hasSourceMode ? oldMode : undefined, newMode });
   }
   while (i < fields.length) {
     const record = /^(\d+|-)\t(\d+|-)\t(.*)$/s.exec(fields[i++]);
@@ -168,7 +163,7 @@ export function parseDiffFiles(output: string): Map<string, ChangedPath> {
   return changes;
 }
 
-function sharePending<T>(read: (cwd: string, base: string) => Promise<T>) {
+export function sharePending<T>(read: (cwd: string, base: string) => Promise<T>) {
   const pending = new Map<string, Promise<T>>();
   return (cwd: string, base: string) => {
     const key = cwd + "\0" + base;
@@ -181,10 +176,13 @@ function sharePending<T>(read: (cwd: string, base: string) => Promise<T>) {
   };
 }
 
-const trackedChanges = sharePending(async (cwd, base) => {
+async function trackedChanges(cwd: string, base: string) {
   const args = ["diff", base, "-M", "--raw", "--numstat", "-z", "--"];
   return parseDiffFiles(await runGit(args, { cwd, timeoutMs: 5000 }));
-});
+}
+
+// Opens can share rename sources. A list or total must see the checkout as it stands when asked.
+const trackedForOpen = sharePending(trackedChanges);
 
 async function untrackedFiles(cwd: string, file?: string) {
   const args = ["--literal-pathspecs", "ls-files", "--others", "--exclude-standard", "-z", "--"];
@@ -200,17 +198,14 @@ function statusIfUntracked(status?: FileChangeStatus) {
 
 /** Git records the link itself. Following it could read outside the workspace. */
 async function readWorkingFile(filePath: string) {
-  try {
-    const stat = await fs.lstat(filePath);
-    if (stat.isSymbolicLink())
-      return { symlink: true, bytes: await fs.readlink(filePath, { encoding: "buffer" }) };
-    if (!stat.isFile()) return null;
-    if (stat.size > 10 * 1024 * 1024) return { symlink: false, bytes: null };
-    const bytes = await fs.readFile(filePath);
-    return { symlink: false, bytes: isBinaryContent(bytes) ? null : bytes };
-  } catch {
-    return null;
-  }
+  const stat = await fs.lstat(filePath, { bigint: true }).catch(() => null);
+  if (!stat) return null;
+  let content: Promise<Buffer> | undefined;
+  if (stat.isSymbolicLink()) content = fs.readlink(filePath, { encoding: "buffer" });
+  else if (!stat.isFile()) return null;
+  else if (stat.size <= 10 * 1024 * 1024) content = fs.readFile(filePath);
+  const bytes = await content?.catch(() => null);
+  return { stat, bytes: bytes && !isBinaryContent(bytes) ? bytes : null };
 }
 
 async function countFileLines(filePath: string): Promise<number> {
@@ -224,9 +219,9 @@ async function countFileLines(filePath: string): Promise<number> {
 }
 
 const COUNT_CONCURRENCY = 8;
-const listChanges = sharePending(async (cwd, base) => {
-  const [tracked, untracked] = await Promise.all([trackedChanges(cwd, base), untrackedFiles(cwd)]);
-  const files = new Map(tracked);
+export async function getDiffFiles(cwd: string, parentBranch: string): Promise<FileChange[]> {
+  const base = await getMergeBase(cwd, parentBranch);
+  const [files, untracked] = await Promise.all([trackedChanges(cwd, base), untrackedFiles(cwd)]);
   const names = untracked.values();
   async function countUntracked() {
     for (const file of names) {
@@ -238,14 +233,9 @@ const listChanges = sharePending(async (cwd, base) => {
       change.additions = await countFileLines(path.join(cwd, file));
     }
   }
-  await Promise.all(
-    Array.from({ length: Math.min(COUNT_CONCURRENCY, untracked.length) }, countUntracked)
-  );
+  const workers = Math.min(COUNT_CONCURRENCY, untracked.length);
+  await Promise.all(Array.from({ length: workers }, countUntracked));
   return Array.from(files.values(), ({ change }) => change);
-});
-
-export async function getDiffFiles(cwd: string, parentBranch: string): Promise<FileChange[]> {
-  return listChanges(cwd, await getMergeBase(cwd, parentBranch));
 }
 
 export function sumDiffStats(files: readonly DiffStats[]): DiffStats {
@@ -262,18 +252,47 @@ export async function getDiffStats(cwd: string, parentBranch: string): Promise<D
   return sumDiffStats(await getDiffFiles(cwd, parentBranch));
 }
 
-export async function getGitFileContent(
-  cwd: string,
-  base: string,
-  file: string
-): Promise<string | null> {
+async function getGitFileContent(cwd: string, blob: string) {
   try {
-    const blob = await runGit(["cat-file", "blob", `${base}:${file}`], { cwd, timeoutMs: 5000 });
-    return blob.slice(0, 8192).includes("\0") ? null : blob;
+    const content = await runGit(["cat-file", "blob", blob], { cwd, timeoutMs: 5000 });
+    return content.slice(0, 8192).includes("\0") ? null : content;
   } catch (error) {
     if (error instanceof GitError) return null;
     throw error;
   }
+}
+
+async function gitPatch(cwd: string, ...args: string[]) {
+  const format = ["--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/"];
+  const command = ["--literal-pathspecs", "-c", "core.quotePath=false", "diff", ...format, ...args];
+  try {
+    return await runGit(command, { cwd, timeoutMs: 5000 });
+  } catch (error) {
+    if (args[0] === "--no-index" && error instanceof GitError && error.code === 1 && error.stdout)
+      return error.stdout;
+    throw error;
+  }
+}
+
+async function readWorkingDiff(cwd: string, file: string, blob: string | null): Promise<FileDiff> {
+  const filePath = path.join(cwd, file);
+  const changed = "This file changed while it was being read.";
+  const { stat, bytes } = (await readWorkingFile(filePath)) ?? {};
+  if (!stat) throw new ConflictError(changed);
+  const args = blob ? [blob, "--", file] : ["--no-index", "--", "/dev/null", file];
+  const diff = await gitPatch(cwd, ...args).finally(async () => {
+    const after = await fs.lstat(filePath, { bigint: true }).catch(() => null);
+    if (
+      !after ||
+      !(stat.isFile() ? after.isFile() : after.isSymbolicLink()) ||
+      after.size !== stat.size ||
+      after.mtimeNs !== stat.mtimeNs ||
+      after.ino !== stat.ino
+    )
+      throw new ConflictError(changed);
+  });
+  const old_content = blob ? await getGitFileContent(cwd, blob) : "";
+  return { file, diff, old_content, new_content: bytes?.toString("utf8") ?? null };
 }
 
 export async function getFileDiff(
@@ -282,56 +301,37 @@ export async function getFileDiff(
   file: string
 ): Promise<FileDiff> {
   const base = await getMergeBase(cwd, parentBranch);
-  const { change, raw } = (await trackedChanges(cwd, base)).get(file) ?? {};
-  let status = change?.status;
+  const entry = (await trackedForOpen(cwd, base)).get(file);
+  let status = entry?.change.status;
   const untracked = statusIfUntracked(status);
   if (untracked && (await untrackedFiles(cwd, file)).includes(file)) status = untracked;
   if (!status) throw new NotFoundError("This file has no changes.");
-  const source = change?.previous_path ?? file;
-  let oldContent: string | null = null;
-  if (status === "added") oldContent = "";
-  else if (raw?.oldMode !== "160000") oldContent = await getGitFileContent(cwd, base, source);
-  const hasWorkingBlob = status !== "deleted" && raw?.newMode !== "160000";
-  const working = hasWorkingBlob ? await readWorkingFile(path.join(cwd, file)) : null;
-  const newContent = status === "deleted" ? "" : (working?.bytes?.toString("utf8") ?? null);
-  const result = { file, diff: "", old_content: oldContent, new_content: newContent };
-  // A gitlink names a commit. Passing it to diff would select a tree instead of a blob.
-  if (raw?.oldMode === "160000" || raw?.newMode === "160000") return result;
+
+  const source = entry?.change.previous_path ?? file;
+  const basePath = `${base}:${source}`;
   const options = { cwd, timeoutMs: 5000 };
-  const args = [
-    "--literal-pathspecs",
-    "-c",
-    "core.quotePath=false",
-    "diff",
-    "--no-ext-diff",
-    "--no-color",
-    "--src-prefix=a/",
-    "--dst-prefix=b/",
-  ];
-  if (status === "deleted") {
-    // This path is a leaf in the base. The empty tree has no descendants, even if the worktree does.
-    const emptyTree = (await runGit(["hash-object", "-t", "tree", "--stdin"], options)).trim();
-    args.push(base, emptyTree, "--", file);
-  } else if (!working) {
-    return result;
-  } else if (status === "added") {
-    args.push("--no-index", "--", "/dev/null", file);
-  } else {
-    let { oldMode, oldOid } = raw ?? {};
-    if (!oldMode || oldMode === "000000") {
-      // A numstat-only or unmerged record can omit the base object.
-      const format = "--format=%(objectmode) %(objectname)";
-      const lookup = ["--literal-pathspecs", "ls-tree", format, base, "--", source];
-      [oldMode, oldOid] = (await runGit(lookup, options)).trim().split(" ");
-    }
-    if (!oldOid || oldMode === "040000" || oldMode === "160000") return result;
-    // A bare blob compares link text with regular bytes in one hunk across a type change.
-    const typeChanged = (oldMode === "120000") !== working.symlink;
-    args.push(typeChanged ? `${oldOid}^{blob}` : `${base}:${source}`, "--", file);
+  let mode = entry?.oldMode;
+  if (entry && entry.newMode !== "160000" && mode === undefined) {
+    // Not every record gives the base mode at the source path.
+    const args = ["--literal-pathspecs", "ls-tree", "--format=%(objectmode)", base, "--", source];
+    mode = (await runGit(args, options)).trim();
   }
-  result.diff = await runGit(args, options).catch((error: unknown) => {
-    if (status === "added" && error instanceof GitError && error.code === 1) return error.stdout;
-    throw error;
-  });
+
+  let result: FileDiff;
+  if (status === "deleted") {
+    // The selected base path is a leaf and the empty tree has no children.
+    const emptyTree = (await runGit(["hash-object", "-t", "tree", "--stdin"], options)).trim();
+    const diff = await gitPatch(cwd, base, emptyTree, "--", file);
+    const old_content = mode === "160000" ? null : await getGitFileContent(cwd, basePath);
+    result = { file, diff, old_content, new_content: "" };
+  } else if (entry?.newMode === "160000" || mode === "160000") {
+    // An added gitlink can replace a directory whose deleted children match the same pathspec.
+    const filter = status === "added" ? ["--diff-filter=A"] : [];
+    const diff = await gitPatch(cwd, base, ...filter, "--", file);
+    result = { file, diff, old_content: null, new_content: null };
+  } else {
+    const blob = mode && mode !== "000000" && mode !== "040000" ? basePath : null;
+    result = await readWorkingDiff(cwd, file, blob);
+  }
   return result;
 }

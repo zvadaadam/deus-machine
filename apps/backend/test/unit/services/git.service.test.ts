@@ -1,5 +1,28 @@
-import { describe, expect, it } from "vitest";
-import { parseDiffFiles, resolveWorkspaceRelativePath } from "../../../src/services/git.service";
+import { describe, expect, it, vi } from "vitest";
+import {
+  parseDiffFiles,
+  resolveWorkspaceRelativePath,
+  sharePending,
+} from "../../../src/services/git.service";
+
+it.each(["success", "failure"])(
+  "shares only pending opens of the same checkout and base through %s",
+  async (outcome) => {
+    const gate = Promise.withResolvers<string>();
+    const read = vi.fn(() => gate.promise);
+    const open = sharePending(read);
+    const first = open("checkout", "base");
+    expect(open("checkout", "base")).toBe(first);
+    const all = Promise.allSettled([first, open("elsewhere", "base"), open("checkout", "other")]);
+    expect(read).toHaveBeenCalledTimes(3);
+    if (outcome === "success") gate.resolve("old");
+    else gate.reject(new Error("failed read"));
+    await all;
+    read.mockResolvedValue("fresh");
+    await expect(open("checkout", "base")).resolves.toBe("fresh");
+    expect(read).toHaveBeenCalledTimes(4);
+  }
+);
 
 describe("parseDiffFiles", () => {
   const header = (status: string) => `:100644 100644 0000000 abcdef0 ${status}`;

@@ -16,6 +16,7 @@ import { resolveNode } from "../../../src/services/node/driver";
 
 let root: string;
 const git = (...args: string[]) => runGit(args, { cwd: root });
+const staleFile = { statusCode: 409, message: "This file changed while it was being read." };
 const workspace = {
   kind: "worktree",
   id: "local",
@@ -48,6 +49,15 @@ function write(file: string, content: string) {
   const target = path.join(root, file);
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, content);
+}
+
+function afterContentRead(file: string, change: (target: string) => void) {
+  vi.spyOn(fs.promises, "readFile").mockImplementationOnce(async () => {
+    const target = path.join(root, file);
+    const bytes = fs.readFileSync(target);
+    change(target);
+    return bytes;
+  });
 }
 
 async function commitBase(files: Record<string, string> = {}, branch = "main") {
@@ -322,55 +332,168 @@ it("classifies a git failure by its exit status even when its diagnostic names a
   expect(await getDiffStats(root, "main")).toEqual({ additions: 1, deletions: 1 });
 });
 
-it("compares a symlink's stored bytes and leaves a changed gitlink without a content patch", async () => {
+async function stageSubmodule(file: string) {
+  await git("init", "-qb", "main", file);
+  await git("-C", file, "commit", "--allow-empty", "-qm", "Nested base");
+  await git("add", "--", file);
+  return (await git("-C", file, "rev-parse", "HEAD")).trim();
+}
+
+it("shows the old and new submodule commits without reading file contents", async () => {
   await git("init", "-qb", "main");
-  await git("init", "-qb", "main", "sub");
-  write("sub/tracked", "nested bytes\n");
-  await git("-C", "sub", "add", ".");
-  await git("-C", "sub", "commit", "-qm", "Nested base");
-  write("kind", "regular\n");
-  await git("add", ".");
+  const oldCommit = await stageSubmodule("sub");
   await git("commit", "-qm", "Base");
   await git("-C", "sub", "commit", "--allow-empty", "-qm", "Moved gitlink");
-  fs.unlinkSync(path.join(root, "kind"));
-  fs.symlinkSync("sub/tracked", path.join(root, "kind"));
-  const link = await getFileDiff(root, "main", "kind");
-  expect(link.diff.match(/^diff --git .*$/gm)).toEqual(["diff --git a/kind b/kind"]);
-  expect(link.diff).toContain("-regular\n+sub/tracked");
-  expect(link.new_content).toBe("sub/tracked");
+  const newCommit = (await git("-C", "sub", "rev-parse", "HEAD")).trim();
+  const reads = vi.spyOn(fs.promises, "readFile");
+  const commands = traceGit();
   expect(await getFileDiff(root, "main", "sub")).toEqual({
     file: "sub",
-    diff: "",
+    diff: expect.stringContaining(
+      `-Subproject commit ${oldCommit}\n+Subproject commit ${newCommit}`
+    ),
     old_content: null,
     new_content: null,
   });
+  expect(reads).not.toHaveBeenCalled();
+  expect(commands().some((args) => args.includes("cat-file"))).toBe(false);
 });
 
-it("shares one whole-tree read across concurrent opens, the list and stats", async () => {
-  const paths = Array.from({ length: 512 }, (_, i) => `file-${i}`);
-  await commitBase(Object.fromEntries(paths.map((file) => [file, "before\n"])));
-  for (const file of paths) write(file, "after\n");
-  write("untracked", "new\n");
-  const reads = vi.spyOn(fs.promises, "readFile");
-  const commands = traceGit();
-  const scans = (arg: string) => commands().filter((args) => args.includes(arg)).length;
-  const [files, stats, ...details] = await Promise.all([
-    getDiffFiles(root, "main"),
-    getDiffStats(root, "main"),
-    ...paths.slice(0, 8).map((file) => getFileDiff(root, "main", file)),
-  ]);
-  expect(files).toHaveLength(paths.length + 1);
-  expect(stats).toEqual({ additions: paths.length + 1, deletions: paths.length });
-  for (const detail of details) expect(detail.diff).toContain("-before\n+after");
-  expect(scans("--raw")).toBe(1);
-  expect(scans("ls-files")).toBe(1);
-  expect(reads.mock.calls.filter(([file]) => file === path.join(root, "untracked"))).toHaveLength(
-    1
-  );
-  write(paths[0], "before\n");
-  expect(await getDiffFiles(root, "main")).toHaveLength(paths.length);
-  expect(scans("--raw")).toBe(2);
+it.each([
+  { kind: "directory", ordinary: "sub/plain.txt", sections: 1 },
+  { kind: "regular file", ordinary: "sub", sections: 2 },
+])("opens only sub when a $kind becomes a submodule and back", async ({ ordinary, sections }) => {
+  await commitBase({ [ordinary]: "regular content\n" });
+  await git("rm", "--", ordinary);
+  const commit = await stageSubmodule("sub");
+  const headers = Array(sections).fill("diff --git a/sub b/sub");
+  const added = await getFileDiff(root, "main", "sub");
+  expect(added.diff.match(/^diff --git .*$/gm)).toEqual(headers);
+  expect(added.diff).toContain(`+Subproject commit ${commit}\n`);
+
+  await git("commit", "-qm", "Submodule base");
+  await git("rm", "--cached", "--", "sub");
+  fs.rmSync(path.join(root, "sub"), { recursive: true });
+  write(ordinary, "regular content\n");
+  await git("add", "--", ordinary);
+  const removed = await getFileDiff(root, "main", "sub");
+  expect(removed.diff.match(/^diff --git .*$/gm)).toEqual(headers);
+  expect(removed.diff).toContain(`-Subproject commit ${commit}\n`);
+  if (ordinary === "sub") {
+    expect(added.diff).toContain("-regular content\n");
+    expect(removed.diff).toContain("+regular content\n");
+  }
 });
+
+it.each([false, true])("keeps both modes when the base file is a symlink=%s", async (wasLink) => {
+  await commitBase({ target: "contents of the link target\n" });
+  const file = path.join(root, "kind");
+  function place(link: boolean, content: string) {
+    if (link) fs.symlinkSync(content, file);
+    else write("kind", content);
+  }
+  place(wasLink, "target");
+  await git("add", "kind");
+  await git("commit", "-qm", "Original kind");
+  for (const content of ["target", "different"]) {
+    fs.unlinkSync(file);
+    place(!wasLink, content);
+    const detail = await getFileDiff(root, "main", "kind");
+    expect(detail.old_content).toBe("target");
+    expect(detail.new_content).toBe(content);
+    expect(detail.diff.match(/^diff --git .*$/gm)).toEqual(
+      Array(2).fill("diff --git a/kind b/kind")
+    );
+    expect(detail.diff).toContain(`deleted file mode ${wasLink ? "120000" : "100644"}`);
+    expect(detail.diff).toContain(`new file mode ${wasLink ? "100644" : "120000"}`);
+    expect(detail.diff).toContain(`+${content}\n`);
+  }
+});
+
+it("reads the current checkout for a list and totals while an older list is still counting", async () => {
+  await commitBase({ tracked: "base\n" });
+  await git("switch", "-qc", "first");
+  write("tracked", "first\n");
+  await git("commit", "-qam", "First checkout");
+  write("waiting", "one\n");
+  const counting = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  vi.spyOn(fs.promises, "readFile").mockImplementationOnce(async () => {
+    const bytes = fs.readFileSync(path.join(root, "waiting"));
+    counting.resolve();
+    await release.promise;
+    return bytes;
+  });
+  const commands = traceGit();
+  const first = getDiffFiles(root, "main");
+  try {
+    await counting.promise;
+    await git("switch", "-qc", "second", "main");
+    write("added", "two\nlines\n");
+    await git("add", "added");
+    const [files, stats] = await Promise.all([
+      getDiffFiles(root, "main"),
+      getDiffStats(root, "main"),
+    ]);
+    expect(files.map(({ file }) => file)).toEqual(["added", "waiting"]);
+    expect(stats).toEqual({ additions: 3, deletions: 0 });
+  } finally {
+    release.resolve();
+  }
+  expect((await first).map(({ file }) => file)).toEqual(["tracked", "waiting"]);
+  expect(commands().filter((args) => args.includes("--raw"))).toHaveLength(3);
+  expect(commands().filter((args) => args.includes("ls-files"))).toHaveLength(3);
+});
+
+it("refuses an added file replaced by a directory between its contents and patch", async () => {
+  await commitBase();
+  write("added", "original\n");
+  await git("add", "added");
+  afterContentRead("added", (target) => {
+    fs.unlinkSync(target);
+    write("added/null", "child contents\n");
+  });
+  const commands = traceGit();
+  await expect(resolveNode(workspace, root).diffFile("added")).rejects.toMatchObject(staleFile);
+  expect(commands().some((args) => args.includes("--no-index"))).toBe(true);
+});
+
+it.each(["modified", "renamed"])("refuses a %s file removed after enumeration", async (status) => {
+  await commitBase({ original: "before\n" });
+  const file = status === "renamed" ? "moved" : "original";
+  const target = path.join(root, file);
+  if (status === "renamed") {
+    await git("mv", "original", file);
+    afterContentRead(file, fs.unlinkSync);
+  } else {
+    write(file, "after\n");
+    vi.spyOn(fs.promises, "lstat").mockImplementationOnce(async () => {
+      fs.unlinkSync(target);
+      return fs.lstatSync(target, { bigint: true });
+    });
+  }
+  await expect(resolveNode(workspace, root).diffFile(file)).rejects.toMatchObject(staleFile);
+});
+
+it.each(["size", "mtime", "inode"])(
+  "refuses a working file whose %s changes during the patch",
+  async (field) => {
+    await commitBase({ tracked: "base\n" });
+    write("tracked", "first\n");
+    const stamp = new Date("2025-01-01T00:00:00Z");
+    fs.utimesSync(path.join(root, "tracked"), stamp, stamp);
+    afterContentRead("tracked", (target) => {
+      if (field === "inode") {
+        write("swap", "later\n");
+        fs.renameSync(path.join(root, "swap"), target);
+      } else {
+        write("tracked", field === "size" ? "more bytes\n" : "later\n");
+      }
+      fs.utimesSync(target, stamp, field === "mtime" ? new Date(stamp.getTime() + 1000) : stamp);
+    });
+    await expect(getFileDiff(root, "main", "tracked")).rejects.toMatchObject(staleFile);
+  }
+);
 
 it("opens only the selected file and scopes the untracked lookup to its literal name", async () => {
   await commitBase({ tracked: "before\n" });
