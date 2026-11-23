@@ -263,10 +263,10 @@ async function getGitFileContent(cwd: string, blob: string) {
 }
 
 async function gitPatch(cwd: string, ...args: string[]) {
-  const format = ["--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/"];
-  const command = ["--literal-pathspecs", "-c", "core.quotePath=false", "diff", ...format, ...args];
+  const command = ["--literal-pathspecs", "-c", "core.quotePath=false", "diff", "--no-ext-diff"];
+  const format = ["--no-color", "--submodule=short", "--src-prefix=a/", "--dst-prefix=b/"];
   try {
-    return await runGit(command, { cwd, timeoutMs: 5000 });
+    return await runGit([...command, ...format, ...args], { cwd, timeoutMs: 5000 });
   } catch (error) {
     if (args[0] === "--no-index" && error instanceof GitError && error.code === 1 && error.stdout)
       return error.stdout;
@@ -324,13 +324,13 @@ export async function getFileDiff(
     const diff = await gitPatch(cwd, base, emptyTree, "--", file);
     const old_content = mode === "160000" ? null : await getGitFileContent(cwd, basePath);
     result = { file, diff, old_content, new_content: "" };
-  } else if (entry?.newMode === "160000" || mode === "160000") {
+  } else if (entry?.newMode === "160000") {
     // An added gitlink can replace a directory whose deleted children match the same pathspec.
     const filter = status === "added" ? ["--diff-filter=A"] : [];
     const diff = await gitPatch(cwd, base, ...filter, "--", file);
     result = { file, diff, old_content: null, new_content: null };
   } else {
-    const blob = mode && mode !== "000000" && mode !== "040000" ? basePath : null;
+    const blob = mode && !["000000", "040000", "160000"].includes(mode) ? basePath : null;
     result = await readWorkingDiff(cwd, file, blob);
   }
   return result;

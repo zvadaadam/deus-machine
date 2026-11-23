@@ -339,30 +339,38 @@ async function stageSubmodule(file: string) {
   return (await git("-C", file, "rev-parse", "HEAD")).trim();
 }
 
-it("shows the old and new submodule commits without reading file contents", async () => {
+it.each(["diff", "log"])("shows only commit pointers with diff.submodule=%s", async (format) => {
   await git("init", "-qb", "main");
   const oldCommit = await stageSubmodule("sub");
   await git("commit", "-qm", "Base");
-  await git("-C", "sub", "commit", "--allow-empty", "-qm", "Moved gitlink");
+  write("sub/nested.txt", "nested contents\n");
+  await git("-C", "sub", "add", "nested.txt");
+  await git("-C", "sub", "commit", "-qm", "Moved gitlink");
   const newCommit = (await git("-C", "sub", "rev-parse", "HEAD")).trim();
+  await git("config", "diff.submodule", format);
   const reads = vi.spyOn(fs.promises, "readFile");
   const commands = traceGit();
-  expect(await getFileDiff(root, "main", "sub")).toEqual({
-    file: "sub",
-    diff: expect.stringContaining(
-      `-Subproject commit ${oldCommit}\n+Subproject commit ${newCommit}`
-    ),
-    old_content: null,
-    new_content: null,
-  });
+  const detail = await getFileDiff(root, "main", "sub");
+  expect(detail).toMatchObject({ file: "sub", old_content: null, new_content: null });
+  expect(detail.diff.split("\n")).toEqual([
+    "diff --git a/sub b/sub",
+    expect.stringMatching(/^index [a-f0-9]+\.\.[a-f0-9]+ 160000$/),
+    "--- a/sub",
+    "+++ b/sub",
+    "@@ -1 +1 @@",
+    `-Subproject commit ${oldCommit}`,
+    `+Subproject commit ${newCommit}`,
+    "",
+  ]);
   expect(reads).not.toHaveBeenCalled();
   expect(commands().some((args) => args.includes("cat-file"))).toBe(false);
 });
 
 it.each([
-  { kind: "directory", ordinary: "sub/plain.txt", sections: 1 },
-  { kind: "regular file", ordinary: "sub", sections: 2 },
-])("opens only sub when a $kind becomes a submodule and back", async ({ ordinary, sections }) => {
+  { kind: "a directory", ordinary: "sub/plain.txt", staged: true, sections: 1 },
+  { kind: "a staged file", ordinary: "sub", staged: true, sections: 2 },
+  { kind: "an untracked file", ordinary: "sub", staged: false, sections: 2 },
+])("opens sub when replaced by $kind", async ({ ordinary, staged, sections }) => {
   await commitBase({ [ordinary]: "regular content\n" });
   await git("rm", "--", ordinary);
   const commit = await stageSubmodule("sub");
@@ -374,14 +382,21 @@ it.each([
   await git("commit", "-qm", "Submodule base");
   await git("rm", "--cached", "--", "sub");
   fs.rmSync(path.join(root, "sub"), { recursive: true });
-  write(ordinary, "regular content\n");
-  await git("add", "--", ordinary);
+  write(ordinary, "first line\nsecond line\n");
+  if (staged) await git("add", "--", ordinary);
   const removed = await getFileDiff(root, "main", "sub");
-  expect(removed.diff.match(/^diff --git .*$/gm)).toEqual(headers);
-  expect(removed.diff).toContain(`-Subproject commit ${commit}\n`);
+  expect(removed.diff.match(/^diff --git .*$/gm)).toEqual(["diff --git a/sub b/sub"]);
   if (ordinary === "sub") {
     expect(added.diff).toContain("-regular content\n");
-    expect(removed.diff).toContain("+regular content\n");
+    expect(await getDiffFiles(root, "main")).toEqual([
+      { file: "sub", status: "modified", additions: 2, deletions: 1 },
+    ]);
+    expect(removed).toMatchObject({ old_content: "", new_content: "first line\nsecond line\n" });
+    expect(removed.diff).toContain(
+      "--- /dev/null\n+++ b/sub\n@@ -0,0 +1,2 @@\n+first line\n+second line\n"
+    );
+  } else {
+    expect(removed.diff).toContain(`-Subproject commit ${commit}\n`);
   }
 });
 

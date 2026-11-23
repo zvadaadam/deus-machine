@@ -536,8 +536,10 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   workspace's changed-files list (normalised paths), and the local diff read
   refuses any other itself (`getFileDiff`): a file git does not list may be
   an ignored secret, and its diff would be the whole file. One file's patch
-  is the base's blob against the working file, so it holds that file alone;
-  a pure rename's is empty and the answer says so. The list is git's own,
+  is the base's blob against the working file (a submodule entry's is git's
+  own for that path), read between two looks at the file: one that changed
+  meanwhile is refused. A pure rename's patch is empty and the answer says
+  so. The list is git's own,
   read NUL-delimited (`parseDiffFiles` in `services/git.service.ts`): one row
   per path with git's status, a rename under its new name with the old one
   beside it (an untracked file's lines are counted from the file). Changes
