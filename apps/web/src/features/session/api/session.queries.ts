@@ -243,8 +243,8 @@ export function useSendMessage() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ mode, ...input }: SendMessageVariables) => {
-      const { sessionId, content, turnId, model, agentHarness, thinkingLevel } = input;
+    mutationFn: async ({ mode, turnId, ...input }: SendMessageVariables) => {
+      const { sessionId, content, model, agentHarness, thinkingLevel } = input;
       // Mac-CLOSED direct lane: a live direct channel means this session streams
       // straight from agnt, so its prompt goes there too — no Mac backend to relay
       // it, and no HTTP fallback (that path targets the same closed backend). The
@@ -275,7 +275,7 @@ export function useSendMessage() {
           await backend.call(api.steerMessage, input);
           return;
         }
-        return await backend.call(api.sendMessage, input);
+        return await backend.call(api.sendMessage, { ...input, turnId });
       } catch (error) {
         // The host understood the send and refused it: sending again would only
         // be refused again. Anything else (a lost reply, no connection) is

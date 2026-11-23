@@ -239,7 +239,6 @@ describe("backend prompt delivery", () => {
         expect(await actions.sendMessage(content, "steer")).toBe(true);
         expect(state.call).toHaveBeenCalledExactlyOnceWith(api.steerMessage, {
           sessionId: SESSION,
-          turnId: expect.any(String),
           model: "opus",
           agentHarness: "claude-code",
           thinkingLevel: "high",
