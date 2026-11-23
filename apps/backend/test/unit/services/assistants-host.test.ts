@@ -60,6 +60,7 @@ vi.mock("../../../src/services/agent/service", () => ({
   liveTurnId: (sessionId: string) => state.live.get(sessionId),
   provideSessionTools: () => {},
   isConnected: () => false,
+  turnWatcher: undefined,
 }));
 vi.mock("../../../src/services/agent/tool-relay", () => ({
   pendingFor: (sessionId: string) => state.pending.filter((r) => r.sessionId === sessionId),
