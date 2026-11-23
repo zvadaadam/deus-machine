@@ -249,6 +249,8 @@ try {
       { exact: true }
     );
   const tabs = page.getByRole("tablist", { name: "Session tabs" }).getByRole("tab");
+  const fullQueue =
+    "This chat already has 20 messages waiting. Remove one, or wait for the agent to take them.";
   const data = [];
   let heldUpdates;
   let refusedId,
@@ -273,15 +275,22 @@ try {
       }
       socket.send(raw);
     });
-    socket.onMessage((raw) => {
+    socket.onMessage(async (raw) => {
       const frame = JSON.parse(String(raw));
       if (frame.type === "q:mutate" && frame.action === "sendMessage") {
         data.push(frame.params);
         if (frame.params.sessionId !== cloudChat) {
-          // Reject local fixture sends at the host's busy check before a CLI could run.
-          db.prepare("UPDATE sessions SET status = 'working' WHERE id = ?").run(
-            frame.params.sessionId
-          );
+          // Another client fills the busy chat's queue before the window's send reaches it.
+          const { sessionId, agentHarness, model } = frame.params;
+          db.prepare("UPDATE sessions SET status = 'working' WHERE id = ?").run(sessionId);
+          for (let i = 1; i <= 20; i++) {
+            await host.write("sendMessage", {
+              sessionId,
+              agentHarness,
+              model,
+              content: `Queued ${i}`,
+            });
+          }
         }
         if (frame.params.sessionId === firstChat) refusedId = frame.id;
         if (frame.params.sessionId === cloudChat) lostId = frame.id;
@@ -509,8 +518,9 @@ try {
     await input.fill("Refused draft");
     await input.press("Enter");
     await until(() => refusal?.success === false, 5000, "backend refusal");
-    await page.locator("[data-sonner-toast]").first().waitFor();
-    db.prepare("UPDATE sessions SET status = 'idle' WHERE id = ?").run(firstChat);
+    assert.equal(refusal.error, fullQueue);
+    await page.locator("[data-sonner-toast]").getByText(fullQueue, { exact: true }).waitFor();
+    await value(input, "Refused draft");
     await page.reload();
     await value(input, "Refused draft");
   });
@@ -591,6 +601,7 @@ try {
       await dropPicture(page, input, "Start");
       await page.getByRole("button", { name: "Retry", exact: true }).first().click();
       await page.locator('[data-slot="workspace-start-state"]').waitFor({ state: "detached" });
+      await page.locator("[data-sonner-toast]").getByText(fullQueue, { exact: true }).waitFor();
       await value(input, "first waiting message\n\nmy follow-up");
       await preview(page).waitFor();
       await page.reload();

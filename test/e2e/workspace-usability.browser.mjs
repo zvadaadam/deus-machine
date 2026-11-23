@@ -335,6 +335,7 @@ const server = await createServer({
             createdSessions.push(session);
             return json({ success: true, data: session });
           }
+          if (req.url === "/api/query/queuedMessages") return json({ paused: null, items: [] });
           if (req.url === "/api/query/messages") {
             historyRequests++;
             const respond = () =>
