@@ -154,14 +154,16 @@ async function drain(q: Queue): Promise<Item | undefined> {
   changed(q);
   try {
     await attempt.admission;
-    attempt.admission = undefined;
     return head;
   } catch (error) {
+    if (liveTurnId(q.sessionId) === turnId) return;
     const state = error instanceof ChatBusyError ? "busy" : "returned";
     if (queues.get(q.sessionId) !== q || !recoverAttempt(q, turnId, state)) return;
     changed(q);
     // The competing turn may already have ended while this attempt held the head.
     if (state === "busy") void drain(q);
+  } finally {
+    attempt.admission = undefined;
   }
 }
 

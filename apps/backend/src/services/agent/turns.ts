@@ -486,6 +486,7 @@ export async function stopSession(
       `UPDATE sessions SET status = 'idle', updated_at = datetime('now')
        WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
     ).run(sessionId, ...ACTIVE_TURN_STATUSES);
+    if (targetTurnId) agentService.notifyTurnInterrupted(sessionId, targetTurnId, true);
     invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
     return { unconfirmed: false };
   }

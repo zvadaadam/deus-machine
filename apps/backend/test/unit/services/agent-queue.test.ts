@@ -382,6 +382,25 @@ describe("messages held for a local chat", () => {
     expect(starts()).toEqual(["first", "head"]);
   });
 
+  it("keeps a live head sending when its admission reply fails before its echo", async () => {
+    await send("first");
+    await send("head");
+    end("first", "cancelled");
+    const wire = Promise.withResolvers<void>();
+    engine.startTurn.mockReturnValueOnce(wire.promise);
+    const resuming = run(api.resumeQueuedMessages, { sessionId });
+    await vi.waitFor(() => expect(starts()).toEqual(["first", "head"]));
+    emit({ type: "turn.started", sessionId, turnId: "head", timestamp: seq });
+    wire.reject(new Error("connection lost"));
+    await resuming;
+    expect((await queue()).paused).toBe("failed");
+    await run(api.resumeQueuedMessages, { sessionId });
+    expect(starts()).toEqual(["first", "head"]);
+    expect((await queue()).items).toMatchObject([{ id: "head", state: "sending" }]);
+    echo("head");
+    expect(await ids()).toEqual([]);
+  });
+
   it.each(["echo", "error end"] as const)(
     "keeps the delivery established by the %s when the head's admission reply is lost",
     async (seen) => {
@@ -421,6 +440,39 @@ describe("messages held for a local chat", () => {
     await run(api.resumeQueuedMessages, { sessionId });
     expect(starts()).toEqual(["first", "fresh", "waiting"]);
     expect(await queue()).toEqual({ paused: null, items: [] });
+  });
+
+  it("returns an unechoed head when a targeted Stop finds no active turn", async () => {
+    await send("first");
+    await send("head");
+    await send("tail");
+    end("first", "cancelled");
+    engine.startTurn.mockResolvedValueOnce(undefined);
+    await run(api.resumeQueuedMessages, { sessionId });
+    emit({ type: "turn.started", sessionId, turnId: "head", timestamp: seq });
+
+    engine.cancelTurn.mockResolvedValueOnce({ outcome: "no_active_turn" });
+    await expect(stop()).resolves.toEqual({ unconfirmed: false });
+    expect(engine.cancelTurn.mock.calls).toEqual([[sessionId, "head"]]);
+    expect(await run(api.session, { sessionId })).toMatchObject({ status: "idle" });
+    expect(await queue()).toMatchObject({
+      paused: "stopped",
+      items: [
+        { id: "head", state: "waiting" },
+        { id: "tail", state: "waiting" },
+      ],
+    });
+    await run(api.resumeQueuedMessages, { sessionId });
+    const retry = engine.startTurn.mock.lastCall![0];
+    expect(starts()).toEqual(["first", "head", retry.turnId]);
+    expect(retry.turnId).not.toBe("head");
+    expect(retry.input).toBe("Message head");
+    expect(await ids()).toEqual(["tail"]);
+
+    engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: retry.turnId });
+    await stop();
+    end(retry.turnId, "cancelled");
+    expect(await queue()).toMatchObject({ paused: "stopped", items: [{ id: "tail" }] });
   });
 
   it("keeps a waiting row paused when a normal end arrives before the cancel reply", async () => {
