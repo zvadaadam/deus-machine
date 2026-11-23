@@ -3,15 +3,22 @@
  * TanStack Query hooks for Claude Code session management
  */
 
-import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useQueries,
+  useMutation,
+  useIsMutating,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { produce } from "immer";
 import { api } from "@shared/api";
-import { ACTIVE_TURN_STATUSES } from "@shared/enums";
 import type { PaginatedMessages } from "@shared/types/session";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
-import { locationOf } from "@/features/sidebar/lib/location";
 import { createOptimisticUserMessage, dropOptimisticMessage } from "../lib/optimisticMessage";
+import { willQueueMessage } from "../lib/queuedMessages";
+import { returnContentToComposer } from "../lib/returnToComposer";
+import { composerStore } from "../store/sessionComposerStore";
 import { patchWorkspaceSessionStatus } from "../lib/agentEventFold";
 import { SendRejectedError, rollbackSendStatus } from "../lib/sendRollback";
 import {
@@ -69,6 +76,37 @@ export function useSession(sessionId: string | null) {
     ...sessionDetailQueryOptions(sessionId || ""),
     enabled: !!sessionId,
   });
+}
+
+export function useQueuedMessages(sessionId: string) {
+  const queryKey = queryKeys.sessions.queued(sessionId);
+  const params = { sessionId };
+  useQuerySubscription(api.queuedMessages, { queryKey, params });
+  return useQuery({
+    queryKey,
+    queryFn: () => call(api.queuedMessages, params),
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useEditQueuedMessage(sessionId: string) {
+  const client = useQueryClient();
+  const mutationKey = [api.queuedMessage.name, sessionId];
+  const editing = useIsMutating({ mutationKey }) > 0;
+  const { mutateAsync: edit } = useMutation({
+    mutationKey,
+    mutationFn: async (id: string) => {
+      const host = runtimeForQueryClient(client) ?? { call };
+      const store = composerStore(client);
+      const params = { sessionId, id };
+      const { content } = await host.call(api.queuedMessage, params);
+      if (content === null) return;
+      await returnContentToComposer(sessionId, content, store);
+      await host.call(api.removeQueuedMessage, params);
+    },
+  });
+  return { edit, editing };
 }
 
 /**
@@ -289,13 +327,7 @@ export function useSendMessage() {
     onMutate: async ({ sessionId, content, model, turnId, mode }) => {
       const session = queryClient.getQueryData<Session>(queryKeys.sessions.detail(sessionId));
       // A busy local chat shows the host's queue until the engine echoes the message.
-      if (
-        mode === "steer" ||
-        (session?.workspace_kind &&
-          locationOf({ kind: session.workspace_kind }) === "local" &&
-          ACTIVE_TURN_STATUSES.includes(session.status))
-      )
-        return;
+      if (mode === "steer" || willQueueMessage(session?.workspace_kind, session?.status)) return;
       await queryClient.cancelQueries({
         queryKey: queryKeys.sessions.messages(sessionId),
       });

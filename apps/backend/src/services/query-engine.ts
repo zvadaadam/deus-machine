@@ -16,6 +16,7 @@
 
 import * as Sentry from "@sentry/node";
 import { match } from "ts-pattern";
+import { z } from "zod";
 import { subscriptionKey } from "@deus/runtime-client";
 import { streams, type LiveName } from "@shared/api";
 import type { QServerFrame } from "@shared/types/query-protocol";
@@ -265,11 +266,15 @@ export function invalidate(resources: LiveName[], ctx?: InvalidateContext): void
     }
     for (const [subId, sub] of connSubs) {
       if (!resources.includes(sub.resource)) continue;
-      const sessionId = typeof sub.params.sessionId === "string" ? sub.params.sessionId : undefined;
-      const concerned =
-        !ctx?.sessionIds?.length || (!!sessionId && ctx.sessionIds.includes(sessionId));
-
-      if ((sub.resource === "session" || sub.resource === "queuedMessages") && !concerned) continue;
+      const { sessionId } = sub.params;
+      if (
+        typeof sessionId === "string" &&
+        ctx?.sessionIds?.length &&
+        !ctx.sessionIds.includes(sessionId)
+      ) {
+        const input = registry().find(sub.resource)?.input;
+        if (input instanceof z.ZodObject && "sessionId" in input.shape) continue;
+      }
       if (
         sub.resource === "workspaces" &&
         ctx?.sessionIds?.length &&

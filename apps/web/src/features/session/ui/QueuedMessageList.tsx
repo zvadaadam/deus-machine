@@ -1,4 +1,3 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence } from "framer-motion";
 import { Image, Pencil, X } from "lucide-react";
 import { toast } from "sonner";
@@ -7,10 +6,7 @@ import { getErrorMessage } from "@shared/lib/errors";
 import { Button } from "@/components/ui/button";
 import { Collapse } from "@/components/ui/collapse";
 import { call } from "@/platform/ws";
-import { queryKeys } from "@/shared/api/queryKeys";
-import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
-import { returnContentToComposer } from "../lib/returnToComposer";
-import { composerStore } from "../store/sessionComposerStore";
+import { useQueuedMessages } from "../api/session.queries";
 
 function showError(error: unknown) {
   toast.error(getErrorMessage(error));
@@ -34,28 +30,15 @@ function ImageCount({ count, besideText }: { count: number; besideText: boolean 
 export function QueuedMessageList({
   sessionId,
   canSteer,
-  sending,
+  editDisabled,
+  onEdit,
 }: {
   sessionId: string;
   canSteer: boolean;
-  sending: boolean;
+  editDisabled: boolean;
+  onEdit: (id: string) => Promise<void>;
 }) {
-  const store = composerStore(useQueryClient());
-  const queryKey = queryKeys.sessions.queued(sessionId);
-  const params = { sessionId };
-  useQuerySubscription(api.queuedMessages, { queryKey, params });
-  const { data } = useQuery({
-    queryKey,
-    queryFn: () => call(api.queuedMessages, params),
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-  });
-
-  const remove = (id: string) => call(api.removeQueuedMessage, { sessionId, id });
-  async function edit(id: string) {
-    const { content } = await remove(id);
-    if (content !== null) await returnContentToComposer(sessionId, content, store);
-  }
+  const { data } = useQueuedMessages(sessionId);
 
   return (
     <div
@@ -70,23 +53,25 @@ export function QueuedMessageList({
               <span role="status">
                 {data.paused === "stopped"
                   ? "Queue paused. The agent was stopped."
-                  : "Queue paused. The last turn failed."}
+                  : "Queue paused after an error."}
               </span>
               <Button
                 size="xs"
                 variant="secondary"
-                onClick={() => call(api.resumeQueuedMessages, params).catch(showError)}
+                onClick={() => call(api.resumeQueuedMessages, { sessionId }).catch(showError)}
               >
                 Resume
               </Button>
             </div>
           </Collapse>
         )}
-        {data?.items.map(({ id, text, images, steering }) => (
+        {data?.items.map(({ id, text, images, state }) => (
           <Collapse key={`message:${id}`}>
             <div className="border-border-subtle bg-bg-muted text-text-secondary mb-1 flex h-8 items-center gap-2 rounded-lg border pr-1 pl-2.5 text-sm pointer-coarse:h-12">
-              {steering && (
-                <span className="text-text-muted shrink-0 text-xs">Waiting to be read</span>
+              {state !== "waiting" && (
+                <span className="text-text-muted shrink-0 text-xs">
+                  {state === "sending" ? "Sending" : "Waiting to be read"}
+                </span>
               )}
               {text && (
                 <span className="min-w-0 truncate" title={text}>
@@ -94,7 +79,7 @@ export function QueuedMessageList({
                 </span>
               )}
               {images > 0 && <ImageCount count={images} besideText={Boolean(text)} />}
-              {!steering && (
+              {state === "waiting" && (
                 <div className="ml-auto flex shrink-0 items-center">
                   {canSteer && (
                     <Button
@@ -112,8 +97,8 @@ export function QueuedMessageList({
                     variant="ghost"
                     aria-label="Edit queued message"
                     title="Edit queued message"
-                    disabled={sending}
-                    onClick={() => edit(id).catch(showError)}
+                    disabled={editDisabled}
+                    onClick={() => onEdit(id).catch(showError)}
                   >
                     <Pencil className="size-3.5" />
                   </Button>
@@ -122,7 +107,9 @@ export function QueuedMessageList({
                     variant="ghost"
                     aria-label="Remove queued message"
                     title="Remove queued message"
-                    onClick={() => remove(id).catch(showError)}
+                    onClick={() =>
+                      call(api.removeQueuedMessage, { sessionId, id }).catch(showError)
+                    }
                   >
                     <X className="size-3.5" />
                   </Button>

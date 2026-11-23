@@ -74,10 +74,10 @@ export const sendMessage = write({
 
 export type QueuedMessages = {
   paused: "stopped" | "failed" | null;
-  items: { id: string; text: string; images: number; steering: boolean }[];
+  items: { id: string; text: string; images: number; state: "sending" | "steering" | "waiting" }[];
 };
 
-/** Messages held in this process for a local chat. Steers awaiting an echo come first. */
+/** A local chat's sending head, unread steers and waiting messages, held in this process. */
 export const queuedMessages = live({
   name: "queuedMessages",
   input: sessionId,
@@ -85,6 +85,13 @@ export const queuedMessages = live({
 });
 
 const queuedMessageId = sessionId.extend({ id: z.string().min(1) });
+
+/** Full composer content, available while the row is waiting. */
+export const queuedMessage = read({
+  name: "queuedMessage",
+  input: queuedMessageId,
+  output: out<{ content: string | null }>(),
+});
 
 export const steerMessage = write({
   name: "steerMessage",
@@ -101,7 +108,7 @@ export const steerQueuedMessage = write({
 export const removeQueuedMessage = write({
   name: "removeQueuedMessage",
   input: queuedMessageId,
-  output: out<{ content: string | null }>(),
+  output: out<{ removed: boolean }>(),
 });
 
 export const resumeQueuedMessages = write({

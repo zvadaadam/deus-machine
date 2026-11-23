@@ -29,7 +29,6 @@ import {
 } from "./persistence";
 import { invalidate } from "../query-engine";
 import * as agentService from "./service";
-import { interruptQueue, stopQueue } from "./queue";
 import {
   startCloudTurn,
   cancelCloudTurn,
@@ -407,7 +406,7 @@ export async function stopSession(
   /** Who stops it, kept on the turn so a reader can say who did. */
   by: Origin = { kind: "person" }
 ): Promise<{ unconfirmed: boolean }> {
-  const starting = stopQueue(sessionId);
+  const starting = agentService.turnWatcher?.stopAsked(sessionId);
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new NotFoundError("Session not found");
@@ -538,7 +537,7 @@ function scheduleUnconfirmedCancelWatchdog(
         )
         .run(live === undefined ? "error" : null, sessionId, ...ACTIVE_TURN_STATUSES);
       if (result.changes > 0) {
-        interruptQueue(sessionId, live);
+        agentService.turnWatcher?.interrupted(sessionId, live);
         console.warn(`[CommandHandler] unconfirmed cancel never settled: session=${sessionId}`);
         invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
       }
@@ -556,7 +555,7 @@ function handleAgentRejection(sessionId: string, reason?: string): void {
   const msg = reason || "Agent rejected the message";
   console.error(`[CommandHandler] Agent rejected sendMessage for session=${sessionId}: ${msg}`);
   persistSessionError(sessionId, msg, "internal");
-  interruptQueue(sessionId, agentService.liveTurnId(sessionId));
+  agentService.turnWatcher?.interrupted(sessionId, agentService.liveTurnId(sessionId));
   invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
 }
 
@@ -564,6 +563,6 @@ function handleAgentError(sessionId: string, err: unknown): void {
   const errorMsg = err instanceof Error ? err.message : String(err);
   console.error("[CommandHandler] Failed to forward to agent-server:", errorMsg);
   persistSessionError(sessionId, `Agent server communication failed: ${errorMsg}`, "internal");
-  interruptQueue(sessionId, agentService.liveTurnId(sessionId));
+  agentService.turnWatcher?.interrupted(sessionId, agentService.liveTurnId(sessionId));
   invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
 }

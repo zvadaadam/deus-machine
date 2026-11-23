@@ -1,14 +1,15 @@
-import { inputToText, steerMessageId, type TurnEndedEvent } from "@zvada/agent-server/protocol";
+import { echoMessageId, inputToText, steerMessageId } from "@zvada/agent-server/protocol";
 import type * as api from "@shared/api/sessions";
 import type { OutputOf, ParsedInputOf } from "@shared/api/op";
 import { ACTIVE_TURN_STATUSES } from "@shared/enums";
 import { uuidv7 } from "@shared/lib/uuid";
 import type { SessionRow } from "../../db";
 import { getDatabase } from "../../lib/database";
-import { ChatBusyError } from "../../lib/errors";
+import { ChatBusyError, ConflictError } from "../../lib/errors";
 import { invalidate, onInvalidate } from "../query-engine";
 import { toEngineInput } from "./run-config";
-import { liveTurnId, steerTurn } from "./service";
+import type { TurnEnd } from "./event-handler";
+import { liveTurnId, provideTurnWatcher, steerTurn } from "./service";
 import { differentTurnMessage, knownTurn, requireSameHarness, sendMessage } from "./turns";
 
 type Input = ParsedInputOf<typeof api.sendMessage>;
@@ -24,8 +25,11 @@ interface Queue {
   steers: Map<string, Steer>;
   paused: api.QueuedMessages["paused"];
   starting?: { head: Item; admission: ReturnType<typeof sendMessage> };
+  /** Visible until the user echo, which can arrive on either side of admission. */
+  sending?: Item;
 }
 
+const MAX_QUEUED_MESSAGES = 20;
 const queues = new Map<string, Queue>();
 let unwatch: (() => void) | undefined;
 
@@ -46,13 +50,20 @@ function notify(sessionIds: string[]) {
 }
 
 function changed(q: Queue) {
-  if (!q.waiting.length && !q.steers.size && !q.starting) queues.delete(q.sessionId);
+  if (!q.waiting.length && !q.steers.size && !q.starting && !q.sending) queues.delete(q.sessionId);
   notify([q.sessionId]);
 }
 
-function queueFor(sessionId: string): Queue {
+function queueForNewMessage(sessionId: string): Queue {
   const existing = queues.get(sessionId);
-  if (existing) return existing;
+  if (existing) {
+    const held = existing.waiting.length + existing.steers.size + (existing.sending ? 1 : 0);
+    if (held >= MAX_QUEUED_MESSAGES)
+      throw new ConflictError(
+        `This chat already has ${MAX_QUEUED_MESSAGES} messages waiting. Remove one, or wait for the agent to take them.`
+      );
+    return existing;
+  }
   const q: Queue = { sessionId, waiting: [], steers: new Map(), paused: null };
   queues.set(sessionId, q);
   // Archive, hide and delete publish a changed list. A turn's scoped updates
@@ -93,17 +104,21 @@ function itemFor(message: Message): Item {
 export function queuedMessages(sessionId: string): api.QueuedMessages {
   const q = queues.get(sessionId);
   if (!q) return { paused: null, items: [] };
-  const row = ({ message, text, images }: Item, steering: boolean) => ({
+  const row = (
+    { message, text, images }: Item,
+    state: api.QueuedMessages["items"][number]["state"]
+  ) => ({
     id: message.turnId,
     text,
     images,
-    steering,
+    state,
   });
   return {
     paused: q.paused,
     items: [
-      ...Array.from(q.steers.values(), ({ item }) => row(item, true)),
-      ...q.waiting.map((item) => row(item, false)),
+      ...(q.sending ? [row(q.sending, "sending")] : []),
+      ...Array.from(q.steers.values(), ({ item }) => row(item, "steering")),
+      ...q.waiting.map((item) => row(item, "waiting")),
     ],
   };
 }
@@ -118,15 +133,19 @@ async function drain(q: Queue): Promise<Item | undefined> {
     return;
   }
   if (ACTIVE_TURN_STATUSES.includes(chat.status)) return;
-  const head = q.waiting.shift()!;
+  const head = q.waiting[0]!;
+  // A synchronous refusal can publish the queue and return unread steers ahead of this head.
   const starting = { head, admission: sendMessage(head.message) };
+  q.waiting = q.waiting.filter((item) => item !== head);
   q.starting = starting;
+  q.sending = head;
   changed(q);
   try {
     await starting.admission;
   } catch (error) {
     if (queues.get(q.sessionId) !== q || q.starting !== starting) return;
     q.starting = undefined;
+    q.sending = undefined;
     q.waiting.unshift(head);
     const busy = error instanceof ChatBusyError;
     if (!busy) q.paused ??= "failed";
@@ -137,6 +156,8 @@ async function drain(q: Queue): Promise<Item | undefined> {
   }
   if (queues.get(q.sessionId) === q && q.starting === starting) {
     q.starting = undefined;
+    // A confirmed delivery gap can retire the live turn before its admission reply.
+    if (liveTurnId(q.sessionId) !== head.message.turnId) q.sending = undefined;
     changed(q);
   }
   return head;
@@ -149,7 +170,7 @@ function pendingSteer(q: Queue | undefined, rowId: string) {
 
 function alreadyQueued({ sessionId, turnId, content }: Message) {
   const q = queues.get(sessionId);
-  const head = q?.starting?.head;
+  const head = q?.starting?.head ?? q?.sending;
   const held =
     head?.message.turnId === turnId
       ? head
@@ -176,9 +197,8 @@ export async function sendOrQueue(input: Input) {
     }
   }
   checkQueueHarness(chat, message.agentHarness);
-  const item = itemFor(message);
-  const q = queueFor(sessionId);
-  q.waiting.push(item);
+  const q = queueForNewMessage(sessionId);
+  q.waiting.push(itemFor(message));
   changed(q);
   if (!ACTIVE_TURN_STATUSES.includes(chat.status)) void drain(q);
   return queued;
@@ -231,8 +251,9 @@ export async function steerMessage(
     return { outcome: "sent" };
   }
   checkQueueHarness(chat, input.agentHarness);
+  const q = queueForNewMessage(sessionId);
   const item = itemFor({ ...input, turnId: uuidv7() });
-  return { outcome: await steer(queueFor(sessionId), item, chat) };
+  return { outcome: await steer(q, item, chat) };
 }
 
 export async function steerQueuedMessage(
@@ -248,13 +269,18 @@ export async function steerQueuedMessage(
   return { outcome: outcome === "sent" ? "gone" : outcome };
 }
 
+export function queuedMessage(sessionId: string, id: string) {
+  const item = queues.get(sessionId)?.waiting.find((row) => row.message.turnId === id);
+  return { content: item?.message.content ?? null };
+}
+
 export function removeQueuedMessage(sessionId: string, id: string) {
   const q = queues.get(sessionId);
   const index = q?.waiting.findIndex((item) => item.message.turnId === id) ?? -1;
-  if (!q || index === -1) return { content: null };
-  const [item] = q.waiting.splice(index, 1);
+  if (!q || index === -1) return { removed: false };
+  q.waiting.splice(index, 1);
   changed(q);
-  return { content: item!.message.content };
+  return { removed: true };
 }
 
 export async function resumeQueuedMessages(sessionId: string) {
@@ -267,12 +293,17 @@ export async function resumeQueuedMessages(sessionId: string) {
   return {};
 }
 
-export function steerEcho(sessionId: string, turnId: string, messageId: string) {
+function userEcho(sessionId: string, turnId: string, messageId: string) {
   const q = queues.get(sessionId);
-  const steer = q?.steers.get(messageId);
-  if (!q || steer?.turnId !== turnId) return;
-  steer.echoed = true;
-  q.steers.delete(messageId);
+  if (!q) return;
+  if (q.sending?.message.turnId === turnId && messageId === echoMessageId(turnId)) {
+    q.sending = undefined;
+  } else {
+    const steer = q.steers.get(messageId);
+    if (steer?.turnId !== turnId) return;
+    steer.echoed = true;
+    q.steers.delete(messageId);
+  }
   changed(q);
 }
 
@@ -287,7 +318,7 @@ function recoverSteers(q: Queue, turnId?: string) {
   return unread.length > 0;
 }
 
-export function stopQueue(sessionId: string) {
+function stopQueue(sessionId: string) {
   const q = queues.get(sessionId);
   if (!q) return;
   q.paused = "stopped";
@@ -296,22 +327,27 @@ export function stopQueue(sessionId: string) {
 }
 
 /** A live turn can still echo. Once it is gone, its unread steers can be resumed as turns. */
-export function interruptQueue(sessionId: string, activeTurnId?: string) {
+function interruptQueue(sessionId: string, activeTurnId?: string) {
   const q = queues.get(sessionId);
   if (!q) return;
-  if (!activeTurnId) recoverSteers(q);
+  if (!activeTurnId) {
+    recoverSteers(q);
+    if (!q.starting) q.sending = undefined;
+  }
   q.paused ??= "failed";
   changed(q);
 }
 
-export function turnEnded(ended: TurnEndedEvent, status?: "idle" | "error") {
+function turnEnded({ event: ended, status }: TurnEnd) {
   const q = queues.get(ended.sessionId);
   if (!q) return;
   // Includes the engine's undeliveredSteers and calls still awaiting a verdict.
   const recovered = recoverSteers(q, ended.turnId);
+  const wasSending = q.sending?.message.turnId === ended.turnId;
+  if (wasSending) q.sending = undefined;
   // A replayed end can return its own steers but cannot stop or advance its successor.
   if (!status) {
-    if (recovered) changed(q);
+    if (recovered || wasSending) changed(q);
     return;
   }
   if (q.starting?.head.message.turnId === ended.turnId) q.starting = undefined;
@@ -320,3 +356,5 @@ export function turnEnded(ended: TurnEndedEvent, status?: "idle" | "error") {
   changed(q);
   void drain(q);
 }
+
+provideTurnWatcher({ turnEnded, userEcho, stopAsked: stopQueue, interrupted: interruptQueue });

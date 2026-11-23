@@ -1,8 +1,14 @@
 // backend/src/services/agent/service.ts
 // Composition root for agent-server communication.
 //
-// Connects the in-process engine's AgentLink to the event handler for
-// persistence and WS push, and relays the live turn's questions and plans.
+// Wires AgentLink to the event handler for persistence and WS push, and relays
+// the live turn's questions and plans. These modules have no circular imports.
+//
+//   queue → turns → service (this file)
+//                     ├── client         (AgentLink: the in-process engine)
+//                     ├── event-handler  (persistence and WS push)
+//                     ├── run-config     (turn params assembly)
+//                     └── tool-relay     (frontend RPC relay)
 //
 // Initialized once at startup in server.ts via agentService.init().
 
@@ -28,7 +34,7 @@ import { isUnknownEvent } from "@shared/protocol-types";
 import { AgentLink } from "./client";
 import { LocalAgents } from "./local-agents";
 import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
-import { createAgentEventHandler, type AgentEventHandler } from "./event-handler";
+import { createAgentEventHandler, type AgentEventHandler, type TurnEnd } from "./event-handler";
 import { buildTurnStartParams, withoutImageParts, type DeusTurnOptions } from "./run-config";
 import { toolRequests } from "@shared/api/sessions";
 import { cancelSessionRelays, isPrompt, pendingFor, relay } from "./tool-relay";
@@ -73,7 +79,9 @@ export async function init(): Promise<void> {
     console.log(`[AgentService] Settled ${settled.value.length} chat(s) a restart interrupted`);
     invalidate(["workspaces", "sessions", "session"], { sessionIds: settled.value });
   }
-  const handler = createAgentEventHandler();
+  const handler = createAgentEventHandler((sessionId, liveTurnId) =>
+    turnWatcher?.interrupted(sessionId, liveTurnId)
+  );
   events = handler;
   // A client that starts following a chat while its agent waits on a question
   // or a plan (a window opened late, a phone) is shown it at once; one that
@@ -93,12 +101,15 @@ export async function init(): Promise<void> {
     onEnvelope: (envelope) => {
       const { event, sessionId } = envelope;
       const known = !isUnknownEvent(event);
-      // Relays belong to the chat. Withdraw this turn's cards before handle can start its successor.
+      // Withdraw this turn's cards before publishing its end and admitting its successor.
       if (known && event.type === "turn.ended" && handler.liveTurnId(sessionId) === event.turnId) {
         cancelSessionRelays(sessionId, "turn ended");
       }
-      handler.handle(envelope);
+      const end = handler.handle(envelope);
       if (!known) return;
+      if (end) turnWatcher?.turnEnded(end);
+      if (event.type === "message.started" && event.role === "user")
+        turnWatcher?.userEcho(sessionId, event.turnId, event.messageId);
       if (event.type === "permission.requested") void answerPermission(event);
       if (event.type === "elicitation.requested") void answerElicitation(event);
     },
@@ -273,6 +284,23 @@ export function isConnected(): boolean {
   return link?.isConnected() ?? false;
 }
 
+/** A chat's tools beside the Deus tools: the operator's, registered by services/assistants. */
+let sessionTools: ((own: HostToolSource) => HostToolSource) | undefined;
+export function provideSessionTools(compose: (own: HostToolSource) => HostToolSource): void {
+  sessionTools = compose;
+}
+
+interface TurnWatcher {
+  turnEnded(end: TurnEnd): void;
+  userEcho(sessionId: string, turnId: string, messageId: string): void;
+  stopAsked(sessionId: string): Promise<{ turnId: string }> | undefined;
+  interrupted(sessionId: string, liveTurnId?: string): void;
+}
+export let turnWatcher: TurnWatcher | undefined;
+export function provideTurnWatcher(watcher: TurnWatcher): void {
+  turnWatcher = watcher;
+}
+
 /**
  * The turn the event handler believes is running for a session, if any.
  *
@@ -280,12 +308,6 @@ export function isConnected(): boolean {
  * (never initialized, or shut down) — callers must treat it as absence of
  * evidence, not as evidence of absence.
  */
-/** A chat's tools beside the Deus tools: the operator's, registered by services/assistants. */
-let sessionTools: ((own: HostToolSource) => HostToolSource) | undefined;
-export function provideSessionTools(compose: (own: HostToolSource) => HostToolSource): void {
-  sessionTools = compose;
-}
-
 export function liveTurnId(sessionId: string): string | undefined {
   return events?.liveTurnId(sessionId);
 }

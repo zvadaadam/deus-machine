@@ -28,6 +28,7 @@ import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { AnimatePresence, motion } from "framer-motion";
 import { Minimize2, ArrowUp, Square, Wrench } from "lucide-react";
+import { useEditQueuedMessage } from "../api/session.queries";
 import { useFileMention } from "../hooks/useFileMention";
 import { useCloudSlashItems } from "../hooks/useCloudSlashItems";
 import { useSlashCommand } from "../hooks/useSlashCommand";
@@ -36,6 +37,7 @@ import { useSessionComposer } from "../hooks/useSessionComposer";
 import { FileMentionPopover } from "./FileMentionPopover";
 import { SlashCommandPopover } from "./SlashCommandPopover";
 import { setupEnvironmentPrompt } from "../lib/sessionPrompts";
+import { willQueueMessage } from "../lib/queuedMessages";
 import { extractImagesFromClipboard, buildMessageContent } from "../lib/imageAttachments";
 import {
   InputGroup,
@@ -240,7 +242,8 @@ export function MessageInput({
   const location = workspaceKind ? locationOf({ kind: workspaceKind }) : null;
   const localChat = location === "local" && sessionStatus !== undefined;
   const canSteer = localChat && sessionStatus === "working";
-  const queueing = localChat && ACTIVE_TURN_STATUSES.includes(sessionStatus);
+  const queueing = willQueueMessage(workspaceKind, sessionStatus);
+  const { edit, editing } = useEditQueuedMessage(sessionId);
 
   // Composer content — subscribed from the store, mutated via bound setters.
   const composer = useSessionComposer(sessionId, {
@@ -304,7 +307,7 @@ export function MessageInput({
     skillMentions.length > 0;
 
   const disabledReason = sendDisabledReason || selection.unavailable;
-  const canSend = hasContent && !sending && !disabledReason;
+  const canSend = hasContent && !sending && !editing && !disabledReason;
   const handleSend = async (mode?: "steer") => {
     if (!canSend) return;
     const combined = buildCombinedContent();
@@ -430,7 +433,12 @@ export function MessageInput({
         )}
       </AnimatePresence>
       {localChat && (
-        <QueuedMessageList sessionId={sessionId} canSteer={canSteer} sending={sending} />
+        <QueuedMessageList
+          sessionId={sessionId}
+          canSteer={canSteer}
+          editDisabled={sending || editing}
+          onEdit={edit}
+        />
       )}
 
       <InputGroup

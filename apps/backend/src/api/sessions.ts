@@ -112,6 +112,7 @@ export default [
   // A client's send is the person's: no origin comes from the operation's input.
   handle(api.sendMessage, queue.sendOrQueue),
   handle(api.queuedMessages, ({ sessionId }) => queue.queuedMessages(sessionId)),
+  handle(api.queuedMessage, ({ sessionId, id }) => queue.queuedMessage(sessionId, id)),
   handle(api.steerMessage, queue.steerMessage),
   handle(api.steerQueuedMessage, ({ sessionId, id }) => queue.steerQueuedMessage(sessionId, id)),
   handle(api.removeQueuedMessage, ({ sessionId, id }) => queue.removeQueuedMessage(sessionId, id)),

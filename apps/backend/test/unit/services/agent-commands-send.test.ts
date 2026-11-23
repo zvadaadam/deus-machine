@@ -287,9 +287,9 @@ describeWithDb("sendMessage", () => {
       );
 
       await expect(send(SESSION)).resolves.toEqual({ turnId: "turn-1", queued: true });
-      expect(await run(api.removeQueuedMessage, { sessionId: SESSION, id: "turn-1" })).toEqual({
-        content: "hello",
-      });
+      const held = { sessionId: SESSION, id: "turn-1" };
+      expect(await run(api.queuedMessage, held)).toEqual({ content: "hello" });
+      expect(await run(api.removeQueuedMessage, held)).toEqual({ removed: true });
 
       // The turn that IS running belongs to somebody — it must not be
       // flipped to an error status just because our send lost the race.

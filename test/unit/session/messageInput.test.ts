@@ -1,7 +1,8 @@
-import { createElement, type ComponentProps } from "react";
+import { createElement, type ComponentProps, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MutationObserver, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 import { api } from "@shared/api";
 import * as platform from "@/platform/capabilities";
 import * as ws from "@/platform/ws";
@@ -75,24 +76,21 @@ function Input({
 
 const client = new QueryClient();
 afterEach(() => client.clear());
-function renderInput(props: Partial<ComponentProps<typeof Input>>) {
+function render(element: ReactElement) {
   return renderToStaticMarkup(
-    createElement(
-      QueryClientProvider,
-      { client },
-      createElement(
-        TooltipProvider,
-        null,
-        createElement(Input, {
-          sessionId: "test",
-          sending: false,
-          sessionStatus: "idle",
-          onStop: vi.fn(),
-          onSend: vi.fn(),
-          ...props,
-        })
-      )
-    )
+    createElement(QueryClientProvider, { client }, createElement(TooltipProvider, null, element))
+  );
+}
+function renderInput(props: Partial<ComponentProps<typeof Input>>) {
+  return render(
+    createElement(Input, {
+      sessionId: "test",
+      sending: false,
+      sessionStatus: "idle",
+      onStop: vi.fn(),
+      onSend: vi.fn(),
+      ...props,
+    })
   );
 }
 
@@ -162,17 +160,7 @@ it("opens a chat from another build with its draft editable and Send disabled", 
   const snapshot = vi.spyOn(store, "getInitialState").mockImplementation(store.getState);
   try {
     for (const initialModel of [undefined, "claude-code:opus"]) {
-      const html = renderToStaticMarkup(
-        createElement(
-          QueryClientProvider,
-          { client },
-          createElement(
-            TooltipProvider,
-            null,
-            createElement(SessionComposer, { sessionId: id, initialModel })
-          )
-        )
-      );
+      const html = render(createElement(SessionComposer, { sessionId: id, initialModel }));
       expect(html).toContain("future-agent");
       expect(html).toContain("is not one this version of Deus runs.");
       expect(html.match(/<button[^>]*aria-label="Send message"[^>]*>/)?.[0]).toContain(
@@ -202,9 +190,11 @@ describe("composer Stop availability", () => {
 
 describe("sending from the composer", () => {
   const store = composerStore();
+  const row = { id: "row", text: "Follow up with details", images: 0, state: "waiting" } as const;
   const button = (label: string) =>
     controls.button.mock.calls.findLast(([props]) => props["aria-label"] === label)![0];
   beforeEach(() => {
+    client.setQueryData(queryKeys.sessions.queued("test"), { items: [row], paused: null });
     sessionComposerActions.seedIfAbsent("test", emptyComposer("claude-code:opus", "high"));
     sessionComposerActions.setDraft("test", "Follow up");
     vi.spyOn(store, "getInitialState").mockImplementation(store.getState);
@@ -258,12 +248,10 @@ describe("sending from the composer", () => {
   );
 
   it("keeps Edit disabled until a pending send clears its draft", async () => {
-    const text = "Follow up with details";
-    client.setQueryData(queryKeys.sessions.queued("test"), {
-      items: [{ id: "row", text, images: 0, steering: false }],
-      paused: null,
-    });
-    const remove = vi.spyOn(ws, "call").mockResolvedValue({ content: text });
+    const call = vi
+      .spyOn(ws, "call")
+      .mockResolvedValueOnce({ content: row.text })
+      .mockResolvedValueOnce({ removed: true });
     const reply = Promise.withResolvers<boolean>();
     const send = new MutationObserver<boolean, Error, string>(client, {
       mutationFn: () => reply.promise,
@@ -281,18 +269,106 @@ describe("sending from the composer", () => {
     expect(send.getCurrentResult().variables).toBe("Follow up");
     const editButton = /<button[^>]*aria-label="Edit queued message"[^>]*>/;
     expect(render().match(editButton)?.[0]).toContain('disabled=""');
+    expect(call).not.toHaveBeenCalled();
     expect(store.getState().composers.test.draft).toBe("Follow up");
 
     reply.resolve(true);
     await vi.waitFor(() => expect(store.getState().composers.test.draft).toBe(""));
     expect(render().match(editButton)?.[0]).not.toContain('disabled=""');
     await button("Edit queued message").onClick();
-    expect(remove).toHaveBeenCalledExactlyOnceWith(api.removeQueuedMessage, {
-      sessionId: "test",
-      id: "row",
-    });
-    expect(store.getState().composers.test.draft).toBe(text);
+    expect(call.mock.calls).toEqual([
+      [api.queuedMessage, { sessionId: "test", id: row.id }],
+      [api.removeQueuedMessage, { sessionId: "test", id: row.id }],
+    ]);
+    expect(store.getState().composers.test.draft).toBe(row.text);
   });
+
+  it("holds Send through the Edit read, draft restoration and remove reply", async () => {
+    const read = Promise.withResolvers<{ content: string }>();
+    const remove = Promise.withResolvers<{ removed: boolean }>();
+    const call = vi
+      .spyOn(ws, "call")
+      .mockReturnValueOnce(read.promise)
+      .mockReturnValueOnce(remove.promise);
+    const send = vi.fn(() => true);
+    const draw = () =>
+      renderInput({ workspaceKind: "worktree", sessionStatus: "working", onSend: send });
+    const trySend = () => {
+      draw();
+      expect(button("Queue message").disabled).toBe(true);
+      button("Queue message").onClick();
+      controls.input.mock.lastCall![0].onKeyDown({
+        key: "Enter",
+        nativeEvent: {},
+        preventDefault: vi.fn(),
+      });
+      expect(send).not.toHaveBeenCalled();
+    };
+    draw();
+    const edit = button("Edit queued message").onClick();
+    await vi.waitFor(() =>
+      expect(call).toHaveBeenCalledExactlyOnceWith(api.queuedMessage, {
+        sessionId: "test",
+        id: row.id,
+      })
+    );
+    trySend();
+    expect(store.getState().composers.test.draft).toBe("Follow up");
+    read.resolve({ content: row.text });
+    await vi.waitFor(() =>
+      expect(call).toHaveBeenNthCalledWith(2, api.removeQueuedMessage, {
+        sessionId: "test",
+        id: row.id,
+      })
+    );
+    trySend();
+    remove.resolve({ removed: true });
+    await edit;
+    draw();
+    expect(button("Queue message").disabled).toBe(false);
+    expect(store.getState().composers.test.draft).toBe("Follow up with details\n\nFollow up");
+  });
+
+  it.each([
+    ["Enter", false, api.sendMessage],
+    ["Command-Enter", true, api.steerMessage],
+  ] as const)(
+    "keeps the draft and shows the host's refusal for a full queue on %s",
+    async (_key, metaKey, op) => {
+      client.setQueryData(queryKeys.sessions.queued("test"), {
+        items: Array.from({ length: 20 }, (_, index) => ({ ...row, id: String(index) })),
+        paused: null,
+      });
+      client.setQueryData(queryKeys.sessions.detail("test"), {
+        id: "test",
+        workspace_kind: "worktree",
+        status: "working",
+        agent_harness: "claude-code",
+      });
+      const reason =
+        "This chat already has 20 messages waiting. Remove one, or wait for the agent to take them.";
+      const error = vi.spyOn(toast, "error").mockReturnValue("refused");
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      vi.spyOn(platform, "isMac", "get").mockReturnValue(true);
+      vi.spyOn(ws, "isConnected").mockReturnValue(true);
+      const call = vi.spyOn(ws, "call").mockRejectedValueOnce(new ws.OpError(reason));
+      render(
+        createElement(SessionComposer, { sessionId: "test", initialModel: "claude-code:opus" })
+      );
+      controls.input.mock.lastCall![0].onKeyDown({
+        key: "Enter",
+        metaKey,
+        nativeEvent: {},
+        preventDefault: vi.fn(),
+      });
+      await vi.waitFor(() => expect(error).toHaveBeenCalledExactlyOnceWith(reason));
+      expect(call).toHaveBeenCalledExactlyOnceWith(
+        op,
+        expect.objectContaining({ content: "Follow up" })
+      );
+      expect(store.getState().composers.test.draft).toBe("Follow up");
+    }
+  );
 
   it("leaves Enter to the phone keyboard and clears the draft accepted through the Queue button", async () => {
     controls.mobile.mockReturnValueOnce(true);

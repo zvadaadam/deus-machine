@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { api } from "@shared/api";
 import type { QueuedMessages } from "@shared/api/sessions";
 import { queryKeys } from "@/shared/api/queryKeys";
+import { useEditQueuedMessage } from "@/features/session/api/session.queries";
 import { QueuedMessageList } from "@/features/session/ui/QueuedMessageList";
 import {
   composerStore,
@@ -34,16 +35,23 @@ vi.mock("@/components/ui/button", async (importOriginal) => {
 const client = new QueryClient();
 const sessionId = "queued-chat";
 const queryKey = queryKeys.sessions.queued(sessionId);
-const item = { id: "waiting", text: "Review this", images: 2, steering: false };
+const item = { id: "waiting", text: "Review this", images: 2, state: "waiting" } as const;
+const params = { sessionId, id: item.id };
+
+function List({ canSteer }: { canSteer: boolean }) {
+  const { edit, editing } = useEditQueuedMessage(sessionId);
+  return createElement(QueuedMessageList, {
+    sessionId,
+    canSteer,
+    onEdit: edit,
+    editDisabled: editing,
+  });
+}
 
 function render(data: QueuedMessages, canSteer = true) {
   client.setQueryData(queryKey, data);
   return renderToStaticMarkup(
-    createElement(
-      QueryClientProvider,
-      { client },
-      createElement(QueuedMessageList, { sessionId, canSteer, sending: false })
-    )
+    createElement(QueryClientProvider, { client }, createElement(List, { canSteer }))
   );
 }
 
@@ -59,11 +67,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("shows the host's unread steer first and leaves it without actions", () => {
+it.each([
+  ["steering", "Waiting to be read"],
+  ["sending", "Sending"],
+] as const)("shows the host's %s row first with its status and no actions", (state, status) => {
   const waiting = { ...item, text: "", images: 1 };
   const html = render({
     paused: null,
-    items: [{ id: "read-next", text: "Change direction", images: 2, steering: true }, waiting],
+    items: [{ id: "head", text: "Change direction", images: 2, state }, waiting],
   });
   expect(subscribe).toHaveBeenCalledExactlyOnceWith(api.queuedMessages, {
     queryKey,
@@ -72,7 +83,7 @@ it("shows the host's unread steer first and leaves it without actions", () => {
   expect(html).toContain('aria-label="Queued messages"');
   expect(html).not.toContain(">Queued<");
   expect(html).toMatch(
-    /Waiting to be read.*Change direction.*aria-label="2 images".*>1 image<.*>Steer</s
+    new RegExp(`>${status}<.*Change direction.*aria-label="2 images".*>1 image<.*>Steer<`, "s")
   );
   expect(button.mock.calls.map(([p]) => p["aria-label"] ?? p.children)).toEqual([
     "Steer",
@@ -98,7 +109,7 @@ it.each([
 
 it.each([
   ["stopped", "Queue paused. The agent was stopped."],
-  ["failed", "Queue paused. The last turn failed."],
+  ["failed", "Queue paused after an error."],
 ] as const)("keeps a %s queue on screen until Resume reaches the host", async (paused, reason) => {
   const items = [item];
   const html = render({ paused, items }, false);
@@ -124,7 +135,7 @@ it("keeps twenty rows in order with a full preview for truncated text", () => {
 });
 
 it.each([true, false])(
-  "returns the saved text and picture to the composer only if Edit removed them (%s)",
+  "restores the full text and picture before Remove answers removed=%s",
   async (removed) => {
     vi.stubGlobal(
       "FileReader",
@@ -142,27 +153,60 @@ it.each([true, false])(
       { type: "text", text: "Original full message" },
       { type: "image", mimeType: "image/png", data: "AQID" },
     ]);
-    call.mockResolvedValueOnce({ content: removed ? content : null });
-    await click("Edit queued message");
-    expect(call).toHaveBeenCalledExactlyOnceWith(api.removeQueuedMessage, {
-      sessionId,
-      id: item.id,
-    });
-    const draft = composerStore(client).getState().pendingContent[sessionId]!;
-    expect(draft.draft).toBe(removed ? "Original full message\n\nTyped since" : "Typed since");
-    expect(draft.imageAttachments.map((image) => image.preview)).toEqual(
-      removed ? ["data:image/png;base64,AQID"] : []
+    const remove = Promise.withResolvers<{ removed: boolean }>();
+    call.mockResolvedValueOnce({ content }).mockReturnValueOnce(remove.promise);
+    const edit = click("Edit queued message");
+    await vi.waitFor(() =>
+      expect(call.mock.calls).toEqual([
+        [api.queuedMessage, params],
+        [api.removeQueuedMessage, params],
+      ])
     );
+    const draft = () => composerStore(client).getState().pendingContent[sessionId]!;
+    expect(draft().draft).toBe("Original full message\n\nTyped since");
+    expect(draft().imageAttachments.map((image) => image.preview)).toEqual([
+      "data:image/png;base64,AQID",
+    ]);
+    remove.resolve({ removed });
+    await edit;
+    expect(draft().draft).toBe("Original full message\n\nTyped since");
     expect(error).not.toHaveBeenCalled();
   }
 );
+
+it("leaves the draft alone when the message has already left the queue", async () => {
+  sessionComposerActions.setDraft(sessionId, "Typed since");
+  render({ paused: null, items: [item] });
+  call.mockResolvedValueOnce({ content: null });
+  await click("Edit queued message");
+  expect(call).toHaveBeenCalledExactlyOnceWith(api.queuedMessage, params);
+  expect(composerStore(client).getState().pendingContent[sessionId]?.draft).toBe("Typed since");
+  expect(error).not.toHaveBeenCalled();
+});
+
+it.each(["read", "remove"])("keeps the host's row when Edit loses the %s reply", async (step) => {
+  const data = { paused: null, items: [item] };
+  sessionComposerActions.setDraft(sessionId, "Typed since");
+  render(data);
+  if (step === "remove") call.mockResolvedValueOnce({ content: item.text });
+  call.mockRejectedValueOnce(new Error("Connection lost"));
+  await click("Edit queued message");
+  expect(call).toHaveBeenNthCalledWith(1, api.queuedMessage, params);
+  if (step === "remove") expect(call).toHaveBeenNthCalledWith(2, api.removeQueuedMessage, params);
+  expect(call).toHaveBeenCalledTimes(step === "remove" ? 2 : 1);
+  expect(client.getQueryData(queryKey)).toEqual(data);
+  expect(composerStore(client).getState().pendingContent[sessionId]?.draft).toBe(
+    step === "read" ? "Typed since" : "Review this\n\nTyped since"
+  );
+  expect(error).toHaveBeenCalledExactlyOnceWith("Connection lost");
+});
 
 it("steers and removes by id without changing the cached rows or the draft", async () => {
   const data = { paused: null, items: [item] };
   render(data);
   call.mockResolvedValueOnce({ outcome: "queued" });
   await click("Steer");
-  call.mockResolvedValueOnce({ content: "Removed message" });
+  call.mockResolvedValueOnce({ removed: true });
   await click("Remove queued message");
   expect(call.mock.calls).toEqual([
     [api.steerQueuedMessage, { sessionId, id: item.id }],

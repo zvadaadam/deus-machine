@@ -26,7 +26,11 @@ import {
   type RestoredCloudConversation,
 } from "@shared/cloud-session-snapshot";
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
-import type { ConversationChange, ConversationState } from "@zvada/agent-server/protocol";
+import type {
+  ConversationChange,
+  ConversationState,
+  TurnEndedEvent,
+} from "@zvada/agent-server/protocol";
 import {
   isLiveEnvelope,
   isUnknownEvent,
@@ -49,13 +53,14 @@ import { applySessionFacts, describeEvent, turnOutcomeFor, type SessionFacts } f
 import { refreshPrSnapshotForSession } from "../pr-snapshot.service";
 import { restoreCloudSnapshot } from "./cloud/snapshot";
 import { OpenParts } from "./open-parts";
-import { interruptQueue, steerEcho, turnEnded } from "./queue";
 
 // ---- Types ----
 
+export type TurnEnd = { event: TurnEndedEvent; status?: TurnOutcomeWrite["status"] };
+
 export interface AgentEventHandler {
   /** Feed one sequenced wire envelope (post-dedupe, in seq order). */
-  handle(envelope: DecodedWireEventEnvelope): void;
+  handle(envelope: DecodedWireEventEnvelope): TurnEnd | void;
   /** Restore durable cloud history without executing historical live effects. */
   hydrateCloudSnapshot(
     sessionId: string,
@@ -169,7 +174,9 @@ function pushEnvelope(envelope: DecodedWireEventEnvelope): void {
 // ---- Factory ----
 
 /** Create the agent event handler: persistence + WS push per lifecycle event. */
-export function createAgentEventHandler(): AgentEventHandler {
+export function createAgentEventHandler(
+  onInterrupted?: (sessionId: string, liveTurnId?: string) => void
+): AgentEventHandler {
   const sessions = new Map<string, SessionState>();
   // A client that starts following a chat, or returns to it, first gets the
   // reply still being typed as it stands (see ./open-parts).
@@ -294,7 +301,7 @@ export function createAgentEventHandler(): AgentEventHandler {
         SESSION_RESOURCES,
         sessionId
       );
-      interruptQueue(sessionId, state.turnId);
+      onInterrupted?.(sessionId, state.turnId);
     },
 
     handleTitle(sessionId, title) {
@@ -410,15 +417,11 @@ export function createAgentEventHandler(): AgentEventHandler {
         .otherwise(() => {});
 
       if (!NOT_PUSHED.has(envelope.event.type)) pushEnvelope(envelope);
-      // A queued successor may begin immediately. Publish its predecessor's end first.
       if (envelope.event.type === "turn.ended") {
-        turnEnded(
-          envelope.event,
-          envelope.event.turnId === liveTurnId ? outcome?.status : undefined
-        );
-      }
-      if (envelope.event.type === "message.started" && envelope.event.role === "user") {
-        steerEcho(sessionId, envelope.event.turnId, envelope.event.messageId);
+        return {
+          event: envelope.event,
+          status: envelope.event.turnId === liveTurnId ? outcome?.status : undefined,
+        };
       }
     },
   };
