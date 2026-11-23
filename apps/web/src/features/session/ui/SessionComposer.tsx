@@ -181,7 +181,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
         hasMessages={messages.length > 0}
         environmentUnconfigured={environmentUnconfigured}
         showCompactButton={showCompactButton}
-        onSend={(content) => sendMessage(content)}
+        onSend={sendMessage}
         onCompact={compactConversation}
         onStop={stopSession}
         onOpenNewTab={onOpenNewTab}

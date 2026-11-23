@@ -1,11 +1,6 @@
 // backend/src/services/agent/turns.ts
-// Starting and stopping a turn: what `sendMessage` and `stopSession` do.
-//
-// A send is admitted or refused as a whole. The user's message row is never
-// written here: the engine echoes the prompt back and that echo is the one
-// path that persists messages. So until the turn is admitted, the only copy
-// of the prompt is the sender's optimistic bubble, and every way a send can
-// fail must reject, which is what tells the sender to take the bubble back.
+// Strict turn admission and cancellation, shared by the composer, its queue and the operator.
+// The engine's echo writes the user's message. The caller keeps the prompt until admission.
 
 import { createHash } from "node:crypto";
 import { WireRequestError } from "@zvada/agent-server/client";
@@ -34,6 +29,7 @@ import {
 } from "./persistence";
 import { invalidate } from "../query-engine";
 import * as agentService from "./service";
+import { interruptQueue, stopQueue } from "./queue";
 import {
   startCloudTurn,
   cancelCloudTurn,
@@ -54,6 +50,15 @@ type Admission = { content: string; origin: string | null; done: Promise<{ turnI
 const admissionsOf = new WeakMap<object, Map<string, Admission>>();
 const ADMISSION_KEPT_MS = 10 * 60_000;
 
+/** A retry of an existing turn goes through admission even while its chat is busy. */
+export function knownTurn(sessionId: string, turnId: string): boolean {
+  const db = getDatabase();
+  return (
+    admissionsOf.get(db)?.has(`${sessionId}\0${turnId}`) === true ||
+    !!getTurn(db, sessionId, turnId)
+  );
+}
+
 /** A turn's request as its echo was stored: its text and its sender. */
 function storedRequest(sessionId: string, turnId: string) {
   const db = getDatabase();
@@ -72,7 +77,7 @@ function storedRequest(sessionId: string, turnId: string) {
 }
 
 /**
- * Start a turn in a session. Answers `api.sendMessage`; rejects when the turn
+ * Start a turn in a session. Rejects when the turn
  * is not admitted. The same turn id asked again (a caller retrying a send
  * whose answer it lost) answers as the first did, once that one's admission
  * is known: success only for the same request (text and sender), a pending
@@ -145,8 +150,7 @@ async function sendMessageOnce(
   // will ever answer (the wire rejects the turn with turnActive and the
   // composer shows nothing). "Needs input" counts as active too: plan
   // approval and questions park the RUNNING turn while the overlay waits.
-  // Reject up front — the refusal surfaces in the UI. The wire guard
-  // stays as the backstop for the status race.
+  // The wire guard covers the same race during admission.
   if (session?.is_hidden) throw new ConflictError("That chat is archived; it takes no messages.");
   if (session && ACTIVE_TURN_STATUSES.includes(session.status)) {
     throw new ChatBusyError(
@@ -309,14 +313,6 @@ async function sendMessageOnce(
       throw err;
     }
   } else {
-    // No engine turn can be admitted from here. Flipping the session to "error"
-    // is only half the job: this handler's return value IS the write's answer, so
-    // returning normally would report success for a turn that never ran.
-    // The user's prompt exists in exactly one place at this moment — the
-    // frontend's optimistic bubble — because the backend never writes the user
-    // row (the engine's echo is the single persistence path). A false accept
-    // therefore strands that bubble on screen forever, durable nowhere. Throw so
-    // the write fails and the composer's rollback runs.
     if (!agentService.isConnected()) {
       const err = new AgentServerDisconnectedError();
       handleAgentError(sessionId, err);
@@ -328,24 +324,7 @@ async function sendMessageOnce(
       throw err;
     }
 
-    // Admission is AWAITED, and that is the whole point. `turn/start` is a
-    // quick-ack: the server answers the moment it admits the turn — before the
-    // harness has run a step (it acks, then `void executeTurn`) — so this waits
-    // for a verdict, never for the turn. The streaming half stays where it
-    // belongs, on the event channel.
-    //
-    // The guards above only close the SYNCHRONOUS half of the lost-prompt hole.
-    // Admission can also fail asynchronously: a turnActive race with a second
-    // client, a server shutting down, a harness that will not spawn. Answering
-    // the write before that verdict arrives reports success for a
-    // turn the server then refuses — and the prompt exists in exactly one place
-    // right now, the frontend's optimistic bubble, because the backend never
-    // writes the user row (the engine's echo is the single persistence path).
-    // So every rejection rethrows: a throw fails the write, which is the
-    // only answer that runs the composer's
-    // rollback. Nothing can arrive here AFTER admission — the promise settles on
-    // the ack — so there is no post-ack failure left to handle in the
-    // background.
+    // turn/start answers at admission. The streamed reply arrives through the event handler.
     try {
       await agentService.startTurn(sessionId, turnId, agentHarness, content, {
         cwd,
@@ -364,12 +343,7 @@ async function sendMessageOnce(
         )
         .run(sessionId, turnId);
       if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
-        // The session is legitimately mid-turn — another client won the race
-        // between the status guard above and the wire. That RUNNING turn is
-        // fine, it just is not ours, so the session must NOT be flipped to an
-        // error status. Reject the send and leave the status alone; the wording
-        // matches the synchronous guard, since to the user it is the same "wait
-        // your turn" and the wire's own message leaks a session id.
+        // Another turn won admission. Keep it working and return the typed refusal.
         console.warn(
           `[CommandHandler] sendMessage rejected, turn already active: session=${sessionId}`
         );
@@ -468,8 +442,8 @@ export async function stopSession(
 
   // The credit is the stop that took effect: the first that did keeps it; one that
   // definitely did not (no answer, nothing running) gives up its claim.
+  const tookEffect = result?.outcome === "cancelled" || result?.outcome === "unconfirmed";
   if (targetTurnId) {
-    const tookEffect = result?.outcome === "cancelled" || result?.outcome === "unconfirmed";
     let stops = effectiveStops.get(db);
     if (!stops) effectiveStops.set(db, (stops = new Map()));
     const winner = stops.get(key);
@@ -495,6 +469,7 @@ export async function stopSession(
   )
     return { unconfirmed: false };
 
+  if (tookEffect) stopQueue(sessionId);
   if (result && result.outcome !== "unconfirmed") {
     db.prepare(
       `UPDATE sessions SET status = 'idle', updated_at = datetime('now')
@@ -551,6 +526,7 @@ function scheduleUnconfirmedCancelWatchdog(
         )
         .run(live === undefined ? "error" : null, sessionId, ...ACTIVE_TURN_STATUSES);
       if (result.changes > 0) {
+        interruptQueue(sessionId, live);
         console.warn(`[CommandHandler] unconfirmed cancel never settled: session=${sessionId}`);
         invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
       }
@@ -568,6 +544,7 @@ function handleAgentRejection(sessionId: string, reason?: string): void {
   const msg = reason || "Agent rejected the message";
   console.error(`[CommandHandler] Agent rejected sendMessage for session=${sessionId}: ${msg}`);
   persistSessionError(sessionId, msg, "internal");
+  interruptQueue(sessionId, agentService.liveTurnId(sessionId));
   invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
 }
 
@@ -575,5 +552,6 @@ function handleAgentError(sessionId: string, err: unknown): void {
   const errorMsg = err instanceof Error ? err.message : String(err);
   console.error("[CommandHandler] Failed to forward to agent-server:", errorMsg);
   persistSessionError(sessionId, `Agent server communication failed: ${errorMsg}`, "internal");
+  interruptQueue(sessionId, agentService.liveTurnId(sessionId));
   invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
 }

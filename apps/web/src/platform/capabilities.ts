@@ -20,7 +20,7 @@
  */
 
 const isElectron = typeof window !== "undefined" && "electronAPI" in window;
-const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent);
+export const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent);
 
 export const capabilities = {
   /** Import cookies from local Chromium profiles into the in-app browser.

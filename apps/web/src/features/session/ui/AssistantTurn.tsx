@@ -8,7 +8,7 @@ import { Square, TriangleAlert } from "lucide-react";
 interface AssistantTurnProps {
   messages: Message[];
   turn?: SessionTurn;
-  isOpen: boolean;
+  footerMessages?: Message[];
   isStreaming: boolean;
   startedAt?: string | null;
 }
@@ -16,7 +16,7 @@ interface AssistantTurnProps {
 export const AssistantTurn = memo(function AssistantTurn({
   messages,
   turn,
-  isOpen,
+  footerMessages,
   isStreaming,
   startedAt,
 }: AssistantTurnProps) {
@@ -32,7 +32,7 @@ export const AssistantTurn = memo(function AssistantTurn({
       <div className="flex min-w-0 flex-col gap-1 overflow-x-hidden">
         <PartsRenderer parts={parts} isStreamingTurn={isStreaming} />
       </div>
-      {!isOpen && (
+      {footerMessages && (
         <>
           {isCancelled && (
             <div className="border-warning/20 border-l-warning bg-warning/5 mx-2 flex items-center gap-2.5 rounded-lg border border-l-2 px-3 py-2">
@@ -46,7 +46,7 @@ export const AssistantTurn = memo(function AssistantTurn({
               <span className="text-warning text-sm font-medium">{stopNotice}</span>
             </div>
           )}
-          <TurnFooter messages={messages} turn={turn} startedAt={startedAt} />
+          <TurnFooter messages={footerMessages} turn={turn} startedAt={startedAt} />
         </>
       )}
     </div>

@@ -1,16 +1,4 @@
-/**
- * useSessionActions — send/stop/compact/createPR for a session.
- *
- * Sends with the model shown by the composer and its staged content.
- *
- * Message flow (agent-server-owns-send):
- *   1. user clicks send → useSendMessage routes through socket → agent-server
- *   2. agent-server atomically saves user message + sets status=working +
- *      dispatches agent
- *   3. agent-server streams response → saves to DB → notifies backend
- *   4. backend pushes q:snapshot/q:delta to WS subscribers → React Query
- *      cache → UI updates
- */
+/** Send and steer use the model and settings shown in this chat's composer. */
 
 import type { WorkspaceKind } from "@shared/enums";
 import { canPlan } from "@shared/harnesses";
@@ -39,7 +27,7 @@ interface UseSessionActionsReturn {
    * @param customContent Override the staged content (defaults to composer store's draft).
    * Resolves true only when the send actually reached the backend.
    */
-  sendMessage: (customContent?: string) => Promise<boolean>;
+  sendMessage: (customContent?: string, mode?: "steer") => Promise<boolean>;
   stopSession: () => Promise<void>;
   compactConversation: () => Promise<boolean>;
   createPR: () => Promise<boolean>;
@@ -58,7 +46,7 @@ export function useSessionActions({
   const stopSessionMutation = useStopSession();
 
   const sendMessage = useCallback(
-    async (customContent?: string) => {
+    async (customContent?: string, mode?: "steer") => {
       if (sendMessageMutation.isPending) return false;
 
       const composer = composerStore().getState().composers[sessionId];
@@ -70,6 +58,7 @@ export function useSessionActions({
       const agentHarness = getAgentHarnessForModel(model);
       try {
         await sendMessageMutation.mutateAsync({
+          mode,
           sessionId,
           content,
           model: getModelId(model),

@@ -155,7 +155,7 @@ Single WS connection (`/ws`) using `q:` prefixed JSON frames:
 | `q:request` / `q:response`               | A read, answered once (`diffStats`, `settings`)                                                            |
 | `q:subscribe` / `q:snapshot` / `q:delta` | A live read: its value, sent again whenever it changes (workspaces, sessions)                              |
 | `q:subscribe` / `q:event` / `q:reset`    | A stream of events, sent only to the connections following it (a chat's agent events, a terminal's output) |
-| `q:mutate` / `q:mutate_result`           | A write, never sent twice (archiveWorkspace, sendMessage, stopSession)                                     |
+| `q:mutate` / `q:mutate_result`           | A write, never replayed on reconnect (archiveWorkspace, sendMessage, steerMessage, stopSession)            |
 | `q:tool_response`                        | The answer to something an agent asked this client                                                         |
 
 **One contract.** Every operation and stream a host offers is declared once in
@@ -193,6 +193,19 @@ A compaction of the running turn appears when that turn settles. An unfinished
 last turn record is the open turn. A replay can append an older end, so otherwise
 `session/lib/conversationView.ts` uses the newest message's turn record, or the
 chat's working status until that record arrives.
+
+While a local chat's agent works, Enter in the desktop composer queues the person's
+message and Command-Enter (Ctrl-Enter outside macOS) steers it into the turn.
+With a question or plan card open, both queue. `services/agent/queue.ts` keeps each
+chat's queue in the backend process's memory. Every window follows `queuedMessages`
+for that chat. `session/ui/QueuedMessageList.tsx` shows the text and a picture count.
+Only `removeQueuedMessage` returns the full content. Unread steers appear first.
+If their turn ends before the agent reads them, they go back to the front in order.
+After publishing a normal turn end, the backend sends one waiting message as the next
+turn. A stop or failure pauses the queue until Resume. When the agent reads a steer
+mid-turn, `groupTurns` in `session/lib/chatTimeline.ts` shows one reply in several
+groups with one footer. Cloud chats keep their existing send, including the hosted
+web's direct lane. The operator's `send` to a busy chat still answers `busy`.
 
 A `fileChanges` subscription names one workspace. On macOS its first follower
 opens a recursive watch on the local checkout. The last one leaving, including
@@ -351,11 +364,10 @@ the window (`capabilities.singleWindow`): a browser tab keeps its own
 not find it and send it too; the desktop app, which is one window, keeps it on the
 device (localStorage), so quitting does not lose it either. Quitting before the
 first chat opens stops the start, so the reopened desktop app shows a failed
-start with the message still waiting, and Retry sends it. It is sent once: a chat that already
-has a message, or is answering one, is never sent it again, and a send the
-backend refuses goes into that chat's composer with a toast rather than being
-retried. Send it from anywhere else and two workspaces started in a row lose
-one.
+start with the message still waiting, and Retry sends it. The window sends once,
+skipping a chat already spoken to or working. A local chat that becomes busy after
+the check queues the message. A refusal returns it to that chat's composer with a toast.
+Send it from anywhere else and two workspaces started in a row lose one.
 
 A message the cloud platform refuses after the backend took it (a channel `error`,
 `MESSAGE_SEND_FAILED`) is never lost either, first message or not: its bubble goes and
@@ -385,11 +397,10 @@ message waits per workspace: sending there when nothing waits makes it the
 waiting message. While it waits, Send is disabled and a line says why.
 What is typed there stays in the box and moves to the chat's composer when the chat opens
 (`sessionComposerActions.move`, from `useFirstMessageDelivery`), before the
-waiting message is sent. The waiting message is per client, so another device
-or window can speak to the chat first; this client's message is then never
-sent, and goes into that chat's composer instead (`missedFirstMessages`). A
-failure that cannot be retried has no composer: nothing typed there could be
-sent.
+waiting message is sent. The waiting message is per client. If this client sees
+that another window or device has already spoken, its waiting message goes into
+that chat's composer (`missedFirstMessages`). A failure that cannot be retried
+has no composer: nothing typed there could be sent.
 
 `bun run test:e2e:workspace-start` runs these against the real backend, git and
 web app (see `test/e2e/README.md`).

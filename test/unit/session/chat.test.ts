@@ -1,11 +1,20 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  createSteerEchoParts,
+  createTextPart,
+  createUserEchoParts,
+  echoMessageId,
+  steerMessageId,
+} from "@zvada/agent-server/protocol/factories";
 import { describe, expect, it, vi } from "vitest";
+import { foldEvent, messagesKey } from "@/features/session/lib/agentEventFold";
 import { Chat } from "@/features/session/ui/Chat";
 import { SessionProvider } from "@/features/session/context";
 import type { SessionStatus } from "@shared/enums";
-import type { Message, SessionTurn } from "@shared/types/session";
+import type { LifecycleEvent, Part, ReportedOrigin } from "@shared/protocol-types";
+import type { Message, PaginatedMessages, SessionTurn } from "@shared/types/session";
 
 const scroll = vi.hoisted(() => vi.fn());
 const virtualization = vi.hoisted(() => vi.fn());
@@ -34,6 +43,97 @@ const messages: Message[] = [
     sent_at: "2026-09-09T10:00:00.000Z",
   },
 ];
+
+it("folds a read steer between replies and finishes the same turn once", () => {
+  const client = new QueryClient();
+  const sessionId = "chat";
+  const turnId = "turn";
+  const ctx = {
+    queryClient: client,
+    activeSessionId: sessionId,
+    folds: new Map(),
+    requestRefetch: vi.fn(),
+    scheduleFlush: vi.fn(),
+  };
+  const feed = (event: LifecycleEvent) => foldEvent(ctx, sessionId, event);
+  const stamp = { sessionId, turnId, timestamp: 1000 };
+  function message(
+    role: "user" | "assistant",
+    outputIndex: number,
+    messageId: string,
+    part: Part,
+    origin?: ReportedOrigin
+  ) {
+    const address = { ...stamp, messageId, outputIndex, timestamp: stamp.timestamp + outputIndex };
+    feed({ type: "message.started", role, origin, ...address });
+    feed({
+      type: "message.part",
+      ...address,
+      partIndex: 0,
+      part: { ...part, sessionId, messageId },
+    });
+    feed({ type: "message.ended", ...address });
+  }
+  function render(sessionStatus: SessionStatus) {
+    const page = client.getQueryData<PaginatedMessages>(messagesKey(sessionId))!;
+    expect(page.turns.map((turn) => turn.turnId)).toEqual([turnId]);
+    virtualization.mockReturnValueOnce({ width: 800, height: 900 });
+    return renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(SessionProvider, {
+          sessionStatus,
+          subagentMessages: new Map(),
+          children: createElement(Chat, { ...page, loading: false, sessionStatus }),
+        })
+      )
+    );
+  }
+  try {
+    feed({ type: "turn.started", ...stamp });
+    message("user", 0, echoMessageId(turnId), createUserEchoParts("Review the change", turnId)[0], {
+      kind: "assistant",
+      id: "reviewer",
+      name: "Reviewer",
+    });
+    message(
+      "assistant",
+      1,
+      "before",
+      createTextPart({ sessionId, messageId: "before" }, "First reply", false)
+    );
+    message("user", 2, steerMessageId("s"), createSteerEchoParts("Focus on the tests", "s")[0]);
+    message(
+      "assistant",
+      3,
+      "after",
+      createTextPart({ sessionId, messageId: "after" }, "Second reply", false)
+    );
+
+    const active = render("working");
+    expect(active).toMatch(
+      /Sent from.*Reviewer.*Review the change.*First reply.*Focus on the tests.*Second reply/s
+    );
+    expect(active.match(/Sent from/g)).toHaveLength(1);
+    expect(active).not.toContain("Copy response");
+    expect(active.match(/class="opacity-60"/g)).toHaveLength(1);
+    expect(active.indexOf('class="opacity-60"')).toBeGreaterThan(
+      active.indexOf("Focus on the tests")
+    );
+
+    feed({ type: "turn.ended", ...stamp, timestamp: 2000, stopReason: "cancelled" });
+    const settled = render("idle");
+    expect(settled.match(/Response stopped/g)).toHaveLength(1);
+    expect(settled.match(/aria-label="Copy response"/g)).toHaveLength(1);
+    expect(settled.indexOf("Response stopped")).toBeGreaterThan(settled.indexOf("Second reply"));
+    const virtual = virtualization.mock.calls.at(-1)![0];
+    const keys = Array.from({ length: virtual.count }, (_, index) => virtual.getItemKey(index));
+    expect(new Set(keys).size).toBe(4);
+  } finally {
+    client.clear();
+  }
+});
 
 describe("session alert visibility", () => {
   it.each([

@@ -6,10 +6,13 @@
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { produce } from "immer";
 import { api } from "@shared/api";
+import { ACTIVE_TURN_STATUSES } from "@shared/enums";
 import type { PaginatedMessages } from "@shared/types/session";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
+import { locationOf } from "@/features/sidebar/lib/location";
 import { createOptimisticUserMessage, dropOptimisticMessage } from "../lib/optimisticMessage";
+import { patchWorkspaceSessionStatus } from "../lib/agentEventFold";
 import { SendRejectedError, rollbackSendStatus } from "../lib/sendRollback";
 import {
   useIsDirectSession,
@@ -18,7 +21,7 @@ import {
 } from "../cloud/useIsDirectSession";
 import { getDirectSession } from "../cloud/directSessionRegistry";
 import { uuidv7 } from "@shared/lib/uuid";
-import type { Message, Session, SessionStatus } from "../types";
+import type { Session, SessionStatus } from "../types";
 import type { RepoGroup } from "@shared/types/workspace";
 import { useEffect, useMemo } from "react";
 import { track } from "@/platform/analytics";
@@ -223,6 +226,7 @@ export function newTurnId(): string {
 }
 
 export interface SendMessageVariables {
+  mode?: "steer";
   sessionId: string;
   content: string;
   model: string;
@@ -234,29 +238,13 @@ export interface SendMessageVariables {
   thinkingLevel: string;
 }
 
-/**
- * Send message mutation with optimistic update.
- *
- * The caller mints the turn id and it travels BOTH ways: into the command
- * params (the backend uses it as the engine's `turnId`) and onto the optimistic
- * bubble's `turn_id`. That is what lets the engine's user echo
- * (`message.started{role:"user"}`) replace the bubble in place instead of
- * appending a second one — the reconciliation is keyed on that id, so it has
- * to exist before the send, not after.
- */
+/** A send predicts its echo when it expects to start a turn. The host decides whether it does. */
 export function useSendMessage() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({
-      sessionId,
-      content,
-      model,
-      agentHarness,
-      turnId,
-      permissionMode,
-      thinkingLevel,
-    }: SendMessageVariables): Promise<Message | void> => {
+    mutationFn: async ({ mode, ...input }: SendMessageVariables) => {
+      const { sessionId, content, turnId, model, agentHarness, thinkingLevel } = input;
       // Mac-CLOSED direct lane: a live direct channel means this session streams
       // straight from agnt, so its prompt goes there too — no Mac backend to relay
       // it, and no HTTP fallback (that path targets the same closed backend). The
@@ -283,15 +271,11 @@ export function useSendMessage() {
       const backend = runtimeForQueryClient(queryClient) ?? { isConnected, connect, call };
       if (!backend.isConnected()) await backend.connect();
       try {
-        await backend.call(api.sendMessage, {
-          sessionId,
-          content,
-          model,
-          agentHarness,
-          turnId,
-          permissionMode,
-          thinkingLevel,
-        });
+        if (mode === "steer") {
+          await backend.call(api.steerMessage, input);
+          return;
+        }
+        return await backend.call(api.sendMessage, input);
       } catch (error) {
         // The host understood the send and refused it: sending again would only
         // be refused again. Anything else (a lost reply, no connection) is
@@ -302,11 +286,16 @@ export function useSendMessage() {
       }
     },
 
-    // Optimistic update: show user message immediately.
-    // Status indicators (tab spinner, sidebar) are updated by the workspaces
-    // WS subscription — the agent-server notifies the backend, which pushes fresh
-    // workspace snapshots within ~50ms.
-    onMutate: async ({ sessionId, content, model, turnId }) => {
+    onMutate: async ({ sessionId, content, model, turnId, mode }) => {
+      const session = queryClient.getQueryData<Session>(queryKeys.sessions.detail(sessionId));
+      // A busy local chat shows the host's queue until the engine echoes the message.
+      if (
+        mode === "steer" ||
+        (session?.workspace_kind &&
+          locationOf({ kind: session.workspace_kind }) === "local" &&
+          ACTIVE_TURN_STATUSES.includes(session.status))
+      )
+        return;
       await queryClient.cancelQueries({
         queryKey: queryKeys.sessions.messages(sessionId),
       });
@@ -340,22 +329,21 @@ export function useSendMessage() {
         });
       });
 
-      // Optimistically set workspace status to "working" in sidebar cache.
-      // Handles the startup race where the first IPC event arrives before
-      // the workspace list has loaded (cache empty → event matching fails).
-      queryClient.setQueriesData<RepoGroup[]>({ queryKey: ["workspaces", "by-repo"] }, (old) => {
-        if (!old) return old;
-        return old.map((group) => ({
-          ...group,
-          workspaces: group.workspaces.map((ws) =>
-            ws.current_session_id === sessionId
-              ? { ...ws, session_status: "working" as SessionStatus }
-              : ws
-          ),
-        }));
-      });
+      patchWorkspaceSessionStatus(queryClient, sessionId, "working");
 
       return { previousWorkspaceByRepo };
+    },
+
+    onSuccess: (result, { sessionId, turnId }, context) => {
+      if (!result?.queued || !context) return;
+      // Another turn started before this send reached the host. If the queue
+      // already drained, the engine owns this bubble now.
+      const page = queryClient.getQueryData<PaginatedMessages>(
+        queryKeys.sessions.messages(sessionId)
+      );
+      if (!page?.turns.some((turn) => turn.turnId === turnId))
+        dropOptimisticMessage(queryClient, sessionId, turnId);
+      void queryClient.invalidateQueries({ queryKey: ["workspaces", "by-repo"] });
     },
 
     onError: (_err, variables, context) => {
@@ -381,13 +369,12 @@ export function useSendMessage() {
           emitSendAttemptFailed();
         }
       }
-      // Retire THIS send's bubble, and only it — the toast above is the user's
-      // notice, and the row must not linger pretending the prompt was sent.
+      if (!context) return;
       dropOptimisticMessage(queryClient, variables.sessionId, variables.turnId);
       // Put the sidebar's status back — by REFETCH after a server rejection,
       // or uncertain delivery, and by snapshot only for failures before dispatch.
       // See sendRollback.ts.
-      rollbackSendStatus(queryClient, _err, context?.previousWorkspaceByRepo);
+      rollbackSendStatus(queryClient, _err, context.previousWorkspaceByRepo);
     },
 
     onSettled: async (_, error, variables) => {
@@ -414,8 +401,6 @@ export function useSendMessage() {
           context_used_percent: session?.context_used_percent,
         });
       }
-      // No incrementalFetchAndMerge needed — WS q:delta handles reconciliation.
-      // The optimistic message stays visible until the delta arrives with the real message.
     },
   });
 }

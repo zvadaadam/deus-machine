@@ -3,16 +3,7 @@
 //
 // Wires the AgentLink (the engine, in this process, on the standard wire)
 // straight into the event handler: the engine's lifecycle envelopes go to
-// persistence + WS push with nothing in between. No circular imports — this
-// module imports from its dependencies, none of them import back.
-//
-// Dependency graph (all arrows point down, no cycles):
-//
-//   service (this file)
-//       ├── client              (AgentLink: the in-process engine)
-//       ├── event-handler       (factory: createAgentEventHandler)
-//       ├── run-config          (turn params assembly)
-//       └── tool-relay          (frontend RPC relay)
+// persistence + WS push with nothing in between.
 //
 // Initialized once at startup in server.ts via agentService.init().
 
@@ -24,6 +15,7 @@ import type {
   PermissionOutcome,
   PermissionRequestedEvent,
   TurnCancelResult,
+  TurnSteerParams,
 } from "@zvada/agent-server/protocol";
 import {
   allowOnce,
@@ -38,7 +30,7 @@ import { AgentLink } from "./client";
 import { LocalAgents } from "./local-agents";
 import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
 import { createAgentEventHandler, type AgentEventHandler } from "./event-handler";
-import { buildTurnStartParams, type DeusTurnOptions } from "./run-config";
+import { buildTurnStartParams, withoutImageParts, type DeusTurnOptions } from "./run-config";
 import { toolRequests } from "@shared/api/sessions";
 import { isPrompt, pendingFor, relay } from "./tool-relay";
 import { resolveTurnApps } from "../integrations";
@@ -176,8 +168,7 @@ export async function startTurn(
     agentDeviceSession: device.session,
     simulator: device.udid ? { udid: device.udid } : null,
     // Negotiated at the handshake, not guessed from a harness list.
-    supportsImages:
-      link.getAgents().find((a) => a.type === agentHarness)?.capabilities.images ?? false,
+    supportsImages: supportsImages(agentHarness),
   });
   // Mirror the admission BEFORE the quick-ack round-trip: the server can push
   // the first envelopes in the same tick the ack line is processed, and the
@@ -195,6 +186,18 @@ export async function startTurn(
   // view was stale (e.g. backend restart); register for real now.
   if (!registered) events?.beginTurn(sessionId, turnId, { force: true });
   events?.confirmTurn(sessionId, turnId);
+}
+
+function supportsImages(harness: string): boolean {
+  return link?.getAgents().find((a) => a.type === harness)?.capabilities.images ?? false;
+}
+
+export async function steerTurn(harness: string, params: TurnSteerParams) {
+  if (!link) throw new AgentServerDisconnectedError();
+  return link.engine.steerTurn({
+    ...params,
+    input: supportsImages(harness) ? params.input : withoutImageParts(params.input),
+  });
 }
 
 /**

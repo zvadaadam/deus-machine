@@ -35,7 +35,6 @@ interface ChatProps {
   /** Structured error category from classifyError (e.g. "auth", "rate_limit") */
   errorCategory?: string;
   agentHarness?: string | null;
-  latestMessageSentAt?: string | null;
   onRetryInNewChat?: () => void;
   /** True when there are older messages beyond the loaded window */
   hasOlder?: boolean;
@@ -72,7 +71,6 @@ export function Chat({
   errorMessage,
   errorCategory,
   agentHarness,
-  latestMessageSentAt,
   onRetryInNewChat,
   hasOlder = false,
   loadingOlder = false,
@@ -114,12 +112,6 @@ export function Chat({
   // entrance animation mid-play (which causes visible jumps).
   const animatedTurnsRef = useRef(new Set<number>());
 
-  // Track working duration
-  const { formattedDuration } = useWorkingDuration({
-    status: sessionStatus,
-    latestMessageSentAt,
-  });
-
   // Cloud setup story — spliced into the timeline chronologically (after the
   // send that triggered it, before the reply). Empty for local workspaces.
   const cloudEnvEntries = useCloudEnvEntries(workspaceId);
@@ -131,11 +123,16 @@ export function Chat({
     items: timeline,
     spacings: turnSpacings,
     activity,
+    activeStartedAt,
     lastRole,
   } = useMemo(
     () => buildChatTimeline(messages, compactions, active, cloudEnvEntries, turns, workspaceStart),
     [messages, compactions, active, cloudEnvEntries, turns, workspaceStart]
   );
+  const { formattedDuration } = useWorkingDuration({
+    status: sessionStatus,
+    latestMessageSentAt: activeStartedAt,
+  });
 
   /**
    * What the agent is doing right now → the CircularPixelGrid variant.
@@ -213,6 +210,7 @@ export function Chat({
       if (item.type === "cloudEnv") return `cloudEnv:${item.entries[0]?.id ?? index}`;
       if (item.type === "start") return "start";
       if (item.type === "user") return item.message.id;
+      if (item.afterUserId) return `reply:${item.afterUserId}`;
       return item.turnId ? `turn:${item.turnId}` : item.messages[0].id;
     },
     [timeline]
@@ -353,8 +351,8 @@ export function Chat({
                             <AssistantTurn
                               messages={t.messages}
                               turn={t.record}
-                              isOpen={t.isOpen}
-                              isStreaming={t.isOpen && t.isLatest && working}
+                              footerMessages={t.footerMessages}
+                              isStreaming={t.isStreaming && working}
                               startedAt={t.startedAt}
                             />
                           ))

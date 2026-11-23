@@ -41,6 +41,7 @@ import {
   persistChanges,
   persistSessionTitle,
   persistSessionError,
+  type TurnOutcomeWrite,
   type WriteResult,
 } from "./persistence";
 import { pushCloudSessionTitle } from "./cloud/driver";
@@ -48,6 +49,7 @@ import { applySessionFacts, describeEvent, turnOutcomeFor, type SessionFacts } f
 import { refreshPrSnapshotForSession } from "../pr-snapshot.service";
 import { restoreCloudSnapshot } from "./cloud/snapshot";
 import { OpenParts } from "./open-parts";
+import { interruptQueue, steerEcho, turnEnded } from "./queue";
 
 // ---- Types ----
 
@@ -292,6 +294,7 @@ export function createAgentEventHandler(): AgentEventHandler {
         SESSION_RESOURCES,
         sessionId
       );
+      interruptQueue(sessionId, state.turnId);
     },
 
     handleTitle(sessionId, title) {
@@ -347,13 +350,14 @@ export function createAgentEventHandler(): AgentEventHandler {
       // hot path (measured: 200 deltas → 200 writes, ~169 KB for a 1.7 KB
       // message), for durability the protocol explicitly does not promise.
       const isDelta = envelope.event.type === "message.part.delta";
+      let outcome: TurnOutcomeWrite | undefined;
       const writes = isDelta
         ? []
         : persistChanges(
             sessionId,
             conversation,
             changes,
-            (turn) => turnOutcomeFor(state, turn),
+            (turn) => (outcome = turnOutcomeFor(state, turn)),
             turnProviderCredentialSource(envelope.event)
           );
 
@@ -405,6 +409,11 @@ export function createAgentEventHandler(): AgentEventHandler {
         .otherwise(() => {});
 
       if (!NOT_PUSHED.has(envelope.event.type)) pushEnvelope(envelope);
+      // A queued successor may begin immediately. Publish its predecessor's end first.
+      if (envelope.event.type === "turn.ended") turnEnded(envelope.event, outcome?.status);
+      if (envelope.event.type === "message.started" && envelope.event.role === "user") {
+        steerEcho(sessionId, envelope.event.turnId, envelope.event.messageId);
+      }
     },
   };
 }
