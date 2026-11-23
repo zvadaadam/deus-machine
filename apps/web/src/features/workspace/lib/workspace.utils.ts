@@ -8,8 +8,12 @@ export const STATUS_BG: Record<FileChangeStatus, string> = {
   renamed: "bg-warning",
 };
 
+export function renameOriginLabel(previousPath: string): string {
+  return `renamed from ${previousPath}`;
+}
+
 export function fileChangeLabel({ file, status, previous_path }: FileChange): string {
-  return previous_path ? `${file} (${status} from ${previous_path})` : `${file} (${status})`;
+  return `${file} (${previous_path ? renameOriginLabel(previous_path) : status})`;
 }
 
 /**

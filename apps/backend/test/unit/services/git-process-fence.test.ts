@@ -3,6 +3,9 @@ import path from "node:path";
 import ts from "typescript";
 import { expect, it } from "vitest";
 
+// This trips on ordinary direct git spawns in shipping code, skipping scripts/ folders.
+// A program name held in a constant, Bun's object form or shell template, and `env git`
+// are outside the check.
 const root = path.resolve(__dirname, "../../../../..");
 const owner = "shared/lib/git-process.ts";
 const runners = new Set([
@@ -61,6 +64,14 @@ function gitSpawns(file: string, source: string): string[] {
       const runner = name(call.expression);
       if (!runners.has(runner)) return false;
       const [program, args] = call.arguments;
+      if (
+        program &&
+        ts.isCallExpression(program) &&
+        name(program.expression) === "resolveCliExecutable"
+      ) {
+        const [tool] = program.arguments;
+        return tool && ts.isStringLiteralLike(tool) && tool.text === "git";
+      }
       const command = literal(
         program && ts.isArrayLiteralExpression(program) ? program.elements[0] : program
       );
@@ -94,6 +105,7 @@ it("reports the file and line of a direct git call, including aliases and shell 
     'wrap(execute)("git", ["status"]);',
     'Bun.spawnSync(["git", "version"]);',
     'execFile("/usr/bin/git", ["status"]);',
+    'execFileAsync(resolveCliExecutable("git"), ["status"]);',
   ].join("\n");
   expect(gitSpawns("old.ts", fixture)).toEqual([
     "old.ts:1",
@@ -103,6 +115,7 @@ it("reports the file and line of a direct git call, including aliases and shell 
     "old.ts:11",
     "old.ts:12",
     "old.ts:13",
+    "old.ts:14",
   ]);
 });
 

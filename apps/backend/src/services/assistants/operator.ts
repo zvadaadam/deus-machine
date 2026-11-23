@@ -40,7 +40,7 @@ import { getServerName } from "../server-name";
 import { currentHost } from "./access";
 import { addProjectTool } from "./add-project";
 import { FEEDBACK_CATEGORIES, FeedbackNotSent, sendFeedback } from "./feedback";
-import { createDeusHost, refusing, whereSentence, type DeusHost } from "./host";
+import { createDeusHost, formatFileChange, refusing, whereSentence, type DeusHost } from "./host";
 import * as store from "./store";
 
 /** One file's diff is cut here: enough to review a change, not a whole regenerated file. */
@@ -120,10 +120,7 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
         const shown = files.slice(0, FILES_LIMIT);
         return [
           `${name}: ${total} file(s) changed`,
-          ...shown.map((f) => {
-            const from = f.previous_path ? ` (renamed from ${quoted(f.previous_path)})` : "";
-            return `  ${quoted(f.file)}${from}  +${f.additions} -${f.deletions}`;
-          }),
+          ...shown.map((change) => `  ${formatFileChange(change)}`),
           ...(total > shown.length ? [`  (and ${total - shown.length} more)`] : []),
           `  ${callHint("read_changes", { session, file: shown[0]!.file })}`,
         ].join("\n");

@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { PROJECT_ENVIRONMENT_PATH } from "@deus-hq/api";
 import type { FileMatch, FileTreeNode, FileTreeResponse } from "@shared/types/files";
+import { isBinaryContent } from "../lib/file-content";
 
 /** In-memory cache with TTL to avoid rescanning on every request. */
 const scanCache = new Map<string, { data: Promise<FileTreeResponse>; expiresAt: number }>();
@@ -303,8 +304,5 @@ export function fuzzySearchPaths(
  */
 export function readTextFile(filePath: string): string | null {
   const buf = fs.readFileSync(filePath);
-  // Detect binary files
-  const sample = buf.subarray(0, 8192);
-  if (sample.includes(0)) return null;
-  return buf.toString("utf-8");
+  return isBinaryContent(buf) ? null : buf.toString("utf-8");
 }

@@ -11,7 +11,7 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
-import { fileChangeLabel } from "../lib/workspace.utils";
+import { fileChangeLabel, renameOriginLabel } from "../lib/workspace.utils";
 import { DiffViewer } from "./DiffViewer";
 import { useFileDiff } from "../api/workspace.queries";
 import { PierreFileIcon } from "@/features/file-browser/lib/pierreIcons";
@@ -126,8 +126,7 @@ function ChangesDiffSectionInner({
             {filePath}
             {fileChange.previous_path && (
               <span className="text-text-muted font-normal">
-                {" "}
-                (renamed from {fileChange.previous_path})
+                {` (${renameOriginLabel(fileChange.previous_path)})`}
               </span>
             )}
           </span>

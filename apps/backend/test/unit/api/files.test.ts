@@ -8,7 +8,6 @@ import { operations } from "../../helpers";
 
 const files = vi.hoisted(() => ({
   scanWorkspaceFiles: vi.fn(),
-  invalidateCache: vi.fn(),
   readTextFile: vi.fn(),
   listTopFiles: vi.fn(),
   fuzzySearchFiles: vi.fn(),
@@ -82,13 +81,6 @@ describe("workspaceFiles", () => {
       statusCode: 400,
       message: "workspaceFiles requires workspaceId",
     });
-  });
-});
-
-describe("invalidateFileCache", () => {
-  it("forgets the workspace's scan and answers nothing", async () => {
-    expect(await run(api.invalidateFileCache, workspace)).toBeUndefined();
-    expect(files.invalidateCache).toHaveBeenCalledWith(WORKSPACE_PATH);
   });
 });
 

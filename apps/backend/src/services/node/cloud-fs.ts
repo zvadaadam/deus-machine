@@ -90,12 +90,6 @@ export function listCloudTree(sessionId: string): Promise<CloudList> {
   return promise;
 }
 
-/** Drop a session's cached tree — an in-flight one too, so a refresh can't be
- *  clobbered by the list it raced. */
-export function invalidateCloudTree(sessionId: string): void {
-  cloudTreeCache.delete(sessionId);
-}
-
 export function flattenCloudTree(tree: CloudFsNode[]): string[] {
   const paths: string[] = [];
   const walk = (nodes: CloudFsNode[]) => {

@@ -57,6 +57,19 @@ async function commitBase(files: Record<string, string> = {}, branch = "main") {
   await git("commit", "--allow-empty", "-qm", "Base");
 }
 
+function traceGit() {
+  const trace = path.join(root, ".git", "trace.jsonl");
+  vi.stubEnv("GIT_TRACE2_EVENT", trace);
+  return (): string[][] =>
+    fs
+      .readFileSync(trace, "utf8")
+      .trimEnd()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+      .filter((event) => event.event === "start")
+      .map((event) => event.argv.slice(1));
+}
+
 interface Fixture {
   status: FileChange["status"];
   lines: [added: number, removed: number];
@@ -337,27 +350,49 @@ it("shares one whole-tree read across concurrent opens, the list and stats", asy
   const paths = Array.from({ length: 512 }, (_, i) => `file-${i}`);
   await commitBase(Object.fromEntries(paths.map((file) => [file, "before\n"])));
   for (const file of paths) write(file, "after\n");
-  const trace = path.join(root, ".git", "trace.jsonl");
-  vi.stubEnv("GIT_TRACE2_EVENT", trace);
-  const scans = () =>
-    fs
-      .readFileSync(trace, "utf8")
-      .trimEnd()
-      .split("\n")
-      .map((line) => JSON.parse(line))
-      .filter((event) => event.event === "start" && event.argv.includes("--raw")).length;
+  write("untracked", "new\n");
+  const reads = vi.spyOn(fs.promises, "readFile");
+  const commands = traceGit();
+  const scans = (arg: string) => commands().filter((args) => args.includes(arg)).length;
   const [files, stats, ...details] = await Promise.all([
     getDiffFiles(root, "main"),
     getDiffStats(root, "main"),
     ...paths.slice(0, 8).map((file) => getFileDiff(root, "main", file)),
   ]);
-  expect(files).toHaveLength(paths.length);
-  expect(stats).toEqual({ additions: paths.length, deletions: paths.length });
+  expect(files).toHaveLength(paths.length + 1);
+  expect(stats).toEqual({ additions: paths.length + 1, deletions: paths.length });
   for (const detail of details) expect(detail.diff).toContain("-before\n+after");
-  expect(scans()).toBe(1);
+  expect(scans("--raw")).toBe(1);
+  expect(scans("ls-files")).toBe(1);
+  expect(reads.mock.calls.filter(([file]) => file === path.join(root, "untracked"))).toHaveLength(
+    1
+  );
   write(paths[0], "before\n");
-  expect(await getDiffFiles(root, "main")).toHaveLength(paths.length - 1);
-  expect(scans()).toBe(2);
+  expect(await getDiffFiles(root, "main")).toHaveLength(paths.length);
+  expect(scans("--raw")).toBe(2);
+});
+
+it("opens only the selected file and scopes the untracked lookup to its literal name", async () => {
+  await commitBase({ tracked: "before\n" });
+  write("tracked", "after\n");
+  const file = "new[1].txt";
+  write(file, "selected\n");
+  write("new1.txt", "sibling\n");
+  write("folder/child", "descendant\n");
+  const reads = vi.spyOn(fs.promises, "readFile");
+  const commands = traceGit();
+  const untrackedLookups = () => commands().filter((args) => args.includes("ls-files"));
+
+  expect((await getFileDiff(root, "main", "tracked")).new_content).toBe("after\n");
+  expect(reads.mock.calls).toEqual([[path.join(root, "tracked")]]);
+  expect(untrackedLookups()).toEqual([]);
+  reads.mockClear();
+  expect((await getFileDiff(root, "main", file)).new_content).toBe("selected\n");
+  expect(reads.mock.calls).toEqual([[path.join(root, file)]]);
+  expect(untrackedLookups()).toEqual([
+    ["--literal-pathspecs", "ls-files", "--others", "--exclude-standard", "-z", "--", file],
+  ]);
+  await expect(getFileDiff(root, "main", "folder")).rejects.toMatchObject({ statusCode: 404 });
 });
 
 it("diffs a link itself and refuses files outside the change list", async () => {

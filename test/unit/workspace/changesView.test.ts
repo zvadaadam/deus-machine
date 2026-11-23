@@ -17,6 +17,7 @@ const rename = {
   additions: 1,
   deletions: 0,
 } as const;
+const expectedOrigin = `renamed from ${rename.previous_path}`;
 const changes: FileChange[] = [
   { file: "empty", status: "added", additions: 0, deletions: 0 },
   { file: "appended", status: "modified", additions: 1, deletions: 0 },
@@ -47,8 +48,10 @@ vi.mock("@/features/file-browser/lib/pierreIcons", () => ({ PierreFileIcon: () =
 vi.mock("@/shared/lib/diffOptions", () => ({ useDiffOptions: () => ({}) }));
 
 const readChanges = vi.hoisted(() => vi.fn());
-vi.mock("@/features/workspace/api/workspace.queries", () => ({ useFileChanges: readChanges }));
-vi.mock("@/features/workspace/ui/ChangesDiffViewer", () => ({ ChangesDiffViewer: () => null }));
+vi.mock("@/features/workspace/api/workspace.queries", () => ({
+  useFileChanges: readChanges,
+  useFileDiff: () => ({}),
+}));
 vi.mock("@/features/workspace/ui/CloudSandboxGate", () => ({ CloudSandboxGate: () => null }));
 
 it("shows a failed read in the Changes tab and reserves the empty state for a successful read", () => {
@@ -65,10 +68,18 @@ it("shows a failed read in the Changes tab and reserves the empty state for a su
 it("shows the four statuses from git in Changes", () => {
   readChanges.mockReturnValueOnce({ data: { files: changes } });
   const list = renderToStaticMarkup(createElement(ChangesView, { workspace }));
-  for (const { file, status, previous_path } of changes) {
-    const description = previous_path ? `renamed from ${previous_path}` : status;
+  for (const { file, status } of changes) {
+    const description = status === "renamed" ? expectedOrigin : status;
     expect(list).toContain(`aria-label="${file} (${description})"`);
   }
+  expect(list).toContain(`> (${expectedOrigin})</span>`);
+});
+
+it("shows the rename origin in the phone's Changes header", () => {
+  readChanges.mockReturnValueOnce({ data: { files: [rename] } });
+  const phone = renderToStaticMarkup(createElement(ChangesView, { workspace, compact: true }));
+  expect(phone).toContain(`title="${rename.file} (${expectedOrigin})"`);
+  expect(phone).toContain(`> (${expectedOrigin})</span>`);
 });
 
 it("decorates the files in the Files tab and opens a rename at its current path", () => {
@@ -86,7 +97,8 @@ it("decorates the files in the Files tab and opens a rename at its current path"
   for (const status of ["added", "modified", "deleted", "renamed"]) {
     expect(shadowHtml).toContain(`title="Git status: ${status}">${status[0].toUpperCase()}</span>`);
   }
-  expect(shadowHtml).toContain(`Renamed from ${rename.previous_path}`);
+  expect(shadowHtml).toContain(`title="${expectedOrigin}"`);
+  expect(shadowHtml).toContain(`>${expectedOrigin} +1<`);
   const model = tree.mock.results.at(-1)!.value.model;
   expect(model.getItem("untouched.md")).not.toBeNull();
   expect(model.getItem("staged-deletion.txt")).toBeNull();

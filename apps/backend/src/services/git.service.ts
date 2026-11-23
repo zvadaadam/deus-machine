@@ -4,6 +4,7 @@ import type { FileDiff } from "@shared/api/workspaces";
 import { GitError, runGit } from "@shared/lib/git-process";
 import type { DiffStats, FileChange, FileChangeStatus } from "@shared/types/workspace";
 import { ConflictError, NotFoundError } from "../lib/errors";
+import { isBinaryContent } from "../lib/file-content";
 
 /** Outlasts several sidebar polls. Retargeting a workspace changes the key immediately. */
 const parentBranchCache = new Map<string, { branch: string; expiresAt: number }>();
@@ -167,35 +168,34 @@ export function parseDiffFiles(output: string): Map<string, ChangedPath> {
   return changes;
 }
 
-const pendingChanges = new Map<string, Promise<Map<string, ChangedPath>>>();
-
-function changedPaths(cwd: string, base: string) {
-  const key = cwd + "\0" + base;
-  const pending = pendingChanges.get(key);
-  if (pending) return pending;
-  const read = readChangedPaths(cwd, base).finally(() => pendingChanges.delete(key));
-  pendingChanges.set(key, read);
-  return read;
+function sharePending<T>(read: (cwd: string, base: string) => Promise<T>) {
+  const pending = new Map<string, Promise<T>>();
+  return (cwd: string, base: string) => {
+    const key = cwd + "\0" + base;
+    let result = pending.get(key);
+    if (!result) {
+      result = read(cwd, base).finally(() => pending.delete(key));
+      pending.set(key, result);
+    }
+    return result;
+  };
 }
 
-async function readChangedPaths(cwd: string, base: string) {
-  const options = { cwd, timeoutMs: 5000 };
-  const tracked = await runGit(["diff", base, "-M", "--raw", "--numstat", "-z", "--"], options);
-  const changes = parseDiffFiles(tracked);
-  const untracked = await runGit(["ls-files", "--others", "--exclude-standard", "-z"], options);
-  // One row per path. A staged deletion can leave an untracked replacement on disk.
-  for (const file of untracked.split("\0").slice(0, -1)) {
-    const entry = changes.get(file);
-    if (entry && entry.change.status !== "deleted") continue;
-    const additions = await countFileLines(path.join(cwd, file));
-    if (entry) {
-      entry.change.status = "modified";
-      entry.change.additions = additions;
-    } else {
-      changes.set(file, { change: { file, status: "added", additions, deletions: 0 } });
-    }
-  }
-  return changes;
+const trackedChanges = sharePending(async (cwd, base) => {
+  const args = ["diff", base, "-M", "--raw", "--numstat", "-z", "--"];
+  return parseDiffFiles(await runGit(args, { cwd, timeoutMs: 5000 }));
+});
+
+async function untrackedFiles(cwd: string, file?: string) {
+  const args = ["--literal-pathspecs", "ls-files", "--others", "--exclude-standard", "-z", "--"];
+  if (file !== undefined) args.push(file);
+  return (await runGit(args, { cwd, timeoutMs: 5000 })).split("\0").slice(0, -1);
+}
+
+// One row per path. A staged deletion can leave an untracked replacement on disk.
+function statusIfUntracked(status?: FileChangeStatus) {
+  if (!status) return "added";
+  if (status === "deleted") return "modified";
 }
 
 /** Git records the link itself. Following it could read outside the workspace. */
@@ -207,7 +207,7 @@ async function readWorkingFile(filePath: string) {
     if (!stat.isFile()) return null;
     if (stat.size > 10 * 1024 * 1024) return { symlink: false, bytes: null };
     const bytes = await fs.readFile(filePath);
-    return { symlink: false, bytes: bytes.subarray(0, 8192).includes(0) ? null : bytes };
+    return { symlink: false, bytes: isBinaryContent(bytes) ? null : bytes };
   } catch {
     return null;
   }
@@ -223,9 +223,29 @@ async function countFileLines(filePath: string): Promise<number> {
   return count;
 }
 
+const COUNT_CONCURRENCY = 8;
+const listChanges = sharePending(async (cwd, base) => {
+  const [tracked, untracked] = await Promise.all([trackedChanges(cwd, base), untrackedFiles(cwd)]);
+  const files = new Map(tracked);
+  const names = untracked.values();
+  async function countUntracked() {
+    for (const file of names) {
+      const { status: trackedStatus, deletions = 0 } = files.get(file)?.change ?? {};
+      const status = statusIfUntracked(trackedStatus);
+      if (!status) continue;
+      const change: FileChange = { file, status, additions: 0, deletions };
+      files.set(file, { change });
+      change.additions = await countFileLines(path.join(cwd, file));
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(COUNT_CONCURRENCY, untracked.length) }, countUntracked)
+  );
+  return Array.from(files.values(), ({ change }) => change);
+});
+
 export async function getDiffFiles(cwd: string, parentBranch: string): Promise<FileChange[]> {
-  const base = await getMergeBase(cwd, parentBranch);
-  return Array.from((await changedPaths(cwd, base)).values(), ({ change }) => change);
+  return listChanges(cwd, await getMergeBase(cwd, parentBranch));
 }
 
 export function sumDiffStats(files: readonly DiffStats[]): DiffStats {
@@ -262,13 +282,12 @@ export async function getFileDiff(
   file: string
 ): Promise<FileDiff> {
   const base = await getMergeBase(cwd, parentBranch);
-  const entry = (await changedPaths(cwd, base)).get(file);
-  if (!entry) throw new NotFoundError("This file has no changes.");
-  const {
-    change: { status, previous_path },
-    raw,
-  } = entry;
-  const source = previous_path ?? file;
+  const { change, raw } = (await trackedChanges(cwd, base)).get(file) ?? {};
+  let status = change?.status;
+  const untracked = statusIfUntracked(status);
+  if (untracked && (await untrackedFiles(cwd, file)).includes(file)) status = untracked;
+  if (!status) throw new NotFoundError("This file has no changes.");
+  const source = change?.previous_path ?? file;
   let oldContent: string | null = null;
   if (status === "added") oldContent = "";
   else if (raw?.oldMode !== "160000") oldContent = await getGitFileContent(cwd, base, source);

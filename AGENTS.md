@@ -304,10 +304,10 @@ progress channel: the desktop, the web app and a phone all follow it.
   `shared/lib/git-process.ts` (`runGit`; `git-process-fence.test.ts` trips
   on the ordinary spellings of a direct spawn): no prompts, `LC_ALL=C`, its
   own process group, and a timeout and a stdout limit that stop the whole
-  group. An `execFile` timeout stops only
-  git itself, and `git worktree add`'s checkout child keeps writing; a
-  worktree cut short stays locked, which only
-  `git worktree remove --force --force` clears (`removeWorktree`).
+  group. An `execFile` timeout stops only git itself, and
+  `git worktree add`'s checkout child keeps writing; a worktree cut short
+  stays locked, which only `git worktree remove --force --force` clears
+  (`removeWorktree`).
 - A name is free only if the database, the `.deus` folder and the repository's
   branches all lack it; a name found taken is never reused or removed.
 - Cloud workspaces provision through `cloud-workspace-init.service.ts`. They
@@ -524,9 +524,10 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   `~/Developer/<name>` when that folder is already its clone, refuses any other
   folder there in words, and otherwise runs the app's own clone and add
   (`gitClone`, `addRepo`, through `act`) into `~/Developer/<name>`, which
-  gives a folderless project its folder. Its answers, and a failed start's
-  reason, name folders under the home folder as `~/…` (`home-relative.ts`);
-  what is stored stays absolute. A clone outlasting the call answers
+  gives a folderless project its folder. Its answers, and the reason an
+  assistant is given for a session in error, name folders under the home
+  folder as `~/…` (`home-relative.ts`); what is stored stays absolute. A
+  clone outlasting the call answers
   "still cloning"; a second call for that folder joins it, and the first call
   after it ends hears the outcome. The address rule (`lib/clone-address.ts`)
   is the app's clone's too: https or ssh only, no credentials, whitespace,

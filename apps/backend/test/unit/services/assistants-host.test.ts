@@ -1846,20 +1846,28 @@ describe("what still lives in Deus (H18, H19)", () => {
     expect(state.feedback).toHaveLength(1);
   });
 
-  it("read_changes lists a rename and opens it by the listed destination only", async () => {
-    const file = "folder/café.txt";
-    const previous = 'folder/old "name".txt';
+  it("lists a rename in outcomes and read_changes, which opens its destination", async () => {
+    const file = "folder/café\nnotes.txt";
+    const previous = 'folder/old\n"name".txt';
+    const shownFile = '"folder/café notes.txt"';
+    const shownPrevious = '"folder/old \\"name\\".txt"';
     let additions = 1;
     state.ops.diffFiles = () => ({
       files: [
-        { file: "folder\\café.txt", status: "modified", additions: 1, deletions: 0 },
+        { file: file.replace("/", "\\"), status: "modified", additions: 0, deletions: 2 },
         { file, previous_path: previous, status: "renamed", additions, deletions: 0 },
       ],
+      truncated: true,
+      total_count: 3,
     });
     const open = vi.fn(() => ({ diff: "+x" }));
     state.ops.diffFile = open;
     const listed = await call(LOCAL_CALLER, "read_changes", { session: "lead" });
-    expect(listed.text).toContain(`"${file}" (renamed from ${JSON.stringify(previous)})  +1 -0`);
+    const modified = '"folder\\\\café notes.txt" +0 -2';
+    const renamed = `${shownFile} (renamed from ${shownPrevious}) +1 -0`;
+    const waited = await call(LOCAL_CALLER, "wait_for_sessions", { sessions: ["lead"], wait: 0 });
+    expect(waited.text.split("\n")).toContain(`  changes: ${modified}, ${renamed}, and 1 more`);
+    expect(listed.text).toContain(`\n  ${modified}\n  ${renamed}\n  (and 1 more)\n`);
     for (const name of [previous, ".env"]) {
       const refused = await call(LOCAL_CALLER, "read_changes", { session: "lead", file: name });
       expect(refused.isError).toBe(true);
@@ -1867,14 +1875,14 @@ describe("what still lives in Deus (H18, H19)", () => {
     }
     expect(open).not.toHaveBeenCalled();
     const shown = await call(LOCAL_CALLER, "read_changes", { session: "lead", file: `./${file}` });
-    expect(shown.text).toContain(`diff of "${file}"`);
+    expect(shown.text).toContain(`diff of ${shownFile}`);
     expect(shown.text).toContain("  | +x");
     expect(open).toHaveBeenCalledWith({ workspaceId: "w-lead", file });
     additions = 0;
     open.mockReturnValue({ diff: "" });
     const pure = await call(LOCAL_CALLER, "read_changes", { session: "lead", file });
     expect(pure.text).toContain(
-      `${JSON.stringify(file)} was renamed from ${JSON.stringify(previous)}. Its content is unchanged.`
+      `${shownFile} was renamed from ${shownPrevious}. Its content is unchanged.`
     );
   });
 });

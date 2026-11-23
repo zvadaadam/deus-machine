@@ -33,6 +33,7 @@ import {
   OperatorError,
   Refused,
   callHint,
+  quoted,
   refuse,
   refOf,
   type Answer,
@@ -54,6 +55,7 @@ import * as sessions from "@shared/api/sessions";
 import { agentModels } from "@shared/api/settings";
 import { uuidv7 } from "@shared/lib/uuid";
 import * as workspaces from "@shared/api/workspaces";
+import type { FileChange } from "@shared/types/workspace";
 import { ACTIVE_TURN_STATUSES } from "@shared/enums";
 import { HARNESSES, knownHarness } from "@shared/harnesses";
 import { githubRepoSlug } from "@shared/git-origin";
@@ -253,6 +255,11 @@ export async function refusing<T>(work: () => Promise<T> | T): Promise<T> {
  */
 export const whereSentence = () =>
   `These are the coding agents on the computer ${JSON.stringify(getServerName())} itself: its own workspaces and their chats. Cloud workspaces are not listed here.`;
+
+export function formatFileChange(change: FileChange): string {
+  const from = change.previous_path ? ` (renamed from ${quoted(change.previous_path)})` : "";
+  return `${quoted(change.file)}${from} +${change.additions} -${change.deletions}`;
+}
 
 /** The agents a start may name, as a refusal lists them: `"claude-code" (Claude Code) and …`. */
 const AGENT_NAMES = new Intl.ListFormat("en").format(
@@ -915,9 +922,7 @@ export function createDeusHost(): DeusHost {
           workspaceId: entry.workspace.id,
         });
         if (files.length === 0) return "changes: none";
-        const shown = files
-          .slice(0, 10)
-          .map((f) => `${JSON.stringify(f.file)} (+${f.additions} -${f.deletions})`);
+        const shown = files.slice(0, 10).map(formatFileChange);
         const more = (total_count ?? files.length) - shown.length;
         return `changes: ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""}`;
       } catch (error) {

@@ -13,6 +13,7 @@ import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react";
 import type { FileTreeRowDecorationRenderer, GitStatusEntry } from "@pierre/trees";
 import "@pierre/trees/web-components";
 
+import { renameOriginLabel } from "@/features/workspace/lib/workspace.utils";
 import type { FileTreeNode } from "../../types";
 import { fileTreeThemeStyles } from "../../lib/fileTreeTheme";
 
@@ -95,7 +96,7 @@ export function FileTree({
 
         const node = fileLookupRef.current.get(row.path);
         if (!node) return null;
-        const origin = node.previous_path && `Renamed from ${node.previous_path}`;
+        const origin = node.previous_path && renameOriginLabel(node.previous_path);
         const parts: string[] = origin ? [origin] : [];
         if (node.additions) parts.push(`+${node.additions}`);
         if (node.deletions) parts.push(`-${node.deletions}`);

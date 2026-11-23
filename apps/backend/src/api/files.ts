@@ -33,6 +33,4 @@ export default [
   handle(api.fileSearch, ({ workspaceId, query, limit }) =>
     nodeOf(workspaceId).fsSearch(query, limit)
   ),
-
-  handle(api.invalidateFileCache, ({ workspaceId }) => nodeOf(workspaceId).fsInvalidate()),
 ];

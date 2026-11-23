@@ -20,13 +20,7 @@ import {
   hasLiveCloudSession,
   requestCloudFs,
 } from "../agent/cloud/driver";
-import {
-  listCloudTree,
-  invalidateCloudTree,
-  flattenCloudTree,
-  cloudTreeToResponse,
-  cloudFsOrThrow,
-} from "./cloud-fs";
+import { listCloudTree, flattenCloudTree, cloudTreeToResponse, cloudFsOrThrow } from "./cloud-fs";
 import { CLOUD_NODE_ID, workspaceNodeId } from "./index";
 import type { WorkspaceWithDetailsRow } from "../../db";
 
@@ -60,7 +54,6 @@ export interface NodeDriver {
   fsTree(): Promise<FileTreeResponse>;
   fsRead(filePath: string): Promise<FsReadOutcome>;
   fsSearch(query: string, limit: number): Promise<FileMatch[]>;
-  fsInvalidate(): void;
 }
 
 // ─────────────────────────── local worktree ───────────────────────────
@@ -166,10 +159,6 @@ class LocalNodeDriver implements NodeDriver {
       return filesService.listTopFiles(this.workspacePath, limit);
     }
     return filesService.fuzzySearchFiles(this.workspacePath, query, limit);
-  }
-
-  fsInvalidate(): void {
-    filesService.invalidateCache(this.workspacePath);
   }
 }
 
@@ -311,10 +300,6 @@ class RemoteNodeDriver implements NodeDriver {
     return !query || typeof query !== "string"
       ? filesService.scoreTopFiles(paths, limit)
       : filesService.fuzzySearchPaths(paths, query, limit);
-  }
-
-  fsInvalidate(): void {
-    if (this.workspace.current_session_id) invalidateCloudTree(this.workspace.current_session_id);
   }
 }
 
