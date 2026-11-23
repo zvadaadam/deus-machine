@@ -1,20 +1,6 @@
-/**
- * sendMessage and the "no turn was admitted" paths.
- *
- * The user's prompt is NOT written by this command. The engine echoes it back
- * as message.started{role:"user"} and that echo is the single persistence path
- * for the row — so between the send and the echo, the prompt exists in exactly
- * one place: the frontend's optimistic bubble, keyed by the send's turn id.
- *
- * That makes the command's RESULT load-bearing. `handleCommand` (query-engine)
- * answers `accepted: true` when this function returns and `accepted: false`
- * when it throws, and only the false answer runs the composer's rollback. A
- * path that flips the session to "error" but still returns normally leaves the
- * bubble on screen for a turn that never ran and is durable nowhere — which is
- * why the two no-turn guards below must reject, not return.
- *
- * Runs against a real in-memory SQLite, like the stopSession suite.
- */
+// Turn admission through the person's send operation, and the strict sender's busy refusal.
+// The engine echo writes the prompt. The operation tells the composer whether it was
+// admitted, queued for a later turn, or refused.
 
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -35,7 +21,10 @@ const { mockGetDatabase, mockInvalidate } = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
-vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
+vi.mock("../../../src/services/query-engine", () => ({
+  invalidate: mockInvalidate,
+  onInvalidate: () => () => {},
+}));
 
 import { WireRequestError } from "@zvada/agent-server/client";
 import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
@@ -44,6 +33,7 @@ import type { InputOf } from "@shared/api/op";
 import { operations } from "../../helpers";
 import sessionHandlers from "../../../src/api/sessions";
 import * as agentService from "../../../src/services/agent/service";
+import { sendMessage as sendStrict } from "../../../src/services/agent/turns";
 import * as cloudDriver from "../../../src/services/agent/cloud/driver";
 import { applyCloudStatus } from "../../../src/services/workspace-lifecycle";
 
@@ -201,9 +191,16 @@ describeWithDb("sendMessage", () => {
     expect(startTurn).toHaveBeenCalledTimes(2);
   });
 
-  it("refuses a busy chat with a typed error", async () => {
+  it("keeps the typed busy refusal for strict callers", async () => {
     db.prepare("UPDATE sessions SET status = 'working' WHERE id = ?").run(SESSION);
-    await expect(send(SESSION, "turn-2")).rejects.toMatchObject({ name: "ChatBusyError" });
+    await expect(
+      sendStrict({
+        sessionId: SESSION,
+        content: "hello",
+        model: "opus",
+        agentHarness: "claude-code",
+      })
+    ).rejects.toMatchObject({ name: "ChatBusyError" });
   });
 
   it.each([
@@ -280,7 +277,7 @@ describeWithDb("sendMessage", () => {
   // to await admission. `turn/start` acks the moment the turn is admitted
   // (before the harness runs a step), so awaiting costs a hop, not a turn.
   describe("when the wire refuses admission", () => {
-    it("REJECTS the send on turnActive without disturbing the running turn", async () => {
+    it("queues the person's send on turnActive without disturbing the running turn", async () => {
       vi.spyOn(agentService, "isConnected").mockReturnValue(true);
       vi.spyOn(agentService, "startTurn").mockRejectedValue(
         new WireRequestError(
@@ -289,9 +286,10 @@ describeWithDb("sendMessage", () => {
         )
       );
 
-      // Not accepted: returning normally here would ack `accepted: true` for a
-      // turn the server refused, stranding the optimistic bubble.
-      await expect(send(SESSION)).rejects.toThrow(/still working/i);
+      await expect(send(SESSION)).resolves.toEqual({ turnId: "turn-1", queued: true });
+      const held = { sessionId: SESSION, id: "turn-1" };
+      expect(await run(api.queuedMessage, held)).toEqual({ content: "hello" });
+      expect(await run(api.removeQueuedMessage, held)).toEqual({ removed: true });
 
       // The turn that IS running belongs to somebody — it must not be
       // flipped to an error status just because our send lost the race.
@@ -420,7 +418,7 @@ describeWithDb("sendMessage", () => {
       );
     });
 
-    it("does NOT move for a second client's send inside the echo-only window", async () => {
+    it("refuses a different harness at queue admission before the first echo", async () => {
       vi.spyOn(agentService, "isConnected").mockReturnValue(true);
       const startTurn = vi.spyOn(agentService, "startTurn").mockResolvedValue(undefined as never);
 
@@ -433,13 +431,19 @@ describeWithDb("sendMessage", () => {
         message_count: 0,
       });
 
-      // Client B sends a different harness. The harness lock cannot stop it
-      // (0 messages, nothing locked); the active-turn guard has to.
-      await expect(sendWith("codex-app-server", "turn-b")).rejects.toThrow(/still working/i);
-
-      // The row still describes the turn that is actually running. Rebinding
-      // here would strand the session on a harness that never ran, and the
-      // lock would then reject every follow-up send under the real one.
+      await expect(sendWith("codex-app-server", "turn-b")).rejects.toThrow(/Cannot switch agent/i);
+      await expect(
+        run(api.steerMessage, {
+          sessionId: SESSION,
+          agentHarness: "codex-app-server",
+          model: "gpt-5.5-codex",
+          content: "hello",
+        })
+      ).rejects.toThrow(/Cannot switch agent/i);
+      expect(await run(api.queuedMessages, { sessionId: SESSION })).toEqual({
+        paused: null,
+        items: [],
+      });
       expect(harness()).toBe("claude-code");
       expect(startTurn).toHaveBeenCalledOnce();
     });
@@ -569,14 +573,14 @@ describeWithDb("sendMessage", () => {
     );
   });
 
-  it("still refuses a send while a turn is running, from every active status", async () => {
+  it("queues a person's message from every active status", async () => {
     vi.spyOn(agentService, "isConnected").mockReturnValue(true);
     vi.spyOn(agentService, "startTurn").mockResolvedValue(undefined as never);
 
     for (const status of ["working", "needs_plan_response", "needs_response"]) {
       db.prepare(`UPDATE sessions SET status = ? WHERE id = ?`).run(status, SESSION);
-      await expect(send(SESSION)).rejects.toThrow();
-      // Refused, not errored — the running turn is untouched.
+      await expect(send(SESSION)).resolves.toEqual({ turnId: "turn-1", queued: true });
+      await run(api.removeQueuedMessage, { sessionId: SESSION, id: "turn-1" });
       expect(row(SESSION).status).toBe(status);
     }
   });

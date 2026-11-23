@@ -155,7 +155,7 @@ Single WS connection (`/ws`) using `q:` prefixed JSON frames:
 | `q:request` / `q:response`               | A read, answered once (`diffStats`, `settings`)                                                            |
 | `q:subscribe` / `q:snapshot` / `q:delta` | A live read: its value, sent again whenever it changes (workspaces, sessions)                              |
 | `q:subscribe` / `q:event` / `q:reset`    | A stream of events, sent only to the connections following it (a chat's agent events, a terminal's output) |
-| `q:mutate` / `q:mutate_result`           | A write, never sent twice (archiveWorkspace, sendMessage, stopSession)                                     |
+| `q:mutate` / `q:mutate_result`           | A write, never sent twice (archiveWorkspace, sendMessage, steerMessage, stopSession)                       |
 | `q:tool_response`                        | The answer to something an agent asked this client                                                         |
 
 **One contract.** Every operation and stream a host offers is declared once in
@@ -193,6 +193,22 @@ A compaction of the running turn appears when that turn settles. An unfinished
 last turn record is the open turn. A replay can append an older end, so otherwise
 `session/lib/conversationView.ts` uses the newest message's turn record, or the
 chat's working status until that record arrives.
+
+While a local chat works, Enter on a keyboard and Send on a phone queue the message.
+Command-Enter (Ctrl-Enter outside macOS) asks for a steer. If the agent cannot take it,
+the message queues or starts its own turn if the chat is free. With a question or plan card
+open, both shortcuts queue. `services/agent/queue.ts` holds up to 20 messages per chat in
+the backend process's memory. Each open composer follows `queuedMessages` for the text and
+picture count in `session/ui/QueuedMessageList.tsx`. Edit reads a waiting row's full content
+with `queuedMessage`, puts it in the composer, then calls `removeQueuedMessage`. The sending
+head stays first until its user echo is complete. If its own turn is known to be gone first,
+the head returns to the front and the queue pauses. Unread steers follow and return to the
+front in order if their turn ends unread. After publishing a normal end the backend sends
+one row from an unpaused queue. Asking to stop pauses it at once. After a stop or failure
+it waits for Resume.
+A steer read mid-turn splits one reply into groups with one footer (`groupTurns` in
+`session/lib/chatTimeline.ts`). Cloud chats keep their send, including the hosted web's
+direct lane. The operator's `send` to a busy chat still answers `busy`.
 
 A `fileChanges` subscription names one workspace. On macOS its first follower
 opens a recursive watch on the local checkout. The last one leaving, including
@@ -351,11 +367,11 @@ the window (`capabilities.singleWindow`): a browser tab keeps its own
 not find it and send it too; the desktop app, which is one window, keeps it on the
 device (localStorage), so quitting does not lose it either. Quitting before the
 first chat opens stops the start, so the reopened desktop app shows a failed
-start with the message still waiting, and Retry sends it. It is sent once: a chat that already
-has a message, or is answering one, is never sent it again, and a send the
-backend refuses goes into that chat's composer with a toast rather than being
-retried. Send it from anywhere else and two workspaces started in a row lose
-one.
+start with the message still waiting, and Retry sends it. The window sends once,
+skipping a chat already spoken to or working. If another client starts a local
+turn after that check, the first message queues behind its turn. A full queue or any
+other refusal returns it to the chat's composer with a toast. Send it from anywhere
+else and two workspaces started in a row lose one.
 
 A message the cloud platform refuses after the backend took it (a channel `error`,
 `MESSAGE_SEND_FAILED`) is never lost either, first message or not: its bubble goes and
@@ -385,11 +401,10 @@ message waits per workspace: sending there when nothing waits makes it the
 waiting message. While it waits, Send is disabled and a line says why.
 What is typed there stays in the box and moves to the chat's composer when the chat opens
 (`sessionComposerActions.move`, from `useFirstMessageDelivery`), before the
-waiting message is sent. The waiting message is per client, so another device
-or window can speak to the chat first; this client's message is then never
-sent, and goes into that chat's composer instead (`missedFirstMessages`). A
-failure that cannot be retried has no composer: nothing typed there could be
-sent.
+waiting message is sent. The waiting message is per client. If the window's delivery
+check finds another window or device has already spoken, its waiting message goes
+into that chat's composer (`missedFirstMessages`). A failure that cannot be retried
+has no composer: nothing typed there could be sent.
 
 `bun run test:e2e:workspace-start` runs these against the real backend, git and
 web app (see `test/e2e/README.md`).
@@ -500,10 +515,11 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   with it (`first_session_id`). Who started each workspace, chat and message
   is kept (`started_by`, `messages.origin`), and the agent reading a message
   is told when an agent or an assistant sent it. The package holds nothing
-  between calls: a message to a busy chat is sent within the call if its turn
-  ends on its own in time, else nothing is sent and the answer says why. The
-  host holds only a new workspace's first task: `start` takes it and sends it
-  as the turn the package minted once the first chat is ready. A start that took
+  between calls. A message to a busy chat is sent within the call if its turn ends
+  on its own in time and the chat stays free. If a person's queued message starts
+  at that end, the waiting call finds the chat busy again and sends nothing. A refusal
+  says why. The host holds only a new workspace's first task. `start` takes it and
+  sends it as the turn the package minted once the first chat is ready. A start that took
   longer than 30 minutes sends nothing, and the chat says so in its error; a stop
   drops it. At its commit, in one synchronous step, the host refuses
   (`Refused`): a start by an archived chat or into an archived workspace; a

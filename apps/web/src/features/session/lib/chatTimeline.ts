@@ -23,9 +23,10 @@ export type AssistantTurnData = {
   turnId: string;
   record?: SessionTurn;
   messages: Message[];
-  firstMessageIndex: number;
-  isLatest: boolean;
-  isOpen: boolean;
+  /** Only the final group of a settled turn carries its footer. */
+  footerMessages?: Message[];
+  afterUserId?: string;
+  isStreaming: boolean;
   startedAt: string | null;
 };
 
@@ -63,6 +64,7 @@ export interface ChatTimeline {
   spacings: string[];
   /** What the agent is doing right now — the activity indicator's variant. */
   activity: AgentActivity;
+  activeStartedAt: string | null;
   /** The last RENDERED message's role, for the indicator's top margin. */
   lastRole: MessageRole | null;
 }
@@ -87,7 +89,8 @@ export function buildChatTimeline(
     records,
     messages.at(-1)?.turn_id ?? null
   );
-  const openTurnId = conversation.turns.find((turn) => turn.status === "active")?.turnId;
+  const openTurn = conversation.turns.find((turn) => turn.status === "active");
+  const openTurnId = openTurn?.turnId;
   const grouped = groupTurns(conversation, rendered, records, openTurnId);
   const items = insertCloudEnv(insertCompactions(grouped, compactions, openTurnId), envEntries);
   // The message that asked for the workspace, then how the workspace started.
@@ -102,8 +105,18 @@ export function buildChatTimeline(
       turnSpacingClasses(item, items[i - 1] ?? null, items[i + 1] ?? null, i === 0)
     ),
     activity: agentActivity(conversation),
+    activeStartedAt: turnStartedAt(rendered, openTurn),
     lastRole: grouped.at(-1)?.type ?? null,
   };
+}
+
+function turnStartedAt(messages: Message[], turn?: SessionTurn): string | null {
+  if (!turn) return null;
+  if (turn.startedAt) return new Date(turn.startedAt).toISOString();
+  return (
+    messages.find((message) => message.turn_id === turn.turnId && message.role === "user")
+      ?.sent_at ?? null
+  );
 }
 
 /** Subagent children render nested under their Task tool block, never inline. */
@@ -145,10 +158,8 @@ export function turnStopNotice(reason: string | null | undefined): string | null
  * Group consecutive messages into turns.
  *
  * The boundaries are the engine's: a run breaks when the speaker or the turn
- * changes, and `isLatest` is set on the FINAL group only — the guard that
- * keeps a finished turn out of streaming mode in the gap between "user sends"
- * and "first assistant part arrives" (without it, the completed answer above
- * visibly reverts to "working").
+ * changes. A steer can split the assistant's reply. Only the last group
+ * streams, and only the end of the reply shows the turn's footer.
  *
  * The groups come back in order, so each is a contiguous SLICE of `rendered`
  * and the rows themselves never round-trip through the projection.
@@ -159,10 +170,12 @@ function groupTurns(
   records: readonly SessionTurn[],
   openTurnId?: string
 ): Turn[] {
-  const byId = new Map(records.map((record) => [record.turnId, record]));
+  const unplaced = new Map(records.map((record) => [record.turnId, record]));
   const turns: Turn[] = [];
+  const splitReplies = new Map<string, Message[]>();
   let index = 0;
-  let latestUserSentAt: string | null = null;
+  let user: Message | undefined;
+  let startedAt: string | null = null;
 
   for (const group of groupIntoTurns(conversation)) {
     const start = index;
@@ -170,63 +183,58 @@ function groupTurns(
     const slice = rendered.slice(start, index);
 
     if (group.role === "user") {
-      // One row per user turn: the engine emits exactly one echo per turn, so
-      // a run of user entries can only be one message.
       slice.forEach((message, offset) => {
-        latestUserSentAt = message.sent_at ?? null;
+        if (!message.turn_id || message.turn_id !== user?.turn_id)
+          startedAt = message.sent_at ?? null;
+        user = message;
         turns.push({ type: "user", message, messageIndex: start + offset });
       });
       continue;
     }
 
+    const continues = !!group.turnId && rendered[index]?.turn_id === group.turnId;
+    const earlier = splitReplies.get(group.turnId);
+    if (earlier) earlier.push(...slice);
+    else if (continues) splitReplies.set(group.turnId, [...slice]);
+    const record = continues ? undefined : unplaced.get(group.turnId);
+    if (record) unplaced.delete(group.turnId);
     turns.push({
       type: "assistant",
       turnId: group.turnId,
-      record: byId.get(group.turnId),
+      record,
       messages: slice,
-      firstMessageIndex: start,
-      isLatest: group.isLatest,
-      isOpen: group.turnId === openTurnId,
-      // The clock starts when the user asked, which is the turn before this.
-      startedAt: latestUserSentAt,
+      footerMessages: !continues && group.turnId !== openTurnId ? (earlier ?? slice) : undefined,
+      afterUserId: earlier ? user?.id : undefined,
+      isStreaming: false,
+      startedAt,
     });
   }
 
-  // A completed turn can have no assistant content. It still has one stable
-  // UI item; late messages fill that item instead of replacing a fake row.
-  const answered = new Set(
-    turns.flatMap((item) => (item.type === "assistant" ? [item.turnId] : []))
-  );
-  for (const record of records) {
-    if (answered.has(record.turnId) || (record.endedAt === undefined && !record.stopReason))
-      continue;
+  // A turn can end after a user message, including a steer, with no further reply.
+  for (const record of unplaced.values()) {
+    if (record.endedAt === undefined && !record.stopReason) continue;
     let anchor = turns.findLastIndex(
       (item) => item.type === "user" && item.message.turn_id === record.turnId
     );
-    const user = turns[anchor];
+    const lastUser = turns[anchor];
     if (anchor === -1) {
       const at = record.startedAt ?? record.endedAt;
       if (at !== undefined) anchor = turns.findLastIndex((item) => itemEndTime(item) <= at);
     }
+    const earlier = splitReplies.get(record.turnId);
     turns.splice(anchor + 1, 0, {
       type: "assistant",
       turnId: record.turnId,
       record,
       messages: [],
-      firstMessageIndex: -1,
-      isLatest: false,
-      isOpen: false,
-      startedAt:
-        user?.type === "user"
-          ? (user.message.sent_at ?? null)
-          : record.startedAt !== undefined
-            ? new Date(record.startedAt).toISOString()
-            : null,
+      footerMessages: earlier ?? [],
+      afterUserId: earlier && lastUser?.type === "user" ? lastUser.message.id : undefined,
+      isStreaming: false,
+      startedAt: turnStartedAt(rendered, record),
     });
   }
-  turns.forEach((turn, index) => {
-    if (turn.type === "assistant") turn.isLatest = index === turns.length - 1;
-  });
+  const last = turns.at(-1);
+  if (last?.type === "assistant") last.isStreaming = last.turnId === openTurnId;
   return turns;
 }
 

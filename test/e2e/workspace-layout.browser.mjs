@@ -123,6 +123,7 @@ const server = await createServer({
             });
           if (resource === "sessions")
             return json([{ id: "session", agent_harness: "codex-app-server", message_count: 1 }]);
+          if (resource === "queuedMessages") return json({ paused: null, items: [] });
           if (resource === "messages")
             return json({
               messages: [],

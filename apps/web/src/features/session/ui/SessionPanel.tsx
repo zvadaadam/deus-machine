@@ -169,16 +169,6 @@ export function SessionPanel({
     return groups;
   }, [messages]);
 
-  // Latest user message sent_at for turn duration tracking
-  const latestMessageSentAt = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "user" && messages[i].sent_at) {
-        return messages[i].sent_at;
-      }
-    }
-    return null;
-  }, [messages]);
-
   // DEBUG: disabled — was flooding console, making [autoscroll] logs unreadable
   // if (import.meta.env.DEV) {
   //   console.log("[SessionPanel] DEBUG:", { sessionId, messagesCount: messages.length, loading, sessionStatus });
@@ -267,7 +257,6 @@ export function SessionPanel({
               undefined
             }
             agentHarness={session?.agent_harness}
-            latestMessageSentAt={latestMessageSentAt}
             hasOlder={hasOlder}
             loadingOlder={loadOlderMutation.isPending}
             onLoadOlder={handleLoadOlder}
@@ -372,7 +361,6 @@ export function SessionPanel({
                       : session?.error_category) ?? undefined
                   }
                   agentHarness={session?.agent_harness}
-                  latestMessageSentAt={latestMessageSentAt}
                   hasOlder={hasOlder}
                   loadingOlder={loadOlderMutation.isPending}
                   onLoadOlder={handleLoadOlder}

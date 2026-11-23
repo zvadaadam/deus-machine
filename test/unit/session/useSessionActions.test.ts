@@ -8,7 +8,7 @@ import {
 import { registerDirectSession } from "@/features/session/cloud/directSessionRegistry";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { api } from "@shared/api";
-import type { Session } from "@shared/types/session";
+import type { PaginatedMessages, Session } from "@shared/types/session";
 import { OpError } from "@/platform/ws/runtime-client";
 
 const state = vi.hoisted(() => ({
@@ -176,10 +176,84 @@ describe("backend prompt delivery", () => {
   function storageForLocalSession() {
     state.queryClient!.setQueryData<Session>(queryKeys.sessions.detail(SESSION), (old) => ({
       ...old!,
-      workspace_kind: "local",
+      workspace_kind: "worktree",
       provider_session_id: null,
+      status: "idle",
     }));
   }
+
+  it.each(["working", "needs_response", "idle"] as const)(
+    "keeps a queued send out of the transcript when the window showed %s",
+    async (status) => {
+      const client = state.queryClient!;
+      client.setQueryData<Session>(queryKeys.sessions.detail(SESSION), (old) => ({
+        ...old!,
+        status,
+      }));
+      const key = queryKeys.sessions.messages(SESSION);
+      const page: PaginatedMessages = {
+        messages: [
+          { id: "reply", session_id: SESSION, turn_id: "running", role: "assistant", seq: 1 },
+        ],
+        turns: [],
+        compactions: [],
+        has_older: false,
+        has_newer: false,
+      };
+      client.setQueryData(key, page);
+      state.call.mockImplementationOnce((_op, { turnId }) => {
+        const ids = client
+          .getQueryData<PaginatedMessages>(key)!
+          .messages.map((message) => message.id);
+        expect(ids).toHaveLength(status === "idle" ? 2 : 1);
+        return { turnId, queued: true };
+      });
+      const model = "claude-code:opus";
+      sessionComposerActions.seedIfAbsent(SESSION, emptyComposer(model, "high"));
+      try {
+        expect(
+          await useSessionActions({ sessionId: SESSION, model }).sendMessage("Follow up")
+        ).toBe(true);
+        expect(state.call).toHaveBeenCalledExactlyOnceWith(
+          api.sendMessage,
+          expect.objectContaining({ content: "Follow up" })
+        );
+        expect(client.getQueryData(key)).toEqual(page);
+        expect(state.error).not.toHaveBeenCalled();
+      } finally {
+        sessionComposerActions.discard(SESSION);
+      }
+    }
+  );
+
+  it.each(["steered", "queued", "sent"])(
+    "accepts a steer answered %s without predicting a bubble",
+    async (outcome) => {
+      const model = "claude-code:opus";
+      const content = JSON.stringify([{ type: "image", data: "AAAA", mimeType: "image/png" }]);
+      sessionComposerActions.seedIfAbsent(SESSION, emptyComposer(model, "high"));
+      sessionComposerActions.togglePlanMode(SESSION);
+      state.call.mockResolvedValueOnce({ outcome });
+      try {
+        const actions = useSessionActions({ sessionId: SESSION, model, workspaceKind: "worktree" });
+        expect(await actions.sendMessage(content, "steer")).toBe(true);
+        expect(state.call).toHaveBeenCalledExactlyOnceWith(api.steerMessage, {
+          sessionId: SESSION,
+          model: "opus",
+          agentHarness: "claude-code",
+          thinkingLevel: "high",
+          permissionMode: "plan",
+          content,
+        });
+        expect(
+          state.queryClient!.getQueryData(queryKeys.sessions.messages(SESSION))
+        ).toBeUndefined();
+        expect(state.error).not.toHaveBeenCalled();
+      } finally {
+        sessionComposerActions.discard(SESSION);
+      }
+    }
+  );
 
   it("sends with the newly picked agent even when the previous model had Plan on", async () => {
     sessionComposerActions.seedIfAbsent(SESSION, emptyComposer("claude-code:opus", "high"));

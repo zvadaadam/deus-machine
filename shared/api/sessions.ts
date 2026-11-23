@@ -55,10 +55,7 @@ export const createSession = write({
   output: out<Session>(),
 });
 
-/**
- * Start a turn. Answers once the agent has admitted it; the prompt and the
- * reply then arrive as the session's events. Refused while a turn is running.
- */
+/** Start a turn, or hold the message for the next turn in a busy local chat. */
 export const sendMessage = write({
   name: "sendMessage",
   input: sessionId.extend({
@@ -72,7 +69,52 @@ export const sendMessage = write({
     /** A cloud turn must name one; a local turn uses the model's default without it. */
     thinkingLevel: z.string().optional(),
   }),
-  output: out<{ turnId: string }>(),
+  output: out<{ turnId: string; queued?: true }>(),
+});
+
+export type QueuedMessages = {
+  paused: "stopped" | "failed" | null;
+  items: { id: string; text: string; images: number; state: "sending" | "steering" | "waiting" }[];
+};
+
+/** A local chat's sending head, unread steers and waiting messages, held in this process. */
+export const queuedMessages = live({
+  name: "queuedMessages",
+  input: sessionId,
+  output: out<QueuedMessages>(),
+});
+
+const queuedMessageId = sessionId.extend({ id: z.string().min(1) });
+
+/** Full composer content, available while the row is waiting. */
+export const queuedMessage = read({
+  name: "queuedMessage",
+  input: queuedMessageId,
+  output: out<{ content: string | null }>(),
+});
+
+export const steerMessage = write({
+  name: "steerMessage",
+  input: sendMessage.input.omit({ turnId: true }),
+  output: out<{ outcome: "steered" | "queued" | "sent" }>(),
+});
+
+export const steerQueuedMessage = write({
+  name: "steerQueuedMessage",
+  input: queuedMessageId,
+  output: out<{ outcome: "steered" | "queued" | "gone" }>(),
+});
+
+export const removeQueuedMessage = write({
+  name: "removeQueuedMessage",
+  input: queuedMessageId,
+  output: out<{ removed: boolean }>(),
+});
+
+export const resumeQueuedMessages = write({
+  name: "resumeQueuedMessages",
+  input: sessionId,
+  output: out<Record<string, never>>(),
 });
 
 /**

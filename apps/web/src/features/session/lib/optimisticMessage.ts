@@ -15,10 +15,8 @@
  * (the swap-a-look-alike approach is where image and file parts got dropped,
  * because the look-alike had to be built a second time by hand).
  *
- * Consequently there is no "local" id space any more. A bubble is retired
- * exactly once — by `dropOptimisticMessage` when the send is REJECTED — so a
- * failed send leaves the typed message on screen instead of evaporating on the
- * next unrelated delta.
+ * A refusal or a queued answer retires the prediction with `dropOptimisticMessage`.
+ * A local chat already known to be busy skips the prediction.
  */
 
 import type { QueryClient } from "@tanstack/react-query";
@@ -63,7 +61,7 @@ export function createOptimisticUserMessage(args: {
 }
 
 /**
- * Retire one send's bubble after a rejection.
+ * Retire one send's predicted bubble.
  *
  * Targeted on purpose. Restoring the pre-send snapshot would also discard
  * anything that streamed in while the send was in flight, and doing nothing

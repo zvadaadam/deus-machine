@@ -21,12 +21,14 @@ import { useEffect } from "react";
 import type { SessionStatus } from "@/shared/types";
 import { agentConfigOf } from "@/features/workspace/lib/reach";
 import { locationOf } from "@/features/sidebar/lib/location";
+import { isMac } from "@/platform/capabilities";
 import { canPlan } from "@shared/harnesses";
 import { ACTIVE_TURN_STATUSES, type WorkspaceKind } from "@shared/enums";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { AnimatePresence, motion } from "framer-motion";
 import { Minimize2, ArrowUp, Square, Wrench } from "lucide-react";
+import { useEditQueuedMessage } from "../api/session.queries";
 import { useFileMention } from "../hooks/useFileMention";
 import { useCloudSlashItems } from "../hooks/useCloudSlashItems";
 import { useSlashCommand } from "../hooks/useSlashCommand";
@@ -35,6 +37,7 @@ import { useSessionComposer } from "../hooks/useSessionComposer";
 import { FileMentionPopover } from "./FileMentionPopover";
 import { SlashCommandPopover } from "./SlashCommandPopover";
 import { setupEnvironmentPrompt } from "../lib/sessionPrompts";
+import { willQueueMessage } from "../lib/queuedMessages";
 import { extractImagesFromClipboard, buildMessageContent } from "../lib/imageAttachments";
 import {
   InputGroup,
@@ -46,6 +49,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 import { PastedTextCard } from "./PastedTextCard";
 import { MissingAttachments } from "./MissingAttachments";
+import { QueuedMessageList } from "./QueuedMessageList";
 import { PastedImageCard } from "./PastedImageCard";
 import { InspectedElementCard } from "./InspectedElementCard";
 import { FileMentionCard } from "./FileMentionCard";
@@ -88,7 +92,7 @@ interface MessageInputProps {
   environmentUnconfigured?: boolean;
   showCompactButton?: boolean;
 
-  onSend: (content: string) => boolean | Promise<boolean>;
+  onSend: (content: string, mode?: "steer") => boolean | Promise<boolean>;
   /** The draft can still be edited while its workspace starts. */
   sendDisabledReason?: string;
   onCompact?: () => void;
@@ -235,6 +239,11 @@ export function MessageInput({
   className,
 }: MessageInputProps) {
   const isMobile = useIsMobile();
+  const location = workspaceKind ? locationOf({ kind: workspaceKind }) : null;
+  const localChat = location === "local" && sessionStatus !== undefined;
+  const canSteer = localChat && sessionStatus === "working";
+  const queueing = willQueueMessage(workspaceKind, sessionStatus);
+  const { edit, editing } = useEditQueuedMessage(sessionId);
 
   // Composer content — subscribed from the store, mutated via bound setters.
   const composer = useSessionComposer(sessionId, {
@@ -298,11 +307,11 @@ export function MessageInput({
     skillMentions.length > 0;
 
   const disabledReason = sendDisabledReason || selection.unavailable;
-  const canSend = hasContent && !sending && !disabledReason;
-  const handleSend = async () => {
+  const canSend = hasContent && !sending && !editing && !disabledReason;
+  const handleSend = async (mode?: "steer") => {
     if (!canSend) return;
     const combined = buildCombinedContent();
-    if (combined && (await onSend(combined))) composer.clearSent();
+    if (combined && (await onSend(combined, mode))) composer.clearSent();
   };
 
   // @ file mention popover — local UI-ephemeral state (open/close, query,
@@ -342,17 +351,11 @@ export function MessageInput({
       e.preventDefault();
       return;
     }
-    if (
-      e.key === "Enter" &&
-      !isMobile &&
-      !e.shiftKey &&
-      !e.metaKey &&
-      !e.ctrlKey &&
-      !e.nativeEvent.isComposing
-    ) {
-      e.preventDefault();
-      handleSend();
-    }
+    if (e.key !== "Enter" || isMobile || e.shiftKey || e.nativeEvent.isComposing) return;
+    const modified = e.metaKey || e.ctrlKey;
+    if (modified && (!localChat || e.altKey || (isMac ? e.ctrlKey : e.metaKey))) return;
+    e.preventDefault();
+    void handleSend(canSteer && modified ? "steer" : undefined);
   };
 
   const handlePaste = async (e: React.ClipboardEvent) => {
@@ -387,19 +390,22 @@ export function MessageInput({
   }, [live, shownThinking, thinkingLevel, setThinkingLevel]);
 
   // Suggest setup only in an empty, idle chat with a known missing recipe.
-  const setupLocation = workspaceKind ? locationOf({ kind: workspaceKind }) : null;
   const showSetupNudge =
-    setupLocation !== null &&
+    location !== null &&
     environmentUnconfigured &&
     !hasMessages &&
     !!model &&
     !sending &&
     (!sessionStatus || !ACTIVE_TURN_STATUSES.includes(sessionStatus));
   const handleSetupEnvironment = () => {
-    if (setupLocation) onSend(setupEnvironmentPrompt(setupLocation));
+    if (location) onSend(setupEnvironmentPrompt(location));
   };
 
   const showPlanMode = canPlan(agentHarness, workspaceKind);
+  const sendLabel = queueing ? "Queue message" : "Send message";
+  let sendTitle = `${sendLabel} (Enter)`;
+  if (queueing && isMobile) sendTitle = sendLabel;
+  else if (canSteer) sendTitle += ` · Steer (${isMac ? "⌘" : "Ctrl+"}Enter)`;
   return (
     <div className={cn("relative z-20 shrink-0 px-2 pb-2", className)}>
       <AnimatePresence initial={false}>
@@ -426,6 +432,14 @@ export function MessageInput({
           </motion.div>
         )}
       </AnimatePresence>
+      {localChat && (
+        <QueuedMessageList
+          sessionId={sessionId}
+          canSteer={canSteer}
+          editDisabled={sending || editing}
+          onEdit={edit}
+        />
+      )}
 
       <InputGroup
         data-no-ring={true}
@@ -566,12 +580,12 @@ export function MessageInput({
             )}
 
             <InputGroupButton
-              onClick={handleSend}
+              onClick={() => void handleSend()}
               disabled={!canSend}
               variant={hasContent ? "default" : "outline"}
               size="icon-sm"
-              title={disabledReason ?? "Send message (Enter)"}
-              aria-label="Send message"
+              title={disabledReason ?? sendTitle}
+              aria-label={sendLabel}
               className="rounded-full"
             >
               <ArrowUp className="h-4 w-4" />

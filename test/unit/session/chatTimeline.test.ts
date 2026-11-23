@@ -40,9 +40,7 @@ function assistantTurn(turnId: string, sentAt: string): Turn {
     type: "assistant",
     turnId,
     messages: [message({ id: `a-${turnId}`, turn_id: turnId, sent_at: sentAt })],
-    firstMessageIndex: 0,
-    isLatest: false,
-    isOpen: false,
+    isStreaming: false,
     startedAt: sentAt,
   };
 }
@@ -237,6 +235,31 @@ describe("buildChatTimeline", () => {
   });
   const reply = withText({ id: "a-1", turn_id: "turn-1", sent_at: "2026-08-14T10:00:05.000Z" });
 
+  it("keeps the original clock and places the footer after a steer with no further reply", () => {
+    const steer = withText({
+      id: "steer",
+      turn_id: "turn-1",
+      role: "user",
+      sent_at: "2026-08-14T10:00:06.000Z",
+    });
+    const rows = [prompt, reply, steer];
+    expect(buildChatTimeline(rows, [], true).activeStartedAt).toBe(prompt.sent_at);
+    const record = { turnId: "turn-1", stopReason: "error" };
+    const { items } = buildChatTimeline(rows, [], false, [], [record]);
+    expect(items).toMatchObject([
+      { type: "user", message: prompt },
+      { type: "assistant", messages: [reply], footerMessages: undefined },
+      { type: "user", message: steer },
+      {
+        type: "assistant",
+        record,
+        messages: [],
+        footerMessages: [reply],
+        startedAt: prompt.sent_at,
+      },
+    ]);
+  });
+
   it("keeps the recorded turn open while a new send's bubble is pending", () => {
     const pending = createOptimisticUserMessage({
       sessionId: reply.session_id,
@@ -251,7 +274,7 @@ describe("buildChatTimeline", () => {
       [{ turnId: "turn-1", startedAt: 1 }]
     );
     expect(items).toMatchObject([
-      { type: "assistant", turnId: "turn-1", isOpen: true },
+      { type: "assistant", turnId: "turn-1", footerMessages: undefined, isStreaming: false },
       { type: "user", message: { id: pending.id } },
     ]);
   });
@@ -280,7 +303,7 @@ describe("buildChatTimeline", () => {
         { turnId: "turn-1", endedAt: 1 },
       ]
     );
-    expect(items).toMatchObject([{ type: "assistant", turnId: "turn-1", isOpen: false }]);
+    expect(items).toMatchObject([{ type: "assistant", turnId: "turn-1", footerMessages: [reply] }]);
   });
 
   it("shows the earlier turn's footer and divider after a later turn settles without reading its activity", () => {
@@ -300,9 +323,9 @@ describe("buildChatTimeline", () => {
     expect(timeline).toMatchObject({
       activity: "idle",
       items: [
-        { type: "assistant", turnId: "turn-1", isOpen: false },
+        { type: "assistant", turnId: "turn-1", footerMessages: [reply] },
         { type: "compaction", compaction: marker },
-        { type: "assistant", turnId: "turn-2", isOpen: false },
+        { type: "assistant", turnId: "turn-2", footerMessages: [later] },
       ],
     });
   });
@@ -467,8 +490,12 @@ describe("buildChatTimeline", () => {
     expect(assistantIds(empty.items[1])).toEqual([]);
     expect(assistantIds(recovered.items[1])).toEqual(["a1"]);
     expect(assistantIds(recovered.items[3])).toEqual(["a2"]);
-    expect(empty.items[1]).toMatchObject({ turnId: "t1", record: records[0], isLatest: false });
-    expect(recovered.items[1]).toMatchObject({ turnId: "t1", record: records[0], isLatest: false });
+    expect(empty.items[1]).toMatchObject({ turnId: "t1", record: records[0], isStreaming: false });
+    expect(recovered.items[1]).toMatchObject({
+      turnId: "t1",
+      record: records[0],
+      isStreaming: false,
+    });
   });
 
   it("does not turn a completed outcome back into the latest response after a new prompt", () => {
@@ -486,7 +513,7 @@ describe("buildChatTimeline", () => {
       ]
     );
     expect(shape(items)).toEqual(["user:t1", "assistant:t1", "user:t2"]);
-    expect(items[1]).toMatchObject({ isLatest: false });
+    expect(items[1]).toMatchObject({ isStreaming: false });
   });
 
   it("anchors a truly message-less outcome and its compaction by turn identity", () => {

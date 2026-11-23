@@ -26,7 +26,11 @@ import {
   type RestoredCloudConversation,
 } from "@shared/cloud-session-snapshot";
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
-import type { ConversationChange, ConversationState } from "@zvada/agent-server/protocol";
+import type {
+  ConversationChange,
+  ConversationState,
+  TurnEndedEvent,
+} from "@zvada/agent-server/protocol";
 import {
   isLiveEnvelope,
   isUnknownEvent,
@@ -41,6 +45,7 @@ import {
   persistChanges,
   persistSessionTitle,
   persistSessionError,
+  type TurnOutcomeWrite,
   type WriteResult,
 } from "./persistence";
 import { pushCloudSessionTitle } from "./cloud/driver";
@@ -51,9 +56,11 @@ import { OpenParts } from "./open-parts";
 
 // ---- Types ----
 
+export type TurnEnd = { event: TurnEndedEvent; status?: TurnOutcomeWrite["status"] };
+
 export interface AgentEventHandler {
   /** Feed one sequenced wire envelope (post-dedupe, in seq order). */
-  handle(envelope: DecodedWireEventEnvelope): void;
+  handle(envelope: DecodedWireEventEnvelope): TurnEnd | void;
   /** Restore durable cloud history without executing historical live effects. */
   hydrateCloudSnapshot(
     sessionId: string,
@@ -167,7 +174,9 @@ function pushEnvelope(envelope: DecodedWireEventEnvelope): void {
 // ---- Factory ----
 
 /** Create the agent event handler: persistence + WS push per lifecycle event. */
-export function createAgentEventHandler(): AgentEventHandler {
+export function createAgentEventHandler(
+  onInterrupted?: (sessionId: string, turnId: string, gone: boolean) => void
+): AgentEventHandler {
   const sessions = new Map<string, SessionState>();
   // A client that starts following a chat, or returns to it, first gets the
   // reply still being typed as it stands (see ./open-parts).
@@ -292,6 +301,7 @@ export function createAgentEventHandler(): AgentEventHandler {
         SESSION_RESOURCES,
         sessionId
       );
+      onInterrupted?.(sessionId, turnId, confirmed);
     },
 
     handleTitle(sessionId, title) {
@@ -347,13 +357,15 @@ export function createAgentEventHandler(): AgentEventHandler {
       // hot path (measured: 200 deltas → 200 writes, ~169 KB for a 1.7 KB
       // message), for durability the protocol explicitly does not promise.
       const isDelta = envelope.event.type === "message.part.delta";
+      const liveTurnId = state.turnId;
+      let outcome: TurnOutcomeWrite | undefined;
       const writes = isDelta
         ? []
         : persistChanges(
             sessionId,
             conversation,
             changes,
-            (turn) => turnOutcomeFor(state, turn),
+            (turn) => (outcome = turnOutcomeFor(state, turn)),
             turnProviderCredentialSource(envelope.event)
           );
 
@@ -405,6 +417,12 @@ export function createAgentEventHandler(): AgentEventHandler {
         .otherwise(() => {});
 
       if (!NOT_PUSHED.has(envelope.event.type)) pushEnvelope(envelope);
+      if (envelope.event.type === "turn.ended") {
+        return {
+          event: envelope.event,
+          status: envelope.event.turnId === liveTurnId ? outcome?.status : undefined,
+        };
+      }
     },
   };
 }
