@@ -350,7 +350,7 @@ export function MessageInput({
     }
     if (e.key !== "Enter" || isMobile || e.shiftKey || e.nativeEvent.isComposing) return;
     const modified = e.metaKey || e.ctrlKey;
-    if ((isMac ? e.ctrlKey : e.metaKey) || (modified && e.altKey)) return;
+    if (modified && (!localChat || e.altKey || (isMac ? e.ctrlKey : e.metaKey))) return;
     e.preventDefault();
     void handleSend(canSteer && modified ? "steer" : undefined);
   };
@@ -429,7 +429,9 @@ export function MessageInput({
           </motion.div>
         )}
       </AnimatePresence>
-      {localChat && <QueuedMessageList sessionId={sessionId} canSteer={canSteer} />}
+      {localChat && (
+        <QueuedMessageList sessionId={sessionId} canSteer={canSteer} sending={sending} />
+      )}
 
       <InputGroup
         data-no-ring={true}

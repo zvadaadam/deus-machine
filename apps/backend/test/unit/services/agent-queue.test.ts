@@ -20,20 +20,21 @@ import { LOCAL_CALLER, Registry } from "../../../src/api/registry";
 import { handleFrame, invalidate, serveOperations } from "../../../src/services/query-engine";
 import { addConnection, closeAll } from "../../../src/services/ws.service";
 import { createDeusHost } from "../../../src/services/assistants/host";
+import { resolveTurnApps } from "../../../src/services/integrations";
 import { operations } from "../../helpers";
 
 const engine = vi.hoisted(() => ({
   open: vi.fn<(options: AgentLinkOptions) => unknown>(),
   startTurn: vi.fn<(params: TurnStartParams & { turnId: string }) => Promise<void>>(),
   steerTurn: vi.fn<(params: TurnSteerParams) => Promise<TurnSteerResult>>(),
-  cancelTurn: vi.fn<() => Promise<TurnCancelResult>>(),
+  cancelTurn: vi.fn<(sessionId: string, turnId?: string) => Promise<TurnCancelResult>>(),
   images: true,
 }));
 
 vi.mock("../../../src/services/agent/client", () => ({ AgentLink: { open: engine.open } }));
 vi.mock("../../../src/lib/database", () => ({ getDatabase: () => db, DB_PATH: ":memory:" }));
 vi.mock("../../../src/services/integrations", () => ({
-  resolveTurnApps: () => ({ servers: {}, skipped: [] }),
+  resolveTurnApps: vi.fn(async () => ({ servers: {}, skipped: [] })),
 }));
 vi.mock("../../../src/services/pr-snapshot.service", () => ({
   refreshPrSnapshotForSession: () => {},
@@ -63,6 +64,7 @@ const message = (id: string) => ({
 const send = (id: string) => run(api.sendMessage, message(id));
 const queue = () => run(api.queuedMessages, { sessionId });
 const starts = () => engine.startTurn.mock.calls.map(([p]) => p.turnId);
+const lastSteerId = () => engine.steerTurn.mock.lastCall![0].steerId!;
 const ids = async () => (await queue()).items.map((item) => item.id);
 const steer = (id: string) => run(api.steerMessage, message(id));
 const steerRow = (id: string) => run(api.steerQueuedMessage, { sessionId, id });
@@ -85,7 +87,7 @@ beforeEach(async () => {
   db.exec(SCHEMA_SQL);
   db.exec(`
     INSERT INTO repositories (id, name, root_path) VALUES ('r', 'repo', '/tmp/repo');
-    INSERT INTO workspaces (id, repository_id, slug) VALUES ('w', 'r', 'checkout');
+    INSERT INTO workspaces (id, repository_id, slug, state) VALUES ('w', 'r', 'checkout', 'ready');
   `);
   sessionId = crypto.randomUUID();
   db.prepare("INSERT INTO sessions (id, workspace_id) VALUES (?, 'w')").run(sessionId);
@@ -121,7 +123,7 @@ afterEach(async () => {
   db.exec("DELETE FROM sessions");
   invalidate(["sessions"]);
   db.close();
-  vi.clearAllMocks();
+  vi.resetAllMocks();
 });
 
 describe("messages held for a local chat", () => {
@@ -177,8 +179,10 @@ describe("messages held for a local chat", () => {
         { id: "steer", steering: true },
         { id: "waiting", steering: false },
       ]);
-      end("first", reason, ["steer"]);
-      reply.resolve({ outcome: "steered", steerId: "steer" });
+      const attempt = lastSteerId();
+      expect(attempt).not.toBe("steer");
+      end("first", reason, [attempt]);
+      reply.resolve({ outcome: "steered", steerId: attempt });
       await receipt;
       if (reason === "cancelled") {
         expect(starts()).toEqual(["first"]);
@@ -197,12 +201,15 @@ describe("messages held for a local chat", () => {
     await send("first");
     await send("a");
     await send("b");
-    engine.startTurn.mockImplementationOnce(async ({ turnId }) => {
+    const ack = Promise.withResolvers<void>();
+    engine.startTurn.mockImplementationOnce(({ turnId }) => {
       emit({ type: "turn.started", sessionId, turnId, timestamp: seq });
       end(turnId);
+      return ack.promise;
     });
     end("first");
     await vi.waitFor(() => expect(starts()).toEqual(["first", "a", "b"]));
+    ack.resolve();
     expect(await ids()).toEqual([]);
     expect(agent.liveTurnId(sessionId)).toBe("b");
   });
@@ -222,12 +229,67 @@ describe("messages held for a local chat", () => {
     expect(await queue()).toEqual({ paused: null, items: [] });
   });
 
+  it("keeps a waiting row paused when a normal end arrives before the cancel reply", async () => {
+    await send("first");
+    await send("waiting");
+    const cancel = Promise.withResolvers<TurnCancelResult>();
+    engine.cancelTurn.mockReturnValueOnce(cancel.promise);
+    const stopping = stop();
+    expect(engine.cancelTurn.mock.calls).toEqual([[sessionId, "first"]]);
+    expect((await queue()).paused).toBe("stopped");
+    end("first");
+    expect(await ids()).toEqual(["waiting"]);
+    cancel.resolve({ outcome: "cancelled", turnId: "first" });
+    await stopping;
+    expect(await queue()).toMatchObject({ paused: "stopped", items: [{ id: "waiting" }] });
+    expect(starts()).toEqual(["first"]);
+  });
+
+  it.each(["admitted", "refused"] as const)(
+    "Stop during a queued head's app setup waits for that head (%s)",
+    async (admission) => {
+      await send("first");
+      await send("head");
+      await send("next");
+      const apps = Promise.withResolvers<Awaited<ReturnType<typeof resolveTurnApps>>>();
+      vi.mocked(resolveTurnApps).mockReturnValueOnce(apps.promise);
+      engine.cancelTurn.mockImplementationOnce(async (_, turnId) => {
+        if (!turnId) return { outcome: "no_active_turn" };
+        end(turnId, "cancelled");
+        return { outcome: "cancelled", turnId };
+      });
+      end("first");
+      expect(agent.liveTurnId(sessionId)).toBeUndefined();
+      const stopping = stop();
+      expect(await queue()).toMatchObject({ paused: "stopped", items: [{ id: "next" }] });
+      expect(engine.cancelTurn).not.toHaveBeenCalled();
+      if (admission === "admitted") apps.resolve({ servers: {}, skipped: [] });
+      else apps.reject(new Error("app setup failed"));
+      await expect(stopping).resolves.toEqual({ unconfirmed: false });
+      expect(agent.liveTurnId(sessionId)).toBeUndefined();
+      expect((await queue()).paused).toBe("stopped");
+      if (admission === "admitted") {
+        expect(engine.cancelTurn.mock.calls).toEqual([[sessionId, "head"]]);
+        expect(starts()).toEqual(["first", "head"]);
+        expect(await ids()).toEqual(["next"]);
+      } else {
+        expect(engine.cancelTurn).not.toHaveBeenCalled();
+        expect(starts()).toEqual(["first"]);
+        expect(await ids()).toEqual(["head", "next"]);
+      }
+    }
+  );
+
   it("pauses after a failed turn, and keeps unread steers at the front in request order", async () => {
     await send("first");
     await send("waiting");
     await steer("a");
     await steer("b");
-    end("first", "error", ["a", "b"]);
+    end(
+      "first",
+      "error",
+      engine.steerTurn.mock.calls.map(([p]) => p.steerId!)
+    );
     expect(await queue()).toMatchObject({
       paused: "failed",
       items: [{ id: "a", steering: false }, { id: "b", steering: false }, { id: "waiting" }],
@@ -246,11 +308,11 @@ describe("messages held for a local chat", () => {
         engine.cancelTurn.mockResolvedValue({ outcome: "unconfirmed", turnId: "first" });
       else engine.cancelTurn.mockRejectedValue(new Error("link closed"));
       await expect(stop()).resolves.toEqual({ unconfirmed: true });
-      expect((await queue()).paused).toBe(kind === "unconfirmed" ? "stopped" : null);
+      expect((await queue()).paused).toBe("stopped");
       await agent.shutdown();
       await vi.advanceTimersByTimeAsync(15_000);
       expect(await queue()).toMatchObject({
-        paused: kind === "unconfirmed" ? "stopped" : "failed",
+        paused: "stopped",
         items: [{ id: "a", steering: false }, { id: "waiting" }],
       });
       expect(starts()).toEqual(["first"]);
@@ -271,6 +333,10 @@ describe("messages held for a local chat", () => {
       paused: "failed",
       items: [{ id: "a", steering: false }, { id: "waiting" }],
     });
+    // The engine can replay the terminal after the gap gave up live ownership.
+    expect(agent.liveTurnId(sessionId)).toBeUndefined();
+    end("first", "cancelled");
+    expect((await queue()).paused).toBe("failed");
   });
 
   it.each([true, false])(
@@ -282,25 +348,26 @@ describe("messages held for a local chat", () => {
       const picture = { type: "image", mimeType: "image/png", data: "cGljdHVyZQ==" };
       await run(api.sendMessage, {
         ...message("picture"),
-        agentHarness: "claude-code",
         content: JSON.stringify([picture]),
       });
       await expect(steerRow("picture")).resolves.toEqual({ outcome: "steered" });
+      const attempt = lastSteerId();
+      expect(attempt).not.toBe("picture");
       expect(engine.steerTurn).toHaveBeenCalledWith({
         sessionId,
         turnId: "first",
-        steerId: "picture",
+        steerId: attempt,
         input: images ? [picture] : [{ type: "text", text: expect.stringContaining("omitted") }],
       });
       expect(await ids()).toEqual(["picture", "waiting"]);
       expect(await remove("picture")).toEqual({ content: null });
       echo("first", "unrelated");
       expect(await ids()).toEqual(["picture", "waiting"]);
-      echo("first", "picture");
+      echo("first", attempt);
       expect(await ids()).toEqual(["waiting"]);
       expect((await run(api.messages, { sessionId })).messages).toContainEqual(
         expect.objectContaining({
-          id: steerMessageId("picture"),
+          id: steerMessageId(attempt),
           role: "user",
           turn_id: "first",
         })
@@ -315,14 +382,70 @@ describe("messages held for a local chat", () => {
     const reply = Promise.withResolvers<TurnSteerResult>();
     engine.steerTurn.mockReturnValueOnce(reply.promise);
     const receipt = steer("a");
-    echo("first", "a");
+    echo("first", lastSteerId());
     reply.reject(new Error("connection closed"));
     await expect(receipt).resolves.toEqual({ outcome: "steered" });
-    await expect(steer("a")).resolves.toEqual({ outcome: "steered" });
+    await expect(steerRow("a")).resolves.toEqual({ outcome: "gone" });
     expect(engine.steerTurn).toHaveBeenCalledOnce();
     end("first");
     expect(await ids()).toEqual([]);
     expect(starts()).toEqual(["first"]);
+  });
+
+  it("a steer echoed after its RPC timed out never runs a second time", async () => {
+    await send("first");
+    engine.steerTurn.mockRejectedValueOnce(new Error("timed out"));
+    await expect(steer("a")).resolves.toEqual({ outcome: "steered" });
+    expect((await queue()).items).toMatchObject([{ id: "a", steering: true }]);
+    echo("first", lastSteerId());
+    expect(await ids()).toEqual([]);
+    end("first");
+    expect(await run(api.session, { sessionId })).toMatchObject({ status: "idle" });
+    expect(starts()).toEqual(["first"]);
+  });
+
+  it.each(["end_turn", "cancelled"] as const)(
+    "a timed-out steer still unread at %s returns to the front once",
+    async (reason) => {
+      await send("first");
+      await send("waiting");
+      engine.steerTurn.mockRejectedValueOnce(new Error("timed out"));
+      await expect(steer("a")).resolves.toEqual({ outcome: "steered" });
+      expect((await queue()).items).toMatchObject([{ id: "a", steering: true }, { id: "waiting" }]);
+      end("first", reason, reason === "cancelled" ? [lastSteerId()] : undefined);
+      if (reason === "cancelled") {
+        expect(await queue()).toMatchObject({
+          paused: "stopped",
+          items: [{ id: "a", steering: false }, { id: "waiting" }],
+        });
+        await run(api.resumeQueuedMessages, { sessionId });
+      }
+      await vi.waitFor(() => expect(starts()).toEqual(["first", "a"]));
+      expect(await ids()).toEqual(["waiting"]);
+      end("a");
+      await vi.waitFor(() => expect(starts()).toEqual(["first", "a", "waiting"]));
+    }
+  );
+
+  it("steers the same unread row into a later turn with a fresh engine id", async () => {
+    await send("first");
+    await send("row");
+    await steerRow("row");
+    const firstAttempt = lastSteerId();
+    end("first", "cancelled", [firstAttempt]);
+    await send("fresh");
+    await steerRow("row");
+    const nextAttempt = lastSteerId();
+    expect(new Set(["row", firstAttempt, nextAttempt]).size).toBe(3);
+    // A second window still saw the Steer action. It cannot start a third attempt.
+    await expect(steerRow("row")).resolves.toEqual({ outcome: "steered" });
+    expect(engine.steerTurn).toHaveBeenCalledTimes(2);
+    echo("first", firstAttempt);
+    expect((await queue()).items).toMatchObject([{ id: "row", steering: true }]);
+    echo("fresh", nextAttempt);
+    expect(await ids()).toEqual([]);
+    end("fresh");
+    expect(starts()).toEqual(["first", "fresh"]);
   });
 
   it("returns the full original content on removal, once", async () => {
@@ -338,13 +461,12 @@ describe("messages held for a local chat", () => {
     expect(starts()).toEqual(["first"]);
   });
 
-  it.each(["no_active_turn", "unsupported", "threw"] as const)(
+  it.each(["no_active_turn", "unsupported"] as const)(
     "moves a steer the engine refused to the head (%s)",
     async (outcome) => {
       await send("first");
       await send("waiting");
-      if (outcome === "threw") engine.steerTurn.mockRejectedValue(new Error("engine unavailable"));
-      else engine.steerTurn.mockResolvedValue({ outcome });
+      engine.steerTurn.mockResolvedValue({ outcome });
       await expect(steer("a")).resolves.toEqual({ outcome: "queued" });
       expect(await ids()).toEqual(["a", "waiting"]);
       end("first");
@@ -387,28 +509,49 @@ describe("messages held for a local chat", () => {
     }
   );
 
-  it("deduplicates a queued id, including two writes before either answer", async () => {
+  it("a held id acknowledges only its original content, including while paused and idle", async () => {
     await send("first");
-    expect(await Promise.all([send("again"), send("again")])).toEqual([
-      { turnId: "again", queued: true },
-      { turnId: "again", queued: true },
-    ]);
-    expect(await ids()).toEqual(["again"]);
-    end("first");
-    await vi.waitFor(() => expect(starts()).toEqual(["first", "again"]));
-    expect(await ids()).toEqual([]);
+    await send("again");
+    const different = () => run(api.sendMessage, { ...message("again"), content: "Another task" });
+    await expect(different()).rejects.toThrow(/different message/i);
+    await steerRow("again");
+    await expect(send("again")).resolves.toEqual({ turnId: "again", queued: true });
+    await expect(different()).rejects.toThrow(/different message/i);
+    end("first", "cancelled", [lastSteerId()]);
+    await expect(send("again")).resolves.toEqual({ turnId: "again", queued: true });
+    await expect(different()).rejects.toThrow(/different message/i);
+    expect(starts()).toEqual(["first"]);
+    expect(await queue()).toMatchObject({
+      paused: "stopped",
+      items: [{ id: "again", text: "Message again" }],
+    });
   });
 
-  it("queues a strict send that loses the engine's admission race", async () => {
-    engine.startTurn.mockRejectedValueOnce(
-      new WireRequestError(WIRE_ERROR_CODES.turnActive, "busy")
-    );
-    await expect(send("loser")).resolves.toEqual({ turnId: "loser", queued: true });
-    expect(await ids()).toEqual(["loser"]);
-    emit({ type: "turn.started", sessionId, turnId: "winner", timestamp: seq });
-    end("winner");
-    await vi.waitFor(() => expect(starts()).toEqual(["loser", "loser"]));
-  });
+  it.each(["before", "after"] as const)(
+    "queues two callers of a losing admission once when the winner ends %s the busy reply",
+    async (when) => {
+      const admission = Promise.withResolvers<void>();
+      engine.startTurn.mockReturnValueOnce(admission.promise);
+      const receipts = Promise.all([send("loser"), send("loser")]);
+      await vi.waitFor(() => expect(starts()).toEqual(["loser"]));
+      expect(await ids()).toEqual([]);
+      await agent.startTurn(sessionId, "winner", "codex-app-server", "winning turn", {
+        cwd: "/tmp/repo",
+      });
+      if (when === "before") end("winner");
+      admission.reject(new WireRequestError(WIRE_ERROR_CODES.turnActive, "busy"));
+      expect(await receipts).toEqual([
+        { turnId: "loser", queued: true },
+        { turnId: "loser", queued: true },
+      ]);
+      if (when === "after") {
+        expect(await ids()).toEqual(["loser"]);
+        end("winner");
+      }
+      await vi.waitFor(() => expect(starts()).toEqual(["loser", "winner", "loser"]));
+      expect(await ids()).toEqual([]);
+    }
+  );
 
   it("pauses rows accepted during an admission that later fails", async () => {
     const reply = Promise.withResolvers<void>();
@@ -524,7 +667,7 @@ describe("messages held for a local chat", () => {
 
   it("publishes the old end before admitting the next turn and pushes the queue to both windows", async () => {
     await send("first");
-    const connect = () => {
+    const connect = (chatId = sessionId) => {
       const frames: {
         id: string;
         data?: { status?: string; items?: unknown[]; envelope?: { event: { type: string } } };
@@ -534,11 +677,20 @@ describe("messages held for a local chat", () => {
         null
       );
       for (const resource of ["queuedMessages", "sessionEvents", "session"]) {
-        handleFrame(id, { type: "q:subscribe", id: resource, resource, params: { sessionId } });
+        handleFrame(id, {
+          type: "q:subscribe",
+          id: resource,
+          resource,
+          params: { sessionId: chatId },
+        });
       }
       return frames;
     };
     const first = connect();
+    const otherChat = await run(api.createSession, { workspaceId: "w" });
+    const unrelated = connect(otherChat.id);
+    expect(unrelated.find((f) => f.id === "queuedMessages")?.data?.items).toEqual([]);
+    unrelated.length = 0;
     await send("next");
     const second = connect();
     for (const frames of [first, second]) {
@@ -549,6 +701,7 @@ describe("messages held for a local chat", () => {
     }
     end("first");
     await vi.waitFor(() => expect(starts()).toEqual(["first", "next"]));
+    expect(unrelated).toEqual([]);
     for (const frames of [first, second]) {
       const ended = frames.findIndex((f) => f.data?.envelope?.event.type === "turn.ended");
       expect(ended).toBeGreaterThanOrEqual(0);
@@ -557,5 +710,23 @@ describe("messages held for a local chat", () => {
       ).toBeGreaterThan(ended);
       expect(frames.filter((f) => f.id === "queuedMessages").at(-1)?.data?.items).toEqual([]);
     }
+  });
+
+  it("a workspace's sessions subscription keeps its scope when a caller passes an extra sessionId", () => {
+    const send = vi.fn();
+    const connection = addConnection({ close() {}, send }, null);
+    handleFrame(connection, {
+      type: "q:subscribe",
+      id: "workspaceChats",
+      resource: "sessions",
+      params: { workspaceId: "w", sessionId: "other" },
+    });
+    send.mockClear();
+    invalidate(["sessions"], { sessionIds: [sessionId] });
+    expect(JSON.parse(send.mock.calls[0]![0])).toMatchObject({
+      type: "q:snapshot",
+      id: "workspaceChats",
+      data: [expect.objectContaining({ id: sessionId })],
+    });
   });
 });

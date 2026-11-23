@@ -9,11 +9,11 @@ import { ChatBusyError } from "../../lib/errors";
 import { invalidate, onInvalidate } from "../query-engine";
 import { toEngineInput } from "./run-config";
 import { liveTurnId, steerTurn } from "./service";
-import { knownTurn, sendMessage } from "./turns";
+import { differentTurnMessage, knownTurn, requireSameHarness, sendMessage } from "./turns";
 
 type Input = ParsedInputOf<typeof api.sendMessage>;
 type Message = Input & { turnId: string };
-type LocalChat = Pick<SessionRow, "status" | "agent_harness">;
+type LocalChat = Pick<SessionRow, "status" | "agent_harness" | "message_count">;
 type Item = { message: Message; text: string; images: number };
 type Steer = { item: Item; turnId: string; echoed: boolean };
 
@@ -23,7 +23,7 @@ interface Queue {
   /** Keyed by the message id the engine will echo. Insertion order is delivery order. */
   steers: Map<string, Steer>;
   paused: api.QueuedMessages["paused"];
-  starting?: Item;
+  starting?: { head: Item; admission: ReturnType<typeof sendMessage> };
 }
 
 const queues = new Map<string, Queue>();
@@ -33,9 +33,8 @@ const OPEN_LOCAL = `FROM sessions s JOIN workspaces w ON w.id = s.workspace_id
   WHERE w.kind = 'worktree' AND w.state != 'archived' AND s.is_hidden = 0`;
 
 function localChat(id: string) {
-  return getDatabase()
-    .prepare<[string], LocalChat>(`SELECT s.status, s.agent_harness ${OPEN_LOCAL} AND s.id = ?`)
-    .get(id);
+  const sql = `SELECT s.status, s.agent_harness, s.message_count ${OPEN_LOCAL} AND s.id = ?`;
+  return getDatabase().prepare<[string], LocalChat>(sql).get(id);
 }
 
 function notify(sessionIds: string[]) {
@@ -80,7 +79,10 @@ function withId(input: Input): Message {
   return { ...input, turnId: input.turnId ?? uuidv7() };
 }
 
-function itemFor(message: Message): Item {
+function itemFor(message: Message, chat: LocalChat): Item {
+  // The first turn binds the harness before its user echo increments the message count.
+  if (chat.message_count > 0 || ACTIVE_TURN_STATUSES.includes(chat.status))
+    requireSameHarness(chat.agent_harness, message.agentHarness);
   const input = toEngineInput(message.content);
   return {
     message,
@@ -118,33 +120,43 @@ async function drain(q: Queue): Promise<Item | undefined> {
   }
   if (ACTIVE_TURN_STATUSES.includes(chat.status)) return;
   const head = q.waiting.shift()!;
-  q.starting = head;
-  const started = sendMessage(head.message);
+  const starting = { head, admission: sendMessage(head.message) };
+  q.starting = starting;
   changed(q);
   try {
-    await started;
+    await starting.admission;
   } catch (error) {
-    if (queues.get(q.sessionId) !== q || q.starting !== head) return;
+    if (queues.get(q.sessionId) !== q || q.starting !== starting) return;
     q.starting = undefined;
     q.waiting.unshift(head);
     const busy = error instanceof ChatBusyError;
-    if (!busy) q.paused = "failed";
+    if (!busy) q.paused ??= "failed";
     changed(q);
     // If the competing turn already ended, its drain saw our pending start.
     if (busy) void drain(q);
     return;
   }
-  if (queues.get(q.sessionId) === q && q.starting === head) {
+  if (queues.get(q.sessionId) === q && q.starting === starting) {
     q.starting = undefined;
     changed(q);
   }
   return head;
 }
 
-function holds(q: Queue | undefined, id: string) {
-  return (
-    q && (q.steers.has(steerMessageId(id)) || q.waiting.some((item) => item.message.turnId === id))
-  );
+function pendingSteer(q: Queue | undefined, rowId: string) {
+  if (!q) return;
+  for (const { item } of q.steers.values()) if (item.message.turnId === rowId) return item;
+}
+
+function alreadyQueued({ sessionId, turnId, content }: Message) {
+  const q = queues.get(sessionId);
+  const head = q?.starting?.head;
+  const held =
+    head?.message.turnId === turnId
+      ? head
+      : (q?.waiting.find((item) => item.message.turnId === turnId) ?? pendingSteer(q, turnId));
+  if (held && held.message.content !== content) throw differentTurnMessage();
+  return !!held;
 }
 
 export async function sendOrQueue(input: Input) {
@@ -153,7 +165,7 @@ export async function sendOrQueue(input: Input) {
   if (!chat) return sendMessage(input);
   const message = withId(input);
   const queued = { turnId: message.turnId, queued: true as const };
-  if (holds(queues.get(sessionId), message.turnId)) return queued;
+  if (alreadyQueued(message)) return queued;
   if (!ACTIVE_TURN_STATUSES.includes(chat.status) || knownTurn(sessionId, message.turnId)) {
     try {
       return await sendMessage(message);
@@ -161,13 +173,13 @@ export async function sendOrQueue(input: Input) {
       if (!(error instanceof ChatBusyError)) throw error;
       chat = localChat(sessionId);
       if (!chat) throw error;
+      if (alreadyQueued(message)) return queued;
     }
   }
+  const item = itemFor(message, chat);
   const q = queueFor(sessionId);
-  if (!holds(q, message.turnId)) {
-    q.waiting.push(itemFor(message));
-    changed(q);
-  }
+  q.waiting.push(item);
+  changed(q);
   if (!ACTIVE_TURN_STATUSES.includes(chat.status)) void drain(q);
   return queued;
 }
@@ -187,19 +199,21 @@ async function steer(q: Queue, item: Item, chat: LocalChat): Promise<SteerResult
   const turnId = chat.status === "working" && liveTurnId(q.sessionId);
   if (turnId) {
     const pending: Steer = { turnId, item, echoed: false };
-    const echoId = steerMessageId(item.message.turnId);
+    const steerId = uuidv7();
+    const echoId = steerMessageId(steerId);
     q.steers.set(echoId, pending);
     changed(q);
     const result = await steerTurn(chat.agent_harness, {
       sessionId: q.sessionId,
       turnId,
-      steerId: item.message.turnId,
+      steerId,
       input: toEngineInput(item.message.content),
     }).catch(() => undefined);
     // The echo or turn end can beat the RPC, even an RPC reporting acceptance.
     if (q.steers.get(echoId) !== pending || queues.get(q.sessionId) !== q)
       return pending.echoed ? "steered" : "queued";
-    if (result?.outcome === "steered") return "steered";
+    // A timed-out call may still echo. Only a definite refusal frees the message.
+    if (result?.outcome !== "no_active_turn" && result?.outcome !== "unsupported") return "steered";
     q.steers.delete(echoId);
   }
   q.waiting.unshift(item);
@@ -214,24 +228,8 @@ export async function steerMessage(input: Input): Promise<SteerResult> {
     await sendMessage(input);
     return { outcome: "sent" };
   }
-  const message = withId(input);
-  const echoId = steerMessageId(message.turnId);
-  if (
-    queues.get(sessionId)?.steers.has(echoId) ||
-    (input.turnId &&
-      getDatabase()
-        .prepare("SELECT 1 FROM messages WHERE session_id = ? AND id = ? AND role = 'user'")
-        .get(sessionId, echoId))
-  ) {
-    return { outcome: "steered" };
-  }
-  if (input.turnId && knownTurn(sessionId, input.turnId)) {
-    await sendMessage(message);
-    return { outcome: "sent" };
-  }
-  const q = queueFor(sessionId);
-  const item = q.waiting.find((i) => i.message.turnId === message.turnId) ?? itemFor(message);
-  return { outcome: await steer(q, item, chat) };
+  const item = itemFor(withId(input), chat);
+  return { outcome: await steer(queueFor(sessionId), item, chat) };
 }
 
 export async function steerQueuedMessage(
@@ -239,7 +237,7 @@ export async function steerQueuedMessage(
   id: string
 ): Promise<OutputOf<typeof api.steerQueuedMessage>> {
   const q = queues.get(sessionId);
-  if (q?.steers.has(steerMessageId(id))) return { outcome: "steered" };
+  if (pendingSteer(q, id)) return { outcome: "steered" };
   const item = q?.waiting.find((i) => i.message.turnId === id);
   const chat = item && localChat(sessionId);
   if (!q || !item || !chat) return { outcome: "gone" };
@@ -291,6 +289,7 @@ export function stopQueue(sessionId: string) {
   if (!q) return;
   q.paused = "stopped";
   changed(q);
+  return q.starting?.admission;
 }
 
 /** A live turn can still echo. Once it is gone, its unread steers can be resumed as turns. */
@@ -312,9 +311,9 @@ export function turnEnded(ended: TurnEndedEvent, status?: "idle" | "error") {
     if (recovered) changed(q);
     return;
   }
-  if (q.starting?.message.turnId === ended.turnId) q.starting = undefined;
+  if (q.starting?.head.message.turnId === ended.turnId) q.starting = undefined;
   if (ended.stopReason === "cancelled") q.paused = "stopped";
-  else if (status === "error") q.paused = "failed";
+  else if (status === "error") q.paused ??= "failed";
   changed(q);
   void drain(q);
 }

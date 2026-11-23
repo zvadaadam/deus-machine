@@ -418,7 +418,7 @@ describeWithDb("sendMessage", () => {
       );
     });
 
-    it("does NOT move for a second client's send inside the echo-only window", async () => {
+    it("refuses a different harness at queue admission before the first echo", async () => {
       vi.spyOn(agentService, "isConnected").mockReturnValue(true);
       const startTurn = vi.spyOn(agentService, "startTurn").mockResolvedValue(undefined as never);
 
@@ -431,17 +431,20 @@ describeWithDb("sendMessage", () => {
         message_count: 0,
       });
 
-      // Client B sends a different harness. The harness lock cannot stop it
-      // (0 messages, nothing locked). Queuing must leave the live harness alone.
-      await expect(sendWith("codex-app-server", "turn-b")).resolves.toEqual({
-        turnId: "turn-b",
-        queued: true,
+      await expect(sendWith("codex-app-server", "turn-b")).rejects.toThrow(/Cannot switch agent/i);
+      await expect(
+        run(api.steerMessage, {
+          sessionId: SESSION,
+          turnId: "turn-b",
+          agentHarness: "codex-app-server",
+          model: "gpt-5.5-codex",
+          content: "hello",
+        })
+      ).rejects.toThrow(/Cannot switch agent/i);
+      expect(await run(api.queuedMessages, { sessionId: SESSION })).toEqual({
+        paused: null,
+        items: [],
       });
-      await run(api.removeQueuedMessage, { sessionId: SESSION, id: "turn-b" });
-
-      // The row still describes the turn that is actually running. Rebinding
-      // here would strand the session on a harness that never ran, and the
-      // lock would then reject every follow-up send under the real one.
       expect(harness()).toBe("claude-code");
       expect(startTurn).toHaveBeenCalledOnce();
     });

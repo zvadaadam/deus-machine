@@ -112,7 +112,7 @@ function App() {
   const [view, setView] = useState(location.search.startsWith("?welcome") ? "Welcome" : location.search.startsWith("?direct") ? "Direct" : location.search === "?history" ? "History" : location.search ? "Onboarding" : "GitHub");
   const [phase, setPhase] = useState(0);
   const [laterTool, setLaterTool] = useState(false);
-  const messages = [{ id: "m", session_id: "s", turn_id: "turn", role: "assistant", seq: 1, parts: [
+  const messages: any[] = [{ id: "m", session_id: "s", turn_id: "turn", role: "assistant", seq: 1, parts: [
     { type: "reasoning", id: "r", text: "Check the project before changing it.", state: "done" },
     { type: "tool", id: "t", toolCallId: "t", toolName: "Bash", kind: "execute", state: { status: "completed", input: {command: "bun test"}, output: "All checks passed", title: "Run tests" } },
     { type: "text", id: "a", text: "The useful answer stays visible.", state: phase ? "done" : "streaming" },
@@ -134,7 +134,7 @@ function App() {
           <button onClick={() => setPhase(p => p + 1)}>Advance turn</button>
           <button onClick={() => setLaterTool(true)}>Run another tool</button>
           <SessionProvider sessionStatus={phase === 1 ? "idle" : "working"} workspaceId="workspace" subagentMessages={new Map()}>
-            <AssistantTurn messages={messages as any} isOpen={phase === 0} isStreaming={phase === 0} turn={phase ? {turnId: "turn", stopReason: "end_turn", endedAt: 1} : undefined} />
+            <AssistantTurn messages={messages} footerMessages={phase ? messages : undefined} isStreaming={phase === 0} turn={phase ? {turnId: "turn", stopReason: "end_turn", endedAt: 1} : undefined} />
           </SessionProvider>
         </>}
       </main>

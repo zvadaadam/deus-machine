@@ -19,9 +19,11 @@ function showError(error: unknown) {
 export function QueuedMessageList({
   sessionId,
   canSteer,
+  sending,
 }: {
   sessionId: string;
   canSteer: boolean;
+  sending: boolean;
 }) {
   const store = composerStore(useQueryClient());
   const queryKey = queryKeys.sessions.queued(sessionId);
@@ -57,7 +59,7 @@ export function QueuedMessageList({
               </span>
               <Button
                 size="xs"
-                variant="ghost"
+                variant="secondary"
                 onClick={() => call(api.resumeQueuedMessages, params).catch(showError)}
               >
                 Resume
@@ -68,16 +70,16 @@ export function QueuedMessageList({
         {data?.items.map(({ id, text, images, steering }) => (
           <Collapse key={`message:${id}`}>
             <div className="border-border-subtle bg-bg-muted text-text-secondary mb-1 flex h-8 items-center gap-2 rounded-lg border pr-1 pl-2.5 text-sm pointer-coarse:h-12">
-              <span className="text-text-muted shrink-0 text-xs">
-                {steering ? "Waiting to be read" : "Queued"}
-              </span>
+              {steering && (
+                <span className="text-text-muted shrink-0 text-xs">Waiting to be read</span>
+              )}
               {text && (
                 <span className="min-w-0 truncate" title={text}>
                   {text}
                 </span>
               )}
               {images > 0 && (
-                <span className="text-text-muted shrink-0 text-xs">
+                <span className={text ? "text-text-muted shrink-0 text-xs" : "shrink-0"}>
                   {images} {images === 1 ? "image" : "images"}
                 </span>
               )}
@@ -99,6 +101,7 @@ export function QueuedMessageList({
                     variant="ghost"
                     aria-label="Edit queued message"
                     title="Edit queued message"
+                    disabled={sending}
                     onClick={() => edit(id).catch(showError)}
                   >
                     <Pencil className="size-3.5" />

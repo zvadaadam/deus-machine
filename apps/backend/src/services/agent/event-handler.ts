@@ -350,6 +350,7 @@ export function createAgentEventHandler(): AgentEventHandler {
       // hot path (measured: 200 deltas → 200 writes, ~169 KB for a 1.7 KB
       // message), for durability the protocol explicitly does not promise.
       const isDelta = envelope.event.type === "message.part.delta";
+      const liveTurnId = state.turnId;
       let outcome: TurnOutcomeWrite | undefined;
       const writes = isDelta
         ? []
@@ -410,7 +411,12 @@ export function createAgentEventHandler(): AgentEventHandler {
 
       if (!NOT_PUSHED.has(envelope.event.type)) pushEnvelope(envelope);
       // A queued successor may begin immediately. Publish its predecessor's end first.
-      if (envelope.event.type === "turn.ended") turnEnded(envelope.event, outcome?.status);
+      if (envelope.event.type === "turn.ended") {
+        turnEnded(
+          envelope.event,
+          envelope.event.turnId === liveTurnId ? outcome?.status : undefined
+        );
+      }
       if (envelope.event.type === "message.started" && envelope.event.role === "user") {
         steerEcho(sessionId, envelope.event.turnId, envelope.event.messageId);
       }

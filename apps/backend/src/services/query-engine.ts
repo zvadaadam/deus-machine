@@ -269,7 +269,7 @@ export function invalidate(resources: LiveName[], ctx?: InvalidateContext): void
       const concerned =
         !ctx?.sessionIds?.length || (!!sessionId && ctx.sessionIds.includes(sessionId));
 
-      if (sub.resource === "session" && !concerned) continue;
+      if ((sub.resource === "session" || sub.resource === "queuedMessages") && !concerned) continue;
       if (
         sub.resource === "workspaces" &&
         ctx?.sessionIds?.length &&

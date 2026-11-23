@@ -256,32 +256,6 @@ describe("backend prompt delivery", () => {
     }
   );
 
-  it("keeps the real user message if its queued turn already started before the answer", async () => {
-    const { useSendMessage } = await import("@/features/session/api/session.queries");
-    const key = queryKeys.sessions.messages(SESSION);
-    const client = state.queryClient!;
-    const turnId = "already-running";
-    state.call.mockImplementationOnce(() => {
-      client.setQueryData<PaginatedMessages>(key, (page) => ({
-        ...page!,
-        messages: page!.messages.map((message) => ({ ...message, seq: 1 })),
-        turns: [{ turnId, startedAt: 1000 }],
-      }));
-      return { turnId, queued: true };
-    });
-    await useSendMessage().mutateAsync({
-      sessionId: SESSION,
-      turnId,
-      content: "Next task",
-      agentHarness: "claude-code",
-      model: "opus",
-      thinkingLevel: "high",
-    });
-    expect(client.getQueryData<PaginatedMessages>(key)?.messages).toMatchObject([
-      { turn_id: turnId, seq: 1 },
-    ]);
-  });
-
   it("sends with the newly picked agent even when the previous model had Plan on", async () => {
     sessionComposerActions.seedIfAbsent(SESSION, emptyComposer("claude-code:opus", "high"));
     try {

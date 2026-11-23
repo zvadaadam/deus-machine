@@ -59,6 +59,17 @@ export function knownTurn(sessionId: string, turnId: string): boolean {
   );
 }
 
+export function differentTurnMessage(): ConflictError {
+  return new ConflictError("A different message was already sent as this turn. Nothing was sent.");
+}
+
+export function requireSameHarness(current: string, requested: string): void {
+  if (current !== requested)
+    throw new ConflictError(
+      `Cannot switch agent from ${current} to ${requested} on a session with messages. Open a new chat tab instead.`
+    );
+}
+
 /** A turn's request as its echo was stored: its text and its sender. */
 function storedRequest(sessionId: string, turnId: string) {
   const db = getDatabase();
@@ -93,14 +104,13 @@ export async function sendMessage(
   const key = `${input.sessionId}\0${turnId}`;
   // Its text kept as a digest: a send with images would otherwise sit in memory for minutes.
   const request = { content: digest(input.content), origin: encodeOrigin(origin) };
-  const different = () =>
-    new ConflictError("A different message was already sent as this turn. Nothing was sent.");
   const db = getDatabase();
   let admissions = admissionsOf.get(db);
   if (!admissions) admissionsOf.set(db, (admissions = new Map()));
   const known = admissions.get(key);
   if (known) {
-    if (known.content !== request.content || known.origin !== request.origin) throw different();
+    if (known.content !== request.content || known.origin !== request.origin)
+      throw differentTurnMessage();
     return known.done;
   }
   const stored = storedRequest(input.sessionId, turnId);
@@ -108,7 +118,7 @@ export async function sendMessage(
     const same =
       stored.content === undefined ||
       (stored.content.trim() === input.content.trim() && stored.origin === request.origin);
-    if (!same) throw different();
+    if (!same) throw differentTurnMessage();
     return { turnId };
   }
   const done = sendMessageOnce(input, origin);
@@ -140,11 +150,7 @@ async function sendMessageOnce(
   // a specific SDK process. Reject cross-harness switches to keep the server
   // authoritative; the UI disables these options too, but this is the source
   // of truth.
-  if (session && session.message_count > 0 && session.agent_harness !== agentHarness) {
-    throw new ConflictError(
-      `Cannot switch agent from ${session.agent_harness} to ${agentHarness} on a session with messages. Open a new chat tab instead.`
-    );
-  }
+  if (session && session.message_count > 0) requireSameHarness(session.agent_harness, agentHarness);
 
   // A send against an active turn would persist a user message that no agent
   // will ever answer (the wire rejects the turn with turnActive and the
@@ -219,11 +225,7 @@ async function sendMessageOnce(
 
     if (result.changes === 0) {
       const current = getSessionRaw(db, sessionId);
-      if (current && current.agent_harness !== agentHarness) {
-        throw new ConflictError(
-          `Cannot switch agent from ${current.agent_harness} to ${agentHarness} on a session with messages. Open a new chat tab instead.`
-        );
-      }
+      if (current) requireSameHarness(current.agent_harness, agentHarness);
     } else if (isCloud) {
       // The driver's connect-time harness stamp already ran for this session
       // under its DEFAULT harness: the workspace pipeline pre-opens the socket
@@ -405,11 +407,21 @@ export async function stopSession(
   /** Who stops it, kept on the turn so a reader can say who did. */
   by: Origin = { kind: "person" }
 ): Promise<{ unconfirmed: boolean }> {
+  const starting = stopQueue(sessionId);
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new NotFoundError("Session not found");
 
-  const targetTurnId = agentService.liveTurnId(sessionId);
+  let targetTurnId = agentService.liveTurnId(sessionId);
+  if (!targetTurnId && starting) {
+    // A queue head can be preparing its apps before the engine knows its turn.
+    try {
+      targetTurnId = (await starting).turnId;
+    } catch {
+      // Its admission failed. The queue has it back and there is no such turn to stop.
+      return { unconfirmed: false };
+    }
+  }
   const mine = JSON.stringify(by);
   const key = `${sessionId}\0${targetTurnId}`;
   // Claimed before the stop is sent, so a reader seeing the cancel can say who:
@@ -469,7 +481,6 @@ export async function stopSession(
   )
     return { unconfirmed: false };
 
-  if (tookEffect) stopQueue(sessionId);
   if (result && result.outcome !== "unconfirmed") {
     db.prepare(
       `UPDATE sessions SET status = 'idle', updated_at = datetime('now')

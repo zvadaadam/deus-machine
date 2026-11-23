@@ -336,13 +336,7 @@ export function useSendMessage() {
 
     onSuccess: (result, { sessionId, turnId }, context) => {
       if (!result?.queued || !context) return;
-      // Another turn started before this send reached the host. If the queue
-      // already drained, the engine owns this bubble now.
-      const page = queryClient.getQueryData<PaginatedMessages>(
-        queryKeys.sessions.messages(sessionId)
-      );
-      if (!page?.turns.some((turn) => turn.turnId === turnId))
-        dropOptimisticMessage(queryClient, sessionId, turnId);
+      dropOptimisticMessage(queryClient, sessionId, turnId);
       void queryClient.invalidateQueries({ queryKey: ["workspaces", "by-repo"] });
     },
 

@@ -42,7 +42,7 @@ function render(data: QueuedMessages, canSteer = true) {
     createElement(
       QueryClientProvider,
       { client },
-      createElement(QueuedMessageList, { sessionId, canSteer })
+      createElement(QueuedMessageList, { sessionId, canSteer, sending: false })
     )
   );
 }
@@ -69,9 +69,9 @@ it("shows the host's unread steer first and leaves it without actions", () => {
     queryKey,
     params: { sessionId },
   });
-  expect(html).toMatch(
-    /Waiting to be read.*Change direction.*2 images.*>Queued<.*1 image.*>Steer</s
-  );
+  expect(html).toContain('aria-label="Queued messages"');
+  expect(html).not.toContain(">Queued<");
+  expect(html).toMatch(/Waiting to be read.*Change direction.*2 images.*1 image.*>Steer</s);
   expect(button.mock.calls.map(([p]) => p["aria-label"] ?? p.children)).toEqual([
     "Steer",
     "Edit queued message",

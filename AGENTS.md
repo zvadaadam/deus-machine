@@ -155,7 +155,7 @@ Single WS connection (`/ws`) using `q:` prefixed JSON frames:
 | `q:request` / `q:response`               | A read, answered once (`diffStats`, `settings`)                                                            |
 | `q:subscribe` / `q:snapshot` / `q:delta` | A live read: its value, sent again whenever it changes (workspaces, sessions)                              |
 | `q:subscribe` / `q:event` / `q:reset`    | A stream of events, sent only to the connections following it (a chat's agent events, a terminal's output) |
-| `q:mutate` / `q:mutate_result`           | A write, never replayed on reconnect (archiveWorkspace, sendMessage, steerMessage, stopSession)            |
+| `q:mutate` / `q:mutate_result`           | A write, never sent twice (archiveWorkspace, sendMessage, steerMessage, stopSession)                       |
 | `q:tool_response`                        | The answer to something an agent asked this client                                                         |
 
 **One contract.** Every operation and stream a host offers is declared once in
@@ -194,17 +194,17 @@ last turn record is the open turn. A replay can append an older end, so otherwis
 `session/lib/conversationView.ts` uses the newest message's turn record, or the
 chat's working status until that record arrives.
 
-While a local chat's agent works, Enter in the desktop composer queues the person's
-message and Command-Enter (Ctrl-Enter outside macOS) steers it into the turn.
-With a question or plan card open, both queue. `services/agent/queue.ts` keeps each
-chat's queue in the backend process's memory. Every window follows `queuedMessages`
-for that chat. `session/ui/QueuedMessageList.tsx` shows the text and a picture count.
-Only `removeQueuedMessage` returns the full content. Unread steers appear first.
-If their turn ends before the agent reads them, they go back to the front in order.
-After publishing a normal turn end, the backend sends one waiting message as the next
-turn. A stop or failure pauses the queue until Resume. When the agent reads a steer
-mid-turn, `groupTurns` in `session/lib/chatTimeline.ts` shows one reply in several
-groups with one footer. Cloud chats keep their existing send, including the hosted
+While a local chat's agent works, Enter on a keyboard queues a message, as does the Send
+button on a phone. Command-Enter (Ctrl-Enter outside macOS) asks for a steer. If the agent cannot
+take it, the message queues or starts its own turn if the chat is free. With a question
+or plan card open, both shortcuts queue. `services/agent/queue.ts` holds each chat's queue
+in the backend process's memory. Each window with that composer open follows `queuedMessages`.
+`session/ui/QueuedMessageList.tsx` shows text and a picture count. Only `removeQueuedMessage`
+returns the full content. Unread steers appear first and return to the front in order if
+their turn ends unread. After publishing a normal end, the backend sends one message from
+an unpaused queue. Asking to stop pauses the queue at once. After a stop or failure it waits
+for Resume. A steer read mid-turn splits one reply into groups with one footer (`groupTurns`
+in `session/lib/chatTimeline.ts`). Cloud chats keep their send, including the hosted
 web's direct lane. The operator's `send` to a busy chat still answers `busy`.
 
 A `fileChanges` subscription names one workspace. On macOS its first follower
