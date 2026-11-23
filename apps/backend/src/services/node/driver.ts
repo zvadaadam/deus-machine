@@ -76,8 +76,10 @@ class LocalNodeDriver implements NodeDriver {
     } catch (error) {
       if (!(error instanceof GitError)) throw error;
       // A git diagnostic can contain private paths or repository-controlled text.
-      let reason = error.timedOut ? "git timed out" : "git could not finish the read";
-      if (!error.timedOut && error.code !== null) {
+      const { cause } = error;
+      let reason = "git could not finish the read";
+      if (error.timedOut) reason = "git timed out";
+      else if (error.code !== null) {
         try {
           await runGit(["rev-parse", "--git-dir"], { cwd: this.workspacePath, timeoutMs: 2000 });
           reason = `git failed (${error.code})`;
@@ -86,6 +88,10 @@ class LocalNodeDriver implements NodeDriver {
           if (probeError.timedOut) reason = "git timed out";
           else if (probeError.code !== null) reason = "the workspace is not a git repository";
         }
+      } else if (cause && typeof cause === "object" && "code" in cause) {
+        const { code } = cause;
+        if (typeof code === "string" && /^[A-Z][A-Z0-9_]*$/.test(code))
+          reason = `git failed (${code})`;
       }
       throw new ConflictError(`Could not read the changes: ${reason}.`);
     }

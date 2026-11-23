@@ -206,7 +206,7 @@ it("distinguishes a missing repository, comparison branch and git executable und
   expect(await driver.diffFiles()).toEqual({ files: [] });
   vi.stubEnv("PATH", root);
   await expect(driver.diffFiles()).rejects.toMatchObject({
-    message: "Could not read the changes: git could not finish the read.",
+    message: "Could not read the changes: git failed (ENOENT).",
     statusCode: 409,
   });
 });

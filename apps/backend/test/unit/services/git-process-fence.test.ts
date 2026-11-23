@@ -120,10 +120,15 @@ it("reports the file and line of a direct git call, including aliases and shell 
 });
 
 it("keeps git process creation in the shared runner", () => {
+  const skippedDirs = ["node_modules", "scripts", "test", "tests", "__tests__", "dist", "build"];
+  // Node matches wildcard filenames case-insensitively on macOS and Windows.
+  const foldCase = process.platform === "darwin" || process.platform === "win32";
   const files = globSync("{apps,shared,packages}/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}", {
     cwd: root,
-    exclude: ["**/{node_modules,scripts,test,tests,__tests__,dist,build}/**", "**/*.{test,spec}.*"],
-  }).map((file) => file.split(path.sep).join("/"));
+    exclude: (entry) => skippedDirs.includes(path.basename(entry)),
+  })
+    .map((file) => file.split(path.sep).join("/"))
+    .filter((file) => !/\.(test|spec)\./.test(foldCase ? file.toLowerCase() : file));
   expect(files).toContain("apps/backend/src/api/repos.ts");
   const violations = files
     .filter((file) => file !== owner)
