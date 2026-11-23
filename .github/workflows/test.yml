@@ -81,6 +81,10 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Test SQLite, terminal and watcher parity on Bun
+        # Closing a recursive watch used to leak one file descriptor on macOS.
+        run: bun run test:bun
+
       - name: Build staged native runtime
         run: bun run build:runtime
 

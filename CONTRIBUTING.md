@@ -5,7 +5,7 @@ Thanks for your interest in contributing to Deus! This document covers everythin
 ## Prerequisites
 
 - **Node.js** 22.x exactly (see `.node-version`; newer majors fail to compile native modules)
-- **Bun** 1.2+ (package manager — never use npm or yarn)
+- **Bun** for all package commands. Use the version in the root `package.json` under `packageManager`.
 - **Xcode Command Line Tools** on macOS; full Xcode only for the iOS simulator and local packaging
 
 ## Setup

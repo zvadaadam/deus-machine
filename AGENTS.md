@@ -28,10 +28,10 @@ New machine or broken toolchain? `bun run doctor` checks Node (22.x, see `.node-
 
 ## Cursor Cloud setup
 
-Fresh cloud images should have Bun available. If `command -v bun` fails, install it before any repo commands:
+Fresh cloud images should have Bun available. Install the version pinned in `package.json` if it is missing:
 
 ```bash
-curl -fsSL https://bun.sh/install | bash
+curl -fsSL https://bun.sh/install | bash -s "bun-v$(node -p "require('./package.json').packageManager.split('@')[1]")"
 export PATH="$HOME/.bun/bin:$PATH"
 ```
 
@@ -210,7 +210,7 @@ A steer read mid-turn splits one reply into groups with one footer (`groupTurns`
 `session/lib/chatTimeline.ts`). Cloud chats keep their send, including the hosted web's
 direct lane. The operator's `send` to a busy chat still answers `busy`.
 
-A `fileChanges` subscription names one workspace. On macOS its first follower
+A `fileChanges` subscription names one workspace. On macOS or on Linux with Bun, its first follower
 opens a recursive watch on the local checkout. The last one leaving, including
 a dropped connection, closes it after three seconds so a quick return reuses
 the watch. An opening event confirms the watch and refreshes Files and Changes.

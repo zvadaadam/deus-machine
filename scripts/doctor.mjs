@@ -1,7 +1,7 @@
 // Checks that this machine can develop, package, and deploy Deus.
 // Run: bun run doctor
 //
-// "required" failures break `bun install` / `bun run dev`. "optional" ones
+// "required" checks cover installs, development and building the runtime. "optional" ones
 // only disable a feature (iOS simulator, local packaging, manual deploys).
 
 import { execFileSync } from "node:child_process";
@@ -44,21 +44,11 @@ check(
 const bunVersion = out("bun", ["--version"]);
 check(
   "required",
-  "Bun",
-  Boolean(bunVersion),
+  `Bun ${wantBun} (CI and runtime builds)`,
+  bunVersion === wantBun,
   bunVersion ?? "not found",
-  "curl -fsSL https://bun.sh/install | bash"
+  `curl -fsSL https://bun.sh/install | bash -s bun-v${wantBun}`
 );
-if (bunVersion && wantBun && bunVersion !== wantBun) {
-  check(
-    "optional",
-    `Bun matches CI pin (${wantBun})`,
-    false,
-    bunVersion,
-    `CI installs with bun@${wantBun}. If this Bun rewrites bun.lock, CI's --frozen-lockfile can fail; ` +
-      "do not commit lockfile changes you did not intend."
-  );
-}
 
 // On macOS, ask xcode-select first: calling the /usr/bin/clang shim without
 // the Command Line Tools opens the "install developer tools" dialog.
