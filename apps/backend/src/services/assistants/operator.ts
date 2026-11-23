@@ -102,7 +102,12 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
             workspaceId,
             file: listed.file,
           });
-          if (!diff.trim()) return `${quoted(listed.file)}: no changes`;
+          if (!diff.trim()) {
+            if (listed.previous_path && !listed.additions && !listed.deletions) {
+              return `${quoted(listed.file)} was renamed from ${quoted(listed.previous_path)}. Its content is unchanged.`;
+            }
+            return `${quoted(listed.file)} has no content patch.`;
+          }
           const cut = diff.length > DIFF_LIMIT;
           return [
             `diff of ${quoted(listed.file)} (+${listed.additions} -${listed.deletions}):`,

@@ -3,7 +3,7 @@
  *
  * Pierre owns rendering, virtualization, keyboard nav, VS Code icons, and
  * git-status badges. We flatten our hierarchical FileTreeNode[] into the
- * string[] shape Pierre wants, push additions/deletions/committed markers
+ * string[] shape Pierre wants, show line counts and rename origins
  * via renderRowDecoration, and forward reveal + selection intents through
  * the imperative model methods.
  */
@@ -20,8 +20,6 @@ interface FileTreeProps {
   nodes: FileTreeNode[];
   selectedPath?: string | null;
   onFileClick?: (path: string) => void;
-  /** When true directories start expanded; when false they start collapsed. */
-  defaultExpanded?: boolean;
   revealPath?: string | null;
   revealRequestId?: string | null;
   onRevealConsumed?: (requestId: string) => void;
@@ -54,7 +52,6 @@ export function FileTree({
   nodes,
   selectedPath,
   onFileClick,
-  defaultExpanded,
   revealPath,
   revealRequestId,
   onRevealConsumed,
@@ -96,22 +93,16 @@ export function FileTree({
       ({ row }) => {
         if (row.kind === "directory") return null;
 
-        // File decoration — +N/−N line counts plus uncommitted marker.
         const node = fileLookupRef.current.get(row.path);
         if (!node) return null;
         const origin = node.previous_path && `Renamed from ${node.previous_path}`;
         const parts: string[] = origin ? [origin] : [];
         if (node.additions) parts.push(`+${node.additions}`);
         if (node.deletions) parts.push(`-${node.deletions}`);
-        if (node.committed === false) parts.push("●");
         if (parts.length === 0) return null;
         return {
           text: parts.join(" "),
-          title:
-            origin ??
-            (node.additions || node.deletions
-              ? `+${node.additions ?? 0} additions, -${node.deletions ?? 0} deletions`
-              : "Uncommitted"),
+          title: origin ?? `+${node.additions ?? 0} additions, -${node.deletions ?? 0} deletions`,
         };
       },
     []
@@ -119,7 +110,7 @@ export function FileTree({
 
   const { model } = useFileTree({
     paths,
-    initialExpansion: defaultExpanded ? "open" : "closed",
+    initialExpansion: "closed",
     flattenEmptyDirectories: true,
     // Monochrome icons — Pierre inherits `currentColor` from the host row
     // foreground when `colored` is off, so the whole tree reads as a single

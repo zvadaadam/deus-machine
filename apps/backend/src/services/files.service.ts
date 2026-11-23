@@ -85,11 +85,10 @@ async function readFileTree(workspacePath: string): Promise<FileTreeResponse> {
 
 async function listWorkspacePaths(workspacePath: string): Promise<string[]> {
   try {
-    const output = await runGit(["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
-      cwd: workspacePath,
-      timeoutMs: GIT_TIMEOUT_MS,
-      maxOutputBytes: 50 * 1024 * 1024,
-    });
+    const output = await runGit(
+      ["ls-files", "--cached", "--others", "--exclude-standard", "--deduplicate", "-z"],
+      { cwd: workspacePath, timeoutMs: GIT_TIMEOUT_MS, maxOutputBytes: 50 * 1024 * 1024 }
+    );
     return output.split("\0", MAX_ENTRIES).filter(Boolean);
   } catch {
     return scanWithReaddir(workspacePath);

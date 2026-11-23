@@ -14,7 +14,7 @@ const runners = new Set([
   "spawn",
   "spawnSync",
 ]);
-const gitCommand = /^\s*git(?:\s|$)/;
+const gitCommand = /^\s*(?:[^\s;&|]*[/\\])?git(?:\s|$)/;
 
 function gitSpawns(file: string, source: string): string[] {
   if (!source.includes("git")) return [];
@@ -52,27 +52,30 @@ function gitSpawns(file: string, source: string): string[] {
     if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
       alias(node.name.text, name(node.initializer));
     }
-    if (ts.isCallExpression(node)) {
-      const [program, args] = node.arguments;
-      const command = literal(
-        program && ts.isArrayLiteralExpression(program) ? program.elements[0] : program
-      );
-      if (gitCommand.test(command)) calls.push(node);
-      else if (
-        /^(?:.*\/)?(?:sh|bash|zsh)$/.test(command) &&
-        args &&
-        ts.isArrayLiteralExpression(args)
-      ) {
-        const commandFlag = args.elements.findIndex((arg) => /^-[a-z]*c$/.test(literal(arg)));
-        if (commandFlag !== -1 && gitCommand.test(literal(args.elements[commandFlag + 1])))
-          calls.push(node);
-      }
-    }
+    if (ts.isCallExpression(node)) calls.push(node);
     ts.forEachChild(node, visit);
   }
   visit(tree);
   return calls
-    .filter((call) => runners.has(name(call.expression)))
+    .filter((call) => {
+      const runner = name(call.expression);
+      if (!runners.has(runner)) return false;
+      const [program, args] = call.arguments;
+      const command = literal(
+        program && ts.isArrayLiteralExpression(program) ? program.elements[0] : program
+      );
+      if (gitCommand.test(command)) return true;
+      if (runner !== "exec" && runner !== "execSync" && path.win32.basename(command) === "git")
+        return true;
+      if (
+        !/^(?:.*\/)?(?:sh|bash|zsh)$/.test(command) ||
+        !args ||
+        !ts.isArrayLiteralExpression(args)
+      )
+        return false;
+      const commandFlag = args.elements.findIndex((arg) => /^-[a-z]*c$/.test(literal(arg)));
+      return commandFlag !== -1 && gitCommand.test(literal(args.elements[commandFlag + 1]));
+    })
     .map((call) => `${file}:${tree.getLineAndCharacterOfPosition(call.getStart(tree)).line + 1}`);
 }
 
@@ -90,6 +93,7 @@ it("reports the file and line of a direct git call, including aliases and shell 
     'const { execFile: execute } = require("node:child_process");',
     'wrap(execute)("git", ["status"]);',
     'Bun.spawnSync(["git", "version"]);',
+    'execFile("/usr/bin/git", ["status"]);',
   ].join("\n");
   expect(gitSpawns("old.ts", fixture)).toEqual([
     "old.ts:1",
@@ -98,6 +102,7 @@ it("reports the file and line of a direct git call, including aliases and shell 
     "old.ts:6",
     "old.ts:11",
     "old.ts:12",
+    "old.ts:13",
   ]);
 });
 

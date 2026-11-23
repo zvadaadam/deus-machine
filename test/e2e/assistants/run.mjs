@@ -355,7 +355,8 @@ try {
       ...hostDb,
       relayUrl: relay.ws,
       authToken: spawnToken,
-      env: { DEUS_ASSISTANT_ISSUER: issuer.url },
+      // The fixture projects lie under the host's home wherever this journey is run.
+      env: { DEUS_ASSISTANT_ISSUER: issuer.url, HOME: directory },
     });
   let host = await startHost();
   const signIn = () =>
@@ -1085,7 +1086,11 @@ try {
     seeded.quarry.workspaceId
   );
   assert.equal(failedRow.state, "error", JSON.stringify(failedRow));
-  assert(failedRow.error_message, "the workspace says why it failed");
+  assert(
+    failedRow.error_message?.includes(hostDb.dir),
+    "the stored reason names the absolute project folder"
+  );
+  const shownReason = failedRow.error_message.replaceAll(directory + path.sep, "~" + path.sep);
   assert.match(
     failingStart,
     new RegExp(
@@ -1095,16 +1100,17 @@ try {
   const failedWait = ok(
     await chatgpt.call("wait_for_sessions", { sessions: [`${failedRow.slug}:1`], wait: 0 })
   );
-  assert(failedWait.includes(failedRow.error_message), failedWait);
+  assert(failedWait.includes(shownReason), failedWait);
+  for (const answer of [failedWait, failingStart]) assert(!answer.includes(directory), answer);
   check(
-    "start_session in a project whose setup fails: the workspace is made (started_by the assistant) and ends in error, the answer says it could not be set up, and wait_for_sessions then gives the workspace's own reason",
+    "start_session in a project whose setup fails: the workspace is made (started_by the assistant) and ends in error, the answer says it could not be set up, and wait_for_sessions gives the stored reason with a home-relative project folder",
     { started: failingStart, wait: failedWait, workspace: failedRow }
   );
   knownFailure(
     "start_session's own answer gives the reason a new workspace could not be set up",
-    failingStart.includes(failedRow.error_message),
+    failingStart.includes(shownReason),
     'engine package: ownOutcome (src/operator/operator.ts:1170, dist/operator/operator.js) renders the outcome with the entry read when the start was made (status setting_up, no error), so outcomeOf (operator.ts:508) prints its fallback "setup failed" instead of the host\'s reason; wait_for_sessions, which reads the entry again, gives it',
-    { answer: failingStart, reason: failedRow.error_message }
+    { answer: failingStart, reason: shownReason }
   );
   const removedFailed = ok(await chatgpt.call("archive", { workspaces: [`${failedRow.slug}:1`] }));
   assert.equal(

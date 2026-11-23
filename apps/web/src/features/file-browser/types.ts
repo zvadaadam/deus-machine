@@ -17,6 +17,4 @@ export interface FileTreeNode extends ScannedNode {
   /** Change status from git diff */
   change_status?: FileChangeStatus;
   previous_path?: string;
-  /** true = committed (in HEAD), false = uncommitted (working dir only) */
-  committed?: boolean;
 }

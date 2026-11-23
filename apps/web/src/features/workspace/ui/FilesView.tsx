@@ -92,8 +92,6 @@ export function FilesView({ workspace, isWatched = false, toolbarAction }: Files
           onFileClick={setSelectedFilePath}
           revealRequest={revealRequest}
           onRevealConsumed={handleRevealConsumed}
-          filterMode="all"
-          hideTabToggle
           toolbarAction={toolbarAction}
         />
       </ResizablePanel>

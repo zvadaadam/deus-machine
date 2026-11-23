@@ -4,6 +4,7 @@ import { processGroupsStopped, trackProcessGroup } from "./process-groups";
 
 /** How long a stopped command gets to tidy up after itself before it is killed. */
 const STOP_GRACE_MS = 2_000;
+const STDERR_TAIL_BYTES = 1024 * 1024;
 
 export class GitError extends Error {
   /** The exit status, or null when git never started or was stopped. */
@@ -70,9 +71,16 @@ export function runGit(
     const chunks: Buffer[] = [];
     let stdoutBytes = 0;
     let outputError: Error | undefined;
-    let stderr = "";
+    let stderr: Buffer | undefined;
+    let stderrEnd = 0;
+    let stderrSize = 0;
     child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
-      stderr += chunk;
+      stderr ??= Buffer.allocUnsafe(STDERR_TAIL_BYTES);
+      const bytes = Buffer.from(chunk).subarray(-STDERR_TAIL_BYTES);
+      const first = bytes.copy(stderr, stderrEnd);
+      bytes.copy(stderr, 0, first);
+      stderrEnd = (stderrEnd + bytes.length) % STDERR_TAIL_BYTES;
+      stderrSize = Math.min(stderrSize + bytes.length, STDERR_TAIL_BYTES);
       onStderr?.(chunk);
     });
 
@@ -85,24 +93,29 @@ export function runGit(
         return child.kill(killSignal);
       }
     };
-    const abort = () => signalGroup("SIGKILL");
-    signal?.addEventListener("abort", abort, { once: true });
     let timedOut = false;
     let kill: NodeJS.Timeout | undefined;
-    let killed: Promise<void> | undefined;
-    const stopGroup = () => {
-      signalGroup("SIGTERM");
-      killed = new Promise<void>((done) => {
-        kill = setTimeout(() => {
-          signalGroup("SIGKILL");
-          done();
-        }, STOP_GRACE_MS);
-      });
-    };
+    let settled = false;
     const stop = setTimeout(() => {
       timedOut = true;
       stopGroup();
     }, timeoutMs);
+
+    function stopGroup() {
+      if (settled || kill) return;
+      clearTimeout(stop);
+      if (signalGroup("SIGTERM")) kill = setTimeout(forceStop, STOP_GRACE_MS);
+      else forceStop();
+    }
+
+    function forceStop() {
+      signalGroup("SIGKILL");
+      // A helper in another group can hold the pipes after git and its group have exited.
+      child.stdout.destroy();
+      child.stderr.destroy();
+      settle();
+    }
+    signal?.addEventListener("abort", stopGroup, { once: true });
 
     child.stdout.on("data", (chunk: Buffer) => {
       if (outputError) return;
@@ -115,18 +128,14 @@ export function runGit(
         `Git output exceeded its byte limit by ${stdoutBytes - maxOutputBytes} (limit ${maxOutputBytes}, received ${stdoutBytes}).`
       );
       chunks.length = 0;
-      clearTimeout(stop);
-      if (!timedOut) stopGroup();
+      stopGroup();
     });
 
-    let settled = false;
-    const settle = async (error?: unknown, code: number | null = null) => {
+    function settle(error?: unknown, code: number | null = null) {
       if (settled) return;
       settled = true;
-      signal?.removeEventListener("abort", abort);
+      signal?.removeEventListener("abort", stopGroup);
       clearTimeout(stop);
-      // Git can exit while a helper with its own stdio is still running.
-      if (kill && signalGroup(0)) await killed;
       clearTimeout(kill);
       untrack();
       const stdout = Buffer.concat(chunks).toString("utf8");
@@ -134,19 +143,27 @@ export function runGit(
       if (signal?.aborted) reject(signal.reason);
       else if (error === undefined && exitCode === 0) resolve(stdout);
       else {
+        const tail =
+          stderr &&
+          Buffer.concat([stderr.subarray(stderrEnd, stderrSize), stderr.subarray(0, stderrEnd)]);
+        let start = 0;
+        // The oldest retained byte can be in the middle of a UTF-8 character.
+        while (tail && (tail[start] & 0xc0) === 0x80) start++;
         reject(
           new GitError(args, {
             code: exitCode,
             stdout,
-            stderr: stderr.trim(),
+            stderr: tail?.toString("utf8", start).trim(),
             timedOut,
             cause: outputError ?? error,
           })
         );
       }
-    };
-    // "error" without "close": git is not installed, or the folder is gone.
+    }
     child.once("error", (error) => settle(error));
-    child.once("close", (code) => settle(undefined, code));
+    child.once("close", (code) => {
+      // Git may have exited before a group member with its own stdio.
+      if (!kill || !signalGroup(0)) settle(undefined, code);
+    });
   });
 }

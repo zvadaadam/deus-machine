@@ -32,7 +32,8 @@ import { useFirstMessageDelivery } from "@/features/session/hooks/useFirstMessag
 import { pendingFirstMessages } from "@/features/workspace/store/workspaceStartStore";
 import { makeCloudFrameHandler } from "@/features/session/cloud/cloudFrameHandler";
 import { SessionProvider } from "@/features/session/context";
-import { FileBrowserPanel } from "@/features/file-browser/ui/FileBrowserPanel";
+import { FilesView } from "@/features/workspace/ui/FilesView";
+import type { Workspace } from "@/shared/types";
 import { useChatTabs } from "@/app/layouts/useChatTabs";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { queryKeys } from "@/shared/api/queryKeys";
@@ -111,7 +112,6 @@ function App() {
   const [view, setView] = useState(location.search.startsWith("?welcome") ? "Welcome" : location.search.startsWith("?direct") ? "Direct" : location.search === "?history" ? "History" : location.search ? "Onboarding" : "GitHub");
   const [phase, setPhase] = useState(0);
   const [laterTool, setLaterTool] = useState(false);
-  const [fileMode, setFileMode] = useState("all");
   const messages = [{ id: "m", session_id: "s", turn_id: "turn", role: "assistant", seq: 1, parts: [
     { type: "reasoning", id: "r", text: "Check the project before changing it.", state: "done" },
     { type: "tool", id: "t", toolCallId: "t", toolName: "Bash", kind: "execute", state: { status: "completed", input: {command: "bun test"}, output: "All checks passed", title: "Run tests" } },
@@ -128,7 +128,7 @@ function App() {
         {view === "Direct" && <SessionPanel sessionId="history-session" workspacePath="" workspaceKind="cloud" embedded={location.search !== "?direct-modal"} />}
         {view === "GitHub" && <GithubCloudAccess />}
         {view === "Cloud" && <CloudSection />}
-        {view === "Files" && <div className="h-[650px]"><FileBrowserPanel selectedWorkspace={{id: "workspace", kind: "cloud"} as any} filterMode={fileMode as any} onFilterModeChange={setFileMode} /></div>}
+        {view === "Files" && <div className="h-[650px]"><FilesView workspace={{id: "workspace", kind: "cloud", state: "ready"} as Workspace} /></div>}
         {view === "Tabs" && <TabJourney />}
         {view === "Chat" && <>
           <button onClick={() => setPhase(p => p + 1)}>Advance turn</button>
@@ -209,7 +209,7 @@ const server = await createServer({
         const sendMutate = async (name, params) => { const r = await fetch("/api/mutate/" + name, {method: "POST", body: JSON.stringify(params)}); return r.json(); };
         export const isConnected = () => location.search.startsWith("?welcome");
         // Writes this fixture answers are fetched; every other write is recorded for the test to inspect.
-        const answered = new Set(["createSession", "invalidateFileCache", "addRepo", "saveSetting"]);
+        const answered = new Set(["createSession", "addRepo", "saveSetting"]);
         export const call = async (op, input) => {
           if (op.kind === "read") return sendRequest(op.name);
           if (!answered.has(op.name)) { window.welcomeCommands.push({name: op.name, params: input}); return {}; }
@@ -363,7 +363,6 @@ const server = await createServer({
               : json({
                   projects: [{ name: "test-project", path: "/fixture/project", source: "cursor" }],
                 });
-          if (req.url === "/api/mutate/invalidateFileCache") return json({ success: true });
           if (req.url === "/api/mutate/addRepo") {
             // The Deus source, cloned at the end of onboarding, registers; any other folder is not a repository.
             let body = "";
@@ -383,6 +382,7 @@ const server = await createServer({
               { git_origin_url: "https://github.com/deus/app.git" },
               { git_origin_url: "https://github.com/deus/other.git" },
             ]);
+          if (req.url === "/api/query/diffFiles") return json({ files: [] });
           if (req.url === "/api/query/workspaceFiles") {
             fileRequests++;
             return filesOnline
@@ -518,7 +518,7 @@ try {
   await page.screenshot({ path: path.join(artifacts, "chat-desktop.png") });
 
   await page.getByRole("button", { name: "Files", exact: true }).click();
-  await page.getByRole("alert").waitFor();
+  await page.getByRole("alert").filter({ hasText: "Cloud computer is reconnecting" }).waitFor();
   filesOnline = true;
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await page.getByRole("treeitem", { name: "README.md", exact: true }).waitFor();
@@ -529,17 +529,6 @@ try {
   await page.evaluate(() => window.reconnectFiles());
   await reconnectResponse;
   assert.equal(fileRequests, before + 1, "A reconnect refreshes Files without a polling loop");
-  await page.getByRole("button", { name: "Changes", exact: true }).click();
-  await page.getByRole("button", { name: "All changes", exact: true }).click();
-  filesOnline = false;
-  await page.getByRole("menuitem", { name: "Refresh files", exact: true }).click();
-  await page
-    .locator('[data-sonner-toast][data-type="error"]')
-    .filter({ hasText: "Cloud computer is reconnecting" })
-    .waitFor();
-  filesOnline = true;
-  await page.getByRole("button", { name: "Try again", exact: true }).click();
-  await page.getByRole("button", { name: "All files", exact: true }).waitFor();
 
   await page.getByRole("button", { name: "Tabs", exact: true }).click();
   const labels = page.locator("output");

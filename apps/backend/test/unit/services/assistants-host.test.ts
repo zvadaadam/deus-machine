@@ -1849,10 +1849,11 @@ describe("what still lives in Deus (H18, H19)", () => {
   it("read_changes lists a rename and opens it by the listed destination only", async () => {
     const file = "folder/café.txt";
     const previous = 'folder/old "name".txt';
+    let additions = 1;
     state.ops.diffFiles = () => ({
       files: [
         { file: "folder\\café.txt", status: "modified", additions: 1, deletions: 0 },
-        { file, previous_path: previous, status: "renamed", additions: 1, deletions: 0 },
+        { file, previous_path: previous, status: "renamed", additions, deletions: 0 },
       ],
     });
     const open = vi.fn(() => ({ diff: "+x" }));
@@ -1869,5 +1870,11 @@ describe("what still lives in Deus (H18, H19)", () => {
     expect(shown.text).toContain(`diff of "${file}"`);
     expect(shown.text).toContain("  | +x");
     expect(open).toHaveBeenCalledWith({ workspaceId: "w-lead", file });
+    additions = 0;
+    open.mockReturnValue({ diff: "" });
+    const pure = await call(LOCAL_CALLER, "read_changes", { session: "lead", file });
+    expect(pure.text).toContain(
+      `${JSON.stringify(file)} was renamed from ${JSON.stringify(previous)}. Its content is unchanged.`
+    );
   });
 });

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -51,6 +51,37 @@ it("lists tracked and untracked files, including ignored project settings and na
     { name: "a\nb.ts", path: "src/auth/a\nb.ts", type: "file", size: 0 },
     { name: "untracked.ts", path: "src/auth/untracked.ts", type: "file", size: 3 },
   ]);
+});
+
+it("lists and counts a nested file once during an edit/edit merge conflict", async () => {
+  const file = "src/conflict.txt";
+  const run = (...args: string[]) =>
+    execFileSync("git", args, {
+      cwd: root,
+      encoding: "utf8",
+      stdio: "pipe",
+      env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" },
+    });
+  const commit = (version: string) => {
+    write(file, version + "\n");
+    run("add", file);
+    run("commit", "-qm", version);
+  };
+  run("init", "-qb", "main");
+  run("config", "user.name", "Files Test");
+  run("config", "user.email", "files@example.test");
+  commit("base");
+  run("switch", "-qc", "topic");
+  commit("theirs");
+  run("switch", "main");
+  commit("ours");
+  expect(() => run("merge", "topic")).toThrow();
+  expect(run("ls-files", "--unmerged").trimEnd().split("\n")).toHaveLength(3);
+
+  const tree = await scanWorkspaceFiles(root);
+  expect(tree.files[0].children?.map((node) => node.path)).toEqual([file]);
+  expect(tree.totalFiles).toBe(1);
+  expect(tree.totalSize).toBe(statSync(path.join(root, file)).size);
 });
 
 it("shares a pending scan and honours invalidation before that scan finishes", async () => {

@@ -171,14 +171,7 @@ export function useFileChanges(
     // Null means no successful read yet. With undefined data, a refetch clears the last error.
     initialData: null,
     initialDataUpdatedAt: 0,
-    queryFn: async () => {
-      const result = await call(api.diffFiles, { workspaceId: workspaceId! });
-      return {
-        files: result.files || [],
-        truncated: result.truncated ?? false,
-        totalCount: result.total_count ?? result.files?.length ?? 0,
-      };
-    },
+    queryFn: () => call(api.diffFiles, { workspaceId: workspaceId! }),
     enabled: !!workspaceId && workspaceState === "ready",
     staleTime: 30000,
     // Events handle invalidation when watched; fall back to polling otherwise

@@ -301,9 +301,10 @@ progress channel: the desktop, the web app and a phone all follow it.
 - A backend that stops mid-start leaves `initializing` rows nothing is working
   on. `failInterruptedWorkspaces` fails them at startup.
 - Every git command the backend and the engine run goes through
-  `shared/lib/git-process.ts` (`runGit`; `git-process-fence.test.ts` holds
-  it): no prompts, `LC_ALL=C`, its own process group, and a timeout and an
-  output limit that stop the whole group. An `execFile` timeout stops only
+  `shared/lib/git-process.ts` (`runGit`; `git-process-fence.test.ts` trips
+  on the ordinary spellings of a direct spawn): no prompts, `LC_ALL=C`, its
+  own process group, and a timeout and a stdout limit that stop the whole
+  group. An `execFile` timeout stops only
   git itself, and `git worktree add`'s checkout child keeps writing; a
   worktree cut short stays locked, which only
   `git worktree remove --force --force` clears (`removeWorktree`).
@@ -532,11 +533,15 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   control characters or leading `-`; git gets it after `--` through
   `runGit` with only the https and ssh transports allowed. `read_changes(file)` shows only a file in the
   workspace's changed-files list (normalised paths), and the local diff read
-  refuses any other itself (`getFileDiff`): an unchanged file's diff would be
-  the whole file, and that may be an ignored secret. The list is git's own,
+  refuses any other itself (`getFileDiff`): a file git does not list may be
+  an ignored secret, and its diff would be the whole file. One file's patch
+  is the base's blob against the working file, so it holds that file alone;
+  a pure rename's is empty and the answer says so. The list is git's own,
   read NUL-delimited (`parseDiffFiles` in `services/git.service.ts`): one row
   per path with git's status, a rename under its new name with the old one
-  beside it. Changes and Files show the same rows. What a
+  beside it (an untracked file's lines are counted from the file). Changes
+  shows those rows; Files shows the files its scan lists, with the same
+  status on each. What a
   repository wrote and names follow the package's untrusted-text rule
   (`quoted()`, `quote()`). An answer takes the one path a card's does
   (`tool-relay.ts` `answer`): whoever answers first, the others' question or

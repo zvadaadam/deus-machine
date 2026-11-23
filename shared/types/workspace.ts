@@ -123,6 +123,4 @@ export interface FileChange {
   previous_path?: string;
   additions: number;
   deletions: number;
-  /** true = committed (in HEAD), false = uncommitted (working dir only), undefined = unknown */
-  committed?: boolean;
 }

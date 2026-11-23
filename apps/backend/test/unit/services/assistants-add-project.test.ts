@@ -333,11 +333,13 @@ describe("what is already here", () => {
     expect(homeRelative(home)).toBe("~");
     const sibling = home + "-backup/Developer/widget";
     expect(homeRelative(sibling)).toBe(sibling);
-    expect(homeRelative(`${home}/one,${home}/two,${sibling}`, "diagnostic")).toBe(
-      `~/one,~/two,${sibling}`
+    expect(homeRelative(`${home}/one, ${home}/two, ${sibling}`, "diagnostic")).toBe(
+      `~/one, ~/two, ${sibling}`
     );
-    const elsewhere = path.join(scratch, "other ", home);
+    const elsewhere = path.join("/Volumes/archive", home, "widget");
     expect(homeRelative(elsewhere)).toBe(elsewhere);
+    const diagnostic = `Cannot open '${elsewhere}'.`;
+    expect(homeRelative(diagnostic, "diagnostic")).toBe(diagnostic);
   });
 
   it("a project for that repository is returned, and nothing is cloned", async () => {

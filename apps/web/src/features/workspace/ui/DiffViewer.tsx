@@ -502,7 +502,9 @@ export function DiffViewer({
           <div
             className={`text-muted-foreground/60 flex items-center justify-center ${embedded ? "py-6" : "h-64"}`}
           >
-            <p className="text-sm">No changes</p>
+            <p className="text-sm">
+              {fileChange.status === "renamed" ? "The contents are unchanged." : "No changes"}
+            </p>
           </div>
         ) : !displayFileDiff ? (
           <div
