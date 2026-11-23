@@ -421,6 +421,7 @@ export async function stopSession(
       // Its admission failed. The queue has it back and there is no such turn to stop.
       return { unconfirmed: false };
     }
+    if (agentService.liveTurnId(sessionId) !== targetTurnId) return { unconfirmed: false };
   }
   const mine = JSON.stringify(by);
   const key = `${sessionId}\0${targetTurnId}`;

@@ -75,14 +75,13 @@ function queueFor(sessionId: string): Queue {
   return q;
 }
 
-function withId(input: Input): Message {
-  return { ...input, turnId: input.turnId ?? uuidv7() };
-}
-
-function itemFor(message: Message, chat: LocalChat): Item {
+function checkQueueHarness(chat: LocalChat, harness: Input["agentHarness"]) {
   // The first turn binds the harness before its user echo increments the message count.
   if (chat.message_count > 0 || ACTIVE_TURN_STATUSES.includes(chat.status))
-    requireSameHarness(chat.agent_harness, message.agentHarness);
+    requireSameHarness(chat.agent_harness, harness);
+}
+
+function itemFor(message: Message): Item {
   const input = toEngineInput(message.content);
   return {
     message,
@@ -163,7 +162,7 @@ export async function sendOrQueue(input: Input) {
   const { sessionId } = input;
   let chat = localChat(sessionId);
   if (!chat) return sendMessage(input);
-  const message = withId(input);
+  const message = { ...input, turnId: input.turnId ?? uuidv7() };
   const queued = { turnId: message.turnId, queued: true as const };
   if (alreadyQueued(message)) return queued;
   if (!ACTIVE_TURN_STATUSES.includes(chat.status) || knownTurn(sessionId, message.turnId)) {
@@ -176,7 +175,8 @@ export async function sendOrQueue(input: Input) {
       if (alreadyQueued(message)) return queued;
     }
   }
-  const item = itemFor(message, chat);
+  checkQueueHarness(chat, message.agentHarness);
+  const item = itemFor(message);
   const q = queueFor(sessionId);
   q.waiting.push(item);
   changed(q);
@@ -221,14 +221,17 @@ async function steer(q: Queue, item: Item, chat: LocalChat): Promise<SteerResult
   return (await drain(q)) === item ? "sent" : "queued";
 }
 
-export async function steerMessage(input: Input): Promise<SteerResult> {
+export async function steerMessage(
+  input: ParsedInputOf<typeof api.steerMessage>
+): Promise<SteerResult> {
   const { sessionId } = input;
   const chat = localChat(sessionId);
   if (!chat) {
     await sendMessage(input);
     return { outcome: "sent" };
   }
-  const item = itemFor(withId(input), chat);
+  checkQueueHarness(chat, input.agentHarness);
+  const item = itemFor({ ...input, turnId: uuidv7() });
   return { outcome: await steer(queueFor(sessionId), item, chat) };
 }
 

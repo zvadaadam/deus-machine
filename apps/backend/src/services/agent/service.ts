@@ -1,9 +1,8 @@
 // backend/src/services/agent/service.ts
 // Composition root for agent-server communication.
 //
-// Wires the AgentLink (the engine, in this process, on the standard wire)
-// straight into the event handler: the engine's lifecycle envelopes go to
-// persistence + WS push with nothing in between.
+// Connects the in-process engine's AgentLink to the event handler for
+// persistence and WS push, and relays the live turn's questions and plans.
 //
 // Initialized once at startup in server.ts via agentService.init().
 
@@ -32,7 +31,7 @@ import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
 import { createAgentEventHandler, type AgentEventHandler } from "./event-handler";
 import { buildTurnStartParams, withoutImageParts, type DeusTurnOptions } from "./run-config";
 import { toolRequests } from "@shared/api/sessions";
-import { isPrompt, pendingFor, relay } from "./tool-relay";
+import { cancelSessionRelays, isPrompt, pendingFor, relay } from "./tool-relay";
 import { resolveTurnApps } from "../integrations";
 import {
   persistSessionNeedsPlanResponse,
@@ -92,9 +91,14 @@ export async function init(): Promise<void> {
 
   link = await AgentLink.open({
     onEnvelope: (envelope) => {
+      const { event, sessionId } = envelope;
+      const known = !isUnknownEvent(event);
+      // Relays belong to the chat. Withdraw this turn's cards before handle can start its successor.
+      if (known && event.type === "turn.ended" && handler.liveTurnId(sessionId) === event.turnId) {
+        cancelSessionRelays(sessionId, "turn ended");
+      }
       handler.handle(envelope);
-      const { event } = envelope;
-      if (isUnknownEvent(event)) return;
+      if (!known) return;
       if (event.type === "permission.requested") void answerPermission(event);
       if (event.type === "elicitation.requested") void answerElicitation(event);
     },

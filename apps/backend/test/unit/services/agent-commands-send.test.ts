@@ -435,7 +435,6 @@ describeWithDb("sendMessage", () => {
       await expect(
         run(api.steerMessage, {
           sessionId: SESSION,
-          turnId: "turn-b",
           agentHarness: "codex-app-server",
           model: "gpt-5.5-codex",
           content: "hello",

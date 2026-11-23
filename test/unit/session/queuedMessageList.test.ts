@@ -71,12 +71,29 @@ it("shows the host's unread steer first and leaves it without actions", () => {
   });
   expect(html).toContain('aria-label="Queued messages"');
   expect(html).not.toContain(">Queued<");
-  expect(html).toMatch(/Waiting to be read.*Change direction.*2 images.*1 image.*>Steer</s);
+  expect(html).toMatch(
+    /Waiting to be read.*Change direction.*aria-label="2 images".*>1 image<.*>Steer</s
+  );
   expect(button.mock.calls.map(([p]) => p["aria-label"] ?? p.children)).toEqual([
     "Steer",
     "Edit queued message",
     "Remove queued message",
   ]);
+});
+
+it.each([
+  ["1 image", 1],
+  ["2 images", 2],
+] as const)("spells out %s alone and labels its icon beside text", (label, images) => {
+  const withText = render({ paused: null, items: [{ ...item, images }] });
+  expect(withText).toContain(`role="img" aria-label="${label}"`);
+  expect(withText).toContain("lucide-image");
+  expect(withText).toContain(`>${images}<`);
+  expect(withText).not.toContain(`>${label}<`);
+
+  const pictureOnly = render({ paused: null, items: [{ ...item, text: "", images }] });
+  expect(pictureOnly).toContain(`>${label}<`);
+  expect(pictureOnly).not.toContain("lucide-image");
 });
 
 it.each([

@@ -88,7 +88,7 @@ const queuedMessageId = sessionId.extend({ id: z.string().min(1) });
 
 export const steerMessage = write({
   name: "steerMessage",
-  input: sendMessage.input,
+  input: sendMessage.input.omit({ turnId: true }),
   output: out<{ outcome: "steered" | "queued" | "sent" }>(),
 });
 

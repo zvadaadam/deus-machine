@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence } from "framer-motion";
-import { Pencil, X } from "lucide-react";
+import { Image, Pencil, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@shared/api";
 import { getErrorMessage } from "@shared/lib/errors";
@@ -14,6 +14,21 @@ import { composerStore } from "../store/sessionComposerStore";
 
 function showError(error: unknown) {
   toast.error(getErrorMessage(error));
+}
+
+function ImageCount({ count, besideText }: { count: number; besideText: boolean }) {
+  const label = `${count} ${count === 1 ? "image" : "images"}`;
+  if (!besideText) return <span className="shrink-0">{label}</span>;
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      className="text-text-muted inline-flex shrink-0 items-center gap-0.5 text-xs"
+    >
+      <Image aria-hidden="true" className="size-3" />
+      {count}
+    </span>
+  );
 }
 
 export function QueuedMessageList({
@@ -78,11 +93,7 @@ export function QueuedMessageList({
                   {text}
                 </span>
               )}
-              {images > 0 && (
-                <span className={text ? "text-text-muted shrink-0 text-xs" : "shrink-0"}>
-                  {images} {images === 1 ? "image" : "images"}
-                </span>
-              )}
+              {images > 0 && <ImageCount count={images} besideText={Boolean(text)} />}
               {!steering && (
                 <div className="ml-auto flex shrink-0 items-center">
                   {canSteer && (
