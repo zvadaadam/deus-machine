@@ -79,9 +79,7 @@ export async function init(): Promise<void> {
     console.log(`[AgentService] Settled ${settled.value.length} chat(s) a restart interrupted`);
     invalidate(["workspaces", "sessions", "session"], { sessionIds: settled.value });
   }
-  const handler = createAgentEventHandler((sessionId, liveTurnId) =>
-    turnWatcher?.interrupted(sessionId, liveTurnId)
-  );
+  const handler = createAgentEventHandler(notifyTurnInterrupted);
   events = handler;
   // A client that starts following a chat while its agent waits on a question
   // or a plan (a window opened late, a phone) is shown it at once; one that
@@ -108,7 +106,7 @@ export async function init(): Promise<void> {
       const end = handler.handle(envelope);
       if (!known) return;
       if (end) turnWatcher?.turnEnded(end);
-      if (event.type === "message.started" && event.role === "user")
+      if (event.type === "message.ended")
         turnWatcher?.userEcho(sessionId, event.turnId, event.messageId);
       if (event.type === "permission.requested") void answerPermission(event);
       if (event.type === "elicitation.requested") void answerElicitation(event);
@@ -296,9 +294,17 @@ interface TurnWatcher {
   stopAsked(sessionId: string): Promise<{ turnId: string }> | undefined;
   interrupted(sessionId: string, liveTurnId?: string): void;
 }
-export let turnWatcher: TurnWatcher | undefined;
+let turnWatcher: TurnWatcher | undefined;
 export function provideTurnWatcher(watcher: TurnWatcher): void {
   turnWatcher = watcher;
+}
+
+export function notifyStopAsked(sessionId: string) {
+  return turnWatcher?.stopAsked(sessionId);
+}
+
+export function notifyTurnInterrupted(sessionId: string, liveTurnId?: string): void {
+  turnWatcher?.interrupted(sessionId, liveTurnId);
 }
 
 /**

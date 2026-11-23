@@ -134,9 +134,9 @@ it("keeps twenty rows in order with a full preview for truncated text", () => {
   expect(html).toContain(`title="${items[19].text}"`);
 });
 
-it.each([true, false])(
-  "restores the full text and picture before Remove answers removed=%s",
-  async (removed) => {
+it.each([true, false, "lost reply"] as const)(
+  "keeps the restored text and picture after the host removes the row (Remove result %s)",
+  async (result) => {
     vi.stubGlobal(
       "FileReader",
       class {
@@ -148,7 +148,7 @@ it.each([true, false])(
       }
     );
     sessionComposerActions.setDraft(sessionId, "Typed since");
-    render({ paused: null, items: [item] });
+    render({ paused: null, items: [{ ...item, text: "Original full message", images: 1 }] });
     const content = JSON.stringify([
       { type: "text", text: "Original full message" },
       { type: "image", mimeType: "image/png", data: "AQID" },
@@ -162,15 +162,22 @@ it.each([true, false])(
         [api.removeQueuedMessage, params],
       ])
     );
-    const draft = () => composerStore(client).getState().pendingContent[sessionId]!;
-    expect(draft().draft).toBe("Original full message\n\nTyped since");
-    expect(draft().imageAttachments.map((image) => image.preview)).toEqual([
-      "data:image/png;base64,AQID",
-    ]);
-    remove.resolve({ removed });
+    const draft = () => composerStore(client).getState().pendingContent[sessionId];
+    const restored = {
+      draft: "Original full message\n\nTyped since",
+      imageAttachments: [{ type: "image/png", preview: "data:image/png;base64,AQID" }],
+    };
+    expect(draft()).toMatchObject(restored);
+
+    const emptyQueue: QueuedMessages = { paused: null, items: [] };
+    client.setQueryData(queryKey, emptyQueue);
+    if (result === "lost reply") remove.reject(new Error("Connection lost"));
+    else remove.resolve({ removed: result });
     await edit;
-    expect(draft().draft).toBe("Original full message\n\nTyped since");
-    expect(error).not.toHaveBeenCalled();
+
+    expect(client.getQueryData(queryKey)).toEqual(emptyQueue);
+    expect(draft()).toMatchObject(restored);
+    expect(error.mock.calls).toEqual(result === "lost reply" ? [["Connection lost"]] : []);
   }
 );
 
@@ -184,20 +191,18 @@ it("leaves the draft alone when the message has already left the queue", async (
   expect(error).not.toHaveBeenCalled();
 });
 
-it.each(["read", "remove"])("keeps the host's row when Edit loses the %s reply", async (step) => {
+it("leaves the draft and row alone when Edit's read fails", async () => {
   const data = { paused: null, items: [item] };
   sessionComposerActions.setDraft(sessionId, "Typed since");
   render(data);
-  if (step === "remove") call.mockResolvedValueOnce({ content: item.text });
   call.mockRejectedValueOnce(new Error("Connection lost"));
   await click("Edit queued message");
-  expect(call).toHaveBeenNthCalledWith(1, api.queuedMessage, params);
-  if (step === "remove") expect(call).toHaveBeenNthCalledWith(2, api.removeQueuedMessage, params);
-  expect(call).toHaveBeenCalledTimes(step === "remove" ? 2 : 1);
+  expect(call).toHaveBeenCalledExactlyOnceWith(api.queuedMessage, params);
   expect(client.getQueryData(queryKey)).toEqual(data);
-  expect(composerStore(client).getState().pendingContent[sessionId]?.draft).toBe(
-    step === "read" ? "Typed since" : "Review this\n\nTyped since"
-  );
+  expect(composerStore(client).getState().pendingContent[sessionId]).toMatchObject({
+    draft: "Typed since",
+    imageAttachments: [],
+  });
   expect(error).toHaveBeenCalledExactlyOnceWith("Connection lost");
 });
 

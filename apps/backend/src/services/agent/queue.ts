@@ -15,7 +15,7 @@ import { differentTurnMessage, knownTurn, requireSameHarness, sendMessage } from
 type Input = ParsedInputOf<typeof api.sendMessage>;
 type Message = Input & { turnId: string };
 type LocalChat = Pick<SessionRow, "status" | "agent_harness" | "message_count">;
-type Item = { message: Message; text: string; images: number };
+type Item = { message: Message; text: string; images: number; lastTurnId?: string };
 type Steer = { item: Item; turnId: string; echoed: boolean };
 
 interface Queue {
@@ -134,8 +134,12 @@ async function drain(q: Queue): Promise<Item | undefined> {
   }
   if (ACTIVE_TURN_STATUSES.includes(chat.status)) return;
   const head = q.waiting[0]!;
+  // Resume after a missing echo is a new turn. Retrying an admitted id only repeats its receipt.
+  const previousTurnId = head.lastTurnId;
+  const turnId = previousTurnId === undefined ? head.message.turnId : uuidv7();
+  head.lastTurnId = turnId;
   // A synchronous refusal can publish the queue and return unread steers ahead of this head.
-  const starting = { head, admission: sendMessage(head.message) };
+  const starting = { head, admission: sendMessage({ ...head.message, turnId }) };
   q.waiting = q.waiting.filter((item) => item !== head);
   q.starting = starting;
   q.sending = head;
@@ -143,8 +147,15 @@ async function drain(q: Queue): Promise<Item | undefined> {
   try {
     await starting.admission;
   } catch (error) {
-    if (queues.get(q.sessionId) !== q || q.starting !== starting) return;
+    if (queues.get(q.sessionId) !== q) return;
+    if (head.lastTurnId === turnId && !knownTurn(q.sessionId, turnId))
+      head.lastTurnId = previousTurnId;
+    if (q.starting !== starting) return;
     q.starting = undefined;
+    if (!q.sending) {
+      changed(q);
+      return head;
+    }
     q.sending = undefined;
     q.waiting.unshift(head);
     const busy = error instanceof ChatBusyError;
@@ -157,7 +168,7 @@ async function drain(q: Queue): Promise<Item | undefined> {
   if (queues.get(q.sessionId) === q && q.starting === starting) {
     q.starting = undefined;
     // A confirmed delivery gap can retire the live turn before its admission reply.
-    if (liveTurnId(q.sessionId) !== head.message.turnId) q.sending = undefined;
+    if (liveTurnId(q.sessionId) !== turnId) recoverSending(q);
     changed(q);
   }
   return head;
@@ -296,7 +307,7 @@ export async function resumeQueuedMessages(sessionId: string) {
 function userEcho(sessionId: string, turnId: string, messageId: string) {
   const q = queues.get(sessionId);
   if (!q) return;
-  if (q.sending?.message.turnId === turnId && messageId === echoMessageId(turnId)) {
+  if (q.sending?.lastTurnId === turnId && messageId === echoMessageId(turnId)) {
     q.sending = undefined;
   } else {
     const steer = q.steers.get(messageId);
@@ -305,6 +316,14 @@ function userEcho(sessionId: string, turnId: string, messageId: string) {
     q.steers.delete(messageId);
   }
   changed(q);
+}
+
+function recoverSending(q: Queue) {
+  if (!q.sending) return;
+  q.waiting.unshift(q.sending);
+  q.sending = undefined;
+  q.starting = undefined;
+  q.paused ??= "failed";
 }
 
 function recoverSteers(q: Queue, turnId?: string) {
@@ -332,7 +351,7 @@ function interruptQueue(sessionId: string, activeTurnId?: string) {
   if (!q) return;
   if (!activeTurnId) {
     recoverSteers(q);
-    if (!q.starting) q.sending = undefined;
+    recoverSending(q);
   }
   q.paused ??= "failed";
   changed(q);
@@ -343,14 +362,14 @@ function turnEnded({ event: ended, status }: TurnEnd) {
   if (!q) return;
   // Includes the engine's undeliveredSteers and calls still awaiting a verdict.
   const recovered = recoverSteers(q, ended.turnId);
-  const wasSending = q.sending?.message.turnId === ended.turnId;
-  if (wasSending) q.sending = undefined;
+  const wasSending = q.sending?.lastTurnId === ended.turnId;
+  if (wasSending) recoverSending(q);
   // A replayed end can return its own steers but cannot stop or advance its successor.
   if (!status) {
     if (recovered || wasSending) changed(q);
     return;
   }
-  if (q.starting?.head.message.turnId === ended.turnId) q.starting = undefined;
+  if (q.starting?.head.lastTurnId === ended.turnId) q.starting = undefined;
   if (ended.stopReason === "cancelled") q.paused = "stopped";
   else if (status === "error") q.paused ??= "failed";
   changed(q);

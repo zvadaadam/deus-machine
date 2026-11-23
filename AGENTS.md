@@ -201,9 +201,11 @@ open, both shortcuts queue. `services/agent/queue.ts` holds up to 20 messages pe
 the backend process's memory. Each open composer follows `queuedMessages` for the text and
 picture count in `session/ui/QueuedMessageList.tsx`. Edit reads a waiting row's full content
 with `queuedMessage`, puts it in the composer, then calls `removeQueuedMessage`. The sending
-head stays first until its user echo. Unread steers follow and return to the front in order
-if their turn ends unread. After publishing a normal end the backend sends one row from an
-unpaused queue. Asking to stop pauses it at once. After a stop or failure it waits for Resume.
+head stays first until its user echo is complete. If its turn ends or is interrupted first,
+the head returns to the front and the queue pauses. Unread steers follow and return to the
+front in order if their turn ends unread. After publishing a normal end the backend sends
+one row from an unpaused queue. Asking to stop pauses it at once. After a stop or failure
+it waits for Resume.
 A steer read mid-turn splits one reply into groups with one footer (`groupTurns` in
 `session/lib/chatTimeline.ts`). Cloud chats keep their send, including the hosted web's
 direct lane. The operator's `send` to a busy chat still answers `busy`.
@@ -367,9 +369,9 @@ device (localStorage), so quitting does not lose it either. Quitting before the
 first chat opens stops the start, so the reopened desktop app shows a failed
 start with the message still waiting, and Retry sends it. The window sends once,
 skipping a chat already spoken to or working. If another client starts a local
-turn after that check, the first message queues behind its turn. A refusal returns
-it to the chat's composer with a toast. Send it from anywhere else and two
-workspaces started in a row lose one.
+turn after that check, the first message queues behind its turn. A full queue or any
+other refusal returns it to the chat's composer with a toast. Send it from anywhere
+else and two workspaces started in a row lose one.
 
 A message the cloud platform refuses after the backend took it (a channel `error`,
 `MESSAGE_SEND_FAILED`) is never lost either, first message or not: its bubble goes and
