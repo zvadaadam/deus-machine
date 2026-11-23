@@ -292,7 +292,7 @@ interface TurnWatcher {
   turnEnded(end: TurnEnd): void;
   userEcho(sessionId: string, turnId: string, messageId: string): void;
   stopAsked(sessionId: string): Promise<{ turnId: string }> | undefined;
-  interrupted(sessionId: string, liveTurnId?: string): void;
+  interrupted(sessionId: string, turnId: string | undefined, gone: boolean): void;
 }
 let turnWatcher: TurnWatcher | undefined;
 export function provideTurnWatcher(watcher: TurnWatcher): void {
@@ -303,8 +303,12 @@ export function notifyStopAsked(sessionId: string) {
   return turnWatcher?.stopAsked(sessionId);
 }
 
-export function notifyTurnInterrupted(sessionId: string, liveTurnId?: string): void {
-  turnWatcher?.interrupted(sessionId, liveTurnId);
+export function notifyTurnInterrupted(
+  sessionId: string,
+  turnId: string | undefined,
+  gone: boolean
+): void {
+  turnWatcher?.interrupted(sessionId, turnId, gone);
 }
 
 /**

@@ -310,18 +310,18 @@ async function sendMessageOnce(
           reason: "wake failed — try again",
         });
       }
-      handleAgentError(sessionId, err);
+      handleAgentError(sessionId, turnId, err);
       throw err;
     }
   } else {
     if (!agentService.isConnected()) {
       const err = new AgentServerDisconnectedError();
-      handleAgentError(sessionId, err);
+      handleAgentError(sessionId, turnId, err);
       throw err;
     }
     if (!cwd) {
       const err = new ConflictError("Session has no resolvable workspace");
-      handleAgentError(sessionId, err);
+      handleAgentError(sessionId, turnId, err);
       throw err;
     }
 
@@ -355,8 +355,8 @@ async function sendMessageOnce(
       // Every other rejection — harness unavailable, shutting down, invalid
       // params, a transport that died mid-request — means no turn was admitted,
       // so the session must not be left sitting on "working".
-      if (err instanceof WireRequestError) handleAgentRejection(sessionId, err.message);
-      else handleAgentError(sessionId, err);
+      if (err instanceof WireRequestError) handleAgentRejection(sessionId, turnId, err.message);
+      else handleAgentError(sessionId, turnId, err);
       throw err;
     }
   }
@@ -537,7 +537,7 @@ function scheduleUnconfirmedCancelWatchdog(
         )
         .run(live === undefined ? "error" : null, sessionId, ...ACTIVE_TURN_STATUSES);
       if (result.changes > 0) {
-        agentService.notifyTurnInterrupted(sessionId, live);
+        agentService.notifyTurnInterrupted(sessionId, cancelledTurnId, live === undefined);
         console.warn(`[CommandHandler] unconfirmed cancel never settled: session=${sessionId}`);
         invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
       }
@@ -551,18 +551,20 @@ function scheduleUnconfirmedCancelWatchdog(
 
 // ---- Helpers ----
 
-function handleAgentRejection(sessionId: string, reason?: string): void {
+function handleAgentRejection(sessionId: string, turnId: string, reason?: string): void {
   const msg = reason || "Agent rejected the message";
   console.error(`[CommandHandler] Agent rejected sendMessage for session=${sessionId}: ${msg}`);
   persistSessionError(sessionId, msg, "internal");
-  agentService.notifyTurnInterrupted(sessionId, agentService.liveTurnId(sessionId));
+  const gone = agentService.liveTurnId(sessionId) !== turnId;
+  agentService.notifyTurnInterrupted(sessionId, turnId, gone);
   invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
 }
 
-function handleAgentError(sessionId: string, err: unknown): void {
+function handleAgentError(sessionId: string, turnId: string, err: unknown): void {
   const errorMsg = err instanceof Error ? err.message : String(err);
   console.error("[CommandHandler] Failed to forward to agent-server:", errorMsg);
   persistSessionError(sessionId, `Agent server communication failed: ${errorMsg}`, "internal");
-  agentService.notifyTurnInterrupted(sessionId, agentService.liveTurnId(sessionId));
+  const gone = agentService.liveTurnId(sessionId) !== turnId;
+  agentService.notifyTurnInterrupted(sessionId, turnId, gone);
   invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
 }

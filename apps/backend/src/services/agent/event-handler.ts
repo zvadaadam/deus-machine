@@ -175,7 +175,7 @@ function pushEnvelope(envelope: DecodedWireEventEnvelope): void {
 
 /** Create the agent event handler: persistence + WS push per lifecycle event. */
 export function createAgentEventHandler(
-  onInterrupted?: (sessionId: string, liveTurnId?: string) => void
+  onInterrupted?: (sessionId: string, turnId: string, gone: boolean) => void
 ): AgentEventHandler {
   const sessions = new Map<string, SessionState>();
   // A client that starts following a chat, or returns to it, first gets the
@@ -301,7 +301,7 @@ export function createAgentEventHandler(
         SESSION_RESOURCES,
         sessionId
       );
-      onInterrupted?.(sessionId, state.turnId);
+      onInterrupted?.(sessionId, turnId, confirmed);
     },
 
     handleTitle(sessionId, title) {

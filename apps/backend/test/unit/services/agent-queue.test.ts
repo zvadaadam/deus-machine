@@ -335,18 +335,26 @@ describe("messages held for a local chat", () => {
       expect(await read("head")).toEqual({ content: "Message head" });
       expect(starts()).toEqual(["first", "head"]);
 
+      engine.startTurn.mockResolvedValueOnce(undefined);
       await run(api.resumeQueuedMessages, { sessionId });
       const retry = engine.startTurn.mock.lastCall![0];
       expect(starts()).toEqual(["first", "head", retry.turnId]);
       expect(retry.turnId).not.toBe("head");
       expect(retry).toMatchObject({ input: "Message head", config: { model: "model-head" } });
+      emit({ type: "turn.started", sessionId, turnId: retry.turnId, timestamp: seq });
+      echo("head");
+      expect((await queue()).items).toMatchObject([
+        { id: "head", state: "sending" },
+        { id: "tail" },
+      ]);
+      echo(retry.turnId, undefined, "Message head");
       expect(await ids()).toEqual(["tail"]);
       end(retry.turnId);
       await vi.waitFor(() => expect(starts()).toEqual(["first", "head", retry.turnId, "tail"]));
     }
   );
 
-  it("keeps an unclosed echo when the admission reply arrives after the service lost the turn", async () => {
+  it("keeps an admitted head sending through unnamed and unconfirmed interruptions", async () => {
     await send("first");
     await send("head");
     end("first", "cancelled");
@@ -356,6 +364,17 @@ describe("messages held for a local chat", () => {
     await agent.shutdown();
     admit();
     await resuming;
+    expect(await queue()).toMatchObject({
+      paused: null,
+      items: [{ id: "head", state: "sending" }],
+    });
+    agent.notifyTurnInterrupted(sessionId, undefined, true);
+    agent.notifyTurnInterrupted(sessionId, "head", false);
+    expect(await queue()).toMatchObject({
+      paused: "failed",
+      items: [{ id: "head", state: "sending" }],
+    });
+    end("head", "error");
     expect(await queue()).toMatchObject({
       paused: "failed",
       items: [{ id: "head", state: "waiting" }],
@@ -551,6 +570,88 @@ describe("messages held for a local chat", () => {
       expect(starts()).toEqual(["first"]);
     }
   );
+
+  describe("a queue attempt belongs to its turn", () => {
+    it("starts the head once when its predecessor's Stop watchdog fires during app setup", async () => {
+      vi.useFakeTimers();
+      await send("A");
+      await send("B");
+      engine.cancelTurn.mockResolvedValueOnce({ outcome: "unconfirmed", turnId: "A" });
+      await expect(stop()).resolves.toEqual({ unconfirmed: true });
+      end("A", "cancelled");
+
+      const releaseApps = holdAppSetup();
+      engine.startTurn.mockResolvedValue(undefined);
+      const firstResume = run(api.resumeQueuedMessages, { sessionId });
+      expect(agent.liveTurnId(sessionId)).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect((await queue()).paused).toBe("failed");
+      await run(api.resumeQueuedMessages, { sessionId });
+      releaseApps();
+      await firstResume;
+      expect(starts()).toEqual(["A", "B"]);
+      expect(await queue()).toMatchObject({ paused: null, items: [{ id: "B", state: "sending" }] });
+      expect(await read("B")).toEqual({ content: null });
+    });
+
+    it("starts only the tail when the recovered head's complete echo arrives before Resume", async () => {
+      await send("A");
+      await send("B");
+      await send("C");
+      end("A", "cancelled");
+      engine.startTurn.mockResolvedValueOnce(undefined);
+      await run(api.resumeQueuedMessages, { sessionId });
+      emit({ type: "turn.started", sessionId, turnId: "B", timestamp: seq });
+      const echo = [...echoFrames("B", "Message B")];
+      const close = echo.pop()!;
+      for (const frame of echo) emit(frame);
+      engine.open.mock.calls[0]![0].onEventGap!({
+        sessionId,
+        reason: "server_restarted",
+        error: new EventGapError("lost"),
+      });
+      expect(await queue()).toMatchObject({
+        paused: "failed",
+        items: [
+          { id: "B", state: "waiting" },
+          { id: "C", state: "waiting" },
+        ],
+      });
+      emit(close);
+      await run(api.resumeQueuedMessages, { sessionId });
+      expect(starts()).toEqual(["A", "B", "C"]);
+      expect(await ids()).toEqual([]);
+    });
+
+    it("pauses on another turn's admission failure and keeps the head until its echo", async () => {
+      const wire = Promise.withResolvers<void>();
+      engine.startTurn.mockReturnValueOnce(wire.promise);
+      const predecessor = send("A");
+      await vi.waitFor(() => expect(starts()).toEqual(["A"]));
+      emit({ type: "turn.started", sessionId, turnId: "A", timestamp: seq });
+      await send("B");
+      await send("C");
+      const releaseApps = holdAppSetup();
+      engine.startTurn.mockResolvedValueOnce(undefined);
+      end("A");
+      expect(agent.liveTurnId(sessionId)).toBeUndefined();
+      wire.reject(new Error("A lost its admission reply"));
+      await expect(predecessor).rejects.toThrow("A lost its admission reply");
+      const duringSetup = await queue();
+      releaseApps();
+      await vi.waitFor(() => expect(starts()).toEqual(["A", "B"]));
+      emit({ type: "turn.started", sessionId, turnId: "B", timestamp: seq });
+      echo("B");
+      expect(duringSetup).toMatchObject({
+        paused: "failed",
+        items: [
+          { id: "B", state: "sending" },
+          { id: "C", state: "waiting" },
+        ],
+      });
+      expect(await queue()).toMatchObject({ paused: "failed", items: [{ id: "C" }] });
+    });
+  });
 
   it.each(["before", "after"] as const)(
     "returns the sending head ahead of unread steers when a gap lands %s admission",
@@ -973,15 +1074,19 @@ describe("messages held for a local chat", () => {
           ],
         })
       );
-      if (failure === "failed") await run(api.resumeQueuedMessages, { sessionId });
-      else {
+      if (failure === "failed") {
+        await run(api.resumeQueuedMessages, { sessionId });
+        const retry = engine.startTurn.mock.lastCall![0];
+        expect(starts()).toEqual(["first", "a", retry.turnId]);
+        expect(retry.turnId).not.toBe("a");
+        expect(retry.input).toBe("Message a");
+      } else {
         await agent.startTurn(sessionId, "other", "codex-app-server", "winning turn", {
           cwd: "/tmp/repo",
         });
         end("other");
+        await vi.waitFor(() => expect(starts()).toEqual(["first", "a", "other", "a"]));
       }
-      const expected = failure === "failed" ? ["first", "a", "a"] : ["first", "a", "other", "a"];
-      await vi.waitFor(() => expect(starts()).toEqual(expected));
       expect(await ids()).toEqual(["b"]);
     }
   );

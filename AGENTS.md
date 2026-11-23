@@ -201,7 +201,7 @@ open, both shortcuts queue. `services/agent/queue.ts` holds up to 20 messages pe
 the backend process's memory. Each open composer follows `queuedMessages` for the text and
 picture count in `session/ui/QueuedMessageList.tsx`. Edit reads a waiting row's full content
 with `queuedMessage`, puts it in the composer, then calls `removeQueuedMessage`. The sending
-head stays first until its user echo is complete. If its turn ends or is interrupted first,
+head stays first until its user echo is complete. If its own turn is known to be gone first,
 the head returns to the front and the queue pauses. Unread steers follow and return to the
 front in order if their turn ends unread. After publishing a normal end the backend sends
 one row from an unpaused queue. Asking to stop pauses it at once. After a stop or failure
