@@ -430,10 +430,16 @@ describe("messages held for a local chat", () => {
   it("pauses on Stop before the terminal event and lets a typed message run before Resume", async () => {
     await send("first");
     await send("waiting");
+    await steer("follow-up");
+    const attempt = lastSteerId();
     engine.cancelTurn.mockResolvedValue({ outcome: "cancelled", turnId: "first" });
     await expect(stop()).resolves.toEqual({ unconfirmed: false });
     expect((await queue()).paused).toBe("stopped");
+    echo("first", attempt, message("follow-up").content);
     end("first", "cancelled");
+    const { messages } = await run(api.messages, { sessionId });
+    expect(messages.filter((row) => row.id === steerMessageId(attempt))).toHaveLength(1);
+    expect(await ids()).toEqual(["waiting"]);
     await expect(send("fresh")).resolves.toEqual({ turnId: "fresh" });
     end("fresh");
     expect(await queue()).toMatchObject({ paused: "stopped", items: [{ id: "waiting" }] });
@@ -489,6 +495,35 @@ describe("messages held for a local chat", () => {
     await stopping;
     expect(await queue()).toMatchObject({ paused: "stopped", items: [{ id: "waiting" }] });
     expect(starts()).toEqual(["first"]);
+  });
+
+  it("keeps a resumed queue unpaused when the previous Stop reply arrives during app setup", async () => {
+    await send("A");
+    await send("B");
+    await send("C");
+    const cancel = Promise.withResolvers<TurnCancelResult>();
+    engine.cancelTurn.mockReturnValueOnce(cancel.promise);
+    const stopping = stop();
+    expect(engine.cancelTurn.mock.calls).toEqual([[sessionId, "A"]]);
+    end("A");
+
+    const releaseApps = holdAppSetup();
+    const resuming = run(api.resumeQueuedMessages, { sessionId });
+    expect(agent.liveTurnId(sessionId)).toBeUndefined();
+    cancel.resolve({ outcome: "no_active_turn" });
+    await stopping;
+    const duringSetup = await queue();
+    releaseApps();
+    await resuming;
+    expect(duringSetup).toMatchObject({
+      paused: null,
+      items: [
+        { id: "B", state: "sending" },
+        { id: "C", state: "waiting" },
+      ],
+    });
+    end("B");
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "C"]));
   });
 
   describe("Stop during a queued head's app setup", () => {
