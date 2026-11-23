@@ -21,6 +21,7 @@ import { native } from "@/platform";
 import { ServerOfflinePage } from "@/features/connection";
 import { initNotifications } from "@/platform/notifications";
 import { useGlobalSessionNotifications } from "@/features/session/hooks/useGlobalSessionNotifications";
+import { useOpenWorkspaceLink } from "@/features/workspace/hooks/useOpenWorkspaceLink";
 import { useAgentEvents } from "@/features/session/hooks/useAgentEvents";
 import { useQueryProtocol } from "@/shared/hooks/useQueryProtocol";
 import { useBackendRestart } from "@/shared/hooks/useBackendRestart";
@@ -43,6 +44,7 @@ export function DesktopShell({ reset }: { reset: () => void }) {
 
   // Global listener: fire OS notifications for ALL session events when backgrounded
   useGlobalSessionNotifications();
+  useOpenWorkspaceLink(auth.hasDeviceGrant && !!settingsQuery.data?.onboarding_completed);
   useAgentEvents();
 
   // Global listener: backend restart -> update cached port + force WS reconnect

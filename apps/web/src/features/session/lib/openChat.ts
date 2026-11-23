@@ -4,7 +4,8 @@
 // (useChatTabs); the view takes exactly that request, once.
 
 import { create } from "zustand";
-import { useWorkspaceStore } from "@/features/workspace/store";
+import { showWorkspace } from "@/features/workspace/lib/openWorkspace";
+import { workspaceLayoutActions } from "@/features/workspace/store";
 
 export interface OpenChatRequest {
   id: number;
@@ -21,12 +22,22 @@ interface OpenChatState {
 export const useOpenChatStore = create<OpenChatState>(() => ({ requested: {} }));
 
 let next = 0;
+const OPEN_CHAT_REQUEST_MAX_AGE_MS = 10_000;
+
+/** An old request must not move focus when a workspace opens later. */
+export function currentOpenChatRequest(workspaceId: string): OpenChatRequest | undefined {
+  const request = useOpenChatStore.getState().requested[workspaceId];
+  return request && Date.now() - request.at <= OPEN_CHAT_REQUEST_MAX_AGE_MS ? request : undefined;
+}
 
 export function openChat(workspaceId: string, sessionId: string): void {
   useOpenChatStore.setState((state) => ({
     requested: { ...state.requested, [workspaceId]: { id: ++next, sessionId, at: Date.now() } },
   }));
-  useWorkspaceStore.getState().selectWorkspace(workspaceId);
+  if (workspaceLayoutActions.getLayout(workspaceId).panelMode === "content") {
+    workspaceLayoutActions.setPanelMode(workspaceId, "split");
+  }
+  showWorkspace(workspaceId);
 }
 
 /** The tab view takes request `id`: true only if it was still the workspace's request. */

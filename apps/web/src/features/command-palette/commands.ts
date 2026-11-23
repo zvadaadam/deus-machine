@@ -3,6 +3,7 @@ import {
   Plus,
   FolderOpen,
   FolderGit2,
+  Link2,
   GitBranch,
   GitPullRequest,
   Settings,
@@ -83,6 +84,20 @@ export const staticCommands: CommandDefinition[] = [
     shortcut: "\u2318O",
     keywords: ["open", "editor", "vscode", "cursor", "external", "app"],
     when: () => capabilities.openInExternalApp,
+    action: () => {},
+  },
+  {
+    id: "copy-workspace-link",
+    label: "Copy workspace link",
+    icon: Link2,
+    group: "workspace",
+    action: () => {},
+  },
+  {
+    id: "copy-chat-link",
+    label: "Copy chat link",
+    icon: Link2,
+    group: "workspace",
     action: () => {},
   },
 

@@ -26,6 +26,8 @@ export const BROWSER_NEW_TAB_REQUESTED = "browser:new-tab-requested" as const;
 /** Backend lifecycle — main process → frontend */
 export const BACKEND_PORT_CHANGED = "backend:port-changed" as const;
 
+export const WORKSPACE_LINK_AVAILABLE = "workspace-link:available" as const;
+
 // ============================================================================
 // Payload Schemas
 // ============================================================================
@@ -189,6 +191,7 @@ type BackendPortChangedEvent = z.infer<typeof BackendPortChangedSchema>;
  */
 export const AppEventSchemaMap = {
   [BACKEND_PORT_CHANGED]: BackendPortChangedSchema,
+  [WORKSPACE_LINK_AVAILABLE]: z.undefined(),
   [BROWSER_NEW_TAB_REQUESTED]: BrowserNewTabRequestedSchema,
 } as const satisfies Record<AppEventName, z.ZodTypeAny>;
 
@@ -204,6 +207,7 @@ export const AppEventSchemaMap = {
 export interface AppEventMap {
   // Backend lifecycle
   [BACKEND_PORT_CHANGED]: BackendPortChangedEvent;
+  [WORKSPACE_LINK_AVAILABLE]: undefined;
 
   // Browser
   [BROWSER_NEW_TAB_REQUESTED]: BrowserNewTabRequestedEvent;

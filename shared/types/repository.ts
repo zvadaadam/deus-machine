@@ -21,6 +21,9 @@ export interface Repository {
   updated_at?: string;
 }
 
+export const CLOUD_PROJECT_REMOVAL_REASON =
+  "This project has cloud workspaces, so it can't be removed yet. Archiving a cloud workspace only pauses its computer.";
+
 /** What a folder holds as a git repository, read before it is added. */
 export interface InspectedRepository {
   /** The repository's top-level folder, which may be above the one asked about. */

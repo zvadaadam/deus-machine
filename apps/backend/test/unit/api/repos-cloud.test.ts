@@ -163,7 +163,7 @@ describe("addCloudRepo", () => {
       git_origin_url: "https://github.com/acme/rocket",
     });
     expect(m.defaultBranch).toHaveBeenCalledWith("acme/rocket", "org-2");
-    expect(m.invalidate).toHaveBeenCalledWith(["workspaces"]);
+    expect(m.invalidate).toHaveBeenCalledWith(["workspaces", "repos"]);
     expectNoLocalReadsOrWrites();
   });
 
@@ -251,7 +251,7 @@ describe("addRepo with a folder for a project that has none", () => {
       git_default_branch: "develop",
     });
     expect(rows()).toHaveLength(1);
-    expect(m.invalidate).toHaveBeenCalledWith(["workspaces"]);
+    expect(m.invalidate).toHaveBeenCalledWith(["workspaces", "repos"]);
   });
 
   it("keeps two folders of one repository as two projects", async () => {
@@ -296,7 +296,7 @@ describe("repoBranches for a project with no folder", () => {
 
     expect(m.branches).toHaveBeenCalledWith("acme/rocket", "org-default");
     expect((rows()[0] as { git_default_branch: string }).git_default_branch).toBe("trunk");
-    expect(m.invalidate).toHaveBeenCalledWith(["workspaces"]);
+    expect(m.invalidate).toHaveBeenCalledWith(["workspaces", "repos"]);
   });
 
   it("leaves the project alone when GitHub will not answer", async () => {

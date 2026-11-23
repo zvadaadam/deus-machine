@@ -33,6 +33,7 @@ import { sendNotification } from "@/platform/notifications";
 import { isWindowFocused } from "@/shared/hooks/useWindowFocus";
 import { track } from "@/platform/analytics";
 import { unreadActions } from "@/features/session/store/unreadStore";
+import { openWorkspace } from "@/features/workspace/lib/openWorkspace";
 import { useWorkspaceStore } from "@/features/workspace/store";
 import { markStartedIn } from "@/features/workspace/store/workspaceStartStore";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
@@ -314,25 +315,25 @@ export function useGlobalSessionNotifications() {
             markStartedIn(ws.id, firstChat);
           }
 
+          function openFromNotification() {
+            showWindow();
+            openWorkspace(ws);
+          }
           if (prevState === "initializing" && ws.state === "error") {
-            const open = () => {
-              showWindow();
-              useWorkspaceStore.getState().selectWorkspace(ws.id);
-            };
             if (!isWindowFocused()) {
               if (canNotify) {
                 sendNotification({
                   title: "Workspace didn't start",
                   body: formatBody(group.repo_name, ws),
                   sound: "Basso",
-                  onClick: open,
+                  onClick: openFromNotification,
                 });
               }
             } else if (useWorkspaceStore.getState().selectedWorkspaceId !== ws.id) {
               toast.error(`${ws.title || ws.slug} didn't start`, {
                 description: ws.error_message ?? undefined,
                 duration: 10_000,
-                action: { label: "View", onClick: open },
+                action: { label: "View", onClick: openFromNotification },
               });
             }
           }
@@ -364,10 +365,7 @@ export function useGlobalSessionNotifications() {
               title: "Setup failed",
               body: formatBody(group.repo_name, ws),
               sound: "Basso",
-              onClick: () => {
-                showWindow();
-                useWorkspaceStore.getState().selectWorkspace(ws.id);
-              },
+              onClick: openFromNotification,
             });
           }
 
@@ -378,10 +376,7 @@ export function useGlobalSessionNotifications() {
                 title: "Setup complete",
                 body: formatBody(group.repo_name, ws),
                 sound: "Glass",
-                onClick: () => {
-                  showWindow();
-                  useWorkspaceStore.getState().selectWorkspace(ws.id);
-                },
+                onClick: openFromNotification,
               });
             }
           }

@@ -12,6 +12,7 @@
 
 import { Tray, Menu, nativeImage, app, BrowserWindow } from "electron";
 import { join } from "path";
+import { focusWindow } from "./focus-window";
 
 type TrayStatus = "starting" | "running" | "offline";
 
@@ -48,10 +49,7 @@ export function setupTray(): void {
 
 function showMainWindow(): void {
   const win = BrowserWindow.getAllWindows()[0];
-  if (!win) return;
-  if (win.isMinimized()) win.restore();
-  win.show();
-  win.focus();
+  if (win) focusWindow(win);
 }
 
 function updateTrayMenu(status: TrayStatus): void {

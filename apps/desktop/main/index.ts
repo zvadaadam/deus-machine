@@ -32,6 +32,7 @@ import {
 } from "./app-protocol";
 import { registerNativeHandlers } from "./native-handlers";
 import { limitPermissions } from "./permissions";
+import { registerWorkspaceLinks } from "./workspace-links";
 import { WEBVIEW_PARTITION } from "../../../shared/browser";
 import { registerBrowserEmulationHandlers } from "./browser-emulation";
 import { registerBrowserCookieHandlers } from "./browser-cookies";
@@ -110,6 +111,8 @@ ipcMain.handle = (channel, listener) =>
     if (!fromWindow(event)) throw new Error(`"${channel}" answers only the app's window`);
     return listener(event, ...args);
   });
+
+registerWorkspaceLinks(() => mainWindow);
 
 let quitState: "running" | "stopping" | "stopped" = "running";
 
@@ -436,13 +439,6 @@ app.whenReady().then(async () => {
   if (!is.dev) {
     if (mainWindow && !mainWindow.isDestroyed()) setupAutoUpdater(mainWindow);
   }
-});
-
-// Second instance: focus existing window.
-app.on("second-instance", (_event, _commandLine) => {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.focus();
 });
 
 // Quit when all windows are closed (all platforms including macOS)

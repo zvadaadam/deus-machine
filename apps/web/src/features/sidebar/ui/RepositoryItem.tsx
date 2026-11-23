@@ -7,6 +7,7 @@ import { SidebarMenuItem } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
+import { CLOUD_PROJECT_REMOVAL_REASON } from "@shared/types/repository";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
 import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
@@ -18,6 +19,7 @@ import type { Workspace, DiffStats, RepoGroup } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
 import { WorkspaceItem } from "./WorkspaceItem";
 import { ArchivedWorkspaces } from "./ArchivedWorkspaces";
+import { RemoveProjectDialog } from "./RemoveProjectDialog";
 
 import { SidebarRow, SidebarRowMain, SidebarRowIconSlot, SidebarRowRight } from "./SidebarRow";
 import { DeusRepositoryBanner } from "./DeusRepositoryBanner";
@@ -26,7 +28,7 @@ import { DeusRepositoryBanner } from "./DeusRepositoryBanner";
  * RepositoryItem — collapsible repo section header.
  *
  * Layout:
- *   [REPO NAME] [count → chevron on hover]  ...  [PR] [+]  (hover-reveal actions)
+ *   [REPO NAME] [count → chevron on hover]  ...  [Remove] [PR] [+]  (hover/focus actions)
  *     └── WorkspaceItem[]
  */
 export function RepositoryItem({
@@ -104,6 +106,15 @@ export function RepositoryItem({
             </SidebarRowMain>
             {sidebarExpanded && canCreate && (
               <SidebarRowRight className="gap-2 opacity-0 transition-opacity group-focus-within/repository-item:opacity-100 group-hover/repository-item:opacity-100">
+                {repository.removal && (
+                  <RemoveProjectDialog
+                    repoId={repository.repo_id}
+                    name={repoName || "this project"}
+                    disabledReason={
+                      repository.removal === "cloud" ? CLOUD_PROJECT_REMOVAL_REASON : undefined
+                    }
+                  />
+                )}
                 {/* A workspace on a pull request or branch is a local one. */}
                 {offersNewFromBranch(place.location, repository) && onNewWorkspaceFromGitHub && (
                   <Tooltip>

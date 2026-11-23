@@ -615,7 +615,7 @@ export async function openAutomationRun(
       throw new ConflictError("This run has no session to open (it was skipped or never started).");
     }
     if (!automation.repository_id) {
-      throw new NotFoundError("This automation's repository isn't on this Mac.");
+      throw new NotFoundError(store.MISSING_RUN_REPOSITORY);
     }
 
     const detail = await platform.fetchSessionDetail(run.provider_session_id, orgId);

@@ -13,6 +13,7 @@ import {
 import { useMemo, useState } from "react";
 import { produce } from "immer";
 import { api } from "@shared/api";
+import type { InputOf } from "@shared/api/op";
 import { toast } from "sonner";
 import { getErrorMessage } from "@shared/lib/errors";
 import { native } from "@/platform";
@@ -33,29 +34,37 @@ const removeWorkspaceKey = ["removeWorkspace"] as const;
 
 // The query reads once for the first paint, and the subscription pushes each new value into the cache.
 export function useWorkspacesByRepo(state: string = SIDEBAR_WORKSPACE_STATE) {
+  const queryKey = queryKeys.workspaces.byRepo(state);
   const pending = useMutationState({
     filters: { mutationKey: removeWorkspaceKey, status: "pending" },
     select: (mutation) => mutation.state.variables,
   });
+  const pendingProjects = useMutationState({
+    filters: { mutationKey: [api.removeRepo.name], status: "pending" },
+    select: (mutation) => (mutation.state.variables as InputOf<typeof api.removeRepo>).repoId,
+  });
   useQuerySubscription(api.workspaces, {
-    queryKey: queryKeys.workspaces.byRepo(state),
+    queryKey,
     params: { state },
     mergeDelta: mergeWorkspaceDelta,
   });
 
   return useQuery({
-    queryKey: queryKeys.workspaces.byRepo(state),
+    queryKey,
     queryFn: () => call(api.workspaces, { state }),
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
     // The host publishes the removal before acknowledging it. Until then, hide it only in the view.
-    select: pending.length
-      ? (groups) =>
-          groups.map((group) => ({
-            ...group,
-            workspaces: group.workspaces.filter((workspace) => !pending.includes(workspace.id)),
-          }))
-      : undefined,
-    staleTime: Infinity, // WS subscription keeps data fresh
-    refetchOnWindowFocus: false, // Subscription handles freshness
+    select:
+      pending.length || pendingProjects.length
+        ? (groups) =>
+            groups
+              .filter((group) => !pendingProjects.includes(group.repo_id))
+              .map((group) => ({
+                ...group,
+                workspaces: group.workspaces.filter((workspace) => !pending.includes(workspace.id)),
+              }))
+        : undefined,
   });
 }
 

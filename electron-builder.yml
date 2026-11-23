@@ -1,5 +1,8 @@
 appId: com.deus.app
 productName: Deus
+protocols:
+  - name: Deus workspace
+    schemes: [deus]
 directories:
   buildResources: resources
   output: dist-electron

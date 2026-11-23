@@ -20,9 +20,7 @@ import { getErrorMessage } from "@shared/lib/errors";
 import { cn } from "@/shared/lib/utils";
 import { Button, ScrollArea } from "@/components/ui";
 import { Switch } from "@/components/ui/switch";
-import { useWorkspaceStore } from "@/features/workspace/store";
-import { useUIStore } from "@/shared/stores/uiStore";
-import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
+import { openChat } from "@/features/session/lib/openChat";
 import type { Automation, AutomationRun } from "@/shared/types";
 import {
   refreshAutomations,
@@ -49,8 +47,6 @@ export function AutomationDetail({
   const runNow = useRunAutomationNow();
   const toggle = useToggleAutomation();
   const openRun = useOpenAutomationRun();
-  const selectWorkspace = useWorkspaceStore((s) => s.selectWorkspace);
-  const closeAutomations = useUIStore((s) => s.closeAutomations);
 
   // Mirror the platform on mount, and keep mirroring while a run is live —
   // runs execute server-side, so their progress only arrives by re-reading
@@ -81,18 +77,7 @@ export function AutomationDetail({
 
   const handleOpenRun = (run: AutomationRun) => {
     openRun.mutate(run.id, {
-      onSuccess: ({ workspaceId, sessionId }) => {
-        // Activate the adopted run's session tab — the persisted layout
-        // would otherwise restore the previously active tab over the run
-        // the user just clicked.
-        const layout = workspaceLayoutActions.getLayout(workspaceId);
-        const tabs = layout.chatTabSessionIds.includes(sessionId)
-          ? layout.chatTabSessionIds
-          : [...layout.chatTabSessionIds, sessionId];
-        workspaceLayoutActions.setChatTabState(workspaceId, tabs, sessionId);
-        closeAutomations();
-        selectWorkspace(workspaceId);
-      },
+      onSuccess: ({ workspaceId, sessionId }) => openChat(workspaceId, sessionId),
       onError: (err) => toast.error(getErrorMessage(err)),
     });
   };

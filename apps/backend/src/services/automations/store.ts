@@ -6,6 +6,8 @@
 import { uuidv7 } from "@shared/lib/uuid";
 import { attachAdoptedSession, insertAdoptedWorkspace } from "../workspace-lifecycle";
 import { getDatabase } from "../../lib/database";
+import { getRepositoryById } from "../../db";
+import { NotFoundError } from "../../lib/errors";
 import type { AutomationRow, AutomationRunRow, AutomationWithDetailsRow } from "../../db/types";
 
 // ─── automations ─────────────────────────────────────────────
@@ -41,7 +43,8 @@ const UPSERT_AUTOMATION_SQL = `
     paused_reason, session_policy, model, thinking_level, next_run_at, last_run_at,
     consecutive_failures, created_by, workspace_id, organization_id, synced_at, updated_at
   ) VALUES (
-    @id, @name, @prompt, @cron, @timezone, @environment, @repository_id, @status,
+    @id, @name, @prompt, @cron, @timezone, @environment,
+    (SELECT id FROM repositories WHERE id = @repository_id), @status,
     @paused_reason, @session_policy, @model, @thinking_level, @next_run_at, @last_run_at,
     @consecutive_failures, @created_by, @workspace_id, @organization_id, @synced_at, @updated_at
   )
@@ -194,6 +197,8 @@ export function sessionExists(sessionId: string): boolean {
   return getDatabase().prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId) !== undefined;
 }
 
+export const MISSING_RUN_REPOSITORY = "This automation's repository isn't on this Mac.";
+
 /**
  * Find-or-create the deus workspace/session rows for a run's platform ids —
  * ONE transaction, so a mid-sequence failure can never leave a workspace
@@ -216,6 +221,7 @@ export function adoptRunRows(input: {
 }) {
   const db = getDatabase();
   const adopt = db.transaction(() => {
+    if (!getRepositoryById(db, input.repositoryId)) throw new NotFoundError(MISSING_RUN_REPOSITORY);
     let session = db
       .prepare("SELECT id, workspace_id FROM sessions WHERE provider_session_id = ?")
       .get(input.providerSessionId) as { id: string; workspace_id: string } | undefined;

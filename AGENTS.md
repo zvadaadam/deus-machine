@@ -72,7 +72,7 @@ Frontend (React)
 Backend ⊃ Agent engine (apps/agent-server/) — in process, the standard wire on an in-process channel
 ```
 
-**Electron Main** — Thin shell. Window lifecycle, native dialogs, process spawning. No business logic. It starts the backend and restarts one that exits, five times at most unless one stays up a minute (`backend-process.ts`). The backend stops when the desktop does, however that ends: its stdin is a pipe the desktop holds (`apps/backend/src/lib/parent-stdin.ts`), whose first line is the backend's spawn token. The token is in no process's environment, where every child would inherit it and `ps eww` would show it; the desktop keeps it in memory (`deus-cloud-provision.ts`). The preload offers the window only what the web app calls, and never the backend's spawn token; `test/unit/desktop/ipc-surface.test.ts` holds the preload, the main handlers and the web app's calls equal, so an unused channel is deleted, not kept. Every renderer runs sandboxed, so both preloads are single CommonJS files that require only `electron`. A main-process handler answers only the window's own page, never a Browser-tab guest or a frame inside the window (`index.ts`); web permissions are refused unless listed (`permissions.ts`), so a page in the Browser tab gets no camera, microphone, location, notifications or other apps. The installed app cannot be run as Node, given Node flags or inspected, and loads only its own checked `app.asar` (the fuses in `electron-builder.yml`).
+**Electron Main** — Thin shell. Window lifecycle, native dialogs, process spawning. No business logic. It starts the backend and restarts one that exits, five times at most unless one stays up a minute (`backend-process.ts`). The backend stops when the desktop does, however that ends: its stdin is a pipe the desktop holds (`apps/backend/src/lib/parent-stdin.ts`), whose first line is the backend's spawn token. The token is in no process's environment, where every child would inherit it and `ps eww` would show it; the desktop keeps it in memory (`deus-cloud-provision.ts`). The preload offers the window only what the web app calls, and never the backend's spawn token; `test/unit/desktop/ipc-surface.test.ts` holds the preload, the main handlers and the web app's calls equal, so an unused channel is deleted, not kept. Every renderer runs sandboxed, so both preloads are single CommonJS files that require only `electron`. A main-process handler answers only the window's own page, never a Browser-tab guest or a frame inside the window (`index.ts`); web permissions are refused unless listed (`permissions.ts`), so a page in the Browser tab gets no camera, microphone, location, notifications or other apps. Only the packaged app registers `deus://workspace?id=<workspace id>` (with `&session=<chat id>` for a chat). The main process keeps the latest link accepted by `shared/workspace-link.ts` until the window's own page asks, and hands it only the validated ids. The installed app cannot be run as Node, given Node flags or inspected, and loads only its own checked `app.asar` (the fuses in `electron-builder.yml`).
 
 **Backend (Hono)** — All business logic. DB reads/writes, config, agent event persistence, tool relay, PTY, file watching. Operations in `src/api/`, answered over the socket; the few HTTP routes under `/api`. Runs the agent engine in its own process. A request from this computer needs no token, so it must be addressed to `localhost`, `127.0.0.1` or `[::1]` and come from no page or a page whose origin is in `DEUS_WEB_ORIGINS`, which the launcher sets (`shared/web-origins.ts`; `middleware/loopback-origin-gate.ts`): the desktop passes its window's origin (`app://deus` packaged, served by `apps/desktop/main/app-protocol.ts`; Vite's in dev), `dev:web` and the e2e runners `LOOPBACK_WEB_ORIGINS`. A backend started without it trusts no page. The app opens no remote-debugging port; agents' browser tools run their own browser.
 
@@ -240,6 +240,12 @@ project with no folder never reaches git or the filesystem: its branches come fr
 GitHub (`repoBranches`, through `services/github-remote.ts`, whose API base
 `DEUS_GITHUB_API_URL` overrides), a local workspace on it is refused in words, and in
 the composer its Cloud switch is on and locked ("<name> is not on this Mac").
+Windows follow the live `repos` list. The app can remove an empty project or one with only archived local
+workspaces once their chats settle. When all are archived and one is cloud, hovering over or tapping Remove
+explains why the project must stay.
+After rechecking the folder and counts, `workspace-lifecycle.ts` unlinks local automations and deletes
+the project, its workspaces and chats. The folder, checkouts and Git branches stay on disk.
+Startup also clears automation links before deleting empty-named projects with no workspaces.
 
 A workspace is created in one place: Home, whose composer sends the first
 message with it. Everything that wants one goes there through
@@ -486,7 +492,9 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   (`services/assistants/host.ts`) and adds `read_changes`, `add_project` and
   `send_feedback` (a report about Deus itself to the Deus team's Hivenet board,
   `services/assistants/feedback.ts`: the report alone,
-  `consent.telemetry: false`). A session is one chat of one of this computer's
+  `consent.telemetry: false`). The registry refuses project removal as an assistant operation.
+  Neither the assistant nor the chat tool list offers it.
+  A session is one chat of one of this computer's
   own workspaces (`workspace:N`, numbered by creation; cloud workspaces are
   not listed); a workspace being set up is its first chat under the id minted
   with it (`first_session_id`). Who started each workspace, chat and message
@@ -554,9 +562,10 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   handed to the engine with the Deus tools in one source): the chat itself is
   the caller, plan mode reads only, a chat cannot act on itself, and depth,
   chats per starter and starts per minute are limited. The turn's
-  instructions carry the package's `OPERATOR_GUIDANCE`
-  (`workspace-context.ts`). A message another chat or an assistant sent shows
-  "Sent from" above its bubble (`session/ui/SentFrom.tsx`), and the chip opens
+  instructions carry the package's `OPERATOR_GUIDANCE`. For this computer's `deus://workspace`
+  links, give `read_session` the link's `session` value as `session`. Without it, pass the link's `id`
+  as `session` to read the workspace's current chat (`workspace-context.ts`). A message another chat
+  or an assistant sent shows "Sent from" above its bubble (`session/ui/SentFrom.tsx`), and the chip opens
   the sending chat. A chat runs with full access or in plan mode, nothing
   between: Deus approves a chat's tool requests itself. A mode between the
   two must route these tools' writes to the person before it ships.
@@ -582,6 +591,12 @@ filter: it tears nothing down, and agents elsewhere keep running. The rules are 
 functions in `features/sidebar/lib/location.ts`; the choice (`location`,
 `cloudOrganizationId`) is kept in the sidebar store; one hook, `useWindowPlace`, wires
 them for `MainLayout`.
+
+Selecting a workspace writes `/s/<computer>/w/<workspace>` on the relay (`local` in
+`dev:web`) or `/w/<workspace>` on web-direct. Changing chats replaces `?session=<chat>`
+in that history entry. Copy link uses the same browser address (`workspaceAddress` in
+`features/workspace/lib/workspaceAddress.ts`) or `deus://workspace?id=<workspace>` in
+the desktop app. Only a chat link includes the session, chosen when the link is copied.
 
 What the window knows of the cloud is one live read, `cloudOrganizations`
 (`useCloudOrganizations()`): whether this backend can act there (`available`), the
@@ -803,6 +818,8 @@ Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `s
 - Column changes, post-launch: the above stops applying. Deprecate by renaming with a `DEPRECATED_` prefix, never drop.
 
 ## Testing
+
+Desktop checks launch the app through `test/e2e/lib/launch-in-background.mjs` and browsers run headless so every test leaves the foreground to the person.
 
 ```bash
 bun run test:backend          # apps/backend/test/unit/

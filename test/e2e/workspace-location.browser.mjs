@@ -14,6 +14,7 @@ import Database from "better-sqlite3";
 import { createServer } from "vite";
 import { chromium } from "playwright";
 import { SCHEMA_SQL } from "../../shared/schema.ts";
+import { uuidv7 } from "../../shared/lib/uuid.ts";
 import { LOOPBACK_WEB_ORIGINS } from "../../shared/web-origins.ts";
 import { pause, startPlatform, until } from "./cloud/platform.mjs";
 
@@ -24,10 +25,11 @@ const directory = await mkdtemp(path.join(screenshots, "run-"));
 const check = (name, details) => console.log(`PASS: ${name}`, details ?? "");
 
 const repository = crypto.randomUUID();
-const local = crypto.randomUUID();
-const localSession = crypto.randomUUID();
-const cloud = crypto.randomUUID();
-const cloudSession = crypto.randomUUID();
+const local = uuidv7();
+const localSession = uuidv7();
+const otherChat = uuidv7();
+const cloud = uuidv7();
+const cloudSession = uuidv7();
 const PROVIDER = "ses_location_smoke";
 const PROVIDER_WORKSPACE = "wsp_location_smoke";
 const LOCAL_TITLE = "Local location smoke";
@@ -80,6 +82,24 @@ db.prepare(
   "INSERT INTO sessions (id, workspace_id, agent_harness, status) VALUES (?, ?, 'claude-code', 'idle')"
 ).run(localSession, local);
 db.prepare(
+  "INSERT INTO sessions (id, workspace_id, agent_harness, status) VALUES (?, ?, 'codex-app-server', 'idle')"
+).run(otherChat, local);
+for (const [session, text] of [
+  [localSession, "Which files belong to this workspace?"],
+  [otherChat, "Review the browser navigation changes."],
+]) {
+  const message = crypto.randomUUID();
+  const part = crypto.randomUUID();
+  db.prepare("INSERT INTO messages (id, session_id, role, sent_at) VALUES (?, ?, 'user', ?)").run(
+    message,
+    session,
+    new Date().toISOString()
+  );
+  db.prepare(
+    "INSERT INTO parts (id, message_id, session_id, type, data) VALUES (?, ?, ?, 'text', ?)"
+  ).run(part, message, session, JSON.stringify({ type: "text", id: part, state: "done", text }));
+}
+db.prepare(
   "INSERT INTO workspaces (id, repository_id, slug, title, state, setup_status, current_session_id, git_branch, git_target_branch, kind, provider_workspace_id) VALUES (?, ?, 'cloud-smoke', ?, 'ready', 'completed', ?, 'cloud-smoke', 'main', 'cloud', ?)"
 ).run(cloud, repository, CLOUD_TITLE, cloudSession, PROVIDER_WORKSPACE);
 db.prepare(
@@ -108,6 +128,8 @@ const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/serv
     ...env,
     PORT: "0",
     DATABASE_PATH: path.join(directory, "deus.db"),
+    DEUS_USER_DATA_DIR: directory,
+    AGENT_ALLOW_AGENTLESS: "1",
     // Never the login Keychain, and git never climbs out of the run into this checkout.
     DEUS_VAULT_NO_KEYCHAIN: "1",
     GIT_CEILING_DIRECTORIES: directory,
@@ -162,12 +184,33 @@ try {
     cacheDir: path.join(directory, "vite-cache"),
     logLevel: "error",
     define: { "import.meta.env.VITE_BACKEND_PORT": JSON.stringify(String(port)) },
-    server: { host: "127.0.0.1", port: 0, fs: { allow: [root] } },
+    server: { host: "127.0.0.1", port: 0, hmr: false, fs: { allow: [root] } },
   });
   await vite.listen();
   const base = vite.resolvedUrls.local[0];
+  const home = `${base}s/local`;
+  const localAddress = `${home}/w/${local}`;
+  const firstAddress = `${localAddress}?session=${localSession}`;
+  const secondAddress = `${localAddress}?session=${otherChat}`;
+  const cloudAddress = `${home}/w/${cloud}?session=${cloudSession}`;
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const allowClipboard = (context) =>
+    context.grantPermissions(["clipboard-read", "clipboard-write"], {
+      origin: new URL(base).origin,
+    });
+  await allowClipboard(context);
+  await context.addInitScript(() => {
+    const history = globalThis.history;
+    const visits = (globalThis.workspaceAddressVisits = [globalThis.location.href]);
+    for (const method of ["replaceState", "pushState"]) {
+      const original = history[method].bind(history);
+      history[method] = (...args) => {
+        original(...args);
+        visits.push(globalThis.location.href);
+      };
+    }
+  });
   page = await context.newPage();
   page.setDefaultTimeout(60_000);
   page.on("pageerror", (error) => errors.push(error.message));
@@ -264,10 +307,279 @@ try {
   await showing("local");
   check("Ctrl+1 and Ctrl+2 switch");
 
-  // 5. Select the local workspace, then open the cloud one by URL (the router's own
-  //    navigation, so this session's memory stays).
+  const expectChat = async (view, address, label) => {
+    await view.waitForURL(address);
+    await view.getByRole("tab", { name: label, exact: true, selected: true }).waitFor();
+  };
+  const waitForRoute = (view) =>
+    view.waitForFunction(async () => {
+      const { webRouter } = await import("/src/app/router.ts");
+      const { status, resolvedLocation } = webRouter.state;
+      return (
+        status === "idle" &&
+        resolvedLocation?.state.__TSR_key === globalThis.history.state.__TSR_key
+      );
+    });
+  const openRoutedSettings = async (view) => {
+    await view.evaluate(async () => {
+      const { webRouter } = await import("/src/app/router.ts");
+      await webRouter.navigate({ to: "/s/$serverId/settings", params: { serverId: "local" } });
+    });
+    await view.waitForURL(`${home}/settings`);
+    await view.getByRole("combobox", { name: "Theme" }).waitFor();
+  };
+  const expectHome = async () => {
+    await page.waitForURL((url) => url.href.replace(/\/$/, "") === home);
+    await page.getByLabel("Message to start a new workspace").waitFor();
+  };
+  const copyLink = async (view, label, expected) => {
+    await view.keyboard.press("Control+k");
+    await view.getByRole("option", { name: label, exact: true }).click();
+    await view.getByText("Link copied", { exact: true }).first().waitFor();
+    assert.ok(
+      await view.evaluate(async (link) => (await navigator.clipboard.readText()) === link, expected)
+    );
+  };
+
+  // A switch to a place with no remembered workspace goes Home on this computer.
   await sidebar.getByText(LOCAL_TITLE, { exact: true }).click();
-  await until("the local workspace selected", async () => (await selected()) === local);
+  await expectChat(page, firstAddress, "Claude Code #1");
+  await page.keyboard.press("Control+2");
+  await expectHome();
+  await showing("cloud");
+  await page.keyboard.press("Control+k");
+  await page.getByRole("dialog").waitFor();
+  assert.equal(await page.getByRole("option", { name: /^Copy (chat|workspace) link$/ }).count(), 0);
+  await page.keyboard.press("Control+k");
+  await page.getByRole("dialog").waitFor({ state: "detached" });
+  await page.goBack();
+  await expectChat(page, firstAddress, "Claude Code #1");
+  check("a place with no selection goes Home; Back restores the workspace and chat");
+
+  // One browser, two addresses, one shared tab layout. Each address wins on reload.
+  const savedChat = (view) =>
+    view.evaluate(
+      (id) =>
+        JSON.parse(localStorage.getItem("workspace-layout-store"))?.state.layouts[id]
+          ?.activeChatTabSessionId,
+      local
+    );
+  await until(
+    "chat A saved before opening B's address",
+    async () => (await savedChat(page)) === localSession
+  );
+  const other = await context.newPage();
+  await other.goto(secondAddress);
+  await expectChat(other, secondAddress, "Codex #1");
+  await until("the linked chat published", async () => (await savedChat(other)) === otherChat);
+  const visits = await other.evaluate(() => globalThis.workspaceAddressVisits);
+  assert.deepEqual(
+    [...new Set(visits)],
+    [secondAddress],
+    "every address while opening B with A saved"
+  );
+  check("opening B with A saved keeps B in every history write", { visits });
+  await page.reload();
+  await expectChat(page, firstAddress, "Claude Code #1");
+  await other.reload();
+  await expectChat(other, secondAddress, "Codex #1");
+  await other.getByText("Review the browser navigation changes.", { exact: true }).waitFor();
+  const entries = await other.evaluate(() => globalThis.history.length);
+  await other.getByRole("tab", { name: "Claude Code #1" }).click();
+  await expectChat(other, firstAddress, "Claude Code #1");
+  await other.getByRole("tab", { name: "Codex #1" }).click();
+  await expectChat(other, secondAddress, "Codex #1");
+  assert.equal(await other.evaluate(() => globalThis.history.length), entries);
+  await copyLink(other, "Copy workspace link", localAddress);
+  await copyLink(other, "Copy chat link", secondAddress);
+  const draft = other.getByPlaceholder(/Ask a follow-up/);
+  await draft.press("ControlOrMeta+v");
+  await until(
+    "the copied chat link in the composer",
+    async () => (await draft.inputValue()) === secondAddress
+  );
+  await other.screenshot({ path: path.join(screenshots, "linked-chat.png") });
+  check("two tabs reload into their own chats; chat clicks replace the history entry");
+  check("the palette copies the workspace and chat addresses", {
+    workspace: localAddress,
+    chat: secondAddress,
+  });
+  await other.close();
+
+  const fresh = await browser.newPage();
+  await allowClipboard(fresh.context());
+  await fresh.goto(secondAddress);
+  await expectChat(fresh, secondAddress, "Codex #1");
+  await fresh.getByText("Review the browser navigation changes.", { exact: true }).waitFor();
+  await fresh.goto(`${localAddress}?session=not-an-id`);
+  await expectChat(fresh, secondAddress, "Codex #1");
+  const missingChat = fresh.getByText("That chat is no longer open in this workspace.", {
+    exact: true,
+  });
+  assert.equal(await missingChat.count(), 0);
+  await fresh.goto(`${localAddress}?session=${cloudSession}`);
+  await missingChat.waitFor();
+  await expectChat(fresh, secondAddress, "Codex #1");
+  check(
+    "an address naming another workspace's chat explains the fallback and shows the active chat"
+  );
+  await fresh.getByRole("button", { name: "Expand workspace", exact: true }).click();
+  await copyLink(fresh, "Copy chat link", secondAddress);
+  await fresh.reload();
+  await expectChat(fresh, secondAddress, "Codex #1");
+  await fresh.setViewportSize({ width: 390, height: 844 });
+  await fresh.locator("#mobile-panel-chat").waitFor();
+  assert.equal(await fresh.getByRole("button", { name: "Choose app to open in" }).count(), 0);
+  await fresh.getByRole("tab", { name: "Code", exact: true }).click();
+  await copyLink(fresh, "Copy workspace link", localAddress);
+  await copyLink(fresh, "Copy chat link", secondAddress);
+  check("a fresh browser context opens the linked transcript without a saved layout");
+  check(
+    "the palette copies the selected chat from the expanded workspace and the phone's Code pane"
+  );
+
+  await fresh.setViewportSize({ width: 1440, height: 900 });
+  await fresh.goto(`${home}/settings`);
+  await fresh.getByRole("button", { name: "Back to app" }).click();
+  await fresh.waitForURL((url) => url.href.replace(/\/$/, "") === home);
+  await fresh.locator(`[data-workspace-id="${local}"]`).getByText(LOCAL_TITLE).click();
+  await expectChat(fresh, secondAddress, "Codex #1");
+  await fresh.reload();
+  await expectChat(fresh, secondAddress, "Codex #1");
+  check("closing a direct Settings address returns Home and the next workspace survives reload");
+
+  await fresh.goto(`${home}/settings`);
+  await fresh.getByRole("combobox", { name: "Theme" }).waitFor();
+  await fresh.evaluate(
+    async ([workspace, chat]) => {
+      const { openChat } = await import("/src/features/session/lib/openChat.ts");
+      openChat(workspace, chat);
+    },
+    [local, localSession]
+  );
+  await expectChat(fresh, firstAddress, "Claude Code #1");
+  await waitForRoute(fresh);
+  check("opening another chat from Settings dismisses it and writes that chat's address");
+
+  const takeEffects = await fresh.evaluateHandle(async () => {
+    const { webRouter } = await import("/src/app/router.ts");
+    const { useOpenChatStore } = await import("/src/features/session/lib/openChat.ts");
+    const { useWorkspaceStore } = await import("/src/features/workspace/store/workspaceStore.ts");
+    const events = [];
+    const record = (kind, id) => {
+      const href = new URL(webRouter.history.location.href, globalThis.location.origin).href;
+      events.push({ kind, id, href });
+    };
+    useWorkspaceStore.subscribe(({ selectedWorkspaceId }) => record("select", selectedWorkspaceId));
+    useOpenChatStore.subscribe(({ requested }, prev) => {
+      for (const [id, chat] of Object.entries(requested)) {
+        if (chat !== prev.requested[id]) record("request", chat.sessionId);
+      }
+    });
+    return () => events.splice(0);
+  });
+  const readEffects = () => takeEffects.evaluate((take) => take());
+  const expectVisitToA = async () => {
+    await waitForRoute(fresh);
+    await expectChat(fresh, firstAddress, "Claude Code #1");
+    const events = await readEffects();
+    const ids = (kind) => events.filter((e) => e.kind === kind).map((e) => e.id);
+    assert.deepEqual(ids("request"), [localSession], "the outside visit requests A's chat");
+    assert.deepEqual([...new Set(ids("select"))], [local], "the outside visit reveals A");
+    assert.ok(
+      events.every((e) => e.href === firstAddress),
+      "every effect belongs to A's visit"
+    );
+  };
+
+  // Hold B's match open until the browser goes Back. React still has A's route.
+  const duringB = await fresh.evaluate(
+    async ({ id, take }) => {
+      const { webRouter } = await import("/src/app/router.ts");
+      const { useWorkspaceStore } = await import("/src/features/workspace/store/workspaceStore.ts");
+      const { uiActions } = await import("/src/shared/stores/uiStore.ts");
+      const route = webRouter.routesById["/s/$serverId/w/$workspaceId"];
+      const reachedB = Promise.withResolvers();
+      const gate = Promise.withResolvers();
+      route.update({
+        beforeLoad: ({ params }) => {
+          if (params.workspaceId === id) {
+            reachedB.resolve();
+            return gate.promise;
+          }
+        },
+      });
+      useWorkspaceStore.getState().selectWorkspace(id);
+      await reachedB.promise;
+      uiActions.openAutomations();
+      const pending = {
+        status: webRouter.state.status,
+        rendered: webRouter.state.matches.at(-1).params.workspaceId,
+        events: take().map(({ kind, id }) => [kind, id]),
+      };
+      const back = new Promise((resolve) =>
+        globalThis.addEventListener("popstate", resolve, { once: true })
+      );
+      webRouter.history.back();
+      await back;
+      gate.resolve();
+      route.update({ beforeLoad: undefined });
+      return pending;
+    },
+    { id: cloud, take: takeEffects }
+  );
+  assert.deepEqual(duringB, { status: "pending", rendered: local, events: [["select", cloud]] });
+  await expectVisitToA();
+  check("Back during B's pending navigation restores A and requests only A's chat");
+
+  for (const view of ["Automations", "Customize"]) {
+    await openRoutedSettings(fresh);
+    await fresh.keyboard.press("Control+k");
+    await fresh.getByRole("option", { name: `Go to ${view}`, exact: true }).click();
+    await fresh.waitForURL(firstAddress);
+    await waitForRoute(fresh);
+    assert.deepEqual(await readEffects(), [], `Settings to ${view}`);
+    const heading = fresh.getByRole("heading", { name: view, exact: true });
+    await heading.waitFor();
+    // Closing Settings leaves two consecutive history entries with exactly the same chat address.
+    for (const direction of ["goBack", "goForward"]) {
+      await fresh[direction]();
+      await expectVisitToA();
+      await heading.waitFor({ state: "detached" });
+      if (direction === "goBack") {
+        await fresh.getByRole("button", { name: view, exact: true }).click();
+        await heading.waitFor();
+      }
+    }
+  }
+  check("Settings keeps the palette's Automations and Customize selections on screen");
+  check(
+    "Back and Forward between identical chat addresses each reveal the workspace and request its chat"
+  );
+
+  // Keep the tab view unmounted so B's request is still waiting when the palette copies.
+  await fresh.getByRole("button", { name: "Automations", exact: true }).click();
+  await fresh.evaluate(
+    async ([id, chat]) => {
+      const { openChat } = await import("/src/features/session/lib/openChat.ts");
+      const { uiActions } = await import("/src/shared/stores/uiStore.ts");
+      openChat(id, chat);
+      uiActions.openAutomations();
+    },
+    [local, otherChat]
+  );
+  await copyLink(fresh, "Copy chat link", secondAddress);
+  const pendingChat = await fresh.evaluate(async (id) => {
+    const { currentOpenChatRequest } = await import("/src/features/session/lib/openChat.ts");
+    return currentOpenChatRequest(id)?.sessionId;
+  }, local);
+  assert.equal(pendingChat, otherChat);
+  assert.equal(await savedChat(fresh), localSession);
+  check("Copy chat link copies requested B while A is still the saved tab");
+  await fresh.close();
+
+  // 5. Open the cloud workspace by URL (the router's own navigation, so this
+  //    session's memory stays).
   await page.evaluate(async (id) => {
     const { webRouter } = await import("/src/app/router.ts");
     await webRouter.navigate({
@@ -276,20 +588,78 @@ try {
     });
   }, cloud);
   await showing("cloud");
+  await expectChat(page, cloudAddress, "New chat");
   assert.equal(await selected(), cloud);
   await sidebar.locator('[aria-current="page"]').getByText(CLOUD_TITLE).waitFor();
   await until("the cloud session attached", () => platform.socketsFor(PROVIDER).length > 0);
   check("selecting a cloud workspace by URL lands with the location on cloud", {
     url: new URL(page.url()).pathname,
   });
+  await page.goBack();
+  await expectChat(page, firstAddress, "Claude Code #1");
+  await page.goBack();
+  await expectHome();
+  await page.goForward();
+  await expectChat(page, firstAddress, "Claude Code #1");
+  await page.goForward();
+  await expectChat(page, cloudAddress, "New chat");
+  check("Back and Forward restore Home and both workspace addresses, including their chats");
+  for (const view of ["Automations", "Customize"]) {
+    await sidebar.getByRole("button", { name: view, exact: true }).click();
+    const heading = page.getByRole("heading", { name: view, exact: true });
+    await heading.waitFor();
+    await page.goBack();
+    await expectChat(page, firstAddress, "Claude Code #1");
+    await heading.waitFor({ state: "detached" });
+    await page.goForward();
+    await expectChat(page, cloudAddress, "New chat");
+  }
+  check("Back from Automations or Customize reveals the previous workspace and its chat");
+  await openRoutedSettings(page);
+  await page.goBack();
+  await expectChat(page, cloudAddress, "New chat");
+  check("Settings keeps its own address; Back returns to the linked chat");
 
   // 6. Switching back restores the local workspace; switching again, the cloud one.
   await page.keyboard.press("Control+1");
   await showing("local");
   await until("the local workspace restored", async () => (await selected()) === local);
   await sidebar.locator('[aria-current="page"]').getByText(LOCAL_TITLE).waitFor();
+  await expectChat(page, firstAddress, "Claude Code #1");
+  await page.getByRole("button", { name: "Expand workspace", exact: true }).click();
+  const toolsOnly = page.locator('[data-workspace-view="content"]');
+  await toolsOnly.waitFor();
   await page.keyboard.press("Control+2");
-  await until("the cloud workspace restored", async () => (await selected()) === cloud);
+  await expectChat(page, cloudAddress, "New chat");
+  const beforeReselect = await page.evaluate(
+    async ([workspace, chat]) => {
+      const { useOpenChatStore } = await import("/src/features/session/lib/openChat.ts");
+      const expired = { id: -1, sessionId: chat, at: Date.now() - 60_000 };
+      useOpenChatStore.setState({ requested: { [workspace]: expired } });
+      return globalThis.workspaceAddressVisits.length;
+    },
+    [local, otherChat]
+  );
+  await page.keyboard.press("Control+1");
+  await page.waitForURL(firstAddress);
+  await waitForRoute(page);
+  await toolsOnly.waitFor();
+  const reselectVisits = await page.evaluate(
+    (from) => globalThis.workspaceAddressVisits.slice(from),
+    beforeReselect
+  );
+  assert.ok(!reselectVisits.includes(secondAddress), "an expired request never enters the address");
+  await page.goBack();
+  await expectChat(page, cloudAddress, "New chat");
+  await page.goForward();
+  await expectChat(page, firstAddress, "Claude Code #1");
+  await page.locator('[data-workspace-view="split"]').waitFor();
+  check(
+    "reselecting a tools-only workspace keeps its view; Forward to its chat address reveals the chat"
+  );
+  check("an expired request is never written into the reselected workspace's address");
+  await page.keyboard.press("Control+2");
+  await expectChat(page, cloudAddress, "New chat");
   check("switching back restores the workspace last selected in each location");
 
   // 7. The choice survives a reload (at the index, so no URL selection pulls it back).
@@ -377,6 +747,27 @@ try {
   await header.waitFor();
   await showing("cloud");
   check("signed in again, a reload shows the cloud it was left in");
+
+  await page.goto(secondAddress);
+  await expectChat(page, secondAddress, "Codex #1");
+  const observing = await context.newPage();
+  await observing.goto(firstAddress);
+  await expectChat(observing, firstAddress, "Claude Code #1");
+  await sidebar
+    .locator(`[data-workspace-id="${local}"]`)
+    .getByRole("button", { name: /Archive workspace/ })
+    .click();
+  await page.getByText("Workspace archived", { exact: true }).waitFor();
+  await expectHome();
+  await observing.waitForURL((url) => url.href.replace(/\/$/, "") === home);
+  await observing.getByLabel("Message to start a new workspace").waitFor();
+  await observing.close();
+  await page.goto(secondAddress);
+  await expectHome();
+  await page
+    .getByText("No open workspace matches that link on this computer.", { exact: true })
+    .waitFor();
+  check("archiving goes Home in both open tabs; reopening the old workspace link explains why");
 
   assert.deepEqual(errors, [], "no page error");
   check("no page error");

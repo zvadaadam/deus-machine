@@ -53,7 +53,8 @@ import { openWith } from "../streams";
 import { agentDeviceFor } from "../simulator-context";
 import { setupForTurn } from "../project-environment.service";
 import { handleAutomationToolRequest } from "../automations";
-import { AgentServerDisconnectedError } from "../../lib/errors";
+import { getDatabase } from "../../lib/database";
+import { AgentServerDisconnectedError, NotFoundError } from "../../lib/errors";
 import { requireParam } from "../../lib/query-params";
 
 // ---- Singleton ----
@@ -164,6 +165,9 @@ export async function startTurn(
 ): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
   const apps = await turnApps(agentHarness);
+  if (!getDatabase().prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId)) {
+    throw new NotFoundError("This chat no longer exists.");
+  }
   const device = agentDeviceFor(sessionId);
   const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, {
     ...options,

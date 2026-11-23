@@ -8,6 +8,7 @@ import { operations } from "../../helpers";
 import simulatorOperations from "../../../src/api/simulator";
 import * as simulator from "../../../src/services/simulator-context";
 import { archiveWorkspace } from "../../../src/services/workspace-archive.service";
+import { removeRepo, repoRemoval } from "../../../src/services/workspace-lifecycle";
 
 // A stream start whose helper says it is ready and then exits before the
 // session is registered: the start fails, and nothing announces the stream.
@@ -74,11 +75,12 @@ vi.mock("../../../src/services/streams", () => ({
 beforeEach(() => {
   db = new Database(":memory:");
   db.exec(SCHEMA_SQL);
-  db.exec("INSERT INTO repositories (id, name) VALUES ('r', 'test')");
+  db.exec("INSERT INTO repositories (id, name) VALUES ('r', 'test'), ('keep', 'other')");
   const insert = db.prepare(
-    "INSERT INTO workspaces (id, repository_id, slug, state) VALUES (?, 'r', ?, 'ready')"
+    "INSERT INTO workspaces (id, repository_id, slug, state) VALUES (?, ?, ?, 'ready')"
   );
-  for (const id of ["ws-1", "archived", "other"]) insert.run(id, id);
+  for (const id of ["ws-1", "archived", "other"])
+    insert.run(id, id === "archived" ? "r" : "keep", id);
   published.length = 0;
   helper.child = null;
   helper.onConnect = () => {};
@@ -112,35 +114,43 @@ it("lets an archive stop a simulator before its session is registered", async ()
   simulator.stopStream("other");
 });
 
-it("refuses a simulator start when the workspace was archived during the capability check", async () => {
-  const capability = Promise.withResolvers<SimulatorCapabilities>();
-  const checked = vi
-    .spyOn(simulator, "getSimulatorCapabilities")
-    .mockReturnValueOnce(capability.promise);
-  const stream = vi.spyOn(simulator, "startStream");
-  const request = operations(simulatorOperations)(simStart, {
-    workspaceId: "archived",
-    udid: "UDID-3",
-    skipBootCheck: true,
-  });
-  expect(checked).toHaveBeenCalledOnce();
-  expect(stream).not.toHaveBeenCalled();
-  await archiveWorkspace("archived");
-  capability.resolve({ available: true, unavailableReason: null });
-  await request;
-
-  try {
-    await expect(stream.mock.results[0].value).rejects.toThrow(/archived/i);
-    expect(published).toContainEqual({
-      type: "streamFailed",
-      error: expect.stringMatching(/archived/i),
+it.each(["archived", "removed"])(
+  "refuses a simulator start when the workspace was %s during the capability check",
+  async (state) => {
+    const capability = Promise.withResolvers<SimulatorCapabilities>();
+    const checked = vi
+      .spyOn(simulator, "getSimulatorCapabilities")
+      .mockReturnValueOnce(capability.promise);
+    const stream = vi.spyOn(simulator, "startStream");
+    const request = operations(simulatorOperations)(simStart, {
+      workspaceId: "archived",
+      udid: "UDID-3",
+      skipBootCheck: true,
     });
-    expect(simulator.getContextForWorkspace("archived")).toBeNull();
-    expect(helper.child).toBeNull();
-    await simulator.startStream("other", "UDID-3", true);
-    expect(simulator.getContextForWorkspace("other")?.udid).toBe("UDID-3");
-  } finally {
-    simulator.stopStream("other");
-    simulator.stopStream("archived");
+    expect(checked).toHaveBeenCalledOnce();
+    expect(stream).not.toHaveBeenCalled();
+    await archiveWorkspace("archived");
+    if (state === "removed") {
+      const noLiveTurn = () => undefined;
+      removeRepo("r", repoRemoval("r", noLiveTurn).confirmation, noLiveTurn);
+    }
+    capability.resolve({ available: true, unavailableReason: null });
+    await request;
+
+    try {
+      const reason = state === "archived" ? /archived/i : /no longer exists/i;
+      await expect(stream.mock.results[0].value).rejects.toThrow(reason);
+      expect(published).toContainEqual({
+        type: "streamFailed",
+        error: expect.stringMatching(reason),
+      });
+      expect(simulator.getContextForWorkspace("archived")).toBeNull();
+      expect(helper.child).toBeNull();
+      await simulator.startStream("other", "UDID-3", true);
+      expect(simulator.getContextForWorkspace("other")?.udid).toBe("UDID-3");
+    } finally {
+      simulator.stopStream("other");
+      simulator.stopStream("archived");
+    }
   }
-});
+);

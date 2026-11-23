@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef, type KeyboardEvent } from "react";
 import { useWorkspacesByRepo } from "@/features/workspace/api";
-import { useWorkspaceStore } from "@/features/workspace/store";
+import { openWorkspace } from "@/features/workspace/lib/openWorkspace";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { track } from "@/platform/analytics";
 import {
@@ -40,7 +40,6 @@ export function CommandPalette({ actionOverrides = {}, hiddenCommands = [] }: Co
 
   // Workspace data for the "Go to Workspace" search page
   const workspacesQuery = useWorkspacesByRepo();
-  const selectWorkspace = useWorkspaceStore((s) => s.selectWorkspace);
 
   const allWorkspaces = useMemo(() => {
     if (!workspacesQuery.data) return [];
@@ -74,15 +73,11 @@ export function CommandPalette({ actionOverrides = {}, hiddenCommands = [] }: Co
     [closeCommandPalette, actionOverrides]
   );
 
-  const handleWorkspaceSelect = useCallback(
-    (workspace: Workspace) => {
-      closeCommandPalette();
-      setSearch("");
-      setPage("home");
-      selectWorkspace(workspace.id);
-    },
-    [closeCommandPalette, selectWorkspace]
-  );
+  function handleWorkspaceSelect(workspace: Workspace) {
+    setSearch("");
+    setPage("home");
+    openWorkspace(workspace);
+  }
 
   // Backspace on empty input navigates back from workspace page to home
   const handleKeyDown = useCallback(

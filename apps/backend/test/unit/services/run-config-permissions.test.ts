@@ -4,6 +4,18 @@ import { buildTurnStartParams } from "../../../src/services/agent/run-config";
 
 const harnesses = ["claude-code", "codex-app-server"] as const;
 
+it.each([...harnesses, "gemini"] as const)(
+  "briefs %s on reading chat links for this computer's workspaces",
+  (harness) => {
+    const { config } = buildTurnStartParams("chat", "turn", harness, "Read this chat", {
+      cwd: "/workspace",
+    });
+    expect(config.systemPromptAppend).toContain(
+      "For this computer's workspaces, read a `deus://workspace?id=<workspace id>&session=<chat id>` link with `read_session`. Pass its `session` value as `session`.\nWithout `session`, pass the link's `id` value as `session` to read the workspace's current chat."
+    );
+  }
+);
+
 describe.each(harnesses)("%s local permission policy", (harness) => {
   it.each([undefined, "native-session"])(
     "uses full access when the composer omits the mode (resume: %s)",

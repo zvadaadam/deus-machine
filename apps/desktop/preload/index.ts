@@ -24,6 +24,7 @@ import type { UpdateCheckResult, UpdateState } from "../../../shared/types/updat
 const ALLOWED_INVOKE_CHANNELS = new Set([
   // Window visibility / onboarding
   "show_main_window",
+  "take_workspace_link",
   "enter_onboarding_mode",
   "exit_onboarding_mode",
 
@@ -58,6 +59,7 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
 const ALLOWED_EVENT_CHANNELS = new Set([
   // Backend lifecycle
   "backend:port-changed",
+  "workspace-link:available",
 
   // Browser — only popup requests (window.open / target="_blank") need
   // main→renderer forwarding. Everything else about the <webview> (load,

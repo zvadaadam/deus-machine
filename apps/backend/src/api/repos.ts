@@ -16,10 +16,10 @@ import { parseCloneAddress, repositoryKey } from "../lib/clone-address";
 import { getGitRemoteUrl } from "../lib/git-remotes";
 import { GitError, runGit } from "@shared/lib/git-process";
 import {
-  getAllRepositories,
   getMaxRepositorySortOrder,
   getRepositoryById,
   getRepositoryByRootPath,
+  getRepositoryRows,
 } from "../db";
 import { resolveCloudRepoAccess } from "../services/cloud-workspace-init.service";
 import { defaultCloudOrgId } from "../services/agent/cloud/config";
@@ -34,6 +34,8 @@ import { parseGitHubRepo, runGh } from "../services/gh.service";
 import { githubInstallUrl } from "@shared/lib/github";
 import { readProjectFile, writeProjectFile } from "../services/project-environment.service";
 import { invalidate } from "../services/query-engine";
+import { liveTurnId } from "../services/agent/service";
+import { removeRepo, repoRemoval } from "../services/workspace-lifecycle";
 import { listRecentProjects } from "../services/recent-projects.service";
 import { publish } from "../services/streams";
 import { handle } from "./registry";
@@ -114,7 +116,7 @@ export async function addCloudRepository(
     return getRepositoryById(db, repoId);
   })();
   if (!repo) throw new AppError(500, "Repository was not saved");
-  invalidate(["workspaces"]);
+  invalidate(["workspaces", "repos"]);
   return repo;
 }
 
@@ -126,7 +128,7 @@ async function listCloudRepositories(organizationId?: string | null) {
   }
   const { repos } = await listAccessibleRepos(orgId);
   const byOrigin = new Map<string, string>();
-  for (const repo of getAllRepositories(getDatabase())) {
+  for (const repo of getRepositoryRows(getDatabase())) {
     if (!repo.git_origin_url) continue;
     const key = repositoryKey(repo.git_origin_url);
     if (!byOrigin.has(key)) byOrigin.set(key, repo.id);
@@ -251,9 +253,7 @@ export async function addRepository(rootPath: string): Promise<Repository> {
 
   const repo = insert();
   if (!repo) throw new AppError(500, "Repository was not saved");
-  // "workspaces" carries every repository summary (the sidebar's project
-  // list), so other connected clients only see the new repo through it.
-  invalidate(["workspaces"]);
+  invalidate(["workspaces", "repos"]);
   return repo;
 }
 
@@ -482,7 +482,7 @@ async function listGithubBranches(
     getDatabase()
       .prepare("UPDATE repositories SET git_default_branch = ? WHERE id = ? AND root_path IS NULL")
       .run(found.defaultBranch, repo.id);
-    invalidate(["workspaces"]);
+    invalidate(["workspaces", "repos"]);
   }
   return { branches: found.branches.map((name) => ({ name })) };
 }
@@ -524,7 +524,7 @@ async function listRemoteBranches(
 }
 
 export default [
-  handle(api.repos, () => getAllRepositories(getDatabase())),
+  handle(api.repos, () => getRepositoryRows(getDatabase())),
   handle(api.repoEnvironmentFile, async ({ repoId }) => {
     // The local checkout is the only source: never another branch's file.
     const root = requireFolder(requireRepo(repoId));
@@ -557,6 +557,8 @@ export default [
   handle(api.inspectRepo, ({ root_path }) => inspectRepository(root_path)),
 
   handle(api.addRepo, ({ root_path }) => addRepository(root_path)),
+  handle(api.repoRemoval, ({ repoId }) => repoRemoval(repoId, liveTurnId).confirmation),
+  handle(api.removeRepo, ({ repoId, confirmed }) => removeRepo(repoId, confirmed, liveTurnId)),
   handle(api.addCloudRepo, ({ repository, organizationId }) =>
     addCloudRepository(repository, organizationId)
   ),
