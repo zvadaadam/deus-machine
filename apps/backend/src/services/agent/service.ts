@@ -31,6 +31,7 @@ import {
   planAnswer,
 } from "@shared/agent-asks";
 import { isUnknownEvent } from "@shared/protocol-types";
+import { hasAgentMessages } from "./agent-messages";
 import { AgentLink } from "./client";
 import { LocalAgents } from "./local-agents";
 import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
@@ -170,7 +171,6 @@ export async function startTurn(
 ): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
   const apps = await turnApps(agentHarness);
-  const { hasAgentMessages } = await import("./agent-messages");
   if (!getDatabase().prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId)) {
     throw new NotFoundError("This chat no longer exists.");
   }
