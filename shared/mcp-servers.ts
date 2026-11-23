@@ -4,6 +4,7 @@
 
 import type { AgentHarness } from "./enums";
 import { HARNESSES } from "./harnesses";
+import type { ToolPart } from "./protocol-types";
 
 /** The name a turn on `harness` gives an installed app's server. */
 export function appServerName(appId: string, harness: AgentHarness): string {
@@ -47,3 +48,30 @@ const DEUS_TOOL_PREFIXES = [
   `mcp__${DEUS_TOOLS_SERVER}__`,
   `${DEUS_TOOLS_SERVER}.`,
 ];
+
+export function coerceToolInput(input: unknown): Record<string, unknown> {
+  if (input && typeof input === "object" && !Array.isArray(input)) {
+    return input as Record<string, unknown>;
+  }
+  return {};
+}
+
+function parsePartialInput(partialInput: string): Record<string, unknown> {
+  try {
+    return coerceToolInput(JSON.parse(partialInput || "{}"));
+  } catch {
+    return {};
+  }
+}
+
+/** Codex wraps an MCP tool's input in `{ arguments }`. Older Codex parts identify Deus by name alone. */
+export function toolCardInput(part: ToolPart): Record<string, unknown> {
+  const input =
+    part.state.status === "pending"
+      ? parsePartialInput(part.state.partialInput)
+      : coerceToolInput(part.state.input);
+  const wrapped = part.mcp
+    ? part.toolName === `${part.mcp.server}.${part.mcp.tool}`
+    : part.toolName.startsWith(`${DEUS_TOOLS_SERVER}.`);
+  return wrapped ? coerceToolInput(input.arguments) : input;
+}

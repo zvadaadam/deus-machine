@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // vi.hoisted ensures mockFrontendAPI is available when the vi.mock factory runs (local mock variable name kept for brevity)
 const { mockFrontendAPI } = vi.hoisted(() => ({
   mockFrontendAPI: {
+    hasAgentMessages: vi.fn(() => false),
     requestGetDiff: vi.fn(),
     requestDiffComment: vi.fn(),
     requestGetTerminalOutput: vi.fn(),
@@ -14,6 +15,7 @@ vi.mock("../host-link", () => ({
 }));
 
 import type { HostToolSource } from "@zvada/agent-server/core";
+import { TELL_USER } from "@shared/agent-message";
 import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
 import { deusTools } from "../agents/deus-tools";
 
@@ -66,6 +68,7 @@ describe("deusTools", () => {
     const tools = getRegisteredTools(server);
     const toolNames = Object.keys(tools);
     expect(toolNames).toHaveLength(28);
+    expect(toolNames).not.toContain(TELL_USER);
     // Workspace tools (questions are Claude's own AskUserQuestion, through the engine)
     expect(toolNames).not.toContain("AskUserQuestion");
     expect(toolNames).toContain("GetWorkspaceDiff");
@@ -96,6 +99,33 @@ describe("deusTools", () => {
     expect(toolNames).toContain("recording_status");
     expect(toolNames).toContain("recording_focus");
     expect(toolNames).toContain("recording_hold");
+  });
+
+  it("adds just the read-only message tool and checks its Markdown before confirming the send", async () => {
+    mockFrontendAPI.hasAgentMessages.mockReturnValueOnce(true);
+    const enabled = deusTools(SESSION_ID);
+    expect(enabled.tools.map((t) => t.name)).toEqual([
+      ...server.tools.map((t) => t.name),
+      TELL_USER,
+    ]);
+    expect(enabled.tools.find((t) => t.name === TELL_USER)).toMatchObject({
+      annotations: { readOnly: true },
+      inputSchema: {
+        required: ["message"],
+        properties: { message: { type: "string", pattern: "\\S" } },
+      },
+    });
+    const caller = { ...CALLER, permissionMode: "plan" as const };
+    const signal = new AbortController().signal;
+    await expect(
+      enabled.call(TELL_USER, { message: "**Tests passed.**" }, caller, signal)
+    ).resolves.toEqual({
+      content: [{ type: "text", text: "The person sees your message." }],
+    });
+    await expect(enabled.call(TELL_USER, { message: "\n  " }, caller, signal)).rejects.toThrow();
+    await expect(server.call(TELL_USER, { message: "Update" }, caller, signal)).rejects.toThrow(
+      "No Deus tool"
+    );
   });
 
   // ==========================================================================

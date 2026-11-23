@@ -3,6 +3,7 @@
 
 import * as path from "path";
 import { OPERATOR_GUIDANCE, quote } from "@zvada/agent-server/operator";
+import { TELL_USER } from "@shared/agent-message";
 
 /**
  * Derives the project (repo) name from a worktree path.
@@ -48,6 +49,11 @@ const AGENT_DEVICE =
   'Act with `press|fill|longpress <@ref> --settle`, `scroll <direction> --settle` or `back --settle`, verify with `wait text "…"`, ' +
   "and end with `agent-device close` (`close --shutdown` if you booted it) so another workspace can use the device. " +
   "`agent-device help <topic>` has more (`dogfood` for exploratory QA, `debugging`, `react-native`).\n";
+
+export const AGENT_MESSAGES =
+  `While you work, use \`${TELL_USER}\` for anything the person should read before you finish. ` +
+  "Send the plan for a longer job, a finding that changes the plan, or an intermediate result they can use. " +
+  "Text between tool calls is folded into your work. Write your closing message once as your normal final reply.\n";
 
 /**
  * Builds concise workspace context for any agent.

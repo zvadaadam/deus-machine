@@ -15,7 +15,8 @@ export function tool<Shape extends z.ZodRawShape>(
   description: string,
   shape: Shape,
   // An MCP result's shape, which the tool modules build loosely: one cast, here.
-  handler: (args: z.infer<z.ZodObject<Shape>>) => Promise<unknown>
+  handler: (args: z.infer<z.ZodObject<Shape>>) => Promise<unknown>,
+  annotations?: HostTool["annotations"]
 ): DeusTool {
   const schema = z.object(shape);
   const { $schema: _draft, ...inputSchema } = z.toJSONSchema(schema, { io: "input" });
@@ -23,6 +24,7 @@ export function tool<Shape extends z.ZodRawShape>(
     name,
     description,
     inputSchema,
+    annotations,
     run: async (args) => (await handler(schema.parse(args))) as HostToolResult,
   };
 }

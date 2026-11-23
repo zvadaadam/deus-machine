@@ -60,7 +60,9 @@ export class AgentLink {
 
   /** Start the engine and connect to it. */
   static async open(options: AgentLinkOptions): Promise<AgentLink> {
+    const { hasAgentMessages } = await import("./agent-messages");
     const transport = startEngine({
+      hasAgentMessages,
       request: options.onToolRequest,
       title: options.onTitle,
       ...(options.sessionTools ? { sessionTools: options.sessionTools } : {}),

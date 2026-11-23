@@ -24,6 +24,8 @@ export interface SessionTitle {
 
 /** What the backend answers for the engine. */
 export interface DeusHost {
+  /** Whether this chat was given the tool for messaging the person. */
+  hasAgentMessages?(sessionId: string): boolean;
   /** A chat's tools: the Deus tools `own`, with the session tools the backend adds beside them. */
   sessionTools?(own: HostToolSource): HostToolSource;
   /** A deus MCP tool's request (getDiff, automation/update, …). */
@@ -79,8 +81,11 @@ export function notifyTitle(payload: SessionTitle): boolean {
   return true;
 }
 
-/** Typed request facade to the backend: the deus MCP tools' data fetches. */
+/** What the Deus tools ask their host. */
 export const HostRpc = {
+  hasAgentMessages(sessionId: string): boolean {
+    return host?.hasAgentMessages?.(sessionId) ?? false;
+  },
   requestGetDiff(r: GetDiffRequest): Promise<GetDiffResponse> {
     return requestHost("getDiff", r, DATA_QUERY_TIMEOUT_MS);
   },

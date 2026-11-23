@@ -50,6 +50,7 @@ import {
   type ViewTurn,
 } from "@zvada/agent-server/operator";
 import type { Origin } from "@zvada/agent-server/protocol";
+import { withSentText } from "@shared/agent-message";
 import type { AnyOp, InputOf, OutputOf } from "@shared/api/op";
 import * as sessions from "@shared/api/sessions";
 import { agentModels } from "@shared/api/settings";
@@ -657,7 +658,7 @@ export function createDeusHost(): DeusHost {
             .filter((m) => m.turn_id === fact.turn_id)
             .map((m) => ({
               role: m.role,
-              parts: m.parts ?? [],
+              parts: withSentText(m.parts ?? []),
               ...(m.parent_tool_call_id ? { nested: true } : {}),
               ...(m.origin && m.origin.kind !== "person" ? { origin: m.origin } : {}),
             })),

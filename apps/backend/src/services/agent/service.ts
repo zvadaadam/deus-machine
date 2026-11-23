@@ -166,10 +166,11 @@ export async function startTurn(
   turnId: string,
   agentHarness: AgentHarness,
   prompt: string,
-  options: DeusTurnOptions
+  options: Omit<DeusTurnOptions, "agentMessages">
 ): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
   const apps = await turnApps(agentHarness);
+  const { hasAgentMessages } = await import("./agent-messages");
   if (!getDatabase().prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId)) {
     throw new NotFoundError("This chat no longer exists.");
   }
@@ -177,6 +178,7 @@ export async function startTurn(
   const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, {
     ...options,
     ...apps,
+    agentMessages: hasAgentMessages(sessionId),
     setup: setupForTurn(sessionId),
     agentDeviceSession: device.session,
     simulator: device.udid ? { udid: device.udid } : null,

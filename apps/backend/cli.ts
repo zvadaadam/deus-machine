@@ -27,6 +27,7 @@
 
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import { AgentLink } from "./src/services/agent/client";
+import { hasAgentMessages } from "./src/services/agent/agent-messages";
 import type { AgentHarness } from "@shared/enums";
 import { isUnknownEvent, type AnyLifecycleEvent } from "@shared/protocol-types";
 import { buildTurnStartParams } from "./src/services/agent/run-config";
@@ -375,6 +376,7 @@ async function main() {
   const turnId = uuidv7();
   const params = buildTurnStartParams(sessionId, turnId, opts.agent as AgentHarness, opts.prompt, {
     cwd: opts.cwd,
+    agentMessages: hasAgentMessages(sessionId),
     permissionMode: "default",
     supportsImages: init.harnesses[opts.agent]?.images ?? false,
   });
