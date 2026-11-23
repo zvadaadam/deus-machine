@@ -481,9 +481,12 @@ export async function startStream(
   udid: string,
   skipBootCheck = false
 ): Promise<void> {
-  if (getWorkspaceRaw(getDatabase(), workspaceId)?.state === "archived")
+  const workspace = getWorkspaceRaw(getDatabase(), workspaceId);
+  if (!workspace || workspace.state === "archived")
     throw new ConflictError(
-      "This workspace is archived. Restore it before starting the simulator."
+      workspace
+        ? "This workspace is archived. Restore it before starting the simulator."
+        : "This workspace no longer exists."
     );
   const claim = claimStartingUdid(workspaceId, udid);
 

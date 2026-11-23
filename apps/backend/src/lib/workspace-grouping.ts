@@ -46,6 +46,9 @@ export function groupWorkspacesByRepo(
       };
     }
     grouped[repo.id].archived_count = repo.archived_count;
+    if (repo.total_count === repo.archived_count) {
+      grouped[repo.id].removal = repo.cloud_count ? "cloud" : "offered";
+    }
   }
 
   return Object.values(grouped).sort((a, b) => a.sort_order - b.sort_order);

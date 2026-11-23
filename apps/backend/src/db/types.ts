@@ -35,9 +35,9 @@ export interface RepositoryRow {
   updated_at: string;
 }
 
-/** The `repos` operation: repositories with workspace counts from LEFT JOIN aggregate. */
+/** Project groups count workspaces across every place, including those outside the sidebar filter. */
 export interface RepositoryWithCountsRow extends RepositoryRow {
-  ready_count: number;
+  cloud_count: number;
   archived_count: number;
   total_count: number;
 }

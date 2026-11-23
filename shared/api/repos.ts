@@ -10,7 +10,7 @@ import type { CloudRepoAccess } from "../types/cloud-access";
 import type { BranchSummary, GithubAppState, PRSummary } from "../types/github";
 import type { RecentProject } from "../types/onboarding";
 import type { InspectedRepository, Repository } from "../types/repository";
-import { out, read, write } from "./op";
+import { live, out, read, write } from "./op";
 import { stream } from "./stream";
 
 const repoId = z.object({ repoId: z.string().min(1) });
@@ -19,7 +19,7 @@ const HTTPS_URL = /^https:\/\/[^\s;|&`$()]+$/;
 const organization = z.object({ organizationId: z.string().min(1).nullish() });
 
 /** Every project added to this computer, with a folder here or not. */
-export const repos = read({ name: "repos", output: out<Repository[]>() });
+export const repos = live({ name: "repos", output: out<Repository[]>() });
 
 /** The project's `.deus/environment.json` in its local checkout, and the branch checked out there. */
 export const repoEnvironmentFile = read({
@@ -114,6 +114,29 @@ export const inspectRepo = read({
  * origin is a project with no folder here becomes that project's folder.
  */
 export const addRepo = write({ name: "addRepo", input: rootPath, output: out<Repository>() });
+
+const removalConfirmation = z.object({
+  rootPath: z.string().nullable(),
+  counts: z.object({
+    archivedWorkspaces: z.int().nonnegative(),
+    chats: z.int().nonnegative(),
+    automations: z.int().nonnegative(),
+  }),
+});
+export type RepoRemovalConfirmation = z.infer<typeof removalConfirmation>;
+
+/** What the confirmation shows, or the reason this project must stay. */
+export const repoRemoval = read({
+  name: "repoRemoval",
+  input: repoId,
+  output: out<RepoRemovalConfirmation>(),
+});
+
+export const removeRepo = write({
+  name: "removeRepo",
+  input: repoId.extend({ confirmed: removalConfirmation }),
+  output: out<void>(),
+});
 
 /** Write the project's `.deus/environment.json` in its local checkout. */
 export const saveRepoEnvironmentFile = write({

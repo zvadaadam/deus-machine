@@ -74,6 +74,8 @@ export function buildWorkspaceContext(
       : "") +
     // The session tools every chat here has (services/assistants: withSessionTools).
     `${OPERATOR_GUIDANCE}\n` +
+    "For this computer's workspaces, read a `deus://workspace?id=<workspace id>&session=<chat id>` link with `read_session`. Pass its `session` value as `session`.\n" +
+    "Without `session`, pass the link's `id` value as `session` to read the workspace's current chat.\n" +
     `You can render live HTML+CSS previews inline in chat using the \`html-preview\` code fence — it renders in an isolated Shadow DOM instead of showing code. Use this naturally whenever showing is clearer than describing (design options, component variations, layout ideas).`
   );
 }

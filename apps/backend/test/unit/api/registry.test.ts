@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { live, out, read, write } from "@shared/api/op";
+import { removeRepo } from "@shared/api/repos";
 import type { AssistantAccess } from "@shared/types/assistants";
 import { handle, LOCAL_CALLER, Registry } from "../../../src/api/registry";
 import { assistantCaller } from "../../helpers";
@@ -112,6 +113,7 @@ describe("an assistant's reach", () => {
   const ops = new Registry([
     handle(greet, ({ name }) => `hello ${name}`),
     handle(rename, () => {}),
+    handle(removeRepo, () => {}),
     handle(count, () => 3),
     handle(agentMcp, ({ message }) => ({ answered: message })),
   ]);
@@ -137,6 +139,26 @@ describe("an assistant's reach", () => {
       expect(await ops.run("agentMcp", "write", { message: { id: 1 } }, assistant(access))).toEqual(
         { answered: { id: 1 } }
       );
+    }
+  );
+
+  it.each(["pending", "read", "operate"] as const)(
+    "an assistant cannot remove a project with %s access",
+    async (access) => {
+      await expect(
+        ops.run(
+          removeRepo.name,
+          "write",
+          {
+            repoId: "r",
+            confirmed: {
+              rootPath: null,
+              counts: { archivedWorkspaces: 0, chats: 0, automations: 0 },
+            },
+          },
+          assistant(access)
+        )
+      ).rejects.toMatchObject({ statusCode: 403 });
     }
   );
 

@@ -26,6 +26,7 @@ import {
 import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/shared/lib/utils";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
+import { copyWorkspaceLink, useHasWorkspaceChat } from "../lib/workspaceAddress";
 import { CopyIcon } from "@/components/ui/copy-icon";
 import { SETUP_FAILED, SETUP_RUNNING } from "../lib/startState";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
@@ -346,7 +347,9 @@ export function WorkspaceHeader({
               }
             />
           )}
-          {workspacePath && <HeaderOpenButton workspacePath={workspacePath} />}
+          {workspacePath && (
+            <HeaderOpenButton workspaceId={workspaceId} workspacePath={workspacePath} />
+          )}
           {trailingActions}
         </div>
       )}
@@ -358,11 +361,19 @@ export function WorkspaceHeader({
 // HeaderOpenButton — split button: quick open (last-used) + dropdown
 // ---------------------------------------------------------------------------
 
-function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
+function HeaderOpenButton({
+  workspaceId,
+  workspacePath,
+}: {
+  workspaceId: string;
+  workspacePath: string;
+}) {
   const [apps, setApps] = useState<InstalledApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { copy, copied } = useCopyToClipboard();
+  const [lastCopied, setLastCopied] = useState("");
+  const hasChat = useHasWorkspaceChat(workspaceId);
   const [lastAppId, setLastAppId] = useLastOpenInApp();
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const isHoveringRef = useRef(false);
@@ -399,9 +410,9 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
     }
   }
 
-  function handleCopyPath() {
-    void copy(workspacePath);
+  async function handleCopy(label: string, run: () => Promise<boolean>) {
     setOpen(false);
+    if (await run()) setLastCopied(label);
   }
 
   function handleOpen() {
@@ -433,7 +444,7 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
   return (
     <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
       <div className="border-border-strong flex h-7 shrink-0 items-center rounded-lg border">
-        {/* Copy path closes the menu before the clipboard answers. */}
+        {/* The menu closes before the clipboard answers. */}
         <span role="status" className="sr-only">
           {copied && "Copied"}
         </span>
@@ -516,15 +527,29 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
           </div>
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={handleCopyPath}
-          className="text-text-muted cursor-pointer gap-2 py-1 text-xs"
-        >
-          <span className="contents" aria-hidden="true">
-            <CopyIcon copied={copied} className="size-4" />
-          </span>
-          {copied ? "Copied!" : "Copy path"}
-        </DropdownMenuItem>
+        {Object.entries({
+          "Copy path": () => copy(workspacePath),
+          "Copy workspace link": () => copyWorkspaceLink(workspaceId, "workspace", copy),
+          "Copy chat link": hasChat ? () => copyWorkspaceLink(workspaceId, "chat", copy) : null,
+        }).map(([label, run]) => {
+          if (!run) return null;
+          const done = copied && lastCopied === label;
+          return (
+            <DropdownMenuItem
+              key={label}
+              onSelect={() => void handleCopy(label, run)}
+              className="text-text-muted cursor-pointer gap-2 py-1 text-xs"
+            >
+              <span className="contents" aria-hidden="true">
+                <CopyIcon copied={done} className="size-4" />
+              </span>
+              <span className="inline-grid [&>span]:[grid-area:1/1]">
+                <span className={cn(done && "invisible")}>{label}</span>
+                <span className={cn(!done && "invisible")}>Copied!</span>
+              </span>
+            </DropdownMenuItem>
+          );
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   );

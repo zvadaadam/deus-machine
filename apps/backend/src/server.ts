@@ -28,6 +28,7 @@ import { refreshCloudOrganizations } from "./services/cloud-settings.service";
 import { forgetUnusedAssistants } from "./services/assistants";
 import { startIntegrations } from "./services/integrations";
 import { failInterruptedWorkspaces } from "./services/workspace-init.service";
+import { deleteEmptyUnnamedProjects } from "./services/workspace-lifecycle";
 import { stopWhenStdinEnds } from "./lib/parent-stdin";
 
 // Initialize Sentry before anything else.
@@ -50,6 +51,7 @@ Sentry.init({
 const db = initDatabase();
 // Assistants unused for a month are forgotten (also whenever the list is read).
 forgetUnusedAssistants();
+deleteEmptyUnnamedProjects();
 
 // Workspaces the previous process was still starting when it stopped.
 void failInterruptedWorkspaces()
@@ -59,8 +61,7 @@ void failInterruptedWorkspaces()
   .catch((err) => console.warn("[server] Workspace recovery failed:", err));
 
 // Backfill git_origin_url for repos added before we tracked origin URLs.
-// Runs once at startup (fire-and-forget) so WS subscribers get the data
-// on their first snapshot instead of waiting for a `repos` read.
+// Runs in the background at startup and publishes any origins it finds.
 async function backfillGitOriginUrls(): Promise<void> {
   const { getGitRemoteUrl } = await import("./lib/git-remotes");
 
@@ -93,7 +94,7 @@ async function backfillGitOriginUrls(): Promise<void> {
 
     // Push fresh data to WS subscribers so sidebar shows GitHub icons immediately
     if (updated > 0) {
-      invalidate(["workspaces"]);
+      invalidate(["workspaces", "repos"]);
     }
   } catch {
     // Backfill failed — not critical, icons will appear after next workspace creation

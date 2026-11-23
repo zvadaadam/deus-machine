@@ -13,13 +13,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
+import { useRepos } from "@/features/repository/api";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useUIStore } from "@/shared/stores/uiStore";
-import { api } from "@shared/api";
-import { call } from "@/platform/ws";
 import { githubRepoSlug, httpsOrigin, normalizeRepoRef } from "@shared/git-origin";
 import {
   getEnvironmentSecretSettings,
@@ -135,12 +133,7 @@ function RepositoryEnvironments({
     target?.location ?? "cloud"
   );
   const signIn = useDeusCloudSignIn();
-  const repos = useQuery({
-    queryKey: queryKeys.repos.all,
-    queryFn: () => call(api.repos),
-    enabled: !isCloudDirectWebMode(),
-    staleTime: 10_000,
-  });
+  const repos = useRepos();
   const settings = useQuery({
     queryKey: queryKeys.settings.environments.detail(accountId, orgId, null),
     queryFn: ({ signal }) => getEnvironmentSecretSettings(orgId!, null, signal),

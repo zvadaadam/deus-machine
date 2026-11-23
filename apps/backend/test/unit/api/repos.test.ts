@@ -201,7 +201,7 @@ describe("addRepo", () => {
       1,
       "https://github.com/zvadaadam/deus.git"
     );
-    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces"]);
+    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "repos"]);
   });
 
   it("refuses a repository that was already added, naming the existing one", async () => {

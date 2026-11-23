@@ -249,7 +249,7 @@ async function main() {
   // 2. Create workspace + session
   const repoId = uuidv7();
   const workspaceId = uuidv7();
-  const sessionId = `cli-${Date.now()}`;
+  const sessionId = uuidv7();
 
   db.prepare(
     `INSERT OR IGNORE INTO repositories (id, name, root_path) VALUES (?, 'cli-test', ?)`

@@ -114,7 +114,6 @@ async function cloneAndRegisterInBackground() {
       }
     }
 
-    queryClient.invalidateQueries({ queryKey: queryKeys.repos.all });
     queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
 
     // This runs in the background, after onboarding: offer Home rather than take the screen.

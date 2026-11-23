@@ -98,6 +98,8 @@ export interface RepoGroup {
    */
   has_folder?: boolean;
   archived_count?: number;
+  /** Absent while any workspace is unarchived, or when the host doesn't offer project removal. */
+  removal?: "offered" | "cloud";
   workspaces: Workspace[];
 }
 

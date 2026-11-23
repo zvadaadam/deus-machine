@@ -394,12 +394,18 @@ export function getCompactions(db: Database.Database, sessionId: string): Compac
 
 // ─── Repository Queries ─────────────────────────────────────
 
+export function getRepositoryRows(db: Database.Database): RepositoryRow[] {
+  return db
+    .prepare<[], RepositoryRow>("SELECT * FROM repositories ORDER BY sort_order, name")
+    .all();
+}
+
 export function getAllRepositories(db: Database.Database): RepositoryWithCountsRow[] {
   return db
     .prepare(
       `
     SELECT r.*,
-           COUNT(CASE WHEN w.state = 'ready' THEN 1 END) as ready_count,
+           COUNT(CASE WHEN w.kind = 'cloud' THEN 1 END) as cloud_count,
            COUNT(CASE WHEN w.state = 'archived' THEN 1 END) as archived_count,
            COUNT(w.id) as total_count
     FROM repositories r

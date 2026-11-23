@@ -22,6 +22,7 @@ import { useCreateWorkspace } from "@/features/workspace/api";
 import { useAddRepo } from "@/features/repository/api";
 import { useSidebarStore } from "@/features/sidebar/store";
 import { openNewWorkspace } from "@/features/workspace/lib/newWorkspace";
+import { showWorkspace } from "@/features/workspace/lib/openWorkspace";
 import { native } from "@/platform";
 import { capabilities } from "@/platform/capabilities";
 import { getErrorMessage } from "@shared/lib/errors";
@@ -118,7 +119,7 @@ export function useRepoActions({ selectWorkspace }: UseRepoActionsOptions) {
     }) => {
       try {
         const workspace = await createWorkspaceMutation.mutateAsync(params);
-        selectWorkspace(workspace.id);
+        showWorkspace(workspace.id);
         expandRepo(workspace.repository_id);
       } catch (error) {
         selectWorkspace(null);

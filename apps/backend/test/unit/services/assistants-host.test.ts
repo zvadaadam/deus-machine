@@ -15,6 +15,7 @@ import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
 import { CATALOG_MODEL_LISTS, defaultModelId } from "@shared/models";
 import type { Op } from "@shared/api/op";
 import { SCHEMA_SQL } from "@shared/schema";
+import { deusTools } from "../../../../agent-server/agents/deus-tools";
 
 const state = vi.hoisted(() => ({
   db: null as unknown as import("better-sqlite3").Database,
@@ -754,6 +755,20 @@ describe("through MCP and as a chat's own tools", () => {
       state.db.prepare("SELECT error_message FROM workspaces WHERE id = 'w-missing'").pluck().get()
     ).toBe(error);
   });
+
+  it.each(["assistant", "chat"] as const)(
+    "no assistant or chat tool removes a project (%s tool list)",
+    async (caller) => {
+      const tools: readonly { name: string }[] =
+        caller === "chat"
+          ? withSessionTools(deusTools("s-lead")).tools
+          : (await mcp({ jsonrpc: "2.0", id: 1, method: "tools/list" }, assistantCaller("operate")))
+              .result.tools;
+      expect(tools.map((tool) => tool.name).filter((name) => /project|repo/i.test(name))).toEqual([
+        "add_project",
+      ]);
+    }
+  );
 
   it("says when a diff cannot be read, including in a settled turn's outcome", async () => {
     const why = "Could not read the changes: git returned no merge base.";

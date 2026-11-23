@@ -15,51 +15,35 @@
  * back — see agent-commands-send.test.ts for that half.
  */
 
+import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WireRequestError } from "@zvada/agent-server/client";
 import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
+import { api } from "@shared/api";
+import { SCHEMA_SQL } from "@shared/schema";
+import repoHandlers from "../../../src/api/repos";
+import sessionHandlers from "../../../src/api/sessions";
+import workspaceHandlers from "../../../src/api/workspaces";
+import * as agentEvents from "../../../src/services/agent/event-handler";
+import * as integrations from "../../../src/services/integrations";
+import type { TurnApps } from "../../../src/services/integrations/runtime";
+import * as projectEnvironment from "../../../src/services/project-environment.service";
+import * as streams from "../../../src/services/streams";
+import { operations } from "../../helpers";
 
-const {
-  mockOpen,
-  mockLinkStartTurn,
-  mockBeginTurn,
-  mockAbortTurn,
-  mockGetDatabase,
-  mockInvalidate,
-  mockSetupForTurn,
-} = vi.hoisted(() => ({
+const { mockOpen, mockLinkStartTurn, mockLinkCancelTurn } = vi.hoisted(() => ({
   mockOpen: vi.fn(),
   mockLinkStartTurn: vi.fn(),
-  mockBeginTurn: vi.fn(),
-  mockAbortTurn: vi.fn(),
-  mockGetDatabase: vi.fn(),
-  mockInvalidate: vi.fn(),
-  mockSetupForTurn: vi.fn(),
+  mockLinkCancelTurn: vi.fn(),
 }));
 
+let db: Database.Database;
 vi.mock("../../../src/lib/database", () => ({
-  getDatabase: mockGetDatabase,
+  getDatabase: () => db,
   DB_PATH: "/tmp/deus-service-turn-test.db",
-}));
-vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
-vi.mock("../../../src/services/project-environment.service", () => ({
-  setupForTurn: mockSetupForTurn,
-}));
-vi.mock("../../../src/services/simulator-context", () => ({
-  agentDeviceFor: (sessionId: string) => ({ session: sessionId, udid: null }),
 }));
 vi.mock("../../../src/services/agent/client", () => ({
   AgentLink: { open: mockOpen },
-}));
-vi.mock("../../../src/services/agent/event-handler", () => ({
-  createAgentEventHandler: () => ({
-    beginTurn: mockBeginTurn,
-    abortTurn: mockAbortTurn,
-    confirmTurn: vi.fn(),
-    settleEventGap: vi.fn(),
-    handle: vi.fn(),
-    handleTitle: vi.fn(),
-  }),
 }));
 
 import * as agentService from "../../../src/services/agent/service";
@@ -71,29 +55,79 @@ const start = () =>
   agentService.startTurn(SESSION, TURN, "claude-code", "hello", { cwd: "/tmp/nonexistent-ws" });
 
 describe("agentService.startTurn", () => {
+  let events: agentEvents.AgentEventHandler;
   beforeEach(async () => {
+    db = new Database(":memory:");
+    db.pragma("foreign_keys = ON");
+    db.exec(SCHEMA_SQL);
+    db.exec(`
+      INSERT INTO repositories (id, name, root_path) VALUES ('r', 'Project', '/repo');
+      INSERT INTO workspaces (id, repository_id, slug, state) VALUES ('w', 'r', 'work', 'ready');
+    `);
+    db.prepare("INSERT INTO sessions (id, workspace_id) VALUES (?, 'w')").run(SESSION);
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "log").mockImplementation(() => {});
-    mockSetupForTurn.mockReturnValue(null);
     mockOpen.mockResolvedValue({
       startTurn: mockLinkStartTurn,
+      cancelTurn: mockLinkCancelTurn,
       getAgents: () => [],
       isConnected: () => true,
       engine: { onAuthUpdated: () => () => {}, onCliProgress: () => () => {} },
       close: vi.fn().mockResolvedValue(undefined),
     });
+    const createEvents = vi.spyOn(agentEvents, "createAgentEventHandler");
     await agentService.init();
+    events = createEvents.mock.results[0]!.value;
   });
 
   afterEach(async () => {
     await agentService.shutdown();
+    db.close();
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
+  it("refuses a send when Stop, archive and project removal finish during the integration lookup", async () => {
+    const run = operations([...sessionHandlers, ...workspaceHandlers, ...repoHandlers]);
+    const lookup = Promise.withResolvers<TurnApps>();
+    const apps = vi.spyOn(integrations, "resolveTurnApps").mockReturnValueOnce(lookup.promise);
+    mockLinkCancelTurn.mockResolvedValueOnce({ outcome: "no_active_turn" });
+    mockLinkStartTurn.mockResolvedValue({ sessionId: SESSION, turnId: TURN });
+
+    const sending = run(api.sendMessage, {
+      sessionId: SESSION,
+      turnId: TURN,
+      content: "hello",
+      model: "opus",
+      agentHarness: "claude-code",
+    });
+    expect(apps).toHaveBeenCalledOnce();
+    expect(await run(api.session, { sessionId: SESSION })).toMatchObject({ status: "working" });
+    await expect(run(api.stopSession, { sessionId: SESSION })).resolves.toEqual({
+      unconfirmed: false,
+    });
+    expect(mockLinkCancelTurn).toHaveBeenCalledWith(SESSION, undefined);
+    expect(await run(api.session, { sessionId: SESSION })).toMatchObject({ status: "idle" });
+    await run(api.archiveWorkspace, { workspaceId: "w" });
+    const confirmed = await run(api.repoRemoval, { repoId: "r" });
+    await run(api.removeRepo, { repoId: "r", confirmed });
+    expect(await run(api.session, { sessionId: SESSION })).toBeNull();
+
+    const publish = vi.spyOn(streams, "publish");
+    lookup.resolve({ servers: {}, skipped: [] });
+    const [outcome] = await Promise.allSettled([sending]);
+    expect.soft(mockLinkStartTurn).toHaveBeenCalledTimes(0);
+    expect(outcome).toMatchObject({
+      status: "rejected",
+      reason: { statusCode: 404, message: "This chat no longer exists." },
+    });
+    expect(publish.mock.calls.map(([stream]) => stream.name)).not.toContain(api.sessionEvents.name);
+  });
+
   it("rolls the local turn back when the wire refuses admission", async () => {
-    mockBeginTurn.mockReturnValue(true);
+    const begin = vi.spyOn(events, "beginTurn");
+    const abort = vi.spyOn(events, "abortTurn");
     mockLinkStartTurn.mockRejectedValue(
       new WireRequestError(WIRE_ERROR_CODES.turnActive, "already has an active turn")
     );
@@ -102,23 +136,22 @@ describe("agentService.startTurn", () => {
     // an `accepted: false` ack.
     await expect(start()).rejects.toBeInstanceOf(WireRequestError);
 
-    expect(mockBeginTurn).toHaveBeenCalledWith(SESSION, TURN);
-    expect(mockAbortTurn).toHaveBeenCalledWith(SESSION, TURN);
+    expect(begin).toHaveBeenCalledWith(SESSION, TURN);
+    expect(abort).toHaveBeenCalledWith(SESSION, TURN);
   });
 
   it("keeps the local turn when admission succeeds", async () => {
-    mockBeginTurn.mockReturnValue(true);
     mockLinkStartTurn.mockResolvedValue({ sessionId: SESSION, turnId: TURN });
 
     await expect(start()).resolves.toBeUndefined();
 
-    expect(mockAbortTurn).not.toHaveBeenCalled();
+    expect(agentService.liveTurnId(SESSION)).toBe(TURN);
   });
 
   it.each(["claude-code", "codex-app-server"] as const)(
     "passes setup as it stands at the start of each %s turn",
     async (harness) => {
-      mockSetupForTurn.mockReturnValueOnce({
+      const setup = vi.spyOn(projectEnvironment, "setupForTurn").mockReturnValueOnce({
         state: "running",
         command: "bun install",
         log: "/tmp/setup.log",
@@ -128,7 +161,7 @@ describe("agentService.startTurn", () => {
       const cwd = "/tmp/nonexistent-ws";
       for (const id of ["first", "next"])
         await agentService.startTurn(SESSION, id, harness, "hello", { cwd });
-      expect(mockSetupForTurn.mock.calls).toEqual([[SESSION], [SESSION]]);
+      expect(setup.mock.calls).toEqual([[SESSION], [SESSION]]);
       const [first, next] = mockLinkStartTurn.mock.calls;
       expect(first![0].config.systemPromptAppend).toContain("cat '/tmp/setup.status'");
       expect(next![0].config.systemPromptAppend).not.toContain("/tmp/setup.status");
@@ -139,18 +172,19 @@ describe("agentService.startTurn", () => {
     // beginTurn said no: the session already holds a live turn locally. The
     // refusal that follows belongs to OUR doomed send, so rolling back here
     // would clear the OTHER turn's id and orphan its envelopes.
-    mockBeginTurn.mockReturnValue(false);
+    events.beginTurn(SESSION, "earlier-turn");
+    const abort = vi.spyOn(events, "abortTurn");
     mockLinkStartTurn.mockRejectedValue(
       new WireRequestError(WIRE_ERROR_CODES.turnActive, "already has an active turn")
     );
 
     await expect(start()).rejects.toBeInstanceOf(WireRequestError);
 
-    expect(mockAbortTurn).not.toHaveBeenCalled();
+    expect(abort).not.toHaveBeenCalled();
+    expect(agentService.liveTurnId(SESSION)).toBe("earlier-turn");
   });
 
   it("keeps a Codex turn's images: the app-server takes them", async () => {
-    mockBeginTurn.mockReturnValue(true);
     mockLinkStartTurn.mockResolvedValue({ sessionId: SESSION, turnId: TURN });
     const link = (await mockOpen.mock.results[0]!.value) as { getAgents: () => unknown };
     link.getAgents = () => [{ type: "codex-app-server", capabilities: { images: true } }];

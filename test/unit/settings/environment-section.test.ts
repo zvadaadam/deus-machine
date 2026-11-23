@@ -23,6 +23,7 @@ vi.mock("@/features/sidebar/hooks/useWindowOrganization", () => ({
   useWindowOrganization: () => ({ id: ui.windowOrganization }),
 }));
 vi.mock("@/shared/hooks/useDeusCloudSignIn", () => ({ useDeusCloudSignIn: () => ({}) }));
+vi.mock("@/shared/hooks/useQuerySubscription", () => ({ useQuerySubscription: () => {} }));
 vi.mock("@/shared/config/webDirectMode", () => ({ isCloudDirectWebMode: () => false }));
 vi.mock("@/shared/stores/uiStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/shared/stores/uiStore")>()),
