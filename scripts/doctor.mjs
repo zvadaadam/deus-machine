@@ -1,7 +1,7 @@
 // Checks that this machine can develop, package, and deploy Deus.
 // Run: bun run doctor
 //
-// "required" checks cover installs, development and building the runtime. "optional" ones
+// "required" checks cover installs, development and the pre-push gate. "optional" ones
 // only disable a feature (iOS simulator, local packaging, manual deploys).
 
 import { execFileSync } from "node:child_process";
@@ -83,6 +83,29 @@ check(
   "bun run setup"
 );
 
+const browser = await import("playwright")
+  .then(({ chromium }) => chromium.launch())
+  .catch(() => null);
+check(
+  "required",
+  "Headless Chromium (bun run check)",
+  Boolean(browser),
+  browser?.version() ?? "unavailable",
+  "bunx playwright install --with-deps chromium"
+);
+await browser?.close();
+
+for (const command of ["ffmpeg", "ffprobe"]) {
+  const version = out(command, ["-version"])?.split("\n")[0];
+  check(
+    "required",
+    `${command} (bun run check)`,
+    Boolean(version),
+    version ?? "missing",
+    process.platform === "darwin" ? "brew install ffmpeg" : "Install FFmpeg and ffprobe."
+  );
+}
+
 // Electron (42 and later) has no postinstall: `bun run dev` and
 // `bun run package:mac:dir` download the binary (`bun run electron:install`,
 // Electron's install.js), which writes path.txt last. A download cut
@@ -140,11 +163,13 @@ check(
 );
 
 for (const app of ["cloud-relay", "landing"]) {
+  const relay = app === "cloud-relay";
+  const installed = existsSync(join(rootDir, "apps", app, "node_modules"));
   check(
-    "optional",
-    `apps/${app} dependencies (typecheck:all, deploys)`,
-    existsSync(join(rootDir, "apps", app, "node_modules")),
-    existsSync(join(rootDir, "apps", app, "node_modules")) ? "installed" : "not installed",
+    relay ? "required" : "optional",
+    `apps/${app} dependencies (${relay ? "bun run check" : "landing deploy"})`,
+    installed,
+    installed ? "installed" : "not installed",
     "bun run setup"
   );
 }

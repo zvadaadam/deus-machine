@@ -38,10 +38,6 @@ export interface TerminalSpec {
 export function openTerminal(spec: TerminalSpec): Terminal {
   const { command, args, cols, rows, cwd, env } = spec;
   if (process.versions.bun) {
-    // Bun 1.3.6 can drop the output of a process that exits the instant it
-    // writes it (a bare `/bin/echo`: 1 in 100 runs, most of them when many run
-    // at once). A shell that prints and lives on, as the app's terminals are,
-    // loses nothing; node-pty loses nothing in either case.
     const proc = Bun.spawn([command, ...args], {
       cwd,
       // Bun's `name` does not export TERM, as node-pty's does.

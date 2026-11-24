@@ -162,8 +162,8 @@ try {
     }),
     "Circular controls override the shared shape without retaining its squircle"
   );
-  await primary.hover();
   const before = await primary.boundingBox();
+  await primary.hover();
   await page.mouse.down();
   await expect(primary.and(page.locator(":active"))).toBeVisible();
   await primary.evaluate((el) => Promise.allSettled(el.getAnimations().map((a) => a.finished)));

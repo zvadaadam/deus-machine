@@ -56,6 +56,22 @@ describe("release workflow", () => {
       uses: "./.github/workflows/deploy.yml",
       with: { service: "web", ref: "${{ needs.validate-and-bump.outputs.tag }}" },
     });
+    const deploy = load(readFileSync(".github/workflows/deploy.yml", "utf8")) as {
+      on: { push: { paths: string[] } };
+      jobs: {
+        "deploy-web": { if: string; steps: Array<{ uses?: string; with?: { ref: string } }> };
+      };
+    };
+    const web = deploy.jobs["deploy-web"];
+    expect(web.if).toBe("inputs.service == 'web'");
+    expect(web.steps.find((step) => step.uses?.startsWith("actions/checkout@"))?.with?.ref).toBe(
+      "refs/tags/${{ inputs.ref }}"
+    );
+    expect(deploy.on.push.paths.toSorted()).toEqual([
+      "apps/cloud-relay/**",
+      "apps/landing/**",
+      "shared/types/relay.ts",
+    ]);
   });
 
   it("releases the pushed tag without incrementing it", () => {

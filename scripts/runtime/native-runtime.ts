@@ -50,7 +50,8 @@ export function buildDeusRuntime(): void {
   }).trim();
   if (`bun@${compiler}` !== packageManager) {
     throw new Error(
-      `Building deus-runtime requires ${packageManager}. Found bun@${compiler} on PATH.`
+      `Building deus-runtime requires ${packageManager}. Found bun@${compiler} on PATH.\n` +
+        `Install it with curl -fsSL https://bun.sh/install | bash -s ${packageManager.replace("bun@", "bun-v")}`
     );
   }
 

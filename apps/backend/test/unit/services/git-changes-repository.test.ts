@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,6 +13,7 @@ import {
   resolveParentBranch,
 } from "../../../src/services/git.service";
 import { resolveNode } from "../../../src/services/node/driver";
+import { holdOpenPipe } from "../../fixtures/held-pipe";
 
 let root: string;
 const git = (...args: string[]) => runGit(args, { cwd: root });
@@ -604,11 +604,7 @@ it.for(["timeout", "abort", "overflow"])(
   "settles on %s while a detached post-commit helper holds the pipes",
   async (stop, { onTestFinished }) => {
     await git("init", "-qb", "main");
-    // Both readers stay alive until this test releases the pipe, even on a slow host.
-    const fifo = path.join(root, "hold");
-    execFileSync("mkfifo", [fifo]);
-    const hold = fs.openSync(fifo, fs.constants.O_RDWR);
-    onTestFinished(() => fs.closeSync(hold));
+    holdOpenPipe(path.join(root, "hold"));
     write(
       "detach.cjs",
       `const helper = require("node:child_process").spawn("cat", ["hold"], { detached: true, stdio: "inherit" });
@@ -671,15 +667,16 @@ it("keeps git's exit status when shutdown closes a helper holding stdout", async
   vi.resetModules();
   const runner = await import("@shared/lib/git-process");
   const groups = await import("@shared/lib/process-groups");
+  holdOpenPipe(path.join(root, "hold"));
+  const leader = Promise.withResolvers<number>();
   const output = runner.runGit(
-    ["-c", "alias.finish=!sleep 10 & echo $PPID > git.pid; printf done", "finish"],
-    { cwd: root }
+    ["-c", "alias.finish=!cat hold & echo $PPID >&2; printf done", "finish"],
+    { cwd: root, onStderr: (pid) => leader.resolve(Number(pid)) }
   );
   try {
-    await vi.waitFor(() => {
-      const pid = Number(fs.readFileSync(path.join(root, "git.pid"), "utf8"));
-      expect(() => process.kill(pid, 0)).toThrow();
-    });
+    const pid = await leader.promise;
+    expect(pid).toBeGreaterThan(0);
+    await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow());
   } finally {
     groups.stopProcessGroups();
   }

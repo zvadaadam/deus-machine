@@ -28,7 +28,7 @@ New machine or broken toolchain? `bun run doctor` checks Node (22.x, see `.node-
 
 ## Cursor Cloud setup
 
-Fresh cloud images should have Bun available. Install the version pinned in `package.json` if it is missing:
+Fresh cloud images should have Bun available. Install the version pinned in `package.json` if `bun --version` differs or Bun is missing.
 
 ```bash
 curl -fsSL https://bun.sh/install | bash -s "bun-v$(node -p "require('./package.json').packageManager.split('@')[1]")"
@@ -45,7 +45,7 @@ bun run test:agent-server
 bun run dev:web
 ```
 
-`bun run dev:web` is the preferred cloud smoke because it rebuilds the Node native module ABI, starts the backend (which runs the agent engine in its process), and then starts Vite with the emitted backend port. Confirm the terminal shows `[AgentService] Engine started, agents: [claude-code, codex-app-server, gemini]`, `[BACKEND_PORT]...` and `Server ready!` before opening the frontend URL.
+`bun run dev:web` is the preferred cloud smoke. It checks that Node can open SQLite, repairs the native module if needed, starts the backend (including the agent engine), and points Vite at the port the backend reports. Confirm the terminal shows `[AgentService] Engine started, agents: [claude-code, codex-app-server, gemini]`, `[BACKEND_PORT]...` and `Server ready!` before opening the frontend URL.
 
 For browser-based UI smoke tests, install the Playwright browser after dependencies are installed:
 

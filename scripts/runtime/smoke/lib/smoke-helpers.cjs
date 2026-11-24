@@ -71,7 +71,7 @@ function runtimeEnv(binDir, extraEnv = {}) {
     env.DEUS_BUNDLED_BIN_DIR = binDir;
     env.PATH = deterministicRuntimePath(binDir);
   }
-  return { ...env, ...extraEnv };
+  return { ...env, ...extraEnv, DEUS_VAULT_NO_KEYCHAIN: "1" };
 }
 
 function packagedDesktopEnv(tempHome) {

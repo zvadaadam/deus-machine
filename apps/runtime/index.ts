@@ -95,7 +95,7 @@ const RUNTIME_CHECKS = {
         10_000
       );
       openTerminal({
-        // Not a bare /bin/echo: see openTerminal on output Bun drops at exit.
+        // Exercise a shell that stays open after printing, like a workspace terminal.
         command: "/bin/sh",
         args: ["-c", "echo deus-runtime-terminal; sleep 0.1"],
         cols: 80,

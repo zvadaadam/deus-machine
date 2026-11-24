@@ -1,6 +1,6 @@
-# Release workflow (macOS + Linux desktop + CLI)
+# Release workflow (macOS and Linux desktop, npm CLI and hosted web)
 #
-# Builds and publishes Electron desktop artifacts via GitHub Releases.
+# Publishes Electron artifacts and the npm CLI, then deploys the tagged web app.
 # electron-updater reads latest-mac.yml from the release assets to deliver
 # auto-updates.
 #
@@ -10,13 +10,15 @@
 #          gh workflow run release.yml -f bump=minor
 #          gh workflow run release.yml -f bump=patch -f dry_run=true
 #
-# Required GitHub Secrets: Cognitic s.r.o.'s Apple team (V3MA6M9H6Q), the same
-# Developer ID and notarization account as the Rafina app (docs/releases.md):
+# Required GitHub secrets. Apple signing uses Cognitic s.r.o.'s team (V3MA6M9H6Q),
+# the same Developer ID and notarization account as the Rafina app (docs/releases.md).
 #   APPLE_CERT_P12                     — Base64-encoded .p12 of the Developer ID Application identity
 #   APPLE_CERT_PASSWORD                — Password for the .p12
 #   APPLE_ID                           — Apple Account that notarizes, a member of the team
 #   APPLE_APP_SPECIFIC_PASSWORD        — App-specific password of that account
 #   APPLE_TEAM_ID                      — The team's id
+#   CLOUDFLARE_API_TOKEN               — Deploys the hosted web to Cloudflare Pages
+#   CLOUDFLARE_ACCOUNT_ID              — Cloudflare account hosting the web app
 #
 # Optional GitHub Secrets:
 #   SENTRY_AUTH_TOKEN                  — Sentry auth token for source map upload
@@ -211,21 +213,22 @@ jobs:
             echo "::error::Expected the arm64 and x64 DMGs"
             exit 1
           fi
-          pids=()
+          auth=(--apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID")
+          ids=()
           for dmg in "${dmgs[@]}"; do
-            xcrun notarytool submit "$dmg" \
-              --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-              --team-id "$APPLE_TEAM_ID" --wait --output-format json \
-              > "$dmg.json" 2> "$dmg.log" &
-            pids+=("$!")
+            echo "Submitting $dmg"
+            response=$(xcrun notarytool submit "$dmg" "${auth[@]}" --output-format json) || { echo "$response"; exit 1; }
+            echo "$response"
+            id=$(jq -er '.id' <<< "$response")
+            ids+=("$id")
           done
 
           failed=0
-          for i in "${!pids[@]}"; do
-            dmg="${dmgs[i]}"
-            wait "${pids[i]}" && jq -e '.status == "Accepted"' "$dmg.json" >/dev/null || failed=1
-            echo "Notarization of $dmg"
-            cat "$dmg.log" "$dmg.json"
+          for id in "${ids[@]}"; do
+            if ! xcrun notarytool wait "$id" "${auth[@]}" --output-format json | jq -e 'select(.status == "Accepted")'; then
+              xcrun notarytool log "$id" "${auth[@]}"
+              failed=1
+            fi
           done
           if [[ "$failed" != 0 ]]; then exit 1; fi
           for dmg in "${dmgs[@]}"; do

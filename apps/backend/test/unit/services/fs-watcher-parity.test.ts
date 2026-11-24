@@ -76,6 +76,8 @@ it("delivers checkout changes with a bounded descriptor cost", async () => {
 
     start();
     const visible = join(nested, "visible");
+    const later = join(nested, "new-directory");
+    const laterFile = join(later, "visible");
     const edits = {
       create: () => writeFileSync(visible, "create"),
       modify: () => writeFileSync(visible, "modify"),
@@ -85,6 +87,9 @@ it("delivers checkout changes with a bounded descriptor cost", async () => {
         renameSync(tmp, visible);
       },
       delete: () => unlinkSync(visible),
+      "mkdir after subscribing": () => mkdirSync(later),
+      "create in new directory": () => writeFileSync(laterFile, "first"),
+      "edit in new directory": () => writeFileSync(laterFile, "second"),
     };
     for (const [name, edit] of Object.entries(edits)) {
       // Let any trailing notification from the previous edit pass before arming this waiter.

@@ -118,6 +118,7 @@ jobs:
   deploy-web:
     name: Deploy Web App
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     concurrency: deploy-web
     if: inputs.service == 'web'
     steps:
@@ -134,12 +135,10 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build web app
+        # The production web app is the fully Mac-closed (web-direct) build:
+        # cloud sessions straight against agnt from the browser. Relay entry
+        # paths (/connect*, /s/*) keep their relay behavior on the same build.
         run: bun run build:web
-        env:
-          # The production web app is the fully Mac-closed (web-direct) build:
-          # cloud sessions straight against agnt from the browser. Relay entry
-          # paths (/connect*, /s/*) keep their relay behavior on the same build.
-          VITE_CLOUD_DIRECT: "1"
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
@@ -149,6 +148,8 @@ jobs:
           command: pages deploy apps/web/dist/web --project-name=deus --branch=main
 
   # ── Deploy Landing + Root Edge Router (Cloudflare Worker) ────────
+  # When the router and web asset paths both change, ship them in two releases, web first,
+  # so the router can still serve the published app's scripts.
   deploy-landing:
     name: Deploy Landing
     needs: changes

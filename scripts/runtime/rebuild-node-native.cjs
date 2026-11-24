@@ -53,19 +53,12 @@ for (const target of fs.existsSync(ptyPrebuilds) ? fs.readdirSync(ptyPrebuilds) 
   if (fs.existsSync(helper)) fs.chmodSync(helper, 0o755);
 }
 
-function sqliteLoads() {
-  try {
-    require("better-sqlite3")(":memory:").close();
-    return true;
-  } catch {
-    return false;
-  }
+try {
+  require("better-sqlite3")(":memory:").close();
+  return;
+} catch {
+  // Rebuild when the binary installed by better-sqlite3 cannot open a database in this Node.
 }
-
-if (sqliteLoads()) return;
-const prebuild = path.join(PROJECT_ROOT, "node_modules", "prebuild-install", "bin.js");
-const installed = spawnSync(process.execPath, [prebuild], { cwd: SQLITE_ROOT, stdio: "inherit" });
-if (installed.status === 0 && sqliteLoads()) return;
 
 const selectedPython = pythonCandidates().find(isUsablePython);
 const env = { ...process.env };
