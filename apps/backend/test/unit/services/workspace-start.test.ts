@@ -58,6 +58,7 @@ import * as lifecycle from "../../../src/services/workspace-lifecycle";
 import { setupFile } from "../../../src/services/setup-status";
 import { buildWorkspaceContext } from "../../../src/services/agent/workspace-context";
 import { GitError, runGit } from "@shared/lib/git-process";
+import { holdOpenPipe } from "../../fixtures/held-pipe";
 import { CELESTIAL_NAMES } from "../../../src/services/workspace.service";
 
 let scratch: string;
@@ -77,6 +78,12 @@ const row = (id: string) =>
 const workspacePath = (slug: string) => path.join(root, ".deus", slug);
 const branches = () => git("branch", "--format=%(refname:short)").split("\n");
 const setupStatus = (id: string) => fs.readFileSync(setupFile(id, "status"), "utf8");
+
+function waitingGit() {
+  const fifo = path.join(scratch, "hold");
+  holdOpenPipe(fifo);
+  return ["-c", `alias.wait=!cat "${fifo}" & echo $! >&2; wait`, "wait"];
+}
 
 function setupScript(command: string) {
   fs.mkdirSync(path.join(root, ".deus"), { recursive: true });
@@ -400,19 +407,26 @@ describe("a start that fails", () => {
     expect(locale.trim()).toBe("C");
   });
 
-  it("stops a command that runs too long, with everything it started", async () => {
-    const started = Date.now();
-    const pidFile = path.join(scratch, "pid");
-    const failure = await runGit(
-      ["-c", `alias.wait=!sh -c 'sleep 30 & echo $! > "${pidFile}"; wait'`, "wait"],
-      { cwd: root, timeoutMs: 300 }
-    ).catch((error: unknown) => error);
-
+  it("stops a command that runs too long, with everything it started", async ({
+    onTestFinished,
+  }) => {
+    let grandchild = 0;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const failure = await runGit(waitingGit(), {
+      cwd: root,
+      timeoutMs: 1,
+      onStderr: (pid) => {
+        grandchild = Number(pid);
+        vi.runAllTimers();
+      },
+    }).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(GitError);
     expect((failure as GitError).timedOut).toBe(true);
-    expect(Date.now() - started).toBeLessThan(5000);
     // The grandchild is gone too: a checkout does not keep writing after its command is stopped.
-    const grandchild = Number(fs.readFileSync(pidFile, "utf8"));
+    expect(grandchild).toBeGreaterThan(0);
     await vi.waitFor(() => expect(() => process.kill(grandchild, 0)).toThrow());
   });
 
@@ -421,21 +435,19 @@ describe("a start that fails", () => {
     vi.resetModules();
     const git = await import("@shared/lib/git-process");
     const groups = await import("@shared/lib/process-groups");
-    const pidFile = path.join(scratch, "pid");
-    const running = git
-      .runGit(["-c", `alias.wait=!sh -c 'sleep 30 & echo $! > "${pidFile}"; wait'`, "wait"], {
+    let grandchild = 0;
+    const failure = await git
+      .runGit(waitingGit(), {
         cwd: root,
-        timeoutMs: 60_000,
+        onStderr: (pid) => {
+          grandchild = Number(pid);
+          groups.stopProcessGroups();
+        },
       })
       .catch((error: unknown) => error);
-    await vi.waitFor(() => expect(fs.existsSync(pidFile)).toBe(true));
-    const grandchild = Number(fs.readFileSync(pidFile, "utf8"));
-    const stopped = Date.now();
-
-    groups.stopProcessGroups();
-
-    expect(await running).toBeInstanceOf(git.GitError);
-    expect(Date.now() - stopped).toBeLessThan(5000);
+    expect(failure).toBeInstanceOf(git.GitError);
+    expect(failure).toMatchObject({ timedOut: false });
+    expect(grandchild).toBeGreaterThan(0);
     await vi.waitFor(() => expect(() => process.kill(grandchild, 0)).toThrow());
     // What a start asks for next is refused without running: no new writer.
     const later = path.join(scratch, "later");

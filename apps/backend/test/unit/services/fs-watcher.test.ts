@@ -219,7 +219,7 @@ describe("the fileChanges subscription", () => {
     expect(watch).not.toHaveBeenCalled();
   });
 
-  it.each(["linux", "win32"])("leaves %s polling", (platform) => {
+  it.each(["linux", "win32"])("leaves Node on %s polling", (platform) => {
     asPlatform(platform);
     expect(() => open("ui")).toThrow("File watching is unavailable");
     expect(watch).not.toHaveBeenCalled();

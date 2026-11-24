@@ -9,7 +9,7 @@
     "email": "hello@deusmachine.ai"
   },
   "repository": "github:zvadaadam/deus-machine",
-  "packageManager": "bun@1.3.6",
+  "packageManager": "bun@1.3.14",
   "engines": {
     "node": "22.x"
   },
@@ -46,9 +46,9 @@
     "smoke:packaged-runtime": "node scripts/runtime/smoke/packaged-runtime.cjs",
     "smoke:packaged-desktop": "node scripts/runtime/smoke/packaged-desktop.cjs",
     "smoke:cli-package": "node scripts/runtime/smoke/cli-package.cjs",
+    "check": "bun scripts/check.mjs",
     "test": "bun run test:backend && bun run test:agent-server && bun run test:app && bun run test:runtime-client",
     "test:app": "node node_modules/vitest/vitest.mjs run --config test/vitest.config.ts",
-    "test:desktop-runtime": "node node_modules/vitest/vitest.mjs run --config test/vitest.config.ts unit/desktop unit/runtime unit/shared/cli-path.test.ts unit/shared/runtime.test.ts",
     "test:app:watch": "node node_modules/vitest/vitest.mjs --config test/vitest.config.ts",
     "test:e2e": "bun run test:e2e:workspace-start",
     "test:backend": "bun run native:node && node node_modules/vitest/vitest.mjs run --config apps/backend/vitest.config.ts",
@@ -65,7 +65,7 @@
     "typecheck:agent-server": "bun node_modules/typescript/bin/tsc --noEmit --project apps/agent-server/tsconfig.json",
     "test:relay": "cd apps/cloud-relay && bun run test",
     "test:relay:watch": "cd apps/cloud-relay && bun run test:watch",
-    "typecheck:relay": "cd apps/cloud-relay && bun ../../node_modules/typescript/bin/tsc --noEmit",
+    "typecheck:relay": "cd apps/cloud-relay && bun run typecheck",
     "typecheck:all": "bun run typecheck && bun run typecheck:backend && bun run typecheck:agent-server && bun run typecheck:relay",
     "format": "prettier --write \"apps/**/*.{ts,tsx,css,json}\" \"packages/runtime-client/**/*.{ts,json}\"",
     "format:check": "prettier --check \"apps/**/*.{ts,tsx,css,json}\" \"packages/runtime-client/**/*.{ts,json}\"",

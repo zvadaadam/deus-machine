@@ -1,5 +1,5 @@
-import { chmodSync, mkdirSync, rmSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveRuntimeStagePaths } from "../../shared/runtime";
@@ -41,6 +41,20 @@ function signMacExecutable(filePath: string): void {
 
 /** Compiles apps/runtime into dist/runtime/electron/bin/<target>/deus-runtime for every target. */
 export function buildDeusRuntime(): void {
+  const { packageManager } = JSON.parse(
+    readFileSync(path.join(projectRoot, "package.json"), "utf8")
+  );
+  const compiler = execFileSync("bun", ["--version"], {
+    cwd: projectRoot,
+    encoding: "utf8",
+  }).trim();
+  if (`bun@${compiler}` !== packageManager) {
+    throw new Error(
+      `Building deus-runtime requires ${packageManager}. Found bun@${compiler} on PATH.\n` +
+        `Install it with curl -fsSL https://bun.sh/install | bash -s ${packageManager.replace("bun@", "bun-v")}`
+    );
+  }
+
   const entry = path.join(projectRoot, "apps", "runtime", "index.ts");
   for (const target of DEUS_RUNTIME_TARGETS) {
     const output = path.join(
