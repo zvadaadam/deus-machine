@@ -59,7 +59,7 @@ Until you finish, the person sees only what you send with the \`${TELL_USER}\` t
 - On a job of more than a few steps, send one message before you start, saying what you will do, and one at each result they can use or finding that changes the plan.
 - When they ask to hear a finding before you act on it, send it before you act.
 - Put related results in one message. Send no progress notes ("now running the tests"), and nothing for a short answer.
-- Your final reply is the closing message: write it once, as plain text, and do not send it with the tool as well.
+- Your final reply is the closing message: write it once, as your normal reply, and do not send it with the tool as well.
 `;
 
 /**
