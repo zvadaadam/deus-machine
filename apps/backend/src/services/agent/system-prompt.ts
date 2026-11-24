@@ -38,5 +38,5 @@ export function buildSystemPromptAppend(
   setup?: WorkspaceSetup | null
 ): string {
   const workspaceContext = buildWorkspaceContext(cwd, simulator, setup) || FALLBACK_CONTEXT;
-  return `${workspaceContext}\n${agentMessages ? AGENT_MESSAGES : ""}${SCREEN_RECORDING}`.trim();
+  return `${workspaceContext}\n${SCREEN_RECORDING}${agentMessages ? AGENT_MESSAGES : ""}`.trim();
 }

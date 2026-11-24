@@ -13,7 +13,7 @@ export interface Settings {
   diff_view_mode?: string;
   /** Read the agent's messages with the work folded (the default) or see the full run. */
   chat_view?: "bubbles" | "full";
-  /** Give local chats a tool to message the person while they work. */
+  /** Give new local chats a tool to message the person while they work. On by default. */
   agent_messages?: boolean;
 
   // Onboarding
