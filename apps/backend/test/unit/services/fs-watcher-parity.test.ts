@@ -53,7 +53,10 @@ it("delivers checkout changes with a bounded descriptor cost", async () => {
   };
   const count = () => readdirSync("/dev/fd").length;
   try {
-    if (!canWatchWorkspace()) {
+    const shouldWatch =
+      process.platform === "darwin" || (process.platform === "linux" && "bun" in process.versions);
+    expect(canWatchWorkspace()).toBe(shouldWatch);
+    if (!shouldWatch) {
       expect(start).toThrow("File watching is unavailable");
       return;
     }

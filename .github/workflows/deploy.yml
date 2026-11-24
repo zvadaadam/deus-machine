@@ -26,7 +26,6 @@ on:
         required: true
         type: string
       ref:
-        required: true
         type: string
     secrets:
       CLOUDFLARE_API_TOKEN:
@@ -43,10 +42,8 @@ on:
           - relay
           - web
           - landing
-          - all
-        default: all
       ref:
-        description: "Release tag name for web/all (vX.Y.Z). Optional branch or tag for relay/landing."
+        description: "Release tag for web (vX.Y.Z). Relay and landing use the branch or tag selected for the run."
         type: string
 
 # Every job only builds and pushes to Cloudflare (via CLOUDFLARE_API_TOKEN);
@@ -84,11 +81,9 @@ jobs:
     concurrency: deploy-relay
     if: >-
       !cancelled() &&
-      (inputs.service == 'relay' || inputs.service == 'all' || needs.changes.outputs.relay == 'true')
+      (inputs.service == 'relay' || needs.changes.outputs.relay == 'true')
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref || github.sha }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -124,7 +119,7 @@ jobs:
     name: Deploy Web App
     runs-on: ubuntu-latest
     concurrency: deploy-web
-    if: inputs.service == 'web' || inputs.service == 'all'
+    if: inputs.service == 'web'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -154,20 +149,16 @@ jobs:
           command: pages deploy apps/web/dist/web --project-name=deus --branch=main
 
   # ── Deploy Landing + Root Edge Router (Cloudflare Worker) ────────
-  # A manual "all" deploy publishes the web assets before the router that serves them.
   deploy-landing:
     name: Deploy Landing
-    needs: [changes, deploy-web]
+    needs: changes
     runs-on: ubuntu-latest
     concurrency: deploy-landing
     if: >-
       !cancelled() &&
-      (needs.deploy-web.result == 'success' || needs.deploy-web.result == 'skipped') &&
-      (inputs.service == 'landing' || inputs.service == 'all' || needs.changes.outputs.landing == 'true')
+      (inputs.service == 'landing' || needs.changes.outputs.landing == 'true')
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref || github.sha }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

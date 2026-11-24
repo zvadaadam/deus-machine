@@ -5,9 +5,11 @@ installers, stages a draft GitHub Release, publishes the matching `deus-machine`
 CLI, makes the release public and deploys the web app from that tag.
 A failed CLI publish leaves the installers in draft.
 
-A merge to `main` deploys the relay and landing when their files change. To
-redeploy the hosted web by hand, choose **Actions → Deploy → Run workflow**,
-select `web` and enter the published tag (for example `v0.3.24`) as the ref.
+A merge to `main` deploys the relay and landing when their files change.
+To deploy by hand, choose **Actions → Deploy → Run workflow** and select one
+service. For `web`, enter the published release tag (for example `v0.3.24`) as
+the `ref`. For `relay` or `landing`, choose the branch or tag for the workflow
+run and leave `ref` blank.
 
 ## Starting a release
 
