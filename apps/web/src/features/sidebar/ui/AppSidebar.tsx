@@ -83,7 +83,7 @@ export function AppSidebar({
     [repositories, repositoryOrder, reorderRepositories]
   );
 
-  const sensors = useReorderSensors();
+  const sensors = useReorderSensors({ startKeys: ["Space"] });
 
   /**
    * Handle drag end - reorder repositories
@@ -186,6 +186,12 @@ export function AppSidebar({
         <SidebarContent className="scrollbar-hidden">
           <DndContext
             sensors={sensors}
+            accessibility={{
+              screenReaderInstructions: {
+                draggable:
+                  "Press Enter to expand or collapse this project. Press Space to pick up the project, use Up or Down to move it, then Space to drop or Escape to cancel.",
+              },
+            }}
             collisionDetection={closestCenter}
             onDragStart={() => setDragging(true)}
             onDragCancel={() => setDragging(false)}

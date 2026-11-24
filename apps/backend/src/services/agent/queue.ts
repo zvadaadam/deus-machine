@@ -25,6 +25,8 @@ interface Queue {
   /** Keyed by the message id the engine will echo. Insertion order is delivery order. */
   steers: Map<string, Steer>;
   paused: api.QueuedMessages["paused"];
+  /** This turn's Stop or interruption already paused the rows waiting then. */
+  pausedTurnId?: string;
 }
 
 const MAX_QUEUED_MESSAGES = 20;
@@ -48,7 +50,10 @@ function notify(sessionIds: string[]) {
 }
 
 function changed(q: Queue) {
-  if (!q.items.length && !q.steers.size) queues.delete(q.sessionId);
+  if (!q.items.length && !q.steers.size) {
+    if (q.pausedTurnId) q.paused = null;
+    else queues.delete(q.sessionId);
+  }
   notify([q.sessionId]);
 }
 
@@ -331,7 +336,7 @@ function recoverAttempt(q: Queue, turnId: string, state: "busy" | "returned" = "
   head.attempt = { turnId, state };
   q.items.splice(q.items.indexOf(head), 1);
   q.items.unshift(head);
-  if (state === "returned") q.paused ??= "failed";
+  if (state === "returned" && turnId !== q.pausedTurnId) q.paused ??= "failed";
   return true;
 }
 
@@ -346,23 +351,26 @@ function recoverSteers(q: Queue, turnId: string) {
   return unread.length > 0;
 }
 
-function stopQueue(sessionId: string) {
-  const q = queues.get(sessionId);
-  if (!q) return;
-  q.paused = "stopped";
-  changed(q);
-}
-
 /** A live turn can still echo. Once it is gone, its unread steers can be resumed as turns. */
-function interruptQueue(sessionId: string, turnId: string | undefined, gone: boolean) {
-  const q = queues.get(sessionId);
+function pauseQueue(
+  sessionId: string,
+  turnId: string | undefined,
+  gone: boolean,
+  reason: "stopped" | "failed" = "failed"
+) {
+  const q =
+    queues.get(sessionId) ?? (turnId && localChat(sessionId) && queueForNewMessage(sessionId));
   if (!q) return;
+  const pausedHere = turnId !== undefined && turnId === q.pausedTurnId;
   if (gone && turnId !== undefined) {
     recoverSteers(q, turnId);
     recoverAttempt(q, turnId);
   }
-  q.paused ??= "failed";
+  if (turnId) q.pausedTurnId = turnId;
+  if (reason === "stopped") q.paused = reason;
+  else if (!pausedHere) q.paused ??= reason;
   changed(q);
+  if (gone && pausedHere) void drain(q);
 }
 
 function turnEnded({ event: ended, status }: TurnEnd) {
@@ -371,15 +379,22 @@ function turnEnded({ event: ended, status }: TurnEnd) {
   // Includes the engine's undeliveredSteers and calls still awaiting a verdict.
   const recovered = recoverSteers(q, ended.turnId);
   const wasSending = recoverAttempt(q, ended.turnId);
+  const pausedHere = ended.turnId === q.pausedTurnId;
+  if (status || pausedHere) q.pausedTurnId = undefined;
   // A replayed end can return its own steers but cannot stop or advance its successor.
   if (!status) {
-    if (recovered || wasSending) changed(q);
+    if (recovered || wasSending || pausedHere) changed(q);
     return;
   }
-  if (ended.stopReason === "cancelled") q.paused = "stopped";
+  if (ended.stopReason === "cancelled" && !pausedHere) q.paused = "stopped";
   else if (status === "error") q.paused ??= "failed";
   changed(q);
   void drain(q);
 }
 
-provideTurnWatcher({ turnEnded, userEcho, stopAsked: stopQueue, interrupted: interruptQueue });
+provideTurnWatcher({
+  turnEnded,
+  userEcho,
+  stopAsked: (id) => pauseQueue(id, liveTurnId(id), false, "stopped"),
+  interrupted: pauseQueue,
+});

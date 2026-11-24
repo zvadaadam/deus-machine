@@ -253,6 +253,7 @@ async function run() {
     const hold = new Set(),
       held = [],
       results = new Map();
+    let slowDetail = false;
     await page.routeWebSocket(/\/ws$/, (socket) => {
       const server = socket.connectToServer();
       server.onMessage((raw) => {
@@ -262,6 +263,10 @@ async function run() {
       });
       socket.onMessage((raw) => {
         const frame = JSON.parse(String(raw));
+        if (slowDetail && frame.type === "q:subscribe" && frame.resource === "session") {
+          setTimeout(() => server.send(raw), 400);
+          return;
+        }
         if (frame.type === "q:mutate" && hold.has(frame.action)) {
           held.push({ frame, forward: () => server.send(raw) });
         } else server.send(raw);
@@ -324,7 +329,7 @@ async function run() {
     // Move the last follow-up to the front. The display keeps the drop until the real write lands.
     hold.add("moveQueuedMessage");
     await grip(3).focus();
-    await page.keyboard.press("Space");
+    await page.keyboard.press("Enter");
     const announce = (position) =>
       group.getByText(position, { exact: true }).waitFor({ state: "attached" });
     await group
@@ -654,8 +659,47 @@ async function run() {
     assert.equal(await row.getAttribute("aria-current"), "page");
     const tabs = page.getByRole("tablist", { name: "Session tabs" });
     const label = await tabs.getByRole("tab", { selected: true }).innerText();
+    const finalTask = "Check the file list.";
+    await send(finalTask);
+    await drive("echo");
+    await page.getByRole("status", { name: /^Working for/ }).waitFor();
     await page.getByRole("button", { name: "New chat tab" }).click();
     const tab = tabs.getByRole("tab", { name: label, exact: true });
+    const spinner = tabs
+      .getByRole("button", { name: `Close ${label} tab`, exact: true })
+      .locator("canvas");
+    await spinner.waitFor();
+    await drive("end");
+    await spinner.waitFor({ state: "detached" });
+    slowDetail = true;
+    await page.evaluate(() => {
+      globalThis.staleFrame = false;
+      function sample() {
+        globalThis.staleFrame ||= !!globalThis.document.querySelector(
+          '[aria-label^="Working for "], [aria-label="Stop execution"], [aria-label="Queue message"]'
+        );
+        globalThis.tabFrame = globalThis.requestAnimationFrame(sample);
+      }
+      sample();
+    });
+    await tab.click();
+    await transcript.getByText(finalTask, { exact: true }).waitFor();
+    assert.equal(
+      await page.evaluate(async () => {
+        await new Promise((resolve) =>
+          globalThis.requestAnimationFrame(() => globalThis.requestAnimationFrame(resolve))
+        );
+        globalThis.cancelAnimationFrame(globalThis.tabFrame);
+        return globalThis.staleFrame;
+      }),
+      false,
+      "A finished tab painted working controls while waiting for its detail"
+    );
+    slowDetail = false;
+    await tabs.getByRole("tab").last().click();
+    console.log(
+      "PASS a tab that finished in the background paints idle on return, even with a slow session read"
+    );
     await tab.click({ button: "right" });
     await captureMenu("chat-menu.png");
     await copy.click();

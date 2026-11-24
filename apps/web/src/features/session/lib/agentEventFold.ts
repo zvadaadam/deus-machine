@@ -49,6 +49,7 @@ import type { AgentConversationSnapshot } from "@shared/cloud-session-snapshot";
 // eslint-disable-next-line no-restricted-imports -- reduce has no zod-free subpath
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
 import { queryKeys } from "@/shared/api/queryKeys";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import type { Message } from "@shared/types/session";
 import type { RepoGroup } from "@shared/types/workspace";
 import type { SessionStatus } from "@shared/enums";
@@ -538,7 +539,8 @@ export function patchSessionDetail(
     queryKeys.sessions.detail(sessionId),
     (old) => (old ? { ...old, ...patch } : old)
   );
-  if (patch.status) patchWorkspaceSessionStatus(qc, sessionId, patch.status);
+  if (patch.status && isCloudDirectWebMode())
+    patchWorkspaceSessionStatus(qc, sessionId, patch.status);
 }
 
 /** A direct turn (or an optimistic send) updates its chat in each cached workspace list. */

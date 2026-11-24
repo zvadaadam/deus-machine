@@ -61,7 +61,13 @@ export function RepositoryItem({
         data-state={isCollapsed ? "closed" : "open"}
         className="group/repository-item relative"
       >
-        <CollapsibleTrigger asChild>
+        <CollapsibleTrigger
+          asChild
+          onKeyDown={({ key, target, currentTarget, repeat }) => {
+            if (key !== "Enter" || target !== currentTarget || repeat) return;
+            if (!dragHandle["aria-pressed"]) currentTarget.click();
+          }}
+        >
           <SidebarRow
             {...dragHandle}
             variant="repo"

@@ -626,22 +626,70 @@ describe("messages held for a local chat", () => {
     expect(await queue()).toMatchObject({ paused: "stopped", items: [{ id: "tail" }] });
   });
 
-  it("holds new sends and Resume until the confirmed turn's end", async () => {
+  it.each(["end", "watchdog"] as const)(
+    "holds new sends and Resume until the confirmed turn's %s",
+    async (settlement) => {
+      vi.useFakeTimers();
+      await send("A");
+      await send("B");
+      plan("A");
+      const [card] = pendingFor(sessionId);
+      engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "A" });
+      await expect(stop()).resolves.toEqual({ unconfirmed: false });
+      expect(answer(card!.requestId, { result: { approved: true } })).toBe(false);
+      await run(api.resumeQueuedMessages, { sessionId });
+      await expect(send("C")).resolves.toEqual({ turnId: "C", queued: true });
+      expect(starts()).toEqual(["A"]);
+      expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
+      if (settlement === "end") end("A", "cancelled");
+      else await vi.advanceTimersByTimeAsync(15_000);
+      await vi.waitFor(() => expect(starts()).toEqual(["A", "B"]));
+      expect(await queue()).toMatchObject({ paused: null, items: [{ id: "C" }] });
+      expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
+    }
+  );
+
+  it("sends a message typed after Stop when there was no waiting row to resume", async () => {
     await send("A");
-    await send("B");
     engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "A" });
-    await expect(stop()).resolves.toEqual({ unconfirmed: false });
-    await run(api.resumeQueuedMessages, { sessionId });
-    await expect(send("C")).resolves.toEqual({ turnId: "C", queued: true });
-    expect(starts()).toEqual(["A"]);
-    expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
+    await stop();
+    await send("B");
     end("A", "cancelled");
-    expect(await run(api.session, { sessionId })).toMatchObject({ status: "idle" });
-    expect(await queue()).toMatchObject({ paused: "stopped", items: [{ id: "B" }, { id: "C" }] });
-    await run(api.resumeQueuedMessages, { sessionId });
-    expect(starts()).toEqual(["A", "B"]);
-    expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "B"]));
+    expect((await queue()).paused).toBeNull();
   });
+
+  it.each(["watchdog", "replay gap"] as const)(
+    "holds A again when the engine names it after the %s gave it up",
+    async (lost) => {
+      vi.useFakeTimers();
+      await send("A");
+      engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "A" });
+      if (lost === "watchdog") {
+        await stop();
+        await vi.advanceTimersByTimeAsync(15_000);
+      } else {
+        engine.open.mock.calls[0]![0].onEventGap!({
+          sessionId,
+          reason: "replay_failed",
+          error: new EventGapError("lost"),
+        });
+        await vi.advanceTimersByTimeAsync(0);
+      }
+      expect(agent.liveTurnId(sessionId)).toBeUndefined();
+      engine.startTurn.mockRejectedValueOnce(
+        new WireRequestError(WIRE_ERROR_CODES.turnActive, "busy", { turnId: "A" })
+      );
+      await expect(send("B")).resolves.toEqual({ turnId: "B", queued: true });
+      expect(agent.liveTurnId(sessionId)).toBe("A");
+      end("A", "cancelled");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(starts()).toEqual(["A", "B", "B"]);
+      expect(await ids()).toEqual([]);
+      end("B");
+      expect(await run(api.session, { sessionId })).toMatchObject({ status: "idle" });
+    }
+  );
 
   it("settles a confirmed stop with no end and keeps the late end off its successor", async () => {
     vi.useFakeTimers();
@@ -654,9 +702,7 @@ describe("messages held for a local chat", () => {
     await send("first");
     await send("A");
     await send("tail");
-    engine.startTurn.mockImplementationOnce(async ({ turnId }) => {
-      emit({ type: "turn.started", sessionId, turnId, timestamp: seq });
-    });
+    engine.startTurn.mockResolvedValueOnce(undefined);
     end("first");
     await vi.waitFor(() => expect(agent.liveTurnId(sessionId)).toBe("A"));
     await steer("unread");
@@ -668,19 +714,18 @@ describe("messages held for a local chat", () => {
       "steering",
       "waiting",
     ]);
-    expect(await run(api.session, { sessionId })).toMatchObject({ status: "needs_response" });
+    expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
 
     await vi.advanceTimersByTimeAsync(15_000);
-    expect(frames).toContainEqual(expect.objectContaining({ type: "q:reset", id: "transcript" }));
+    expect(frames).not.toContainEqual(
+      expect.objectContaining({ type: "q:reset", id: "transcript" })
+    );
     expect(agent.liveTurnId(sessionId)).toBeUndefined();
     expect(pendingFor(sessionId)).toEqual([]);
     expect(await run(api.session, { sessionId })).toMatchObject({
       status: "idle",
       error_message: null,
     });
-    expect((await run(api.messages, { sessionId })).turns).toContainEqual(
-      expect.objectContaining({ turnId: "A", stopReason: "cancelled" })
-    );
     expect(await queue()).toMatchObject({
       paused: "stopped",
       items: [
@@ -692,6 +737,8 @@ describe("messages held for a local chat", () => {
 
     const release = holdAppSetup();
     const resume = run(api.resumeQueuedMessages, { sessionId });
+    const startedAt = seq;
+    emit({ type: "turn.started", sessionId, turnId: "A", timestamp: startedAt });
     emit({
       type: "turn.ended",
       sessionId,
@@ -703,7 +750,7 @@ describe("messages held for a local chat", () => {
     expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
     expect((await queue()).paused).toBeNull();
     expect((await run(api.messages, { sessionId })).turns).toContainEqual(
-      expect.objectContaining({ turnId: "A", cost: 0.25 })
+      expect.objectContaining({ turnId: "A", startedAt, cost: 0.25 })
     );
     release();
     await resume;
@@ -1267,7 +1314,7 @@ describe("messages held for a local chat", () => {
     }
   );
 
-  it.each(["replay gap", "cancel watchdog", "confirmed cancel"] as const)(
+  it.each(["replay gap", "confirmed cancel"] as const)(
     "withdraws a question when a %s settles its turn without a terminal event",
     async (settlement) => {
       await send("first");
@@ -1280,18 +1327,10 @@ describe("messages held for a local chat", () => {
           reason: "server_restarted",
           error: new EventGapError("lost"),
         });
-      } else if (settlement === "cancel watchdog") {
-        vi.useFakeTimers();
-        engine.cancelTurn.mockResolvedValueOnce({ outcome: "unconfirmed", turnId: "first" });
-        await stop();
-        expect(pendingFor(sessionId)).toEqual([card]);
-        await agent.shutdown();
-        await vi.advanceTimersByTimeAsync(15_000);
       } else {
-        vi.useFakeTimers();
         engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "first" });
         await stop();
-        await vi.advanceTimersByTimeAsync(15_000);
+        expect(agent.liveTurnId(sessionId)).toBe("first");
       }
       expect(pendingFor(sessionId)).toEqual([]);
       expect(answer(card!.requestId, { result: {} })).toBe(false);
@@ -1469,7 +1508,9 @@ describe("messages held for a local chat", () => {
         cwd: "/tmp/repo",
       });
       if (when === "before") end("winner");
-      admission.reject(new WireRequestError(WIRE_ERROR_CODES.turnActive, "busy"));
+      admission.reject(
+        new WireRequestError(WIRE_ERROR_CODES.turnActive, "busy", { turnId: "winner" })
+      );
       expect(await receipts).toEqual([
         { turnId: "loser", queued: true },
         { turnId: "loser", queued: true },

@@ -346,7 +346,7 @@ async function sendMessageOnce(
     try {
       await done;
     } catch (err) {
-      if (preparing.signal.aborted && err === preparing.signal.reason) {
+      if (err === preparing.signal.reason) {
         settleStopped(sessionId, turnId);
         throw err;
       }
@@ -414,8 +414,7 @@ export async function stopSession(
   const admission = admitting.get(sessionId);
   const targetTurnId = admission?.turnId ?? agentService.liveTurnId(sessionId);
   if (admission) {
-    if (agentService.liveTurnId(sessionId) !== admission.turnId)
-      admission.preparing.abort(new ConflictError("Stopped before it started."));
+    admission.preparing.abort(new ConflictError("Stopped before it started."));
     try {
       await admission.done;
     } catch {
@@ -478,17 +477,16 @@ export async function stopSession(
     return { unconfirmed: false };
 
   const unconfirmed = !result || result.outcome === "unconfirmed";
-  if (!cloud && live && result?.outcome === "no_active_turn") {
-    agentService.finishStoppedTurn(sessionId, live);
-  } else if (unconfirmed || (!cloud && live)) {
+  if (unconfirmed || (!cloud && live && result?.outcome === "cancelled")) {
     scheduleCancelWatchdog(sessionId, targetTurnId, !unconfirmed);
   } else {
-    settleStopped(sessionId);
+    settleStopped(sessionId, cloud ? undefined : live);
   }
   return { unconfirmed };
 }
 
 function settleStopped(sessionId: string, goneTurnId?: string): void {
+  if (goneTurnId) agentService.giveUpTurn(sessionId, goneTurnId);
   getDatabase()
     .prepare(
       `UPDATE sessions SET status = 'idle', updated_at = datetime('now')
@@ -508,10 +506,11 @@ function scheduleCancelWatchdog(
     try {
       // A successor may still be preparing its apps. Without either owner the
       // status guard below distinguishes a settled chat from one left active.
-      const live = admitting.get(sessionId)?.turnId ?? agentService.liveTurnId(sessionId);
+      const held = agentService.liveTurnId(sessionId);
+      const live = admitting.get(sessionId)?.turnId ?? held;
       if (live !== undefined && live !== cancelledTurnId) return;
-      if (confirmed && cancelledTurnId) {
-        agentService.finishStoppedTurn(sessionId, cancelledTurnId);
+      if (confirmed) {
+        if (held && held === cancelledTurnId) settleStopped(sessionId, held);
         return;
       }
 

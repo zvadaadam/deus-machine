@@ -10,6 +10,10 @@ import type { DiffStats, Workspace } from "@/shared/types";
 import { getWorkspaceActivity } from "@/features/sidebar/lib/status";
 import type { CloudPresence } from "./cloudPresence";
 
+export function isWorkspaceWorking(workspace?: Workspace | null): boolean {
+  return !!workspace && getWorkspaceActivity(workspace, {}).working;
+}
+
 /**
  * The workspaces to ask for: those with no number yet, and those working. Every
  * other cached number is used as it is.
@@ -19,7 +23,7 @@ export function diffStatsToAsk(
   cached: (id: string) => DiffStats | undefined
 ): string[] {
   const ask = workspaces
-    .filter((workspace) => !cached(workspace.id) || getWorkspaceActivity(workspace, {}).working)
+    .filter((workspace) => !cached(workspace.id) || isWorkspaceWorking(workspace))
     .map((workspace) => workspace.id);
   return [...new Set(ask)];
 }

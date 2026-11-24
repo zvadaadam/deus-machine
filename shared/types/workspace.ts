@@ -48,6 +48,7 @@ export interface Workspace {
   current_session_id: string | null;
   /** Visible chats in creation order. Older hosts send no chat list. */
   chats?: WorkspaceChat[];
+  /** The current chat's status for first-message delivery when the workspace has no first-chat id. */
   session_status: SessionStatus | null;
   latest_message_sent_at: string | null;
   /** The first chat's id, minted with the workspace, and that chat's own status and when it was last spoken to. */

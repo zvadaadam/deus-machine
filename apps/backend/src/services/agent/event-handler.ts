@@ -40,7 +40,7 @@ import type { LiveName } from "@shared/api";
 import { cloudSaveFailures, sessionEvents } from "@shared/api/sessions";
 import { cloudSaveFailure } from "@shared/cloud-autosave";
 import { invalidate } from "../query-engine";
-import { openWith, publish, resetSubscribers } from "../streams";
+import { openWith, publish } from "../streams";
 import {
   persistChanges,
   persistSessionTitle,
@@ -58,11 +58,9 @@ import { OpenParts } from "./open-parts";
 
 export type TurnEnd = { event: TurnEndedEvent; status?: TurnOutcomeWrite["status"] };
 
-/** A confirmed stop whose terminal frame was lost has no engine sequence number. */
-export type AgentUpdate = DecodedWireEventEnvelope | { sessionId: string; event: TurnEndedEvent };
-
 export interface AgentEventHandler {
-  handle(envelope: AgentUpdate): TurnEnd | void;
+  /** Feed one sequenced wire envelope (post-dedupe, in seq order). */
+  handle(envelope: DecodedWireEventEnvelope): TurnEnd | void;
   /** Restore durable cloud history without executing historical live effects. */
   hydrateCloudSnapshot(
     sessionId: string,
@@ -80,6 +78,8 @@ export interface AgentEventHandler {
   beginTurn(sessionId: string, turnId: string, opts?: { force?: boolean }): boolean;
   /** Release a rejected local claim, only while this turn is still unadmitted. */
   abortTurn(sessionId: string, turnId: string): boolean;
+  /** Release a stopped turn whose end was lost. Late frames still belong to its transcript. */
+  giveUpTurn(sessionId: string, turnId: string): void;
   /**
    * The turn this handler currently believes is running, if any — set at
    * admission (or at `turn.started` on the replay path) and cleared at its
@@ -164,9 +164,7 @@ function persistAndInvalidate(
  * delta is delivered but not kept: a client that was away never needs it, the
  * part's next event restates what it streamed.
  */
-function pushEnvelope(envelope: AgentUpdate): void {
-  if (!("seq" in envelope))
-    return resetSubscribers(sessionEvents, { sessionId: envelope.sessionId });
+function pushEnvelope(envelope: DecodedWireEventEnvelope): void {
   publish(
     sessionEvents,
     { sessionId: envelope.sessionId },
@@ -255,6 +253,13 @@ export function createAgentEventHandler(
       return sessions.get(sessionId)?.turnId;
     },
 
+    giveUpTurn(sessionId, turnId) {
+      const state = sessions.get(sessionId);
+      if (state?.turnId !== turnId) return;
+      state.turnId = undefined;
+      state.acceptedTurnId = turnId;
+    },
+
     confirmTurn(sessionId, turnId) {
       const state = sessions.get(sessionId);
       if (!state) return;
@@ -328,14 +333,8 @@ export function createAgentEventHandler(
         state.conversation,
         envelope.event
       );
-      if ("seq" in envelope) {
-        state.conversation = conversation;
-        typing.saw(envelope);
-      } else {
-        // Store the known end, but keep the native fold ready for a late end's billing.
-        state.acceptedTurnId = envelope.event.turnId;
-        typing.restored(sessionId, []);
-      }
+      state.conversation = conversation;
+      typing.saw(envelope);
 
       if (isUnknownEvent(envelope.event)) {
         // Law 6: forward it verbatim. Dropping it would be a hole in the

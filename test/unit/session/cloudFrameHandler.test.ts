@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import { makeCloudFrameHandler } from "@/features/session/cloud/cloudFrameHandler";
 import { setDirectQuestionParked } from "@/features/session/cloud/directQuestionState";
@@ -13,6 +13,7 @@ import type { PaginatedMessages } from "@shared/types/session";
 import type { RepoGroup } from "@shared/types/workspace";
 
 const T = 1_700_000_000_000;
+afterEach(() => vi.unstubAllEnvs());
 
 function makeCtx(qc: QueryClient, sessionId: string): AgentStreamContext {
   const folds = new Map<string, SessionFold>();
@@ -638,7 +639,8 @@ describe("makeCloudFrameHandler", () => {
     });
   });
 
-  it("projects direct turn boundaries onto both the detail row and the workspace chat", () => {
+  it.each([true, false])("projects the workspace row on hosted web (%s)", (hosted) => {
+    vi.stubEnv("VITE_CLOUD_DIRECT", hosted ? "1" : "0");
     const SESSION = "sess-status";
     const qc = new QueryClient();
     seedEmptyPage(qc, SESSION);
@@ -652,7 +654,9 @@ describe("makeCloudFrameHandler", () => {
 
     const workspaceList = ["workspaces", "by-repo"];
     qc.setQueryData(workspaceList, [
-      { workspaces: [{ current_session_id: SESSION, chats: [{ id: SESSION, status: "idle" }] }] },
+      {
+        workspaces: [{ current_session_id: SESSION, chats: [{ id: SESSION, status: "working" }] }],
+      },
     ]);
     const chatStatus = () =>
       qc.getQueryData<RepoGroup[]>(workspaceList)?.[0].workspaces[0].chats?.[0].status;
@@ -672,7 +676,7 @@ describe("makeCloudFrameHandler", () => {
     expect(qc.getQueryData<{ status: string }>(["sessions", "detail", SESSION])!.status).toBe(
       "idle"
     );
-    expect(chatStatus()).toBe("idle");
+    expect(chatStatus()).toBe(hosted ? "idle" : "working");
 
     onFrame({
       type: "turn.ended",
@@ -686,6 +690,7 @@ describe("makeCloudFrameHandler", () => {
       "error"
     );
 
+    expect(chatStatus()).toBe(hosted ? "error" : "working");
     // `stopReason: "error"` with NO inline error object is a valid terminal
     // shape (the backend classifies it as an internal error) — still an error.
     onFrame({ type: "turn.started", sessionId: SESSION, turnId: "t3", timestamp: T });

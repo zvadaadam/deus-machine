@@ -209,7 +209,7 @@ export function MainLayout() {
   const prStatusQuery = usePRStatus(prWorkspaceId, {
     ghInstalled: ghStatusQuery.data?.isInstalled,
     ghAuthenticated: ghStatusQuery.data?.isAuthenticated,
-    sessionStatus: selectedWorkspace?.session_status ?? undefined,
+    workspace: selectedWorkspace,
   });
 
   // --- Extracted hooks ---

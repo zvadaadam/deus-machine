@@ -189,7 +189,18 @@ export async function assertSidebarGestures(
         .count(),
       1
     );
-    for (const input of desktop ? ["touch", "mouse", "keyboard"] : ["touch"]) {
+    await header.focus();
+    await page.keyboard.press("Enter");
+    assert.equal(await header.getAttribute("aria-expanded"), "true", "Enter opens the project");
+    assert.notEqual(await header.getAttribute("aria-pressed"), "true");
+    await page.keyboard.press("Enter");
+    assert.equal(await header.getAttribute("aria-expanded"), "false", "Enter closes the project");
+    const instructions = await header.evaluate(
+      (el) => el.ownerDocument.getElementById(el.getAttribute("aria-describedby"))?.textContent
+    );
+    assert.match(instructions, /Enter.*expand or collapse.*Space.*pick up/i);
+    console.log("PASS Enter opens and closes the project and the header describes both keys");
+    for (const input of desktop ? ["touch", "mouse", "keyboard"] : ["touch", "keyboard"]) {
       await list.evaluate((el) =>
         Promise.allSettled(
           el.getAnimations({ subtree: true }).map((animation) => animation.finished)

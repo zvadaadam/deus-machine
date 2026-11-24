@@ -9,9 +9,15 @@ import type { Workspace } from "@/shared/types";
 import type { CloudPresence } from "@/features/workspace/lib/cloudPresence";
 
 vi.mock("@/platform/ws", () => ({ call: vi.fn() }));
+const query = vi.hoisted(() => vi.fn());
+vi.mock("@tanstack/react-query", async (original) => ({
+  ...(await original<typeof import("@tanstack/react-query")>()),
+  useQuery: query,
+}));
 
 const { diffStatsToAsk, wokeUp } = await import("@/features/workspace/lib/diffStats");
-const { rereadDiffStats } = await import("@/features/workspace/api/workspace.queries");
+const { rereadDiffStats, useFileChanges, usePRStatus } =
+  await import("@/features/workspace/api/workspace.queries");
 const { queryKeys } = await import("@/shared/api/queryKeys");
 
 const row = (
@@ -62,6 +68,20 @@ describe("which diff numbers the sidebar asks for", () => {
       diffStatsToAsk(rows, cached({ "cloud-working": { additions: 0, deletions: 0 } }))
     ).toEqual(["cloud-working"]);
   });
+});
+
+it("polls the workspace's files and pull request while a background chat works", () => {
+  for (const status of ["working", "idle"] as const) {
+    const workspace = row("workspace", "worktree", status);
+    useFileChanges(workspace, false);
+    expect(query.mock.lastCall![0].refetchInterval).toBe(status === "working" ? 5000 : false);
+    useFileChanges(workspace, true);
+    expect(query.mock.lastCall![0].refetchInterval).toBe(false);
+    usePRStatus(workspace.id, { workspace });
+    expect(query.mock.lastCall![0].refetchInterval({ state: {} })).toBe(
+      status === "working" ? 30_000 : false
+    );
+  }
 });
 
 describe("when the open cloud workspace's computer wakes", () => {

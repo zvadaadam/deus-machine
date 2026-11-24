@@ -145,9 +145,12 @@ test("a linked chat leaves the saved tab unread and shows its background work", 
   await page.getByRole("button", { name: "Toggle local workspaces", exact: true }).waitFor();
   await page.evaluate(
     async ({ workspace, saved, linked }) => {
-      const { workspaceLayoutActions } =
-        await import("/src/features/workspace/store/workspaceLayoutStore.ts");
-      const { unreadActions } = await import("/src/features/session/store/unreadStore.ts");
+      const { workspaceLayoutActions } = await import(
+        `${window.location.origin}/src/features/workspace/store/workspaceLayoutStore.ts`
+      );
+      const { unreadActions } = await import(
+        `${window.location.origin}/src/features/session/store/unreadStore.ts`
+      );
       workspaceLayoutActions.setChatTabState(workspace, [saved, linked], saved);
       unreadActions.markUnread(saved);
       unreadActions.markUnread(linked);
@@ -177,7 +180,9 @@ test("a linked chat leaves the saved tab unread and shows its background work", 
   const waitForAdditions = (count) =>
     page.waitForFunction(
       async ({ key, count }) => {
-        const { queryClient } = await import("/src/shared/api/queryClient.ts");
+        const { queryClient } = await import(
+          `${window.location.origin}/src/shared/api/queryClient.ts`
+        );
         return queryClient.getQueryData(key)?.additions === count;
       },
       { key: queryKeys.workspaces.diffStats(ws.id), count },

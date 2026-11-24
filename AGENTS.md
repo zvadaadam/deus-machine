@@ -210,14 +210,15 @@ stays first until its user echo is complete. If its own turn is known to be gone
 first, the head returns to the front and the queue pauses. Unread steers follow and
 return to the front in order if their turn ends unread. After publishing a normal end,
 the backend sends one row from an unpaused queue. Stop pauses the queue at once.
-During a local turn's app setup, Stop returns the chat to idle at once. The person
+During local app setup, Stop returns the chat to idle at once, except for an agent's or
+assistant's first task, which ends in an error saying it was not delivered. The person
 keeps their draft, a queue head waits first, and an operator's send is refused
 with “Stopped before it started.” Once the start request reaches the wire, Stop
 waits for its answer (up to 30 seconds) and cancels the turn if it is still live.
-If the engine reports no active turn, the chat settles at once. When it confirms a
-cancellation, the chat stays occupied for the final echoes and turn end. After
-15 seconds without the end, the watchdog closes that turn and returns
-its unread messages to the paused queue. After a stop or failure the queue waits for Resume.
+If the engine reports no active turn, the chat settles at once. A confirmed cancel
+withdraws the turn's cards at once and keeps the chat occupied for its final echoes and end.
+After 15 seconds without the end, the watchdog frees the chat and returns unread messages
+to the queue, leaving the turn's outcome to the engine. Rows paused by a stop or failure wait for Resume, which can be pressed before the turn ends.
 A steer read mid-turn splits one reply into groups with one footer (`groupTurns` in
 `session/lib/chatTimeline.ts`). Cloud chats keep their send, including the hosted web's
 direct lane. The operator's `send` to a busy chat still answers `busy`.

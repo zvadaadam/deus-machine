@@ -14,6 +14,8 @@
 
 import type { AgentHarness } from "@shared/enums";
 import type { HostToolSource } from "@zvada/agent-server/core";
+import { WireRequestError } from "@zvada/agent-server/client";
+import { readRefusalData } from "@zvada/agent-server/protocol";
 import type {
   ElicitationOutcome,
   ElicitationRequestedEvent,
@@ -34,12 +36,7 @@ import { isUnknownEvent } from "@shared/protocol-types";
 import { AgentLink } from "./client";
 import { LocalAgents } from "./local-agents";
 import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
-import {
-  createAgentEventHandler,
-  type AgentEventHandler,
-  type AgentUpdate,
-  type TurnEnd,
-} from "./event-handler";
+import { createAgentEventHandler, type AgentEventHandler, type TurnEnd } from "./event-handler";
 import { buildTurnStartParams, withoutImageParts, type DeusTurnOptions } from "./run-config";
 import { toolRequests } from "@shared/api/sessions";
 import { cancelSessionRelays, isPrompt, pendingFor, relay } from "./tool-relay";
@@ -105,7 +102,20 @@ export async function init(): Promise<void> {
   initCloudDriver(handler);
 
   link = await AgentLink.open({
-    onEnvelope: (envelope) => handleLocalEvent(handler, envelope),
+    onEnvelope: (envelope) => {
+      const { event, sessionId } = envelope;
+      const known = !isUnknownEvent(event);
+      // Withdraw this turn's cards before publishing its end and admitting its successor.
+      if (known && event.type === "turn.ended")
+        cancelSessionRelays(sessionId, "turn ended", event.turnId);
+      const end = handler.handle(envelope);
+      if (!known) return;
+      if (end) turnWatcher?.turnEnded(end);
+      if (event.type === "message.ended")
+        turnWatcher?.userEcho(sessionId, event.turnId, event.messageId);
+      if (event.type === "permission.requested") void answerPermission(event);
+      if (event.type === "elicitation.requested") void answerElicitation(event);
+    },
     onEventGap: (gap) => {
       const turnId = handler.handleEventGap(gap);
       if (!turnId || gap.reason !== "replay_failed") return;
@@ -138,36 +148,6 @@ export async function init(): Promise<void> {
   );
 }
 
-function handleLocalEvent(handler: AgentEventHandler, envelope: AgentUpdate): void {
-  const { event, sessionId } = envelope;
-  const known = !isUnknownEvent(event);
-  // Withdraw this turn's cards before publishing its end and admitting its successor.
-  if (known && event.type === "turn.ended")
-    cancelSessionRelays(sessionId, "turn ended", event.turnId);
-  const end = handler.handle(envelope);
-  if (!known) return;
-  if (end) turnWatcher?.turnEnded(end);
-  if (event.type === "message.ended")
-    turnWatcher?.userEcho(sessionId, event.turnId, event.messageId);
-  if (event.type === "permission.requested") void answerPermission(event);
-  if (event.type === "elicitation.requested") void answerElicitation(event);
-}
-
-/** A confirmed stop whose end never arrived settles through the same fold as a delivered end. */
-export function finishStoppedTurn(sessionId: string, turnId: string): void {
-  if (events?.liveTurnId(sessionId) !== turnId) return;
-  handleLocalEvent(events, {
-    sessionId,
-    event: {
-      type: "turn.ended",
-      sessionId,
-      turnId,
-      stopReason: "cancelled",
-      timestamp: Date.now(),
-    },
-  });
-}
-
 /** Stop the engine: turns under way are cancelled, the agent CLIs stopped. */
 export async function shutdown(): Promise<void> {
   shutdownCloudDriver();
@@ -195,7 +175,6 @@ export async function startTurn(
 ): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
   const { signal } = options;
-  signal?.throwIfAborted();
   const stopped = Promise.withResolvers<never>();
   const onAbort = () => stopped.reject(signal?.reason);
   signal?.addEventListener("abort", onAbort);
@@ -226,7 +205,10 @@ export async function startTurn(
   try {
     await link.startTurn(params);
   } catch (err) {
-    if (registered) events?.abortTurn(sessionId, turnId);
+    if (registered && events?.abortTurn(sessionId, turnId) && err instanceof WireRequestError) {
+      const active = readRefusalData(err, "turnActive");
+      if (active) events.beginTurn(sessionId, active.turnId);
+    }
     throw err;
   }
   // Server accepted a turn our local state thought was concurrent — the local
@@ -297,6 +279,8 @@ export async function stopSession(params: {
 }): Promise<TurnCancelResult> {
   if (!link) throw new Error("Agent service not initialized");
   const result = await link.cancelTurn(params.sessionId, params.turnId);
+  if (result.outcome === "cancelled")
+    cancelSessionRelays(params.sessionId, "turn stopped", result.turnId);
   if (result.outcome === "unconfirmed") {
     console.warn(`[AgentService] cancel unconfirmed for session=${params.sessionId}`);
   }
@@ -347,6 +331,10 @@ export function notifyTurnInterrupted(
  */
 export function liveTurnId(sessionId: string): string | undefined {
   return events?.liveTurnId(sessionId);
+}
+
+export function giveUpTurn(sessionId: string, turnId: string): void {
+  events?.giveUpTurn(sessionId, turnId);
 }
 
 /**

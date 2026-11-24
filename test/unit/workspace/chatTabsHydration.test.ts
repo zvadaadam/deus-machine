@@ -1,5 +1,8 @@
 import { act, createElement, startTransition } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { RuntimeClient } from "@/platform/ws/runtime-client";
+import { queryKeys } from "@/shared/api/queryKeys";
+import { Socket } from "../../../packages/runtime-client/test/socket";
 import { create } from "zustand";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -54,14 +57,20 @@ const chat = (id: string): Session => ({
   updated_at: "2026-01-01 00:00:00",
 });
 let root: Root;
+let tabCache: QueryClient;
 let view: ReturnType<typeof useChatTabs>;
 
 function Tabs() {
+  return createElement(QueryClientProvider, { client: tabCache }, createElement(TabView));
+}
+
+function TabView() {
   view = useChatTabs({ workspaceId: "w", activeSessionId: "a" });
   return null;
 }
 
 beforeEach(() => {
+  tabCache = new QueryClient();
   // This component renders no elements. React needs only a root and window to receive events.
   vi.stubGlobal("window", Object.assign(new EventTarget(), { HTMLIFrameElement: class {} }));
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -81,6 +90,40 @@ afterEach(() => {
 function readList(ids: string[]) {
   act(() => useList.setState({ data: ids.map(chat), dataUpdatedAt: Date.now() }));
 }
+
+it("keeps a background tab's session detail current until the tab closes", async () => {
+  const socket = new Socket();
+  const runtime = new RuntimeClient(
+    { host: "mac", account: "a", grant: "local" },
+    { open: () => socket, queryClient: tabCache, heartbeatIntervalMs: 0 }
+  );
+  try {
+    const connected = runtime.connect();
+    await Promise.resolve();
+    socket.open();
+    socket.message({ type: "connected" });
+    await connected;
+    workspaceLayoutActions.setChatTabState("w", ["a", "b"], "a", ["a", "b"]);
+    act(() => root.render(createElement(Tabs)));
+    readList(["a", "b"]);
+    const sub = socket
+      .frames("q:subscribe")
+      .find(
+        (f) => f.resource === "session" && (f.params as { sessionId: string }).sessionId === "b"
+      );
+    expect(sub).toBeDefined();
+    const key = queryKeys.sessions.detail("b");
+    tabCache.setQueryData(key, { ...chat("b"), status: "working" });
+    socket.message({ type: "q:snapshot", id: sub!.id, data: chat("b") });
+    expect(tabCache.getQueryData<Session>(key)?.status).toBe("idle");
+    act(() => view.handleTabChange("tab-b"));
+    expect(socket.frames("q:unsubscribe")).toEqual([]);
+    act(() => view.handleTabClose("tab-b"));
+    expect(socket.frames("q:unsubscribe")).toContainEqual(expect.objectContaining({ id: sub!.id }));
+  } finally {
+    runtime.dispose();
+  }
+});
 
 it.each([
   ["no saved tabs", []],
@@ -335,4 +378,20 @@ it("reopens a chat with the label it had when closed in this visit", () => {
   expect(view.closedTabs[0].label).toBe(label);
   act(() => view.handleTabRestore(view.closedTabs[0]));
   expect(view.activeTab?.label).toBe(label);
+});
+
+it("reopens a chat that started elsewhere with its live agent and label", () => {
+  workspaceLayoutActions.setChatTabState("w", ["a", "b"], "b");
+  act(() => root.render(createElement(Tabs)));
+  act(() => useList.setState({ data: [chat("a"), { ...chat("b"), message_count: 0 }] }));
+  act(() => view.handleTabClose("tab-b"));
+  expect(view.closedTabs[0]).toMatchObject({ hasStarted: false, label: "New chat" });
+
+  act(() =>
+    useList.setState({ data: [chat("a"), { ...chat("b"), agent_harness: "codex-app-server" }] })
+  );
+  const started = { agentHarness: "codex-app-server", hasStarted: true, label: "Codex #1" };
+  expect(view.closedTabs[0]).toMatchObject(started);
+  act(() => view.handleTabRestore(view.closedTabs[0]));
+  expect(view.activeTab).toMatchObject(started);
 });

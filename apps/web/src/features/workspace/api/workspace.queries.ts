@@ -20,11 +20,10 @@ import { native } from "@/platform";
 import { call } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
-import type { RepoGroup, DiffStats } from "../types";
+import type { RepoGroup, DiffStats, Workspace } from "../types";
 import type { WorkspaceStatus } from "@shared/enums";
 import { mergeWorkspaceDelta } from "../lib/workspace.utils";
-import { diffStatsToAsk } from "../lib/diffStats";
-import { getWorkspaceActivity } from "@/features/sidebar/lib/status";
+import { diffStatsToAsk, isWorkspaceWorking } from "../lib/diffStats";
 import { track } from "@/platform/analytics";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 
@@ -91,7 +90,7 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
   );
 
   const workspaceIds = useMemo(() => [...new Set(readyRows.map((w) => w.id))].sort(), [readyRows]);
-  const hasWorkingWorkspaces = readyRows.some((w) => getWorkspaceActivity(w, {}).working);
+  const hasWorkingWorkspaces = readyRows.some(isWorkspaceWorking);
 
   return useQuery({
     queryKey: ["bulk-diff-stats", workspaceIds],
@@ -147,36 +146,20 @@ export function rereadDiffStats(
   void queryClient.invalidateQueries({ queryKey: ["bulk-diff-stats"] });
 }
 
-/**
- * Fetch file changes for a workspace
- * Conditionally polls only when workspace is actively working.
- *
- * When `isWatched` is true (file watcher active via notify crate),
- * polling is disabled — cache invalidation comes from `fileChanges` events.
- * Falls back to 5s polling when not watched.
- *
- * IMPORTANT: Requires workspaceState === "ready" to avoid fetching diffs
- * against incomplete worktrees during initialization. Running git diff on
- * an initializing worktree produces garbage (e.g. +500K/-1M) that gets
- * cached for 30s, persisting as phantom diffs even after the workspace
- * becomes ready. Guard here, not in the UI.
- */
-export function useFileChanges(
-  workspaceId: string | null,
-  sessionStatus?: string | null,
-  isWatched: boolean = false,
-  workspaceState?: string | null
-) {
+/** Read the diff once the checkout is ready. While a chat works, poll every five
+ * seconds unless the file watcher already reports changes. */
+export function useFileChanges(workspace: Workspace | null, isWatched = false) {
+  const workspaceId = workspace?.state === "ready" ? workspace.id : null;
   return useQuery({
     queryKey: queryKeys.workspaces.diffFiles(workspaceId || ""),
     // Null means no successful read yet. With undefined data, a refetch clears the last error.
     initialData: null,
     initialDataUpdatedAt: 0,
     queryFn: () => call(api.diffFiles, { workspaceId: workspaceId! }),
-    enabled: !!workspaceId && workspaceState === "ready",
+    enabled: !!workspaceId,
     staleTime: 30000,
     // Events handle invalidation when watched; fall back to polling otherwise
-    refetchInterval: isWatched ? false : sessionStatus === "working" ? 5000 : false,
+    refetchInterval: !isWatched && isWorkspaceWorking(workspace) ? 5000 : false,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });
@@ -263,9 +246,9 @@ export function useRepoBranches(repoId: string | null, organizationId?: string |
 
 export function usePRStatus(
   workspaceId: string | null,
-  options?: { ghInstalled?: boolean; ghAuthenticated?: boolean; sessionStatus?: string }
+  options?: { ghInstalled?: boolean; ghAuthenticated?: boolean; workspace?: Workspace | null }
 ) {
-  const { ghInstalled = true, ghAuthenticated = true, sessionStatus } = options ?? {};
+  const { ghInstalled = true, ghAuthenticated = true, workspace } = options ?? {};
   return useQuery({
     queryKey: queryKeys.workspaces.prStatus(workspaceId || ""),
     queryFn: () => call(api.prStatus, { workspaceId: workspaceId! }),
@@ -273,7 +256,7 @@ export function usePRStatus(
     staleTime: 10_000,
     refetchInterval: (query) => {
       // A working turn can create a PR.
-      if (sessionStatus === "working") return 30_000;
+      if (isWorkspaceWorking(workspace)) return 30_000;
 
       // After agent stops: CI checks typically run 2-15min. Poll every 60s
       // while CI is pending so the user sees updates without manual refresh.

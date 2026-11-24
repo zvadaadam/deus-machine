@@ -9,6 +9,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { shallow } from "zustand/shallow";
+import { hashKey, useQueryClient } from "@tanstack/react-query";
+import { api } from "@shared/api";
+import { queryKeys } from "@/shared/api/queryKeys";
+import { runtimeForQueryClient } from "@/platform/ws/runtime-client";
 import { getErrorMessage } from "@shared/lib/errors";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useCreateSession, useWorkspaceSessions } from "@/features/session/api/session.queries";
@@ -128,7 +132,6 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     // Only act when transitioning from null/undefined → real session ID
     if (prev || !activeSessionId) return;
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time patch when workspace init completes
     setMainTabs((tabs) => {
       const defaultIdx = tabs.findIndex((t) => t.id === "tab-default");
       if (defaultIdx === -1) return tabs;
@@ -264,7 +267,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       openChatDone(workspaceId, requested.id);
       return;
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- consume a navigation request
+
     setMainTabs((tabs) =>
       tabs.some((t) => isSessionChatTab(t) && t.sessionId === target)
         ? tabs
@@ -283,11 +286,26 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
   ]);
 
   const shownSessionId = activeTabSessionId ?? activeSessionId ?? null;
+  const openIds = useMemo(
+    () => mainTabs.filter(isSessionChatTab).map((tab) => tab.sessionId),
+    [mainTabs]
+  );
+  const runtime = runtimeForQueryClient(useQueryClient());
+  const detailKey = hashKey(openIds);
+  useEffect(() => {
+    if (!runtime) return;
+    const releases = openIds.map((sessionId) =>
+      runtime.retainQuery(api.session.name, { sessionId }, queryKeys.sessions.detail(sessionId))
+    );
+    return () => releases.forEach((release) => release());
+    // A tab's label can change while its session stays open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runtime, detailKey]);
+
   useEffect(() => {
     // A route's layout effect can request a chat after this render, before this effect runs.
     if (!hydrated || currentOpenChatRequest(workspaceId)) return;
     if (shownSessionId) unreadActions.markRead(shownSessionId);
-    const openIds = mainTabs.filter(isSessionChatTab).map((tab) => tab.sessionId);
     const knownIds = [...seen.current];
     const saved = useWorkspaceLayoutStore.getState().layouts[workspaceId];
     // React can replay a restore with a new tab array while the address change is pending.
@@ -298,7 +316,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     )
       return;
     workspaceLayoutActions.setChatTabState(workspaceId, openIds, shownSessionId, knownIds);
-  }, [mainTabs, shownSessionId, workspaceId, requested, hydrated]);
+  }, [openIds, shownSessionId, workspaceId, requested, hydrated]);
 
   // --- Tab handlers ---
 
@@ -473,7 +491,8 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       .sort((a, b) => (order.get(a.id) ?? order.size) - (order.get(b.id) ?? order.size))
       .map((session) => {
         const closed = closedTabs[order.get(session.id) ?? closedTabs.length];
-        return closed ?? { ...sessionToTab(session, sequences.get(session.id) ?? 1), closedAt: 0 };
+        if (closed && (closed.hasStarted || session.message_count === 0)) return closed;
+        return { ...sessionToTab(session, sequences.get(session.id) ?? 1), closedAt: 0 };
       });
   }, [workspaceSessions, openSessionIds, closedTabs]);
 

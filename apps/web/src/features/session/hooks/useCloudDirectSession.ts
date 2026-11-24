@@ -53,6 +53,7 @@ import {
   toolRequestFromElicitation,
 } from "../cloud/directSessionRegistry";
 import { getRuntimeClient, setToolResponseInterceptor } from "@/platform/ws";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { runtimeForQueryClient } from "@/platform/ws/runtime-client";
 import { api } from "@shared/api";
 import type { AnyStream, EventOf, ScopeOf } from "@shared/api/stream";
@@ -143,7 +144,7 @@ function settleDirectQuestionState(
       ?.state.turns.some((turn) => turn.status === "active") ??
     false;
   if (live) patchSessionDetail(qc, sessionId, { status: "working" });
-  else patchWorkspaceSessionStatus(qc, sessionId, "idle");
+  else if (isCloudDirectWebMode()) patchWorkspaceSessionStatus(qc, sessionId, "idle");
 }
 
 /** The fold's active turn — what a freshly arrived question belongs to. */
@@ -581,6 +582,7 @@ export function useCloudDirectSession(
             toast.error(refusal.message);
             return;
           }
+          patchSessionDetail(queryClient, sessionId, { status: "error" });
         }
         setError(refusal.message, refusal.category);
         return;
