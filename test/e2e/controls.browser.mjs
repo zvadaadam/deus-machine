@@ -141,6 +141,13 @@ function assertSameBounds(before, after, message) {
       `${message} (${key}: ${before[key]} → ${after[key]})`
     );
 }
+async function waitForFunction(page, message, predicate, arg) {
+  try {
+    await page.waitForFunction(predicate, arg);
+  } catch (cause) {
+    throw new Error(message, { cause });
+  }
+}
 let browser;
 try {
   await new Promise((resolve) => http.listen(0, "127.0.0.1", resolve));
@@ -328,9 +335,12 @@ try {
     content:
       '[data-slot="dropdown-menu-content"], [data-slot="dialog-content"] { animation-play-state: paused !important }',
   });
-  for (const [trigger, slot, enter, exit] of [
-    ["main", "dropdown-menu-content", 160, 120],
-    ["Open dialog", "dialog-content", 240, 160],
+  // A surface can paint before Radix handles Escape. Use each surface's own close action.
+  const renameBranch = page.getByRole("menuitem", { name: "Rename branch" });
+  const closeDialog = page.getByRole("button", { name: "Close", exact: true });
+  for (const [trigger, slot, enter, exit, close] of [
+    ["main", "dropdown-menu-content", 160, 120, renameBranch],
+    ["Open dialog", "dialog-content", 240, 160, closeDialog],
   ]) {
     const selector = `[data-slot="${slot}"]`;
     for (const [state, duration] of [
@@ -338,9 +348,11 @@ try {
       ["closed", exit],
     ]) {
       if (state === "open") await page.getByRole("button", { name: trigger, exact: true }).click();
-      else await page.keyboard.press("Escape");
+      else await close.press("Enter");
       const surface = page.locator(`${selector}[data-state="${state}"]`);
-      await page.waitForFunction(
+      await waitForFunction(
+        page,
+        `Waiting for the ${slot} ${state} animation to pause`,
         (s) =>
           document
             .querySelector(s)
@@ -410,7 +422,7 @@ try {
   await navigation
     .locator("li ~ li")
     .evaluateAll((items) => items.forEach((item) => item.remove()));
-  await settings.waitForFunction(() => {
+  await waitForFunction(settings, "Waiting for the Settings list to shrink to one row", () => {
     const list = document.querySelector('[data-slot="sidebar-content"]');
     return list.scrollHeight === list.querySelector("ul").offsetHeight;
   });
