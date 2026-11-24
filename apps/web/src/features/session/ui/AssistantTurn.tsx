@@ -3,6 +3,8 @@ import type { Message, SessionTurn } from "@/shared/types";
 import type { ChatView } from "@/features/settings/lib/chatView";
 import { getTurnFooterData } from "./utils";
 import { turnStopNotice } from "../lib/chatTimeline";
+import { assistantTurnContent, staysAtEnd } from "../lib/assistantTurnContent";
+import { formatTurnDurationLabel } from "./utils/formatTurnDurationLabel";
 import { PartsRenderer } from "./blocks/PartsRenderer";
 import { AnimatePresence } from "framer-motion";
 import { Collapse } from "@/components/ui/collapse";
@@ -38,6 +40,16 @@ export const AssistantTurn = memo(function AssistantTurn({
     () => footerGroups && getTurnFooterData(footerGroups, startedAt, turn),
     [footerGroups, startedAt, turn]
   );
+  const bubbles = view === "bubbles";
+  const condensed = bubbles && !ended && !!agentMessages;
+  const rows = useMemo(() => assistantTurnContent(parts, condensed), [parts, condensed]);
+  const stays = useMemo(() => (ended ? staysAtEnd(parts) : null), [parts, ended]);
+  const hasWorkedLine = bubbles && stays && stays.size < rows.length;
+  const workedTime =
+    hasWorkedLine && footerGroups?.length === 1 && footer?.durationMs != null
+      ? formatTurnDurationLabel(footer.durationMs)
+      : null;
+  const workedLabel = workedTime ? `Worked for ${workedTime}` : "Worked";
   const cancelled = turn?.stopReason === "cancelled";
   const notice = cancelled ? "Response stopped" : turnStopNotice(turn?.stopReason);
   const NoticeIcon = cancelled ? Square : TriangleAlert;
@@ -48,11 +60,12 @@ export const AssistantTurn = memo(function AssistantTurn({
     >
       <PartsRenderer
         parts={parts}
-        bubbles={view === "bubbles"}
-        agentMessages={agentMessages}
+        rows={rows}
+        stays={stays}
+        bubbles={bubbles}
         ended={ended}
         streaming={streaming}
-        durationMs={footerGroups?.length === 1 ? footer?.durationMs : null}
+        workedLabel={hasWorkedLine ? workedLabel : undefined}
       />
       <AnimatePresence initial={false}>
         {footer && notice && (
@@ -68,7 +81,7 @@ export const AssistantTurn = memo(function AssistantTurn({
       </AnimatePresence>
       {footer ? (
         <TurnFooterSlot>
-          <TurnFooter {...footer} />
+          <TurnFooter {...footer} workedTime={workedTime} />
         </TurnFooterSlot>
       ) : (
         progressSlot

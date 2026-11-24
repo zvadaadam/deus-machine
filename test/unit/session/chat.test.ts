@@ -182,6 +182,12 @@ it("folds a read steer between replies and finishes the same turn once", () => {
     message(
       "assistant",
       4,
+      "checking",
+      createReasoningPart({ sessionId, messageId: "checking" }, "Checking the tests", false)
+    );
+    message(
+      "assistant",
+      5,
       "after",
       createTextPart({ sessionId, messageId: "after" }, "Second reply", false)
     );
@@ -220,6 +226,9 @@ it("folds a read steer between replies and finishes the same turn once", () => {
     expect(settled).toContain("Second reply");
     expect(settled.match(/Response stopped/g)).toHaveLength(1);
     expect(settled.match(/aria-label="Copy response"/g)).toHaveLength(1);
+    expect(settled.match(/aria-label="Expand activity, Worked"/g)).toHaveLength(2);
+    expect(settled).toContain('aria-label="Turn took 1s. Started ');
+    expect(settled).not.toContain("View turn details");
     expect(settled.indexOf("Response stopped")).toBeGreaterThan(settled.indexOf("Second reply"));
     const virtual = virtualization.mock.calls.at(-1)![0];
     const keys = Array.from({ length: virtual.count }, (_, index) => virtual.getItemKey(index));
