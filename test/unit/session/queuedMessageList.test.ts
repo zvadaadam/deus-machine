@@ -96,6 +96,7 @@ afterEach(() => {
   sessionComposerActions.discard(sessionId);
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 it.each([
@@ -155,6 +156,31 @@ it.each([
   await click("Resume");
   expect(call).toHaveBeenCalledExactlyOnceWith(api.resumeQueuedMessages, { sessionId });
   expect(client.getQueryData(queryKey)).toEqual({ paused, items });
+});
+
+it.each(["stopped", "failed", "limit"] as const)(
+  "shows a %s pause only while the queue has rows",
+  (paused) => {
+    const empty = render({ paused, items: [] });
+    expect(empty).not.toMatch(/Queue paused|>Resume</);
+    for (const state of ["waiting", "sending"] as const) {
+      expect(render({ paused, items: [{ ...item, state }] })).toContain(">Resume<");
+    }
+  }
+);
+
+it("names only a future reset on the paused queue and keeps Resume available", () => {
+  const reset = new Date(2026, 10, 24, 5, 10).getTime();
+  vi.useFakeTimers({ now: reset - 1 });
+  for (const [resetsAt, sentence] of [
+    [reset, "Queue paused until 05:10."],
+    [reset - 60_000, "Queue paused. A usage limit was reached."],
+    [undefined, "Queue paused. A usage limit was reached."],
+  ] as const) {
+    const html = render({ paused: "limit", limit: { resetsAt, continues: false }, items: [item] });
+    expect(html).toContain(sentence);
+    expect(html).toContain(">Resume<");
+  }
 });
 
 it("keeps twenty rows in order with a full preview for truncated text", () => {

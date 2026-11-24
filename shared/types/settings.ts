@@ -28,6 +28,8 @@ export interface Settings {
    * Per-model upgrades happen by the user cycling the indicator.
    */
   default_thinking_level?: "low" | "medium" | "high";
+  /** Continue local chats when their usage limit resets. Off unless enabled. */
+  continue_after_usage_limit?: boolean;
 
   // AI — Codex
   openai_api_key?: string;

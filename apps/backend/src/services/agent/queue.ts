@@ -2,19 +2,22 @@ import { echoMessageId, inputToText, steerMessageId } from "@zvada/agent-server/
 import type * as api from "@shared/api/sessions";
 import type { OutputOf, ParsedInputOf } from "@shared/api/op";
 import { ACTIVE_TURN_STATUSES } from "@shared/enums";
+import { knownHarness } from "@shared/harnesses";
 import { uuidv7 } from "@shared/lib/uuid";
-import type { SessionRow } from "../../db";
+import { getTurnsForMessages, type SessionRow } from "../../db";
 import { getDatabase } from "../../lib/database";
 import { ChatBusyError, ConflictError } from "../../lib/errors";
 import { invalidate, onInvalidate } from "../query-engine";
+import { getSetting } from "../settings.service";
 import { toEngineInput } from "./run-config";
 import type { TurnEnd } from "./event-handler";
 import { liveTurnId, provideTurnWatcher, steerTurn } from "./service";
+import { continuedSettings } from "./turn-settings";
 import { differentTurnMessage, knownTurn, requireSameHarness, sendMessage } from "./turns";
 
 type Input = ParsedInputOf<typeof api.sendMessage>;
 type Message = Input & { turnId: string };
-type LocalChat = Pick<SessionRow, "status" | "agent_harness" | "message_count">;
+type LocalChat = Pick<SessionRow, "status" | "agent_harness" | "message_count" | "error_category">;
 type Attempt = { turnId: string; state: "sending" | "busy" | "returned" };
 type Item = { message: Message; text: string; images: number; attempt?: Attempt };
 type Steer = { item: Item; turnId: string; echoed: boolean };
@@ -24,24 +27,29 @@ interface Queue {
   items: Item[];
   /** Keyed by the message id the engine will echo. Insertion order is delivery order. */
   steers: Map<string, Steer>;
-  paused: api.QueuedMessages["paused"];
-  /** This turn's Stop or interruption already paused the rows waiting then. */
-  pausedTurnId?: string;
+  /** A resumed or emptied Stop remembers its turn until the end, with reason null. */
+  pause:
+    | { reason: "stopped" | "failed" | null; turnId?: string }
+    | { reason: "limit"; turnId: string; limit: NonNullable<api.QueuedMessages["limit"]> }
+    | null;
 }
 
 const MAX_QUEUED_MESSAGES = 20;
 const queues = new Map<string, Queue>();
 let unwatch: (() => void) | undefined;
+const MINUTE = 60_000;
+let clock: NodeJS.Timeout | undefined;
 
 const OPEN_LOCAL = `FROM sessions s JOIN workspaces w ON w.id = s.workspace_id
   WHERE w.kind = 'worktree' AND w.state != 'archived' AND s.is_hidden = 0`;
 
 function localChat(id: string) {
-  const sql = `SELECT s.status, s.agent_harness, s.message_count ${OPEN_LOCAL} AND s.id = ?`;
+  const sql = `SELECT s.status, s.agent_harness, s.message_count, s.error_category ${OPEN_LOCAL} AND s.id = ?`;
   return getDatabase().prepare<[string], LocalChat>(sql).get(id);
 }
 
 function notify(sessionIds: string[]) {
+  watchResets();
   if (!queues.size) {
     unwatch?.();
     unwatch = undefined;
@@ -50,33 +58,35 @@ function notify(sessionIds: string[]) {
 }
 
 function changed(q: Queue) {
-  if (!q.items.length && !q.steers.size) {
-    if (q.pausedTurnId) q.paused = null;
+  if (!q.items.length && !q.steers.size && q.pause?.reason !== "limit") {
+    if (q.pause?.turnId) q.pause.reason = null;
     else queues.delete(q.sessionId);
   }
   notify([q.sessionId]);
 }
 
-function queueForNewMessage(sessionId: string): Queue {
+function queueFor(sessionId: string): Queue {
   const existing = queues.get(sessionId);
-  if (existing) {
-    const held = existing.items.length + existing.steers.size;
-    if (held >= MAX_QUEUED_MESSAGES)
-      throw new ConflictError(
-        `This chat already has ${MAX_QUEUED_MESSAGES} messages waiting. Remove one, or wait for the agent to take them.`
-      );
-    return existing;
-  }
-  const q: Queue = { sessionId, items: [], steers: new Map(), paused: null };
+  if (existing) return existing;
+  const q: Queue = { sessionId, items: [], steers: new Map(), pause: null };
   queues.set(sessionId, q);
   // Archive, hide and delete publish a changed list. A turn's scoped updates
   // cannot remove a chat. Check all held queues in one read on list changes.
   unwatch ??= onInvalidate((resources, ctx) => {
-    if (
-      ctx?.sessionIds?.length ||
-      !(resources.includes("workspaces") || resources.includes("sessions"))
-    )
+    if (!(resources.includes("workspaces") || resources.includes("sessions"))) return;
+    if (ctx?.sessionIds?.length) {
+      for (const id of ctx.sessionIds) {
+        const held = queues.get(id);
+        if (
+          held?.pause?.reason === "limit" &&
+          (liveTurnId(id) || localChat(id)?.error_category !== "usage_limit")
+        ) {
+          held.pause = null;
+          changed(held);
+        }
+      }
       return;
+    }
     const gone = getDatabase()
       .prepare<[string], { id: string }>(
         `SELECT value AS id FROM json_each(?) WHERE NOT EXISTS (SELECT 1 ${OPEN_LOCAL} AND s.id = value)`
@@ -86,6 +96,15 @@ function queueForNewMessage(sessionId: string): Queue {
     for (const { id } of gone) queues.delete(id);
     notify(gone.map(({ id }) => id));
   });
+  return q;
+}
+
+function queueForNewMessage(sessionId: string) {
+  const q = queueFor(sessionId);
+  if (q.items.length + q.steers.size >= MAX_QUEUED_MESSAGES)
+    throw new ConflictError(
+      `This chat already has ${MAX_QUEUED_MESSAGES} messages waiting. Remove one, or wait for the agent to take them.`
+    );
   return q;
 }
 
@@ -118,7 +137,8 @@ export function queuedMessages(sessionId: string): api.QueuedMessages {
   });
   const head = sending(q);
   return {
-    paused: q.paused,
+    paused: q.pause?.reason ?? null,
+    ...(q.pause?.reason === "limit" && { limit: q.pause.limit }),
     items: [
       ...(head ? [row(head, "sending")] : []),
       ...Array.from(q.steers.values(), ({ item }) => row(item, "steering")),
@@ -136,7 +156,7 @@ function waitingRow(q: Queue | undefined, id: string) {
 }
 
 async function drain(q: Queue): Promise<Item | undefined> {
-  if (q.paused || !q.items.length || sending(q)) return;
+  if (q.pause?.reason || !q.items.length || sending(q)) return;
   const chat = localChat(q.sessionId);
   if (!chat) {
     queues.delete(q.sessionId);
@@ -306,12 +326,75 @@ export function removeQueuedMessage(sessionId: string, id: string) {
 
 export async function resumeQueuedMessages(sessionId: string) {
   const q = queues.get(sessionId);
-  if (q?.paused) {
-    q.paused = null;
+  if (q?.pause?.reason) {
+    if (q.pause.reason === "limit" || !q.pause.turnId) q.pause = null;
+    else q.pause.reason = null;
     changed(q);
     await drain(q);
   }
   return {};
+}
+
+export function continueAfterLimit(sessionId: string, on: boolean) {
+  const q = queues.get(sessionId);
+  if (q?.pause?.reason !== "limit" || q.pause.limit.resetsAt === undefined)
+    throw new ConflictError("This chat has no reported reset time.");
+  if (on && q.pause.limit.resetsAt <= Date.now())
+    return continueLimited(q, q.pause.turnId).then(() => ({}));
+  q.pause.limit.continues = on;
+  changed(q);
+  return {};
+}
+
+function continueAt(q: Queue) {
+  return q.pause?.reason === "limit" && q.pause.limit.continues
+    ? (q.pause.limit.resetsAt ?? Infinity) + MINUTE
+    : Infinity;
+}
+
+function watchResets() {
+  clearTimeout(clock);
+  const due = Math.min(...Array.from(queues.values(), continueAt));
+  clock = Number.isFinite(due)
+    ? setTimeout(checkResets, Math.min(MINUTE, Math.max(0, due - Date.now()))).unref()
+    : undefined;
+}
+
+function checkResets() {
+  const now = Date.now();
+  for (const q of queues.values()) {
+    if (q.pause?.reason === "limit" && continueAt(q) <= now)
+      void continueLimited(q, q.pause.turnId).catch((error) =>
+        console.warn("[Queue] Could not continue the chat:", error)
+      );
+  }
+  watchResets();
+}
+
+async function continueLimited(q: Queue, turnId: string) {
+  q.pause = null;
+  changed(q);
+  const id = q.sessionId;
+  const chat = localChat(id);
+  if (chat?.status !== "error" || chat.error_category !== "usage_limit" || liveTurnId(id)) return;
+  const db = getDatabase();
+  const recent = db
+    .prepare<[string], { turn_id: string }>(
+      `SELECT turn_id FROM turns WHERE session_id = ?
+       ORDER BY COALESCE(started_at, ended_at) DESC, turn_id DESC LIMIT 50`
+    )
+    .all(id);
+  if (recent[0]?.turn_id !== turnId) return;
+  if (q.items.length) return drain(q);
+  const harness = knownHarness(chat.agent_harness);
+  if (!harness) return;
+  const turns = getTurnsForMessages(db, id, recent);
+  await sendMessage({
+    sessionId: id,
+    content: "Continue.",
+    ...continuedSettings(harness, turns),
+    permissionMode: turns.at(-1)?.execution?.permissionMode,
+  });
 }
 
 function userEcho(sessionId: string, turnId: string, messageId: string) {
@@ -336,7 +419,8 @@ function recoverAttempt(q: Queue, turnId: string, state: "busy" | "returned" = "
   head.attempt = { turnId, state };
   q.items.splice(q.items.indexOf(head), 1);
   q.items.unshift(head);
-  if (state === "returned" && turnId !== q.pausedTurnId) q.paused ??= "failed";
+  if (state === "returned" && turnId !== q.pause?.turnId && !q.pause?.reason)
+    q.pause = { reason: "failed" };
   return true;
 }
 
@@ -360,32 +444,39 @@ function pauseQueue(
 ) {
   const q =
     queues.get(sessionId) ??
-    (reason === "stopped" && turnId && localChat(sessionId) && queueForNewMessage(sessionId));
+    (reason === "stopped" && turnId && localChat(sessionId) && queueFor(sessionId));
   if (!q) return;
-  const pausedHere = turnId !== undefined && turnId === q.pausedTurnId;
+  const pausedHere = turnId !== undefined && turnId === q.pause?.turnId;
   if (gone && turnId !== undefined) {
     recoverSteers(q, turnId);
     recoverAttempt(q, turnId);
   }
-  if (turnId) q.pausedTurnId = turnId;
-  if (reason === "stopped") q.paused = reason;
-  else if (!pausedHere) q.paused ??= reason;
+  if (reason === "stopped" || !pausedHere)
+    q.pause = { reason: q.pause?.reason === "stopped" ? "stopped" : reason, turnId };
   changed(q);
   if (gone && pausedHere) void drain(q);
 }
 
-function turnEnded({ event: ended, status, held }: TurnEnd) {
-  const q = queues.get(ended.sessionId);
+function turnEnded({ event: ended, status, held, limit }: TurnEnd) {
+  const q =
+    limit && localChat(ended.sessionId) ? queueFor(ended.sessionId) : queues.get(ended.sessionId);
   if (!q) return;
+  const standingPause = q.pause?.reason;
   // Includes the engine's undeliveredSteers and calls still awaiting a verdict.
   const recovered = recoverSteers(q, ended.turnId);
   const wasSending = recoverAttempt(q, ended.turnId);
-  const pausedHere = ended.turnId === q.pausedTurnId;
-  if (status || pausedHere) q.pausedTurnId = undefined;
+  const pausedHere = ended.turnId === q.pause?.turnId;
+  if (q.pause?.reason !== "limit" && (status || pausedHere)) {
+    q.pause = q.pause?.reason ? { reason: q.pause.reason } : null;
+  }
   // A given-up turn can free the chat without pausing rows that arrived after it.
   if (status && held && !pausedHere) {
-    if (ended.stopReason === "cancelled") q.paused = "stopped";
-    else if (status === "error") q.paused ??= "failed";
+    if (ended.stopReason === "cancelled") q.pause = { reason: "stopped" };
+    else if (limit && standingPause !== "stopped" && standingPause !== "failed") {
+      const continues =
+        limit.resetsAt !== undefined && getSetting("continue_after_usage_limit") === true;
+      q.pause = { reason: "limit", turnId: ended.turnId, limit: { ...limit, continues } };
+    } else if (status === "error") q.pause ??= { reason: "failed" };
   }
   if (status || recovered || wasSending || pausedHere) changed(q);
   if (status) void drain(q);

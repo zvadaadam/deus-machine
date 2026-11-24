@@ -286,6 +286,40 @@ it("reveals a workspace under Automations when its failed-start notification is 
   expect(expand).toHaveBeenCalledWith("repo");
 });
 
+it("names the usage limit in a background chat's notification", () => {
+  function Notifications() {
+    useGlobalSessionNotifications();
+    return null;
+  }
+  const client = new QueryClient();
+  vi.mocked(sendNotification).mockClear();
+  act(() =>
+    root.render(createElement(QueryClientProvider, { client }, createElement(Notifications)))
+  );
+  for (const status of ["working", "error"]) {
+    client.setQueryData(
+      ["workspaces", "by-repo"],
+      [
+        {
+          repo_name: "Project",
+          workspaces: [
+            {
+              id: "w",
+              slug: "work",
+              chats: [
+                { id: "b", status, error_category: status === "error" ? "usage_limit" : null },
+              ],
+            },
+          ],
+        },
+      ]
+    );
+  }
+  expect(sendNotification).toHaveBeenCalledWith(
+    expect.objectContaining({ title: "Usage limit reached", body: "Project · work" })
+  );
+});
+
 it.each(["w", "elsewhere"])(
   "marks only unseen finished chats unread with %s selected and counts their workspace once",
   (selectedWorkspaceId) => {

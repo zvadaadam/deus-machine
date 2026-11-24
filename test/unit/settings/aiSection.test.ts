@@ -51,6 +51,19 @@ const render = () =>
   );
 
 describe("local agent status", () => {
+  it("offers automatic continuation for local chats and defaults it off", () => {
+    const label = "When a usage limit resets, continue the chats it stopped.";
+    for (const on of [undefined, true]) {
+      const props = { settings: { continue_after_usage_limit: on }, saveSetting: vi.fn() };
+      const html = renderToStaticMarkup(createElement(AISection, props));
+      expect(html).toContain(label);
+      expect(html).toContain(`aria-checked="${on === true}"`);
+      expect(
+        renderToStaticMarkup(createElement(AISection, { ...props, cloudOnly: true }))
+      ).not.toContain(label);
+    }
+  });
+
   it("offers sign-in for a signed-out agent", () => {
     state.data = { auth: [claude({}), codex], clis: ready, logins: [] };
     const html = render();

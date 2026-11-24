@@ -151,7 +151,13 @@ it("folds a read steer between replies and finishes the same turn once", () => {
         createElement(SessionProvider, {
           sessionStatus,
           subagentMessages: new Map(),
-          children: createElement(Chat, { ...page, loading: false, sessionStatus, agentMessages }),
+          children: createElement(Chat, {
+            sessionId,
+            ...page,
+            loading: false,
+            sessionStatus,
+            agentMessages,
+          }),
         })
       )
     );
@@ -244,6 +250,7 @@ describe("session alert visibility", () => {
           QueryClientProvider,
           { client },
           createElement(Chat, {
+            sessionId: "session-1",
             messages,
             loading: false,
             sessionStatus,
@@ -268,6 +275,7 @@ it.each(["worktree", "cloud"] as const)("paints %s user messages on mount", (wor
         QueryClientProvider,
         { client },
         createElement(Chat, {
+          sessionId: "session-1",
           messages,
           sessionStatus: "working",
           loading: false,
@@ -301,6 +309,7 @@ it.each(["needs_response", "needs_plan_response"] as const)(
     try {
       virtualization.mockReturnValueOnce({ width: 800, height: 600 });
       const chat = createElement(Chat, {
+        sessionId: "session-1",
         messages: [...messages, reply],
         sessionStatus,
         loading: false,
@@ -351,7 +360,12 @@ it("keeps separate assistant groups distinct when older messages have no turn ID
       createElement(
         QueryClientProvider,
         { client },
-        createElement(Chat, { messages: rows, loading: false, sessionStatus: "idle" })
+        createElement(Chat, {
+          sessionId: "session-1",
+          messages: rows,
+          loading: false,
+          sessionStatus: "idle",
+        })
       )
     );
     const options = virtualization.mock.calls.at(-1)![0];
@@ -387,7 +401,13 @@ it("notifies scrolling for appended messages within a turn and empty outcomes, b
       createElement(
         QueryClientProvider,
         { client },
-        createElement(Chat, { messages: rows, turns, loading: false, sessionStatus: "working" })
+        createElement(Chat, {
+          sessionId: "session-1",
+          messages: rows,
+          turns,
+          loading: false,
+          sessionStatus: "working",
+        })
       )
     );
     return scroll.mock.calls.at(-1)![0] as { contentCount: number; lastContentId: string };
@@ -419,6 +439,7 @@ it("keeps a first-send refusal in an otherwise empty chat", () => {
         QueryClientProvider,
         { client },
         createElement(Chat, {
+          sessionId: "session-1",
           messages: [],
           loading: false,
           sessionStatus: "error",

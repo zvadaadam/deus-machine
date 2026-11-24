@@ -28,6 +28,7 @@ import { buildChatTimeline, type ChatTimeline } from "../lib/chatTimeline";
 import { SessionErrorCard } from "./SessionErrorCard";
 
 interface ChatProps {
+  sessionId: string;
   messages: Message[];
   turns?: SessionTurn[];
   /** Positional compaction markers, spliced between the turns they belong to. */
@@ -67,6 +68,7 @@ const NO_TURNS: SessionTurn[] = [];
 const NO_COMPACTIONS: Compaction[] = [];
 
 export function Chat({
+  sessionId,
   messages,
   turns = NO_TURNS,
   compactions = NO_COMPACTIONS,
@@ -443,6 +445,7 @@ export function Chat({
                     aria-live="assertive"
                   >
                     <SessionErrorCard
+                      sessionId={sessionId}
                       message={errorMessage}
                       category={errorCategory}
                       agentHarness={agentHarness}

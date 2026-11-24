@@ -21,6 +21,7 @@ const { mockGetDatabase, mockInvalidate } = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
+vi.mock("../../../src/services/settings.service", () => ({ getSetting: () => null }));
 vi.mock("../../../src/services/query-engine", () => ({
   invalidate: mockInvalidate,
   onInvalidate: () => () => {},
