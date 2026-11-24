@@ -3,6 +3,9 @@ import path from "node:path";
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { GitError, runGit } from "@shared/lib/git-process";
 import type { FileChange } from "@shared/types/workspace";
+import { createWorkspaceTools } from "../../../../agent-server/agents/deus-tools/workspace";
+import { HostRpc } from "../../../../agent-server/host-link";
+import { trackedSessions } from "../../../../agent-server/session-tracker";
 import {
   detectDefaultBranch,
   getDiffFiles,
@@ -544,6 +547,30 @@ it("diffs a link itself and refuses files outside the change list", async () => 
   expect(await driver.diffFile("link")).toMatchObject({ ok: true, new_content: "ignored" });
   for (const file of [".gitignore", "ignored"]) {
     await expect(driver.diffFile(file)).rejects.toMatchObject({ statusCode: 404 });
+  }
+});
+
+it("GetWorkspaceDiff opens the same changed file by relative or absolute path and refuses a sibling checkout", async () => {
+  const file = "src/note.txt";
+  await commitBase({ [file]: "old\n" });
+  write(file, "new\n");
+  const driver = resolveNode(workspace, root);
+  vi.spyOn(HostRpc, "requestGetDiff").mockImplementation(async ({ file }) => {
+    const result = await driver.diffFile(file!);
+    assert(result.ok);
+    return result;
+  });
+  const tool = createWorkspaceTools("chat").find((tool) => tool.name === "GetWorkspaceDiff")!;
+  trackedSessions.set("chat", { cwd: root, harness: "codex-app-server" });
+  try {
+    const relative = await tool.run({ file });
+    expect(relative.content).toMatchObject([{ text: expect.stringContaining("-old\n+new") }]);
+    expect(await tool.run({ file: path.join(root, file) })).toEqual(relative);
+    await expect(tool.run({ file: path.join(root + "-other", file) })).rejects.toThrow(
+      /file path relative to the workspace/i
+    );
+  } finally {
+    trackedSessions.delete("chat");
   }
 });
 
