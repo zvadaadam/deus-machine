@@ -33,7 +33,7 @@ function UsageLimit({ sessionId, message }: Pick<SessionErrorCardProps, "session
   if (limit?.resetsAt === undefined) return message;
   const hasReset = hasLimitReset(limit.resetsAt);
   const at = limitTime(limit.resetsAt + 60_000);
-  const scheduled = limit.continues && !hasReset;
+  const scheduled = limit.continues;
   const continueLabel = hasReset ? "Continue" : `Continue at ${at}`;
   const toggle = () =>
     call(api.continueAfterLimit, { sessionId, on: !scheduled }).catch((error) =>

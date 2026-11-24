@@ -135,13 +135,23 @@ describe("a usage limit", () => {
     expect(html).not.toContain(providerMessage);
   });
 
-  it.each([false, true])("offers Continue when the reset has passed (armed %s)", (continues) => {
+  it("offers Continue after the reset when no continuation is scheduled", () => {
     const reset = new Date(2026, 10, 24, 5, 10).getTime();
     vi.setSystemTime(reset + 1);
-    const html = card({ resetsAt: reset, continues });
+    const html = card({ resetsAt: reset, continues: false });
     expect(html).toContain("Reset at 05:10.");
     expect(html).toContain(">Continue<");
     expect(html).not.toMatch(/Resets at|Continue at|>Cancel</);
+  });
+
+  it("keeps Cancel available during the minute between reset and automatic continuation", () => {
+    const reset = new Date(2026, 10, 24, 5, 10).getTime();
+    vi.setSystemTime(reset + 30_000);
+    const html = card({ resetsAt: reset, continues: true });
+    expect(html).toContain("Reset at 05:10.");
+    expect(html).toContain("Continues at 05:11 while Deus stays open.");
+    expect(html).toContain(">Cancel<");
+    expect(html).not.toContain(">Continue<");
   });
 
   it("keeps the provider's message when the reset is unknown or the host restarted", () => {
