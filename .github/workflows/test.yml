@@ -26,8 +26,10 @@ jobs:
         with:
           bun-version-file: package.json
       - &install
+        name: Install project dependencies
         run: bun install --frozen-lockfile
-      - run: bun install --frozen-lockfile
+      - name: Install relay dependencies
+        run: bun install --frozen-lockfile
         working-directory: apps/cloud-relay
       - name: Install FFmpeg and ffprobe
         working-directory: ${{ runner.temp }}
@@ -51,6 +53,7 @@ jobs:
       - *bun
       - *install
       - &chromium
+        name: Install Playwright Chromium
         run: bunx playwright install --with-deps chromium
       - run: bun run check app
       - name: Upload UI regression screenshots
@@ -84,7 +87,8 @@ jobs:
       - *bun
       - *install
       # node-pty ships no Linux prebuild, and pty-parity opens real terminals.
-      - run: bunx node-gyp rebuild
+      - name: Build node-pty
+        run: bunx node-gyp rebuild
         working-directory: node_modules/node-pty
       - run: bun run check backend
 

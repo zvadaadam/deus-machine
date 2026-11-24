@@ -841,17 +841,21 @@ The desktop, npm CLI and hosted web ship together from a release tag. See [docs/
 ## Testing
 
 Run `bun run check` before pushing. It runs the CI groups for this platform and
-reports each command. Use `bun run check <group>` for one group. Browsers run
-headless. The packaged Electron launch opens a window and runs only in CI.
+reports each command. Use `bun run check <group>` for one group.
+The `test:e2e:*` runners are outside the gate, so run the ones your change touches (see [test/e2e/README.md](test/e2e/README.md)).
+Desktop checks launch the app through `test/e2e/lib/launch-in-background.mjs` and browsers run headless so every local test leaves the foreground to the person.
+The gate runs the packaged Electron smoke only in CI because it opens a window.
 
 Vitest with `vi.mock()` and `vi.hoisted()`. Tests live outside `src/` — never colocate.
 
-The packaged app's backend runs Bun, with `bun:sqlite` behind `apps/backend/src/lib/sqlite.ts`
-and Bun's own terminal behind `openTerminal` in `services/pty.service.ts`:
-`bun run test:bun` runs `sqlite-parity.test.ts`, `pty-parity.test.ts` and
-`fs-watcher-parity.test.ts` on it
-(the same files run on Node inside `test:backend`); add a case there when the
-backend starts using another SQLite or terminal call. `bun run smoke:cli-package` packs the npm CLI, installs the
+The backend unit tests run the checkout on Node. The desktop ships a Bun backend,
+with `bun:sqlite` behind `apps/backend/src/lib/sqlite.ts` and Bun's own terminal
+behind `openTerminal` in `services/pty.service.ts`. `bun run test:bun` runs
+`sqlite-parity.test.ts`, `pty-parity.test.ts` and `fs-watcher-parity.test.ts` on
+that runtime. The same files run on Node inside `test:backend`. Add a case there
+when the backend starts using another SQLite or terminal call.
+
+`bun run smoke:cli-package` packs the npm CLI, installs the
 tarball into an empty folder and runs `deus --version` and `deus start`. It
 installs with npm, the one place npm is used, because that is how a person
 installs it.
