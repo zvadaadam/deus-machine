@@ -23,6 +23,7 @@ const EMPTY_CLOSED_TABS: ClosedSessionTab[] = [];
 const EMPTY_WORKING_SET = new Set<string>();
 
 interface SessionTabBarProps {
+  workspaceId: string;
   tabs: ChatTab[];
   activeTabId: string;
   workingSessionIds?: Set<string>;
@@ -44,6 +45,7 @@ function getWrappedIndex(currentIndex: number, nextIndex: number, count: number)
 }
 
 export function SessionTabBar({
+  workspaceId,
   tabs,
   activeTabId,
   workingSessionIds = EMPTY_WORKING_SET,
@@ -158,6 +160,7 @@ export function SessionTabBar({
               return (
                 <SortableSessionTab key={tab.id} id={tab.id}>
                   <SessionTab
+                    workspaceId={workspaceId}
                     tab={tab}
                     isActive={isActive}
                     isWorking={isWorking}

@@ -5,7 +5,7 @@
  * This component focuses on layout and connecting tabs to SessionPanel.
  */
 
-import { useMemo, useCallback, useEffect, useRef } from "react";
+import { useMemo, useEffect } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import {
   SessionPanel,
@@ -72,25 +72,9 @@ export function ChatArea({
   );
   const workingSessionIds = useWorkingSessionIds(chatSessionIds);
 
-  // Mark non-active tab sessions as unread when they leave the working set.
-  const activeSessionId = getChatTabSessionId(activeTab);
-  const prevWorkingRef = useRef(workingSessionIds);
-  const prevWorkspaceRef = useRef(workspace.id);
   useEffect(() => {
-    // Reset on workspace switch — don't compare across workspaces
-    if (prevWorkspaceRef.current !== workspace.id) {
-      prevWorkspaceRef.current = workspace.id;
-      prevWorkingRef.current = workingSessionIds;
-      return;
-    }
-    const prev = prevWorkingRef.current;
-    prevWorkingRef.current = workingSessionIds;
-    for (const sid of prev) {
-      if (!workingSessionIds.has(sid) && sid !== activeSessionId) {
-        unreadActions.markUnread(sid);
-      }
-    }
-  }, [workingSessionIds, activeSessionId, workspace.id]);
+    if (tabSessionId) unreadActions.markRead(tabSessionId);
+  }, [tabSessionId]);
 
   const unreadMap = useUnreadStore((s) => s.unreadSessionIds);
   const unreadSessionIds = useMemo(
@@ -98,28 +82,16 @@ export function ChatArea({
     [chatSessionIds, unreadMap]
   );
 
-  // Wrap tab change to mark the newly-active session as read inline
-  const handleTabChangeWithRead = useCallback(
-    (tabId: string) => {
-      const tab = tabs.find((t) => t.id === tabId);
-      const sessionId = getChatTabSessionId(tab);
-      if (sessionId) {
-        unreadActions.markRead(sessionId);
-      }
-      handleTabChange(tabId);
-    },
-    [tabs, handleTabChange]
-  );
-
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       <SessionTabBar
+        workspaceId={workspace.id}
         tabs={tabs}
         activeTabId={activeTabId}
         workingSessionIds={workingSessionIds}
         unreadSessionIds={unreadSessionIds}
         focusActiveTabKey={focusActiveTabKey}
-        onTabChange={handleTabChangeWithRead}
+        onTabChange={handleTabChange}
         onTabClose={handleTabClose}
         // No + in web-direct — session creation needs the Mac backend, and an
         // affordance that can only toast is clutter (handleTabAdd still guards

@@ -17,12 +17,10 @@ import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
 import type { RepoGroup, Workspace } from "@/shared/types";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
-import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
 import {
   cloudRowState,
   filterByPlace,
   placeActivity,
-  workspaceActivity,
   followSelection,
   organizationRowState,
   placeKey,
@@ -131,13 +129,9 @@ export function useWindowPlace({
 
   // The sidebar lists one place; the menu marks the others' working and unread workspaces.
   const unreadSessionIds = useUnreadStore((s) => s.unreadSessionIds);
-  const layouts = useWorkspaceLayoutStore((s) => s.layouts);
   const activity = useMemo(
-    () =>
-      placeActivity(repoGroups, organizations, (workspace) =>
-        workspaceActivity(workspace, layouts[workspace.id]?.chatTabSessionIds, unreadSessionIds)
-      ),
-    [repoGroups, organizations, layouts, unreadSessionIds]
+    () => placeActivity(repoGroups, organizations, unreadSessionIds),
+    [repoGroups, organizations, unreadSessionIds]
   );
 
   // The place follows a newly selected workspace (from anywhere), so the sidebar

@@ -11,7 +11,7 @@ import { githubRepoSlug } from "@shared/git-origin";
 import type { DeusCloudSessionStatus } from "@shared/types/deus-cloud-auth";
 import type { CloudOrganizations } from "@shared/types/environment-secrets";
 import type { RepoGroup, Workspace } from "@/shared/types";
-import { getDisplayStatus } from "./status";
+import { getWorkspaceActivity } from "./status";
 
 export type WorkspaceLocation = "local" | "cloud";
 
@@ -495,39 +495,17 @@ export function pendingCloudOutcome(
  */
 export type PlaceActivity = "unread" | "working";
 
-/**
- * A workspace's activity by the sidebar row's own signals: unread when any of its
- * chats (its tabs, else its current chat) has an unseen reply or needs an answer,
- * working while its agent runs.
- */
-export function workspaceActivity(
-  workspace: Workspace,
-  tabSessionIds: string[] | undefined,
-  unreadSessionIds: Partial<Record<string, boolean>>
-): PlaceActivity | null {
-  const sessionIds = tabSessionIds?.length
-    ? tabSessionIds
-    : workspace.current_session_id
-      ? [workspace.current_session_id]
-      : [];
-  const unseen = sessionIds.some((id) => unreadSessionIds[id]);
-  return match(getDisplayStatus(workspace, unseen))
-    .with("unread", () => "unread" as const)
-    .with("working", () => "working" as const)
-    .with("idle", "error", () => null)
-    .exhaustive();
-}
-
 /** Each place's activity, by place key; a place with none is absent. Archived workspaces are not counted. */
 export function placeActivity(
   groups: RepoGroup[],
   organizations: Organizations,
-  activityOf: (workspace: Workspace) => PlaceActivity | null
+  unread: Readonly<Record<string, boolean>>
 ): Partial<Record<string, PlaceActivity>> {
   const byPlace: Partial<Record<string, PlaceActivity>> = {};
   for (const workspace of groups.flatMap((group) => group.workspaces)) {
     if (workspace.state === "archived") continue;
-    const activity = activityOf(workspace);
+    const { status, working } = getWorkspaceActivity(workspace, unread);
+    const activity = status === "unread" ? "unread" : working ? "working" : null;
     if (!activity) continue;
     const key = placeKey(placeOf(workspace, organizations));
     if (byPlace[key] !== "unread") byPlace[key] = activity;

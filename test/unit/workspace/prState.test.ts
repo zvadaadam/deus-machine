@@ -103,6 +103,22 @@ it.each([
   }
 });
 
+it("uses the failed lookup's fallback when the lookup is inconclusive and a PR is saved", () => {
+  const lookup = { ...settled, data: { has_pr: false, conclusive: false, error: null } };
+  expect(derivePRActionState(lookup, undefined, saved)).toEqual({
+    type: "linked",
+    prNumber: 12,
+    prUrl: "/pr/12",
+    warning: "Could not check for a pull request on GitHub.",
+  });
+  const reviewed = { ...saved, pr_state: "open", pr_review_status: "review_required" } as const;
+  expect(derivePRActionState(lookup, undefined, reviewed).type).toBe("awaiting_review");
+  expect(derivePRActionState(lookup, undefined)).toEqual({ type: "create_pr" });
+  expect(
+    derivePRActionState({ ...lookup, data: { ...lookup.data, no_remote: true } }, undefined)
+  ).toEqual({ type: "no_remote" });
+});
+
 it("shows a picked PR until a conclusive lookup rules it out", () => {
   const lookup = { ...settled, data: { has_pr: false, error: "unknown" } } as const;
   expect(derivePRActionState(lookup, undefined, saved).type).toBe("linked");

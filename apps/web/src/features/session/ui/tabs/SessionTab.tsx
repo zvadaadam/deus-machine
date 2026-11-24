@@ -1,13 +1,18 @@
 import type { KeyboardEvent, RefCallback } from "react";
+import { Link, MessageSquare, X } from "lucide-react";
 import { getAgentLogo } from "@/assets/agents";
+import { ContextMenu, ContextMenuItem } from "@/components/ui/context-menu";
 import { TabPill } from "@/components/ui/tab-pill";
+import { copyWorkspaceLink } from "@/features/workspace/lib/workspaceAddress";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { cn } from "@/shared/lib/utils";
 import { CircularPixelGrid } from "../CircularPixelGrid";
-import type { ChatTab } from "./types";
+import { getChatTabSessionId, type ChatTab } from "./types";
 
 const AGENT_ICON_SIZE = "h-3.5 w-3.5";
 
 interface SessionTabProps {
+  workspaceId: string;
   tab: ChatTab;
   isActive: boolean;
   isWorking: boolean;
@@ -34,6 +39,7 @@ function renderStatusIcon(tab: ChatTab, isWorking: boolean, isUnread: boolean) {
 }
 
 export function SessionTab({
+  workspaceId,
   tab,
   isActive,
   isWorking,
@@ -44,10 +50,11 @@ export function SessionTab({
   onKeyDown,
   tabRef,
 }: SessionTabProps) {
+  const sessionId = getChatTabSessionId(tab);
   const closeProps =
     canClose && onClose ? { onClose, closeAriaLabel: `Close ${tab.label} tab` } : {};
 
-  return (
+  const pill = (
     <TabPill
       active={isActive}
       icon={renderStatusIcon(tab, isWorking, isUnread)}
@@ -63,5 +70,26 @@ export function SessionTab({
     >
       {tab.label}
     </TabPill>
+  );
+  if (!sessionId || isCloudDirectWebMode()) return pill;
+  return (
+    <ContextMenu trigger={<div>{pill}</div>}>
+      {!isActive && (
+        <ContextMenuItem onSelect={onSelect}>
+          <MessageSquare />
+          Open chat
+        </ContextMenuItem>
+      )}
+      <ContextMenuItem onSelect={() => copyWorkspaceLink({ workspaceId, sessionId })}>
+        <Link />
+        Copy link
+      </ContextMenuItem>
+      {canClose && onClose && (
+        <ContextMenuItem onSelect={onClose}>
+          <X />
+          Close tab
+        </ContextMenuItem>
+      )}
+    </ContextMenu>
   );
 }

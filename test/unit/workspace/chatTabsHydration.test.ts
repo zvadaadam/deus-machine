@@ -13,9 +13,10 @@ import {
   openChat,
   useOpenChatStore,
 } from "@/features/session/lib/openChat";
+import { useUnreadStore } from "@/features/session/store/unreadStore";
 import type { Session } from "@/features/session/types";
 import { useSidebarStore } from "@/features/sidebar/store";
-import { copyWorkspaceLink } from "@/features/workspace/lib/workspaceAddress";
+import { copyWorkspaceLink, currentChatLink } from "@/features/workspace/lib/workspaceAddress";
 import {
   useWorkspaceLayoutStore,
   useWorkspaceStore,
@@ -185,7 +186,8 @@ it("copies the saved chat when a pending request expires while the palette is op
   uiActions.openAutomations();
   uiActions.openCommandPalette();
   const copy = vi.fn().mockResolvedValue(true);
-  const clickCopyChat = () => copyWorkspaceLink(workspaceId, "chat", copy);
+  vi.stubGlobal("navigator", { clipboard: { writeText: copy } });
+  const clickCopyChat = () => copyWorkspaceLink(currentChatLink(workspaceId));
   const pending = useOpenChatStore.getState();
   expect(currentOpenChatRequest(workspaceId)?.sessionId).toBe(requested);
   vi.advanceTimersByTime(10_001);
@@ -223,7 +225,7 @@ it("reveals a workspace under Automations when its failed-start notification is 
     root.render(createElement(QueryClientProvider, { client }, createElement(Notifications)))
   );
   uiActions.openAutomations();
-  const workspace = { id: "failed", repository_id: "repo", slug: "work" };
+  const workspace = { id: "failed", chats: [], repository_id: "repo", slug: "work" };
   for (const state of ["initializing", "error"]) {
     client.setQueryData(
       ["workspaces", "by-repo"],
@@ -236,4 +238,84 @@ it("reveals a workspace under Automations when its failed-start notification is 
   expect(useWorkspaceStore.getState().selectedWorkspaceId).toBe("failed");
   expect(useUIStore.getState().automationsOpen).toBe(false);
   expect(expand).toHaveBeenCalledWith("repo");
+});
+
+it.each(["w", "elsewhere"])(
+  "marks only unseen finished chats unread with %s selected and counts their workspace once",
+  (selectedWorkspaceId) => {
+    vi.useFakeTimers();
+    vi.mocked(sendNotification).mockClear();
+    const client = new QueryClient();
+    useUnreadStore.setState({ unreadSessionIds: {} });
+    useWorkspaceStore.setState({ selectedWorkspaceId });
+    function Notifications() {
+      useGlobalSessionNotifications();
+      return null;
+    }
+    act(() =>
+      root.render(createElement(QueryClientProvider, { client }, createElement(Notifications)))
+    );
+    for (const status of ["working", "idle"]) {
+      client.setQueryData(
+        ["workspaces", "by-repo"],
+        [
+          {
+            repo_name: "Project",
+            workspaces: [
+              {
+                id: "w",
+                slug: "work",
+                current_session_id: "a",
+                session_status: status,
+                chats: [
+                  { id: "a", status },
+                  { id: "b", status },
+                  { id: "c", status },
+                ],
+              },
+            ],
+          },
+        ]
+      );
+    }
+    expect(useUnreadStore.getState().unreadSessionIds).toEqual(
+      selectedWorkspaceId === "w" ? { b: true, c: true } : { a: true, b: true, c: true }
+    );
+    vi.advanceTimersByTime(1500);
+    expect(sendNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "3 agents finished",
+        body: "Project · 1 workspace",
+        sound: "Glass",
+      })
+    );
+  }
+);
+
+it("can reopen a visible chat whose tab was closed before the workspace remounted", () => {
+  workspaceLayoutActions.setChatTabState("w", ["a"], "a", ["a", "b", "c"]);
+  act(() => root.render(createElement(Tabs)));
+  readList(["a", "b", "c"]);
+  const closed = view.closedTabs.find((tab) => tab.sessionId === "b");
+  expect(closed).toBeDefined();
+  act(() => view.handleTabRestore(closed!));
+  expect(view.activeTabId).toBe("tab-b");
+  act(() => view.handleTabClose("tab-b"));
+  expect(view.closedTabs.map((tab) => tab.sessionId)).toEqual(["b", "c"]);
+  readList(["a", "c"]);
+  expect(view.closedTabs.map((tab) => tab.sessionId)).toEqual(["c"]);
+});
+
+it("reopens all 23 closed chats in reverse close order", () => {
+  const ids = ["a", ...Array.from({ length: 23 }, (_, n) => `s${n}`)];
+  workspaceLayoutActions.setChatTabState("w", ids, "a", ids);
+  act(() => root.render(createElement(Tabs)));
+  readList(ids);
+  for (const id of ids.slice(1)) act(() => view.handleTabClose(`tab-${id}`));
+  expect(view.closedTabs.map((tab) => tab.sessionId)).toContain("s0");
+  expect(view.closedTabs).toHaveLength(23);
+  for (const id of ids.slice(1).reverse()) {
+    act(() => view.handleTabRestore(view.closedTabs[0]));
+    expect(view.activeTabId).toBe(`tab-${id}`);
+  }
 });

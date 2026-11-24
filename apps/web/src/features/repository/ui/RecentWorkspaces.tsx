@@ -3,7 +3,9 @@ import { Cloud } from "lucide-react";
 import { CircularPixelGrid } from "@/features/session/ui/CircularPixelGrid";
 import { WorkflowStatusIcon } from "@/features/sidebar/ui/WorkflowStatusIcon";
 import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "@/features/sidebar/lib/utils";
-import { getDisplayStatus } from "@/features/sidebar/lib/status";
+import { useUnreadStore } from "@/features/session/store/unreadStore";
+import { workspaceChats } from "@shared/types/workspace";
+import { getWorkspaceActivity } from "@/features/sidebar/lib/status";
 import { cn } from "@/shared/lib/utils";
 import { formatTimeAgo } from "@/shared/lib/formatters";
 import { tempo } from "@/shared/lib/tempo";
@@ -29,7 +31,10 @@ function parseAppDate(value: string | null | undefined): Date | null {
 }
 
 function getWorkspaceActivityDate(workspace: Workspace): Date {
-  const latestMessageDate = parseAppDate(workspace.latest_message_sent_at);
+  const latestMessageDate = workspaceChats(workspace).reduce<Date | null>((latest, chat) => {
+    const sent = parseAppDate(chat.last_user_message_at);
+    return sent && (!latest || sent > latest) ? sent : latest;
+  }, null);
   const workspaceDate = parseAppDate(workspace.updated_at);
   return latestMessageDate ?? workspaceDate ?? new Date(0);
 }
@@ -98,12 +103,9 @@ export function buildRecentWorkspaceGroups(repoGroups: RepoGroup[]): RecentWorks
 }
 
 function RecentWorkspaceStatusIcon({ workspace }: { workspace: Workspace }) {
-  if (workspace.state === "initializing") {
-    return <CircularPixelGrid variant="working" size={14} resolution={8} />;
-  }
-
-  const displayStatus = getDisplayStatus(workspace);
-
+  const displayStatus = useUnreadStore(
+    (s) => getWorkspaceActivity(workspace, s.unreadSessionIds).status
+  );
   if (displayStatus === "working") {
     return <CircularPixelGrid variant="working" size={14} resolution={8} />;
   }

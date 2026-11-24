@@ -17,6 +17,13 @@ import type {
 } from "../enums";
 export type { WorkspaceState, SetupStatus, WorkspaceStatus };
 
+export interface WorkspaceChat {
+  id: string;
+  status: SessionStatus;
+  error_category: string | null;
+  last_user_message_at: string | null;
+}
+
 /**
  * Core workspace entity
  * Represents a git worktree-based development workspace
@@ -39,6 +46,8 @@ export interface Workspace {
   start_recoverable?: boolean;
   status: WorkspaceStatus;
   current_session_id: string | null;
+  /** Visible chats in creation order. Older hosts send no chat list. */
+  chats?: WorkspaceChat[];
   session_status: SessionStatus | null;
   session_error_category: string | null;
   session_error_message: string | null;
@@ -72,6 +81,10 @@ export interface Workspace {
   pr_checked_at?: string | null;
   archive_commit?: string | null;
   archived_at?: string | null;
+}
+
+export function workspaceChats(workspace: Workspace): WorkspaceChat[] {
+  return workspace.chats ?? [];
 }
 
 export type ArchivedWorkspace = Pick<

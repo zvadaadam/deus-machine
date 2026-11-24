@@ -36,8 +36,6 @@ import {
   useOpenChatStore,
 } from "@/features/session/lib/openChat";
 
-const MAX_CLOSED_TABS = 20;
-
 function createClosedTabId(sessionId: string): string {
   return `${sessionId}-${Date.now()}-${crypto.randomUUID()}`;
 }
@@ -334,16 +332,14 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
           initialModel: closingTab.initialModel,
           closedAt: Date.now(),
         };
-        setClosedTabs((prevClosed) =>
-          [
-            entry,
-            ...prevClosed.filter(
-              (closedTab) =>
-                closedTab.sessionId !== closingTab.sessionId &&
-                !openSessionIds.has(closedTab.sessionId)
-            ),
-          ].slice(0, MAX_CLOSED_TABS)
-        );
+        setClosedTabs((prev) => [
+          entry,
+          ...prev.filter(
+            (closedTab) =>
+              closedTab.sessionId !== closingTab.sessionId &&
+              !openSessionIds.has(closedTab.sessionId)
+          ),
+        ]);
       }
 
       if (tabId === activeMainTabId && newTabs.length > 0) {
@@ -466,10 +462,21 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
   // --- Derived state ---
 
   const openSessionIds = useMemo(() => getOpenSessionIds(mainTabs), [mainTabs]);
-  const restorableClosedTabs = useMemo(
-    () => closedTabs.filter((closedTab) => !openSessionIds.has(closedTab.sessionId)),
-    [closedTabs, openSessionIds]
-  );
+  const restorableClosedTabs = useMemo(() => {
+    const sessions = workspaceSessions ?? [];
+    const sequences = computeSequences(sessions);
+    const order = new Map(closedTabs.map((tab, index) => [tab.sessionId, index]));
+    return sessions
+      .filter((session) => !openSessionIds.has(session.id))
+      .sort((a, b) => (order.get(a.id) ?? order.size) - (order.get(b.id) ?? order.size))
+      .map((session) => {
+        const tab = sessionToTab(session, sequences.get(session.id) ?? 1);
+        const closed = closedTabs[order.get(session.id) ?? closedTabs.length];
+        // A model chosen before the first send lives only in the tab.
+        if (closed && !closed.hasStarted && !tab.hasStarted) return closed;
+        return { ...tab, closedAt: closed?.closedAt ?? 0 };
+      });
+  }, [workspaceSessions, openSessionIds, closedTabs]);
 
   // --- Keyboard shortcuts ---
 

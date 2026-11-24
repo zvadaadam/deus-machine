@@ -77,3 +77,35 @@ it("opens the cloud project's refusal on tap and offers only Cancel", async ({
   expect(opened).toContain(">Cancel</button>");
   expect(opened).not.toContain(">Remove</button>");
 });
+
+it("describes a present or missing folder and keeps Remove available", ({ onTestFinished }) => {
+  touch.open = true;
+  onTestFinished(() => {
+    touch.open = false;
+  });
+  const client = new QueryClient({ defaultOptions: { queries: { enabled: false } } });
+  const dialog = createElement(
+    QueryClientProvider,
+    { client },
+    createElement(
+      TooltipProvider,
+      null,
+      createElement(RemoveProjectDialog, { repoId: "r", name: "Orbit" })
+    )
+  );
+  for (const [folderExists, text] of [
+    [false, "Deus can’t find the project folder at /projects/orbit."],
+    [true, "The folder /projects/orbit, its checkouts and its Git branches stay on disk."],
+  ] as const) {
+    client.setQueryData([api.repoRemoval.name, "r"], {
+      rootPath: "/projects/orbit",
+      folderExists,
+      counts: { archivedWorkspaces: 0, chats: 0, automations: 0 },
+    });
+    const html = renderToStaticMarkup(dialog);
+    expect(html).toContain(text);
+    expect(html.includes("stay on disk")).toBe(folderExists);
+    expect(html).toContain(">Remove</button>");
+  }
+  client.clear();
+});

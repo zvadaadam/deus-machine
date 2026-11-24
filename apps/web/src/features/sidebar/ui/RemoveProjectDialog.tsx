@@ -103,7 +103,7 @@ function RemovalConfirmation({ repoId, name }: Props) {
   );
 }
 
-function RemovalDescription({ rootPath, counts }: OutputOf<typeof api.repoRemoval>) {
+function RemovalDescription({ rootPath, folderExists, counts }: OutputOf<typeof api.repoRemoval>) {
   const { archivedWorkspaces, chats, automations } = counts;
   return (
     <>
@@ -113,9 +113,11 @@ function RemovalDescription({ rootPath, counts }: OutputOf<typeof api.repoRemova
           : `This deletes ${archivedWorkspaces} archived workspace${archivedWorkspaces === 1 ? "" : "s"} and ${chats} chat${chats === 1 ? "" : "s"} from Deus.`}
       </p>
       <p>
-        {rootPath
-          ? `The folder ${abbreviatePath(rootPath)}, its checkouts and its Git branches stay on disk.`
-          : "The repository stays on GitHub."}
+        {!rootPath
+          ? "The repository stays on GitHub."
+          : folderExists === false
+            ? `Deus can’t find the project folder at ${abbreviatePath(rootPath)}.`
+            : `The folder ${abbreviatePath(rootPath)}, its checkouts and its Git branches stay on disk.`}
       </p>
       {automations > 0 && (
         <p>

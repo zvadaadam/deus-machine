@@ -13,6 +13,7 @@ import { call } from "@/platform/ws";
 import type { Workspace, DiffStats } from "@/shared/types";
 import { useAutomationForWorkspace } from "@/features/automations";
 import { uiActions } from "@/shared/stores/uiStore";
+import { SETUP_FAILED } from "@/features/workspace/lib/startState";
 import { prTargetBranch } from "@/features/workspace/lib/prState";
 import type { DisplayStatus } from "../lib/status";
 import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "../lib/utils";
@@ -124,6 +125,7 @@ function LiveActivityLine({ sessionId }: { sessionId: string }) {
 interface WorkspaceHoverCardProps {
   workspace: Workspace;
   displayStatus: DisplayStatus;
+  workingChatId?: string;
   diffStats?: DiffStats;
   /** Live working duration, already formatted (e.g. "4:29"). */
   workingDuration?: string | null;
@@ -141,13 +143,13 @@ interface WorkspaceHoverCardProps {
 export function WorkspaceHoverCard({
   workspace,
   displayStatus,
+  workingChatId,
   diffStats,
   workingDuration,
   children,
 }: WorkspaceHoverCardProps) {
   const displayName = getWorkspaceDisplayName(workspace);
   const secondaryText = getWorkspaceSecondaryText(workspace);
-  const isWorking = displayStatus === "working";
   // Provenance + where the files live — the two facts the row can't fit.
   const automation = useAutomationForWorkspace(workspace.id);
   const isCloud = workspace.kind === "cloud";
@@ -163,8 +165,7 @@ export function WorkspaceHoverCard({
 
   const branch = workspace.git_branch;
   const targetBranch = prTargetBranch(workspace);
-  const timeText =
-    isWorking && workingDuration ? workingDuration : formatTimeAgo(workspace.updated_at);
+  const timeText = workingDuration ?? formatTimeAgo(workspace.updated_at);
 
   return (
     <HoverCard openDelay={500} closeDelay={100}>
@@ -178,7 +179,11 @@ export function WorkspaceHoverCard({
               {displayName}
             </span>
           </div>
-          <WorkspaceGitIcon workspace={workspace} displayStatus={displayStatus} />
+          <WorkspaceGitIcon
+            workspace={workspace}
+            displayStatus={displayStatus}
+            working={!!workingChatId}
+          />
         </div>
 
         {/* Context: where it runs · what created it */}
@@ -194,6 +199,9 @@ export function WorkspaceHoverCard({
               </>
             )}
           </span>
+          {workspace.setup_status === "failed" && (
+            <span className="text-accent-red-muted text-xs">{SETUP_FAILED}</span>
+          )}
           {automation && (
             <button
               type="button"
@@ -210,9 +218,7 @@ export function WorkspaceHoverCard({
           )}
         </div>
 
-        {isWorking && workspace.current_session_id && (
-          <LiveActivityLine sessionId={workspace.current_session_id} />
-        )}
+        {workingChatId && <LiveActivityLine sessionId={workingChatId} />}
 
         {/* Chips: PR · CI · diff */}
         {(prLabel || showCi || hasChanges) && (

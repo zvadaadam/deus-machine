@@ -26,7 +26,7 @@ import {
 import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/shared/lib/utils";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
-import { copyWorkspaceLink, useHasWorkspaceChat } from "../lib/workspaceAddress";
+import { copyWorkspaceLink, currentChatLink, useHasWorkspaceChat } from "../lib/workspaceAddress";
 import { CopyIcon } from "@/components/ui/copy-icon";
 import { SETUP_FAILED, SETUP_RUNNING } from "../lib/startState";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
@@ -372,7 +372,6 @@ function HeaderOpenButton({
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const { copy, copied } = useCopyToClipboard();
-  const [lastCopied, setLastCopied] = useState("");
   const hasChat = useHasWorkspaceChat(workspaceId);
   const [lastAppId, setLastAppId] = useLastOpenInApp();
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
@@ -408,11 +407,6 @@ function HeaderOpenButton({
     } else {
       setOpen(true);
     }
-  }
-
-  async function handleCopy(label: string, run: () => Promise<boolean>) {
-    setOpen(false);
-    if (await run()) setLastCopied(label);
   }
 
   function handleOpen() {
@@ -529,15 +523,15 @@ function HeaderOpenButton({
         <DropdownMenuSeparator />
         {Object.entries({
           "Copy path": () => copy(workspacePath),
-          "Copy workspace link": () => copyWorkspaceLink(workspaceId, "workspace", copy),
-          "Copy chat link": hasChat ? () => copyWorkspaceLink(workspaceId, "chat", copy) : null,
+          "Copy workspace link": () => copyWorkspaceLink({ workspaceId }),
+          "Copy chat link": hasChat ? () => copyWorkspaceLink(currentChatLink(workspaceId)) : null,
         }).map(([label, run]) => {
           if (!run) return null;
-          const done = copied && lastCopied === label;
+          const done = copied && label === "Copy path";
           return (
             <DropdownMenuItem
               key={label}
-              onSelect={() => void handleCopy(label, run)}
+              onSelect={() => void run()}
               className="text-text-muted cursor-pointer gap-2 py-1 text-xs"
             >
               <span className="contents" aria-hidden="true">
