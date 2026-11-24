@@ -102,10 +102,10 @@ describeWithDb("stopSession", () => {
     expect(JSON.parse(row.cancelled_by)).toEqual({ kind: "session", sessionId: "second" });
   });
 
-  it("goes idle when the harness CONFIRMED the interrupt", async () => {
-    vi.spyOn(agentService, "stopSession").mockResolvedValue({
-      outcome: "cancelled",
-      turnId: "turn-1",
+  it("goes idle when the confirmed turn has already ended", async () => {
+    vi.spyOn(agentService, "stopSession").mockImplementation(async () => {
+      vi.mocked(agentService.liveTurnId).mockReturnValue(undefined);
+      return { outcome: "cancelled", turnId: "turn-1" };
     });
 
     await stopSession({ sessionId: SESSION });
@@ -114,6 +114,7 @@ describeWithDb("stopSession", () => {
   });
 
   it("goes idle when there was no active turn to cancel", async () => {
+    vi.mocked(agentService.liveTurnId).mockReturnValue(undefined);
     vi.spyOn(agentService, "stopSession").mockResolvedValue({ outcome: "no_active_turn" });
 
     await stopSession({ sessionId: SESSION });

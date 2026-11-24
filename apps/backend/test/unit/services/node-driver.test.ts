@@ -30,11 +30,14 @@ describe("NodeDriver", () => {
     await expect(resolveNode(local, "/tmp/ws1").diffFiles()).rejects.toBe(error);
   });
 
-  it("refuses a path outside the workspace", async () => {
-    await expect(resolveNode(local, "/tmp/ws1").diffFile("../escape")).rejects.toThrow(
-      "Invalid file path"
-    );
-  });
+  it.each(["../ws1-backup/file.ts", ".", "/tmp/ws1/file.ts"])(
+    "asks for a workspace-relative file when the diff read receives %s",
+    async (file) => {
+      await expect(resolveNode(local, "/tmp/ws1").diffFile(file)).rejects.toThrow(
+        /file path relative to the workspace/i
+      );
+    }
+  );
 
   it.each([
     ["CREATE", "added"],

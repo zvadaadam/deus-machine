@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { toast } from "sonner";
 import { isWorkspaceLinkId, workspaceLink, type WorkspaceLink } from "@shared/workspace-link";
 import { currentOpenChatRequest, useOpenChatStore } from "@/features/session/lib/openChat";
 import { capabilities } from "@/platform/capabilities";
@@ -43,15 +44,23 @@ export function workspaceChatId(workspaceId: string | null | undefined) {
   );
 }
 
-export async function copyWorkspaceLink(
-  workspaceId: string,
-  target: "workspace" | "chat",
-  copy: (link: string) => Promise<boolean>
-): Promise<boolean> {
-  if (target === "workspace") return copy(linkToWorkspace({ workspaceId }));
-  // A request can expire while the menu is open without either store changing.
+/** A request can expire while a menu is open. Resolve the selected chat on activation. */
+export function currentChatLink(workspaceId: string): WorkspaceLink | null {
   const sessionId = workspaceChatId(workspaceId);
-  return sessionId ? copy(linkToWorkspace({ workspaceId, sessionId })) : false;
+  return sessionId ? { workspaceId, sessionId } : null;
+}
+
+export async function copyWorkspaceLink(link: WorkspaceLink | null) {
+  if (!link) {
+    toast.error("This chat is no longer available");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(linkToWorkspace(link));
+    toast.success("Link copied");
+  } catch {
+    toast.error("Couldn't copy the link");
+  }
 }
 
 function subscribeWorkspaceChat(notify: () => void) {

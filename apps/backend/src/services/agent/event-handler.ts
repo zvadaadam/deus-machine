@@ -56,7 +56,7 @@ import { OpenParts } from "./open-parts";
 
 // ---- Types ----
 
-export type TurnEnd = { event: TurnEndedEvent; status?: TurnOutcomeWrite["status"] };
+export type TurnEnd = { event: TurnEndedEvent; status?: TurnOutcomeWrite["status"]; held: boolean };
 
 export interface AgentEventHandler {
   /** Feed one sequenced wire envelope (post-dedupe, in seq order). */
@@ -78,6 +78,8 @@ export interface AgentEventHandler {
   beginTurn(sessionId: string, turnId: string, opts?: { force?: boolean }): boolean;
   /** Release a rejected local claim, only while this turn is still unadmitted. */
   abortTurn(sessionId: string, turnId: string): boolean;
+  /** Release the held turn. Its end can still settle the chat while it is the last accepted turn. */
+  giveUpTurn(sessionId: string, turnId: string): void;
   /**
    * The turn this handler currently believes is running, if any — set at
    * admission (or at `turn.started` on the replay path) and cleared at its
@@ -251,6 +253,11 @@ export function createAgentEventHandler(
       return sessions.get(sessionId)?.turnId;
     },
 
+    giveUpTurn(sessionId, turnId) {
+      const state = sessions.get(sessionId);
+      if (state?.turnId === turnId) state.turnId = undefined;
+    },
+
     confirmTurn(sessionId, turnId) {
       const state = sessions.get(sessionId);
       if (!state) return;
@@ -417,12 +424,9 @@ export function createAgentEventHandler(
         .otherwise(() => {});
 
       if (!NOT_PUSHED.has(envelope.event.type)) pushEnvelope(envelope);
-      if (envelope.event.type === "turn.ended") {
-        return {
-          event: envelope.event,
-          status: envelope.event.turnId === liveTurnId ? outcome?.status : undefined,
-        };
-      }
+      const event = envelope.event;
+      if (event.type === "turn.ended")
+        return { event, status: outcome?.status, held: event.turnId === liveTurnId };
     },
   };
 }

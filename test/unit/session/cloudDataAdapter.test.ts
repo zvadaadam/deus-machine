@@ -81,6 +81,14 @@ describe("mapToRepoGroups", () => {
       current_session_id: "a", // opening the item opens this session
       provider_workspace_id: "ws_1",
       repo_name: "acme/app",
+      chats: [
+        {
+          id: "a",
+          status: "working",
+          error_category: null,
+          last_user_message_at: "2026-08-31T00:00:00Z",
+        },
+      ],
       session_status: "working", // agnt "running" → deus "working"
     });
   });

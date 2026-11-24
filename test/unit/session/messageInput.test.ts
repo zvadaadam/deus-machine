@@ -370,6 +370,44 @@ describe("sending from the composer", () => {
     }
   );
 
+  it.each([
+    ["a turn record", [{ turnId: "A" }], "older", "A"],
+    ["this window's optimistic bubble", [], "minted-here", "minted-here"],
+    ["a settled turn", [{ turnId: "ended", endedAt: 100 }], "ended", undefined],
+  ] as const)(
+    "steers the turn shown by %s even if a new turn arrives before the write",
+    async (_case, turns, newest, expected) => {
+      client.setQueryData(queryKeys.sessions.detail("test"), {
+        id: "test",
+        status: "working",
+        agent_harness: "claude-code",
+        workspace_kind: "worktree",
+      });
+      const pageKey = queryKeys.sessions.messages("test");
+      client.setQueryData(pageKey, { messages: [{ turn_id: newest }], turns, compactions: [] });
+      vi.spyOn(platform, "isMac", "get").mockReturnValue(true);
+      const connecting = Promise.withResolvers<void>();
+      vi.spyOn(ws, "isConnected").mockReturnValue(false);
+      vi.spyOn(ws, "connect").mockReturnValue(connecting.promise);
+      const call = vi.spyOn(ws, "call").mockResolvedValue({ outcome: "queued" });
+      render(
+        createElement(SessionComposer, { sessionId: "test", initialModel: "claude-code:opus" })
+      );
+      controls.input.mock.lastCall![0].onKeyDown({
+        key: "Enter",
+        metaKey: true,
+        nativeEvent: {},
+        preventDefault: vi.fn(),
+      });
+      client.setQueryData(pageKey, { messages: [], turns: [{ turnId: "B" }], compactions: [] });
+      connecting.resolve();
+      await vi.waitFor(() => expect(call).toHaveBeenCalledOnce());
+      const [[op, input]] = call.mock.calls;
+      expect(op).toBe(api.steerMessage);
+      expect(input.turnId).toBe(expected);
+    }
+  );
+
   it("leaves Enter to the phone keyboard and clears the draft accepted through the Queue button", async () => {
     controls.mobile.mockReturnValueOnce(true);
     const send = vi.fn(() => true);

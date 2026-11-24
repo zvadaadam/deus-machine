@@ -13,6 +13,7 @@ import { composerStore } from "../store/sessionComposerStore";
 
 interface UseSessionActionsProps {
   sessionId: string;
+  steerTurnId?: string;
   model?: string;
   workspaceId?: string;
   workspaceKind?: WorkspaceKind | null;
@@ -36,6 +37,7 @@ interface UseSessionActionsReturn {
 
 export function useSessionActions({
   sessionId,
+  steerTurnId,
   model,
   workspaceId,
   workspaceKind,
@@ -58,14 +60,11 @@ export function useSessionActions({
       const agentHarness = getAgentHarnessForModel(model);
       try {
         await sendMessageMutation.mutateAsync({
-          mode,
+          ...(mode === "steer" ? { mode, turnId: steerTurnId } : { turnId: newTurnId() }),
           sessionId,
           content,
           model: getModelId(model),
           agentHarness,
-          // The send's correlation key: it seeds the optimistic bubble AND
-          // becomes the engine's turnId, so the user echo comes back matchable.
-          turnId: newTurnId(),
           permissionMode:
             composer.planModeEnabled && canPlan(agentHarness, workspaceKind) ? "plan" : undefined,
           thinkingLevel: composer.thinkingLevel,
@@ -84,7 +83,7 @@ export function useSessionActions({
       }
       return true;
     },
-    [sessionId, model, workspaceKind, sendMessageMutation, onMessageSent]
+    [sessionId, steerTurnId, model, workspaceKind, sendMessageMutation, onMessageSent]
   );
 
   const stopSession = useCallback(async () => {

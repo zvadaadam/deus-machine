@@ -167,7 +167,7 @@ describeWithDb("sendMessage", () => {
     expect(startTurn).toHaveBeenCalledTimes(2);
   });
 
-  it("F1: a stop during admission, then a refused start, leaves no turn row: a retry runs anew", async () => {
+  it("a Stop during a refused admission leaves the error and no turn row, so a retry runs anew", async () => {
     vi.spyOn(agentService, "isConnected").mockReturnValue(true);
     let refuse!: (err: unknown) => void;
     const startTurn = vi
@@ -175,18 +175,25 @@ describeWithDb("sendMessage", () => {
       .mockImplementationOnce(() => new Promise<never>((_, reject) => (refuse = reject)))
       .mockResolvedValueOnce(undefined as never);
     const first = send(SESSION, "turn-7");
-    // The stop sees the turn as live (registered before the engine's verdict) and claims it.
+    // The handler has registered this turn, but the engine has not accepted it.
     vi.spyOn(agentService, "liveTurnId").mockReturnValue("turn-7");
-    vi.spyOn(agentService, "stopSession").mockResolvedValue({ outcome: "cancelled" } as never);
-    await run(api.stopSession, { sessionId: SESSION });
+    const cancel = vi
+      .spyOn(agentService, "stopSession")
+      .mockResolvedValue({ outcome: "no_active_turn" });
+    const stopping = run(api.stopSession, { sessionId: SESSION });
     refuse(new WireRequestError(WIRE_ERROR_CODES.shuttingDown, "server is shutting down"));
     await expect(first).rejects.toThrow();
+    await expect(stopping).resolves.toEqual({ unconfirmed: false });
+    expect(cancel).not.toHaveBeenCalled();
+    expect(row(SESSION)).toMatchObject({
+      status: "error",
+      error_message: "server is shutting down",
+    });
     // No turn of that id exists, so a read has no running turn to show.
     expect(db.prepare("SELECT COUNT(*) AS n FROM turns WHERE turn_id = 'turn-7'").get()).toEqual({
       n: 0,
     });
     vi.mocked(agentService.liveTurnId).mockReturnValue(undefined);
-    db.prepare("UPDATE sessions SET status = 'idle' WHERE id = ?").run(SESSION);
     await expect(send(SESSION, "turn-7")).resolves.toEqual({ turnId: "turn-7" });
     expect(startTurn).toHaveBeenCalledTimes(2);
   });

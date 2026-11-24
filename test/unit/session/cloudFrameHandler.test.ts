@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import { makeCloudFrameHandler } from "@/features/session/cloud/cloudFrameHandler";
+import { setDirectQuestionParked } from "@/features/session/cloud/directQuestionState";
 import { buildChatTimeline } from "@/features/session/lib/chatTimeline";
 import {
   flushDeltas,
@@ -9,8 +10,10 @@ import {
   type SessionFold,
 } from "@/features/session/lib/agentEventFold";
 import type { PaginatedMessages } from "@shared/types/session";
+import type { RepoGroup } from "@shared/types/workspace";
 
 const T = 1_700_000_000_000;
+afterEach(() => vi.unstubAllEnvs());
 
 function makeCtx(qc: QueryClient, sessionId: string): AgentStreamContext {
   const folds = new Map<string, SessionFold>();
@@ -636,7 +639,8 @@ describe("makeCloudFrameHandler", () => {
     });
   });
 
-  it("projects the turn lifecycle onto sessions.detail (web-direct has no q: push)", () => {
+  it.each([true, false])("projects the workspace row on hosted web (%s)", (hosted) => {
+    vi.stubEnv("VITE_CLOUD_DIRECT", hosted ? "1" : "0");
     const SESSION = "sess-status";
     const qc = new QueryClient();
     seedEmptyPage(qc, SESSION);
@@ -648,7 +652,16 @@ describe("makeCloudFrameHandler", () => {
     });
     const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
 
+    const workspaceList = ["workspaces", "by-repo"];
+    qc.setQueryData(workspaceList, [
+      {
+        workspaces: [{ current_session_id: SESSION, chats: [{ id: SESSION, status: "working" }] }],
+      },
+    ]);
+    const chatStatus = () =>
+      qc.getQueryData<RepoGroup[]>(workspaceList)?.[0].workspaces[0].chats?.[0].status;
     onFrame({ type: "turn.started", sessionId: SESSION, turnId: "t1", timestamp: T });
+    expect(chatStatus()).toBe("working");
     expect(qc.getQueryData<{ status: string }>(["sessions", "detail", SESSION])!.status).toBe(
       "working"
     );
@@ -663,6 +676,7 @@ describe("makeCloudFrameHandler", () => {
     expect(qc.getQueryData<{ status: string }>(["sessions", "detail", SESSION])!.status).toBe(
       "idle"
     );
+    expect(chatStatus()).toBe(hosted ? "idle" : "working");
 
     onFrame({
       type: "turn.ended",
@@ -676,6 +690,7 @@ describe("makeCloudFrameHandler", () => {
       "error"
     );
 
+    expect(chatStatus()).toBe(hosted ? "error" : "working");
     // `stopReason: "error"` with NO inline error object is a valid terminal
     // shape (the backend classifies it as an internal error) — still an error.
     onFrame({ type: "turn.started", sessionId: SESSION, turnId: "t3", timestamp: T });
@@ -731,7 +746,7 @@ describe("makeCloudFrameHandler", () => {
     expect(d.context_used_percent).toBe(30);
   });
 
-  it("snapshot restates session facts: live turn → working, real message_count", () => {
+  it("restates a snapshot's message count and whether the live turn is working or waiting", () => {
     const SESSION = "sess-snap-facts";
     const qc = new QueryClient();
     seedEmptyPage(qc, SESSION);
@@ -742,7 +757,7 @@ describe("makeCloudFrameHandler", () => {
     });
     const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
 
-    onFrame({
+    const snapshot = {
       type: "session.snapshot",
       state: { sessionId: SESSION, status: "running", currentTurnId: "t-live", turns: [] },
       messages: [
@@ -768,7 +783,8 @@ describe("makeCloudFrameHandler", () => {
         },
       ],
       events: [],
-    } as Record<string, unknown>);
+    };
+    onFrame(snapshot);
 
     const detail = qc.getQueryData<{ status: string; message_count: number }>([
       "sessions",
@@ -778,6 +794,12 @@ describe("makeCloudFrameHandler", () => {
     // A live turn in the snapshot means working NOW; count fixes discovery's zero.
     expect(detail.status).toBe("working");
     expect(detail.message_count).toBe(2);
+
+    setDirectQuestionParked(SESSION, true, qc);
+    onFrame(snapshot);
+    expect(qc.getQueryData(["sessions", "detail", SESSION])).toMatchObject({
+      status: "needs_response",
+    });
   });
 
   it("seeds the live turn as ACTIVE from a snapshot (the one-live-turn send guard reads it)", () => {

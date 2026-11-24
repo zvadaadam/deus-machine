@@ -1,5 +1,8 @@
 import { act, createElement, startTransition } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { RuntimeClient } from "@/platform/ws/runtime-client";
+import { queryKeys } from "@/shared/api/queryKeys";
+import { Socket } from "../../../packages/runtime-client/test/socket";
 import { create } from "zustand";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -13,9 +16,10 @@ import {
   openChat,
   useOpenChatStore,
 } from "@/features/session/lib/openChat";
+import { useUnreadStore } from "@/features/session/store/unreadStore";
 import type { Session } from "@/features/session/types";
 import { useSidebarStore } from "@/features/sidebar/store";
-import { copyWorkspaceLink } from "@/features/workspace/lib/workspaceAddress";
+import { copyWorkspaceLink, currentChatLink } from "@/features/workspace/lib/workspaceAddress";
 import {
   useWorkspaceLayoutStore,
   useWorkspaceStore,
@@ -36,7 +40,6 @@ vi.hoisted(() => {
 vi.mock("@/features/session/api/session.queries", () => ({
   useWorkspaceSessions: () => useList(),
   useCreateSession: () => ({}),
-  useWorkingSessionIds: () => {},
 }));
 vi.mock("@/platform/notifications", () => ({ sendNotification: vi.fn() }));
 vi.mock("@/platform/capabilities", () => ({ capabilities: { nativeNotifications: true } }));
@@ -55,14 +58,20 @@ const chat = (id: string): Session => ({
   updated_at: "2026-01-01 00:00:00",
 });
 let root: Root;
+let tabCache: QueryClient;
 let view: ReturnType<typeof useChatTabs>;
 
 function Tabs() {
+  return createElement(QueryClientProvider, { client: tabCache }, createElement(TabView));
+}
+
+function TabView() {
   view = useChatTabs({ workspaceId: "w", activeSessionId: "a" });
   return null;
 }
 
 beforeEach(() => {
+  tabCache = new QueryClient();
   // This component renders no elements. React needs only a root and window to receive events.
   vi.stubGlobal("window", Object.assign(new EventTarget(), { HTMLIFrameElement: class {} }));
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -83,6 +92,40 @@ function readList(ids: string[]) {
   act(() => useList.setState({ data: ids.map(chat), dataUpdatedAt: Date.now() }));
 }
 
+it("keeps a background tab's session detail current until the tab closes", async () => {
+  const socket = new Socket();
+  const runtime = new RuntimeClient(
+    { host: "mac", account: "a", grant: "local" },
+    { open: () => socket, queryClient: tabCache, heartbeatIntervalMs: 0 }
+  );
+  try {
+    const connected = runtime.connect();
+    await Promise.resolve();
+    socket.open();
+    socket.message({ type: "connected" });
+    await connected;
+    workspaceLayoutActions.setChatTabState("w", ["a", "b"], "a", ["a", "b"]);
+    act(() => root.render(createElement(Tabs)));
+    readList(["a", "b"]);
+    const sub = socket
+      .frames("q:subscribe")
+      .find(
+        (f) => f.resource === "session" && (f.params as { sessionId: string }).sessionId === "b"
+      );
+    expect(sub).toBeDefined();
+    const key = queryKeys.sessions.detail("b");
+    tabCache.setQueryData(key, { ...chat("b"), status: "working" });
+    socket.message({ type: "q:snapshot", id: sub!.id, data: chat("b") });
+    expect(tabCache.getQueryData<Session>(key)?.status).toBe("idle");
+    act(() => view.handleTabChange("tab-b"));
+    expect(socket.frames("q:unsubscribe")).toEqual([]);
+    act(() => view.handleTabClose("tab-b"));
+    expect(socket.frames("q:unsubscribe")).toContainEqual(expect.objectContaining({ id: sub!.id }));
+  } finally {
+    runtime.dispose();
+  }
+});
+
 it.each([
   ["no saved tabs", []],
   ["the first tab saved", ["a"]],
@@ -92,6 +135,7 @@ it.each([
     activeChatTabSessionId: saved[0] ?? null,
   });
   openChat("w", "b");
+  useUnreadStore.setState({ unreadSessionIds: { a: true, b: true } });
   const published: (string | null)[] = [];
   const unsubscribeLayout = useWorkspaceLayoutStore.subscribe(({ layouts }) => {
     published.push(layouts.w.activeChatTabSessionId);
@@ -101,11 +145,13 @@ it.each([
     if (prev.requested.w && !state.requested.w) activeAtAcknowledgment.push(view.activeTabId);
   });
   act(() => root.render(createElement(Tabs)));
+  expect(useUnreadStore.getState().unreadSessionIds).toEqual({ a: true, b: true });
   readList(["a", "b"]);
   unsubscribeLayout();
   unsubscribe();
   expect(view.tabs.map((tab) => tab.id)).toEqual(["tab-a", "tab-b"]);
   expect(view.activeTabId).toBe("tab-b");
+  expect(useUnreadStore.getState().unreadSessionIds).toEqual({ a: true });
   expect(activeAtAcknowledgment).toEqual(["tab-b"]);
   expect(published[0]).toBe("b");
   expect(published).not.toContain("a");
@@ -186,7 +232,8 @@ it("copies the saved chat when a pending request expires while the palette is op
   uiActions.openAutomations();
   uiActions.openCommandPalette();
   const copy = vi.fn().mockResolvedValue(true);
-  const clickCopyChat = () => copyWorkspaceLink(workspaceId, "chat", copy);
+  vi.stubGlobal("navigator", { clipboard: { writeText: copy } });
+  const clickCopyChat = () => copyWorkspaceLink(currentChatLink(workspaceId));
   const pending = useOpenChatStore.getState();
   expect(currentOpenChatRequest(workspaceId)?.sessionId).toBe(requested);
   vi.advanceTimersByTime(10_001);
@@ -224,7 +271,7 @@ it("reveals a workspace under Automations when its failed-start notification is 
     root.render(createElement(QueryClientProvider, { client }, createElement(Notifications)))
   );
   uiActions.openAutomations();
-  const workspace = { id: "failed", repository_id: "repo", slug: "work" };
+  const workspace = { id: "failed", chats: [], repository_id: "repo", slug: "work" };
   for (const state of ["initializing", "error"]) {
     client.setQueryData(
       ["workspaces", "by-repo"],
@@ -237,4 +284,115 @@ it("reveals a workspace under Automations when its failed-start notification is 
   expect(useWorkspaceStore.getState().selectedWorkspaceId).toBe("failed");
   expect(useUIStore.getState().automationsOpen).toBe(false);
   expect(expand).toHaveBeenCalledWith("repo");
+});
+
+it.each(["w", "elsewhere"])(
+  "marks only unseen finished chats unread with %s selected and counts their workspace once",
+  (selectedWorkspaceId) => {
+    vi.useFakeTimers();
+    vi.mocked(sendNotification).mockClear();
+    const client = new QueryClient();
+    useUnreadStore.setState({ unreadSessionIds: {} });
+    useWorkspaceStore.setState({ selectedWorkspaceId });
+    function Notifications() {
+      useGlobalSessionNotifications();
+      return null;
+    }
+    act(() =>
+      root.render(createElement(QueryClientProvider, { client }, createElement(Notifications)))
+    );
+    for (const status of ["working", "idle"]) {
+      client.setQueryData(
+        ["workspaces", "by-repo"],
+        [
+          {
+            repo_name: "Project",
+            workspaces: [
+              {
+                id: "w",
+                slug: "work",
+                current_session_id: "a",
+                session_status: status,
+                chats: [
+                  { id: "a", status },
+                  { id: "b", status },
+                  { id: "c", status },
+                ],
+              },
+            ],
+          },
+        ]
+      );
+    }
+    expect(useUnreadStore.getState().unreadSessionIds).toEqual(
+      selectedWorkspaceId === "w" ? { b: true, c: true } : { a: true, b: true, c: true }
+    );
+    vi.advanceTimersByTime(1500);
+    expect(sendNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "3 agents finished",
+        body: "Project · 1 workspace",
+        sound: "Glass",
+      })
+    );
+  }
+);
+
+it("can reopen a visible chat whose tab was closed before the workspace remounted", () => {
+  workspaceLayoutActions.setChatTabState("w", ["a"], "a", ["a", "b", "c"]);
+  act(() => root.render(createElement(Tabs)));
+  readList(["a", "b", "c"]);
+  const closed = view.closedTabs.find((tab) => tab.sessionId === "b");
+  expect(closed).toBeDefined();
+  act(() => view.handleTabRestore(closed!));
+  expect(view.activeTabId).toBe("tab-b");
+  act(() => view.handleTabClose("tab-b"));
+  expect(view.closedTabs.map((tab) => tab.sessionId)).toEqual(["b", "c"]);
+  readList(["a", "c"]);
+  expect(view.closedTabs.map((tab) => tab.sessionId)).toEqual(["c"]);
+});
+
+it("reopens all 23 closed chats in reverse close order", () => {
+  const ids = ["a", ...Array.from({ length: 23 }, (_, n) => `s${n}`)];
+  workspaceLayoutActions.setChatTabState("w", ids, "a", ids);
+  act(() => root.render(createElement(Tabs)));
+  readList(ids);
+  for (const id of ids.slice(1)) act(() => view.handleTabClose(`tab-${id}`));
+  expect(view.closedTabs.map((tab) => tab.sessionId)).toContain("s0");
+  expect(view.closedTabs).toHaveLength(23);
+  for (const id of ids.slice(1).reverse()) {
+    act(() => view.handleTabRestore(view.closedTabs[0]));
+    expect(view.activeTabId).toBe(`tab-${id}`);
+  }
+});
+
+it("reopens a chat with the label it had when closed in this visit", () => {
+  workspaceLayoutActions.setChatTabState("w", ["b", "a"], "b");
+  act(() => root.render(createElement(Tabs)));
+  readList(["a", "b"]);
+  const label = view.tabs[1].label;
+  const focusKey = view.focusActiveTabKey;
+  expect(label).toMatch(/#2$/);
+  act(() => view.handleTabClose("tab-a"));
+  expect(view.activeTabId).toBe("tab-b");
+  expect(view.focusActiveTabKey).toBe(focusKey + 1);
+  expect(view.closedTabs[0].label).toBe(label);
+  act(() => view.handleTabRestore(view.closedTabs[0]));
+  expect(view.activeTab?.label).toBe(label);
+});
+
+it("reopens a chat that started elsewhere with its live agent and label", () => {
+  workspaceLayoutActions.setChatTabState("w", ["a", "b"], "b");
+  act(() => root.render(createElement(Tabs)));
+  act(() => useList.setState({ data: [chat("a"), { ...chat("b"), message_count: 0 }] }));
+  act(() => view.handleTabClose("tab-b"));
+  expect(view.closedTabs[0]).toMatchObject({ hasStarted: false, label: "New chat" });
+
+  act(() =>
+    useList.setState({ data: [chat("a"), { ...chat("b"), agent_harness: "codex-app-server" }] })
+  );
+  const started = { agentHarness: "codex-app-server", hasStarted: true, label: "Codex #1" };
+  expect(view.closedTabs[0]).toMatchObject(started);
+  act(() => view.handleTabRestore(view.closedTabs[0]));
+  expect(view.activeTab).toMatchObject(started);
 });

@@ -67,22 +67,14 @@ export function ChangesView({
   const diffViewerRef = useRef<ChangesDiffViewerRef>(null);
   const [changesFilter, setChangesFilter] = useState<ChangesFilter>("all-changes");
 
-  const isReady = workspace.state === "ready";
-
   // A provisioning/paused/stopped cloud computer has no sidecar to serve the
   // diff. Compute the gate stage up front so the change poller stays off a down
   // computer, and gate the whole view to the setting-up/wake screen instead of
   // a misleading "No changes yet".
   const gateStage = cloudGateStage(workspace);
-  const canServe = gateStage === null;
 
   // Fetch file change data
-  const { data: fileChangesData, error } = useFileChanges(
-    isReady && canServe ? workspace.id : null,
-    workspace.session_status,
-    isWatched,
-    workspace.state
-  );
+  const { data: fileChangesData, error } = useFileChanges(gateStage ? null : workspace, isWatched);
   const fileChanges = useMemo(() => fileChangesData?.files ?? [], [fileChangesData]);
 
   const filteredFileChanges = fileChanges; // TODO: apply filter when backend supports it

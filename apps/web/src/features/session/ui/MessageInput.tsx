@@ -84,6 +84,7 @@ interface MessageInputProps {
 
   sending: boolean;
   sessionStatus?: SessionStatus;
+  steerTurnId?: string;
   contextTokenCount?: number;
   contextUsedPercent?: number;
   /** Whether the session already has messages (gates model-switch behaviour). */
@@ -222,6 +223,7 @@ export function MessageInput({
   selection,
   sending,
   sessionStatus,
+  steerTurnId,
   contextTokenCount = 0,
   contextUsedPercent = 0,
   hasMessages = false,
@@ -436,6 +438,7 @@ export function MessageInput({
         <QueuedMessageList
           sessionId={sessionId}
           canSteer={canSteer}
+          turnId={steerTurnId}
           editDisabled={sending || editing}
           onEdit={edit}
         />

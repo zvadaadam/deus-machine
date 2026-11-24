@@ -15,6 +15,28 @@ interface WorkspaceStatusMenuProps {
   children: React.ReactNode;
 }
 
+export function WorkspaceStatusChoices({
+  Item = DropdownMenuItem,
+  currentStatus,
+  onStatusChange,
+}: Omit<WorkspaceStatusMenuProps, "children"> & { Item?: typeof DropdownMenuItem }) {
+  return WORKFLOW_STATUSES.map((status) => (
+    <Item
+      key={status}
+      onSelect={() => {
+        if (status !== currentStatus) onStatusChange(status);
+      }}
+    >
+      <span aria-hidden="true">
+        <WorkflowStatusIcon status={status} />
+      </span>
+      <span className={status === currentStatus ? "font-medium" : undefined}>
+        {WORKFLOW_STATUS_CONFIG[status].label}
+      </span>
+    </Item>
+  ));
+}
+
 /**
  * Dropdown menu for changing workspace workflow status.
  * Wraps a trigger element (the status icon) with a menu of all statuses.
@@ -28,22 +50,7 @@ export const WorkspaceStatusMenu = React.memo(function WorkspaceStatusMenu({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-40">
-        {WORKFLOW_STATUSES.map((status) => {
-          const config = WORKFLOW_STATUS_CONFIG[status];
-          const isActive = status === currentStatus;
-          return (
-            <DropdownMenuItem
-              key={status}
-              onSelect={() => {
-                if (!isActive) onStatusChange(status);
-              }}
-              className="flex items-center gap-2"
-            >
-              <WorkflowStatusIcon status={status} size={14} />
-              <span className={isActive ? "font-medium" : undefined}>{config.label}</span>
-            </DropdownMenuItem>
-          );
-        })}
+        <WorkspaceStatusChoices currentStatus={currentStatus} onStatusChange={onStatusChange} />
       </DropdownMenuContent>
     </DropdownMenu>
   );

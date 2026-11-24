@@ -7,7 +7,7 @@
  */
 
 import type { Workspace } from "@/features/workspace/types";
-import { getDisplayStatus } from "./status";
+import { getWorkspaceActivity } from "./status";
 
 /**
  * Clean repository display name by removing username prefix
@@ -85,7 +85,8 @@ const STALE_DAYS = 7;
  */
 export function splitByRecency<T extends Workspace>(
   workspaces: T[],
-  selectedWorkspaceId: string | null | undefined
+  selectedWorkspaceId: string | null | undefined,
+  unread: Readonly<Record<string, boolean>>
 ): [visible: T[], stale: T[]] {
   if (workspaces.length < STALE_HIDE_MIN_WORKSPACES) {
     return [workspaces, []];
@@ -95,8 +96,7 @@ export function splitByRecency<T extends Workspace>(
   const visibleIds = new Set<string>();
 
   for (const ws of workspaces) {
-    const status = getDisplayStatus(ws);
-    const isActive = status !== "idle";
+    const isActive = getWorkspaceActivity(ws, unread).status !== "idle";
     const isSelected = ws.id === selectedWorkspaceId;
     const isRecent = new Date(ws.updated_at).getTime() >= cutoff;
 

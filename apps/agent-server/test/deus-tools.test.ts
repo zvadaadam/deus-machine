@@ -54,7 +54,10 @@ describe("deusTools", () => {
     const diff = server.tools.find((tool) => tool.name === "GetWorkspaceDiff")!;
     expect(diff.inputSchema).toMatchObject({
       type: "object",
-      properties: { file: { type: "string" }, stat: { type: "boolean" } },
+      properties: {
+        file: { type: "string", description: expect.stringContaining("relative to the workspace") },
+        stat: { type: "boolean" },
+      },
     });
     expect(diff.inputSchema).not.toHaveProperty("$schema");
     // A call's arguments are checked before the tool runs.
@@ -134,10 +137,8 @@ describe("deusTools", () => {
   // ==========================================================================
 
   describe("GetWorkspaceDiff", () => {
-    it("returns diff content from EventBroadcaster", async () => {
-      mockFrontendAPI.requestGetDiff.mockResolvedValue({
-        diff: "--- a/file.ts\n+++ b/file.ts\n@@ -1 +1 @@\n-old\n+new",
-      });
+    it("lists changed paths when called without a file or stat", async () => {
+      mockFrontendAPI.requestGetDiff.mockResolvedValue({ diff: "file.ts\nother.ts" });
 
       const tool = getRegisteredTools(server)["GetWorkspaceDiff"];
       const result = await tool.handler({});
@@ -147,20 +148,8 @@ describe("deusTools", () => {
         file: undefined,
         stat: undefined,
       });
-      expect(result.content[0].text).toContain("--- a/file.ts");
-    });
-
-    it("passes file parameter for single-file diff", async () => {
-      mockFrontendAPI.requestGetDiff.mockResolvedValue({ diff: "file diff" });
-
-      const tool = getRegisteredTools(server)["GetWorkspaceDiff"];
-      await tool.handler({ file: "/path/to/file.ts" });
-
-      expect(mockFrontendAPI.requestGetDiff).toHaveBeenCalledWith({
-        sessionId: SESSION_ID,
-        file: "/path/to/file.ts",
-        stat: undefined,
-      });
+      expect(tool.description).toContain("lists the changed paths");
+      expect(result.content[0].text).toBe("file.ts\nother.ts");
     });
 
     it("passes stat parameter for stat output", async () => {

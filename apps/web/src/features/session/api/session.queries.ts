@@ -3,13 +3,7 @@
  * TanStack Query hooks for Claude Code session management
  */
 
-import {
-  useQuery,
-  useQueries,
-  useMutation,
-  useIsMutating,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useQuery, useMutation, useIsMutating, useQueryClient } from "@tanstack/react-query";
 import { produce } from "immer";
 import { api } from "@shared/api";
 import type { PaginatedMessages } from "@shared/types/session";
@@ -30,7 +24,6 @@ import { getDirectSession } from "../cloud/directSessionRegistry";
 import { uuidv7 } from "@shared/lib/uuid";
 import type { Session, SessionStatus } from "../types";
 import type { RepoGroup } from "@shared/types/workspace";
-import { useEffect, useMemo } from "react";
 import { track } from "@/platform/analytics";
 
 import { call, connect, isConnected, OpError } from "@/platform/ws";
@@ -107,47 +100,6 @@ export function useEditQueuedMessage(sessionId: string) {
     },
   });
   return { edit, editing };
-}
-
-/**
- * Subscribe to per-session working status for multiple sessions at once.
- * Used by the tab bar to show per-tab spinners and unread detection.
- *
- * Subscribes each session to WS push so status transitions arrive in real
- * time — even for non-active tabs. Without this, only the active tab
- * (via useSession) receives WS updates; background tabs rely on stale
- * HTTP cache and never trigger unread detection.
- */
-export function useWorkingSessionIds(sessionIds: string[]): Set<string> {
-  const queryClient = useQueryClient();
-
-  // WS-subscribe all tab sessions so status pushes keep the cache fresh.
-  const runtime = runtimeForQueryClient(queryClient);
-  const stableKey = useMemo(() => sessionIds.join(","), [sessionIds]);
-  useEffect(() => {
-    if (!sessionIds.length || !runtime) return;
-    const unsubs = sessionIds.map((id) =>
-      runtime.retainQuery(api.session.name, { sessionId: id }, queryKeys.sessions.detail(id))
-    );
-    return () => unsubs.forEach((u) => u());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stableKey, runtime]);
-
-  const queries = useQueries({
-    queries: sessionIds.map((id) => ({
-      ...sessionDetailQueryOptions(id),
-      // A session that disappears arrives as null.
-      select: (data: Session | null): SessionStatus | undefined => data?.status,
-    })),
-  });
-
-  return useMemo(() => {
-    const ids = new Set<string>();
-    sessionIds.forEach((id, i) => {
-      if (queries[i]?.data === "working") ids.add(id);
-    });
-    return ids;
-  }, [queries, sessionIds]);
 }
 
 /**
@@ -263,18 +215,15 @@ export function newTurnId(): string {
   return uuidv7();
 }
 
-export interface SendMessageVariables {
-  mode?: "steer";
+export type SendMessageVariables = {
   sessionId: string;
   content: string;
   model: string;
   agentHarness: AgentHarness;
-  /** Minted by the caller with `newTurnId()` — see useSessionActions. */
-  turnId: string;
   permissionMode?: string;
   /** Every turn names one: a cloud turn without it is refused (AGNT chooses none). */
   thinkingLevel: string;
-}
+} & ({ mode?: undefined; turnId: string } | { mode: "steer"; turnId?: string });
 
 /** A send predicts its echo when it expects to start a turn. The host decides whether it does. */
 export function useSendMessage() {
@@ -291,7 +240,7 @@ export function useSendMessage() {
       // which falls through to onError's rollback. No credential rides the wire —
       // agnt resolves the org key at dispatch.
       const direct = getDirectSession(sessionId, queryClient);
-      if (direct) {
+      if (direct && mode !== "steer") {
         direct.sendMessage(content, turnId, { model, agentHarness, thinkingLevel });
         return;
       }
@@ -310,7 +259,7 @@ export function useSendMessage() {
       if (!backend.isConnected()) await backend.connect();
       try {
         if (mode === "steer") {
-          await backend.call(api.steerMessage, input);
+          await backend.call(api.steerMessage, { ...input, turnId });
           return;
         }
         return await backend.call(api.sendMessage, { ...input, turnId });
@@ -363,12 +312,12 @@ export function useSendMessage() {
 
       patchWorkspaceSessionStatus(queryClient, sessionId, "working");
 
-      return { previousWorkspaceByRepo };
+      return { previousWorkspaceByRepo, turnId };
     },
 
-    onSuccess: (result, { sessionId, turnId }, context) => {
+    onSuccess: (result, { sessionId }, context) => {
       if (!result?.queued || !context) return;
-      dropOptimisticMessage(queryClient, sessionId, turnId);
+      dropOptimisticMessage(queryClient, sessionId, context.turnId);
       void queryClient.invalidateQueries({ queryKey: ["workspaces", "by-repo"] });
     },
 
@@ -396,7 +345,7 @@ export function useSendMessage() {
         }
       }
       if (!context) return;
-      dropOptimisticMessage(queryClient, variables.sessionId, variables.turnId);
+      dropOptimisticMessage(queryClient, variables.sessionId, context.turnId);
       // Put the sidebar's status back — by REFETCH after a server rejection,
       // or uncertain delivery, and by snapshot only for failures before dispatch.
       // See sendRollback.ts.

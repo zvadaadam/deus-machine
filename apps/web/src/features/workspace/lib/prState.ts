@@ -51,6 +51,8 @@ export function derivePRActionState(
   let failure = lookup.isError ? "unknown" : lookup.data?.error;
   if (ghStatus?.isInstalled === false) failure = "gh_not_installed";
   else if (ghStatus?.isAuthenticated === false) failure = "gh_not_authenticated";
+  else if (workspace?.pr_number && lookup.data?.conclusive === false && !lookup.data.has_pr)
+    failure ??= "unknown";
 
   // The row keeps the last known lifecycle, or the link a PR workspace started with.
   let prStatus = failure ? undefined : lookup.data;

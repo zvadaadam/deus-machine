@@ -26,6 +26,22 @@ function isUnfinished(turn: SessionTurn): boolean {
   return turn.endedAt === undefined && !turn.stopReason;
 }
 
+export function openConversationTurn(
+  newestTurnId: string | null | undefined,
+  working: boolean,
+  records: readonly SessionTurn[] = []
+): ConversationState["turns"][number] | undefined {
+  // An unfinished last record wins. A replay can append an older end, so otherwise use the
+  // newest message's record, or the chat's working status until that record arrives.
+  const last = records.at(-1);
+  const record =
+    last && isUnfinished(last) ? last : records.find((turn) => turn.turnId === newestTurnId);
+  const turnId = record?.turnId ?? newestTurnId;
+  const open = record ? isUnfinished(record) : working;
+  if (!turnId || !open) return undefined;
+  return { turnId, startedAt: record?.startedAt ?? 0, status: "active", errors: [] };
+}
+
 export function conversationView(
   messages: Message[],
   working: boolean,
@@ -45,19 +61,10 @@ export function conversationView(
     startedAt: message.sent_at ? Date.parse(message.sent_at) : 0,
   }));
 
-  // An unfinished last record wins. A replay can append an older end, so otherwise use the
-  // newest message's record, or the chat's working status until that record arrives.
-  const last = records.at(-1);
-  const record =
-    last && isUnfinished(last) ? last : records.find((turn) => turn.turnId === newestTurnId);
-  const turnId = record?.turnId ?? newestTurnId;
-  const open = record ? isUnfinished(record) : working;
+  const open = openConversationTurn(newestTurnId, working, records);
   return {
     timeline,
-    turns:
-      turnId && open
-        ? [{ turnId, startedAt: record?.startedAt ?? 0, status: "active", errors: [] }]
-        : [],
+    turns: open ? [open] : [],
     permissions: [],
     elicitations: [],
     totals: { input: 0, output: 0 },

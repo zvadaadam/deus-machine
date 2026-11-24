@@ -26,7 +26,7 @@ import { isCloudDirectEnabled } from "./cloudDirectFlag";
 /**
  * The canonical `sessions.detail` query — WS-kept-fresh (`staleTime: Infinity`),
  * HTTP `queryFn` as the initial-load fallback. The one definition every reader
- * spreads (`useSession`, `useWorkingSessionIds`, this hook, the hover prefetch),
+ * spreads (`useSession`, this hook, the hover prefetch),
  * so there is a single source of truth for how that row is fetched + cached.
  */
 export function sessionDetailQueryOptions(sessionId: string) {

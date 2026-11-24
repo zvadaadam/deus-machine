@@ -1,4 +1,15 @@
-import { describe, it, expect } from "vitest";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { RuntimeClient } from "@/platform/ws/runtime-client";
+import { api } from "@shared/api";
+import {
+  useAgentRpcHandler,
+  type PendingAgentRequest,
+} from "@/features/session/hooks/useAgentRpcHandler";
+import { setDirectQuestionParked } from "@/features/session/cloud/directQuestionState";
+import { Socket } from "../../../packages/runtime-client/test/socket";
+import { describe, it, expect, vi } from "vitest";
 import {
   toolRequestFromElicitation,
   buildElicitationResponseFrame,
@@ -107,4 +118,82 @@ describe("buildElicitationResponseFrame (renderer answer → agnt elicitation.re
       outcome: { action: "decline" },
     });
   });
+});
+
+it("keeps a live question through reset and replay, withdraws the missing plan and retains a direct question", async () => {
+  vi.stubGlobal("window", Object.assign(new EventTarget(), { HTMLIFrameElement: class {} }));
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const root = createRoot(Object.assign(new EventTarget(), { nodeType: 9 }) as Document);
+  const socket = new Socket();
+  const runtime = new RuntimeClient(
+    { host: "mac", account: "a", grant: "local" },
+    { open: () => socket, heartbeatIntervalMs: 0 }
+  );
+  let shown: Map<string, PendingAgentRequest>;
+  function Reader() {
+    shown = useAgentRpcHandler({ sessionWorkspaces: new Map() }).pendingRequests;
+    return null;
+  }
+  try {
+    const connected = runtime.connect();
+    await Promise.resolve();
+    socket.open();
+    socket.message({ type: "connected" });
+    await connected;
+    act(() =>
+      root.render(
+        createElement(QueryClientProvider, { client: runtime.queryClient }, createElement(Reader))
+      )
+    );
+    const id = socket.frames("q:subscribe").find((sub) => sub.resource === "toolRequests")!.id;
+    function request(sessionId: string, method: string) {
+      return {
+        type: "request" as const,
+        request: {
+          requestId: `request-${sessionId}`,
+          sessionId,
+          method,
+          params: { sessionId, question: "Ready?" },
+          timeoutMs: 60_000,
+        },
+      };
+    }
+    function present(sessionId: string, method: string) {
+      socket.message({ type: "q:event", id, data: request(sessionId, method) });
+    }
+    setDirectQuestionParked("direct", true, runtime.queryClient);
+    act(() => {
+      runtime.publish(
+        api.toolRequests,
+        { sessionId: "direct" },
+        request("direct", "askUserQuestion")
+      );
+      present("gone", "exitPlanMode");
+      present("pending", "askUserQuestion");
+    });
+    const before = shown!;
+    expect([...before.keys()]).toEqual(["direct", "gone", "pending"]);
+    act(() => {
+      socket.message({ type: "server_reconnecting" });
+      socket.message({ type: "connected" });
+    });
+    expect(shown!).toBe(before);
+    act(() =>
+      socket.message({
+        type: "q:event",
+        id,
+        data: { type: "pending", requestIds: ["request-pending"] },
+      })
+    );
+    expect([...shown!.keys()]).toEqual(["direct", "pending"]);
+    act(() => present("pending", "askUserQuestion"));
+    expect(shown!.get("pending")).toBe(before.get("pending"));
+    expect(shown!.get("direct")).toBe(before.get("direct"));
+    act(() => socket.message({ type: "q:event", id, data: { type: "pending", requestIds: [] } }));
+    expect([...shown!.keys()]).toEqual(["direct"]);
+  } finally {
+    act(() => root.unmount());
+    runtime.dispose();
+    vi.unstubAllGlobals();
+  }
 });

@@ -16,8 +16,10 @@
 // Pending state is stored in a Map<sessionId, PendingRequest> so multiple concurrent
 // agent sessions can each have their own pending request simultaneously.
 
+import { useQueryClient } from "@tanstack/react-query";
 import { match } from "ts-pattern";
 import { useEffect, useLayoutEffect, useCallback, useRef, useState } from "react";
+import { hasParkedDirectQuestion } from "../cloud/directQuestionState";
 import { getErrorMessage } from "@shared/lib/errors";
 import { api } from "@shared/api";
 import { call } from "@/platform/ws";
@@ -132,7 +134,7 @@ export function useAgentRpcHandler(
   context: AgentRpcContext,
   onPendingChange?: (pending: Map<string, PendingAgentRequest>) => void
 ) {
-  // Map of sessionId → pending request awaiting user interaction
+  const queryClient = useQueryClient();
   const [pendingRequests, setPendingRequests] = useState<Map<string, PendingAgentRequest>>(
     () => new Map()
   );
@@ -166,26 +168,28 @@ export function useAgentRpcHandler(
     onPendingChangeRef.current?.(pendingRequests);
   }, [pendingRequests]);
 
-  const setPendingAndNotify = useCallback(
-    (updater: (prev: Map<string, PendingAgentRequest>) => Map<string, PendingAgentRequest>) => {
-      setPendingRequests((prev) => updater(prev));
-    },
-    []
-  );
-
-  // The direct lane retracts a question it can no longer answer (its turn
-  // ended while the socket was down): drop that request's overlay, or a stale
-  // card stays answerable for an agent that has moved on.
   useStream(api.toolRequests, {}, (event) => {
-    if (event.type !== "cancel") return;
-    const { sessionId, requestId } = event;
-    setPendingAndNotify((prev) => {
-      const current = prev.get(sessionId);
-      if (!current || current.wsRequestId !== requestId) return prev;
-      const next = new Map(prev);
-      next.delete(sessionId);
-      return next;
-    });
+    if (event.type === "cancel") {
+      const { sessionId, requestId } = event;
+      setPendingRequests((prev) => {
+        if (prev.get(sessionId)?.wsRequestId !== requestId) return prev;
+        const next = new Map(prev);
+        next.delete(sessionId);
+        return next;
+      });
+    } else if (event.type === "pending") {
+      const pending = new Set(event.requestIds);
+      setPendingRequests((prev) => {
+        const kept = new Map(
+          [...prev].filter(
+            ([id, card]) =>
+              pending.has(card.wsRequestId) ||
+              (card.type === "askUserQuestion" && hasParkedDirectQuestion(id, queryClient))
+          )
+        );
+        return kept.size === prev.size ? prev : kept;
+      });
+    }
   });
 
   // ============================================================================
@@ -206,7 +210,7 @@ export function useAgentRpcHandler(
         console.log("[AgentRPC] exitPlanMode pending for session:", sessionId);
       }
 
-      setPendingAndNotify((prev) => {
+      setPendingRequests((prev) => {
         // Sent again to a window that follows the chat anew: already shown.
         if (prev.get(sessionId)?.wsRequestId === wsRequestId) return prev;
         const next = new Map(prev);
@@ -219,7 +223,7 @@ export function useAgentRpcHandler(
         return next;
       });
     },
-    [setPendingAndNotify]
+    [setPendingRequests]
   );
 
   // ============================================================================
@@ -254,7 +258,7 @@ export function useAgentRpcHandler(
         );
       }
 
-      setPendingAndNotify((prev) => {
+      setPendingRequests((prev) => {
         // Sent again to a window that follows the chat anew: already shown.
         if (prev.get(sessionId)?.wsRequestId === wsRequestId) return prev;
         const next = new Map(prev);
@@ -267,7 +271,7 @@ export function useAgentRpcHandler(
         return next;
       });
     },
-    [setPendingAndNotify]
+    [setPendingRequests]
   );
 
   // ============================================================================
@@ -358,7 +362,7 @@ export function useAgentRpcHandler(
       const pending = pendingRequestsRef.current.get(sessionId);
       if (!pending || pending.type !== "exitPlanMode") return;
 
-      setPendingAndNotify((prev) => {
+      setPendingRequests((prev) => {
         const next = new Map(prev);
         next.delete(sessionId);
         return next;
@@ -366,7 +370,7 @@ export function useAgentRpcHandler(
 
       sendToolResponse(pending.wsRequestId, { approved, turnId });
     },
-    [setPendingAndNotify]
+    [setPendingRequests]
   );
 
   /**
@@ -378,7 +382,7 @@ export function useAgentRpcHandler(
       const pending = pendingRequestsRef.current.get(sessionId);
       if (!pending || pending.type !== "askUserQuestion") return;
 
-      setPendingAndNotify((prev) => {
+      setPendingRequests((prev) => {
         const next = new Map(prev);
         next.delete(sessionId);
         return next;
@@ -386,7 +390,7 @@ export function useAgentRpcHandler(
 
       sendToolResponse(pending.wsRequestId, { answers });
     },
-    [setPendingAndNotify]
+    [setPendingRequests]
   );
 
   // ============================================================================

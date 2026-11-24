@@ -24,6 +24,7 @@ import {
   flushDeltas,
   hydrateConversation,
   messagesKey,
+  patchWorkspaceSessionStatus,
   pruneFolds,
   refetchMessages,
   routeEnvelope,
@@ -1012,4 +1013,41 @@ describe("pruneFolds", () => {
     // that fold could only ever have grown stale in place.
     expect([...h.ctx.folds.keys()]).toEqual([SESSION]);
   });
+});
+
+it("updates the direct chat on its workspace without switching the selected chat", () => {
+  const qc = new QueryClient();
+  const key = ["workspaces", "by-repo", "ready"];
+  const chats = [
+    { id: "selected", status: "idle" },
+    { id: "direct", status: "working" },
+  ];
+  qc.setQueryData(key, [
+    { workspaces: [{ current_session_id: "selected", session_status: "idle", chats }] },
+  ]);
+  patchWorkspaceSessionStatus(qc, "direct", "needs_response");
+  expect(qc.getQueryData(key)).toMatchObject([
+    {
+      workspaces: [
+        {
+          session_status: "idle",
+          chats: [chats[0], { id: "direct", status: "needs_response" }],
+        },
+      ],
+    },
+  ]);
+  patchWorkspaceSessionStatus(qc, "selected", "working");
+  expect(qc.getQueryData(key)).toMatchObject([
+    {
+      workspaces: [
+        {
+          session_status: "working",
+          chats: [
+            { id: "selected", status: "working" },
+            { id: "direct", status: "needs_response" },
+          ],
+        },
+      ],
+    },
+  ]);
 });

@@ -9,6 +9,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { shallow } from "zustand/shallow";
+import { hashKey, useQueryClient } from "@tanstack/react-query";
+import { api } from "@shared/api";
+import { queryKeys } from "@/shared/api/queryKeys";
+import { runtimeForQueryClient } from "@/platform/ws/runtime-client";
 import { getErrorMessage } from "@shared/lib/errors";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useCreateSession, useWorkspaceSessions } from "@/features/session/api/session.queries";
@@ -18,6 +22,7 @@ import {
   workspaceLayoutActions,
 } from "@/features/workspace/store/workspaceLayoutStore";
 import type { Session } from "@/features/session/types";
+import { unreadActions } from "@/features/session/store/unreadStore";
 import type { ChatTab, ClosedSessionTab, SessionChatTab } from "@/features/session/ui/tabs";
 import { getChatTabSessionId, isSessionChatTab } from "@/features/session/ui/tabs";
 import {
@@ -35,8 +40,6 @@ import {
   openChatDone,
   useOpenChatStore,
 } from "@/features/session/lib/openChat";
-
-const MAX_CLOSED_TABS = 20;
 
 function createClosedTabId(sessionId: string): string {
   return `${sessionId}-${Date.now()}-${crypto.randomUUID()}`;
@@ -129,7 +132,6 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     // Only act when transitioning from null/undefined → real session ID
     if (prev || !activeSessionId) return;
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time patch when workspace init completes
     setMainTabs((tabs) => {
       const defaultIdx = tabs.findIndex((t) => t.id === "tab-default");
       if (defaultIdx === -1) return tabs;
@@ -265,7 +267,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       openChatDone(workspaceId, requested.id);
       return;
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- consume a navigation request
+
     setMainTabs((tabs) =>
       tabs.some((t) => isSessionChatTab(t) && t.sessionId === target)
         ? tabs
@@ -284,10 +286,26 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
   ]);
 
   const shownSessionId = activeTabSessionId ?? activeSessionId ?? null;
+  const openIds = useMemo(
+    () => mainTabs.filter(isSessionChatTab).map((tab) => tab.sessionId),
+    [mainTabs]
+  );
+  const runtime = runtimeForQueryClient(useQueryClient());
+  const detailKey = hashKey(openIds);
+  useEffect(() => {
+    if (!runtime) return;
+    const releases = openIds.map((sessionId) =>
+      runtime.retainQuery(api.session.name, { sessionId }, queryKeys.sessions.detail(sessionId))
+    );
+    return () => releases.forEach((release) => release());
+    // A tab's label can change while its session stays open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runtime, detailKey]);
+
   useEffect(() => {
     // A route's layout effect can request a chat after this render, before this effect runs.
     if (!hydrated || currentOpenChatRequest(workspaceId)) return;
-    const openIds = mainTabs.filter(isSessionChatTab).map((tab) => tab.sessionId);
+    if (shownSessionId) unreadActions.markRead(shownSessionId);
     const knownIds = [...seen.current];
     const saved = useWorkspaceLayoutStore.getState().layouts[workspaceId];
     // React can replay a restore with a new tab array while the address change is pending.
@@ -298,7 +316,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     )
       return;
     workspaceLayoutActions.setChatTabState(workspaceId, openIds, shownSessionId, knownIds);
-  }, [mainTabs, shownSessionId, workspaceId, requested, hydrated]);
+  }, [openIds, shownSessionId, workspaceId, requested, hydrated]);
 
   // --- Tab handlers ---
 
@@ -334,23 +352,21 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
           initialModel: closingTab.initialModel,
           closedAt: Date.now(),
         };
-        setClosedTabs((prevClosed) =>
-          [
-            entry,
-            ...prevClosed.filter(
-              (closedTab) =>
-                closedTab.sessionId !== closingTab.sessionId &&
-                !openSessionIds.has(closedTab.sessionId)
-            ),
-          ].slice(0, MAX_CLOSED_TABS)
-        );
+        setClosedTabs((prev) => [
+          entry,
+          ...prev.filter(
+            (closedTab) =>
+              closedTab.sessionId !== closingTab.sessionId &&
+              !openSessionIds.has(closedTab.sessionId)
+          ),
+        ]);
       }
 
       if (tabId === activeMainTabId && newTabs.length > 0) {
         const targetIndex = currentIndex > 0 ? currentIndex - 1 : 0;
         setActiveMainTabId(newTabs[targetIndex].id);
-        setFocusActiveTabKey((prevKey) => prevKey + 1);
       }
+      setFocusActiveTabKey((prevKey) => prevKey + 1);
     },
     [activeMainTabId, mainTabs]
   );
@@ -466,10 +482,19 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
   // --- Derived state ---
 
   const openSessionIds = useMemo(() => getOpenSessionIds(mainTabs), [mainTabs]);
-  const restorableClosedTabs = useMemo(
-    () => closedTabs.filter((closedTab) => !openSessionIds.has(closedTab.sessionId)),
-    [closedTabs, openSessionIds]
-  );
+  const restorableClosedTabs = useMemo(() => {
+    const sessions = workspaceSessions ?? [];
+    const sequences = computeSequences(sessions);
+    const order = new Map(closedTabs.map((tab, index) => [tab.sessionId, index]));
+    return sessions
+      .filter((session) => !openSessionIds.has(session.id))
+      .sort((a, b) => (order.get(a.id) ?? order.size) - (order.get(b.id) ?? order.size))
+      .map((session) => {
+        const closed = closedTabs[order.get(session.id) ?? closedTabs.length];
+        if (closed && (closed.hasStarted || session.message_count === 0)) return closed;
+        return { ...sessionToTab(session, sequences.get(session.id) ?? 1), closedAt: 0 };
+      });
+  }, [workspaceSessions, openSessionIds, closedTabs]);
 
   // --- Keyboard shortcuts ---
 
@@ -530,6 +555,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     tabs: mainTabs,
     activeTabId: activeMainTabId,
     activeTab,
+    shownSessionId,
     closedTabs: restorableClosedTabs,
     focusActiveTabKey,
     handleTabChange,

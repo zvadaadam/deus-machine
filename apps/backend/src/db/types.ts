@@ -20,6 +20,7 @@ import type {
   WorkspaceState,
   WorkspaceStatus,
 } from "@shared/enums";
+import type { WorkspaceChat } from "@shared/types/workspace";
 import type { ErrorCategory } from "@shared/protocol-types";
 
 // ─── repositories ────────────────────────────────────────────
@@ -122,10 +123,10 @@ export interface WorkspaceWithDetailsRow {
   /** Repository remote when the query includes it (e.g. setup and its retry). */
   git_origin_url?: string | null;
 
+  /** The list, detail and delta reads include the workspace's visible chats. */
+  chats?: WorkspaceChat[];
   // From sessions JOIN (null when no active session)
   session_status: SessionStatus | null;
-  session_error_category: string | null;
-  session_error_message: string | null;
   latest_message_sent_at: string | null;
   /** The first chat's id, minted with the workspace, and that chat's own status and when it was last spoken to. */
   first_session_id?: string | null;

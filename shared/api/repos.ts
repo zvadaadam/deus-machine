@@ -129,7 +129,7 @@ export type RepoRemovalConfirmation = z.infer<typeof removalConfirmation>;
 export const repoRemoval = read({
   name: "repoRemoval",
   input: repoId,
-  output: out<RepoRemovalConfirmation>(),
+  output: out<RepoRemovalConfirmation & { folderExists: boolean }>(),
 });
 
 export const removeRepo = write({

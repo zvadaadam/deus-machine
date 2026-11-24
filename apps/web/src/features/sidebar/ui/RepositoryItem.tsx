@@ -1,5 +1,5 @@
-import { useMemo } from "react";
 import { Collapse } from "@/components/ui/collapse";
+import type { ComponentPropsWithRef } from "react";
 import { offersNewFromBranch } from "../lib/location";
 import { Plus, ChevronRight, ChevronDown, GitPullRequest } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
@@ -10,7 +10,6 @@ import { cn } from "@/shared/lib/utils";
 import { CLOUD_PROJECT_REMOVAL_REASON } from "@shared/types/repository";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
-import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
 import { getCleanRepoName, splitByRecency } from "../lib/utils";
 import { sortByStatusPriority } from "../lib/status";
 import { useSidebarStore } from "../store/sidebarStore";
@@ -32,6 +31,7 @@ import { DeusRepositoryBanner } from "./DeusRepositoryBanner";
  *     └── WorkspaceItem[]
  */
 export function RepositoryItem({
+  dragHandle,
   repository,
   isCollapsed,
   selectedWorkspaceId,
@@ -45,29 +45,12 @@ export function RepositoryItem({
   onStatusChange,
   diffStatsMap,
   sidebarExpanded,
-}: RepositoryItemProps) {
+}: RepositoryItemProps & { dragHandle: ComponentPropsWithRef<"div"> }) {
   const repoName = getCleanRepoName(repository.repo_name);
   // Web-direct can't create workspaces (no Mac backend) — the hover actions
   // would only open a picker with nothing in it.
   const canCreate = !isCloudDirectWebMode();
 
-  // Build set of workspace IDs that have any unread tab session,
-  // checking all tab sessions (matching WorkspaceItem's logic).
-  const unreadMap = useUnreadStore((s) => s.unreadSessionIds);
-  const layouts = useWorkspaceLayoutStore((s) => s.layouts);
-  const unreadWorkspaceIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const ws of repository.workspaces) {
-      const tabIds = layouts[ws.id]?.chatTabSessionIds;
-      const sessionIds = tabIds?.length
-        ? tabIds
-        : ws.current_session_id
-          ? [ws.current_session_id]
-          : [];
-      if (sessionIds.some((sid) => unreadMap[sid])) ids.add(ws.id);
-    }
-    return ids.size > 0 ? ids : undefined;
-  }, [repository.workspaces, unreadMap, layouts]);
   // Detect the deus repo by clean name
   const isDeus = repoName === "deus";
   const workspaceCount = repository.workspaces.filter((w) => w.state !== "archived").length;
@@ -78,10 +61,16 @@ export function RepositoryItem({
         data-state={isCollapsed ? "closed" : "open"}
         className="group/repository-item relative"
       >
-        <CollapsibleTrigger asChild>
+        <CollapsibleTrigger
+          asChild
+          onKeyDown={({ key, target, currentTarget, repeat }) => {
+            if (key !== "Enter" || target !== currentTarget || repeat) return;
+            if (!dragHandle["aria-pressed"]) currentTarget.click();
+          }}
+        >
           <SidebarRow
+            {...dragHandle}
             variant="repo"
-            role="button"
             aria-label={`Toggle ${repoName} workspaces`}
             className="cursor-grab"
           >
@@ -164,7 +153,6 @@ export function RepositoryItem({
                   repository={repository}
                   isDeus={isDeus}
                   selectedWorkspaceId={selectedWorkspaceId}
-                  unreadWorkspaceIds={unreadWorkspaceIds}
                   diffStatsMap={diffStatsMap}
                   onNewWorkspace={onNewWorkspace}
                   onWorkspaceClick={onWorkspaceClick}
@@ -191,7 +179,6 @@ interface RepositoryWorkspaceListProps {
   repository: RepoGroup;
   isDeus: boolean;
   selectedWorkspaceId: string | null;
-  unreadWorkspaceIds?: Set<string>;
   diffStatsMap?: Record<string, DiffStats>;
   onNewWorkspace: (repoId?: string) => void;
   onWorkspaceClick: (workspace: Workspace) => void;
@@ -203,7 +190,6 @@ function RepositoryWorkspaceList({
   repository,
   isDeus,
   selectedWorkspaceId,
-  unreadWorkspaceIds,
   diffStatsMap,
   onNewWorkspace,
   onWorkspaceClick,
@@ -215,12 +201,13 @@ function RepositoryWorkspaceList({
   // Same gate as the header "+": no creation prompts on a build that can't create.
   const canCreate = !isCloudDirectWebMode();
 
+  const unread = useUnreadStore((s) => s.unreadSessionIds);
   const sortedWorkspaces = sortByStatusPriority(
     repository.workspaces.filter((w) => w.state !== "archived"),
-    unreadWorkspaceIds
+    unread
   );
 
-  const [visible, stale] = splitByRecency(sortedWorkspaces, selectedWorkspaceId);
+  const [visible, stale] = splitByRecency(sortedWorkspaces, selectedWorkspaceId, unread);
   const hasStale = stale.length > 0;
   const displayedWorkspaces = hasStale && !isExpanded ? visible : sortedWorkspaces;
 
