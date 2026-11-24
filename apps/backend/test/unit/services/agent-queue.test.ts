@@ -1832,11 +1832,16 @@ describe("continuing a chat after a usage limit", () => {
   beforeEach(() => vi.useFakeTimers({ now }));
   afterEach(() => vi.restoreAllMocks());
 
-  it("uses the latest future rejected Claude window from the folded reports", async () => {
-    await run(api.sendMessage, { ...message("A"), turnId: "A", agentHarness: "claude-code" });
-    windows([{ id: "five_hour", status: "limited", resetsAt }]);
+  it("uses the latest rejected Claude window reported during the failing turn", async () => {
+    const claude = (id: string) =>
+      run(api.sendMessage, { ...message(id), turnId: id, agentHarness: "claude-code" });
+    await claude("older");
+    windows([{ id: "seven_day_sonnet", status: "limited", resetsAt: resetsAt + 60 * minute }]);
+    end("older");
+    await claude("A");
+    windows([{ id: "week", status: "limited", resetsAt: resetsAt + minute }]);
     windows([
-      { id: "week", status: "limited", resetsAt: resetsAt + minute },
+      { id: "five_hour", status: "limited", resetsAt },
       { id: "warning", status: "warning", usedPercent: 100, resetsAt: resetsAt + 2 * minute },
       { id: "expires", status: "limited", resetsAt: now },
       { id: "ok", status: "ok", usedPercent: 100, resetsAt: resetsAt + 3 * minute },
@@ -1848,7 +1853,54 @@ describe("continuing a chat after a usage limit", () => {
       limit: { resetsAt: resetsAt + minute, continues: false },
     });
     await vi.advanceTimersByTimeAsync(10 * minute);
-    expect(starts()).toEqual(["A"]);
+    expect(starts()).toEqual(["older", "A"]);
+  });
+
+  it("keeps the time unknown when only the previous turn reported a limit", async () => {
+    preference(true);
+    await send("A");
+    windows([{ id: "five_hour", usedPercent: 100, resetsAt }], "limited");
+    end("A");
+    await send("B");
+    emit({
+      type: "session.limits",
+      sessionId,
+      turnId: "A",
+      timestamp: seq,
+      status: "limited",
+      windows: [{ id: "seven_day", usedPercent: 100, resetsAt: resetsAt + minute }],
+    });
+    fail();
+    expect((await queue()).limit).toEqual({ continues: false });
+    await vi.advanceTimersByTimeAsync(5 * minute);
+    expect(starts()).toEqual(["A", "B"]);
+  });
+
+  it.each([false, true])(
+    "uses each Codex pool's own report status (reversed %s)",
+    async (reverse) => {
+      await send("A");
+      const reports = [
+        () => windows([{ id: "five_hour", usedPercent: 100, resetsAt }], "limited"),
+        () => windows([{ id: "spark:five_hour", usedPercent: 100, resetsAt: resetsAt + minute }]),
+      ];
+      for (const report of reverse ? reports.reverse() : reports) report();
+      fail();
+      expect((await queue()).limit).toEqual({ resetsAt, continues: false });
+    }
+  );
+
+  it("drops a window that recovered or expired before the turn failed", async () => {
+    preference(true);
+    await send("A");
+    windows([
+      { id: "five_hour", status: "limited", resetsAt },
+      { id: "seven_day", status: "limited", resetsAt: resetsAt + minute },
+    ]);
+    windows([{ id: "seven_day", status: "ok" }]);
+    vi.setSystemTime(resetsAt);
+    fail();
+    expect((await queue()).limit).toEqual({ continues: false });
   });
 
   it.each(["empty", "expired", "partial", "available"] as const)(
@@ -1876,6 +1928,23 @@ describe("continuing a chat after a usage limit", () => {
       await expect(choose(true)).rejects.toThrow(/reset time/i);
       await vi.advanceTimersByTimeAsync(10 * minute);
       expect(starts()).toEqual(["A"]);
+    }
+  );
+
+  it.each([false, true])(
+    "a press at the reset continues immediately once (queued row %s)",
+    async (hasRow) => {
+      await send("A");
+      if (hasRow) await send("head");
+      windows([{ id: "primary", usedPercent: 100, resetsAt }], "limited");
+      fail();
+      if (hasRow) await choose(true);
+      await vi.advanceTimersByTimeAsync(resetsAt - now);
+      expect(starts()).toEqual(["A"]);
+      await choose(true);
+      expect(engine.startTurn.mock.lastCall![0].input).toBe(hasRow ? "Message head" : "Continue.");
+      await vi.advanceTimersByTimeAsync(2 * minute);
+      expect(starts()).toHaveLength(2);
     }
   );
 
@@ -2026,6 +2095,34 @@ describe("continuing a chat after a usage limit", () => {
     expect(starts()).toEqual(["A", "B", "waiting"]);
   });
 
+  it.each(["stopped", "failed"] as const)(
+    "preserves a standing %s pause until Resume",
+    async (reason) => {
+      preference(true);
+      await send("A");
+      await send("B");
+      if (reason === "stopped") {
+        engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "A" });
+        await stop();
+        end("A", "cancelled");
+      } else fail("network");
+      await send("C");
+      windows([{ id: "five_hour", usedPercent: 100, resetsAt }], "limited");
+      fail();
+      expect(await queue()).toEqual({
+        paused: reason,
+        items: [{ id: "B", text: "Message B", images: 0, state: "waiting" }],
+      });
+      expect(await run(api.session, { sessionId })).toMatchObject({
+        error_message: "Provider refused this turn",
+      });
+      await vi.advanceTimersByTimeAsync(5 * minute);
+      expect(starts()).toEqual(["A", "C"]);
+      await run(api.resumeQueuedMessages, { sessionId });
+      expect(starts()).toEqual(["A", "C", "B"]);
+    }
+  );
+
   it.each([false, true])(
     "honors Stop and an optional Resume (%s) if the same turn then reports a limit",
     async (resume) => {
@@ -2042,6 +2139,26 @@ describe("continuing a chat after a usage limit", () => {
       expect(starts()).toEqual(resume ? ["A", "waiting"] : ["A"]);
     }
   );
+
+  it("returns the sending head to a limit pause when its echo never arrived", async () => {
+    preference(true);
+    await send("A");
+    await send("head");
+    engine.startTurn.mockResolvedValueOnce(undefined);
+    end("A");
+    await vi.advanceTimersByTimeAsync(0);
+    expect((await queue()).items[0]?.state).toBe("sending");
+    windows([{ id: "five_hour", usedPercent: 100, resetsAt }], "limited");
+    fail();
+    expect(await queue()).toMatchObject({
+      paused: "limit",
+      limit: { resetsAt, continues: true },
+      items: [{ id: "head", state: "waiting" }],
+    });
+    await vi.advanceTimersByTimeAsync(3 * minute);
+    expect(engine.startTurn.mock.lastCall![0].input).toBe("Message head");
+    expect(starts()).toHaveLength(3);
+  });
 
   it("retains a rate_limit's own words even with a future rejected window", async () => {
     preference(true);
@@ -2107,22 +2224,27 @@ describe("continuing a chat after a usage limit", () => {
     expect(starts()).toEqual(["A", "other"]);
   });
 
-  it("tells list, wait and read when the account resets and whether this chat continues", async () => {
-    await limited();
+  it("tells list, wait and read how long until the account resets and whether this chat continues", async () => {
+    const reset = now + 130 * minute;
+    await limited(reset);
     await choose(true);
     const operator = createOperator(createDeusHost());
-    const until = new Date(resetsAt).toLocaleString(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
     for (const [name, args] of [
       ["list_sessions", {}],
       ["wait_for_sessions", { sessions: [sessionId], wait: 0 }],
       ["read_session", { session: sessionId }],
     ] as const) {
       const reply = await operator.call(name, args, caller);
-      expect(reply).toContain(`stopped on a usage limit until ${until}, continues by itself`);
+      expect(
+        reply.match(/stopped on a usage limit, resets in 2 h 10 min, continues by itself/g)
+      ).toHaveLength(1);
     }
+    vi.setSystemTime(reset - 1);
+    expect(await operator.call("list_sessions", {}, caller)).toContain("resets in 1 min");
+    vi.setSystemTime(reset + 1);
+    expect(await operator.call("list_sessions", {}, caller)).toContain(
+      "stopped on a usage limit, its reset has passed, continues by itself"
+    );
     await choose(false);
     expect(await operator.call("list_sessions", {}, caller)).not.toContain("continues by itself");
   });

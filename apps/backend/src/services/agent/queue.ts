@@ -8,11 +8,11 @@ import { getTurnsForMessages, type SessionRow } from "../../db";
 import { getDatabase } from "../../lib/database";
 import { ChatBusyError, ConflictError } from "../../lib/errors";
 import { invalidate, onInvalidate } from "../query-engine";
-import { continuedSettings } from "../assistants/turn-settings";
 import { getSetting } from "../settings.service";
 import { toEngineInput } from "./run-config";
 import type { TurnEnd } from "./event-handler";
 import { liveTurnId, provideTurnWatcher, steerTurn } from "./service";
+import { continuedSettings } from "./turn-settings";
 import { differentTurnMessage, knownTurn, requireSameHarness, sendMessage } from "./turns";
 
 type Input = ParsedInputOf<typeof api.sendMessage>;
@@ -339,6 +339,8 @@ export function continueAfterLimit(sessionId: string, on: boolean) {
   const q = queues.get(sessionId);
   if (q?.pause?.reason !== "limit" || q.pause.limit.resetsAt === undefined)
     throw new ConflictError("This chat has no reported reset time.");
+  if (on && q.pause.limit.resetsAt <= Date.now())
+    return continueLimited(q, q.pause.turnId).then(() => ({}));
   q.pause.limit.continues = on;
   changed(q);
   return {};
@@ -459,6 +461,7 @@ function turnEnded({ event: ended, status, held, limit }: TurnEnd) {
   const q =
     limit && localChat(ended.sessionId) ? queueFor(ended.sessionId) : queues.get(ended.sessionId);
   if (!q) return;
+  const standingPause = q.pause?.reason;
   // Includes the engine's undeliveredSteers and calls still awaiting a verdict.
   const recovered = recoverSteers(q, ended.turnId);
   const wasSending = recoverAttempt(q, ended.turnId);
@@ -469,7 +472,7 @@ function turnEnded({ event: ended, status, held, limit }: TurnEnd) {
   // A given-up turn can free the chat without pausing rows that arrived after it.
   if (status && held && !pausedHere) {
     if (ended.stopReason === "cancelled") q.pause = { reason: "stopped" };
-    else if (limit) {
+    else if (limit && standingPause !== "stopped" && standingPause !== "failed") {
       const continues =
         limit.resetsAt !== undefined && getSetting("continue_after_usage_limit") === true;
       q.pause = { reason: "limit", turnId: ended.turnId, limit: { ...limit, continues } };

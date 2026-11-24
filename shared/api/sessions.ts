@@ -131,7 +131,7 @@ export const resumeQueuedMessages = write({
   output: out<Record<string, never>>(),
 });
 
-/** Continue the local chat one minute after its reported reset, or cancel that continuation. */
+/** Schedule the local chat for one minute after its reset, continue now if it has reset, or cancel. */
 export const continueAfterLimit = write({
   name: "continueAfterLimit",
   input: sessionId.extend({ on: z.boolean() }),

@@ -63,20 +63,6 @@ export type TurnEnd = {
   limit?: { resetsAt?: number };
 };
 
-function usageLimit(limits: ConversationState["limits"]): NonNullable<TurnEnd["limit"]> {
-  const now = Date.now();
-  let resetsAt: number | undefined;
-  for (const w of limits?.windows ?? []) {
-    const limited =
-      w.status === undefined
-        ? limits?.status === "limited" && (w.usedPercent ?? 0) >= 100
-        : w.status === "limited";
-    if (limited && w.resetsAt !== undefined && w.resetsAt > (resetsAt ?? now))
-      resetsAt = w.resetsAt;
-  }
-  return resetsAt === undefined ? {} : { resetsAt };
-}
-
 export interface AgentEventHandler {
   /** Feed one sequenced wire envelope (post-dedupe, in seq order). */
   handle(envelope: DecodedWireEventEnvelope): TurnEnd | void;
@@ -445,14 +431,17 @@ export function createAgentEventHandler(
       if (!NOT_PUSHED.has(envelope.event.type)) pushEnvelope(envelope);
       const event = envelope.event;
       if (event.type === "turn.ended") {
-        const held = event.turnId === liveTurnId;
-        const status = outcome?.status;
-        const limited =
-          held &&
-          status === "error" &&
+        const end: TurnEnd = { event, status: outcome?.status, held: event.turnId === liveTurnId };
+        if (
+          end.held &&
+          end.status === "error" &&
           event.error?.category === "usage_limit" &&
-          (!outcome?.error || outcome.error.category === "usage_limit");
-        return { event, status, held, ...(limited && { limit: usageLimit(conversation.limits) }) };
+          (!outcome?.error || outcome.error.category === "usage_limit")
+        ) {
+          const resetsAt = Math.max(...(state.limitResets?.values() ?? []));
+          end.limit = resetsAt > Date.now() ? { resetsAt } : {};
+        }
+        return end;
       }
     },
   };

@@ -43,6 +43,8 @@ export interface SessionFacts {
   acceptedTurnId?: string;
   /** One terminal error per turn: turn.ended(error) must not double-report. */
   errorReported: boolean;
+  /** Reset times by window, from this turn's own limit reports. */
+  limitResets?: Map<string, number>;
   /** A native terminal can be successful even when its transcript is incomplete. */
   deliveryFailure?: { turnId: string; message: string };
 }
@@ -141,9 +143,20 @@ export function applySessionFacts(
     .with({ type: "turn.started" }, (e): SessionFactWrite[] => {
       if (conversation.turns.find((turn) => turn.turnId === e.turnId)?.status === "ended")
         return [];
+      if (facts.turnId !== e.turnId) facts.limitResets = undefined;
       facts.turnId = e.turnId;
       facts.errorReported = false;
       return [{ fact: "session-working", result: persistSessionWorking(sessionId) }];
+    })
+    .with({ type: "session.limits" }, (e) => {
+      if (facts.turnId !== e.turnId) return [];
+      for (const window of e.windows) {
+        const status = window.status ?? ((window.usedPercent ?? 0) >= 100 ? e.status : undefined);
+        if (status === "limited" && window.resetsAt !== undefined)
+          (facts.limitResets ??= new Map()).set(window.id, window.resetsAt);
+        else facts.limitResets?.delete(window.id);
+      }
+      return [];
     })
     .with({ type: "error" }, (e): SessionFactWrite[] => {
       // A recoverable error means the turn CONTINUES (retry/backoff in

@@ -83,12 +83,12 @@ import { computeWorkspacePath } from "../../middleware/workspace-loader";
 import { liveTurnId } from "../agent/service";
 import { queuedMessages } from "../agent/queue";
 import { answer as answerToolRequest, pendingFor } from "../agent/tool-relay";
+import { continuedSettings, startSettings, type TurnSettings } from "../agent/turn-settings";
 import { sendMessage, stopSession } from "../agent/turns";
 import { invalidate, onInvalidate, runAsThisComputer as run } from "../query-engine";
 import { getServerName } from "../server-name";
 import { assertMayWrite, refusalFor, storedAccess } from "./access";
 import { homeRelative } from "./home-relative";
-import { continuedSettings, startSettings, type TurnSettings } from "./turn-settings";
 import { replyFor, waitingOf } from "./waiting";
 
 /** How long a first task waits for its workspace to be ready. */
@@ -272,12 +272,15 @@ const AGENT_NAMES = new Intl.ListFormat("en").format(
 const NOT_DELIVERED = "Its first task could not be delivered.";
 
 function limitNote(id: string) {
-  const limit = queuedMessages(id).limit;
-  const until =
-    limit?.resetsAt === undefined
-      ? ""
-      : ` until ${new Date(limit.resetsAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`;
-  return `stopped on a usage limit${until}${limit?.continues ? ", continues by itself" : ""}`;
+  const { resetsAt, continues } = queuedMessages(id).limit ?? {};
+  let note = "stopped on a usage limit";
+  if (resetsAt !== undefined) {
+    const minutes = Math.ceil((resetsAt - Date.now()) / 60_000);
+    const hours = minutes >= 60 ? `${Math.floor(minutes / 60)} h` : "";
+    const duration = [hours, minutes % 60 && `${minutes % 60} min`].filter(Boolean).join(" ");
+    note += minutes > 0 ? `, resets in ${duration}` : ", its reset has passed";
+  }
+  return continues ? `${note}, continues by itself` : note;
 }
 
 export function createDeusHost(): DeusHost {
@@ -931,17 +934,16 @@ export function createDeusHost(): DeusHost {
     },
 
     async outcome(caller, entry) {
-      const note = entry.note ? `${entry.note}. ` : "";
       try {
         const { files, total_count } = await act(caller, workspaces.diffFiles, {
           workspaceId: entry.workspace.id,
         });
-        if (files.length === 0) return `${note}changes: none`;
+        if (files.length === 0) return "changes: none";
         const shown = files.slice(0, 10).map(formatFileChange);
         const more = (total_count ?? files.length) - shown.length;
-        return `${note}changes: ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""}`;
+        return `changes: ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""}`;
       } catch (error) {
-        if (error instanceof AppError && error.statusCode < 500) return note + error.message;
+        if (error instanceof AppError && error.statusCode < 500) return error.message;
         throw error;
       }
     },

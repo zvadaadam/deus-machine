@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { match } from "ts-pattern";
 import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -22,7 +21,7 @@ import { useReorderSensors } from "@/shared/hooks/useReorderSensors";
 import { tempo } from "@/shared/lib/tempo";
 import { cn } from "@/shared/lib/utils";
 import { useQueuedMessages } from "../api/session.queries";
-import { limitTime } from "../lib/queuedMessages";
+import { hasLimitReset, limitTime } from "../lib/queuedMessages";
 
 type Row = QueuedMessages["items"][number];
 type Move = { id: string; before: string | null };
@@ -206,16 +205,13 @@ export function QueuedMessageList(controls: QueueControls) {
   const rows = previewMove(data?.items ?? [], pending);
   const waiting = rows.filter((row) => row.state === "waiting").map((row) => row.id);
   const sensors = useReorderSensors();
-  const pause = match(data?.paused)
-    .with("stopped", () => "Queue paused. The agent was stopped.")
-    .with("failed", () => "Queue paused after an error.")
-    .with("limit", () =>
-      data?.limit?.resetsAt === undefined
-        ? "Queue paused. A usage limit was reached."
-        : `Queue paused until ${limitTime(data.limit.resetsAt)}.`
-    )
-    .with(null, undefined, () => null)
-    .exhaustive();
+  const resetsAt = data?.limit?.resetsAt;
+  const until = resetsAt !== undefined && !hasLimitReset(resetsAt) ? limitTime(resetsAt) : null;
+  const pause = {
+    stopped: "Queue paused. The agent was stopped.",
+    failed: "Queue paused after an error.",
+    limit: until ? `Queue paused until ${until}.` : "Queue paused. A usage limit was reached.",
+  };
 
   function drop({ active, over }: DragEndEvent) {
     if (!over || over.id === active.id || pending) return;
@@ -236,6 +232,7 @@ export function QueuedMessageList(controls: QueueControls) {
     <div
       role="group"
       aria-label="Queued messages"
+      {...(rows.length === 0 && { inert: "" })}
       className="max-h-[min(12rem,25dvh)] overflow-y-auto pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11"
     >
       <DndContext
@@ -256,10 +253,10 @@ export function QueuedMessageList(controls: QueueControls) {
       >
         <SortableContext items={waiting} strategy={verticalListSortingStrategy}>
           <AnimatePresence initial={false}>
-            {pause && (
+            {rows.length > 0 && data?.paused && (
               <Collapse key="paused" className="bg-background sticky top-0 z-10">
                 <div className="text-text-secondary flex min-h-8 items-center justify-between gap-2 px-2 text-xs">
-                  <span role="status">{pause}</span>
+                  <span role="status">{pause[data.paused]}</span>
                   <Button
                     size="xs"
                     variant="secondary"

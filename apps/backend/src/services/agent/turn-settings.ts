@@ -1,4 +1,4 @@
-// backend/src/services/assistants/turn-settings.ts
+// backend/src/services/agent/turn-settings.ts
 // The settings an operator's first message or follow-up takes to the engine.
 
 import { OperatorError, type StartInput } from "@zvada/agent-server/operator";

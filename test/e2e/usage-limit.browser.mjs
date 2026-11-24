@@ -120,6 +120,7 @@ async function journey() {
       "Person sent first",
       "No reset time",
       "Automatic",
+      "Opened after reset",
     ].map((title) => [title, crypto.randomUUID()])
   );
   db.prepare(
@@ -194,10 +195,21 @@ async function journey() {
     }
     const page = await windowFor("light");
     const visit = async (window, sessionId) => {
+      await window.bringToFront();
       await window.goto(base + "/w/" + workspace + "?session=" + sessionId);
       const card = window.getByRole("log").getByRole("alert");
       await card.getByText("Usage limit reached", { exact: true }).waitFor();
       return card;
+    };
+    const screenshot = async (window, filename, card) => {
+      if (card) {
+        await until(
+          () => card.evaluate((el) => Number(globalThis.getComputedStyle(el).opacity) >= 0.99),
+          20_000,
+          `the card in ${filename} to finish appearing`
+        );
+      }
+      await window.screenshot({ path: path.join(proof, filename), animations: "disabled" });
     };
     const send = (sessionId, content) =>
       backend.write("sendMessage", {
@@ -218,9 +230,10 @@ async function journey() {
     const person = chats["Person sent first"];
     const unknown = chats["No reset time"];
     const automatic = chats.Automatic;
-    for (const id of [queued, empty, cancelled, person]) {
+    const late = chats["Opened after reset"];
+    for (const id of [queued, empty, cancelled, person, late]) {
       await send(id, first);
-      if (id === queued) await send(id, followup);
+      if (id === queued || id === late) await send(id, followup);
       await limit(id, reset);
     }
 
@@ -231,7 +244,7 @@ async function journey() {
     await group.getByText("Queue paused until 05:10.").waitFor();
     await group.getByText(followup).waitFor();
     await group.getByRole("button", { name: "Resume" }).waitFor();
-    await page.screenshot({ path: path.join(proof, "limit-light.png") });
+    await screenshot(page, "limit-light.png", queueCard);
     await queueCard.getByRole("button", { name: "Continue at 05:11" }).click();
     const scheduled = "Continues at 05:11 while Deus stays open.";
     await queueCard.getByText(scheduled).waitFor();
@@ -240,17 +253,18 @@ async function journey() {
     const darkCard = await visit(dark, queued);
     await darkCard.getByText(scheduled).waitFor();
     await dark.locator("html.dark").waitFor({ state: "attached" });
-    await dark.screenshot({ path: path.join(proof, "limit-dark.png") });
+    await screenshot(dark, "limit-dark.png", darkCard);
 
     const phone = await windowFor("light", true);
     const phoneCard = await visit(phone, empty);
     await phoneCard.getByRole("button", { name: "Continue at 05:11" }).tap();
     await phoneCard.getByText(scheduled).waitFor();
+    assert.equal(await phone.getByRole("button", { name: "Resume", exact: true }).count(), 0);
     const phoneButton = await phoneCard.getByRole("button", { name: "Cancel" }).boundingBox();
     assert(
       phoneButton.height >= 44 && phoneButton.x >= 0 && phoneButton.x + phoneButton.width <= 390
     );
-    await phone.screenshot({ path: path.join(proof, "limit-phone.png") });
+    await screenshot(phone, "limit-phone.png", phoneCard);
 
     for (const id of [cancelled, person]) {
       const card = await visit(page, id);
@@ -278,14 +292,14 @@ async function journey() {
     await setting.click();
     await until(async () => (await backend.read("settings")).continue_after_usage_limit === true);
     await until(async () => (await setting.getAttribute("aria-checked")) === "true");
-    await page.screenshot({ path: path.join(proof, "limit-setting.png"), animations: "disabled" });
+    await screenshot(page, "limit-setting.png");
     await send(unknown, first);
     await limit(unknown);
     const noTime = await visit(page, unknown);
     await noTime.getByText(limitMessage, { exact: true }).waitFor();
     assert.equal(await noTime.getByRole("button").count(), 0);
     assert.equal(await noTime.getByText(/Resets at/).count(), 0);
-    await group.getByText("Queue paused. A usage limit was reached.").waitFor();
+    assert.equal(await group.getByText(/^Queue paused/).count(), 0);
     await send(automatic, first);
     await limit(automatic, reset);
     const automaticCard = await visit(page, automatic);
@@ -293,15 +307,23 @@ async function journey() {
 
     // Node runs expired timers at the end of each tick. Visit the host's 05:10 check on time.
     await drive({ type: "tick", milliseconds: reset - start });
-    const before = await drive({ type: "tick", milliseconds: 59_999 });
-    assert.equal(
-      before.length,
-      7,
-      "Only the six initial sends and the person's message can have started"
-    );
+    const afterReset = await drive({ type: "tick", milliseconds: 30_000 });
+    assert.equal(afterReset.length, 8, "Only the seven initial sends and the person's message ran");
+    await page.clock.setFixedTime(new Date(reset + 30_000));
+    const lateCard = await visit(page, late);
+    await lateCard.getByText("Reset at 05:10.").waitFor();
+    await group.getByText("Queue paused. A usage limit was reached.", { exact: true }).waitFor();
+    const continueNow = lateCard.getByRole("button", { name: "Continue", exact: true });
+    await continueNow.waitFor();
+    await screenshot(page, "limit-after-reset.png", lateCard);
+    await continueNow.click();
+    await page.getByRole("log").getByText(followup, { exact: true }).waitFor();
+
+    const before = await drive({ type: "tick", milliseconds: 29_999 });
+    assert.equal(before.length, 9, "Only the explicit Continue ran before 05:11");
     await drive({ type: "tick", milliseconds: 1 });
     await until(
-      async () => (await drive({ type: "starts" })).length === 10,
+      async () => (await drive({ type: "starts" })).length === 12,
       15_000,
       "the three scheduled turns"
     );
@@ -313,6 +335,7 @@ async function journey() {
       [person, [first, personal]],
       [cancelled, [first]],
       [unknown, [first]],
+      [late, [first, followup]],
     ]) {
       assert.deepEqual(
         starts.filter((s) => s.sessionId === id).map((s) => s.input),
@@ -322,7 +345,7 @@ async function journey() {
     await dark.getByRole("log").getByText(followup, { exact: true }).waitFor();
     await phone.getByRole("log").getByText("Continue.", { exact: true }).waitFor();
     console.log(
-      "PASS limited chats with queued rows, empty queues, Cancel, a person's send, automatic continuation and unknown reset; light, dark and phone."
+      "PASS scheduled chats, Cancel, a person's send, empty queues, unknown resets and an immediate Continue after reset; light, dark and phone."
     );
   } finally {
     await browser?.close();

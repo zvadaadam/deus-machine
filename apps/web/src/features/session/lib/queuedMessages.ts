@@ -1,6 +1,8 @@
 import { ACTIVE_TURN_STATUSES, type SessionStatus, type WorkspaceKind } from "@shared/enums";
 import { locationOf } from "@/features/sidebar/lib/location";
 
+export const hasLimitReset = (resetsAt: number): boolean => resetsAt <= Date.now();
+
 export function limitTime(timestamp: number): string {
   const date = new Date(timestamp);
   return date.toLocaleString(undefined, {

@@ -96,6 +96,7 @@ afterEach(() => {
   sessionComposerActions.discard(sessionId);
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 it.each([
@@ -157,14 +158,27 @@ it.each([
   expect(client.getQueryData(queryKey)).toEqual({ paused, items });
 });
 
-it("shows the limited queue's reset when known and keeps Resume available", () => {
-  const reset = new Date();
-  reset.setHours(5, 10, 0, 0);
-  for (const resetsAt of [reset.getTime(), undefined]) {
+it.each(["stopped", "failed", "limit"] as const)(
+  "shows a %s pause only while the queue has rows",
+  (paused) => {
+    const empty = render({ paused, items: [] });
+    expect(empty).not.toMatch(/Queue paused|>Resume</);
+    for (const state of ["waiting", "sending"] as const) {
+      expect(render({ paused, items: [{ ...item, state }] })).toContain(">Resume<");
+    }
+  }
+);
+
+it("names only a future reset on the paused queue and keeps Resume available", () => {
+  const reset = new Date(2026, 10, 24, 5, 10).getTime();
+  vi.useFakeTimers({ now: reset - 1 });
+  for (const [resetsAt, sentence] of [
+    [reset, "Queue paused until 05:10."],
+    [reset - 60_000, "Queue paused. A usage limit was reached."],
+    [undefined, "Queue paused. A usage limit was reached."],
+  ] as const) {
     const html = render({ paused: "limit", limit: { resetsAt, continues: false }, items: [item] });
-    expect(html).toContain(
-      resetsAt ? "Queue paused until 05:10." : "Queue paused. A usage limit was reached."
-    );
+    expect(html).toContain(sentence);
     expect(html).toContain(">Resume<");
   }
 });

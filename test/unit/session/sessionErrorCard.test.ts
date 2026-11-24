@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionErrorCard } from "@/features/session/ui/SessionErrorCard";
 import { isGenericTurnFailure, readSendRefusal } from "@shared/lib/send-refusal";
 import type { QueuedMessages } from "@shared/api/sessions";
@@ -92,6 +92,8 @@ it("only offers starting a chat when the action is available", () => {
 
 describe("a usage limit", () => {
   const providerMessage = "Your plan limit resets at 5:20am.";
+  beforeEach(() => vi.useFakeTimers({ now: new Date(2026, 10, 24, 5, 9) }));
+  afterEach(() => vi.useRealTimers());
 
   function card(limit?: QueuedMessages["limit"], cloud = false) {
     queued.mockReset().mockReturnValue({ data: { limit } });
@@ -131,6 +133,15 @@ describe("a usage limit", () => {
     expect(html).toContain(">Cancel<");
     expect(html).not.toContain("Continue at ");
     expect(html).not.toContain(providerMessage);
+  });
+
+  it.each([false, true])("offers Continue when the reset has passed (armed %s)", (continues) => {
+    const reset = new Date(2026, 10, 24, 5, 10).getTime();
+    vi.setSystemTime(reset + 1);
+    const html = card({ resetsAt: reset, continues });
+    expect(html).toContain("Reset at 05:10.");
+    expect(html).toContain(">Continue<");
+    expect(html).not.toMatch(/Resets at|Continue at|>Cancel</);
   });
 
   it("keeps the provider's message when the reset is unknown or the host restarted", () => {

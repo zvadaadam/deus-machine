@@ -26,23 +26,26 @@ import {
 } from "@/features/settings/lib/local-agent-login";
 import { LoginCodeForm } from "@/features/settings/ui/sections/LoginCodeForm";
 import { useQueuedMessages } from "../api/session.queries";
-import { limitTime } from "../lib/queuedMessages";
+import { hasLimitReset, limitTime } from "../lib/queuedMessages";
 
 function UsageLimit({ sessionId, message }: Pick<SessionErrorCardProps, "sessionId" | "message">) {
   const limit = useQueuedMessages(sessionId).data?.limit;
   if (limit?.resetsAt === undefined) return message;
+  const hasReset = hasLimitReset(limit.resetsAt);
   const at = limitTime(limit.resetsAt + 60_000);
+  const scheduled = limit.continues && !hasReset;
+  const continueLabel = hasReset ? "Continue" : `Continue at ${at}`;
   const toggle = () =>
-    call(api.continueAfterLimit, { sessionId, on: !limit.continues }).catch((error) =>
+    call(api.continueAfterLimit, { sessionId, on: !scheduled }).catch((error) =>
       toast.error(getErrorMessage(error))
     );
   return (
     <>
-      Resets at {limitTime(limit.resetsAt)}.
+      {hasReset ? "Reset" : "Resets"} at {limitTime(limit.resetsAt)}.
       <span className="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-2 text-xs">
-        {limit.continues && `Continues at ${at} while Deus stays open.`}
+        {scheduled && `Continues at ${at} while Deus stays open.`}
         <Button variant="outline" size="xs" className="pointer-coarse:min-h-11" onClick={toggle}>
-          {limit.continues ? "Cancel" : `Continue at ${at}`}
+          {scheduled ? "Cancel" : continueLabel}
         </Button>
       </span>
     </>
