@@ -31,7 +31,7 @@
     "dev:relay": "cd apps/cloud-relay && wrangler dev",
     "build:relay": "cd apps/cloud-relay && wrangler deploy --dry-run --outdir dist",
     "deploy:relay": "cd apps/cloud-relay && wrangler deploy",
-    "build:web": "VITE_CLOUD_DIRECT=1 vite build --config apps/web/vite.config.ts --outDir dist/web",
+    "build:web": "vite build --config apps/web/vite.config.ts --outDir dist/web",
     "build:cli": "bun run build:runtime && bun apps/cli/build.ts",
     "build:all": "bun run prepare:device-use --force && bun run build:runtime && bun run build",
     "package:mac": "bun run build:all && electron-builder --mac",

@@ -9,7 +9,7 @@ export const groups = {
     "bun run typecheck:all",
     "bun run test:relay",
     "bun run test:screen-studio",
-    "bun run build:web",
+    "VITE_CLOUD_DIRECT=1 bun run build:web",
   ],
   app: [
     "bun run native:node",

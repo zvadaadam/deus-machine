@@ -225,9 +225,9 @@ jobs:
 
           failed=0
           for id in "${ids[@]}"; do
-            if ! xcrun notarytool wait "$id" "${auth[@]}" --output-format json | jq -e 'select(.status == "Accepted")'; then
-              xcrun notarytool log "$id" "${auth[@]}"
+            if ! xcrun notarytool wait "$id" "${auth[@]}" --output-format json --timeout 10m | jq -e 'select(.status == "Accepted")'; then
               failed=1
+              xcrun notarytool log "$id" "${auth[@]}" || true
             fi
           done
           if [[ "$failed" != 0 ]]; then exit 1; fi

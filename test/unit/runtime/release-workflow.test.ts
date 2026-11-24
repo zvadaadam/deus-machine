@@ -59,7 +59,10 @@ describe("release workflow", () => {
     const deploy = load(readFileSync(".github/workflows/deploy.yml", "utf8")) as {
       on: { push: { paths: string[] } };
       jobs: {
-        "deploy-web": { if: string; steps: Array<{ uses?: string; with?: { ref: string } }> };
+        "deploy-web": {
+          if: string;
+          steps: Array<{ uses?: string; run?: string; with?: { ref: string } }>;
+        };
       };
     };
     const web = deploy.jobs["deploy-web"];
@@ -67,6 +70,9 @@ describe("release workflow", () => {
     expect(web.steps.find((step) => step.uses?.startsWith("actions/checkout@"))?.with?.ref).toBe(
       "refs/tags/${{ inputs.ref }}"
     );
+    expect(web.steps.find((step) => step.run === "bun run build:web")).toMatchObject({
+      env: { VITE_CLOUD_DIRECT: "1" },
+    });
     expect(deploy.on.push.paths.toSorted()).toEqual([
       "apps/cloud-relay/**",
       "apps/landing/**",
