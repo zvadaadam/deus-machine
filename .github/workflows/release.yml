@@ -206,24 +206,29 @@ jobs:
         run: |
           set -euo pipefail
 
-          # electron-builder's notarize:true only covers the .app bundle.
-          # DMG/ZIP wrappers must be submitted separately so Gatekeeper
-          # trusts them and `xcrun stapler validate` passes.
-          for artifact in dist-electron/*.dmg dist-electron/*.zip; do
-            [ -f "$artifact" ] || continue
-            echo "Submitting ${artifact} for notarization..."
-            xcrun notarytool submit "$artifact" \
-              --apple-id "$APPLE_ID" \
-              --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-              --team-id "$APPLE_TEAM_ID" \
-              --wait
+          dmgs=(dist-electron/*.dmg)
+          if [[ ${#dmgs[@]} != 2 ]]; then
+            echo "::error::Expected the arm64 and x64 DMGs"
+            exit 1
+          fi
+          pids=()
+          for dmg in "${dmgs[@]}"; do
+            xcrun notarytool submit "$dmg" \
+              --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" --wait --output-format json \
+              > "$dmg.json" 2> "$dmg.log" &
+            pids+=("$!")
           done
 
-          # Staple tickets to DMGs (ZIPs cannot be stapled; Gatekeeper
-          # checks online for those)
-          for dmg in dist-electron/*.dmg; do
-            [ -f "$dmg" ] || continue
-            echo "Stapling ticket to ${dmg}..."
+          failed=0
+          for i in "${!pids[@]}"; do
+            dmg="${dmgs[i]}"
+            wait "${pids[i]}" && jq -e '.status == "Accepted"' "$dmg.json" >/dev/null || failed=1
+            echo "Notarization of $dmg"
+            cat "$dmg.log" "$dmg.json"
+          done
+          if [[ "$failed" != 0 ]]; then exit 1; fi
+          for dmg in "${dmgs[@]}"; do
             xcrun stapler staple "$dmg"
           done
         env:
@@ -238,19 +243,23 @@ jobs:
         run: |
           set -euo pipefail
 
-          found_app=0
-          while IFS= read -r app_path; do
-            found_app=1
-            echo "Verifying signature and Gatekeeper for $app_path"
+          zips=(dist-electron/*.zip)
+          if [[ ${#zips[@]} != 2 ]]; then
+            echo "::error::Expected the arm64 and x64 updater ZIPs"
+            exit 1
+          fi
+          for zip in "${zips[@]}"; do
+            unpacked="$(mktemp -d)"
+            ditto -x -k "$zip" "$unpacked"
+            app_path="$unpacked/Deus.app"
+            echo "Verifying signature, ticket and Gatekeeper for $zip"
+            xcrun stapler validate "$app_path"
             codesign --verify --deep --strict --verbose=2 "$app_path"
             # Keychain recognizes Codex by OpenAI's signature.
             codesign --verify --strict -R='identifier codex and anchor apple generic and certificate leaf[subject.OU] = "2DC432GLL2"' "$app_path/Contents/Resources/bin/codex"
             spctl --assess --type execute --verbose=4 "$app_path"
-          done < <(find dist-electron -maxdepth 2 -path '*/Deus.app' -type d | sort)
-          if [[ "$found_app" -ne 1 ]]; then
-            echo "::error::No packaged Deus.app found"
-            exit 1
-          fi
+            rm -rf "$unpacked"
+          done
 
           while IFS= read -r dmg_path; do
             echo "Validating notarization for $dmg_path"
