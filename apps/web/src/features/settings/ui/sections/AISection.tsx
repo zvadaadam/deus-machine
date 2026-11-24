@@ -84,8 +84,8 @@ export function AISection({
           <FieldContent>
             <FieldLabel htmlFor="agent-messages">Agent messages</FieldLabel>
             <FieldDescription>
-              Let local agents send you updates while they work. In Chat bubbles, their other text
-              waits inside the work line.
+              In new local chats, agents can send you updates while they work. In Chat bubbles,
+              their other text waits inside the work line.
             </FieldDescription>
           </FieldContent>
           <Switch
