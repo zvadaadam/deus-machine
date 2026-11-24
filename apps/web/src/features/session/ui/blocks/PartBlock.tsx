@@ -1,3 +1,4 @@
+import type { BubbleJoins } from "../bubble";
 import { match } from "ts-pattern";
 import type {
   Part,
@@ -9,22 +10,29 @@ import type {
   SubagentPart,
 } from "@shared/protocol-types";
 import { Bot, Paperclip } from "lucide-react";
-import { TextBlock } from "./TextBlock";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { StreamingReasoningBlock } from "./StreamingReasoningBlock";
 import { BufferedTextBlock } from "./BufferedTextBlock";
 import { ToolPartBlock } from "./ToolPartBlock";
 
-export function PartBlock({ part, isStreaming = false }: { part: Part; isStreaming?: boolean }) {
+export function PartBlock({
+  part,
+  isStreaming = false,
+  bubble,
+}: {
+  part: Part;
+  isStreaming?: boolean;
+  bubble?: BubbleJoins;
+}) {
   return (
     match(part)
-      .with({ type: "text" }, (p: TextPart) => {
-        const isActivelyStreaming = isStreaming;
-        if (isActivelyStreaming) {
-          return <BufferedTextBlock key={p.id} text={p.text} isStreaming={true} />;
-        }
-        return <TextBlock key={p.id} block={p.text} role="assistant" weight="normal" />;
-      })
+      .with({ type: "text" }, (p: TextPart) => (
+        <BufferedTextBlock
+          text={p.text}
+          isStreaming={isStreaming && (!bubble || p.state === "streaming")}
+          bubble={bubble}
+        />
+      ))
       .with({ type: "reasoning" }, (p: ReasoningPart) => {
         const isActivelyStreaming = isStreaming && p.state === "streaming";
         if (isActivelyStreaming) {

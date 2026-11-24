@@ -9,6 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Field, FieldContent, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Separator } from "@/components/ui/separator";
 import { useAgentAuth } from "../../api/settings.queries";
 import type { SettingsSectionProps } from "./types";
@@ -77,6 +79,22 @@ export function AISection({
         />
       ))}
       <div className="space-y-4">
+        <Separator />
+
+        <Field orientation="horizontal">
+          <FieldContent>
+            <FieldLabel htmlFor="agent-messages">Agent messages</FieldLabel>
+            <FieldDescription>
+              In new local chats, agents can send you updates while they work. In Chat bubbles,
+              their other text waits inside the work line.
+            </FieldDescription>
+          </FieldContent>
+          <Switch
+            id="agent-messages"
+            checked={settings.agent_messages === true}
+            onCheckedChange={(checked) => saveSetting("agent_messages", checked)}
+          />
+        </Field>
         <Separator />
 
         {/* Default thinking level */}

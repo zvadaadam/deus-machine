@@ -248,13 +248,13 @@ describe("buildChatTimeline", () => {
     const { items } = buildChatTimeline(rows, [], false, [], [record]);
     expect(items).toMatchObject([
       { type: "user", message: prompt },
-      { type: "assistant", messages: [reply], footerMessages: undefined },
+      { type: "assistant", messages: [reply], footerGroups: undefined },
       { type: "user", message: steer },
       {
         type: "assistant",
         record,
         messages: [],
-        footerMessages: [reply],
+        footerGroups: [[reply]],
         startedAt: prompt.sent_at,
       },
     ]);
@@ -274,7 +274,7 @@ describe("buildChatTimeline", () => {
       [{ turnId: "turn-1", startedAt: 1 }]
     );
     expect(items).toMatchObject([
-      { type: "assistant", turnId: "turn-1", footerMessages: undefined, isStreaming: false },
+      { type: "assistant", turnId: "turn-1", footerGroups: undefined, isStreaming: false },
       { type: "user", message: { id: pending.id } },
     ]);
   });
@@ -287,7 +287,9 @@ describe("buildChatTimeline", () => {
       [],
       [{ turnId: "turn-1", startedAt: 1 }]
     );
-    expect(items).toEqual([]);
+    expect(items).toMatchObject([
+      { type: "assistant", messages: [], isStreaming: true, ended: false, footerGroups: undefined },
+    ]);
   });
 
   it("holds the newest message's divider before its first part arrives", () => {
@@ -303,7 +305,10 @@ describe("buildChatTimeline", () => {
         { turnId: "turn-1", endedAt: 1 },
       ]
     );
-    expect(items).toMatchObject([{ type: "assistant", turnId: "turn-1", footerMessages: [reply] }]);
+    expect(items).toMatchObject([
+      { type: "assistant", turnId: "turn-1", footerGroups: [[reply]] },
+      { type: "assistant", turnId: "turn-2", messages: [], ended: false, footerGroups: undefined },
+    ]);
   });
 
   it("shows the earlier turn's footer and divider after a later turn settles without reading its activity", () => {
@@ -323,9 +328,9 @@ describe("buildChatTimeline", () => {
     expect(timeline).toMatchObject({
       activity: "idle",
       items: [
-        { type: "assistant", turnId: "turn-1", footerMessages: [reply] },
+        { type: "assistant", turnId: "turn-1", footerGroups: [[reply]] },
         { type: "compaction", compaction: marker },
-        { type: "assistant", turnId: "turn-2", footerMessages: [later] },
+        { type: "assistant", turnId: "turn-2", footerGroups: [[later]] },
       ],
     });
   });
@@ -435,7 +440,7 @@ describe("buildChatTimeline", () => {
   });
 
   it("renders an empty cancelled turn and its spacing without a message row", () => {
-    const { items, spacings, activity, lastRole } = buildChatTimeline(
+    const { items, spacings, activity, awaitingReply } = buildChatTimeline(
       [withText({ id: "u1", turn_id: "t1", role: "user" })],
       [],
       false,
@@ -445,7 +450,7 @@ describe("buildChatTimeline", () => {
     expect(shape(items)).toEqual(["user:t1", "assistant:t1"]);
     expect(assistantIds(items[1])).toEqual([]);
     expect(spacings).toHaveLength(items.length);
-    expect(lastRole).toBe("assistant");
+    expect(awaitingReply).toBe(false);
     expect(activity).toBe("idle");
   });
 
@@ -512,8 +517,9 @@ describe("buildChatTimeline", () => {
         { turnId: "t2", startedAt: 1 },
       ]
     );
-    expect(shape(items)).toEqual(["user:t1", "assistant:t1", "user:t2"]);
+    expect(shape(items)).toEqual(["user:t1", "assistant:t1", "user:t2", "assistant:t2"]);
     expect(items[1]).toMatchObject({ isStreaming: false });
+    expect(items[3]).toMatchObject({ isStreaming: true, ended: false, footerGroups: undefined });
   });
 
   it("anchors a truly message-less outcome and its compaction by turn identity", () => {

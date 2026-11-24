@@ -3,6 +3,8 @@
 
 import * as path from "path";
 import { OPERATOR_GUIDANCE, quote } from "@zvada/agent-server/operator";
+import { TELL_USER } from "@shared/agent-message";
+import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
 
 /**
  * Derives the project (repo) name from a worktree path.
@@ -48,6 +50,14 @@ const AGENT_DEVICE =
   'Act with `press|fill|longpress <@ref> --settle`, `scroll <direction> --settle` or `back --settle`, verify with `wait text "…"`, ' +
   "and end with `agent-device close` (`close --shutdown` if you booted it) so another workspace can use the device. " +
   "`agent-device help <topic>` has more (`dogfood` for exploratory QA, `debugging`, `react-native`).\n";
+
+export const AGENT_MESSAGES =
+  "The person reads your messages, not your working notes. While you work, send a message with " +
+  `the \`${TELL_USER}\` tool of the \`${DEUS_TOOLS_SERVER}\` server, under the name your tool list gives it, ` +
+  "when there is something they should read before you finish: a plan for a longer job, " +
+  "a finding they asked to hear before you act on it, a result on the way. Put related results in one message. " +
+  "Your final reply is the closing message, so do not send it with the tool as well. " +
+  "Anything else you write between tool calls is shown only as a note inside your work.\n";
 
 /**
  * Builds concise workspace context for any agent.

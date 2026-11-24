@@ -301,6 +301,7 @@ export function toSession(s: AgntSession, owner: QueryClient = queryClient): Ses
     id: s.id,
     workspace_id: s.workspace_id,
     agent_harness: mapHarness(s.harness),
+    agent_messages: false,
     provider_session_id: s.id,
     workspace_kind: "cloud",
     title: s.title,

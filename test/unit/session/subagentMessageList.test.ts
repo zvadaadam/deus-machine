@@ -49,6 +49,7 @@ describe("SubagentMessageList", () => {
       )
     );
 
+    expect(markup).not.toContain('aria-live="off"');
     expect(markup).toContain("First");
     expect(markup).toContain("After tool");
     expect(markup).not.toContain("Second");

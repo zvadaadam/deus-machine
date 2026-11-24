@@ -6,11 +6,25 @@
 // not with tools of Deus's own.
 
 import type { HostToolSource } from "@zvada/agent-server/core";
+import { z } from "zod";
+import { TELL_USER } from "@shared/agent-message";
 import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
+import { HostRpc } from "../../host-link";
 import { createWorkspaceTools } from "./workspace";
 import { createBrowserTools } from "./browser";
 import { createAutomationTools } from "./automations";
 import { createRecordingTools } from "./recording";
+import { tool } from "./tool";
+
+const tellUser = tool(
+  TELL_USER,
+  "Send the person a complete Markdown message. " +
+    "Sub-agents report to their caller without this tool. " +
+    "Write your final reply as ordinary text. To contact another chat, use `send_message`.",
+  { message: z.string().regex(/\S/, "Write a message for the person.") },
+  async () => ({ content: [{ type: "text", text: "Message sent." }] }),
+  { readOnly: true }
+);
 
 /** The Deus tools of one chat. */
 export function deusTools(sessionId: string): HostToolSource {
@@ -20,6 +34,7 @@ export function deusTools(sessionId: string): HostToolSource {
     ...createAutomationTools(sessionId),
     ...createRecordingTools(sessionId),
   ];
+  if (HostRpc.hasAgentMessages(sessionId)) tools.push(tellUser);
   return {
     name: DEUS_TOOLS_SERVER,
     tools,

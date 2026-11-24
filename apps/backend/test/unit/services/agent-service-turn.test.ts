@@ -23,12 +23,17 @@ import { api } from "@shared/api";
 import { SCHEMA_SQL } from "@shared/schema";
 import repoHandlers from "../../../src/api/repos";
 import sessionHandlers from "../../../src/api/sessions";
+import { Registry } from "../../../src/api/registry";
 import workspaceHandlers from "../../../src/api/workspaces";
 import * as agentEvents from "../../../src/services/agent/event-handler";
 import * as integrations from "../../../src/services/integrations";
 import type { TurnApps } from "../../../src/services/integrations/runtime";
 import * as projectEnvironment from "../../../src/services/project-environment.service";
+import { handleFrame, removeSubs, serveOperations } from "../../../src/services/query-engine";
+import * as settings from "../../../src/services/settings.service";
 import * as streams from "../../../src/services/streams";
+import { addConnection, removeConnection } from "../../../src/services/ws.service";
+import type { QServerFrame } from "@shared/types/query-protocol";
 import { operations } from "../../helpers";
 
 const { mockOpen, mockLinkStartTurn, mockLinkCancelTurn } = vi.hoisted(() => ({
@@ -115,6 +120,7 @@ describe("agentService.startTurn", () => {
   it("rolls the local turn back when the wire refuses admission", async () => {
     const begin = vi.spyOn(events, "beginTurn");
     const abort = vi.spyOn(events, "abortTurn");
+    vi.spyOn(settings, "getSetting").mockImplementation((key) => key === "agent_messages");
     mockLinkStartTurn.mockRejectedValue(
       new WireRequestError(WIRE_ERROR_CODES.turnActive, "already has an active turn")
     );
@@ -125,6 +131,9 @@ describe("agentService.startTurn", () => {
 
     expect(begin).toHaveBeenCalledWith(SESSION, TURN);
     expect(abort).toHaveBeenCalledWith(SESSION, TURN);
+    expect(await operations(sessionHandlers)(api.session, { sessionId: SESSION })).toMatchObject({
+      agent_messages: true,
+    });
   });
 
   it("keeps the local turn when admission succeeds", async () => {
@@ -133,6 +142,69 @@ describe("agentService.startTurn", () => {
     await expect(start()).resolves.toBeUndefined();
 
     expect(agentService.liveTurnId(SESSION)).toBe(TURN);
+  });
+
+  it("pushes the recorded message tool to both reads before publishing the turn's first event", async () => {
+    let enabled = true;
+    const preference = vi
+      .spyOn(settings, "getSetting")
+      .mockImplementation((key) => (key === "agent_messages" ? enabled : null));
+    const run = operations(sessionHandlers);
+    const { id: siblingId } = await run(api.createSession, { workspaceId: "w" });
+    const { id: sessionId } = await run(api.createSession, { workspaceId: "w" });
+    serveOperations(new Registry(sessionHandlers));
+    const frames: QServerFrame[] = [];
+    const connection = addConnection(
+      {
+        send: (data) => frames.push(JSON.parse(String(data))),
+        close: vi.fn(),
+      },
+      null
+    );
+    const subscribe = (resource: string, params: Record<string, string>) =>
+      handleFrame(connection, { type: "q:subscribe", id: resource, resource, params });
+    const snapshots = (hasTool: boolean) => {
+      const chat = expect.objectContaining({ id: sessionId, agent_messages: hasTool });
+      const sibling = expect.objectContaining({ id: siblingId, agent_messages: false });
+      return [
+        { type: "q:snapshot", id: "session", data: chat },
+        { type: "q:snapshot", id: "sessions", data: expect.arrayContaining([chat, sibling]) },
+      ];
+    };
+    try {
+      subscribe("session", { sessionId });
+      subscribe("sessions", { workspaceId: "w" });
+      subscribe("sessionEvents", { sessionId });
+      expect(frames).toEqual(expect.arrayContaining(snapshots(false)));
+      expect(preference).not.toHaveBeenCalledWith("agent_messages");
+      frames.length = 0;
+
+      mockLinkStartTurn.mockImplementationOnce(() => {
+        enabled = false;
+        events.handle({
+          sessionId,
+          seq: 1,
+          event: { type: "turn.started", sessionId, turnId: TURN, timestamp: Date.now() },
+        });
+      });
+      await agentService.startTurn(sessionId, TURN, "claude-code", "hello", { cwd: "/tmp" });
+      const firstEvent = frames.findIndex((frame) => frame.type === "q:event");
+      expect(frames[firstEvent]).toMatchObject({
+        id: "sessionEvents",
+        data: { envelope: { event: { type: "turn.started" } } },
+      });
+      const beforeStart = frames.slice(0, firstEvent);
+      for (const snapshot of snapshots(true)) {
+        const updates = beforeStart.filter(
+          (frame) => frame.type === "q:snapshot" && frame.id === snapshot.id
+        );
+        expect(updates.at(-1)).toMatchObject(snapshot);
+      }
+      expect(preference.mock.calls.filter(([key]) => key === "agent_messages")).toHaveLength(1);
+    } finally {
+      removeSubs(connection);
+      removeConnection(connection);
+    }
   });
 
   it.each(["claude-code", "codex-app-server"] as const)(

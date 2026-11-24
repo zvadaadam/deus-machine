@@ -188,7 +188,25 @@ client package does this bookkeeping; a consumer supplies only `onReset`
 not reload the chats a window holds, and a phone following one chat is not
 sent every other chat's tokens.
 
-A turn's parts are drawn in their recorded order (`session/lib/assistantTurnContent.ts`).
+A turn is one list of rows in recorded order: words, runs of work and cards
+(`session/lib/assistantTurnContent.ts`). Both readings of a chat (`chat_view`:
+bubbles, the default, or the full run) draw that list, and a row keeps its key
+and place while the turn runs and when it ends. In bubbles, an ended turn
+closes its rows under one "Worked" line, except its closing words (else the
+last send, else the last passage), a card still waiting, pictures and
+recordings. A turn with no words keeps its last card. Each stretch of a turn
+split by a steer is its own list. Nested sub-agents read as the full run.
+
+`tell_user` (setting `agent_messages`, off by default) lets a local chat's
+agent send the person a message while it works. The call stores nothing: the
+completed part is the message, and `shared/agent-message.ts` is its only
+reader, for the transcript, Copy, the cards, and what other chats and
+assistants read. Whether a chat has the tool is decided once, when its agent
+first asks, and stored on the chat (`sessions.agent_messages`), so its
+instructions and its tool list never disagree. The `session` and `sessions`
+reads carry it as `agent_messages`. While such a chat runs, words outside a
+send belong to its work line.
+
 A compaction of the running turn appears when that turn settles. An unfinished
 last turn record is the open turn. A replay can append an older end, so otherwise
 `session/lib/conversationView.ts` uses the newest message's turn record, or the

@@ -1,7 +1,8 @@
-import { createElement } from "react";
+import { createElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  createReasoningPart,
   createSteerEchoParts,
   createTextPart,
   createUserEchoParts,
@@ -10,6 +11,7 @@ import {
 } from "@zvada/agent-server/protocol/factories";
 import { describe, expect, it, vi } from "vitest";
 import { foldEvent, messagesKey } from "@/features/session/lib/agentEventFold";
+import { queryKeys } from "@/shared/api/queryKeys";
 import { Chat } from "@/features/session/ui/Chat";
 import { SessionProvider } from "@/features/session/context";
 import type { SessionStatus } from "@shared/enums";
@@ -27,10 +29,10 @@ vi.mock("@tanstack/react-virtual", async (importOriginal) => {
   };
 });
 vi.mock("@/features/session/hooks/useAutoScroll", () => ({
-  useAutoScroll: (options: unknown) => {
-    scroll(options);
-    return { showScrollButton: false, handleScrollToBottomClick: () => {} };
-  },
+  useAutoScroll: (options: unknown) => ({
+    showScrollButton: !!scroll(options),
+    handleScrollToBottomClick: () => {},
+  }),
 }));
 
 const messages: Message[] = [
@@ -43,6 +45,70 @@ const messages: Message[] = [
     sent_at: "2026-09-09T10:00:00.000Z",
   },
 ];
+
+it("keeps a deferred reply visible when the next turn starts in an Agent messages chat", () => {
+  const client = new QueryClient();
+  const a = { turnId: "turn-1", startedAt: 1 };
+  const b = { turnId: "turn-2", startedAt: 3 };
+  function reply(turnId: string, seq: number, text: string): Message {
+    const ctx = { sessionId: "session-1", messageId: `${turnId}-reply` };
+    return {
+      ...messages[0],
+      id: ctx.messageId,
+      turn_id: turnId,
+      role: "assistant",
+      seq,
+      parts: [createReasoningPart(ctx, "Checking", false), createTextPart(ctx, text, false)],
+    };
+  }
+  const first = [...messages, reply(a.turnId, 1, "Answer from A.")];
+  const next = [
+    ...first,
+    { ...messages[0], id: "prompt-b", turn_id: b.turnId, seq: 2 },
+    reply(b.turnId, 3, "Answer from B."),
+  ];
+
+  // Replay the inputs on one Chat hook state in the static renderer.
+  function Handoff({ through }: { through: number }) {
+    const [step, advance] = useState(0);
+    if (step < through) advance(step + 1);
+    return Chat({
+      loading: false,
+      agentMessages: true,
+      sessionStatus: step === 1 ? "idle" : "working",
+      messages: step === 2 ? next : first,
+      turns: step === 0 ? [a] : [{ ...a, endedAt: 2 }, ...(step === 2 ? [b] : [])],
+    });
+  }
+  const render = (through: number) =>
+    renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(SessionProvider, {
+          sessionStatus: through === 1 ? "idle" : "working",
+          subagentMessages: new Map(),
+          children: createElement(Handoff, { through }),
+        })
+      )
+    );
+  try {
+    virtualization.mockReturnValue({ width: 800, height: 900 });
+    scroll.mockReturnValue(true);
+    expect(render(0)).not.toContain("Answer from A.");
+    const idle = render(1);
+    expect(idle).toContain("Answer from A.");
+    expect(idle).not.toContain("activity, Worked");
+    const started = render(2);
+    expect(started).toContain("Answer from A.");
+    expect(started).not.toContain("activity, Worked");
+    expect(started).not.toContain("Answer from B.");
+  } finally {
+    scroll.mockReset();
+    virtualization.mockReset();
+    client.clear();
+  }
+});
 
 it("folds a read steer between replies and finishes the same turn once", () => {
   const client = new QueryClient();
@@ -74,7 +140,7 @@ it("folds a read steer between replies and finishes the same turn once", () => {
     });
     feed({ type: "message.ended", ...address });
   }
-  function render(sessionStatus: SessionStatus) {
+  function render(sessionStatus: SessionStatus, agentMessages = false) {
     const page = client.getQueryData<PaginatedMessages>(messagesKey(sessionId))!;
     expect(page.turns.map((turn) => turn.turnId)).toEqual([turnId]);
     virtualization.mockReturnValueOnce({ width: 800, height: 900 });
@@ -85,7 +151,13 @@ it("folds a read steer between replies and finishes the same turn once", () => {
         createElement(SessionProvider, {
           sessionStatus,
           subagentMessages: new Map(),
-          children: createElement(Chat, { sessionId, ...page, loading: false, sessionStatus }),
+          children: createElement(Chat, {
+            sessionId,
+            ...page,
+            loading: false,
+            sessionStatus,
+            agentMessages,
+          }),
         })
       )
     );
@@ -103,27 +175,55 @@ it("folds a read steer between replies and finishes the same turn once", () => {
       "before",
       createTextPart({ sessionId, messageId: "before" }, "First reply", false)
     );
-    message("user", 2, steerMessageId("s"), createSteerEchoParts("Focus on the tests", "s")[0]);
+    message("assistant", 2, "in-progress", {
+      type: "tool",
+      id: "tool",
+      sessionId,
+      messageId: "in-progress",
+      toolCallId: "build",
+      toolName: "Bash",
+      state: { status: "in_progress", input: {}, title: "Building", time: { start: 1 } },
+    });
+    message("user", 3, steerMessageId("s"), createSteerEchoParts("Focus on the tests", "s")[0]);
     message(
       "assistant",
-      3,
+      4,
       "after",
       createTextPart({ sessionId, messageId: "after" }, "Second reply", false)
     );
 
+    const bubbles = render("working");
+    expect(bubbles).toMatch(/Review the change.*First reply.*Focus on the tests.*Second reply/s);
+    expect(bubbles).toContain('aria-label="Expand activity, Building · 1 tool call"');
+    expect(bubbles).not.toMatch(/<article[^>]*\bopacity-60\b/);
+
+    expect(render("working", true)).not.toContain("Second reply");
+    // A confirmed stop can release the session before its turn end arrives.
+    for (const status of ["idle", "error"] as const) {
+      const released = render(status, true);
+      expect(released).toContain("First reply");
+      expect(released).toContain("Second reply");
+      expect(released).not.toContain("activity, Worked");
+    }
+
+    client.setQueryData(queryKeys.settings.all, { chat_view: "full" });
     const active = render("working");
     expect(active).toMatch(
       /Sent from.*Reviewer.*Review the change.*First reply.*Focus on the tests.*Second reply/s
     );
     expect(active.match(/Sent from/g)).toHaveLength(1);
     expect(active).not.toContain("Copy response");
-    expect(active.match(/class="opacity-60"/g)).toHaveLength(1);
-    expect(active.indexOf('class="opacity-60"')).toBeGreaterThan(
-      active.indexOf("Focus on the tests")
-    );
+    const mutedArticles = [...active.matchAll(/<article[^>]*\bopacity-60\b/g)];
+    expect(mutedArticles).toHaveLength(1);
+    expect(mutedArticles[0].index).toBeGreaterThan(active.indexOf("Focus on the tests"));
 
     feed({ type: "turn.ended", ...stamp, timestamp: 2000, stopReason: "cancelled" });
+    client.setQueryData(queryKeys.settings.all, { chat_view: "bubbles" });
+    // The turn end and the session status travel on separate subscriptions.
+    expect(render("working").match(/turn-footer-slot/g)).toHaveLength(1);
     const settled = render("idle");
+    expect(settled).toContain("First reply");
+    expect(settled).toContain("Second reply");
     expect(settled.match(/Response stopped/g)).toHaveLength(1);
     expect(settled.match(/aria-label="Copy response"/g)).toHaveLength(1);
     expect(settled.indexOf("Response stopped")).toBeGreaterThan(settled.indexOf("Second reply"));
@@ -191,7 +291,7 @@ it.each(["worktree", "cloud"] as const)("paints %s user messages on mount", (wor
 });
 
 it.each(["needs_response", "needs_plan_response"] as const)(
-  "%s keeps the last turn open without presenting it as streaming",
+  "%s reads live work from the open turn and keeps the progress slot idle",
   (sessionStatus) => {
     // The request can reach the chat before its turn record or the next part update.
     const part = { sessionId: "session-1", messageId: "reply" };
@@ -235,7 +335,7 @@ it.each(["needs_response", "needs_plan_response"] as const)(
           })
         )
       );
-      expect(html).toContain('aria-label="Expand activity, Reasoning"');
+      expect(html).toContain('aria-label="Expand activity, Thinking"');
       expect(html).toContain(">README.md<");
       expect(html).not.toContain("Copy response");
       expect(html).not.toContain("Auto-compacted");

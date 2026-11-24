@@ -23,11 +23,11 @@ export function activityLabel(parts: readonly Part[], streaming: boolean): strin
     }
   }
 
-  let label = toolCount ? "Activity" : "Reasoning";
+  let label = toolCount || parts.some((part) => part.type === "text") ? "Activity" : "Reasoning";
   if (streaming) {
     const active = parts.findLast(
       (part) =>
-        (part.type === "reasoning" && part.state === "streaming") ||
+        ((part.type === "reasoning" || part.type === "text") && part.state === "streaming") ||
         (part.type === "tool" &&
           (part.state.status === "pending" || part.state.status === "in_progress"))
     );
@@ -37,6 +37,7 @@ export function activityLabel(parts: readonly Part[], streaming: boolean): strin
         (active.state.status === "in_progress" && active.state.title) ||
         toolCardName(active);
     else if (active?.type === "reasoning") label = "Thinking";
+    else if (active?.type === "text") label = "Typing…";
   }
   return [
     label,

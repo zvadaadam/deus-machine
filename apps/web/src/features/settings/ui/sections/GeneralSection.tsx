@@ -21,6 +21,7 @@ import { RotateCcw, Loader2, RefreshCw, CheckCircle2, AlertCircle, Download } fr
 import { useUIStore } from "@/shared/stores/uiStore";
 import { capabilities } from "@/platform";
 import { releaseUrl, useUpdateContext } from "@/features/updates";
+import { CHAT_VIEWS, chatView } from "../../lib/chatView";
 import type { GeneralSectionProps } from "./types";
 
 export function GeneralSection({ settings, saveSetting, theme, setTheme }: GeneralSectionProps) {
@@ -97,6 +98,30 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
           <SelectContent>
             <SelectItem value="unified">Unified</SelectItem>
             <SelectItem value="split">Split</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
+      <Separator />
+      <Field orientation="responsive">
+        <FieldContent>
+          <FieldLabel htmlFor="chat-view">Chat view</FieldLabel>
+          <FieldDescription>
+            Read messages with the work folded, or follow the full run.
+          </FieldDescription>
+        </FieldContent>
+        <Select
+          value={chatView(settings)}
+          onValueChange={(value) => saveSetting("chat_view", value)}
+        >
+          <SelectTrigger id="chat-view" className="min-w-36">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {CHAT_VIEWS.map(({ value, label }) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </Field>

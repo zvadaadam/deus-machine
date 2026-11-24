@@ -49,6 +49,7 @@ const chat = (id: string): Session => ({
   id,
   workspace_id: "w",
   agent_harness: "claude-code",
+  agent_messages: false,
   status: "idle",
   message_count: 1,
   context_token_count: 0,

@@ -1,29 +1,26 @@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { memo, useMemo } from "react";
+import { memo, useMemo, type ReactNode } from "react";
 import { CopyIcon } from "@/components/ui/copy-icon";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { Message, SessionTurn } from "@/shared/types";
 import { useCopyToClipboard } from "@/shared/hooks";
 import { cn } from "@/shared/lib/utils";
 import { formatTurnDurationLabel } from "./utils/formatTurnDurationLabel";
-import { getTurnFooterData } from "./utils";
+import type { TurnFooterData } from "./utils";
 
-interface TurnFooterProps {
-  messages: Message[];
-  turn?: SessionTurn;
-  startedAt?: string | null;
+/** Progress and the settled footer exchange their content in one measured row. */
+export function TurnFooterSlot({ children }: { children: ReactNode }) {
+  return <div className="turn-footer-slot flex h-9 shrink-0 items-center">{children}</div>;
 }
 
-export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }: TurnFooterProps) {
+export const TurnFooter = memo(function TurnFooter({
+  copyText,
+  startedAt: startMs,
+  durationMs,
+  tokens,
+  cost,
+  attribution,
+}: TurnFooterData) {
   const { copy, copied } = useCopyToClipboard({ resetDelay: 1600 });
-  const {
-    copyText,
-    startedAt: startMs,
-    durationMs,
-    tokens,
-    cost,
-    attribution,
-  } = useMemo(() => getTurnFooterData(messages, startedAt, turn), [messages, startedAt, turn]);
 
   // Billed tokens = non-cached input + cache reads/writes + output (the three
   // input buckets are disjoint by protocol invariant, so this never double-counts).

@@ -141,6 +141,7 @@ export interface SessionRow {
   workspace_id: string;
   agent_harness: string;
   agent_session_id: string | null;
+  agent_messages: boolean;
   /** agnt session id for cloud-workspace sessions (null for local). */
   provider_session_id: string | null;
   title: string | null;

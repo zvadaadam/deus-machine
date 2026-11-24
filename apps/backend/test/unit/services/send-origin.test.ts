@@ -22,7 +22,7 @@ describe("a message's origin", () => {
 
   it("reaches turn/start when the host gives one, and never for the person", () => {
     const origin = { kind: "session" as const, sessionId: "lead", name: "deus/voyager:1" };
-    const base = { cwd: "/tmp" };
+    const base = { cwd: "/tmp", agentMessages: false };
     expect(
       buildTurnStartParams("s1", "t1", "claude-code", "hi", { ...base, origin }).origin
     ).toEqual(origin);
