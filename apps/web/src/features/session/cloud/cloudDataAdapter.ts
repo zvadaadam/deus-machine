@@ -262,8 +262,6 @@ function toWorkspace(s: AgntSession, owner: QueryClient): Workspace {
     current_session_id: s.id,
     chats: [{ id: s.id, status, error_category: null, last_user_message_at: s.updated_at }],
     session_status: status,
-    session_error_category: null,
-    session_error_message: null,
     latest_message_sent_at: s.updated_at,
     updated_at: s.updated_at,
     repo_name: repoLabel(s.repo),

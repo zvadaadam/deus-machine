@@ -49,8 +49,6 @@ export interface Workspace {
   /** Visible chats in creation order. Older hosts send no chat list. */
   chats?: WorkspaceChat[];
   session_status: SessionStatus | null;
-  session_error_category: string | null;
-  session_error_message: string | null;
   latest_message_sent_at: string | null;
   /** The first chat's id, minted with the workspace, and that chat's own status and when it was last spoken to. */
   first_session_id?: string | null;

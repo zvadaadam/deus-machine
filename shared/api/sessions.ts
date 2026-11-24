@@ -171,6 +171,8 @@ export const cloudSaveFailures = stream({
 });
 
 export type ToolRequestEvent =
+  /** A new subscription opens with the IDs the host still waits on. */
+  | { type: "pending"; requestIds: string[] }
   /** An agent asks a client to do or answer something (approve a plan, show a diff). */
   | { type: "request"; request: ToolRequestEventData }
   /** The agent no longer waits for that answer: drop the prompt. */

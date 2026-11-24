@@ -14,15 +14,29 @@ const { diffStatsToAsk, wokeUp } = await import("@/features/workspace/lib/diffSt
 const { rereadDiffStats } = await import("@/features/workspace/api/workspace.queries");
 const { queryKeys } = await import("@/shared/api/queryKeys");
 
-const row = (id: string, kind: Workspace["kind"], session_status: string = "idle") =>
-  ({ id, kind, session_status }) as Workspace;
+const row = (
+  id: string,
+  kind: Workspace["kind"],
+  status: NonNullable<Workspace["session_status"]> = "idle"
+) =>
+  ({
+    id,
+    kind,
+    state: "ready",
+    current_session_id: "selected",
+    session_status: "idle",
+    chats: [
+      { id: "selected", status: "idle" },
+      { id: "sibling", status },
+    ],
+  }) as Workspace;
 
 describe("which diff numbers the sidebar asks for", () => {
   const cached =
     (values: Record<string, { additions: number; deletions: number }>) => (id: string) =>
       values[id];
 
-  it("asks for those it has none for, and those working", () => {
+  it("asks for missing numbers and for cached ones while a background chat works", () => {
     const rows = [row("a", "worktree"), row("b", "worktree", "working"), row("c", "worktree")];
     expect(
       diffStatsToAsk(

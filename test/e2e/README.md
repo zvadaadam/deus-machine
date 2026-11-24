@@ -93,10 +93,11 @@ Screenshots and `results.json` land in `.context/workspace-start/`.
 
 ### Desktop workspace links
 
-`workspace-links.desktop.mjs` opens links in the built Electron app with two workspaces
-and three chats in a fresh database under `.context/workspace-links-desktop/`. It checks
+`workspace-links.desktop.mjs` opens links to three chats in two workspaces in the
+built Electron app, using a fresh database under `.context/workspace-links-desktop/`. It checks
 launch and running links, the workspace's active chat, Automations, Settings, onboarding,
-refused and missing destinations, and two links arriving together. On macOS it samples
+refused and missing destinations, and two links arriving together. More workspace rows let it
+scroll the sidebar by touch and drag a project header past another project. On macOS it samples
 the frontmost app through shutdown. On Linux, run it on a virtual display with `xvfb-run -a`.
 
 ```sh

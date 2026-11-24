@@ -340,9 +340,7 @@ export function Chat({
                         className={cn(
                           spacingClass,
                           "chat-turn-wrapper min-w-0",
-                          shouldAnimate &&
-                            (turn.type !== "user" || workspaceKind !== "worktree") &&
-                            "chat-item-enter"
+                          shouldAnimate && turn.type !== "user" && "chat-item-enter"
                         )}
                       >
                         {match(turn)

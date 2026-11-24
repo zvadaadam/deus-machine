@@ -165,7 +165,7 @@ describe("session alert visibility", () => {
   });
 });
 
-it("paints a local user echo at full opacity when it takes the place of a queue row", () => {
+it.each(["worktree", "cloud"] as const)("paints %s user messages on mount", (workspaceKind) => {
   virtualization.mockReturnValueOnce({ width: 800, height: 600 });
   const client = new QueryClient();
   try {
@@ -177,7 +177,7 @@ it("paints a local user echo at full opacity when it takes the place of a queue 
           messages,
           sessionStatus: "working",
           loading: false,
-          workspaceKind: "worktree",
+          workspaceKind,
         })
       )
     );

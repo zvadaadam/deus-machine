@@ -22,9 +22,13 @@ function openFromKeyboard(event: KeyboardEvent<HTMLElement>) {
   );
 }
 
-export function ContextMenu({ trigger, children }: { trigger: ReactElement; children: ReactNode }) {
+export function ContextMenu({
+  trigger,
+  children,
+  ...props
+}: ComponentProps<typeof Menu.Root> & { trigger: ReactElement }) {
   return (
-    <Menu.Root>
+    <Menu.Root {...props}>
       <Menu.Trigger asChild onKeyDown={openFromKeyboard}>
         {trigger}
       </Menu.Trigger>

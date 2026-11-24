@@ -198,7 +198,8 @@ While a local chat works, Enter on a keyboard and Send on a phone queue the mess
 Command-Enter (Ctrl-Enter outside macOS) and a waiting row's send arrow ask to steer
 the turn the window shows. If that turn is gone, unnamed or cannot take the message,
 the message goes first in the queue and starts its own turn when the chat is free
-and the queue is not paused. With a question or plan card open, both shortcuts queue.
+and the queue is not paused. With a question or plan card open, a steer naming
+an older turn still goes first. Otherwise a new message appends and a waiting row stays in place.
 The backend holds up to 20 messages per chat in memory (`services/agent/queue.ts`).
 Each composer follows `queuedMessages` for the text and picture count in
 `session/ui/QueuedMessageList.tsx`. Edit reads a waiting row's full content with
@@ -209,8 +210,14 @@ stays first until its user echo is complete. If its own turn is known to be gone
 first, the head returns to the front and the queue pauses. Unread steers follow and
 return to the front in order if their turn ends unread. After publishing a normal end,
 the backend sends one row from an unpaused queue. Stop pauses the queue at once.
-If a local turn is still starting, Stop waits for admission and cancels it if it
-is still live. After a stop or failure the queue waits for Resume.
+During a local turn's app setup, Stop returns the chat to idle at once. The person
+keeps their draft, a queue head waits first, and an operator's send is refused
+with “Stopped before it started.” Once the start request reaches the wire, Stop
+waits for its answer (up to 30 seconds) and cancels the turn if it is still live.
+If the engine reports no active turn, the chat settles at once. When it confirms a
+cancellation, the chat stays occupied for the final echoes and turn end. After
+15 seconds without the end, the watchdog closes that turn and returns
+its unread messages to the paused queue. After a stop or failure the queue waits for Resume.
 A steer read mid-turn splits one reply into groups with one footer (`groupTurns` in
 `session/lib/chatTimeline.ts`). Cloud chats keep their send, including the hosted web's
 direct lane. The operator's `send` to a busy chat still answers `busy`.
@@ -618,8 +625,10 @@ Selecting a workspace writes `/s/<computer>/w/<workspace>` on the relay (`local`
 `dev:web`) or `/w/<workspace>` on web-direct. Changing chats replaces `?session=<chat>`
 in that history entry. Copy link uses the same browser address (`workspaceAddress` in
 `features/workspace/lib/workspaceAddress.ts`) or `deus://workspace?id=<workspace>` in
-the desktop app. A workspace row's context menu copies the workspace link. A chat tab's
-menu copies that chat's link, even when another tab is selected.
+the desktop app. Every workspace row can copy its link, including while it starts or
+after a failed start. Each tab with a chat copies its own link, even when inactive.
+On touch, holding a workspace row opens its menu. Holding a chat tab or a project
+header starts a drag.
 
 What the window knows of the cloud is one live read, `cloudOrganizations`
 (`useCloudOrganizations()`): whether this backend can act there (`available`), the
@@ -711,7 +720,7 @@ its computer's and ignore this computer's settings. "New workspace from a pull r
 branch" is local (`offersNewFromBranch`). The sidebar row and the place menu read every
 visible chat's activity (`placeActivity` in the menu). A waiting chat or an unseen reply can
 mark the row while another chat's working grid runs. A failed setup has its own mark.
-Reopen lists every visible chat without a tab, the most recently closed first.
+Reopen lists every visible chat without a tab, those closed in this visit first.
 The sidebar's diff numbers never connect to a cloud
 computer: a `diff.request` to a sandbox whose agent is not connected makes the platform
 resume it, so `diffStats` asks only a session with an open channel that is not asleep.

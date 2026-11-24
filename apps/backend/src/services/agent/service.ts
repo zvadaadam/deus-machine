@@ -34,7 +34,12 @@ import { isUnknownEvent } from "@shared/protocol-types";
 import { AgentLink } from "./client";
 import { LocalAgents } from "./local-agents";
 import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
-import { createAgentEventHandler, type AgentEventHandler, type TurnEnd } from "./event-handler";
+import {
+  createAgentEventHandler,
+  type AgentEventHandler,
+  type AgentUpdate,
+  type TurnEnd,
+} from "./event-handler";
 import { buildTurnStartParams, withoutImageParts, type DeusTurnOptions } from "./run-config";
 import { toolRequests } from "@shared/api/sessions";
 import { cancelSessionRelays, isPrompt, pendingFor, relay } from "./tool-relay";
@@ -86,30 +91,21 @@ export async function init(): Promise<void> {
   // follows every chat (a window's card host) is shown every chat's.
   // Prompts only: a request a client answers by itself (a diff, a terminal's
   // output) was sent to the clients following then, and would run twice.
-  openWith(toolRequests, ({ sessionId }) =>
-    pendingFor(sessionId)
-      .filter((request) => isPrompt(request.method))
-      .map((request) => ({ type: "request" as const, request }))
-  );
+  openWith(toolRequests, ({ sessionId }) => {
+    const pending = pendingFor(sessionId);
+    return [
+      { type: "pending" as const, requestIds: pending.map((request) => request.requestId) },
+      ...pending
+        .filter((request) => isPrompt(request.method))
+        .map((request) => ({ type: "request" as const, request })),
+    ];
+  });
   // Cloud sessions feed the SAME handler — one fold, one persistence path,
   // two transports.
   initCloudDriver(handler);
 
   link = await AgentLink.open({
-    onEnvelope: (envelope) => {
-      const { event, sessionId } = envelope;
-      const known = !isUnknownEvent(event);
-      // Withdraw this turn's cards before publishing its end and admitting its successor.
-      if (known && event.type === "turn.ended")
-        cancelSessionRelays(sessionId, "turn ended", event.turnId);
-      const end = handler.handle(envelope);
-      if (!known) return;
-      if (end) turnWatcher?.turnEnded(end);
-      if (event.type === "message.ended")
-        turnWatcher?.userEcho(sessionId, event.turnId, event.messageId);
-      if (event.type === "permission.requested") void answerPermission(event);
-      if (event.type === "elicitation.requested") void answerElicitation(event);
-    },
+    onEnvelope: (envelope) => handleLocalEvent(handler, envelope),
     onEventGap: (gap) => {
       const turnId = handler.handleEventGap(gap);
       if (!turnId || gap.reason !== "replay_failed") return;
@@ -142,6 +138,36 @@ export async function init(): Promise<void> {
   );
 }
 
+function handleLocalEvent(handler: AgentEventHandler, envelope: AgentUpdate): void {
+  const { event, sessionId } = envelope;
+  const known = !isUnknownEvent(event);
+  // Withdraw this turn's cards before publishing its end and admitting its successor.
+  if (known && event.type === "turn.ended")
+    cancelSessionRelays(sessionId, "turn ended", event.turnId);
+  const end = handler.handle(envelope);
+  if (!known) return;
+  if (end) turnWatcher?.turnEnded(end);
+  if (event.type === "message.ended")
+    turnWatcher?.userEcho(sessionId, event.turnId, event.messageId);
+  if (event.type === "permission.requested") void answerPermission(event);
+  if (event.type === "elicitation.requested") void answerElicitation(event);
+}
+
+/** A confirmed stop whose end never arrived settles through the same fold as a delivered end. */
+export function finishStoppedTurn(sessionId: string, turnId: string): void {
+  if (events?.liveTurnId(sessionId) !== turnId) return;
+  handleLocalEvent(events, {
+    sessionId,
+    event: {
+      type: "turn.ended",
+      sessionId,
+      turnId,
+      stopReason: "cancelled",
+      timestamp: Date.now(),
+    },
+  });
+}
+
 /** Stop the engine: turns under way are cancelled, the agent CLIs stopped. */
 export async function shutdown(): Promise<void> {
   shutdownCloudDriver();
@@ -165,10 +191,19 @@ export async function startTurn(
   turnId: string,
   agentHarness: AgentHarness,
   prompt: string,
-  options: DeusTurnOptions
+  options: DeusTurnOptions & { signal?: AbortSignal }
 ): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
-  const apps = await turnApps(agentHarness);
+  const { signal } = options;
+  signal?.throwIfAborted();
+  const stopped = Promise.withResolvers<never>();
+  const onAbort = () => stopped.reject(signal?.reason);
+  signal?.addEventListener("abort", onAbort);
+  const apps = await Promise.race([turnApps(agentHarness), stopped.promise]).finally(() =>
+    signal?.removeEventListener("abort", onAbort)
+  );
+  // Stop can arrive after the apps resolve and before this turn is registered.
+  signal?.throwIfAborted();
   if (!getDatabase().prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId)) {
     throw new NotFoundError("This chat no longer exists.");
   }
@@ -262,16 +297,6 @@ export async function stopSession(params: {
 }): Promise<TurnCancelResult> {
   if (!link) throw new Error("Agent service not initialized");
   const result = await link.cancelTurn(params.sessionId, params.turnId);
-  if (result.outcome === "cancelled")
-    cancelSessionRelays(params.sessionId, "turn stopped", result.turnId);
-  if (params.turnId) {
-    events?.settleEventGap(
-      params.sessionId,
-      params.turnId,
-      result.outcome === "cancelled" ||
-        (result.outcome === "no_active_turn" && !result.activeTurnId)
-    );
-  }
   if (result.outcome === "unconfirmed") {
     console.warn(`[AgentService] cancel unconfirmed for session=${params.sessionId}`);
   }

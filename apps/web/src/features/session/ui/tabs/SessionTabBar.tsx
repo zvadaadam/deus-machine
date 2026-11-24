@@ -1,18 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Plus } from "lucide-react";
-import {
-  DndContext,
-  MouseSensor,
-  TouchSensor,
-  closestCenter,
-  type DragEndEvent,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
+import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { Tooltip, TooltipContent, TooltipKbd, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
+import { useReorderSensors } from "@/shared/hooks/useReorderSensors";
 import { ClosedSessionsPopover } from "./ClosedSessionsPopover";
 import { SessionTab } from "./SessionTab";
 import { SortableSessionTab } from "./SortableSessionTab";
@@ -62,10 +55,7 @@ export function SessionTabBar({
   const tabRefs = useRef(new Map<string, HTMLButtonElement>());
   const prevFocusKeyRef = useRef(focusActiveTabKey);
 
-  const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
-  );
+  const sensors = useReorderSensors({ keyboard: false });
 
   const tabIds = useMemo(() => tabs.map((tab) => tab.id), [tabs]);
 

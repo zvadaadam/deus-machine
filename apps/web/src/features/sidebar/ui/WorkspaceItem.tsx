@@ -25,21 +25,19 @@ import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLay
 import { prefetchWorkspace } from "@/features/workspace/api/prefetch";
 import {
   canRecoverStart,
-  hasCheckout,
   SETUP_FAILED,
   SETUP_RUNNING,
   workspaceStart,
 } from "@/features/workspace/lib/startState";
-import { getWorkspaceActivity, WORKFLOW_STATUS_CONFIG } from "../lib/status";
+import { getWorkspaceActivity } from "../lib/status";
 import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "../lib/utils";
 import type { WorkspaceItemProps } from "../model/types";
 import { SidebarRow } from "./SidebarRow";
 import { WorkspaceGitIcon } from "./WorkspaceGitIcon";
 import { WorkspaceHoverCard } from "./WorkspaceHoverCard";
-import { WorkspaceStatusMenu } from "./WorkspaceStatusMenu";
+import { WorkspaceStatusChoices, WorkspaceStatusMenu } from "./WorkspaceStatusMenu";
 import { ContextMenu, ContextMenuItem, ContextMenuSub } from "@/components/ui/context-menu";
 import { copyWorkspaceLink } from "@/features/workspace/lib/workspaceAddress";
-import { WORKFLOW_STATUSES } from "@shared/enums";
 import { WorkflowStatusIcon } from "./WorkflowStatusIcon";
 
 /** The same presence as the header and panels; only recoverable states offer wake. */
@@ -102,6 +100,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
   onStatusChange,
 }: WorkspaceItemProps) {
   const isInitializing = workspace.state === "initializing";
+  const [menuOpen, setMenuOpen] = React.useState(false);
   // Provenance: automation-born workspaces carry a zap beside the name.
   const automation = useAutomationForWorkspace(workspace.id);
   const queryClient = useQueryClient();
@@ -323,24 +322,20 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
 
   const trigger = (
     <div className={cn(isInitializing && "animate-fade-in-up")}>
-      {isInitializing ? (
-        row
-      ) : (
-        <WorkspaceHoverCard
-          workspace={workspace}
-          displayStatus={status}
-          workingChatId={running?.id}
-          diffStats={diffStats}
-          workingDuration={duration > 0 ? formatDuration(duration, false) : null}
-        >
-          {row}
-        </WorkspaceHoverCard>
-      )}
+      <WorkspaceHoverCard
+        hidePreview={isInitializing || menuOpen}
+        workspace={workspace}
+        displayStatus={status}
+        workingChatId={running?.id}
+        diffStats={diffStats}
+        workingDuration={duration > 0 ? formatDuration(duration, false) : null}
+      >
+        {row}
+      </WorkspaceHoverCard>
     </div>
   );
-  if (isCloudDirectWebMode() || !hasCheckout(workspace)) return trigger;
   return (
-    <ContextMenu trigger={trigger}>
+    <ContextMenu trigger={trigger} onOpenChange={setMenuOpen}>
       {!isActive && (
         <ContextMenuItem onSelect={() => onClick(workspace)}>
           <FolderOpen />
@@ -362,21 +357,11 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
             </>
           }
         >
-          {WORKFLOW_STATUSES.map((status) => (
-            <ContextMenuItem
-              key={status}
-              onSelect={() => {
-                if (status !== workspace.status) onStatusChange(workspace.id, status);
-              }}
-            >
-              <span aria-hidden="true">
-                <WorkflowStatusIcon status={status} />
-              </span>
-              <span className={status === workspace.status ? "font-medium" : undefined}>
-                {WORKFLOW_STATUS_CONFIG[status].label}
-              </span>
-            </ContextMenuItem>
-          ))}
+          <WorkspaceStatusChoices
+            Item={ContextMenuItem}
+            currentStatus={workspace.status}
+            onStatusChange={(status) => onStatusChange(workspace.id, status)}
+          />
         </ContextMenuSub>
       )}
       {canArchive && (

@@ -1,15 +1,19 @@
-import type { KeyboardEvent, RefCallback } from "react";
+import type { KeyboardEvent, RefCallback, SyntheticEvent } from "react";
 import { Link, MessageSquare, X } from "lucide-react";
 import { getAgentLogo } from "@/assets/agents";
 import { ContextMenu, ContextMenuItem } from "@/components/ui/context-menu";
 import { TabPill } from "@/components/ui/tab-pill";
 import { copyWorkspaceLink } from "@/features/workspace/lib/workspaceAddress";
-import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { cn } from "@/shared/lib/utils";
 import { CircularPixelGrid } from "../CircularPixelGrid";
 import { getChatTabSessionId, type ChatTab } from "./types";
 
 const AGENT_ICON_SIZE = "h-3.5 w-3.5";
+
+function keepTouchForDrag(event: SyntheticEvent) {
+  if ("pointerType" in event.nativeEvent && event.nativeEvent.pointerType === "touch")
+    event.preventDefault();
+}
 
 interface SessionTabProps {
   workspaceId: string;
@@ -71,9 +75,15 @@ export function SessionTab({
       {tab.label}
     </TabPill>
   );
-  if (!sessionId || isCloudDirectWebMode()) return pill;
+  if (!sessionId) return pill;
   return (
-    <ContextMenu trigger={<div>{pill}</div>}>
+    <ContextMenu
+      trigger={
+        <div onPointerDown={keepTouchForDrag} onContextMenu={keepTouchForDrag}>
+          {pill}
+        </div>
+      }
+    >
       {!isActive && (
         <ContextMenuItem onSelect={onSelect}>
           <MessageSquare />

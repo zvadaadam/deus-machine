@@ -71,6 +71,13 @@ function turnOutcome(turn: ConversationTurn, alreadyReported: boolean): TurnOutc
   return { status: "idle" };
 }
 
+/** A late event still belongs in the transcript. Only a live local turn can change its chat. */
+function ownsSession(facts: SessionFacts, turnId: string): boolean {
+  return (
+    facts.turnId === turnId || (facts.turnId === undefined && facts.acceptedTurnId === undefined)
+  );
+}
+
 /**
  * `turnOutcome`, plus the two flags an ended turn moves.
  *
@@ -82,8 +89,7 @@ export function turnOutcomeFor(
   facts: SessionFacts,
   turn: ConversationTurn
 ): TurnOutcomeWrite | undefined {
-  const owner = facts.turnId ?? facts.acceptedTurnId;
-  if (owner !== undefined && owner !== turn.turnId) return;
+  if (!ownsSession(facts, turn.turnId)) return;
   const failure = facts.deliveryFailure?.turnId === turn.turnId ? facts.deliveryFailure : undefined;
   const outcome: TurnOutcomeWrite = failure
     ? {
@@ -112,14 +118,12 @@ export function applySessionFacts(
   conversation: ConversationState
 ): SessionFactWrite[] {
   if (isUnknownEvent(event)) return [];
-  const owner = facts.turnId ?? facts.acceptedTurnId;
   const rejectedSend =
     event.type === "error" && event._meta?.cloudErrorCode === "MESSAGE_SEND_FAILED";
   if (
-    owner !== undefined &&
     "turnId" in event &&
     event.turnId !== undefined &&
-    event.turnId !== owner &&
+    !ownsSession(facts, event.turnId) &&
     !rejectedSend
   )
     return [];

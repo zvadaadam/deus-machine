@@ -7,20 +7,19 @@
  * is open) and its computer waking.
  */
 import type { DiffStats, Workspace } from "@/shared/types";
+import { getWorkspaceActivity } from "@/features/sidebar/lib/status";
 import type { CloudPresence } from "./cloudPresence";
-
-type Row = Pick<Workspace, "id" | "session_status">;
 
 /**
  * The workspaces to ask for: those with no number yet, and those working. Every
  * other cached number is used as it is.
  */
 export function diffStatsToAsk(
-  workspaces: Row[],
+  workspaces: Workspace[],
   cached: (id: string) => DiffStats | undefined
 ): string[] {
   const ask = workspaces
-    .filter((workspace) => !cached(workspace.id) || workspace.session_status === "working")
+    .filter((workspace) => !cached(workspace.id) || getWorkspaceActivity(workspace, {}).working)
     .map((workspace) => workspace.id);
   return [...new Set(ask)];
 }

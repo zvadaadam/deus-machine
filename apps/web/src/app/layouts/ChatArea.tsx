@@ -5,17 +5,12 @@
  * This component focuses on layout and connecting tabs to SessionPanel.
  */
 
-import { useMemo, useEffect } from "react";
+import { useMemo } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import {
-  SessionPanel,
-  SessionTabBar,
-  getChatTabSessionId,
-  isSessionChatTab,
-} from "@/features/session";
-import { useWorkingSessionIds } from "@/features/session/api/session.queries";
+import { SessionPanel, SessionTabBar } from "@/features/session";
+import { workspaceChats } from "@shared/types/workspace";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
-import { useUnreadStore, unreadActions } from "@/features/session/store/unreadStore";
+import { useUnreadStore } from "@/features/session/store/unreadStore";
 import { WorkspaceStartState } from "@/features/session/ui/WorkspaceStartState";
 import { workspaceStart } from "@/features/workspace/lib/startState";
 import { localFolder } from "@/features/workspace/lib/reach";
@@ -40,6 +35,7 @@ export function ChatArea({
     tabs,
     activeTabId,
     activeTab,
+    shownSessionId: tabSessionId,
     closedTabs,
     focusActiveTabKey,
     handleTabChange,
@@ -54,33 +50,23 @@ export function ChatArea({
     activeSessionId: workspace.current_session_id,
   });
 
-  // Resolve sessionId: tab's own session, falling back to workspace's active session
-  const tabSessionId = getChatTabSessionId(activeTab) || workspace.current_session_id;
-
   // The chat this workspace started with (while this client watched) opens
   // with the story of the start; no other chat does.
   const startedHere = useWorkspaceStartStore(
     (state) => !!tabSessionId && state.startedIn[workspace.id] === tabSessionId
   );
 
-  // Per-tab working status: subscribes to each chat tab's session detail cache
-  // so each tab's spinner reflects its own session's status (not the workspace's
-  // single session_status which breaks with multiple tabs).
-  const chatSessionIds = useMemo(
-    () => tabs.filter(isSessionChatTab).map((tab) => tab.sessionId),
-    [tabs]
+  const workingSessionIds = useMemo(
+    () =>
+      new Set(
+        workspaceChats(workspace)
+          .filter((chat) => chat.status === "working")
+          .map((chat) => chat.id)
+      ),
+    [workspace]
   );
-  const workingSessionIds = useWorkingSessionIds(chatSessionIds);
-
-  useEffect(() => {
-    if (tabSessionId) unreadActions.markRead(tabSessionId);
-  }, [tabSessionId]);
-
   const unreadMap = useUnreadStore((s) => s.unreadSessionIds);
-  const unreadSessionIds = useMemo(
-    () => new Set(chatSessionIds.filter((sid) => unreadMap[sid])),
-    [chatSessionIds, unreadMap]
-  );
+  const unreadSessionIds = useMemo(() => new Set(Object.keys(unreadMap)), [unreadMap]);
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">

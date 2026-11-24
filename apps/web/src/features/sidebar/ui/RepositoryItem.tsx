@@ -1,4 +1,5 @@
 import { Collapse } from "@/components/ui/collapse";
+import type { ComponentPropsWithRef } from "react";
 import { offersNewFromBranch } from "../lib/location";
 import { Plus, ChevronRight, ChevronDown, GitPullRequest } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
@@ -30,6 +31,7 @@ import { DeusRepositoryBanner } from "./DeusRepositoryBanner";
  *     └── WorkspaceItem[]
  */
 export function RepositoryItem({
+  dragHandle,
   repository,
   isCollapsed,
   selectedWorkspaceId,
@@ -43,7 +45,7 @@ export function RepositoryItem({
   onStatusChange,
   diffStatsMap,
   sidebarExpanded,
-}: RepositoryItemProps) {
+}: RepositoryItemProps & { dragHandle: ComponentPropsWithRef<"div"> }) {
   const repoName = getCleanRepoName(repository.repo_name);
   // Web-direct can't create workspaces (no Mac backend) — the hover actions
   // would only open a picker with nothing in it.
@@ -61,8 +63,8 @@ export function RepositoryItem({
       >
         <CollapsibleTrigger asChild>
           <SidebarRow
+            {...dragHandle}
             variant="repo"
-            role="button"
             aria-label={`Toggle ${repoName} workspaces`}
             className="cursor-grab"
           >

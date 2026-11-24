@@ -205,7 +205,11 @@ async function steer(
   chat: LocalChat,
   turnId?: string
 ): Promise<SteerResult["outcome"]> {
-  if (chat.status === "needs_response" || chat.status === "needs_plan_response") {
+  const matches = turnId !== undefined && turnId === liveTurnId(q.sessionId);
+  if (
+    (!turnId || matches) &&
+    (chat.status === "needs_response" || chat.status === "needs_plan_response")
+  ) {
     if (!q.items.includes(item)) {
       q.items.push(item);
       changed(q);
@@ -214,7 +218,7 @@ async function steer(
   }
   const index = q.items.indexOf(item);
   if (index >= 0) q.items.splice(index, 1);
-  if (turnId && chat.status === "working" && turnId === liveTurnId(q.sessionId)) {
+  if (matches && chat.status === "working") {
     const pending: Steer = { turnId, item, echoed: false };
     const steerId = uuidv7();
     const echoId = steerMessageId(steerId);

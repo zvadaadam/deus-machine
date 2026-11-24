@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   activityElsewhere,
   locationOf,
@@ -86,6 +86,18 @@ describe("the workspace's activity", () => {
     const unread = { sibling: true };
     expect(sortByStatusPriority(workspaces, unread)[0]).toBe(last);
     expect(splitByRecency(workspaces, null, unread)[0]).toContain(last);
+  });
+
+  it("reads each workspace's chats once when sorting by activity", () => {
+    const read = vi.fn(() => [chat("s-a")]);
+    const rows = ["a", "b", "c", "d"].map((id) => ({
+      ...ws(id),
+      get chats() {
+        return read();
+      },
+    }));
+    expect(sortByStatusPriority(rows, {}).map((w) => w.id)).toEqual(["a", "b", "c", "d"]);
+    expect(read).toHaveBeenCalledTimes(rows.length);
   });
 });
 

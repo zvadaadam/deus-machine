@@ -120,7 +120,7 @@ describe("buildElicitationResponseFrame (renderer answer → agnt elicitation.re
   });
 });
 
-it("drops withdrawn backend cards at reconnect, replays pending ones and keeps a parked direct question", async () => {
+it("keeps a live question through reset and replay, withdraws the missing plan and retains a direct question", async () => {
   vi.stubGlobal("window", Object.assign(new EventTarget(), { HTMLIFrameElement: class {} }));
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const root = createRoot(Object.assign(new EventTarget(), { nodeType: 9 }) as Document);
@@ -150,7 +150,7 @@ it("drops withdrawn backend cards at reconnect, replays pending ones and keeps a
       return {
         type: "request" as const,
         request: {
-          requestId: sessionId,
+          requestId: `request-${sessionId}`,
           sessionId,
           method,
           params: { sessionId, question: "Ready?" },
@@ -168,17 +168,29 @@ it("drops withdrawn backend cards at reconnect, replays pending ones and keeps a
         { sessionId: "direct" },
         request("direct", "askUserQuestion")
       );
-      present("gone", "askUserQuestion");
-      present("pending", "exitPlanMode");
+      present("gone", "exitPlanMode");
+      present("pending", "askUserQuestion");
     });
-    expect([...shown!.keys()]).toEqual(["direct", "gone", "pending"]);
+    const before = shown!;
+    expect([...before.keys()]).toEqual(["direct", "gone", "pending"]);
     act(() => {
       socket.message({ type: "server_reconnecting" });
       socket.message({ type: "connected" });
     });
-    expect([...shown!.keys()]).toEqual(["direct"]);
-    act(() => present("pending", "exitPlanMode"));
+    expect(shown!).toBe(before);
+    act(() =>
+      socket.message({
+        type: "q:event",
+        id,
+        data: { type: "pending", requestIds: ["request-pending"] },
+      })
+    );
     expect([...shown!.keys()]).toEqual(["direct", "pending"]);
+    act(() => present("pending", "askUserQuestion"));
+    expect(shown!.get("pending")).toBe(before.get("pending"));
+    expect(shown!.get("direct")).toBe(before.get("direct"));
+    act(() => socket.message({ type: "q:event", id, data: { type: "pending", requestIds: [] } }));
+    expect([...shown!.keys()]).toEqual(["direct"]);
   } finally {
     act(() => root.unmount());
     runtime.dispose();

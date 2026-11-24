@@ -9,6 +9,7 @@ import { WORKSPACE_LINK_AVAILABLE } from "../../shared/events.ts";
 import { SCHEMA_SQL } from "../../shared/schema.ts";
 import { workspaceLink } from "../../shared/workspace-link.ts";
 import { launchInBackground, watchForeground } from "./lib/launch-in-background.mjs";
+import { assertSidebarGestures, seedSidebarGestures } from "./lib/sidebar-gestures.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const output = path.join(root, ".context/workspace-links-desktop");
@@ -72,6 +73,7 @@ const release = seedWorkspace("release", ["The checklist is ready.", "The build 
 const handoff = seedWorkspace("handoff", ["Please review the handoff notes."]);
 const [checklist, signed] = release.chats;
 const [notes] = handoff.chats;
+const neighborId = seedSidebarGestures(db, repo, directory);
 db.close();
 await writeFile(
   path.join(data, "preferences.json"),
@@ -195,6 +197,13 @@ try {
   }
   await shown(notes);
   console.log("PASS a link waited through onboarding and opened its chat on completion");
+  assert.equal(new URL(page.url()).protocol, "app:");
+  await assertSidebarGestures(page, {
+    projectName: "Desktop links",
+    neighborId,
+    desktop: true,
+    screenshot: path.join(output, "workspace-touch-menu.png"),
+  });
 } finally {
   try {
     await desktop.close();

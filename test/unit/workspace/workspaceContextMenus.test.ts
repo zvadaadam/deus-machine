@@ -20,26 +20,31 @@ vi.mock("@/components/ui/context-menu", () => ({
   ContextMenu: ({ trigger, children }: { trigger: ReactNode; children: ReactNode }) =>
     createElement(Fragment, null, trigger, children),
   ContextMenuItem: ({ children }: { children: ReactNode }) => createElement("span", null, children),
+  ContextMenuSub: ({ label, children }: { label: ReactNode; children: ReactNode }) =>
+    createElement(Fragment, null, label, children),
 }));
 
 it.each([
-  [false, true, true],
-  [true, true, false],
-  [false, false, false],
-])(
-  "offers Copy link on the row and tab (web-direct %s, has chat %s)",
-  (webDirect, hasChat, offered) => {
+  [false, true, "ready"],
+  [true, true, "ready"],
+  [true, false, "initializing"],
+  [false, false, "initializing"],
+  [false, false, "error"],
+] as const)(
+  "offers links and available actions on web-direct %s with a chat %s in state %s",
+  (webDirect, hasChat, state) => {
     direct.mockReturnValue(webDirect);
     const workspace = {
       id: "workspace",
       title: "Review",
       slug: "review",
-      state: "ready",
-      kind: "worktree",
+      state,
+      kind: webDirect ? "cloud" : "worktree",
       setup_status: "completed",
       status: "in-progress",
       updated_at: "2026-11-01T13:00:00Z",
       current_session_id: hasChat ? "session" : null,
+      start_recoverable: state === "error",
     } as Workspace;
     const base = {
       id: "tab",
@@ -59,7 +64,13 @@ it.each([
           createElement(
             TooltipProvider,
             null,
-            createElement(WorkspaceItem, { workspace, isActive: false, onClick: vi.fn() }),
+            createElement(WorkspaceItem, {
+              workspace,
+              isActive: false,
+              onClick: vi.fn(),
+              onArchive: webDirect ? undefined : vi.fn(),
+              onStatusChange: webDirect ? undefined : vi.fn(),
+            }),
             createElement(SessionTab, {
               workspaceId: workspace.id,
               tab,
@@ -73,7 +84,11 @@ it.each([
           )
         )
       );
-      expect(html.match(/Copy link/g) ?? []).toHaveLength(offered ? 2 : 0);
+      expect(html.match(/Copy link/g) ?? []).toHaveLength(hasChat ? 2 : 1);
+      expect(html.includes(">Open workspace<")).toBe(true);
+      expect(html.includes(">Open chat<")).toBe(hasChat);
+      expect(html.includes("Set status")).toBe(!webDirect);
+      expect(html.includes(">Archive workspace<")).toBe(!webDirect && state === "ready");
     } finally {
       client.clear();
     }

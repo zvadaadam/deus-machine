@@ -72,8 +72,6 @@ const WORKSPACE_ROW_COLUMNS = `
     w.updated_at,
     r.name as repo_name, r.root_path, r.git_default_branch, r.git_origin_url,
     s.status as session_status,
-    s.error_category as session_error_category,
-    s.error_message as session_error_message,
     s.last_user_message_at as latest_message_sent_at,
     w.first_session_id,
     fs.status as first_session_status,

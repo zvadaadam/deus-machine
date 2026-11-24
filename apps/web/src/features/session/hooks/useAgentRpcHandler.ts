@@ -168,11 +168,8 @@ export function useAgentRpcHandler(
     onPendingChangeRef.current?.(pendingRequests);
   }, [pendingRequests]);
 
-  useStream(
-    api.toolRequests,
-    {},
-    (event) => {
-      if (event.type !== "cancel") return;
+  useStream(api.toolRequests, {}, (event) => {
+    if (event.type === "cancel") {
       const { sessionId, requestId } = event;
       setPendingRequests((prev) => {
         if (prev.get(sessionId)?.wsRequestId !== requestId) return prev;
@@ -180,19 +177,20 @@ export function useAgentRpcHandler(
         next.delete(sessionId);
         return next;
       });
-    },
-    // The host opens the stream with its pending cards. Direct questions belong to their own channel.
-    () =>
+    } else if (event.type === "pending") {
+      const pending = new Set(event.requestIds);
       setPendingRequests((prev) => {
-        const direct = new Map(
+        const kept = new Map(
           [...prev].filter(
             ([id, card]) =>
-              card.type === "askUserQuestion" && hasParkedDirectQuestion(id, queryClient)
+              pending.has(card.wsRequestId) ||
+              (card.type === "askUserQuestion" && hasParkedDirectQuestion(id, queryClient))
           )
         );
-        return direct.size === prev.size ? prev : direct;
-      })
-  );
+        return kept.size === prev.size ? prev : kept;
+      });
+    }
+  });
 
   // ============================================================================
   // exitPlanMode: store pending, wait for user approve/reject

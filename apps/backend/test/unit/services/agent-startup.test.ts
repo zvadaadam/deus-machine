@@ -132,6 +132,12 @@ describe("starting the engine", () => {
         type: "q:event",
         id: "s1",
         event: "toolRequests",
+        data: { type: "pending", requestIds: ["q1", "d1"] },
+      },
+      {
+        type: "q:event",
+        id: "s1",
+        event: "toolRequests",
         data: {
           type: "request",
           request: expect.objectContaining({ requestId: "q1", method: "askUserQuestion" }),
@@ -143,7 +149,15 @@ describe("starting the engine", () => {
     // Another chat's subscriber is shown nothing of it.
     sent.length = 0;
     subscribe(window, "s2", toolRequests, { sessionId: "working" });
-    expect(sent).toEqual([{ type: "q:subscribed", id: "s2" }]);
+    expect(sent).toEqual([
+      {
+        type: "q:event",
+        id: "s2",
+        event: "toolRequests",
+        data: { type: "pending", requestIds: [] },
+      },
+      { type: "q:subscribed", id: "s2" },
+    ]);
 
     // A reloaded window follows every chat at once: it is shown every chat's.
     const plan = relay({
@@ -156,8 +170,11 @@ describe("starting the engine", () => {
     plan.catch(() => {});
     sent.length = 0;
     subscribe(window, "s3", toolRequests, {});
-    expect(
-      sent.map((frame) => (frame.data as { request?: { requestId: string } })?.request?.requestId)
-    ).toEqual(["q1", "p1", undefined]);
+    expect(sent.map((frame) => frame.data)).toEqual([
+      { type: "pending", requestIds: ["q1", "d1", "p1"] },
+      { type: "request", request: expect.objectContaining({ requestId: "q1" }) },
+      { type: "request", request: expect.objectContaining({ requestId: "p1" }) },
+      undefined,
+    ]);
   });
 });

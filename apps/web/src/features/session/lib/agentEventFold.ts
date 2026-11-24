@@ -538,6 +538,7 @@ export function patchSessionDetail(
     queryKeys.sessions.detail(sessionId),
     (old) => (old ? { ...old, ...patch } : old)
   );
+  if (patch.status) patchWorkspaceSessionStatus(qc, sessionId, patch.status);
 }
 
 /** A direct turn (or an optimistic send) updates its chat in each cached workspace list. */

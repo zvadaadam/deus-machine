@@ -13,12 +13,28 @@ import {
   sessionComposerActions,
 } from "@/features/session/store/sessionComposerStore";
 
-const { button, call, subscribe, error } = vi.hoisted(() => ({
+const { button, call, subscribe, error, presence, sortable } = vi.hoisted(() => ({
   button: vi.fn(),
   call: vi.fn(),
   subscribe: vi.fn(),
   error: vi.fn(),
+  presence: vi.fn(() => true),
+  sortable: vi.fn(),
 }));
+vi.mock("framer-motion", async (original) => ({
+  ...(await original<typeof import("framer-motion")>()),
+  useIsPresent: presence,
+}));
+vi.mock("@dnd-kit/sortable", async (original) => {
+  const dnd = await original<typeof import("@dnd-kit/sortable")>();
+  return {
+    ...dnd,
+    useSortable: (params: Parameters<typeof dnd.useSortable>[0]) => {
+      sortable(params);
+      return dnd.useSortable(params);
+    },
+  };
+});
 vi.mock("@/platform/ws", () => ({ call }));
 vi.mock("@/shared/hooks/useQuerySubscription", () => ({ useQuerySubscription: subscribe }));
 vi.mock("sonner", () => ({ toast: { error } }));
@@ -38,6 +54,15 @@ const sessionId = "queued-chat";
 const queryKey = queryKeys.sessions.queued(sessionId);
 const item = { id: "waiting", text: "Review this", images: 2, state: "waiting" } as const;
 const params = { sessionId, id: item.id };
+
+it("makes a departing row inert and removes it from drag and drop during its exit", () => {
+  presence.mockReturnValueOnce(false);
+  const html = render({ paused: null, items: [item] });
+  expect(sortable).toHaveBeenLastCalledWith(
+    expect.objectContaining({ id: item.id, disabled: { draggable: true, droppable: true } })
+  );
+  expect(html).toContain('inert=""');
+});
 
 function List({ canSteer }: { canSteer: boolean }) {
   const { edit, editing } = useEditQueuedMessage(sessionId);

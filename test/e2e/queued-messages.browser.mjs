@@ -19,6 +19,7 @@ import { createServer } from "vite";
 import { SCHEMA_SQL } from "../../shared/schema.ts";
 import { LOOPBACK_WEB_ORIGINS } from "../../shared/web-origins.ts";
 import { connectBackend } from "./lib/operations.mjs";
+import { assertSidebarGestures, seedSidebarGestures } from "./lib/sidebar-gestures.mjs";
 import { freePort, until } from "./remote-access/stack.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
@@ -384,8 +385,54 @@ async function run() {
     await backend.write("removeQueuedMessage", { sessionId, id: last.turnId });
     assert.deepEqual(await release(), { moved: false });
     await shows([B, C, D]);
-    hold.delete("moveQueuedMessage");
     console.log("PASS keyboard and pointer moves, held write, refused drop");
+
+    // Drop the last waiting row onto a neighbor that disappears while the grip is held.
+    const removed = await send("Check the removed row.");
+    await shows([B, C, D, "Check the removed row."]);
+    await rowsOpen();
+    await grip(3).focus();
+    await page.keyboard.press("Space");
+    await painted();
+    await page.keyboard.press("ArrowDown");
+    await announce("Position 4 of 4.");
+    await group.getByText("Check the removed row.").evaluate((row) => {
+      row.ownerDocument.addEventListener(
+        "keydown",
+        (event) => {
+          globalThis.droppedDuringExit =
+            event.code === "Space" && row.isConnected && !!row.closest("[inert]");
+        },
+        { capture: true, once: true }
+      );
+      globalThis.departingRow = new Promise((resolve) => {
+        const observer = new globalThis.MutationObserver(() => {
+          if (!row.closest("[inert]") && row.isConnected) return;
+          observer.disconnect();
+          resolve(row.isConnected);
+        });
+        observer.observe(row.closest('[role="group"]'), {
+          attributes: true,
+          subtree: true,
+          childList: true,
+        });
+      });
+    });
+    await backend.write("removeQueuedMessage", { sessionId, id: removed.turnId });
+    assert(
+      await page.evaluate(() => globalThis.departingRow),
+      "The departing row was still interactive"
+    );
+    await page.keyboard.press("Space");
+    assert(await page.evaluate(() => globalThis.droppedDuringExit), "Drop missed the row’s exit");
+    await shows([B, C, D]);
+    assert.equal(held.length, 0, "Dropping onto a departing row sent a move");
+    assert.deepEqual(
+      (await queue()).items.map((item) => item.text),
+      [B, C, D]
+    );
+    hold.delete("moveQueuedMessage");
+    console.log("PASS a departing drop target becomes inert and the drop sends no write");
 
     // A normal row steer is delivered once, including on a double click.
     await send(extra);
@@ -434,18 +481,6 @@ async function run() {
     });
     await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     await until(() => phoneQueue.evaluate((el) => el.scrollTop > 0));
-    const phoneTab = await phone
-      .getByRole("tablist", { name: "Session tabs" })
-      .getByRole("tab", { selected: true })
-      .boundingBox();
-    await touch.send("Input.dispatchTouchEvent", {
-      type: "touchStart",
-      touchPoints: [{ x: phoneTab.x + phoneTab.width / 2, y: phoneTab.y + phoneTab.height / 2 }],
-    });
-    await phone.getByRole("menuitem", { name: "Copy link" }).waitFor();
-    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-    await phone.keyboard.press("Escape");
-    await touch.detach();
     await drive("read");
 
     // Hold both original WebSocket frames until A has ended and B has started.
@@ -469,7 +504,6 @@ async function run() {
     await assertStatusFits(phoneQueue.getByText("Sending", { exact: true }));
     await phone.screenshot({ path: path.join(evidence, "queue-phone-sending.png") });
     await assertLayout(phone);
-    await phone.close();
     await page.evaluate((text) => {
       // The two surfaces subscribe separately. Sample actual paints until the bubble is visible.
       globalThis.handoff = new Promise((resolve, reject) => {
@@ -577,14 +611,36 @@ async function run() {
       await page.keyboard.press(key);
     };
     const sibling = page.locator(`[data-workspace-id="${backgroundWorkspace}"]`);
+    const checkoutStage = async (state, chat, title) => {
+      const fixture = new Database(database);
+      fixture
+        .prepare("UPDATE workspaces SET state = ?, current_session_id = ? WHERE id = ?")
+        .run(state, chat, backgroundWorkspace);
+      fixture.close();
+      await backend.write("updateWorkspaceTitle", { workspaceId: backgroundWorkspace, title });
+      await sibling.getByText(title, { exact: true }).waitFor();
+    };
+    await checkoutStage("initializing", null, "Starting follow-up");
+    await openByKeyboard(sibling);
+    await captureMenu("starting-workspace-menu.png");
+    await activate("Copy link", "Enter");
+    await clipboardIs(url.replace(workspace, backgroundWorkspace));
+    await until(() => focused(sibling));
+    const startingRow = await sibling.elementHandle();
+    for (const [state, title] of [
+      ["initializing", "First chat attached"],
+      ["ready", "Follow up"],
+    ]) {
+      await checkoutStage(state, backgroundSession, title);
+      assert(
+        await startingRow.evaluate((el) => el === globalThis.document.activeElement),
+        "Starting row lost focus at " + title
+      );
+    }
     const visited = [];
     page.on("framenavigated", (frame) => {
       if (frame === page.mainFrame()) visited.push(frame.url());
     });
-    await openByKeyboard(sibling);
-    await activate("Copy link", "Enter");
-    await clipboardIs(url.replace(workspace, backgroundWorkspace));
-    await until(() => focused(sibling));
     await openByKeyboard(sibling);
     await activate("Set status", "ArrowRight");
     await activate("In Review", "Space");
@@ -617,12 +673,70 @@ async function run() {
     await activate("Close tab", "Enter");
     await tab.waitFor({ state: "detached" });
     assert.equal(await tabs.getByRole("tab").count(), 1);
+    await page.locator('[role="menu"]').first().waitFor({ state: "detached" });
+    await until(
+      () => focused(tabs.getByRole("tab", { selected: true })),
+      8000,
+      "focus on the surviving tab"
+    );
+    console.log(
+      "PASS sidebar and inactive tab links by pointer and keyboard; Escape restores focus; Set status, Archive and Close act only on their target"
+    );
+    console.log(
+      "PASS first chat and ready keep the same focused workspace row; closing an inactive tab focuses the surviving tab"
+    );
+
+    const phoneTabs = phone.getByRole("tablist", { name: "Session tabs" }).getByRole("tab");
+    if ((await phoneTabs.count()) < 2)
+      await phone.getByRole("button", { name: "New chat tab" }).tap();
+    await phoneTabs.nth(1).waitFor();
+    const labels = await phoneTabs.allTextContents();
+    assert.notEqual(labels[0], labels[1]);
+    await phoneTabs.nth(1).tap();
+    await until(async () => (await phoneTabs.nth(1).getAttribute("aria-selected")) === "true");
+    await phoneTabs.first().tap();
+    await until(async () => (await phoneTabs.first().getAttribute("aria-selected")) === "true");
+    const center = async (element) => {
+      const box = await element.boundingBox();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    };
+    const point = await center(phoneTabs.first());
+    const neighbor = await center(phoneTabs.nth(1));
+    await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+    await phone.locator('[role="tablist"] [aria-pressed="true"]').waitFor();
+    // Keep holding past the context menu's 700 ms timer.
+    await phone.waitForTimeout(850);
+    assert.equal(await phone.getByRole("menu").count(), 0, "The tab long press also opened a menu");
+    await touch.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [neighbor] });
+    await phone.screenshot({ path: path.join(evidence, "tab-touch-drag.png") });
+    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await until(
+      async () => (await phoneTabs.allTextContents())[1] === labels[0],
+      8000,
+      "tab reorder by touch"
+    );
+    assert.equal(await phone.getByRole("menu").count(), 0);
+    await touch.detach();
+    const sidebarFixture = new Database(database);
+    const neighborId = seedSidebarGestures(sidebarFixture, "repo", directory);
+    sidebarFixture.close();
+    await backend.write("updateWorkspaceTitle", {
+      workspaceId: workspace,
+      title: "Review compositor",
+    });
+    await phone.getByRole("button", { name: "Expand sidebar" }).tap();
+    await assertSidebarGestures(phone, {
+      projectName: "Workbench",
+      neighborId,
+      screenshot: path.join(evidence, "workspace-touch-menu.png"),
+    });
+    await assertLayout(phone);
     await assertLayout(page);
     console.log(
       "PASS desktop and phone shell fit their viewport; every header and composer ancestor stayed at 0,0"
     );
     console.log(
-      "PASS sidebar and inactive tab links by pointer and keyboard; Escape restores focus; Set status, Archive and Close act only on their target"
+      "PASS a touch tap selects a tab, holding and dragging reorders it without opening a menu, and holding a workspace row opens its menu"
     );
   } catch (error) {
     if (page) {

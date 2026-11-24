@@ -24,6 +24,7 @@ import type { RepoGroup, DiffStats } from "../types";
 import type { WorkspaceStatus } from "@shared/enums";
 import { mergeWorkspaceDelta } from "../lib/workspace.utils";
 import { diffStatsToAsk } from "../lib/diffStats";
+import { getWorkspaceActivity } from "@/features/sidebar/lib/status";
 import { track } from "@/platform/analytics";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 
@@ -73,7 +74,7 @@ export function useWorkspacesByRepo(state: string = SIDEBAR_WORKSPACE_STATE) {
  *
  * One query for the whole sidebar instead of a hook per row.
  * - Initial load: fetches ALL ready workspaces in parallel batches of 15
- * - Polling: only re-fetches workspaces with session_status === "working" (5s)
+ * - Polling: re-fetches workspaces with a working chat every 5s
  * - Idle: no polling (staleTime 30s, refetch on window focus)
  * - On workspace list change: seeds from per-workspace cache, fetches only missing/working
  *
@@ -84,22 +85,13 @@ export function useWorkspacesByRepo(state: string = SIDEBAR_WORKSPACE_STATE) {
 export function useBulkDiffStats(repoGroups: RepoGroup[]) {
   const queryClient = useQueryClient();
 
-  // Stable, de-duplicated IDs for query key — only ready workspaces.
-  const workspaceIds = useMemo(() => {
-    const ids = repoGroups.flatMap((g) =>
-      g.workspaces.filter((w) => w.state === "ready").map((w) => w.id)
-    );
-    return Array.from(new Set(ids)).sort();
-  }, [repoGroups]);
-
-  // The ready rows themselves: what `diffStatsToAsk` reads.
   const readyRows = useMemo(
     () => repoGroups.flatMap((g) => g.workspaces).filter((w) => w.state === "ready"),
     [repoGroups]
   );
 
-  // Only workspaces with active sessions need polling.
-  const hasWorkingWorkspaces = readyRows.some((w) => w.session_status === "working");
+  const workspaceIds = useMemo(() => [...new Set(readyRows.map((w) => w.id))].sort(), [readyRows]);
+  const hasWorkingWorkspaces = readyRows.some((w) => getWorkspaceActivity(w, {}).working);
 
   return useQuery({
     queryKey: ["bulk-diff-stats", workspaceIds],

@@ -39,7 +39,7 @@ import {
   patchWorkspaceSessionStatus,
 } from "../lib/agentEventFold";
 import { connectCloudSessionSocket } from "../cloud/cloudSessionSocket";
-import { hasParkedDirectQuestion, setDirectQuestionParked } from "../cloud/directQuestionState";
+import { setDirectQuestionParked } from "../cloud/directQuestionState";
 import { makeCloudFrameHandler } from "../cloud/cloudFrameHandler";
 import { returnRefusedMessage } from "../lib/returnToComposer";
 import type { ToolRequestEventData } from "@shared/types/query-protocol";
@@ -118,9 +118,6 @@ function presentDirectQuestion(pending: PendingDirectQuestion): void {
 function parkDirectQuestion(pending: PendingDirectQuestion): void {
   setDirectQuestionParked(pending.sessionId, true, pending.queryClient);
   patchSessionDetail(pending.queryClient, pending.sessionId, { status: "needs_response" });
-  // The sidebar/home rows read the workspace projection, not the session
-  // detail — and discovery would keep saying "running" (see directQuestionState).
-  patchWorkspaceSessionStatus(pending.queryClient, pending.sessionId, "needs_response");
   presentDirectQuestion(pending);
 }
 
@@ -145,8 +142,8 @@ function settleDirectQuestionState(
       .get(sessionId)
       ?.state.turns.some((turn) => turn.status === "active") ??
     false;
-  patchWorkspaceSessionStatus(qc, sessionId, live ? "working" : "idle");
   if (live) patchSessionDetail(qc, sessionId, { status: "working" });
+  else patchWorkspaceSessionStatus(qc, sessionId, "idle");
 }
 
 /** The fold's active turn — what a freshly arrived question belongs to. */
@@ -614,13 +611,6 @@ export function useCloudDirectSession(
         folds.get(sessionId)?.state.turns.some((turn) => turn.turnId === pendingTurn?.turnId)
       )
         pendingTurn = null;
-      // The snapshot's projection (`backfillSnapshot`) writes "working" for a
-      // session with a current turn — but a turn parked on a question is
-      // waiting on the user, not generating. Re-assert it after the fold.
-      if (frame.type === "session.snapshot" && hasParkedDirectQuestion(sessionId, queryClient)) {
-        patchSessionDetail(queryClient, sessionId, { status: "needs_response" });
-        patchWorkspaceSessionStatus(queryClient, sessionId, "needs_response");
-      }
     };
 
     // Terminal failure (retries exhausted) leaves a dead socket registered.

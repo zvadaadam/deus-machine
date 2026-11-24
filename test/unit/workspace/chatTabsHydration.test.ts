@@ -37,7 +37,6 @@ vi.hoisted(() => {
 vi.mock("@/features/session/api/session.queries", () => ({
   useWorkspaceSessions: () => useList(),
   useCreateSession: () => ({}),
-  useWorkingSessionIds: () => {},
 }));
 vi.mock("@/platform/notifications", () => ({ sendNotification: vi.fn() }));
 vi.mock("@/platform/capabilities", () => ({ capabilities: { nativeNotifications: true } }));
@@ -92,6 +91,7 @@ it.each([
     activeChatTabSessionId: saved[0] ?? null,
   });
   openChat("w", "b");
+  useUnreadStore.setState({ unreadSessionIds: { a: true, b: true } });
   const published: (string | null)[] = [];
   const unsubscribeLayout = useWorkspaceLayoutStore.subscribe(({ layouts }) => {
     published.push(layouts.w.activeChatTabSessionId);
@@ -101,11 +101,13 @@ it.each([
     if (prev.requested.w && !state.requested.w) activeAtAcknowledgment.push(view.activeTabId);
   });
   act(() => root.render(createElement(Tabs)));
+  expect(useUnreadStore.getState().unreadSessionIds).toEqual({ a: true, b: true });
   readList(["a", "b"]);
   unsubscribeLayout();
   unsubscribe();
   expect(view.tabs.map((tab) => tab.id)).toEqual(["tab-a", "tab-b"]);
   expect(view.activeTabId).toBe("tab-b");
+  expect(useUnreadStore.getState().unreadSessionIds).toEqual({ a: true });
   expect(activeAtAcknowledgment).toEqual(["tab-b"]);
   expect(published[0]).toBe("b");
   expect(published).not.toContain("a");
@@ -318,4 +320,19 @@ it("reopens all 23 closed chats in reverse close order", () => {
     act(() => view.handleTabRestore(view.closedTabs[0]));
     expect(view.activeTabId).toBe(`tab-${id}`);
   }
+});
+
+it("reopens a chat with the label it had when closed in this visit", () => {
+  workspaceLayoutActions.setChatTabState("w", ["b", "a"], "b");
+  act(() => root.render(createElement(Tabs)));
+  readList(["a", "b"]);
+  const label = view.tabs[1].label;
+  const focusKey = view.focusActiveTabKey;
+  expect(label).toMatch(/#2$/);
+  act(() => view.handleTabClose("tab-a"));
+  expect(view.activeTabId).toBe("tab-b");
+  expect(view.focusActiveTabKey).toBe(focusKey + 1);
+  expect(view.closedTabs[0].label).toBe(label);
+  act(() => view.handleTabRestore(view.closedTabs[0]));
+  expect(view.activeTab?.label).toBe(label);
 });

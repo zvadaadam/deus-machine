@@ -1,23 +1,13 @@
 import { useState } from "react";
-import {
-  DndContext,
-  KeyboardSensor,
-  MouseSensor,
-  TouchSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
+import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import {
   SortableContext,
   arrayMove,
-  sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, useIsPresent } from "framer-motion";
 import { ArrowUp, GripVertical, Image, Pencil, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@shared/api";
@@ -27,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Collapse } from "@/components/ui/collapse";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { call } from "@/platform/ws";
+import { useReorderSensors } from "@/shared/hooks/useReorderSensors";
 import { tempo } from "@/shared/lib/tempo";
 import { cn } from "@/shared/lib/utils";
 import { useQueuedMessages } from "../api/session.queries";
@@ -71,6 +62,8 @@ function QueuedRow({
   onEdit,
 }: QueueControls & { row: Row; moving: boolean }) {
   const waiting = state === "waiting";
+  const present = useIsPresent();
+  const sortable = waiting && present;
   const duration = tempo.moderate.duration * 1000;
   const {
     attributes,
@@ -83,12 +76,13 @@ function QueuedRow({
     index,
   } = useSortable({
     id,
-    disabled: { draggable: !waiting || moving, droppable: !waiting },
+    disabled: { draggable: !sortable || moving, droppable: !sortable },
     transition: { duration, easing: "var(--ease-move)" },
   });
   return (
     <div
       ref={setNodeRef}
+      {...(!present && { inert: "" })}
       style={{
         transform: CSS.Translate.toString(waiting && transform ? { ...transform, x: 0 } : null),
         transition,
@@ -209,11 +203,7 @@ export function QueuedMessageList(controls: QueueControls) {
   const [pending, setPending] = useState<Move | null>(null);
   const rows = previewMove(data?.items ?? [], pending);
   const waiting = rows.filter((row) => row.state === "waiting").map((row) => row.id);
-  const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
+  const sensors = useReorderSensors();
 
   function drop({ active, over }: DragEndEvent) {
     if (!over || over.id === active.id || pending) return;

@@ -18,6 +18,7 @@ import {
   workspaceLayoutActions,
 } from "@/features/workspace/store/workspaceLayoutStore";
 import type { Session } from "@/features/session/types";
+import { unreadActions } from "@/features/session/store/unreadStore";
 import type { ChatTab, ClosedSessionTab, SessionChatTab } from "@/features/session/ui/tabs";
 import { getChatTabSessionId, isSessionChatTab } from "@/features/session/ui/tabs";
 import {
@@ -285,6 +286,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
   useEffect(() => {
     // A route's layout effect can request a chat after this render, before this effect runs.
     if (!hydrated || currentOpenChatRequest(workspaceId)) return;
+    if (shownSessionId) unreadActions.markRead(shownSessionId);
     const openIds = mainTabs.filter(isSessionChatTab).map((tab) => tab.sessionId);
     const knownIds = [...seen.current];
     const saved = useWorkspaceLayoutStore.getState().layouts[workspaceId];
@@ -345,8 +347,8 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       if (tabId === activeMainTabId && newTabs.length > 0) {
         const targetIndex = currentIndex > 0 ? currentIndex - 1 : 0;
         setActiveMainTabId(newTabs[targetIndex].id);
-        setFocusActiveTabKey((prevKey) => prevKey + 1);
       }
+      setFocusActiveTabKey((prevKey) => prevKey + 1);
     },
     [activeMainTabId, mainTabs]
   );
@@ -470,11 +472,8 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       .filter((session) => !openSessionIds.has(session.id))
       .sort((a, b) => (order.get(a.id) ?? order.size) - (order.get(b.id) ?? order.size))
       .map((session) => {
-        const tab = sessionToTab(session, sequences.get(session.id) ?? 1);
         const closed = closedTabs[order.get(session.id) ?? closedTabs.length];
-        // A model chosen before the first send lives only in the tab.
-        if (closed && !closed.hasStarted && !tab.hasStarted) return closed;
-        return { ...tab, closedAt: closed?.closedAt ?? 0 };
+        return closed ?? { ...sessionToTab(session, sequences.get(session.id) ?? 1), closedAt: 0 };
       });
   }, [workspaceSessions, openSessionIds, closedTabs]);
 
@@ -537,6 +536,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     tabs: mainTabs,
     activeTabId: activeMainTabId,
     activeTab,
+    shownSessionId,
     closedTabs: restorableClosedTabs,
     focusActiveTabKey,
     handleTabChange,

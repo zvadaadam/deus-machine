@@ -88,6 +88,21 @@ describe("agentService.startTurn", () => {
     vi.clearAllMocks();
   });
 
+  it("skips app preparation when the send was already stopped", async () => {
+    const apps = vi
+      .spyOn(integrations, "resolveTurnApps")
+      .mockResolvedValue({ servers: {}, skipped: [] });
+    const reason = new Error("Stopped before it started.");
+    await expect(
+      agentService.startTurn(SESSION, TURN, "claude-code", "hello", {
+        cwd: "/tmp/nonexistent-ws",
+        signal: AbortSignal.abort(reason),
+      })
+    ).rejects.toBe(reason);
+    expect(apps).not.toHaveBeenCalled();
+    expect(mockLinkStartTurn).not.toHaveBeenCalled();
+  });
+
   it("refuses an engine start whose chat was removed during the integration lookup", async () => {
     const run = operations([...sessionHandlers, ...workspaceHandlers, ...repoHandlers]);
     const lookup = Promise.withResolvers<TurnApps>();
