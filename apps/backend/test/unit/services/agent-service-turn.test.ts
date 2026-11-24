@@ -133,6 +133,7 @@ describe("agentService.startTurn", () => {
   it("rolls the local turn back when the wire refuses admission", async () => {
     const begin = vi.spyOn(events, "beginTurn");
     const abort = vi.spyOn(events, "abortTurn");
+    vi.spyOn(settings, "getSetting").mockImplementation((key) => key === "agent_messages");
     mockLinkStartTurn.mockRejectedValue(
       new WireRequestError(WIRE_ERROR_CODES.turnActive, "already has an active turn")
     );
@@ -143,6 +144,9 @@ describe("agentService.startTurn", () => {
 
     expect(begin).toHaveBeenCalledWith(SESSION, TURN);
     expect(abort).toHaveBeenCalledWith(SESSION, TURN);
+    expect(await operations(sessionHandlers)(api.session, { sessionId: SESSION })).toMatchObject({
+      agent_messages: true,
+    });
   });
 
   it("keeps the local turn when admission succeeds", async () => {

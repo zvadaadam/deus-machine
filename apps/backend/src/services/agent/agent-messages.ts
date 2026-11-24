@@ -1,17 +1,19 @@
+import { getDatabase } from "../../lib/database";
 import { getSetting } from "../settings.service";
 
-const messagesBySession = new Map<string, boolean>();
-
-/** Opening a chat reads the tool list decision only if the agent has already asked. */
-export function recordedAgentMessages(sessionId: string): boolean {
-  return messagesBySession.get(sessionId) === true;
-}
-
-/** A harness keeps its first tool list. Every turn's instructions must match that list. */
+/** A resumed harness keeps its original instructions and must find the same tools. */
 export function hasAgentMessages(sessionId: string): boolean {
-  const previous = messagesBySession.get(sessionId);
-  if (previous !== undefined) return previous;
-  const enabled = getSetting("agent_messages") === true;
-  messagesBySession.set(sessionId, enabled);
-  return enabled;
+  const db = getDatabase();
+  const read = db.prepare<[string], { agent_messages: number | null }>(
+    "SELECT agent_messages FROM sessions WHERE id = ?"
+  );
+  const recorded = read.get(sessionId)?.agent_messages;
+  if (recorded !== null) return recorded === 1;
+
+  db.prepare(
+    `UPDATE sessions SET agent_messages = (agent_session_id IS NULL AND ?)
+     WHERE id = ? AND agent_messages IS NULL`
+  ).run(getSetting("agent_messages") === true ? 1 : 0, sessionId);
+  // Another first ask can win the write.
+  return read.get(sessionId)?.agent_messages === 1;
 }

@@ -781,6 +781,7 @@ describe("through MCP and as a chat's own tools", () => {
   );
 
   it("keeps each chat's instructions and tool list on the same setting after a change", async () => {
+    for (const id of ["before", "after", "later"]) insertChat(id, "w-lead");
     let preference: unknown = "true";
     const tools = (id: string) => withSessionTools(deusTools(id)).tools.map((t) => t.name);
     const instructions = (id: string) =>
@@ -827,7 +828,7 @@ describe("through MCP and as a chat's own tools", () => {
       state: {
         status: "completed",
         input: { arguments: { message: "Tests passed." } },
-        output: "Shown",
+        output: "Message sent.",
         time: { start: 1, end: 2 },
       },
     };

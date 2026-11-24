@@ -109,6 +109,7 @@ describe("deusTools", () => {
       TELL_USER,
     ]);
     expect(enabled.tools.find((t) => t.name === TELL_USER)).toMatchObject({
+      description: expect.stringContaining("Sub-agents report to their caller without this tool."),
       annotations: { readOnly: true },
       inputSchema: {
         required: ["message"],
@@ -120,7 +121,7 @@ describe("deusTools", () => {
     await expect(
       enabled.call(TELL_USER, { message: "**Tests passed.**" }, caller, signal)
     ).resolves.toEqual({
-      content: [{ type: "text", text: "The person sees your message." }],
+      content: [{ type: "text", text: "Message sent." }],
     });
     await expect(enabled.call(TELL_USER, { message: "\n  " }, caller, signal)).rejects.toThrow();
     await expect(server.call(TELL_USER, { message: "Update" }, caller, signal)).rejects.toThrow(

@@ -172,9 +172,9 @@ export function getWorkspacesBySessionIds(
 
 // ─── Session Queries ─────────────────────────────────────────
 
-/** Coerce SQLite INTEGER booleans (0/1) to JS booleans so every reader gets the same shape. */
+/** Read SQLite flags as booleans. A chat whose agent hasn't asked about messages reads false. */
 function coerceSessionBooleans<T extends SessionRow>(row: T): T {
-  return { ...row, is_hidden: Boolean(row.is_hidden) };
+  return { ...row, is_hidden: Boolean(row.is_hidden), agent_messages: Boolean(row.agent_messages) };
 }
 
 /**

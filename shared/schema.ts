@@ -31,7 +31,7 @@ export const PRELAUNCH_SCHEMA_RESET_HINT =
 /** Columns ALTERed into an existing database that lacks them (each is in SCHEMA_SQL too). */
 export const ADDITIVE_COLUMNS: Record<string, Record<string, string>> = {
   workspaces: { started_by: "TEXT", first_session_id: "TEXT", archived_by: "TEXT" },
-  sessions: { started_by: "TEXT", chat: "INTEGER" },
+  sessions: { started_by: "TEXT", chat: "INTEGER", agent_messages: "INTEGER" },
   turns: { cancelled_by: "TEXT", end_seq: "INTEGER" },
   messages: { origin: "TEXT" },
 };
@@ -102,6 +102,8 @@ export const SCHEMA_SQL = `
     -- Engine harness id, as named in shared/harnesses.ts.
     agent_harness TEXT NOT NULL DEFAULT 'claude-code',
     agent_session_id TEXT,
+    -- Whether the agent can message the person. NULL until its first ask.
+    agent_messages INTEGER,
     provider_session_id TEXT,
     title TEXT,
     status TEXT NOT NULL DEFAULT 'idle',

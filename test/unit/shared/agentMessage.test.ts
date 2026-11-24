@@ -14,13 +14,14 @@ function completed(toolName: string, input: Record<string, unknown>, output = ""
     type: "tool",
     toolName,
     toolCallId: "call",
+    kind: "other",
     mcp,
     state: { status: "completed", time, input, output },
   };
 }
 
-const claude = completed(`mcp__${mcp.server}__${mcp.tool}`, { message }, "Shown");
-const codex = completed(`${mcp.server}.${mcp.tool}`, { arguments: { message } }, "Shown");
+const claude = completed(`mcp__${mcp.server}__${mcp.tool}`, { message }, "Message sent.");
+const codex = completed(`${mcp.server}.${mcp.tool}`, { arguments: { message } }, "Message sent.");
 const gemini = completed(`mcp_${mcp.server}_${mcp.tool}`, { message, toolSummary: "Update" });
 
 describe("a message sent while the agent works", () => {
@@ -48,12 +49,20 @@ describe("a message sent while the agent works", () => {
     expect(withSentText([part])[0]).toBe(part);
   });
 
-  it("leaves empty or malformed messages and another server's tool as calls", () => {
+  it("leaves empty or malformed messages as calls", () => {
     for (const input of [{}, { message: "" }, { message: " \t\n " }, { message: 42 }]) {
       expect(sentText(completed(claude.toolName, input))).toBeUndefined();
     }
-    const outside = { ...codex, toolName: `docs.${TELL_USER}`, mcp: { ...mcp, server: "docs" } };
-    expect(sentText(outside)).toBeUndefined();
+  });
+
+  it.each([
+    { ...claude, toolName: `mcp__deus__${TELL_USER}`, mcp: { server: "deus", tool: TELL_USER } },
+    { ...codex, toolName: `docs.${TELL_USER}`, mcp: { server: "docs", tool: TELL_USER } },
+    { ...claude, mcp: undefined },
+    { ...claude, toolName: TELL_USER, mcp: undefined },
+    { ...claude, mcp: { ...mcp, tool: "read_session" } },
+  ])("keeps $toolName as a tool without the host's matching MCP identity", (part) => {
+    expect(withSentText([part])[0]).toBe(part);
   });
 
   it("preserves order and the identity of other parts, including unknown ones", () => {

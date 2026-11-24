@@ -2,7 +2,6 @@
 
 import * as api from "@shared/api/sessions";
 import { uuidv7 } from "@shared/lib/uuid";
-import type { Session } from "@shared/types/session";
 import { getDatabase } from "../lib/database";
 import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 import {
@@ -15,9 +14,7 @@ import {
   getTurnsForMessages,
   getWorkspaceRaw,
   hasOlderMessages,
-  type SessionRow,
 } from "../db";
-import { recordedAgentMessages } from "../services/agent/agent-messages";
 import { cloudAccount } from "../services/agent/cloud/config";
 import { mintCloudSessionToken } from "../services/agent/cloud/session-token";
 import { stopSession } from "../services/agent/turns";
@@ -37,18 +34,9 @@ const DEFAULT_PAGE = 2000;
 const DIRECT_TOKEN_FRESH_MS = 10 * 60_000;
 const DIRECT_TOKEN_SECONDS = 60 * 60;
 
-function toSession(row: SessionRow): Session {
-  return { ...row, agent_messages: recordedAgentMessages(row.id) };
-}
-
 export default [
-  handle(api.sessions, ({ workspaceId }) =>
-    getSessionsByWorkspaceId(getDatabase(), workspaceId).map(toSession)
-  ),
-  handle(api.session, ({ sessionId }) => {
-    const row = getSessionById(getDatabase(), sessionId);
-    return row ? toSession(row) : null;
-  }),
+  handle(api.sessions, ({ workspaceId }) => getSessionsByWorkspaceId(getDatabase(), workspaceId)),
+  handle(api.session, ({ sessionId }) => getSessionById(getDatabase(), sessionId) ?? null),
   handle(api.messages, ({ sessionId, limit, before }) => {
     const db = getDatabase();
     const rows = getMessages(db, sessionId, { limit: limit ?? DEFAULT_PAGE, before });
@@ -119,7 +107,7 @@ export default [
       ).run(sessionId, workspaceId);
     })();
     invalidate(["workspaces", "sessions"]);
-    return toSession(getSessionRaw(db, sessionId)!);
+    return getSessionRaw(db, sessionId)!;
   }),
   // A client's send is the person's: no origin comes from the operation's input.
   handle(api.sendMessage, queue.sendOrQueue),

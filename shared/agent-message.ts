@@ -1,4 +1,4 @@
-import { toolCardInput, toolCardName } from "./mcp-servers";
+import { DEUS_TOOLS_SERVER, toolCardInput } from "./mcp-servers";
 import {
   isUnknownPart,
   type Part,
@@ -18,7 +18,8 @@ export function sentText(part: Part | UnknownPart): TextPart | undefined {
     isUnknownPart(part) ||
     part.type !== "tool" ||
     part.state.status !== "completed" ||
-    toolCardName(part) !== TELL_USER
+    part.mcp?.server !== DEUS_TOOLS_SERVER ||
+    part.mcp.tool !== TELL_USER
   )
     return undefined;
 

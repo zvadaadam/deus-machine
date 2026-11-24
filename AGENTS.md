@@ -194,16 +194,16 @@ bubbles, the default, or the full run) draw that list, and a row keeps its key
 and place while the turn runs and when it ends. In bubbles, an ended turn
 closes its rows under one "Worked" line, except its closing words (else the
 last send, else the last passage), a card still waiting, pictures and
-recordings. Each stretch of a turn split by a steer is its own list. Nested
-sub-agents read as the full run.
+recordings. A turn with no words keeps its last card. Each stretch of a turn
+split by a steer is its own list. Nested sub-agents read as the full run.
 
 `tell_user` (setting `agent_messages`, off by default) lets a local chat's
 agent send the person a message while it works. The call stores nothing: the
 completed part is the message, and `shared/agent-message.ts` is its only
 reader, for the transcript, Copy, the cards, and what other chats and
-assistants read. Whether a chat has the tool is decided when its agent first
-asks and holds for this run of the backend (`services/agent/agent-messages.ts`),
-so instructions never name a tool the chat lacks; the `session` and `sessions`
+assistants read. Whether a chat has the tool is decided once, when its agent
+first asks, and stored on the chat (`sessions.agent_messages`), so its
+instructions and its tool list never disagree. The `session` and `sessions`
 reads carry it as `agent_messages`. While such a chat runs, words outside a
 send belong to its work line.
 
