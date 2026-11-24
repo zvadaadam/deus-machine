@@ -212,26 +212,13 @@ export function Chat({
   });
 
   const [previousTurn, setPreviousTurn] = useState(openTurnId);
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  const [deferredTurns, setDeferredTurns] = useState<ReadonlySet<string>>(() => new Set());
   if (previousTurn !== openTurnId) {
     setPreviousTurn(openTurnId);
-    // Keep every stretch the reader could return to, including ones outside the virtual window.
-    if (showScrollButton && previousTurn) {
-      const next = new Set(expanded);
-      for (const item of timeline) {
-        if (item.type === "assistant" && item.turnId === previousTurn && item.messages[0])
-          next.add(item.messages[0].id);
-      }
-      setExpanded(next);
-    }
+    if (showScrollButton && previousTurn)
+      setDeferredTurns(new Set(deferredTurns).add(previousTurn));
   }
-  const toggleWorked = useCallback((id: string) => {
-    setExpanded((open) => {
-      const next = new Set(open);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
-  }, []);
+  if (!showScrollButton && deferredTurns.size) setDeferredTurns(new Set());
 
   const list = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
@@ -241,14 +228,16 @@ export function Chat({
     overscan: 8,
     getItemKey,
     measureElement: (element, entry, instance) => {
-      // The first measurement corrects an estimate. Only a mounted turn can fold around the reader.
+      // Keep initial estimate corrections. Only followers track growth inside the visible turn.
       instance.shouldAdjustScrollPositionOnItemSizeChange = entry
-        ? (item, delta, v) => (delta < 0 ? item.end : item.start) < (v.scrollOffset ?? 0)
+        ? (item, delta, v) => {
+            // resizeItem scrolls before it records the new size. Give that scroll its measured range.
+            if (list.current) list.current.style.height = `${v.getTotalSize() + delta}px`;
+            const edge = delta > 0 && !showScrollButton ? item.start : item.end;
+            return edge <= (v.scrollOffset ?? 0);
+          }
         : undefined;
       return measureElement(element, entry, instance);
-    },
-    onChange: (v) => {
-      if (list.current) list.current.style.height = `${v.getTotalSize()}px`;
     },
   });
 
@@ -380,10 +369,8 @@ export function Chat({
                               messages={t.messages}
                               turn={t.record}
                               footerGroups={t.footerGroups}
-                              ended={t.ended}
+                              ended={t.ended && !deferredTurns.has(t.turnId)}
                               streaming={t.isStreaming && working}
-                              expanded={expanded.has(t.messages[0]?.id)}
-                              onToggleWorked={toggleWorked}
                               agentMessages={agentMessages}
                               progressSlot={t.isStreaming ? progressSlot : undefined}
                               startedAt={t.startedAt}

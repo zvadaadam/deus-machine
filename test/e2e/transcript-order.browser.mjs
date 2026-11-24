@@ -453,8 +453,12 @@ async function run() {
         );
         assert(await summary.evaluate((button) => button === globalThis.document.activeElement));
         assert.equal(
-          await summary.getAttribute("aria-controls"),
-          await liveAnswer.evaluate((el) => el.closest('[aria-live="off"]').id)
+          await liveAnswer.evaluate((el) => el.closest("[aria-live]").getAttribute("aria-live")),
+          "polite"
+        );
+        assert.equal(
+          await details.evaluate((el) => el.closest("[aria-live]").getAttribute("aria-live")),
+          "off"
         );
         assert(await liveAnswer.evaluate((el) => el.isConnected && !el.closest("[inert]")));
         assert(await details.evaluate((el) => el.isConnected && !!el.closest("[inert]")));
@@ -480,7 +484,7 @@ async function run() {
       }
     );
     await check(
-      "a turn ending while the reader is scrolled back stays open until closed",
+      "a turn ending while the reader is scrolled back settles when follow resumes",
       async () => {
         const turn = fixture(chats.bubbles.session, "reading");
         const passage = Array.from(
@@ -506,10 +510,12 @@ async function run() {
             .parentElement.classList.contains("opacity-100")
         );
         await emit(turn.end("end_turn"));
-        const worked = group.getByRole("button", { name: /^Collapse activity, Worked/ });
-        await worked.waitFor();
-        assert.equal(await worked.getAttribute("aria-expanded"), "true");
-        await worked.press("Enter");
+        await group.getByRole("button", { name: "Copy response" }).waitFor();
+        assert.equal(await group.getByRole("button", { name: /activity, Worked/ }).count(), 0);
+        assert.equal(await group.locator("[inert]").count(), 0);
+        await logView.evaluate((pane) => {
+          pane.scrollTop = pane.scrollHeight;
+        });
         await group.getByRole("button", { name: /^Expand activity, Worked/ }).waitFor();
         await go("bubbles");
         await logView.getByText("Verified.", { exact: true }).waitFor();

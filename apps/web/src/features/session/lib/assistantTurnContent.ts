@@ -35,10 +35,11 @@ export function assistantTurnContent(parts: Parts, condensed = false): TurnBlock
   function finishWork() {
     if (!work.length) return;
     const first = work.find((part) => part.type !== "text");
-    const last = work.at(-1);
     if (first) rows.push({ type: "activity", id: first.id, parts: work });
-    else if (last?.type === "text" && last.state === "streaming")
-      rows.push({ type: "typing", id: last.id });
+    else {
+      const writing = work.findLast((part) => part.type === "text" && part.state === "streaming");
+      if (writing) rows.push({ type: "typing", id: writing.id });
+    }
     work = [];
   }
   for (const raw of parts) {

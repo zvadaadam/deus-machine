@@ -14,8 +14,6 @@ interface PartsRendererProps {
   ended?: boolean;
   agentMessages?: boolean;
   streaming?: boolean;
-  expanded?: boolean;
-  onToggle?: () => void;
   durationMs?: number | null;
 }
 
@@ -25,13 +23,12 @@ export const PartsRenderer = memo(function PartsRenderer({
   streaming = false,
   ended,
   agentMessages,
-  expanded = false,
-  onToggle,
   durationMs,
 }: PartsRendererProps) {
   const { workspacePath } = useSession();
   const id = useId();
   const worked = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
   const condensed = bubbles && !ended && !!agentMessages;
   const rows = useMemo(() => assistantTurnContent(parts, condensed), [parts, condensed]);
   const stays = useMemo(
@@ -47,31 +44,30 @@ export const PartsRenderer = memo(function PartsRenderer({
       }),
     [parts, streaming, workspacePath]
   );
-  const visible = stays && !expanded ? rows.filter((row) => stays.has(row.id)) : rows;
+  const visible = stays && !open ? rows.filter((row) => stays.has(row.id)) : rows;
   // A previously ended turn only needs its closed rows after the first expansion.
   // Once displayed (including while live or in Full run), keep their nodes.
   const [mountedAll, setMountedAll] = useState(!stays);
-  if (!mountedAll && (!stays || expanded)) setMountedAll(true);
+  if (!mountedAll && (!stays || open)) setMountedAll(true);
   const mounted = mountedAll ? rows : visible;
   useLayoutEffect(() => {
-    if (!stays || expanded) return;
+    if (!stays || open) return;
     const row = document.activeElement?.closest("[inert]");
     if (row && document.getElementById(id)?.contains(row)) {
       worked.current?.focus({ preventScroll: true });
     }
-  }, [stays, expanded, id]);
+  }, [stays, open, id]);
   let nextVisible = 0;
   return (
     <>
-      {/* Give a scrolled-back reader the open control at its full height in one layout. */}
-      {onToggle && stays && stays.size < rows.length && (
-        <div className="fold-row" data-closed={mountedAll && !expanded ? false : undefined}>
+      {stays && stays.size < rows.length && (
+        <div className="fold-row" data-closed={mountedAll ? false : undefined}>
           <div className="min-h-0 overflow-clip">
             <ActivityButton
               buttonRef={worked}
               controls={id}
-              expanded={expanded}
-              onToggle={onToggle}
+              expanded={open}
+              onToggle={() => setOpen(!open)}
               label={
                 durationMs == null ? "Worked" : `Worked for ${formatTurnDurationLabel(durationMs)}`
               }
@@ -79,9 +75,10 @@ export const PartsRenderer = memo(function PartsRenderer({
           </div>
         </div>
       )}
-      <div id={id} aria-live={ended ? "off" : undefined}>
+      <div id={id}>
         {mounted.map((row, i) => {
-          const closed = !!stays && !expanded && !stays.has(row.id);
+          const kept = stays?.has(row.id);
+          const closed = kept === false && !open;
           const bubble =
             bubbles && row.type === "text"
               ? {
@@ -94,7 +91,8 @@ export const PartsRenderer = memo(function PartsRenderer({
             <div
               key={row.id}
               className={`fold-row min-w-0 ${bubble ? "agent-words -ml-1" : ""}`}
-              data-closed={stays && (expanded || mountedAll) ? closed : undefined}
+              aria-live={ended && !kept ? "off" : undefined}
+              data-closed={stays && mountedAll ? closed : undefined}
               {...(closed ? { inert: "" } : {})}
             >
               <div className="min-h-0 min-w-0 overflow-clip after:block after:h-1">

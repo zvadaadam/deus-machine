@@ -219,7 +219,10 @@ it("retains a recorded prose boundary between calls and names an empty live text
 it("anchors condensed work to its first non-word so its disclosure survives settlement", () => {
   const writing = { ...n, type: "text", text: "note", state: "streaming" } as const;
   expect(assistantTurnContent([writing], true)).toEqual([{ type: "typing", id: "note" }]);
-  expect(assistantTurnContent([writing, a], true)).toEqual([]);
+  expect(assistantTurnContent([writing, a], true)).toEqual([{ type: "typing", id: "note" }]);
+  expect(assistantTurnContent([writing, { ...writing, id: "second" }, a], true)).toEqual([
+    { type: "typing", id: "second" },
+  ]);
   expect(assistantTurnContent([n], true)).toEqual([]);
   const parts = [n, w, a, b, s];
   expect(assistantTurnContent(parts, true)[0].id).toBe("work");

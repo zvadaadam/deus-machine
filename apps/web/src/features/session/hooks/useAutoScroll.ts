@@ -218,7 +218,9 @@ export function useAutoScroll({
     const container = messagesContainerRef.current;
     if (!container) return;
 
+    let recheck: ReturnType<typeof setTimeout>;
     const handleScroll = () => {
+      clearTimeout(recheck);
       if (!isPausedRef.current) {
         // Chase loop may have self-stopped (idle at bottom). If the user
         // then scrolls away from bottom, we must pause NOW — otherwise
@@ -235,15 +237,17 @@ export function useAutoScroll({
       }
 
       // Already paused — check for re-engagement (scroll back to bottom)
-      const elapsed = Date.now() - pausedAtRef.current;
-      if (elapsed >= PAUSE_COOLDOWN_MS && isAtBottom(container)) {
-        log(`scroll re-engagement: at bottom after ${elapsed}ms cooldown`);
-        resume();
-      }
+      if (!isAtBottom(container)) return;
+      const remaining = PAUSE_COOLDOWN_MS - (Date.now() - pausedAtRef.current);
+      if (remaining > 0) recheck = setTimeout(handleScroll, remaining);
+      else resume();
     };
 
     container.addEventListener("scroll", handleScroll, { passive: true });
-    return () => container.removeEventListener("scroll", handleScroll);
+    return () => {
+      clearTimeout(recheck);
+      container.removeEventListener("scroll", handleScroll);
+    };
   }, [messagesContainerRef, resume]);
 
   // ── Start chase when content is present ─────────────────────────────

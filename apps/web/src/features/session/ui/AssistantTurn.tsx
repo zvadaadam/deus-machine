@@ -16,8 +16,6 @@ interface AssistantTurnProps {
   footerGroups?: Message[][];
   ended: boolean;
   streaming: boolean;
-  expanded: boolean;
-  onToggleWorked: (id: string) => void;
   agentMessages?: boolean;
   /** The current reply keeps its slot when a disconnect or error clears progress before its end. */
   progressSlot?: ReactElement;
@@ -31,8 +29,6 @@ export const AssistantTurn = memo(function AssistantTurn({
   footerGroups,
   ended,
   streaming,
-  expanded,
-  onToggleWorked,
   agentMessages,
   progressSlot,
   startedAt,
@@ -56,8 +52,6 @@ export const AssistantTurn = memo(function AssistantTurn({
         agentMessages={agentMessages}
         ended={ended}
         streaming={streaming}
-        expanded={expanded}
-        onToggle={() => onToggleWorked(messages[0].id)}
         durationMs={footerGroups?.length === 1 ? footer?.durationMs : null}
       />
       <AnimatePresence initial={false}>
