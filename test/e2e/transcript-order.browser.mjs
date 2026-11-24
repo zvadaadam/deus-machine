@@ -448,7 +448,11 @@ async function run() {
         await disclosure.focus();
         assert(await disclosure.evaluate((el) => el === globalThis.document.activeElement));
         parallel.part.state = done;
-        await emit(parallel, reply.finishText("Ready."), reply.end("end_turn"));
+        await emit(parallel, reply.finishText("Ready."), {
+          ...reply.end("end_turn"),
+          tokens: { input: 900, output: 100 },
+          cost: 0.03,
+        });
         const summary = logView.getByRole("button", { name: /^Expand activity, Worked for/ });
         await summary.waitFor();
         await page.waitForFunction(
@@ -487,6 +491,45 @@ async function run() {
       }
     );
     await check(
+      "a timed Worked line moves the same footer facts into keyboard-accessible Details",
+      async () => {
+        const footer = logView.locator(".turn-footer-slot");
+        assert.equal(await footer.innerText(), "Details");
+        await footer.getByRole("button", { name: "Copy response" }).waitFor();
+        const details = footer.getByRole("button", { name: "View turn details" });
+        await details.focus();
+        await page.keyboard.press("Enter");
+        const list = page.getByRole("dialog", { name: "Turn details" }).locator("dl");
+        await list.waitFor();
+        assert.deepEqual(await list.getByRole("term").allTextContents(), [
+          "Duration",
+          "Started",
+          "Finished",
+          "Tokens",
+          "Cost",
+        ]);
+        const [duration, start, end, tokens, cost] = await list
+          .getByRole("definition")
+          .allTextContents();
+        assert.ok(duration && start && end);
+        assert.equal(tokens, "1.0k tok");
+        assert.equal(cost, "$0.03");
+        await page.keyboard.press("Escape");
+        await page.waitForFunction(
+          (el) => el === globalThis.document.activeElement,
+          await details.elementHandle()
+        );
+        await chooseView("Show full run");
+        await footer
+          .getByLabel(`Turn took ${duration}. Started ${start}. Finished ${end}.`)
+          .waitFor();
+        assert.equal(await footer.getByRole("button", { name: "View turn details" }).count(), 0);
+        assert.ok(await footer.getByText(tokens, { exact: true }).isVisible());
+        assert.ok(await footer.getByText(cost, { exact: true }).isVisible());
+        await chooseView("Show chat bubbles");
+      }
+    );
+    await check(
       "a turn ending while the reader is scrolled back settles when follow resumes",
       async () => {
         const turn = fixture(chats.bubbles.session, "reading");
@@ -515,11 +558,13 @@ async function run() {
         await emit(turn.end("end_turn"));
         await group.getByRole("button", { name: "Copy response" }).waitFor();
         assert.equal(await group.getByRole("button", { name: /activity, Worked/ }).count(), 0);
+        assert.ok(await group.getByLabel(/^Turn took /).isVisible());
         assert.equal(await group.locator("[inert]").count(), 0);
         await logView.evaluate((pane) => {
           pane.scrollTop = pane.scrollHeight;
         });
         await group.getByRole("button", { name: /^Expand activity, Worked/ }).waitFor();
+        assert.equal(await group.getByLabel(/^Turn took /).count(), 0);
         await go("bubbles");
         await logView.getByText("Verified.", { exact: true }).waitFor();
         await group.getByRole("button", { name: /^Expand activity, Worked/ }).waitFor();

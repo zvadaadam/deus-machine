@@ -200,7 +200,7 @@ last send, else the last passage), a card still waiting, pictures and
 recordings. A turn with no words keeps its last card. Each stretch of a turn
 split by a steer is its own list. Nested sub-agents read as the full run.
 
-`tell_user` (setting `agent_messages`, off by default) lets a local chat's
+`tell_user` (setting `agent_messages`, on by default) lets a local chat's
 agent send the person a message while it works. The call stores nothing: the
 completed part is the message, and `shared/agent-message.ts` is its only
 reader, for the transcript, Copy, the cards, and what other chats and

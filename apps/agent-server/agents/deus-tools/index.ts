@@ -18,9 +18,10 @@ import { tool } from "./tool";
 
 const tellUser = tool(
   TELL_USER,
-  "Send the person a complete Markdown message. " +
-    "Sub-agents report to their caller without this tool. " +
-    "Write your final reply as ordinary text. To contact another chat, use `send_message`.",
+  "Send the person a message while you work, as complete Markdown. " +
+    "Until you finish, only what you send appears to them; your final reply appears by itself, " +
+    "so do not send it with this tool. Sub-agents report to their caller instead of calling it. " +
+    "To message another chat, use `send_message`.",
   { message: z.string().regex(/\S/, "Write a message for the person.") },
   async () => ({ content: [{ type: "text", text: "Message sent." }] }),
   { readOnly: true }
