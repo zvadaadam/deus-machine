@@ -22,7 +22,7 @@ function card(part: Part): "keep" | "card" | undefined {
   return undefined;
 }
 
-type TurnBlock =
+export type TurnBlock =
   | Part
   | { type: "activity"; id: string; parts: Part[] }
   | { type: "typing"; id: string };

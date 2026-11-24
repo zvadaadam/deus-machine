@@ -783,7 +783,7 @@ describe("through MCP and as a chat's own tools", () => {
 
   it("keeps each chat's instructions and tool list on the same setting after a change", async () => {
     for (const id of ["before", "after", "later"]) insertChat(id, "w-lead");
-    let preference: unknown = "true";
+    let preference: boolean | null = false;
     const tools = (id: string) => withSessionTools(deusTools(id)).tools.map((t) => t.name);
     const instructions = (id: string) =>
       buildTurnStartParams(id, "turn", "gemini", "Check the build", {
@@ -796,10 +796,13 @@ describe("through MCP and as a chat's own tools", () => {
         (key) => key === "agent_messages" && preference,
         async () => {
           expect(tools("before")).not.toContain(TELL_USER);
-          preference = true;
-          expect(instructions("before")).not.toContain(TELL_USER);
-          expect(instructions("after")).toContain(
-            `\`${TELL_USER}\` tool of the \`${DEUS_TOOLS_SERVER}\` server, under the name your tool list gives it`
+          preference = null;
+          const before = instructions("before");
+          const after = instructions("after");
+          expect(before).not.toContain(TELL_USER);
+          expect(after).toContain(`${before}\n\n# Messages to the person\n`);
+          expect(after).toContain(
+            `\`${TELL_USER}\` tool of the \`${DEUS_TOOLS_SERVER}\` server (call it by the name your tool list gives it)`
           );
           preference = false;
           expect(tools("after")).toContain(TELL_USER);

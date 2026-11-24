@@ -51,13 +51,16 @@ const AGENT_DEVICE =
   "and end with `agent-device close` (`close --shutdown` if you booted it) so another workspace can use the device. " +
   "`agent-device help <topic>` has more (`dogfood` for exploratory QA, `debugging`, `react-native`).\n";
 
-export const AGENT_MESSAGES =
-  "The person reads your messages, not your working notes. While you work, send a message with " +
-  `the \`${TELL_USER}\` tool of the \`${DEUS_TOOLS_SERVER}\` server, under the name your tool list gives it, ` +
-  "when there is something they should read before you finish: a plan for a longer job, " +
-  "a finding they asked to hear before you act on it, a result on the way. Put related results in one message. " +
-  "Your final reply is the closing message, so do not send it with the tool as well. " +
-  "Anything else you write between tool calls is shown only as a note inside your work.\n";
+export const AGENT_MESSAGES = `
+# Messages to the person
+
+Until you finish, the person sees only what you send with the \`${TELL_USER}\` tool of the \`${DEUS_TOOLS_SERVER}\` server (call it by the name your tool list gives it). Text you write between tool calls is not shown to them while you work.
+
+- On a job of more than a few steps, send one message before you start, saying what you will do, and one at each result they can use or finding that changes the plan.
+- When they ask to hear a finding before you act on it, send it before you act.
+- Put related results in one message. Send no progress notes ("now running the tests"), and nothing for a short answer.
+- Your final reply is the closing message: write it once, as your normal reply, and do not send it with the tool as well.
+`;
 
 /**
  * Builds concise workspace context for any agent.

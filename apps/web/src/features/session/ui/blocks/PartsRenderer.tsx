@@ -1,37 +1,35 @@
 import { memo, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Part, UnknownPart } from "@shared/protocol-types";
-import { assistantTurnContent, staysAtEnd } from "../../lib/assistantTurnContent";
+import type { TurnBlock } from "../../lib/assistantTurnContent";
 import { extractChatResources } from "../../lib/chatResources";
 import { useSession } from "../../context";
 import { ActivityButton, TurnStatsHeader } from "../TurnStatsHeader";
-import { formatTurnDurationLabel } from "../utils/formatTurnDurationLabel";
 import { PartBlock } from "./PartBlock";
 import { ChatResourceCards } from "./ChatResourceCards";
 
 interface PartsRendererProps {
   parts: Array<Part | UnknownPart>;
+  rows: TurnBlock[];
+  stays?: Set<string> | null;
   bubbles?: boolean;
   ended?: boolean;
-  agentMessages?: boolean;
   streaming?: boolean;
-  durationMs?: number | null;
+  workedLabel?: string;
 }
 
 export const PartsRenderer = memo(function PartsRenderer({
   parts,
+  rows,
+  stays,
   bubbles = false,
   streaming = false,
   ended,
-  agentMessages,
-  durationMs,
+  workedLabel,
 }: PartsRendererProps) {
   const { workspacePath } = useSession();
   const id = useId();
   const worked = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const condensed = bubbles && !ended && !!agentMessages;
-  const rows = useMemo(() => assistantTurnContent(parts, condensed), [parts, condensed]);
-  const stays = useMemo(() => (ended ? staysAtEnd(parts) : null), [parts, ended]);
   const visibleIds = bubbles && !open ? stays : null;
   const resources = useMemo(
     () =>
@@ -58,7 +56,7 @@ export const PartsRenderer = memo(function PartsRenderer({
   let nextVisible = 0;
   return (
     <>
-      {bubbles && stays && stays.size < rows.length && (
+      {workedLabel && (
         <div className="fold-row" data-closed={mountedAll ? false : undefined}>
           <div className="min-h-0 overflow-clip">
             <ActivityButton
@@ -66,9 +64,7 @@ export const PartsRenderer = memo(function PartsRenderer({
               controls={id}
               expanded={open}
               onToggle={() => setOpen(!open)}
-              label={
-                durationMs == null ? "Worked" : `Worked for ${formatTurnDurationLabel(durationMs)}`
-              }
+              label={workedLabel}
             />
           </div>
         </div>

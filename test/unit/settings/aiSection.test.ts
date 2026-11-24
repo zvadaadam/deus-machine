@@ -143,3 +143,16 @@ describe("local agent status", () => {
     }
   );
 });
+
+it("checks Agent messages by default and honours a saved choice", () => {
+  for (const [saved, checked] of [
+    [undefined, true],
+    [false, false],
+    [true, true],
+  ] as const) {
+    const settings = { agent_messages: saved };
+    const html = renderToStaticMarkup(createElement(AISection, { settings, saveSetting: vi.fn() }));
+    const toggle = html.match(/<button\b[^>]*\bid="agent-messages"[^>]*>/)?.[0];
+    expect(toggle).toContain(`aria-checked="${checked}"`);
+  }
+});

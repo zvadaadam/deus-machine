@@ -112,7 +112,9 @@ describe("deusTools", () => {
       TELL_USER,
     ]);
     expect(enabled.tools.find((t) => t.name === TELL_USER)).toMatchObject({
-      description: expect.stringContaining("Sub-agents report to their caller without this tool."),
+      description: expect.stringContaining(
+        "Sub-agents report to their caller instead of calling it."
+      ),
       annotations: { readOnly: true },
       inputSchema: {
         required: ["message"],

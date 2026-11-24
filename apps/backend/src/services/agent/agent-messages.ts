@@ -13,7 +13,7 @@ export function hasAgentMessages(sessionId: string): boolean {
   db.prepare(
     `UPDATE sessions SET agent_messages = (agent_session_id IS NULL AND ?)
      WHERE id = ? AND agent_messages IS NULL`
-  ).run(getSetting("agent_messages") === true ? 1 : 0, sessionId);
+  ).run(getSetting("agent_messages") !== false ? 1 : 0, sessionId);
   // Another first ask can win the write.
   return read.get(sessionId)?.agent_messages === 1;
 }
