@@ -203,6 +203,7 @@ export function Chat({
   );
 
   const { showScrollButton, handleScrollToBottomClick } = useAutoScroll({
+    running: active && !!openTurnId,
     // New messages can extend an existing turn; empty outcomes can add an
     // item without a message. Track both, independently of stable React keys.
     contentCount: messages.length + timeline.length,
@@ -371,7 +372,7 @@ export function Chat({
                               footerGroups={t.footerGroups}
                               ended={t.ended && !deferredTurns.has(t.turnId)}
                               streaming={t.isStreaming && working}
-                              agentMessages={agentMessages && active}
+                              agentMessages={agentMessages && active && !t.ended}
                               progressSlot={t.isStreaming ? progressSlot : undefined}
                               startedAt={t.startedAt}
                             />

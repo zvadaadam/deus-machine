@@ -1,7 +1,8 @@
-import { createElement } from "react";
+import { createElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  createReasoningPart,
   createSteerEchoParts,
   createTextPart,
   createUserEchoParts,
@@ -28,10 +29,10 @@ vi.mock("@tanstack/react-virtual", async (importOriginal) => {
   };
 });
 vi.mock("@/features/session/hooks/useAutoScroll", () => ({
-  useAutoScroll: (options: unknown) => {
-    scroll(options);
-    return { showScrollButton: false, handleScrollToBottomClick: () => {} };
-  },
+  useAutoScroll: (options: unknown) => ({
+    showScrollButton: !!scroll(options),
+    handleScrollToBottomClick: () => {},
+  }),
 }));
 
 const messages: Message[] = [
@@ -44,6 +45,70 @@ const messages: Message[] = [
     sent_at: "2026-09-09T10:00:00.000Z",
   },
 ];
+
+it("keeps a deferred reply visible when the next turn starts in an Agent messages chat", () => {
+  const client = new QueryClient();
+  const a = { turnId: "turn-1", startedAt: 1 };
+  const b = { turnId: "turn-2", startedAt: 3 };
+  function reply(turnId: string, seq: number, text: string): Message {
+    const ctx = { sessionId: "session-1", messageId: `${turnId}-reply` };
+    return {
+      ...messages[0],
+      id: ctx.messageId,
+      turn_id: turnId,
+      role: "assistant",
+      seq,
+      parts: [createReasoningPart(ctx, "Checking", false), createTextPart(ctx, text, false)],
+    };
+  }
+  const first = [...messages, reply(a.turnId, 1, "Answer from A.")];
+  const next = [
+    ...first,
+    { ...messages[0], id: "prompt-b", turn_id: b.turnId, seq: 2 },
+    reply(b.turnId, 3, "Answer from B."),
+  ];
+
+  // Replay the inputs on one Chat hook state in the static renderer.
+  function Handoff({ through }: { through: number }) {
+    const [step, advance] = useState(0);
+    if (step < through) advance(step + 1);
+    return Chat({
+      loading: false,
+      agentMessages: true,
+      sessionStatus: step === 1 ? "idle" : "working",
+      messages: step === 2 ? next : first,
+      turns: step === 0 ? [a] : [{ ...a, endedAt: 2 }, ...(step === 2 ? [b] : [])],
+    });
+  }
+  const render = (through: number) =>
+    renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(SessionProvider, {
+          sessionStatus: through === 1 ? "idle" : "working",
+          subagentMessages: new Map(),
+          children: createElement(Handoff, { through }),
+        })
+      )
+    );
+  try {
+    virtualization.mockReturnValue({ width: 800, height: 900 });
+    scroll.mockReturnValue(true);
+    expect(render(0)).not.toContain("Answer from A.");
+    const idle = render(1);
+    expect(idle).toContain("Answer from A.");
+    expect(idle).not.toContain("activity, Worked");
+    const started = render(2);
+    expect(started).toContain("Answer from A.");
+    expect(started).not.toContain("activity, Worked");
+    expect(started).not.toContain("Answer from B.");
+  } finally {
+    scroll.mockReset();
+    virtualization.mockReset();
+    client.clear();
+  }
+});
 
 it("folds a read steer between replies and finishes the same turn once", () => {
   const client = new QueryClient();

@@ -41,6 +41,7 @@ function isAtBottom(el: HTMLElement): boolean {
 // ── Hook ─────────────────────────────────────────────────────────────────
 
 interface UseAutoScrollOptions {
+  running: boolean;
   contentCount: number;
   lastContentId: string | null;
   messagesContainerRef: RefObject<HTMLDivElement>;
@@ -49,6 +50,7 @@ interface UseAutoScrollOptions {
 }
 
 export function useAutoScroll({
+  running,
   contentCount,
   lastContentId,
   messagesContainerRef,
@@ -250,14 +252,12 @@ export function useAutoScroll({
     };
   }, [messagesContainerRef, resume]);
 
-  // ── Start chase when content is present ─────────────────────────────
+  // A turn can reveal its answer without adding a message.
   const contentReady = contentCount > 0;
   useEffect(() => {
-    if (!contentReady || isPausedRef.current) return;
-    log("contentReady effect: starting chase");
-    startChase();
-    return () => stopChase();
-  }, [contentReady, startChase, stopChase]);
+    stopChase();
+    if (contentReady && !isPausedRef.current) startChase();
+  }, [contentReady, running, startChase, stopChase]);
 
   // ── Human send → resume ────────────────────────────────────────────
   // Triggered by SessionPanel incrementing userSendCount when the human
