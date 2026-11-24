@@ -203,7 +203,7 @@ export function Chat({
   );
 
   const { showScrollButton, handleScrollToBottomClick } = useAutoScroll({
-    running: active && !!openTurnId,
+    running: !!agentMessages && active && !!openTurnId,
     // New messages can extend an existing turn; empty outcomes can add an
     // item without a message. Track both, independently of stable React keys.
     contentCount: messages.length + timeline.length,
