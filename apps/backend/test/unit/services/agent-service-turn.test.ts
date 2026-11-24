@@ -88,27 +88,14 @@ describe("agentService.startTurn", () => {
     vi.clearAllMocks();
   });
 
-  it("refuses a send when Stop, archive and project removal finish during the integration lookup", async () => {
+  it("refuses an engine start whose chat was removed during the integration lookup", async () => {
     const run = operations([...sessionHandlers, ...workspaceHandlers, ...repoHandlers]);
     const lookup = Promise.withResolvers<TurnApps>();
     const apps = vi.spyOn(integrations, "resolveTurnApps").mockReturnValueOnce(lookup.promise);
-    mockLinkCancelTurn.mockResolvedValueOnce({ outcome: "no_active_turn" });
     mockLinkStartTurn.mockResolvedValue({ sessionId: SESSION, turnId: TURN });
 
-    const sending = run(api.sendMessage, {
-      sessionId: SESSION,
-      turnId: TURN,
-      content: "hello",
-      model: "opus",
-      agentHarness: "claude-code",
-    });
+    const sending = start();
     expect(apps).toHaveBeenCalledOnce();
-    expect(await run(api.session, { sessionId: SESSION })).toMatchObject({ status: "working" });
-    await expect(run(api.stopSession, { sessionId: SESSION })).resolves.toEqual({
-      unconfirmed: false,
-    });
-    expect(mockLinkCancelTurn).toHaveBeenCalledWith(SESSION, undefined);
-    expect(await run(api.session, { sessionId: SESSION })).toMatchObject({ status: "idle" });
     await run(api.archiveWorkspace, { workspaceId: "w" });
     const confirmed = await run(api.repoRemoval, { repoId: "r" });
     await run(api.removeRepo, { repoId: "r", confirmed });

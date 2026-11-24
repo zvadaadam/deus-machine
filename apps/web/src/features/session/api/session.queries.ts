@@ -263,18 +263,15 @@ export function newTurnId(): string {
   return uuidv7();
 }
 
-export interface SendMessageVariables {
-  mode?: "steer";
+export type SendMessageVariables = {
   sessionId: string;
   content: string;
   model: string;
   agentHarness: AgentHarness;
-  /** Minted by the caller with `newTurnId()` — see useSessionActions. */
-  turnId: string;
   permissionMode?: string;
   /** Every turn names one: a cloud turn without it is refused (AGNT chooses none). */
   thinkingLevel: string;
-}
+} & ({ mode?: undefined; turnId: string } | { mode: "steer"; turnId?: string });
 
 /** A send predicts its echo when it expects to start a turn. The host decides whether it does. */
 export function useSendMessage() {
@@ -291,7 +288,7 @@ export function useSendMessage() {
       // which falls through to onError's rollback. No credential rides the wire —
       // agnt resolves the org key at dispatch.
       const direct = getDirectSession(sessionId, queryClient);
-      if (direct) {
+      if (direct && mode !== "steer") {
         direct.sendMessage(content, turnId, { model, agentHarness, thinkingLevel });
         return;
       }
@@ -310,7 +307,7 @@ export function useSendMessage() {
       if (!backend.isConnected()) await backend.connect();
       try {
         if (mode === "steer") {
-          await backend.call(api.steerMessage, input);
+          await backend.call(api.steerMessage, { ...input, turnId });
           return;
         }
         return await backend.call(api.sendMessage, { ...input, turnId });
@@ -363,12 +360,12 @@ export function useSendMessage() {
 
       patchWorkspaceSessionStatus(queryClient, sessionId, "working");
 
-      return { previousWorkspaceByRepo };
+      return { previousWorkspaceByRepo, turnId };
     },
 
-    onSuccess: (result, { sessionId, turnId }, context) => {
+    onSuccess: (result, { sessionId }, context) => {
       if (!result?.queued || !context) return;
-      dropOptimisticMessage(queryClient, sessionId, turnId);
+      dropOptimisticMessage(queryClient, sessionId, context.turnId);
       void queryClient.invalidateQueries({ queryKey: ["workspaces", "by-repo"] });
     },
 
@@ -396,7 +393,7 @@ export function useSendMessage() {
         }
       }
       if (!context) return;
-      dropOptimisticMessage(queryClient, variables.sessionId, variables.turnId);
+      dropOptimisticMessage(queryClient, variables.sessionId, context.turnId);
       // Put the sidebar's status back — by REFETCH after a server rejection,
       // or uncertain delivery, and by snapshot only for failures before dispatch.
       // See sendRollback.ts.

@@ -93,16 +93,28 @@ export const queuedMessage = read({
   output: out<{ content: string | null }>(),
 });
 
+const steerTarget = {
+  /** The turn this client shows as running. */
+  turnId: z.string().min(1).optional(),
+};
+
 export const steerMessage = write({
   name: "steerMessage",
-  input: sendMessage.input.omit({ turnId: true }),
+  input: sendMessage.input.extend(steerTarget),
   output: out<{ outcome: "steered" | "queued" | "sent" }>(),
 });
 
 export const steerQueuedMessage = write({
   name: "steerQueuedMessage",
-  input: queuedMessageId,
+  input: queuedMessageId.extend(steerTarget),
   output: out<{ outcome: "steered" | "queued" | "gone" }>(),
+});
+
+/** Move a waiting row before another waiting row, or to the end with `before: null`. */
+export const moveQueuedMessage = write({
+  name: "moveQueuedMessage",
+  input: queuedMessageId.extend({ before: z.string().min(1).nullable() }),
+  output: out<{ moved: boolean }>(),
 });
 
 export const removeQueuedMessage = write({

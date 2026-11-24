@@ -100,9 +100,8 @@ export async function init(): Promise<void> {
       const { event, sessionId } = envelope;
       const known = !isUnknownEvent(event);
       // Withdraw this turn's cards before publishing its end and admitting its successor.
-      if (known && event.type === "turn.ended" && handler.liveTurnId(sessionId) === event.turnId) {
-        cancelSessionRelays(sessionId, "turn ended");
-      }
+      if (known && event.type === "turn.ended")
+        cancelSessionRelays(sessionId, "turn ended", event.turnId);
       const end = handler.handle(envelope);
       if (!known) return;
       if (end) turnWatcher?.turnEnded(end);
@@ -263,6 +262,8 @@ export async function stopSession(params: {
 }): Promise<TurnCancelResult> {
   if (!link) throw new Error("Agent service not initialized");
   const result = await link.cancelTurn(params.sessionId, params.turnId);
+  if (result.outcome === "cancelled")
+    cancelSessionRelays(params.sessionId, "turn stopped", result.turnId);
   if (params.turnId) {
     events?.settleEventGap(
       params.sessionId,
@@ -291,7 +292,7 @@ export function provideSessionTools(compose: (own: HostToolSource) => HostToolSo
 interface TurnWatcher {
   turnEnded(end: TurnEnd): void;
   userEcho(sessionId: string, turnId: string, messageId: string): void;
-  stopAsked(sessionId: string): Promise<{ turnId: string }> | undefined;
+  stopAsked(sessionId: string): void;
   interrupted(sessionId: string, turnId: string | undefined, gone: boolean): void;
 }
 let turnWatcher: TurnWatcher | undefined;
@@ -299,8 +300,8 @@ export function provideTurnWatcher(watcher: TurnWatcher): void {
   turnWatcher = watcher;
 }
 
-export function notifyStopAsked(sessionId: string) {
-  return turnWatcher?.stopAsked(sessionId);
+export function notifyStopAsked(sessionId: string): void {
+  turnWatcher?.stopAsked(sessionId);
 }
 
 export function notifyTurnInterrupted(
@@ -308,6 +309,7 @@ export function notifyTurnInterrupted(
   turnId: string | undefined,
   gone: boolean
 ): void {
+  if (gone && turnId) cancelSessionRelays(sessionId, "turn interrupted", turnId);
   turnWatcher?.interrupted(sessionId, turnId, gone);
 }
 
@@ -336,6 +338,7 @@ async function answerPermission(event: PermissionRequestedEvent): Promise<void> 
 }
 
 async function askPlan(event: PermissionRequestedEvent): Promise<PermissionOutcome> {
+  if (event.turnId !== liveTurnId(event.sessionId)) return { outcome: "cancelled" };
   try {
     const answer = (await handleToolRequest("exitPlanMode", {
       sessionId: event.sessionId,
@@ -364,6 +367,7 @@ async function answerElicitation(event: ElicitationRequestedEvent): Promise<void
 }
 
 async function askQuestions(event: ElicitationRequestedEvent): Promise<ElicitationOutcome> {
+  if (event.turnId !== liveTurnId(event.sessionId)) return { action: "cancel" };
   const questions = event.mode === "question" ? askableQuestions(event.questions) : [];
   if (questions.length === 0) return { action: "decline" };
   try {
@@ -402,6 +406,7 @@ async function handleToolRequest(
   if (method === "agentDevice") return agentDeviceFor(requireParam(params, "sessionId", method));
 
   const sessionId = requireParam(params, "sessionId", method);
+  const turnId = liveTurnId(sessionId);
   const requestId = crypto.randomUUID();
   const isUserFacing = isPrompt(method);
   const sessionResources = ["workspaces", "sessions", "session"] as const;
@@ -420,13 +425,14 @@ async function handleToolRequest(
     return await relay({
       requestId,
       sessionId,
+      turnId,
       method,
       params,
       // User-facing methods wait indefinitely; auto-responding keep 2-min timeout
       timeoutMs: isUserFacing ? 24 * 60 * 60 * 1000 : 120_000,
     });
   } finally {
-    if (isUserFacing) {
+    if (isUserFacing && turnId !== undefined && liveTurnId(sessionId) === turnId) {
       const result = persistSessionBackToWorking(sessionId);
       if (result.ok) invalidate([...sessionResources], { sessionIds: [sessionId] });
     }

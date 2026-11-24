@@ -26,6 +26,7 @@ import { publish } from "../streams";
 // ---- Types ----
 
 interface PendingRelay {
+  turnId?: string;
   resolve: (result: unknown) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
@@ -45,7 +46,9 @@ const pending = new Map<string, PendingRelay>();
  * Returns a promise that resolves when the frontend sends back q:tool_response,
  * or rejects if the timeout expires.
  */
-export function relay(event: ToolRequestEventData & { type?: string }): Promise<unknown> {
+export function relay(
+  event: ToolRequestEventData & { type?: string; turnId?: string }
+): Promise<unknown> {
   const { requestId, sessionId, method, params, timeoutMs } = event;
 
   // If there's already a pending request with this ID, reject the old one
@@ -69,7 +72,7 @@ export function relay(event: ToolRequestEventData & { type?: string }): Promise<
     }, timeoutMs);
 
     const request = { requestId, sessionId, method, params, timeoutMs };
-    pending.set(requestId, { resolve, reject, timer, request });
+    pending.set(requestId, { resolve, reject, timer, request, turnId: event.turnId });
     publish(toolRequests, { sessionId }, { type: "request", request });
   });
 }
@@ -133,18 +136,13 @@ export function cancelRelay(requestId: string, reason: string): boolean {
   return true;
 }
 
-/**
- * Reject every pending relay of a session and tell the renderer to drop their
- * overlays: the turn that asked has ended (stopped, killed, timed out), so a
- * later answer would reach a request the agent has already abandoned — and
- * the overlay would otherwise stay answerable for up to the relay's timeout.
- * Returns the cancelled request ids.
- */
-export function cancelSessionRelays(sessionId: string, reason: string): string[] {
+/** Withdraw this turn's requests, or all of the chat's when no turn is specified. */
+export function cancelSessionRelays(sessionId: string, reason: string, turnId?: string): string[] {
   const cancelled: string[] = [];
   for (const [requestId, entry] of [...pending]) {
-    if (entry.request.sessionId === sessionId && cancelRelay(requestId, reason))
-      cancelled.push(requestId);
+    if (entry.request.sessionId !== sessionId || (turnId !== undefined && entry.turnId !== turnId))
+      continue;
+    if (cancelRelay(requestId, reason)) cancelled.push(requestId);
   }
   return cancelled;
 }

@@ -49,6 +49,9 @@ type Admission = { content: string; origin: string | null; done: Promise<{ turnI
 const admissionsOf = new WeakMap<object, Map<string, Admission>>();
 const ADMISSION_KEPT_MS = 10 * 60_000;
 
+/** Stop waits for the local start in progress, including the turn's app setup. */
+const admitting = new Map<string, { turnId: string; done: Promise<void> }>();
+
 /** A retry of an existing turn goes through admission even while its chat is busy. */
 export function knownTurn(sessionId: string, turnId: string): boolean {
   const db = getDatabase();
@@ -326,23 +329,18 @@ async function sendMessageOnce(
     }
 
     // turn/start answers at admission. The streamed reply arrives through the event handler.
+    const done = agentService.startTurn(sessionId, turnId, agentHarness, content, {
+      cwd,
+      model,
+      thinkingLevel: readThinkingLevel(input.thinkingLevel),
+      permissionMode,
+      resume: existingAgentSessionId || undefined,
+      ...(origin ? { origin } : {}),
+    });
+    admitting.set(sessionId, { turnId, done });
     try {
-      await agentService.startTurn(sessionId, turnId, agentHarness, content, {
-        cwd,
-        model,
-        thinkingLevel: readThinkingLevel(input.thinkingLevel),
-        permissionMode,
-        resume: existingAgentSessionId || undefined,
-        ...(origin ? { origin } : {}),
-      });
+      await done;
     } catch (err) {
-      // A stop that landed while this was being admitted claimed the id with a row;
-      // the engine refused it, so no turn of that id exists: the row goes too.
-      getDatabase()
-        .prepare(
-          "DELETE FROM turns WHERE session_id = ? AND turn_id = ? AND started_at IS NULL AND ended_at IS NULL"
-        )
-        .run(sessionId, turnId);
       if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
         // Another turn won admission. Keep it working and return the typed refusal.
         console.warn(
@@ -358,6 +356,9 @@ async function sendMessageOnce(
       if (err instanceof WireRequestError) handleAgentRejection(sessionId, turnId, err.message);
       else handleAgentError(sessionId, turnId, err);
       throw err;
+    } finally {
+      // A quick turn can end and start its successor before its admission reply.
+      if (admitting.get(sessionId)?.done === done) admitting.delete(sessionId);
     }
   }
 
@@ -406,18 +407,17 @@ export async function stopSession(
   /** Who stops it, kept on the turn so a reader can say who did. */
   by: Origin = { kind: "person" }
 ): Promise<{ unconfirmed: boolean }> {
-  const starting = agentService.notifyStopAsked(sessionId);
+  agentService.notifyStopAsked(sessionId);
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new NotFoundError("Session not found");
 
-  let targetTurnId = agentService.liveTurnId(sessionId);
-  if (!targetTurnId && starting) {
-    // A queue head can be preparing its apps before the engine knows its turn.
+  const admission = admitting.get(sessionId);
+  const targetTurnId = admission?.turnId ?? agentService.liveTurnId(sessionId);
+  if (admission) {
     try {
-      targetTurnId = (await starting).turnId;
+      await admission.done;
     } catch {
-      // Its admission failed. The queue has it back and there is no such turn to stop.
       return { unconfirmed: false };
     }
     if (agentService.liveTurnId(sessionId) !== targetTurnId) return { unconfirmed: false };
@@ -474,7 +474,7 @@ export async function stopSession(
   }
 
   // The requested turn may have ended and a successor started during the RPC.
-  const live = agentService.liveTurnId(sessionId);
+  const live = admitting.get(sessionId)?.turnId ?? agentService.liveTurnId(sessionId);
   if (
     (live !== undefined && live !== targetTurnId) ||
     (result?.outcome === "no_active_turn" && result.activeTurnId !== undefined)
@@ -507,21 +507,9 @@ function scheduleUnconfirmedCancelWatchdog(
 ): void {
   const timer = setTimeout(() => {
     try {
-      // The watchdog belongs to ONE turn, and the status cannot identify it:
-      // consecutive turns are both "working". An unconfirmed cancel usually
-      // does settle — turn.ended lands, the session goes idle, the user sends
-      // again — and all of that fits inside the 15s grace window, after which
-      // a status-only check reads the NEW turn's "working" as the old turn's
-      // stuck cancel and fails a perfectly healthy run mid-flight.
-      //
-      // So bail only on POSITIVE evidence that a different turn is live now.
-      // `liveTurnId` returning undefined is not that evidence: it also means
-      // the handler is gone (link dropped, shutdown), which is precisely when
-      // a session is most likely to be stranded on "working" with no agent
-      // behind it — the case this watchdog exists for. The status guard below
-      // covers the remaining "it ended and nothing replaced it" case, since
-      // that session is no longer in an active status.
-      const live = agentService.liveTurnId(sessionId);
+      // A successor may still be preparing its apps. Without either owner the
+      // status guard below distinguishes a settled chat from one left active.
+      const live = admitting.get(sessionId)?.turnId ?? agentService.liveTurnId(sessionId);
       if (live !== undefined && live !== cancelledTurnId) return;
 
       const db = getDatabase();
