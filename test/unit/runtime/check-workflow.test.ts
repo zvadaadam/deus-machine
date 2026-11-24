@@ -9,7 +9,7 @@ const { jobs } = load(readFileSync(".github/workflows/test.yml", "utf8")) as {
 };
 const preparation = [
   "bun install --frozen-lockfile",
-  "bunx playwright install --with-deps chromium",
+  "bunx playwright install chromium",
   "bunx node-gyp rebuild",
 ];
 
