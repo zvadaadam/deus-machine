@@ -240,7 +240,7 @@ to the queue, leaving the turn's outcome to the engine. Rows paused by a stop or
 A local usage limit pauses even an empty queue. Resume appears only when there are rows. Pressing Continue
 before the reported reset schedules a turn one minute after it. The person can enable this for future limits in Settings.
 Pressing Continue after the reset starts the turn at once. While Deus stays open, the first waiting message goes, or “Continue.”
-with the chat's settings. A new send, Resume, Stop, closing the chat or archiving its workspace clears the schedule.
+with the chat's settings. A new send, Resume, Stop, hiding the chat or archiving its workspace clears the schedule.
 A steer read mid-turn splits one reply into groups with one footer (`groupTurns` in
 `session/lib/chatTimeline.ts`). Cloud chats keep their send, including the hosted web's
 direct lane. The operator's `send` to a busy chat still answers `busy`.

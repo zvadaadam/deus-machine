@@ -179,7 +179,7 @@ async function journey() {
     await vite.listen();
     const base = vite.resolvedUrls.local[0] + "s/local";
     browser = await chromium.launch();
-    async function windowFor(colorScheme, phone = false) {
+    async function windowFor(colorScheme, { phone = false, now = start } = {}) {
       const page = await browser.newPage({
         viewport: phone ? { width: 390, height: 844 } : { width: 1440, height: 900 },
         isMobile: phone,
@@ -189,7 +189,15 @@ async function journey() {
         colorScheme,
         reducedMotion: "reduce",
       });
-      await page.clock.setFixedTime(new Date(start));
+      // Pin the wall clock. Motion starts Web Animations against the document's native performance clock.
+      await page.addInitScript((time) => {
+        Date.now = () => time;
+        globalThis.Date = new Proxy(Date, {
+          apply: (NativeDate) => new NativeDate(time).toString(),
+          construct: (NativeDate, args, newTarget) =>
+            Reflect.construct(NativeDate, args.length ? args : [time], newTarget),
+        });
+      }, now);
       page.setDefaultTimeout(20_000);
       return page;
     }
@@ -255,7 +263,7 @@ async function journey() {
     await dark.locator("html.dark").waitFor({ state: "attached" });
     await screenshot(dark, "limit-dark.png", darkCard);
 
-    const phone = await windowFor("light", true);
+    const phone = await windowFor("light", { phone: true });
     const phoneCard = await visit(phone, empty);
     await phoneCard.getByRole("button", { name: "Continue at 05:11" }).tap();
     await phoneCard.getByText(scheduled).waitFor();
@@ -279,7 +287,7 @@ async function journey() {
         await composer.fill(personal);
         await composer.press("Enter");
         await page.getByRole("log").getByText(personal, { exact: true }).waitFor();
-        assert.equal((await queue(id)).limit, undefined);
+        await until(async () => (await queue(id)).limit === undefined);
       }
     }
 
@@ -294,12 +302,13 @@ async function journey() {
     await until(async () => (await setting.getAttribute("aria-checked")) === "true");
     await screenshot(page, "limit-setting.png");
     await send(unknown, first);
+    await send(unknown, followup);
     await limit(unknown);
     const noTime = await visit(page, unknown);
+    await group.getByText("Queue paused. A usage limit was reached.", { exact: true }).waitFor();
     await noTime.getByText(limitMessage, { exact: true }).waitFor();
     assert.equal(await noTime.getByRole("button").count(), 0);
     assert.equal(await noTime.getByText(/Resets at/).count(), 0);
-    assert.equal(await group.getByText(/^Queue paused/).count(), 0);
     await send(automatic, first);
     await limit(automatic, reset);
     const automaticCard = await visit(page, automatic);
@@ -309,15 +318,18 @@ async function journey() {
     await drive({ type: "tick", milliseconds: reset - start });
     const afterReset = await drive({ type: "tick", milliseconds: 30_000 });
     assert.equal(afterReset.length, 8, "Only the seven initial sends and the person's message ran");
-    await page.clock.setFixedTime(new Date(reset + 30_000));
-    const lateCard = await visit(page, late);
+    const reopened = await windowFor("light", { now: reset + 30_000 });
+    const lateCard = await visit(reopened, late);
     await lateCard.getByText("Reset at 05:10.").waitFor();
-    await group.getByText("Queue paused. A usage limit was reached.", { exact: true }).waitFor();
+    await reopened
+      .getByRole("group", { name: "Queued messages" })
+      .getByText("Queue paused. A usage limit was reached.", { exact: true })
+      .waitFor();
     const continueNow = lateCard.getByRole("button", { name: "Continue", exact: true });
     await continueNow.waitFor();
-    await screenshot(page, "limit-after-reset.png", lateCard);
+    await screenshot(reopened, "limit-after-reset.png", lateCard);
     await continueNow.click();
-    await page.getByRole("log").getByText(followup, { exact: true }).waitFor();
+    await reopened.getByRole("log").getByText(followup, { exact: true }).waitFor();
 
     const before = await drive({ type: "tick", milliseconds: 29_999 });
     assert.equal(before.length, 9, "Only the explicit Continue ran before 05:11");
