@@ -54,7 +54,7 @@ jobs:
       - *install
       - &chromium
         name: Install Playwright Chromium
-        run: bunx playwright install --with-deps chromium
+        run: bunx playwright install chromium
       - run: bun run check app
       - name: Upload UI regression screenshots
         if: always()
