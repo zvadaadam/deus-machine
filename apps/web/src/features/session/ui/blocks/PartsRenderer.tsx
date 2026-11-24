@@ -31,10 +31,8 @@ export const PartsRenderer = memo(function PartsRenderer({
   const [open, setOpen] = useState(false);
   const condensed = bubbles && !ended && !!agentMessages;
   const rows = useMemo(() => assistantTurnContent(parts, condensed), [parts, condensed]);
-  const stays = useMemo(
-    () => (bubbles && ended ? staysAtEnd(parts) : null),
-    [parts, bubbles, ended]
-  );
+  const stays = useMemo(() => (ended ? staysAtEnd(parts) : null), [parts, ended]);
+  const visibleIds = bubbles && !open ? stays : null;
   const resources = useMemo(
     () =>
       extractChatResources({
@@ -44,23 +42,23 @@ export const PartsRenderer = memo(function PartsRenderer({
       }),
     [parts, streaming, workspacePath]
   );
-  const visible = stays && !open ? rows.filter((row) => stays.has(row.id)) : rows;
+  const visible = visibleIds ? rows.filter((row) => visibleIds.has(row.id)) : rows;
   // A previously ended turn only needs its closed rows after the first expansion.
   // Once displayed (including while live or in Full run), keep their nodes.
-  const [mountedAll, setMountedAll] = useState(!stays);
-  if (!mountedAll && (!stays || open)) setMountedAll(true);
+  const [mountedAll, setMountedAll] = useState(!visibleIds);
+  if (!mountedAll && !visibleIds) setMountedAll(true);
   const mounted = mountedAll ? rows : visible;
   useLayoutEffect(() => {
-    if (!stays || open) return;
+    if (!visibleIds) return;
     const row = document.activeElement?.closest("[inert]");
     if (row && document.getElementById(id)?.contains(row)) {
       worked.current?.focus({ preventScroll: true });
     }
-  }, [stays, open, id]);
+  }, [visibleIds, id]);
   let nextVisible = 0;
   return (
     <>
-      {stays && stays.size < rows.length && (
+      {bubbles && stays && stays.size < rows.length && (
         <div className="fold-row" data-closed={mountedAll ? false : undefined}>
           <div className="min-h-0 overflow-clip">
             <ActivityButton
@@ -78,7 +76,7 @@ export const PartsRenderer = memo(function PartsRenderer({
       <div id={id}>
         {mounted.map((row, i) => {
           const kept = stays?.has(row.id);
-          const closed = kept === false && !open;
+          const closed = !!visibleIds && !kept;
           const bubble =
             bubbles && row.type === "text"
               ? {
@@ -91,8 +89,8 @@ export const PartsRenderer = memo(function PartsRenderer({
             <div
               key={row.id}
               className={`fold-row min-w-0 ${bubble ? "agent-words -ml-1" : ""}`}
-              aria-live={ended && !kept ? "off" : undefined}
-              data-closed={stays && mountedAll ? closed : undefined}
+              aria-live={kept === false ? "off" : undefined}
+              data-closed={bubbles && ended && mountedAll ? closed : undefined}
               {...(closed ? { inert: "" } : {})}
             >
               <div className="min-h-0 min-w-0 overflow-clip after:block after:h-1">

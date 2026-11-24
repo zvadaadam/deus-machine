@@ -268,6 +268,7 @@ async function run() {
       await page.getByRole("option", { name: command, exact: true }).click();
     };
     const logView = page.getByRole("log");
+    const liveRegion = (el) => el.closest("[aria-live]").getAttribute("aria-live");
     const order = () =>
       logView
         .locator(".assistant-turn p, button[aria-label*=' activity'], [role=separator][aria-label]")
@@ -344,6 +345,14 @@ async function run() {
         "Auto-compacted",
       ]);
       assert.equal(await logView.getByRole("button", { name: "Copy response" }).count(), 1);
+      assert.equal(
+        await logView.getByText("Progress A", { exact: true }).evaluate(liveRegion),
+        "off"
+      );
+      assert.equal(
+        await logView.getByText("Progress C continued", { exact: true }).evaluate(liveRegion),
+        "polite"
+      );
     });
     const stop = fixture(chats.order.session, "stop");
     await emit(
@@ -452,14 +461,8 @@ async function run() {
           )
         );
         assert(await summary.evaluate((button) => button === globalThis.document.activeElement));
-        assert.equal(
-          await liveAnswer.evaluate((el) => el.closest("[aria-live]").getAttribute("aria-live")),
-          "polite"
-        );
-        assert.equal(
-          await details.evaluate((el) => el.closest("[aria-live]").getAttribute("aria-live")),
-          "off"
-        );
+        assert.equal(await liveAnswer.evaluate(liveRegion), "polite");
+        assert.equal(await details.evaluate(liveRegion), "off");
         assert(await liveAnswer.evaluate((el) => el.isConnected && !el.closest("[inert]")));
         assert(await details.evaluate((el) => el.isConnected && !!el.closest("[inert]")));
         await summary.click();

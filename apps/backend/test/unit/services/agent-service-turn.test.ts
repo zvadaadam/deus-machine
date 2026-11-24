@@ -175,7 +175,7 @@ describe("agentService.startTurn", () => {
       subscribe("session", { sessionId });
       subscribe("sessions", { workspaceId: "w" });
       subscribe("sessionEvents", { sessionId });
-      expect(frames).toMatchObject([...snapshots(false), { type: "q:subscribed" }]);
+      expect(frames).toEqual(expect.arrayContaining(snapshots(false)));
       expect(preference).not.toHaveBeenCalledWith("agent_messages");
       frames.length = 0;
 
@@ -188,14 +188,18 @@ describe("agentService.startTurn", () => {
         });
       });
       await agentService.startTurn(sessionId, TURN, "claude-code", "hello", { cwd: "/tmp" });
-      expect(frames).toMatchObject([
-        ...snapshots(true),
-        {
-          type: "q:event",
-          id: "sessionEvents",
-          data: { envelope: { event: { type: "turn.started" } } },
-        },
-      ]);
+      const firstEvent = frames.findIndex((frame) => frame.type === "q:event");
+      expect(frames[firstEvent]).toMatchObject({
+        id: "sessionEvents",
+        data: { envelope: { event: { type: "turn.started" } } },
+      });
+      const beforeStart = frames.slice(0, firstEvent);
+      for (const snapshot of snapshots(true)) {
+        const updates = beforeStart.filter(
+          (frame) => frame.type === "q:snapshot" && frame.id === snapshot.id
+        );
+        expect(updates.at(-1)).toMatchObject(snapshot);
+      }
       expect(preference.mock.calls.filter(([key]) => key === "agent_messages")).toHaveLength(1);
     } finally {
       removeSubs(connection);

@@ -75,7 +75,7 @@ it("folds a read steer between replies and finishes the same turn once", () => {
     });
     feed({ type: "message.ended", ...address });
   }
-  function render(sessionStatus: SessionStatus) {
+  function render(sessionStatus: SessionStatus, agentMessages = false) {
     const page = client.getQueryData<PaginatedMessages>(messagesKey(sessionId))!;
     expect(page.turns.map((turn) => turn.turnId)).toEqual([turnId]);
     virtualization.mockReturnValueOnce({ width: 800, height: 900 });
@@ -86,7 +86,7 @@ it("folds a read steer between replies and finishes the same turn once", () => {
         createElement(SessionProvider, {
           sessionStatus,
           subagentMessages: new Map(),
-          children: createElement(Chat, { ...page, loading: false, sessionStatus }),
+          children: createElement(Chat, { ...page, loading: false, sessionStatus, agentMessages }),
         })
       )
     );
@@ -125,6 +125,15 @@ it("folds a read steer between replies and finishes the same turn once", () => {
     expect(bubbles).toMatch(/Review the change.*First reply.*Focus on the tests.*Second reply/s);
     expect(bubbles).toContain('aria-label="Expand activity, Building · 1 tool call"');
     expect(bubbles).not.toMatch(/<article[^>]*\bopacity-60\b/);
+
+    expect(render("working", true)).not.toContain("Second reply");
+    // A confirmed stop can release the session before its turn end arrives.
+    for (const status of ["idle", "error"] as const) {
+      const released = render(status, true);
+      expect(released).toContain("First reply");
+      expect(released).toContain("Second reply");
+      expect(released).not.toContain("activity, Worked");
+    }
 
     client.setQueryData(queryKeys.settings.all, { chat_view: "full" });
     const active = render("working");

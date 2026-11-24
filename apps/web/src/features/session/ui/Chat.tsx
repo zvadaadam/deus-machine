@@ -371,7 +371,7 @@ export function Chat({
                               footerGroups={t.footerGroups}
                               ended={t.ended && !deferredTurns.has(t.turnId)}
                               streaming={t.isStreaming && working}
-                              agentMessages={agentMessages}
+                              agentMessages={agentMessages && active}
                               progressSlot={t.isStreaming ? progressSlot : undefined}
                               startedAt={t.startedAt}
                             />
