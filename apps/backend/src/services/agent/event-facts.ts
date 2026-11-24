@@ -71,13 +71,6 @@ function turnOutcome(turn: ConversationTurn, alreadyReported: boolean): TurnOutc
   return { status: "idle" };
 }
 
-/** A late event still belongs in the transcript. Only a live local turn can change its chat. */
-function ownsSession(facts: SessionFacts, turnId: string): boolean {
-  return (
-    facts.turnId === turnId || (facts.turnId === undefined && facts.acceptedTurnId === undefined)
-  );
-}
-
 /**
  * `turnOutcome`, plus the two flags an ended turn moves.
  *
@@ -89,7 +82,8 @@ export function turnOutcomeFor(
   facts: SessionFacts,
   turn: ConversationTurn
 ): TurnOutcomeWrite | undefined {
-  if (!ownsSession(facts, turn.turnId)) return;
+  const owner = facts.turnId ?? facts.acceptedTurnId;
+  if (owner !== undefined && owner !== turn.turnId) return;
   const failure = facts.deliveryFailure?.turnId === turn.turnId ? facts.deliveryFailure : undefined;
   const outcome: TurnOutcomeWrite = failure
     ? {
@@ -118,12 +112,14 @@ export function applySessionFacts(
   conversation: ConversationState
 ): SessionFactWrite[] {
   if (isUnknownEvent(event)) return [];
+  const owner = facts.turnId ?? facts.acceptedTurnId;
   const rejectedSend =
     event.type === "error" && event._meta?.cloudErrorCode === "MESSAGE_SEND_FAILED";
   if (
+    owner !== undefined &&
     "turnId" in event &&
     event.turnId !== undefined &&
-    !ownsSession(facts, event.turnId) &&
+    event.turnId !== owner &&
     !rejectedSend
   )
     return [];
@@ -143,22 +139,11 @@ export function applySessionFacts(
       ];
     })
     .with({ type: "turn.started" }, (e): SessionFactWrite[] => {
-      // A turn admitted here is already 'working' (the send wrote it); one
-      // started elsewhere (another device's cloud turn) is not until now. Keep
-      // the admission mirror truthful on the replay path too (state rebuilt
-      // after a backend restart has no turnId). A replayed turn that already
-      // ended leaves the status alone.
-      const startedElsewhere =
-        facts.turnId !== e.turnId &&
-        conversation.turns.find((turn) => turn.turnId === e.turnId)?.status !== "ended";
+      if (conversation.turns.find((turn) => turn.turnId === e.turnId)?.status === "ended")
+        return [];
       facts.turnId = e.turnId;
-      // A turn deus did NOT admit via beginTurn (replay, engine-initiated)
-      // would otherwise inherit the previous turn's dedupe flag, and its
-      // terminal error message would be dropped as "already reported".
       facts.errorReported = false;
-      return startedElsewhere
-        ? [{ fact: "session-working", result: persistSessionWorking(sessionId) }]
-        : [];
+      return [{ fact: "session-working", result: persistSessionWorking(sessionId) }];
     })
     .with({ type: "error" }, (e): SessionFactWrite[] => {
       // A recoverable error means the turn CONTINUES (retry/backoff in

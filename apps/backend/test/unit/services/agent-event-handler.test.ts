@@ -1065,8 +1065,8 @@ describe("agent event handler (canonical lifecycle stream)", () => {
         envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
       );
       handler.handle(envelope(turnEnded()));
-      // Our own turn was marked working by its send.
-      expect(mockPersistSessionWorking).not.toHaveBeenCalled();
+      expect(mockPersistSessionWorking).toHaveBeenCalledExactlyOnceWith(SESSION);
+      mockPersistSessionWorking.mockClear();
 
       handler.handle(
         envelope({

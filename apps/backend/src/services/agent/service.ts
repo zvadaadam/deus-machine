@@ -14,8 +14,6 @@
 
 import type { AgentHarness } from "@shared/enums";
 import type { HostToolSource } from "@zvada/agent-server/core";
-import { WireRequestError } from "@zvada/agent-server/client";
-import { readRefusalData } from "@zvada/agent-server/protocol";
 import type {
   ElicitationOutcome,
   ElicitationRequestedEvent,
@@ -205,10 +203,7 @@ export async function startTurn(
   try {
     await link.startTurn(params);
   } catch (err) {
-    if (registered && events?.abortTurn(sessionId, turnId) && err instanceof WireRequestError) {
-      const active = readRefusalData(err, "turnActive");
-      if (active) events.beginTurn(sessionId, active.turnId);
-    }
+    if (registered) events?.abortTurn(sessionId, turnId);
     throw err;
   }
   // Server accepted a turn our local state thought was concurrent — the local

@@ -71,8 +71,11 @@ describe("which diff numbers the sidebar asks for", () => {
 });
 
 it("polls the workspace's files and pull request while a background chat works", () => {
-  for (const status of ["working", "idle"] as const) {
-    const workspace = row("workspace", "worktree", status);
+  for (const status of ["working", "idle", "initializing"] as const) {
+    const workspace =
+      status === "initializing"
+        ? { ...row("workspace", "cloud"), state: status }
+        : row("workspace", "worktree", status);
     useFileChanges(workspace, false);
     expect(query.mock.lastCall![0].refetchInterval).toBe(status === "working" ? 5000 : false);
     useFileChanges(workspace, true);

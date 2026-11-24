@@ -359,7 +359,8 @@ function pauseQueue(
   reason: "stopped" | "failed" = "failed"
 ) {
   const q =
-    queues.get(sessionId) ?? (turnId && localChat(sessionId) && queueForNewMessage(sessionId));
+    queues.get(sessionId) ??
+    (reason === "stopped" && turnId && localChat(sessionId) && queueForNewMessage(sessionId));
   if (!q) return;
   const pausedHere = turnId !== undefined && turnId === q.pausedTurnId;
   if (gone && turnId !== undefined) {
@@ -373,7 +374,7 @@ function pauseQueue(
   if (gone && pausedHere) void drain(q);
 }
 
-function turnEnded({ event: ended, status }: TurnEnd) {
+function turnEnded({ event: ended, status, held }: TurnEnd) {
   const q = queues.get(ended.sessionId);
   if (!q) return;
   // Includes the engine's undeliveredSteers and calls still awaiting a verdict.
@@ -381,15 +382,13 @@ function turnEnded({ event: ended, status }: TurnEnd) {
   const wasSending = recoverAttempt(q, ended.turnId);
   const pausedHere = ended.turnId === q.pausedTurnId;
   if (status || pausedHere) q.pausedTurnId = undefined;
-  // A replayed end can return its own steers but cannot stop or advance its successor.
-  if (!status) {
-    if (recovered || wasSending || pausedHere) changed(q);
-    return;
+  // A given-up turn can free the chat without pausing rows that arrived after it.
+  if (status && held && !pausedHere) {
+    if (ended.stopReason === "cancelled") q.paused = "stopped";
+    else if (status === "error") q.paused ??= "failed";
   }
-  if (ended.stopReason === "cancelled" && !pausedHere) q.paused = "stopped";
-  else if (status === "error") q.paused ??= "failed";
-  changed(q);
-  void drain(q);
+  if (status || recovered || wasSending || pausedHere) changed(q);
+  if (status) void drain(q);
 }
 
 provideTurnWatcher({

@@ -11,7 +11,7 @@ import { getWorkspaceActivity } from "@/features/sidebar/lib/status";
 import type { CloudPresence } from "./cloudPresence";
 
 export function isWorkspaceWorking(workspace?: Workspace | null): boolean {
-  return !!workspace && getWorkspaceActivity(workspace, {}).working;
+  return !!workspace && !!getWorkspaceActivity(workspace, {}).running;
 }
 
 /**

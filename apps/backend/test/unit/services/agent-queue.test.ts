@@ -20,7 +20,12 @@ import * as agent from "../../../src/services/agent/service";
 import type { AgentLinkOptions } from "../../../src/services/agent/client";
 import sessionHandlers from "../../../src/api/sessions";
 import { handle, LOCAL_CALLER, Registry } from "../../../src/api/registry";
-import { handleFrame, invalidate, serveOperations } from "../../../src/services/query-engine";
+import {
+  handleFrame,
+  invalidate,
+  onInvalidate,
+  serveOperations,
+} from "../../../src/services/query-engine";
 import { subscribe } from "../../../src/services/streams";
 import { addConnection, closeAll } from "../../../src/services/ws.service";
 import { createDeusHost } from "../../../src/services/assistants/host";
@@ -53,6 +58,13 @@ let sessionId: string;
 let seq: number;
 function emit(event: LifecycleEvent) {
   engine.open.mock.calls[0]![0].onEnvelope({ sessionId, seq: ++seq, event });
+}
+function gap(reason: "replay_failed" | "server_restarted") {
+  engine.open.mock.calls[0]![0].onEventGap!({
+    sessionId,
+    reason,
+    error: new EventGapError("lost"),
+  });
 }
 function end(
   turnId: string,
@@ -660,7 +672,7 @@ describe("messages held for a local chat", () => {
   });
 
   it.each(["watchdog", "replay gap"] as const)(
-    "holds A again when the engine names it after the %s gave it up",
+    "drains B on accepted A's end after the %s gave A up and the engine refused B",
     async (lost) => {
       vi.useFakeTimers();
       await send("A");
@@ -669,11 +681,7 @@ describe("messages held for a local chat", () => {
         await stop();
         await vi.advanceTimersByTimeAsync(15_000);
       } else {
-        engine.open.mock.calls[0]![0].onEventGap!({
-          sessionId,
-          reason: "replay_failed",
-          error: new EventGapError("lost"),
-        });
+        gap("replay_failed");
         await vi.advanceTimersByTimeAsync(0);
       }
       expect(agent.liveTurnId(sessionId)).toBeUndefined();
@@ -681,8 +689,15 @@ describe("messages held for a local chat", () => {
         new WireRequestError(WIRE_ERROR_CODES.turnActive, "busy", { turnId: "A" })
       );
       await expect(send("B")).resolves.toEqual({ turnId: "B", queued: true });
-      expect(agent.liveTurnId(sessionId)).toBe("A");
+      expect(agent.liveTurnId(sessionId)).toBeUndefined();
+      expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
+      const status = vi.fn(() =>
+        db.prepare("SELECT status FROM sessions WHERE id = ?").pluck().get(sessionId)
+      );
+      const unwatch = onInvalidate(status);
       end("A", "cancelled");
+      unwatch();
+      expect(status).toHaveReturnedWith("idle");
       await vi.advanceTimersByTimeAsync(0);
       expect(starts()).toEqual(["A", "B", "B"]);
       expect(await ids()).toEqual([]);
@@ -691,7 +706,7 @@ describe("messages held for a local chat", () => {
     }
   );
 
-  it("settles a confirmed stop with no end and keeps the late end off its successor", async () => {
+  it("settles a confirmed stop and restores working when the successor starts after a late end", async () => {
     vi.useFakeTimers();
     const frames: unknown[] = [];
     const window = addConnection(
@@ -747,7 +762,7 @@ describe("messages held for a local chat", () => {
       timestamp: seq,
       cost: 0.25,
     });
-    expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
+    expect(await run(api.session, { sessionId })).toMatchObject({ status: "idle" });
     expect((await queue()).paused).toBeNull();
     expect((await run(api.messages, { sessionId })).turns).toContainEqual(
       expect.objectContaining({ turnId: "A", startedAt, cost: 0.25 })
@@ -756,6 +771,18 @@ describe("messages held for a local chat", () => {
     await resume;
     expect(starts()).toHaveLength(3);
     expect(agent.liveTurnId(sessionId)).toBe(starts()[2]);
+    expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
+  });
+
+  it("keeps Resume when the turn whose replay failed finally ends", async () => {
+    await send("A");
+    await send("B");
+    engine.cancelTurn.mockResolvedValueOnce({ outcome: "unconfirmed", turnId: "A" });
+    gap("replay_failed");
+    await vi.waitFor(async () => expect((await queue()).paused).toBe("failed"));
+    await run(api.resumeQueuedMessages, { sessionId });
+    end("A", "cancelled");
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "B"]));
   });
 
   it("keeps a waiting row paused when a normal end arrives before the cancel reply", async () => {
@@ -820,6 +847,8 @@ describe("messages held for a local chat", () => {
       expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
       expect(agent.liveTurnId(sessionId)).toBeUndefined();
       const reason = "Stopped before it started.";
+      const changes: string[] = [];
+      const unwatch = onInvalidate((resources) => changes.push(...resources));
       await Promise.all([
         expect(sending).rejects.toMatchObject(
           sender === "direct"
@@ -828,6 +857,8 @@ describe("messages held for a local chat", () => {
         ),
         expect(stop()).resolves.toEqual({ unconfirmed: false }),
       ]);
+      unwatch();
+      expect(changes).not.toContain("queuedMessages");
       expect(starts()).toEqual([]);
       expect(engine.cancelTurn).not.toHaveBeenCalled();
       expect(await run(api.session, { sessionId })).toMatchObject({
@@ -1037,11 +1068,7 @@ describe("messages held for a local chat", () => {
       const echo = [...echoFrames("B", "Message B")];
       const close = echo.pop()!;
       for (const frame of echo) emit(frame);
-      engine.open.mock.calls[0]![0].onEventGap!({
-        sessionId,
-        reason: "server_restarted",
-        error: new EventGapError("lost"),
-      });
+      gap("server_restarted");
       expect(await queue()).toMatchObject({
         paused: "failed",
         items: [
@@ -1100,11 +1127,7 @@ describe("messages held for a local chat", () => {
         await resuming;
       }
       await steer("a");
-      engine.open.mock.calls[0]![0].onEventGap!({
-        sessionId,
-        reason: "server_restarted",
-        error: new EventGapError("lost"),
-      });
+      gap("server_restarted");
       const recovered = {
         paused: "failed",
         items: [
@@ -1322,11 +1345,7 @@ describe("messages held for a local chat", () => {
       const [card] = pendingFor(sessionId);
       expect(card?.method).toBe("askUserQuestion");
       if (settlement === "replay gap") {
-        engine.open.mock.calls[0]![0].onEventGap!({
-          sessionId,
-          reason: "server_restarted",
-          error: new EventGapError("lost"),
-        });
+        gap("server_restarted");
       } else {
         engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "first" });
         await stop();
