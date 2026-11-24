@@ -1,6 +1,7 @@
 // How a workspace's chat tabs follow its live chat list (app/layouts/chatTabsSync).
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { useChatTabs } from "@/app/layouts/useChatTabs";
 import {
@@ -94,7 +95,9 @@ describe("an open-chat request (H22)", () => {
       select = useChatTabs({ workspaceId: "w", activeSessionId: "current" }).handleTabChange;
       return null;
     }
-    renderToStaticMarkup(createElement(Tabs));
+    renderToStaticMarkup(
+      createElement(QueryClientProvider, { client: new QueryClient() }, createElement(Tabs))
+    );
     openChat("w", "late");
     const late = useOpenChatStore.getState().requested.w!;
     select("tab-current");

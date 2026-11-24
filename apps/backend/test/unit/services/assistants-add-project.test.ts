@@ -342,6 +342,14 @@ describe("what is already here", () => {
     expect(homeRelative(diagnostic, "diagnostic")).toBe(diagnostic);
   });
 
+  it("abbreviates the exact home in a git diagnostic and preserves quoted sibling names", () => {
+    const diagnostic = `fatal: repository '${home}' missing; checked "${home}/repo" and '${home} backup'`;
+    expect(homeRelative(diagnostic, "diagnostic")).toBe(
+      `fatal: repository '~' missing; checked "~/repo" and '${home} backup'`
+    );
+    expect(homeRelative(`cannot open ${home}`, "diagnostic")).toBe("cannot open ~");
+  });
+
   it("a project for that repository is returned, and nothing is cloned", async () => {
     const folder = path.join(home, "code", "widget");
     insertProject("widget", folder, "git@github.com:acme/widget.git");

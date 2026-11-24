@@ -92,7 +92,7 @@ it("removes only this project's archived history and local automation links, kee
     expect.objectContaining({ repo_id: "removed", removal: "offered" })
   );
   const confirmed = await preview("removed");
-  expect(confirmed).toEqual({ rootPath: root, counts });
+  expect(confirmed).toEqual({ rootPath: root, folderExists: true, counts });
   await remove("removed", confirmed);
 
   expect(db.prepare("SELECT id FROM repositories").pluck().all()).toEqual(["kept"]);
@@ -140,10 +140,25 @@ it("removes a project with no workspaces or folder, and reports a missing projec
   expect(groupWorkspacesByRepo([], getAllRepositories(db))[0].removal).toBe("offered");
   const counts = { archivedWorkspaces: 0, chats: 0, automations: 0 };
   const confirmed = await preview("r");
-  expect(confirmed).toEqual({ rootPath: null, counts });
+  expect(confirmed).toEqual({ rootPath: null, folderExists: false, counts });
   await remove("r", confirmed);
   await expect(preview("r")).rejects.toMatchObject({ statusCode: 404 });
   await expect(remove("r", confirmed)).rejects.toMatchObject({ statusCode: 404 });
+});
+
+it("checks a missing local folder when the removal confirmation opens", async ({
+  onTestFinished,
+}) => {
+  const parent = mkdtempSync(path.join(tmpdir(), "deus-missing-project-"));
+  onTestFinished(() => rmSync(parent, { recursive: true, force: true }));
+  const root = path.join(parent, "gone");
+  db.prepare("INSERT INTO repositories (id, name, root_path) VALUES ('r', 'Project', ?)").run(root);
+  const confirmed = await preview("r");
+  expect(confirmed).toMatchObject({ rootPath: root, folderExists: false });
+  mkdirSync(root);
+  expect(await preview("r")).toMatchObject({ folderExists: true });
+  await remove("r", confirmed);
+  expect(db.prepare("SELECT id FROM repositories").all()).toEqual([]);
 });
 
 it.each([

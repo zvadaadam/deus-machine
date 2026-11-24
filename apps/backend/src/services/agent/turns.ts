@@ -49,6 +49,12 @@ type Admission = { content: string; origin: string | null; done: Promise<{ turnI
 const admissionsOf = new WeakMap<object, Map<string, Admission>>();
 const ADMISSION_KEPT_MS = 10 * 60_000;
 
+/** Stop interrupts app setup. Once turn/start is on the wire, Stop waits for its answer. */
+const admitting = new Map<
+  string,
+  { turnId: string; preparing: AbortController; done: Promise<void> }
+>();
+
 /** A retry of an existing turn goes through admission even while its chat is busy. */
 export function knownTurn(sessionId: string, turnId: string): boolean {
   const db = getDatabase();
@@ -326,23 +332,24 @@ async function sendMessageOnce(
     }
 
     // turn/start answers at admission. The streamed reply arrives through the event handler.
+    const preparing = new AbortController();
+    const done = agentService.startTurn(sessionId, turnId, agentHarness, content, {
+      cwd,
+      signal: preparing.signal,
+      model,
+      thinkingLevel: readThinkingLevel(input.thinkingLevel),
+      permissionMode,
+      resume: existingAgentSessionId || undefined,
+      ...(origin ? { origin } : {}),
+    });
+    admitting.set(sessionId, { turnId, preparing, done });
     try {
-      await agentService.startTurn(sessionId, turnId, agentHarness, content, {
-        cwd,
-        model,
-        thinkingLevel: readThinkingLevel(input.thinkingLevel),
-        permissionMode,
-        resume: existingAgentSessionId || undefined,
-        ...(origin ? { origin } : {}),
-      });
+      await done;
     } catch (err) {
-      // A stop that landed while this was being admitted claimed the id with a row;
-      // the engine refused it, so no turn of that id exists: the row goes too.
-      getDatabase()
-        .prepare(
-          "DELETE FROM turns WHERE session_id = ? AND turn_id = ? AND started_at IS NULL AND ended_at IS NULL"
-        )
-        .run(sessionId, turnId);
+      if (err === preparing.signal.reason) {
+        settleStopped(sessionId, turnId);
+        throw err;
+      }
       if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
         // Another turn won admission. Keep it working and return the typed refusal.
         console.warn(
@@ -358,6 +365,9 @@ async function sendMessageOnce(
       if (err instanceof WireRequestError) handleAgentRejection(sessionId, turnId, err.message);
       else handleAgentError(sessionId, turnId, err);
       throw err;
+    } finally {
+      // A quick turn can end and start its successor before its admission reply.
+      if (admitting.get(sessionId)?.done === done) admitting.delete(sessionId);
     }
   }
 
@@ -382,42 +392,32 @@ async function sendMessageOnce(
 /** Per database and turn, the stop that took effect (its origin, JSON), for a moment: it keeps the credit. */
 const effectiveStops = new WeakMap<object, Map<string, string>>();
 
-/**
- * Warn if an unconfirmed cancel has not settled within this grace period.
- * Keep Stop available while the handler still owns the live turn.
- */
-const UNCONFIRMED_CANCEL_GRACE_MS = 15_000;
+const CANCEL_GRACE_MS = 15_000;
 
 /**
  * Stop the session's active turn.
  *
- * The cancel outcome is a union and it MATTERS (PROTOCOL §8):
- *   cancelled / no_active_turn — the turn is provably over; go idle now.
- *   unconfirmed                — dispatched but unacknowledged. The agent may
- *                                still be writing files, so forcing "idle"
- *                                here would show a finished session while work
- *                                continues and then flip back when the real
- *                                turn.ended lands. Leave the status alone and
- *                                let turn.ended settle it. The watchdog
- *                                warns if confirmation never arrives.
+ * A native cancel can be confirmed before its last echo and turn.ended arrive.
+ * Keep the chat occupied until that end. If delivery stalls, the watchdog settles
+ * a confirmed stop and warns about an unconfirmed one.
  */
 export async function stopSession(
   { sessionId }: ParsedInputOf<typeof api.stopSession>,
   /** Who stops it, kept on the turn so a reader can say who did. */
   by: Origin = { kind: "person" }
 ): Promise<{ unconfirmed: boolean }> {
-  const starting = agentService.notifyStopAsked(sessionId);
+  agentService.notifyStopAsked(sessionId);
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new NotFoundError("Session not found");
 
-  let targetTurnId = agentService.liveTurnId(sessionId);
-  if (!targetTurnId && starting) {
-    // A queue head can be preparing its apps before the engine knows its turn.
+  const admission = admitting.get(sessionId);
+  const targetTurnId = admission?.turnId ?? agentService.liveTurnId(sessionId);
+  if (admission) {
+    admission.preparing.abort(new ConflictError("Stopped before it started."));
     try {
-      targetTurnId = (await starting).turnId;
+      await admission.done;
     } catch {
-      // Its admission failed. The queue has it back and there is no such turn to stop.
       return { unconfirmed: false };
     }
     if (agentService.liveTurnId(sessionId) !== targetTurnId) return { unconfirmed: false };
@@ -438,18 +438,13 @@ export async function stopSession(
       .prepare("UPDATE turns SET cancelled_by = ? WHERE session_id = ? AND turn_id = ?")
       .run(who, sessionId, targetTurnId);
   let result: Awaited<ReturnType<typeof agentService.stopSession>> | undefined;
-  if (isCloudSession(sessionId)) {
-    try {
-      result = await cancelCloudTurn(sessionId, targetTurnId);
-    } catch (err) {
-      console.error("[CommandHandler] Failed to cancel cloud turn:", err);
-    }
-  } else if (agentService.isConnected()) {
-    try {
+  const cloud = isCloudSession(sessionId);
+  try {
+    if (cloud) result = await cancelCloudTurn(sessionId, targetTurnId);
+    else if (agentService.isConnected())
       result = await agentService.stopSession({ sessionId, turnId: targetTurnId });
-    } catch (err) {
-      console.error("[CommandHandler] Failed to stop on agent-server:", err);
-    }
+  } catch (err) {
+    console.error("[CommandHandler] Could not stop the turn:", err);
   }
 
   // The credit is the stop that took effect: the first that did keeps it; one that
@@ -474,55 +469,50 @@ export async function stopSession(
   }
 
   // The requested turn may have ended and a successor started during the RPC.
-  const live = agentService.liveTurnId(sessionId);
+  const live = admitting.get(sessionId)?.turnId ?? agentService.liveTurnId(sessionId);
   if (
     (live !== undefined && live !== targetTurnId) ||
     (result?.outcome === "no_active_turn" && result.activeTurnId !== undefined)
   )
     return { unconfirmed: false };
 
-  if (result && result.outcome !== "unconfirmed") {
-    db.prepare(
-      `UPDATE sessions SET status = 'idle', updated_at = datetime('now')
-       WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
-    ).run(sessionId, ...ACTIVE_TURN_STATUSES);
-    if (result.outcome === "no_active_turn" && targetTurnId && live === targetTurnId)
-      agentService.notifyTurnInterrupted(sessionId, targetTurnId, true);
-    invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
-    return { unconfirmed: false };
+  const unconfirmed = !result || result.outcome === "unconfirmed";
+  if (unconfirmed || (!cloud && live && result?.outcome === "cancelled")) {
+    scheduleCancelWatchdog(sessionId, targetTurnId, !unconfirmed);
+  } else {
+    settleStopped(sessionId, cloud ? undefined : live);
   }
-
-  console.warn(
-    `[CommandHandler] stopSession unconfirmed: session=${sessionId} — waiting for turn.ended`
-  );
-  // Armed for the turn being cancelled, not for the session — see below.
-  scheduleUnconfirmedCancelWatchdog(sessionId, targetTurnId);
-  return { unconfirmed: true };
+  return { unconfirmed };
 }
 
-/** Bounded fallback for an unconfirmed cancel that no turn.ended ever settles. */
-function scheduleUnconfirmedCancelWatchdog(
+function settleStopped(sessionId: string, goneTurnId?: string): void {
+  if (goneTurnId) agentService.giveUpTurn(sessionId, goneTurnId);
+  getDatabase()
+    .prepare(
+      `UPDATE sessions SET status = 'idle', updated_at = datetime('now')
+       WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
+    )
+    .run(sessionId, ...ACTIVE_TURN_STATUSES);
+  if (goneTurnId) agentService.notifyTurnInterrupted(sessionId, goneTurnId, true);
+  invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
+}
+
+function scheduleCancelWatchdog(
   sessionId: string,
-  cancelledTurnId: string | undefined
+  cancelledTurnId: string | undefined,
+  confirmed: boolean
 ): void {
   const timer = setTimeout(() => {
     try {
-      // The watchdog belongs to ONE turn, and the status cannot identify it:
-      // consecutive turns are both "working". An unconfirmed cancel usually
-      // does settle — turn.ended lands, the session goes idle, the user sends
-      // again — and all of that fits inside the 15s grace window, after which
-      // a status-only check reads the NEW turn's "working" as the old turn's
-      // stuck cancel and fails a perfectly healthy run mid-flight.
-      //
-      // So bail only on POSITIVE evidence that a different turn is live now.
-      // `liveTurnId` returning undefined is not that evidence: it also means
-      // the handler is gone (link dropped, shutdown), which is precisely when
-      // a session is most likely to be stranded on "working" with no agent
-      // behind it — the case this watchdog exists for. The status guard below
-      // covers the remaining "it ended and nothing replaced it" case, since
-      // that session is no longer in an active status.
-      const live = agentService.liveTurnId(sessionId);
+      // A successor may still be preparing its apps. Without either owner the
+      // status guard below distinguishes a settled chat from one left active.
+      const held = agentService.liveTurnId(sessionId);
+      const live = admitting.get(sessionId)?.turnId ?? held;
       if (live !== undefined && live !== cancelledTurnId) return;
+      if (confirmed) {
+        if (held && held === cancelledTurnId) settleStopped(sessionId, held);
+        return;
+      }
 
       const db = getDatabase();
       // Keep a live turn's working/question/plan status and add the warning.
@@ -546,7 +536,7 @@ function scheduleUnconfirmedCancelWatchdog(
     } catch (err) {
       console.error("[CommandHandler] cancel watchdog failed:", err);
     }
-  }, UNCONFIRMED_CANCEL_GRACE_MS);
+  }, CANCEL_GRACE_MS);
   // A pending watchdog must never hold the process open at shutdown.
   timer.unref?.();
 }

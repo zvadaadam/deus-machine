@@ -114,7 +114,12 @@ export default [
   handle(api.queuedMessages, ({ sessionId }) => queue.queuedMessages(sessionId)),
   handle(api.queuedMessage, ({ sessionId, id }) => queue.queuedMessage(sessionId, id)),
   handle(api.steerMessage, queue.steerMessage),
-  handle(api.steerQueuedMessage, ({ sessionId, id }) => queue.steerQueuedMessage(sessionId, id)),
+  handle(api.steerQueuedMessage, ({ sessionId, id, turnId }) =>
+    queue.steerQueuedMessage(sessionId, id, turnId)
+  ),
+  handle(api.moveQueuedMessage, ({ sessionId, id, before }) =>
+    queue.moveQueuedMessage(sessionId, id, before)
+  ),
   handle(api.removeQueuedMessage, ({ sessionId, id }) => queue.removeQueuedMessage(sessionId, id)),
   handle(api.resumeQueuedMessages, ({ sessionId }) => queue.resumeQueuedMessages(sessionId)),
   // A client's stop is the person's.

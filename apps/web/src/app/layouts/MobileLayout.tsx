@@ -98,13 +98,7 @@ export function MobileLayout({
 
   // File changes -- always queried for the badge count on the code tab,
   // and used by ChangesDiffViewer when the code tab is active.
-  const isReady = workspace.state === "ready";
-  const { data: fileChangesData } = useFileChanges(
-    !chatOnly && isReady ? workspace.id : null,
-    workspace.session_status,
-    isWatched,
-    workspace.state
-  );
+  const { data: fileChangesData } = useFileChanges(chatOnly ? null : workspace, isWatched);
   const fileChanges = useMemo(() => fileChangesData?.files ?? [], [fileChangesData]);
 
   // Insert code review prompt into the active chat's composer and switch

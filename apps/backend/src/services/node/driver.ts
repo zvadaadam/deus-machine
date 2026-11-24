@@ -112,7 +112,8 @@ class LocalNodeDriver implements NodeDriver {
   async diffFile(file: string): Promise<DiffFileOutcome> {
     const workspacePath = this.workspacePath;
     const safeFilePath = gitService.resolveWorkspaceRelativePath(workspacePath, file);
-    if (!safeFilePath) throw new ValidationError("Invalid file path");
+    if (!safeFilePath)
+      throw new ValidationError("Use a file path relative to the workspace, such as src/index.ts.");
 
     const diff = await this.readChanges((parent) =>
       gitService.getFileDiff(workspacePath, parent, safeFilePath)

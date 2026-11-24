@@ -7,17 +7,34 @@ import type { QueuedMessages } from "@shared/api/sessions";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useEditQueuedMessage } from "@/features/session/api/session.queries";
 import { QueuedMessageList } from "@/features/session/ui/QueuedMessageList";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   composerStore,
   sessionComposerActions,
 } from "@/features/session/store/sessionComposerStore";
 
-const { button, call, subscribe, error } = vi.hoisted(() => ({
+const { button, call, subscribe, error, presence, sortable } = vi.hoisted(() => ({
   button: vi.fn(),
   call: vi.fn(),
   subscribe: vi.fn(),
   error: vi.fn(),
+  presence: vi.fn(() => true),
+  sortable: vi.fn(),
 }));
+vi.mock("framer-motion", async (original) => ({
+  ...(await original<typeof import("framer-motion")>()),
+  useIsPresent: presence,
+}));
+vi.mock("@dnd-kit/sortable", async (original) => {
+  const dnd = await original<typeof import("@dnd-kit/sortable")>();
+  return {
+    ...dnd,
+    useSortable: (params: Parameters<typeof dnd.useSortable>[0]) => {
+      sortable(params);
+      return dnd.useSortable(params);
+    },
+  };
+});
 vi.mock("@/platform/ws", () => ({ call }));
 vi.mock("@/shared/hooks/useQuerySubscription", () => ({ useQuerySubscription: subscribe }));
 vi.mock("sonner", () => ({ toast: { error } }));
@@ -38,10 +55,20 @@ const queryKey = queryKeys.sessions.queued(sessionId);
 const item = { id: "waiting", text: "Review this", images: 2, state: "waiting" } as const;
 const params = { sessionId, id: item.id };
 
+it("makes a departing row inert and removes it from drag and drop during its exit", () => {
+  presence.mockReturnValueOnce(false);
+  const html = render({ paused: null, items: [item] });
+  expect(sortable).toHaveBeenLastCalledWith(
+    expect.objectContaining({ id: item.id, disabled: { draggable: true, droppable: true } })
+  );
+  expect(html).toContain('inert=""');
+});
+
 function List({ canSteer }: { canSteer: boolean }) {
   const { edit, editing } = useEditQueuedMessage(sessionId);
   return createElement(QueuedMessageList, {
     sessionId,
+    turnId: "turn-on-screen",
     canSteer,
     onEdit: edit,
     editDisabled: editing,
@@ -51,13 +78,17 @@ function List({ canSteer }: { canSteer: boolean }) {
 function render(data: QueuedMessages, canSteer = true) {
   client.setQueryData(queryKey, data);
   return renderToStaticMarkup(
-    createElement(QueryClientProvider, { client }, createElement(List, { canSteer }))
+    createElement(
+      QueryClientProvider,
+      { client },
+      createElement(TooltipProvider, null, createElement(List, { canSteer }))
+    )
   );
 }
 
-function click(label: string) {
+function click(label: string, detail = 1) {
   const props = button.mock.calls.find(([p]) => (p["aria-label"] ?? p.children) === label)![0];
-  return props.onClick();
+  return props.onClick({ detail });
 }
 
 afterEach(() => {
@@ -83,12 +114,16 @@ it.each([
   expect(html).toContain('aria-label="Queued messages"');
   expect(html).not.toContain(">Queued<");
   expect(html).toMatch(
-    new RegExp(`>${status}<.*Change direction.*aria-label="2 images".*>1 image<.*>Steer<`, "s")
+    new RegExp(
+      `Change direction.*aria-label="2 images".*>${status}<.*>1 image<.*aria-label="Send to current turn"`,
+      "s"
+    )
   );
   expect(button.mock.calls.map(([p]) => p["aria-label"] ?? p.children)).toEqual([
-    "Steer",
+    "Reorder queued message 1",
     "Edit queued message",
     "Remove queued message",
+    "Send to current turn",
   ]);
 });
 
@@ -115,7 +150,7 @@ it.each([
   const html = render({ paused, items }, false);
   expect(html).toContain(reason);
   expect(html).toContain("Review this");
-  expect(html).not.toContain(">Steer<");
+  expect(html).not.toContain('aria-label="Send to current turn"');
   call.mockResolvedValueOnce({});
   await click("Resume");
   expect(call).toHaveBeenCalledExactlyOnceWith(api.resumeQueuedMessages, { sessionId });
@@ -206,15 +241,17 @@ it("leaves the draft and row alone when Edit's read fails", async () => {
   expect(error).toHaveBeenCalledExactlyOnceWith("Connection lost");
 });
 
-it("steers and removes by id without changing the cached rows or the draft", async () => {
+it("a double click sends the row to the displayed turn once and leaves the host's rows intact", async () => {
+  vi.stubGlobal("window", { clearTimeout });
   const data = { paused: null, items: [item] };
   render(data);
   call.mockResolvedValueOnce({ outcome: "queued" });
-  await click("Steer");
+  await click("Send to current turn");
+  await click("Send to current turn", 2);
   call.mockResolvedValueOnce({ removed: true });
   await click("Remove queued message");
   expect(call.mock.calls).toEqual([
-    [api.steerQueuedMessage, { sessionId, id: item.id }],
+    [api.steerQueuedMessage, { sessionId, id: item.id, turnId: "turn-on-screen" }],
     [api.removeQueuedMessage, { sessionId, id: item.id }],
   ]);
   expect(composerStore(client).getState().pendingContent[sessionId]).toBeUndefined();

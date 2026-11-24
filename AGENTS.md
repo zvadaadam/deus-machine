@@ -195,17 +195,30 @@ last turn record is the open turn. A replay can append an older end, so otherwis
 chat's working status until that record arrives.
 
 While a local chat works, Enter on a keyboard and Send on a phone queue the message.
-Command-Enter (Ctrl-Enter outside macOS) asks for a steer. If the agent cannot take it,
-the message queues or starts its own turn if the chat is free. With a question or plan card
-open, both shortcuts queue. `services/agent/queue.ts` holds up to 20 messages per chat in
-the backend process's memory. Each open composer follows `queuedMessages` for the text and
-picture count in `session/ui/QueuedMessageList.tsx`. Edit reads a waiting row's full content
-with `queuedMessage`, puts it in the composer, then calls `removeQueuedMessage`. The sending
-head stays first until its user echo is complete. If its own turn is known to be gone first,
-the head returns to the front and the queue pauses. Unread steers follow and return to the
-front in order if their turn ends unread. After publishing a normal end the backend sends
-one row from an unpaused queue. Asking to stop pauses it at once. After a stop or failure
-it waits for Resume.
+Command-Enter (Ctrl-Enter outside macOS) and a waiting row's send arrow ask to steer
+the turn the window shows. If that turn is gone, unnamed or cannot take the message,
+the message goes first in the queue and starts its own turn when the chat is free
+and the queue is not paused. With a question or plan card open, a steer naming
+an older turn still goes first. Otherwise a new message appends and a waiting row stays in place.
+The backend holds up to 20 messages per chat in memory (`services/agent/queue.ts`).
+Each composer follows `queuedMessages` for the text and picture count in
+`session/ui/QueuedMessageList.tsx`. Edit reads a waiting row's full content with
+`queuedMessage`, puts it in the composer, then calls `removeQueuedMessage`.
+Dragging a waiting row's grip, or using Space and the arrow keys, calls
+`moveQueuedMessage` to put it before another waiting row or last. The sending head
+stays first until its user echo is complete. If its own turn is known to be gone
+first, the head returns to the front and the queue pauses. Unread steers follow and
+return to the front in order if their turn ends unread. After publishing a normal end,
+the backend sends one row from an unpaused queue. Stop pauses the queue at once.
+During local app setup, Stop returns the chat to idle at once, except for an agent's or
+assistant's first task, which ends in an error saying it was not delivered. The person
+keeps their draft, a queue head waits first, and an operator's send is refused
+with “Stopped before it started.” Once the start request reaches the wire, Stop
+waits for its answer (up to 30 seconds) and cancels the turn if it is still live.
+If the engine reports no active turn, the chat settles at once. A confirmed cancel
+withdraws the turn's cards at once and keeps the chat occupied for its final echoes and end.
+After 15 seconds without the end, the watchdog frees the chat and returns unread messages
+to the queue, leaving the turn's outcome to the engine. Rows paused by a stop or failure wait for Resume, which can be pressed before the turn ends.
 A steer read mid-turn splits one reply into groups with one footer (`groupTurns` in
 `session/lib/chatTimeline.ts`). Cloud chats keep their send, including the hosted web's
 direct lane. The operator's `send` to a busy chat still answers `busy`.
@@ -259,7 +272,8 @@ the composer its Cloud switch is on and locked ("<name> is not on this Mac").
 Windows follow the live `repos` list. The app can remove an empty project or one with only archived local
 workspaces once their chats settle. When all are archived and one is cloud, hovering over or tapping Remove
 explains why the project must stay.
-After rechecking the folder and counts, `workspace-lifecycle.ts` unlinks local automations and deletes
+The confirmation says when the project's folder is gone.
+After rechecking the recorded path and counts, `workspace-lifecycle.ts` unlinks local automations and deletes
 the project, its workspaces and chats. The folder, checkouts and Git branches stay on disk.
 Startup also clears automation links before deleting empty-named projects with no workspaces.
 
@@ -391,9 +405,9 @@ same way (`workspaceStart(workspace).brief`, `SETUP_RUNNING`, `SETUP_FAILED`).
 
 The header's pull request button is one state (`derivePRActionState` in
 `features/workspace/lib/prState.ts`). Merge names the pull request's own
-base, not the workspace's target. A lookup that failed keeps what the
-workspace row last knew of the pull request, or offers Create PR with the
-reason beside it when none is known.
+base, not the workspace's target. A failed or inconclusive lookup keeps what the
+workspace row last knew of the pull request, or offers Create PR with the reason
+beside it when one was reported.
 
 The start page has the chat's composer (`WorkspaceStartComposer`), where the
 chat will have it, keyed by the workspace since there is no chat yet. One
@@ -549,8 +563,8 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   folder there in words, and otherwise runs the app's own clone and add
   (`gitClone`, `addRepo`, through `act`) into `~/Developer/<name>`, which
   gives a folderless project its folder. Its answers, and the reason an
-  assistant is given for a session in error, name folders under the home
-  folder as `~/…` (`home-relative.ts`); what is stored stays absolute. A
+  assistant is given for a session in error, show the home folder as `~` and
+  paths under it as `~/…` (`home-relative.ts`). Stored paths stay absolute. A
   clone outlasting the call answers
   "still cloning"; a second call for that folder joins it, and the first call
   after it ends hears the outcome. The address rule (`lib/clone-address.ts`)
@@ -572,7 +586,7 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   repository wrote and names follow the package's untrusted-text rule
   (`quoted()`, `quote()`). An answer takes the one path a card's does
   (`tool-relay.ts` `answer`): whoever answers first, the others' question or
-  plan card is withdrawn.
+  plan card is withdrawn. Settling a local turn withdraws its unanswered cards too.
 - **Chats operate chats.** Every local chat has the same tools as its own
   (`withSessionTools` in `operator.ts`, registered with the agent service and
   handed to the engine with the Deus tools in one source): the chat itself is
@@ -612,7 +626,10 @@ Selecting a workspace writes `/s/<computer>/w/<workspace>` on the relay (`local`
 `dev:web`) or `/w/<workspace>` on web-direct. Changing chats replaces `?session=<chat>`
 in that history entry. Copy link uses the same browser address (`workspaceAddress` in
 `features/workspace/lib/workspaceAddress.ts`) or `deus://workspace?id=<workspace>` in
-the desktop app. Only a chat link includes the session, chosen when the link is copied.
+the desktop app. Every workspace row can copy its link, including while it starts or
+after a failed start. Each tab with a chat copies its own link, even when inactive.
+On touch, holding a workspace row opens its menu. Holding a chat tab or a project
+header starts a drag.
 
 What the window knows of the cloud is one live read, `cloudOrganizations`
 (`useCloudOrganizations()`): whether this backend can act there (`available`), the
@@ -701,8 +718,11 @@ its port (or says "That address is on the cloud computer"), and a file in the Fi
 `file-preview` route refuses a cloud workspace. Which tabs a workspace has is
 `app/layouts/content-tabs.ts` (`tabsFor`): a cloud workspace's Browser and Simulator are
 its computer's and ignore this computer's settings. "New workspace from a pull request or
-branch" is local (`offersNewFromBranch`). The header menu marks a place with a working or
-unread workspace (`placeActivity`). The sidebar's diff numbers never connect to a cloud
+branch" is local (`offersNewFromBranch`). The sidebar row and the place menu read every
+visible chat's activity (`placeActivity` in the menu). A waiting chat or an unseen reply can
+mark the row while another chat's working grid runs. A failed setup has its own mark.
+Reopen lists every visible chat without a tab, those closed in this visit first.
+The sidebar's diff numbers never connect to a cloud
 computer: a `diff.request` to a sandbox whose agent is not connected makes the platform
 resume it, so `diffStats` asks only a session with an open channel that is not asleep.
 

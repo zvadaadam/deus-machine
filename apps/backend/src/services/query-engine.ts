@@ -330,9 +330,12 @@ function pushWorkspaceDelta(
     const changed = sharedRead(reads, connectionId, ["workspace-delta", sessionIds], () =>
       getWorkspacesBySessionIds(getDatabase(), sessionIds)
     );
-    // A deleted or no-longer-current session cannot identify its old workspace.
-    // A snapshot can remove that row reliably; an upsert-only delta cannot.
-    if (changed.length < new Set(sessionIds).size) return false;
+    // Several chats can share a row. A deleted or hidden chat needs a fresh snapshot.
+    const missing = new Set(sessionIds);
+    for (const workspace of changed) {
+      for (const chat of workspace.chats) missing.delete(chat.id);
+    }
+    if (missing.size) return false;
     const removed = changed.filter((ws) => !shown.has(ws.state)).map((ws) => ws.id);
     sendFrame(connectionId, {
       type: "q:delta",

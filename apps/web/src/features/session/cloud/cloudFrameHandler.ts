@@ -37,6 +37,7 @@ import {
   type AgentStreamContext,
 } from "../lib/agentEventFold";
 import { bustCloudSessionsListCache } from "./cloudDataAdapter";
+import { hasParkedDirectQuestion } from "./directQuestionState";
 import { cloudSaveFailure } from "@shared/cloud-autosave";
 import { notifyCloudAutosaveFailure } from "./notifyCloudAutosaveFailure";
 
@@ -96,12 +97,7 @@ export function makeCloudFrameHandler(
             ? { status: "working" }
             : { status: error || stopReason === "error" ? "error" : "idle" }
         );
-        // The SIDEBAR row reads the workspaces list, not sessions.detail — a
-        // turn boundary is rare enough that a list refetch is the simple way to
-        // move its working dot without inventing a push channel. Bust the
-        // adapter's in-flight list cache first: a boundary inside its 3s TTL
-        // would otherwise refetch the CACHED list and the dot wouldn't move
-        // until the next slow tick.
+        // Read fresh discovery data after a turn boundary, even inside the adapter's 3s TTL.
         bustCloudSessionsListCache(ctx.queryClient);
         void ctx.queryClient.invalidateQueries({ queryKey: ["workspaces"] });
       } else if (type === "session.usage") {
@@ -159,8 +155,9 @@ function backfillSnapshot(
   // and the context gauge resumes from where the session left off.
   const contextUsed = snapshot.state.contextUsed;
   const contextSize = snapshot.state.contextSize;
+  const status = currentTurnId ? "working" : snapshot.state.status === "error" ? "error" : "idle";
   patchSessionDetail(ctx.queryClient, sessionId, {
-    status: currentTurnId ? "working" : snapshot.state.status === "error" ? "error" : "idle",
+    status: hasParkedDirectQuestion(sessionId, ctx.queryClient) ? "needs_response" : status,
     message_count: messageIds.length,
     ...(typeof contextUsed === "number"
       ? {

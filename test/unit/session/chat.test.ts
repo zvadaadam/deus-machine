@@ -165,6 +165,29 @@ describe("session alert visibility", () => {
   });
 });
 
+it.each(["worktree", "cloud"] as const)("paints %s user messages on mount", (workspaceKind) => {
+  virtualization.mockReturnValueOnce({ width: 800, height: 600 });
+  const client = new QueryClient();
+  try {
+    const html = renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(Chat, {
+          messages,
+          sessionStatus: "working",
+          loading: false,
+          workspaceKind,
+        })
+      )
+    );
+    expect(html).toContain('data-message-id="message-1"');
+    expect(html).not.toContain("chat-item-enter");
+  } finally {
+    client.clear();
+  }
+});
+
 it.each(["needs_response", "needs_plan_response"] as const)(
   "%s keeps the last turn open without presenting it as streaming",
   (sessionStatus) => {

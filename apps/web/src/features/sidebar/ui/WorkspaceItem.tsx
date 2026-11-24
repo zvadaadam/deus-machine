@@ -1,6 +1,15 @@
 import React from "react";
 import { match } from "ts-pattern";
-import { Archive, Cloud, CloudOff, ClockFading, Loader2 } from "lucide-react";
+import {
+  Archive,
+  Cloud,
+  CloudOff,
+  ClockFading,
+  FolderOpen,
+  Link,
+  Loader2,
+  TriangleAlert,
+} from "lucide-react";
 import NumberFlow from "@number-flow/react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -14,29 +23,23 @@ import { useAutomationForWorkspace } from "@/features/automations";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
 import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
 import { prefetchWorkspace } from "@/features/workspace/api/prefetch";
-import { canRecoverStart, workspaceStart } from "@/features/workspace/lib/startState";
-import { getDisplayStatus } from "../lib/status";
+import {
+  canRecoverStart,
+  SETUP_FAILED,
+  SETUP_RUNNING,
+  workspaceStart,
+} from "@/features/workspace/lib/startState";
+import { getWorkspaceActivity } from "../lib/status";
 import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "../lib/utils";
 import type { WorkspaceItemProps } from "../model/types";
 import { SidebarRow } from "./SidebarRow";
 import { WorkspaceGitIcon } from "./WorkspaceGitIcon";
 import { WorkspaceHoverCard } from "./WorkspaceHoverCard";
-import { WorkspaceStatusMenu } from "./WorkspaceStatusMenu";
+import { WorkspaceStatusChoices, WorkspaceStatusMenu } from "./WorkspaceStatusMenu";
+import { ContextMenu, ContextMenuItem, ContextMenuSub } from "@/components/ui/context-menu";
+import { copyWorkspaceLink } from "@/features/workspace/lib/workspaceAddress";
+import { WorkflowStatusIcon } from "./WorkflowStatusIcon";
 
-/**
- * WorkspaceItem — single-line sidebar workspace row.
- *
- *   [icon] [name ..............................] [meta]
- *
- * Icon (WorkspaceGitIcon): shape = git/PR lifecycle, color = attention;
- * working/initializing agents show the live pixel grid. Flush left so it
- * aligns with the repo label above.
- *
- * Meta shows the one signal that matters: error → red dot, unread → gold
- * dot, working → live duration, initializing → setup stage, idle → diff
- * stats or relative time. Hover swaps meta for the archive button; the
- * slug hides in the row title attribute.
- */
 /** The same presence as the header and panels; only recoverable states offer wake. */
 function CloudLivenessIcon({ workspace }: { workspace: WorkspaceItemProps["workspace"] }) {
   const presence = cloudPresence(workspace);
@@ -97,91 +100,67 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
   onStatusChange,
 }: WorkspaceItemProps) {
   const isInitializing = workspace.state === "initializing";
+  const [menuOpen, setMenuOpen] = React.useState(false);
   // Provenance: automation-born workspaces carry a zap beside the name.
   const automation = useAutomationForWorkspace(workspace.id);
   const queryClient = useQueryClient();
 
+  const unread = useUnreadStore((s) => s.unreadSessionIds);
+  const { status, working, running, waiting } = React.useMemo(
+    () => getWorkspaceActivity(workspace, unread),
+    [workspace, unread]
+  );
   const { duration } = useWorkingDuration({
-    status: workspace.session_status,
-    latestMessageSentAt: workspace.latest_message_sent_at,
+    status: running?.status,
+    latestMessageSentAt: running?.last_user_message_at,
   });
-
-  // Check all sessions in this workspace's tabs for unseen activity,
-  // not just current_session_id — the user may have multiple tabs open.
   const activeChatTabSessionId = useWorkspaceLayoutStore(
     (s) => s.layouts[workspace.id]?.activeChatTabSessionId ?? null
   );
-  const chatTabSessionIds = useWorkspaceLayoutStore(
-    (s) => s.layouts[workspace.id]?.chatTabSessionIds
-  );
-  const hasUnseenActivity = useUnreadStore((s) => {
-    const ids = chatTabSessionIds?.length
-      ? chatTabSessionIds
-      : workspace.current_session_id
-        ? [workspace.current_session_id]
-        : [];
-    return ids.some((sid) => s.unreadSessionIds[sid]);
-  });
   const shouldRefreshPrefetch =
-    hasUnseenActivity ||
-    workspace.session_status === "working" ||
+    status !== "idle" ||
     (!!activeChatTabSessionId && activeChatTabSessionId !== workspace.current_session_id);
 
-  const displayStatus = getDisplayStatus(workspace, hasUnseenActivity);
-  // A workspace whose provision died: it stays in the sidebar (see
-  // SIDEBAR_WORKSPACE_STATE) precisely so the failure is visible, which needs
-  // a reason line — a bare red dot reads as "the agent errored".
   const isFailed = workspace.state === "error";
-  const isSetupRunning = workspace.setup_status === "running";
   const isSetupFailed = workspace.setup_status === "failed";
-  const isAttention = displayStatus !== "idle";
-
+  const isSetupRunning = workspace.setup_status === "running";
+  const start = isFailed || isInitializing ? workspaceStart(workspace).brief : null;
   const displayName = getWorkspaceDisplayName(workspace);
   const secondaryText = getWorkspaceSecondaryText(workspace);
+  const attention = match(status)
+    .with("error", () => (isFailed ? null : "error"))
+    .with("unread", () =>
+      match(waiting?.status)
+        .with("needs_response", () => "waiting for your answer")
+        .with("needs_plan_response", () => "waiting for plan approval")
+        .otherwise(() => "unread activity")
+    )
+    .otherwise(() => null);
+  const label = [
+    `Workspace ${displayName}`,
+    working && "working",
+    status === "idle" && "idle",
+    attention,
+    start,
+    isSetupFailed && "setup failed",
+    isSetupRunning && !start && "running setup",
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   const additions = diffStats?.additions ?? 0;
   const deletions = diffStats?.deletions ?? 0;
-  const hasChanges = additions > 0 || deletions > 0;
-
-  // Diff stats only when nothing more urgent claims the cell.
-  const showDiff =
-    hasChanges && displayStatus === "idle" && !isSetupFailed && !isSetupRunning && !isFailed;
-
-  // Attention states get a clear dot instead of text: unread gold, error red.
-  const statusDotClass =
-    isInitializing || isSetupRunning || isSetupFailed || isFailed
-      ? null
-      : match(displayStatus)
-          .with("unread", () => "bg-accent-gold")
-          .with("error", () => "bg-accent-red")
-          .otherwise(() => null);
-
-  const metaText = (): string => {
-    // Starting, failed, or its setup script running or failed: the words the
-    // chat and the header use for the same thing.
-    const start = workspaceStart(workspace).brief;
-    if (start) return start;
-    return (
-      match(displayStatus)
-        // error/unread are unreachable here — the dot branch renders instead —
-        // but the match stays exhaustive so new statuses fail the typecheck.
-        .with("error", () => "")
-        .with("unread", () => "")
-        .with("working", () => (duration > 0 ? formatDuration(duration, false) : "Working..."))
-        .with("idle", () => formatTimeAgo(workspace.updated_at))
-        .exhaustive()
-    );
-  };
-
-  // Error/unread never reach text rendering — they show as dots above.
-  const metaClass =
-    isSetupFailed || isFailed
-      ? "text-accent-red-muted"
-      : isSetupRunning || isInitializing
-        ? "text-text-muted"
-        : displayStatus === "working"
-          ? "text-text-tertiary"
-          : "text-text-disabled";
+  const showDiff = status === "idle" && !isSetupRunning && (additions > 0 || deletions > 0);
+  const metaText =
+    start ??
+    (running
+      ? duration > 0
+        ? formatDuration(duration, false)
+        : "Working..."
+      : isSetupRunning
+        ? SETUP_RUNNING
+        : formatTimeAgo(workspace.updated_at));
+  const icon = <WorkspaceGitIcon workspace={workspace} displayStatus={status} working={working} />;
 
   const handleArchive = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -200,7 +179,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
       data-workspace-id={workspace.id}
       className="cursor-pointer"
       aria-current={isActive ? "page" : undefined}
-      aria-label={`Workspace ${displayName}`}
+      aria-label={label}
       aria-busy={isInitializing || undefined}
       // A failed row's hover should say WHY — the red state without the
       // stored error_message reads as "the agent errored".
@@ -213,13 +192,9 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         })
       }
       onKeyDown={(e) => {
-        // Only when the row itself is focused — child buttons (status menu,
-        // archive) bubble their key events up here.
-        if (e.currentTarget === e.target && e.key === " ") e.preventDefault();
-      }}
-      onKeyUp={(e) => {
         if (e.currentTarget === e.target && (e.key === "Enter" || e.key === " ")) {
-          onClick(workspace);
+          e.preventDefault();
+          if (!e.repeat) onClick(workspace);
         }
       }}
     >
@@ -241,28 +216,31 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
               className="control-interaction flex h-5 w-3.5 shrink-0 items-center hover:opacity-80"
               aria-label={`Status: ${workspace.status}`}
             >
-              <WorkspaceGitIcon workspace={workspace} displayStatus={displayStatus} />
+              {icon}
             </button>
           </WorkspaceStatusMenu>
         ) : (
           // No status mutation on this build (web-direct: workflow status is
           // Mac-side state) — the icon stays, the menu doesn't.
-          <span className="flex h-5 w-3.5 shrink-0 items-center">
-            <WorkspaceGitIcon workspace={workspace} displayStatus={displayStatus} />
-          </span>
+          <span className="flex h-5 w-3.5 shrink-0 items-center">{icon}</span>
         )}
         <span
           className={cn(
             "truncate text-base",
             isActive
               ? "text-text-primary font-medium"
-              : isAttention
+              : status !== "idle"
                 ? "text-text-primary font-normal"
                 : "text-text-tertiary font-normal"
           )}
         >
           {displayName}
         </span>
+        {isSetupFailed && (
+          <span className="text-accent-red-muted flex shrink-0" title={SETUP_FAILED}>
+            <TriangleAlert size={12} aria-hidden />
+          </span>
+        )}
         {workspace.kind === "cloud" && <CloudLivenessIcon workspace={workspace} />}
         {automation && (
           <span
@@ -298,18 +276,27 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
               />
             )}
           </>
-        ) : statusDotClass ? (
+        ) : attention ? (
           <span
-            className={cn("h-2 w-2 rounded-full", statusDotClass)}
-            title={displayStatus === "error" ? "Error" : "Needs response"}
-            aria-label={displayStatus === "error" ? "Error" : "Unread activity"}
+            className={cn(
+              "h-2 w-2 rounded-full",
+              status === "error" ? "bg-accent-red" : "bg-accent-gold"
+            )}
+            title={attention}
           />
         ) : (
-          <span className={cn("flex items-center gap-1", metaClass)}>
-            {isSetupRunning && (
+          <span
+            className={cn(
+              "text-text-disabled flex items-center gap-1",
+              running && "text-text-tertiary",
+              (isInitializing || isSetupRunning) && "text-text-muted",
+              isFailed && "text-accent-red-muted"
+            )}
+          >
+            {isSetupRunning && !running && (
               <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
             )}
-            {metaText()}
+            {metaText}
           </span>
         )}
       </div>
@@ -333,20 +320,56 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
     </SidebarRow>
   );
 
-  return (
+  const trigger = (
     <div className={cn(isInitializing && "animate-fade-in-up")}>
-      {isInitializing ? (
-        row
-      ) : (
-        <WorkspaceHoverCard
-          workspace={workspace}
-          displayStatus={displayStatus}
-          diffStats={diffStats}
-          workingDuration={duration > 0 ? formatDuration(duration, false) : null}
-        >
-          {row}
-        </WorkspaceHoverCard>
-      )}
+      <WorkspaceHoverCard
+        hidePreview={isInitializing || menuOpen}
+        workspace={workspace}
+        displayStatus={status}
+        workingChatId={running?.id}
+        diffStats={diffStats}
+        workingDuration={duration > 0 ? formatDuration(duration, false) : null}
+      >
+        {row}
+      </WorkspaceHoverCard>
     </div>
+  );
+  return (
+    <ContextMenu trigger={trigger} onOpenChange={setMenuOpen}>
+      {!isActive && (
+        <ContextMenuItem onSelect={() => onClick(workspace)}>
+          <FolderOpen />
+          Open workspace
+        </ContextMenuItem>
+      )}
+      <ContextMenuItem onSelect={() => copyWorkspaceLink({ workspaceId: workspace.id })}>
+        <Link />
+        Copy link
+      </ContextMenuItem>
+      {onStatusChange && (
+        <ContextMenuSub
+          label={
+            <>
+              <span aria-hidden="true">
+                <WorkflowStatusIcon status={workspace.status} />
+              </span>
+              Set status
+            </>
+          }
+        >
+          <WorkspaceStatusChoices
+            Item={ContextMenuItem}
+            currentStatus={workspace.status}
+            onStatusChange={(status) => onStatusChange(workspace.id, status)}
+          />
+        </ContextMenuSub>
+      )}
+      {canArchive && (
+        <ContextMenuItem onSelect={() => onArchive(workspace.id)}>
+          <Archive />
+          Archive workspace
+        </ContextMenuItem>
+      )}
+    </ContextMenu>
   );
 });

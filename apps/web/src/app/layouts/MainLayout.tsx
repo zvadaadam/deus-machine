@@ -12,7 +12,6 @@ import {
 import { addProjectActions, hiddenAddProjectCommands } from "@/features/repository/lib/addProject";
 import { SettingsSidebar, SettingsPage, useAssistantArrivals } from "@/features/settings";
 import {
-  useCopyToClipboard,
   useKeyboardShortcuts,
   useZoom,
   useIsFullscreen,
@@ -57,7 +56,11 @@ import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { getLastOpenInAppId } from "@/shared/hooks/useLastOpenInApp";
 import { track } from "@/platform/analytics";
 import { CommandPalette } from "@/features/command-palette";
-import { copyWorkspaceLink, useHasWorkspaceChat } from "@/features/workspace/lib/workspaceAddress";
+import {
+  copyWorkspaceLink,
+  currentChatLink,
+  useHasWorkspaceChat,
+} from "@/features/workspace/lib/workspaceAddress";
 import { AutomationsPage, useAutomations } from "@/features/automations";
 import { CustomizePage } from "@/features/customize";
 import { setupEnvironmentPrompt } from "@/features/session/lib/sessionPrompts";
@@ -206,7 +209,7 @@ export function MainLayout() {
   const prStatusQuery = usePRStatus(prWorkspaceId, {
     ghInstalled: ghStatusQuery.data?.isInstalled,
     ghAuthenticated: ghStatusQuery.data?.isAuthenticated,
-    sessionStatus: selectedWorkspace?.session_status ?? undefined,
+    workspace: selectedWorkspace,
   });
 
   // --- Extracted hooks ---
@@ -399,11 +402,10 @@ export function MainLayout() {
   });
 
   const hasChat = useHasWorkspaceChat(selectedWorkspace?.id);
-  const { copy } = useCopyToClipboard();
-  async function copyLink(target: "workspace" | "chat") {
+  function copyLink(target: "workspace" | "chat") {
     if (!selectedWorkspace) return;
-    if (await copyWorkspaceLink(selectedWorkspace.id, target, copy)) toast.success("Link copied");
-    else toast.error("Couldn't copy the link");
+    const workspaceId = selectedWorkspace.id;
+    return copyWorkspaceLink(target === "chat" ? currentChatLink(workspaceId) : { workspaceId });
   }
 
   return (

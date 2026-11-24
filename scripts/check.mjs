@@ -27,6 +27,7 @@ export const groups = {
     "node --import tsx test/e2e/transcript-order.browser.mjs",
     "node --import tsx test/e2e/composer-drafts.browser.mjs",
     "node --import tsx test/e2e/workspace-list.browser.mjs",
+    "node --import tsx test/e2e/queued-messages.browser.mjs",
   ],
   backend: ["bun run test:backend"],
   "agent-server": ["bun run test:agent-server"],

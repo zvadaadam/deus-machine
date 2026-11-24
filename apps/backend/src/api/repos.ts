@@ -557,7 +557,16 @@ export default [
   handle(api.inspectRepo, ({ root_path }) => inspectRepository(root_path)),
 
   handle(api.addRepo, ({ root_path }) => addRepository(root_path)),
-  handle(api.repoRemoval, ({ repoId }) => repoRemoval(repoId, liveTurnId).confirmation),
+  handle(api.repoRemoval, async ({ repoId }) => {
+    const { confirmation } = repoRemoval(repoId, liveTurnId);
+    const folderExists =
+      !!confirmation.rootPath &&
+      (await fs.promises.stat(confirmation.rootPath).then(
+        (stat) => stat.isDirectory(),
+        () => false
+      ));
+    return { ...confirmation, folderExists };
+  }),
   handle(api.removeRepo, ({ repoId, confirmed }) => removeRepo(repoId, confirmed, liveTurnId)),
   handle(api.addCloudRepo, ({ repository, organizationId }) =>
     addCloudRepository(repository, organizationId)

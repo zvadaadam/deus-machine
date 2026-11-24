@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
-import { CSS, useCombinedRefs } from "@dnd-kit/utilities";
+import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/shared/lib/utils";
 import { tempo } from "@/shared/lib/tempo";
 import type { RepositoryItemProps } from "../model/types";
@@ -10,12 +10,6 @@ interface DraggableRepositoryProps extends RepositoryItemProps {
   dragDisabled?: boolean;
 }
 
-/**
- * Draggable wrapper for RepositoryItem
- * Entire row is the drag target — click = expand/collapse, drag = reorder
- * PointerSensor distance constraint (in AppSidebar) differentiates the two
- * Auto-collapses on drag start for better drag experience
- */
 export function DraggableRepository({
   repository,
   isCollapsed,
@@ -39,9 +33,6 @@ export function DraggableRepository({
       easing: "var(--ease-move)",
     },
   });
-  // Only the focused project starts a keyboard drag. Its nested controls keep Enter and Space.
-  const dragRef = useCombinedRefs(setNodeRef, setActivatorNodeRef);
-
   // Auto-collapse when drag starts (prevents huge drag preview with many workspaces)
   useEffect(() => {
     if (isDragging && !isCollapsed) {
@@ -55,18 +46,18 @@ export function DraggableRepository({
     transition,
   };
 
+  // The header starts the drag. The whole project moves with it.
   return (
     <div
-      ref={dragRef}
+      ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
       className={cn(
         isDragging &&
           "z-50 cursor-grabbing rounded-lg opacity-70 shadow-lg shadow-black/20 [&_*]:cursor-grabbing"
       )}
     >
       <RepositoryItem
+        dragHandle={{ ref: setActivatorNodeRef, ...attributes, ...listeners }}
         repository={repository}
         isCollapsed={isCollapsed}
         onToggleCollapse={onToggleCollapse}

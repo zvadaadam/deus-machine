@@ -49,6 +49,7 @@ import type { AgentConversationSnapshot } from "@shared/cloud-session-snapshot";
 // eslint-disable-next-line no-restricted-imports -- reduce has no zod-free subpath
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
 import { queryKeys } from "@/shared/api/queryKeys";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import type { Message } from "@shared/types/session";
 import type { RepoGroup } from "@shared/types/workspace";
 import type { SessionStatus } from "@shared/enums";
@@ -538,15 +539,11 @@ export function patchSessionDetail(
     queryKeys.sessions.detail(sessionId),
     (old) => (old ? { ...old, ...patch } : old)
   );
+  if (patch.status && isCloudDirectWebMode())
+    patchWorkspaceSessionStatus(qc, sessionId, patch.status);
 }
 
-/**
- * Mirror a direct session's status onto its workspace row in the sidebar/home
- * cache: `Workspace.session_status` is what those rows derive attention from,
- * and discovery (agnt's dashboard) keeps reporting a session blocked on a
- * question as running. Every by-repo state key is patched — the row shows up
- * under whichever filter the sidebar has active.
- */
+/** A direct turn (or an optimistic send) updates its chat in each cached workspace list. */
 export function patchWorkspaceSessionStatus(
   qc: QueryClient,
   sessionId: string,
@@ -556,11 +553,18 @@ export function patchWorkspaceSessionStatus(
     Array.isArray(old)
       ? old.map((group) => ({
           ...group,
-          workspaces: group.workspaces.map((workspace) =>
-            workspace.current_session_id === sessionId
-              ? { ...workspace, session_status: status }
-              : workspace
-          ),
+          workspaces: group.workspaces.map((workspace) => {
+            const current = workspace.current_session_id === sessionId;
+            if (!current && !workspace.chats?.some((chat) => chat.id === sessionId))
+              return workspace;
+            return {
+              ...workspace,
+              session_status: current ? status : workspace.session_status,
+              chats: workspace.chats?.map((chat) =>
+                chat.id === sessionId ? { ...chat, status } : chat
+              ),
+            };
+          }),
         }))
       : old
   );
