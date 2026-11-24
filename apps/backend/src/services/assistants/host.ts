@@ -274,12 +274,8 @@ const NOT_DELIVERED = "Its first task could not be delivered.";
 function limitNote(id: string) {
   const { resetsAt, continues } = queuedMessages(id).limit ?? {};
   let note = "stopped on a usage limit";
-  if (resetsAt !== undefined) {
-    const minutes = Math.ceil((resetsAt - Date.now()) / 60_000);
-    const hours = minutes >= 60 ? `${Math.floor(minutes / 60)} h` : "";
-    const duration = [hours, minutes % 60 && `${minutes % 60} min`].filter(Boolean).join(" ");
-    note += minutes > 0 ? `, resets in ${duration}` : ", its reset has passed";
-  }
+  if (resetsAt !== undefined)
+    note += `, resets ${new Date(resetsAt).toISOString().slice(0, 16).replace("T", " ")} UTC`;
   return continues ? `${note}, continues by itself` : note;
 }
 

@@ -2224,8 +2224,9 @@ describe("continuing a chat after a usage limit", () => {
     expect(starts()).toEqual(["A", "other"]);
   });
 
-  it("tells list, wait and read how long until the account resets and whether this chat continues", async () => {
-    const reset = now + 130 * minute;
+  it("shows the fixed UTC reset and continuation choice in list, wait and read", async () => {
+    const reset = Date.UTC(2026, 10, 24, 4, 10);
+    const note = /stopped on a usage limit, resets 2026-11-24 04:10 UTC, continues by itself/g;
     await limited(reset);
     await choose(true);
     const operator = createOperator(createDeusHost());
@@ -2235,18 +2236,26 @@ describe("continuing a chat after a usage limit", () => {
       ["read_session", { session: sessionId }],
     ] as const) {
       const reply = await operator.call(name, args, caller);
-      expect(
-        reply.match(/stopped on a usage limit, resets in 2 h 10 min, continues by itself/g)
-      ).toHaveLength(1);
+      expect(reply.match(note)).toHaveLength(1);
     }
-    vi.setSystemTime(reset - 1);
-    expect(await operator.call("list_sessions", {}, caller)).toContain("resets in 1 min");
     vi.setSystemTime(reset + 1);
-    expect(await operator.call("list_sessions", {}, caller)).toContain(
-      "stopped on a usage limit, its reset has passed, continues by itself"
-    );
+    expect(await operator.call("list_sessions", {}, caller)).toMatch(note);
     await choose(false);
     expect(await operator.call("list_sessions", {}, caller)).not.toContain("continues by itself");
+  });
+
+  it("reads the next full transcript page a minute after a usage limit", async () => {
+    await run(api.sendMessage, { ...message("A"), turnId: "A", content: "x".repeat(21_000) });
+    windows([{ id: "primary", usedPercent: 100, resetsAt }], "limited");
+    fail();
+    const operator = createOperator(createDeusHost());
+    const args = { session: sessionId, full: true };
+    const first = await operator.call("read_session", args, caller);
+    const page = first.match(/page: "([^"]+)"/)?.[1];
+    expect(page).toBeTruthy();
+    await vi.advanceTimersByTimeAsync(minute);
+    const second = await operator.call("read_session", { ...args, page }, caller);
+    expect(second).toContain("Provider refused this turn");
   });
 
   it("reopens a saved usage-limit error without a reset or an automatic send", async () => {
