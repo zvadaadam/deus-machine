@@ -60,11 +60,8 @@ packages/         Internal packages (screen-studio)
 
 ## Testing
 
-```bash
-bun run test                    # All tests
-bun run test:backend            # Backend unit tests
-bun run test:agent-server       # Agent engine tests (real agents opt-in)
-```
+Run `bun run check` before pushing. For one CI job, use `bun run check <group>`
+(for example, `bun run check backend`). See [DEVELOPMENT.md](DEVELOPMENT.md) for setup.
 
 Tests live in dedicated test directories (`apps/backend/test/`, `apps/agent-server/test/`), not colocated with source code.
 
@@ -73,7 +70,7 @@ Tests live in dedicated test directories (`apps/backend/test/`, `apps/agent-serv
 1. Fork the repo and create a branch from `main`
 2. Make your changes — keep PRs focused on a single concern
 3. Add tests for new functionality
-4. Run `bun run test` to make sure nothing is broken
+4. Run `bun run check`
 5. Open a pull request against `main`
 
 ### PR Guidelines

@@ -835,20 +835,13 @@ Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `s
 
 ## Testing
 
-Desktop checks launch the app through `test/e2e/lib/launch-in-background.mjs` and browsers run headless so every test leaves the foreground to the person.
-
-```bash
-bun run test:backend          # apps/backend/test/unit/
-bun run test:agent-server     # apps/agent-server/test/
-bun run test:app              # test/unit/ (web app, desktop main, runtime scripts)
-bun run test:runtime-client   # packages/runtime-client/test/ (no app aliases or React)
-bun run test:e2e:cloud        # test/e2e/cloud/ (a cloud workspace in the real app, scripted platform)
-```
+Run `bun run check` before pushing. It runs the CI groups for this platform and
+reports each command. Use `bun run check <group>` for one group. Browsers run
+headless. The packaged Electron launch opens a window and runs only in CI.
 
 Vitest with `vi.mock()` and `vi.hoisted()`. Tests live outside `src/` — never colocate.
 
-What ships is not what those run on, so two checks run the shipped thing. The
-packaged app's backend is Bun, with `bun:sqlite` behind `apps/backend/src/lib/sqlite.ts`
+The packaged app's backend runs Bun, with `bun:sqlite` behind `apps/backend/src/lib/sqlite.ts`
 and Bun's own terminal behind `openTerminal` in `services/pty.service.ts`:
 `bun run test:bun` runs `sqlite-parity.test.ts`, `pty-parity.test.ts` and
 `fs-watcher-parity.test.ts` on it

@@ -19,6 +19,11 @@ bun run doctor   # verifies the toolchain below
 `apps/cloud-relay` and `apps/landing` are standalone packages with their own lockfiles, so a plain
 root `bun install` does not cover them and `bun run typecheck:all` fails until `bun run setup` has run.
 
+Before pushing, run `bun run check`. Its browser journeys need Chromium
+(`bunx playwright install chromium`) and its video tests need FFmpeg and ffprobe
+(`brew install ffmpeg` on macOS). On Linux, build the terminal binding once
+with `(cd node_modules/node-pty && bunx node-gyp rebuild)`.
+
 The dev backend opens the same database as the installed app
 (`~/Library/Application Support/com.deus.app/deus.db`), shared by every checkout. Set
 `DATABASE_PATH=/some/other/deus.db` before `bun run dev` / `bun run dev:web` to isolate a branch

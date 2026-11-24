@@ -43,16 +43,6 @@ function isUsablePython(candidate) {
   }
 }
 
-const selectedPython = pythonCandidates().find(isUsablePython);
-const env = { ...process.env };
-if (selectedPython) {
-  env.PYTHON = selectedPython;
-  console.log(`[native:node] using Python: ${selectedPython}`);
-} else {
-  delete env.PYTHON;
-  console.log("[native:node] no validated Python found; falling back to node-gyp discovery");
-}
-
 // node-pty 1.1's published prebuilds ship spawn-helper without its executable
 // bit, so every terminal fails with "posix_spawnp failed" until something
 // rebuilds node-pty. Every backend that runs from source (`bun run dev`,
@@ -61,6 +51,30 @@ const ptyPrebuilds = path.join(PROJECT_ROOT, "node_modules", "node-pty", "prebui
 for (const target of fs.existsSync(ptyPrebuilds) ? fs.readdirSync(ptyPrebuilds) : []) {
   const helper = path.join(ptyPrebuilds, target, "spawn-helper");
   if (fs.existsSync(helper)) fs.chmodSync(helper, 0o755);
+}
+
+function sqliteLoads() {
+  try {
+    require("better-sqlite3")(":memory:").close();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+if (sqliteLoads()) return;
+const prebuild = path.join(PROJECT_ROOT, "node_modules", "prebuild-install", "bin.js");
+const installed = spawnSync(process.execPath, [prebuild], { cwd: SQLITE_ROOT, stdio: "inherit" });
+if (installed.status === 0 && sqliteLoads()) return;
+
+const selectedPython = pythonCandidates().find(isUsablePython);
+const env = { ...process.env };
+if (selectedPython) {
+  env.PYTHON = selectedPython;
+  console.log(`[native:node] using Python: ${selectedPython}`);
+} else {
+  delete env.PYTHON;
+  console.log("[native:node] no validated Python found; falling back to node-gyp discovery");
 }
 
 try {
