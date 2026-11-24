@@ -1,6 +1,11 @@
 import { createElement, memo, useMemo } from "react";
-import { match, P } from "ts-pattern";
-import { DEUS_TOOLS_SERVER, toolCardName } from "@shared/mcp-servers";
+import { match } from "ts-pattern";
+import {
+  coerceToolInput,
+  DEUS_TOOLS_SERVER,
+  toolCardInput,
+  toolCardName,
+} from "@shared/mcp-servers";
 import type { ToolPart, ToolResultContent, ToolStateCompleted } from "@shared/protocol-types";
 import type { ToolUseBlock, ToolResultBlock } from "../tools/types";
 import { toolRegistry } from "../tools/ToolRegistry";
@@ -12,21 +17,6 @@ import "../tools/registerTools";
 
 interface ToolPartBlockProps {
   part: ToolPart;
-}
-
-function coerceToolInput(input: unknown): Record<string, unknown> {
-  if (input && typeof input === "object" && !Array.isArray(input)) {
-    return input as Record<string, unknown>;
-  }
-  return {};
-}
-
-function parsePartialInput(partialInput: string): Record<string, unknown> {
-  try {
-    return coerceToolInput(JSON.parse(partialInput || "{}"));
-  } catch {
-    return {};
-  }
 }
 
 type ToolCard = ToolUseBlock & { inputOnly?: true };
@@ -90,27 +80,11 @@ export function toToolUseBlocks(part: ToolPart): ToolCard[] {
 }
 
 function toToolUseBlock(part: ToolPart): ToolUseBlock {
-  const input = match(part.state)
-    .with({ status: "pending" }, (state) => parsePartialInput(state.partialInput))
-    .with({ status: P.union("in_progress", "completed", "failed", "cancelled") }, (state) =>
-      coerceToolInput(state.input)
-    )
-    .exhaustive();
-
   return {
     type: "tool_use",
     id: part.toolCallId,
     name: getToolRendererName(part),
-    // Codex hands an MCP tool its input as `{ arguments }` (its call is
-    // `<server>.<tool>`): a card reads the arguments themselves, as for Claude.
-    // An older build's Codex part of a Deus tool has no `mcp`: its name says the same.
-    input: (
-      part.mcp
-        ? part.toolName === `${part.mcp.server}.${part.mcp.tool}`
-        : part.toolName.startsWith(`${DEUS_TOOLS_SERVER}.`)
-    )
-      ? coerceToolInput(input.arguments)
-      : input,
+    input: toolCardInput(part),
   };
 }
 

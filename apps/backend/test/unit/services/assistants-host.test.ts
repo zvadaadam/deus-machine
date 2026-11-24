@@ -12,10 +12,14 @@ import type { z } from "zod";
 import { WireRequestError } from "@zvada/agent-server/client";
 import { createOperator } from "@zvada/agent-server/operator";
 import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
+import { TELL_USER } from "@shared/agent-message";
+import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
+import type { ToolPart } from "@shared/protocol-types";
 import { CATALOG_MODEL_LISTS, defaultModelId } from "@shared/models";
 import type { Op } from "@shared/api/op";
 import { SCHEMA_SQL } from "@shared/schema";
 import { deusTools } from "../../../../agent-server/agents/deus-tools";
+import { setHost } from "../../../../agent-server/host-link";
 
 const state = vi.hoisted(() => ({
   db: null as unknown as import("better-sqlite3").Database,
@@ -132,6 +136,8 @@ import {
   ConflictError,
 } from "../../../src/lib/errors";
 import { persistSessionTitle } from "../../../src/services/agent/persistence";
+import { hasAgentMessages } from "../../../src/services/agent/agent-messages";
+import { buildTurnStartParams } from "../../../src/services/agent/run-config";
 import { deleteFailedWorkspace } from "../../../src/services/workspace-lifecycle";
 import { createDeusHost } from "../../../src/services/assistants/host";
 import { getSetting } from "../../../src/services/settings.service";
@@ -191,6 +197,7 @@ function endTurn(sessionId: string, turnId: string, stopReason: string, by?: unk
 
 function message(sessionId: string, turnId: string, role: string, text: string, origin?: unknown) {
   const id = `m-${Math.random()}`;
+  const part = { id: `p-${id}`, messageId: id, sessionId, type: "text", text };
   state.db
     .prepare("INSERT INTO messages (id, session_id, role, turn_id, origin) VALUES (?, ?, ?, ?, ?)")
     .run(id, sessionId, role, turnId, origin ? JSON.stringify(origin) : null);
@@ -198,7 +205,8 @@ function message(sessionId: string, turnId: string, role: string, text: string, 
     .prepare(
       "INSERT INTO parts (id, message_id, session_id, type, data) VALUES (?, ?, ?, 'text', ?)"
     )
-    .run(`p-${id}`, id, sessionId, JSON.stringify({ id: `p-${id}`, type: "text", text }));
+    .run(part.id, id, sessionId, JSON.stringify(part));
+  return id;
 }
 
 /** Checkout finished and the workspace is ready with its first chat. */
@@ -771,6 +779,78 @@ describe("through MCP and as a chat's own tools", () => {
       ]);
     }
   );
+
+  it("keeps each chat's instructions and tool list on the same setting after a change", async () => {
+    for (const id of ["before", "after", "later"]) insertChat(id, "w-lead");
+    let preference: unknown = "true";
+    const tools = (id: string) => withSessionTools(deusTools(id)).tools.map((t) => t.name);
+    const instructions = (id: string) =>
+      buildTurnStartParams(id, "turn", "gemini", "Check the build", {
+        cwd: "/workspace",
+        agentMessages: hasAgentMessages(id),
+      }).config.systemPromptAppend;
+    setHost({ hasAgentMessages, request: vi.fn(), title: vi.fn() });
+    try {
+      await vi.mocked(getSetting).withImplementation(
+        (key) => key === "agent_messages" && preference,
+        async () => {
+          expect(tools("before")).not.toContain(TELL_USER);
+          preference = true;
+          expect(instructions("before")).not.toContain(TELL_USER);
+          expect(instructions("after")).toContain(
+            `\`${TELL_USER}\` tool of the \`${DEUS_TOOLS_SERVER}\` server, under the name your tool list gives it`
+          );
+          preference = false;
+          expect(tools("after")).toContain(TELL_USER);
+          expect(instructions("after")).toContain(TELL_USER);
+          expect(tools("later")).not.toContain(TELL_USER);
+          expect(instructions("later")).not.toContain(TELL_USER);
+        }
+      );
+      const outside = await mcp({ jsonrpc: "2.0", id: 1, method: "tools/list" }, assistantCaller());
+      expect(outside.result.tools.map((t: { name: string }) => t.name)).not.toContain(TELL_USER);
+    } finally {
+      setHost(null);
+    }
+  });
+
+  it("reads a completed send as the agent's words in a transcript and a settled outcome", async () => {
+    const sessionId = "s-lead";
+    const messageId = message(sessionId, "turn", "assistant", "Build finished.");
+    const send: ToolPart = {
+      id: "send",
+      type: "tool",
+      sessionId,
+      messageId,
+      toolCallId: "call",
+      toolName: `${DEUS_TOOLS_SERVER}.${TELL_USER}`,
+      mcp: { server: DEUS_TOOLS_SERVER, tool: TELL_USER },
+      state: {
+        status: "completed",
+        input: { arguments: { message: "Tests passed." } },
+        output: "Message sent.",
+        time: { start: 1, end: 2 },
+      },
+    };
+    state.db
+      .prepare(
+        "INSERT INTO parts (id, message_id, session_id, seq, type, data) VALUES (?, ?, ?, 1, 'tool', ?)"
+      )
+      .run(send.id, messageId, sessionId, JSON.stringify(send));
+    endTurn(sessionId, "turn", "end_turn");
+
+    const caller = assistantCaller();
+    const read = await call(caller, "read_session", { session: "lead" });
+    const waited = await call(caller, "wait_for_sessions", { sessions: ["lead"], wait: 0 });
+    expect(read.text).toContain("[agent]");
+    expect(waited.text).toContain("agent said:");
+    for (const { text, isError } of [read, waited]) {
+      expect(isError).toBe(false);
+      expect(text).toContain("Build finished.");
+      expect(text).toContain("Tests passed.");
+      expect(text).not.toContain(TELL_USER);
+    }
+  });
 
   it("says when a diff cannot be read, including in a settled turn's outcome", async () => {
     const why = "Could not read the changes: git returned no merge base.";

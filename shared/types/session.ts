@@ -67,16 +67,14 @@ export interface PaginatedMessages {
   has_newer: boolean;
 }
 
-/**
- * Session information
- * Metadata about a Claude Code session
- * Matches the sessions database table schema
- */
+/** A chat as its host reports it. */
 export interface Session {
   id: string;
   workspace_id: string;
   /** A chat written by another build can name a harness this one does not run. */
   agent_harness: string;
+  /** True once this local chat's agent has been given the tool to message the person. */
+  agent_messages: boolean;
   agent_session_id?: string | null;
   /** agnt cloud session id — the direct lane connects to this (cloud only). */
   provider_session_id?: string | null;

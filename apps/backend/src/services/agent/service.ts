@@ -31,6 +31,7 @@ import {
   planAnswer,
 } from "@shared/agent-asks";
 import { isUnknownEvent } from "@shared/protocol-types";
+import { hasAgentMessages } from "./agent-messages";
 import { AgentLink } from "./client";
 import { LocalAgents } from "./local-agents";
 import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
@@ -169,7 +170,7 @@ export async function startTurn(
   turnId: string,
   agentHarness: AgentHarness,
   prompt: string,
-  options: DeusTurnOptions & { signal?: AbortSignal }
+  options: Omit<DeusTurnOptions, "agentMessages"> & { signal?: AbortSignal }
 ): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
   const { signal } = options;
@@ -188,6 +189,7 @@ export async function startTurn(
   const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, {
     ...options,
     ...apps,
+    agentMessages: hasAgentMessages(sessionId),
     setup: setupForTurn(sessionId),
     agentDeviceSession: device.session,
     simulator: device.udid ? { udid: device.udid } : null,
