@@ -39,7 +39,12 @@ import { openNewWorkspace } from "@/features/workspace/lib/newWorkspace";
 import { derivePRActionState } from "@/features/workspace/lib/prState";
 import { hasCheckout } from "@/features/workspace/lib/startState";
 import { pendingFirstMessages } from "@/features/workspace/store/workspaceStartStore";
-import { useAgentAuthEvents } from "@/features/settings/api/settings.queries";
+import { chatView, type ChatView } from "@/features/settings/lib/chatView";
+import {
+  useAgentAuthEvents,
+  useSettings,
+  useUpdateSettings,
+} from "@/features/settings/api/settings.queries";
 import { useFirstMessageDelivery } from "@/features/session/hooks/useFirstMessageDelivery";
 import { simulatorStoreActions } from "@/features/simulator/store";
 import { useSidebarStore } from "@/features/sidebar/store";
@@ -398,6 +403,15 @@ export function MainLayout() {
     onSwitchPlace: places.chooseIndex,
   });
 
+  const { data: settings } = useSettings();
+  const { mutate: updateSettings } = useUpdateSettings();
+  function showChatView(view: ChatView) {
+    updateSettings(
+      { chat_view: view },
+      { onError: (error) => toast.error(getErrorMessage(error)) }
+    );
+  }
+
   const hasChat = useHasWorkspaceChat(selectedWorkspace?.id);
   const { copy } = useCopyToClipboard();
   async function copyLink(target: "workspace" | "chat") {
@@ -521,6 +535,7 @@ export function MainLayout() {
       {/* Command Palette (Cmd+K) */}
       <CommandPalette
         hiddenCommands={[
+          `chat-view-${chatView(settings)}`,
           ...hiddenAddProjectCommands(windowPlace.location, folderPicker),
           ...(canOpenInApp ? [] : ["open-in-app"]),
           ...(selectedWorkspace ? [] : ["copy-workspace-link"]),
@@ -529,6 +544,8 @@ export function MainLayout() {
           ...(windowPlace.location === "local" ? [] : ["new-workspace-from"]),
         ]}
         actionOverrides={{
+          "chat-view-bubbles": () => showChatView("bubbles"),
+          "chat-view-full": () => showChatView("full"),
           "add-from-github": () => handleAddFromGitHub(),
           "open-project": repoActions.handleOpenProject,
           "clone-repository": () => repoActions.setShowCloneModal(true),

@@ -1,8 +1,11 @@
+import { useSettings } from "@/features/settings/api/settings.queries";
+import { chatView } from "@/features/settings/lib/chatView";
 import { tempo } from "@/shared/lib/tempo";
 import { match } from "ts-pattern";
 import type { Compaction, Message, SessionTurn, SessionStatus } from "@/shared/types";
 import { ACTIVE_TURN_STATUSES, type WorkspaceKind } from "@shared/enums";
 import { MessageItem } from "./MessageItem";
+import { TurnFooterSlot } from "./TurnFooter";
 import { AssistantTurn } from "./AssistantTurn";
 import { CompactionChip } from "./CompactionChip";
 import { WorkspaceEmptyState } from "./WorkspaceEmptyState";
@@ -17,11 +20,11 @@ import { useAutoScroll } from "../hooks";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useMemo, useRef, useEffect } from "react";
 import { AnimatePresence, m } from "framer-motion";
-import { CircularPixelGrid, type CircularPixelGridVariant } from "./CircularPixelGrid";
+import { CircularPixelGrid } from "./CircularPixelGrid";
 import { CloudEnvGroup, useCloudEnvEntries } from "./CloudEnvProgress";
 import { WorkspaceStartGroup } from "./WorkspaceStartGroup";
 import type { WorkspaceStart } from "@/features/workspace/lib/startState";
-import { buildChatTimeline } from "../lib/chatTimeline";
+import { buildChatTimeline, type ChatTimeline } from "../lib/chatTimeline";
 import { SessionErrorCard } from "./SessionErrorCard";
 
 interface ChatProps {
@@ -34,6 +37,7 @@ interface ChatProps {
   errorMessage?: string | null;
   /** Structured error category from classifyError (e.g. "auth", "rate_limit") */
   errorCategory?: string;
+  agentMessages?: boolean;
   agentHarness?: string | null;
   onRetryInNewChat?: () => void;
   /** True when there are older messages beyond the loaded window */
@@ -71,6 +75,7 @@ export function Chat({
   errorMessage,
   errorCategory,
   agentHarness,
+  agentMessages,
   onRetryInNewChat,
   hasOlder = false,
   loadingOlder = false,
@@ -89,6 +94,8 @@ export function Chat({
   // Chat owns its scroll behavior entirely — refs, hook, and button.
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
+  const { data: settings } = useSettings();
+  const view = chatView(settings);
   const directWeb = isCloudDirectWebMode();
   // A new chat opens a tab through the Mac backend, which the hosted web cannot reach.
   const retryInNewChat = directWeb ? undefined : onRetryInNewChat;
@@ -124,33 +131,11 @@ export function Chat({
     spacings: turnSpacings,
     activity,
     activeStartedAt,
-    lastRole,
+    awaitingReply,
   } = useMemo(
     () => buildChatTimeline(messages, compactions, active, cloudEnvEntries, turns, workspaceStart),
     [messages, compactions, active, cloudEnvEntries, turns, workspaceStart]
   );
-  const { formattedDuration } = useWorkingDuration({
-    status: sessionStatus,
-    latestMessageSentAt: activeStartedAt,
-  });
-
-  /**
-   * What the agent is doing right now → the CircularPixelGrid variant.
-   *
-   * `idle` DURING an active turn means "between observable activities" (a tool
-   * just completed, the model is about to speak but the stream has not said so
-   * yet), not "finished" — so it maps to the default working animation, which
-   * is also what a non-working session shows.
-   */
-  const agentSubState = useMemo((): CircularPixelGridVariant => {
-    if (!working) return "generating";
-    return match(activity)
-      .with("thinking", () => "thinking" as const)
-      .with("tool_running", () => "toolExecuting" as const)
-      .with("tool_failed", () => "error" as const)
-      .otherwise(() => "generating" as const);
-  }, [working, activity]);
-
   // Advance maxAnimatedTurnIndex after commit (useEffect runs once per commit,
   // not twice in StrictMode). During render, shouldAnimate reads the ref purely.
   // Without this separation, StrictMode double-render advances the counter on the
@@ -225,17 +210,21 @@ export function Chat({
     userSendCount,
   });
 
+  const list = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
     count: timeline.length,
     getScrollElement: () => messagesContainerRef.current,
     estimateSize,
     overscan: 8,
     getItemKey,
+    onChange: (v) => {
+      if (list.current) list.current.style.height = `${v.getTotalSize()}px`;
+    },
   });
 
-  // The working indicator sits tighter under a user message than under a
-  // finished assistant turn.
-  const indicatorMarginClass = lastRole === "user" ? "mt-0" : "mt-1";
+  const workingIndicator = working ? (
+    <WorkingIndicator activity={activity} startedAt={activeStartedAt} />
+  ) : null;
   const showSessionError = !!errorMessage && (sessionStatus === "error" || active);
 
   return (
@@ -289,6 +278,7 @@ export function Chat({
                   Position: relative creates the containing block for absolute children.
                   Height = getTotalSize() so the scroll container's scrollHeight is correct. */}
               <div
+                ref={list}
                 style={{
                   height: virtualizer.getTotalSize(),
                   width: "100%",
@@ -340,19 +330,26 @@ export function Chat({
                         className={cn(
                           spacingClass,
                           "chat-turn-wrapper min-w-0",
-                          shouldAnimate && "chat-item-enter"
+                          shouldAnimate && turn.type !== "user" && "chat-item-enter"
                         )}
                       >
                         {match(turn)
                           .with({ type: "user" }, (t) => (
-                            <MessageItem message={t.message} isLastInTurn={true} />
+                            <MessageItem
+                              message={t.message}
+                              previous={timeline[turnIndex - 1]?.type === "user"}
+                              next={timeline[turnIndex + 1]?.type === "user"}
+                            />
                           ))
                           .with({ type: "assistant" }, (t) => (
                             <AssistantTurn
+                              view={view}
                               messages={t.messages}
                               turn={t.record}
-                              footerMessages={t.footerMessages}
-                              isStreaming={t.isStreaming && working}
+                              footerGroups={t.footerGroups}
+                              ended={t.ended}
+                              agentMessages={agentMessages}
+                              workingIndicator={t.isStreaming ? workingIndicator : undefined}
                               startedAt={t.startedAt}
                             />
                           ))
@@ -431,34 +428,9 @@ export function Chat({
                   </m.div>
                 )}
               </AnimatePresence>
-              <AnimatePresence>
-                {working && (
-                  <m.div
-                    key="working-indicator"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0, transition: tempo.fast.exit }}
-                    transition={tempo.fast}
-                    role="status"
-                    aria-live="polite"
-                    aria-label={`Working for ${formattedDuration || "0.0s"}`}
-                    className={cn(
-                      "mr-auto flex items-center gap-2 px-2 py-1.5",
-                      indicatorMarginClass
-                    )}
-                  >
-                    <CircularPixelGrid
-                      variant={agentSubState}
-                      size={20}
-                      resolution={12}
-                      className="flex-shrink-0"
-                    />
-                    <span className="text-foreground ml-1 font-mono text-xs tracking-tight tabular-nums opacity-50">
-                      {formattedDuration || "0.0s"}
-                    </span>
-                  </m.div>
-                )}
-              </AnimatePresence>
+              {awaitingReply && workingIndicator && (
+                <TurnFooterSlot>{workingIndicator}</TurnFooterSlot>
+              )}
             </div>
           </>
         )}
@@ -485,5 +457,39 @@ export function Chat({
         </Button>
       </div>
     </div>
+  );
+}
+
+function WorkingIndicator({
+  activity,
+  startedAt,
+}: {
+  activity: ChatTimeline["activity"];
+  startedAt: string | null;
+}) {
+  const { formattedDuration } = useWorkingDuration({
+    status: "working",
+    latestMessageSentAt: startedAt,
+  });
+  const variant = match(activity)
+    .with("thinking", () => "thinking" as const)
+    .with("tool_running", () => "toolExecuting" as const)
+    .with("tool_failed", () => "error" as const)
+    .otherwise(() => "generating" as const);
+  return (
+    <m.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={tempo.fast}
+      role="status"
+      aria-live="polite"
+      aria-label={`Working for ${formattedDuration || "0.0s"}`}
+      className="flex items-center gap-2 px-2"
+    >
+      <CircularPixelGrid variant={variant} size={20} resolution={12} className="shrink-0" />
+      <span className="text-foreground ml-1 font-mono text-xs tracking-tight tabular-nums opacity-50">
+        {formattedDuration || "0.0s"}
+      </span>
+    </m.div>
   );
 }

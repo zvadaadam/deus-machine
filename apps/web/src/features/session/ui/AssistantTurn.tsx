@@ -1,54 +1,71 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, type ReactElement } from "react";
 import type { Message, SessionTurn } from "@/shared/types";
+import type { ChatView } from "@/features/settings/lib/chatView";
+import { getTurnFooterData } from "./utils";
 import { turnStopNotice } from "../lib/chatTimeline";
 import { PartsRenderer } from "./blocks/PartsRenderer";
-import { TurnFooter } from "./TurnFooter";
+import { AnimatePresence } from "framer-motion";
+import { Collapse } from "@/components/ui/collapse";
+import { TurnFooter, TurnFooterSlot } from "./TurnFooter";
 import { Square, TriangleAlert } from "lucide-react";
 
 interface AssistantTurnProps {
+  view: ChatView;
   messages: Message[];
   turn?: SessionTurn;
-  footerMessages?: Message[];
-  isStreaming: boolean;
+  footerGroups?: Message[][];
+  ended: boolean;
+  agentMessages?: boolean;
+  /** The current reply keeps its slot when a disconnect or error clears progress before its end. */
+  workingIndicator?: ReactElement | null;
   startedAt?: string | null;
 }
 
 export const AssistantTurn = memo(function AssistantTurn({
   messages,
+  view,
   turn,
-  footerMessages,
-  isStreaming,
+  footerGroups,
+  ended,
+  agentMessages,
+  workingIndicator,
   startedAt,
 }: AssistantTurnProps) {
   const parts = useMemo(() => messages.flatMap((message) => message.parts ?? []), [messages]);
-  const isCancelled = turn?.stopReason === "cancelled";
-  const stopNotice = turnStopNotice(turn?.stopReason);
-
+  const footer = useMemo(
+    () => footerGroups && getTurnFooterData(footerGroups, startedAt, turn),
+    [footerGroups, startedAt, turn]
+  );
+  const cancelled = turn?.stopReason === "cancelled";
+  const notice = cancelled ? "Response stopped" : turnStopNotice(turn?.stopReason);
+  const NoticeIcon = cancelled ? Square : TriangleAlert;
+  const footerContent = footer ? <TurnFooter {...footer} /> : workingIndicator;
   return (
     <div
       className="assistant-turn flex w-full min-w-0 flex-col"
       style={{ contain: "layout style" }}
     >
-      <div className="flex min-w-0 flex-col gap-1 overflow-x-hidden">
-        <PartsRenderer parts={parts} isStreamingTurn={isStreaming} />
-      </div>
-      {footerMessages && (
-        <>
-          {isCancelled && (
+      <PartsRenderer
+        parts={parts}
+        bubbles={view === "bubbles"}
+        agentMessages={agentMessages}
+        ended={ended}
+        isStreamingTurn={!!workingIndicator}
+        durationMs={footerGroups?.length === 1 ? footer?.durationMs : null}
+      />
+      <AnimatePresence initial={false}>
+        {footer && notice && (
+          <Collapse key="notice">
             <div className="border-warning/20 border-l-warning bg-warning/5 mx-2 flex items-center gap-2.5 rounded-lg border border-l-2 px-3 py-2">
-              <Square className="text-warning/60 h-3.5 w-3.5 shrink-0 fill-current" />
-              <span className="text-warning text-sm font-medium">Response stopped</span>
+              <NoticeIcon
+                className={`text-warning/60 size-3.5 shrink-0 ${cancelled ? "fill-current" : ""}`}
+              />
+              <span className="text-warning text-sm font-medium">{notice}</span>
             </div>
-          )}
-          {!isCancelled && stopNotice && (
-            <div className="border-warning/20 border-l-warning bg-warning/5 mx-2 flex items-center gap-2.5 rounded-lg border border-l-2 px-3 py-2">
-              <TriangleAlert className="text-warning/60 h-3.5 w-3.5 shrink-0" />
-              <span className="text-warning text-sm font-medium">{stopNotice}</span>
-            </div>
-          )}
-          <TurnFooter messages={footerMessages} turn={turn} startedAt={startedAt} />
-        </>
-      )}
+          </Collapse>
+        )}
+      </AnimatePresence>
+      {footerContent !== undefined && <TurnFooterSlot>{footerContent}</TurnFooterSlot>}
     </div>
   );
 });

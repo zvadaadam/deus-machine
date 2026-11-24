@@ -11,6 +11,7 @@ import type { Message } from "@/shared/types";
 import { readUserMessageContent } from "../lib/userMessageContent";
 import { PartsRenderer } from "./blocks";
 import { TextBlock } from "./blocks/TextBlock";
+import { bubbleClass, type BubbleJoins } from "./bubble";
 import { SentFrom } from "./SentFrom";
 
 import { cn } from "@/shared/lib/utils";
@@ -22,7 +23,7 @@ import { m, useReducedMotion } from "framer-motion";
 
 const COLLAPSE_MAX_HEIGHT = 144;
 
-interface MessageItemProps {
+interface MessageItemProps extends BubbleJoins {
   message: Message;
   isLastInTurn?: boolean;
   isStreamingTurn?: boolean;
@@ -50,7 +51,7 @@ const AssistantMessage = memo(function AssistantMessage({
 });
 
 /** User message — iMessage-style bubble. */
-const UserMessage = memo(function UserMessage({ message }: { message: Message }) {
+const UserMessage = memo(function UserMessage({ message, previous, next }: MessageItemProps) {
   const { copy, copied } = useCopyToClipboard();
   const [isExpanded, setIsExpanded] = useState(false);
   const [shouldCollapse, setShouldCollapse] = useState(false);
@@ -78,11 +79,8 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
       {message.origin && <SentFrom origin={message.origin} />}
       <div
         className={cn(
-          "max-w-[85%]",
-          "bg-accent hover:bg-accent/80 ml-auto w-fit backdrop-blur-sm transition-colors",
-          "relative rounded-xl",
-          "px-3 py-2",
-          "min-w-0"
+          bubbleClass("user", { previous, next }),
+          "user-bubble bg-accent hover:bg-accent/80 relative ml-auto min-w-0 backdrop-blur-sm transition-colors"
         )}
       >
         <div className="pointer-events-none absolute top-1.5 right-1.5 z-10 opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
@@ -165,5 +163,5 @@ export const MessageItem = memo(function MessageItem(props: MessageItemProps) {
   if (props.message.role === "assistant") {
     return <AssistantMessage {...props} />;
   }
-  return <UserMessage message={props.message} />;
+  return <UserMessage {...props} />;
 });

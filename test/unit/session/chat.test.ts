@@ -10,6 +10,7 @@ import {
 } from "@zvada/agent-server/protocol/factories";
 import { describe, expect, it, vi } from "vitest";
 import { foldEvent, messagesKey } from "@/features/session/lib/agentEventFold";
+import { queryKeys } from "@/shared/api/queryKeys";
 import { Chat } from "@/features/session/ui/Chat";
 import { SessionProvider } from "@/features/session/context";
 import type { SessionStatus } from "@shared/enums";
@@ -111,19 +112,28 @@ it("folds a read steer between replies and finishes the same turn once", () => {
       createTextPart({ sessionId, messageId: "after" }, "Second reply", false)
     );
 
+    const bubbles = render("working");
+    expect(bubbles).toMatch(/Review the change.*First reply.*Focus on the tests.*Second reply/s);
+    expect(bubbles).not.toMatch(/<article[^>]*\bopacity-60\b/);
+
+    client.setQueryData(queryKeys.settings.all, { chat_view: "full" });
     const active = render("working");
     expect(active).toMatch(
       /Sent from.*Reviewer.*Review the change.*First reply.*Focus on the tests.*Second reply/s
     );
     expect(active.match(/Sent from/g)).toHaveLength(1);
     expect(active).not.toContain("Copy response");
-    expect(active.match(/class="opacity-60"/g)).toHaveLength(1);
-    expect(active.indexOf('class="opacity-60"')).toBeGreaterThan(
-      active.indexOf("Focus on the tests")
-    );
+    const mutedArticles = [...active.matchAll(/<article[^>]*\bopacity-60\b/g)];
+    expect(mutedArticles).toHaveLength(1);
+    expect(mutedArticles[0].index).toBeGreaterThan(active.indexOf("Focus on the tests"));
 
     feed({ type: "turn.ended", ...stamp, timestamp: 2000, stopReason: "cancelled" });
+    client.setQueryData(queryKeys.settings.all, { chat_view: "bubbles" });
+    // The turn end and the session status travel on separate subscriptions.
+    expect(render("working").match(/turn-footer-slot/g)).toHaveLength(1);
     const settled = render("idle");
+    expect(settled).toContain("First reply");
+    expect(settled).toContain("Second reply");
     expect(settled.match(/Response stopped/g)).toHaveLength(1);
     expect(settled.match(/aria-label="Copy response"/g)).toHaveLength(1);
     expect(settled.indexOf("Response stopped")).toBeGreaterThan(settled.indexOf("Second reply"));

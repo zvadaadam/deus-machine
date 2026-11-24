@@ -256,6 +256,7 @@ export function SessionPanel({
               (cloudDirectState.error ? cloudDirectState.errorCategory : session?.error_category) ??
               undefined
             }
+            agentMessages={session?.agent_messages}
             agentHarness={session?.agent_harness}
             hasOlder={hasOlder}
             loadingOlder={loadOlderMutation.isPending}
@@ -360,6 +361,7 @@ export function SessionPanel({
                       ? cloudDirectState.errorCategory
                       : session?.error_category) ?? undefined
                   }
+                  agentMessages={session?.agent_messages}
                   agentHarness={session?.agent_harness}
                   hasOlder={hasOlder}
                   loadingOlder={loadOlderMutation.isPending}

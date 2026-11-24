@@ -258,6 +258,27 @@
     calc(var(--step, 0) * var(--tempo-step)) backwards;
 }
 
+@utility fold-row {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition-property: grid-template-rows, opacity;
+  @apply tempo-moderate;
+
+  &[data-closed="true"] {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition-duration: var(--tempo-moderate-exit);
+  }
+
+  /* Set false for a row that first appears by opening. Omit it on initial display. */
+  &[data-closed="false"] {
+    @starting-style {
+      grid-template-rows: 0fr;
+      opacity: 0;
+    }
+  }
+}
+
 /* Shared by Button and controls whose semantics/layout require their own markup. */
 @utility control-interaction {
   @apply focus-visible:ring-primary/60 transition-[color,background-color,border-color,box-shadow,opacity] outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50;

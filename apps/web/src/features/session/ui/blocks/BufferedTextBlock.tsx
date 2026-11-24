@@ -1,26 +1,19 @@
-/**
- * Buffered Text Block
- *
- * Wraps TextBlock with useTextBuffer for smooth streaming.
- * Exists as a separate component because hooks can't be called
- * conditionally inside PartsRenderer's map callback.
- *
- * During streaming: shows text smoothly via buffer (muted opacity).
- * After done: falls through to regular TextBlock (no buffer needed).
- */
-
+import type { BubbleJoins } from "../bubble";
 import { useTextBuffer } from "../../hooks/useTextBuffer";
 import { TextBlock } from "./TextBlock";
 
 interface BufferedTextBlockProps {
   text: string;
   isStreaming: boolean;
+  bubble?: BubbleJoins;
 }
 
-export function BufferedTextBlock({ text, isStreaming }: BufferedTextBlockProps) {
-  const displayText = useTextBuffer(text, isStreaming);
-
+export function BufferedTextBlock({ text, isStreaming, bubble }: BufferedTextBlockProps) {
   return (
-    <TextBlock block={displayText} role="assistant" weight={isStreaming ? "muted" : "normal"} />
+    <TextBlock
+      block={useTextBuffer(text, isStreaming)}
+      bubble={bubble}
+      muted={isStreaming && !bubble}
+    />
   );
 }

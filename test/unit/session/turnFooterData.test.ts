@@ -26,10 +26,14 @@ describe("getTurnFooterData", () => {
       }
     );
     expect(
-      getTurnFooterData([createMessage({ sent_at: new Date(endedAt).toISOString() })], promptTime, {
-        turnId: "turn",
-        startedAt,
-      })
+      getTurnFooterData(
+        [[createMessage({ sent_at: new Date(endedAt).toISOString() })]],
+        promptTime,
+        {
+          turnId: "turn",
+          startedAt,
+        }
+      )
     ).toMatchObject({ startedAt, durationMs: 3000 });
   });
 
@@ -91,7 +95,7 @@ describe("getTurnFooterData", () => {
       }),
     ];
 
-    expect(getTurnFooterData(messages, "2026-04-13T10:00:00.000Z")).toEqual({
+    expect(getTurnFooterData([messages], "2026-04-13T10:00:00.000Z")).toEqual({
       copyText: "Done.",
       startedAt: Date.parse("2026-04-13T10:00:00.000Z"),
       durationMs: 9000,
@@ -118,7 +122,7 @@ describe("getTurnFooterData", () => {
       }),
     ];
 
-    expect(getTurnFooterData(messages, "2026-04-13T10:00:00.000Z")).toEqual({
+    expect(getTurnFooterData([messages], "2026-04-13T10:00:00.000Z")).toEqual({
       copyText: "Short answer",
       startedAt: Date.parse("2026-04-13T10:00:00.000Z"),
       durationMs: 6000,
@@ -145,14 +149,14 @@ describe("getTurnFooterData", () => {
     ];
 
     const turn = { turnId: "turn", endedAt: Date.parse("2026-04-13T10:00:08.000Z") };
-    expect(getTurnFooterData(messages, "not-a-date", turn)).toEqual({
+    expect(getTurnFooterData([messages], "not-a-date", turn)).toEqual({
       copyText: "Partial response",
       startedAt: null,
       durationMs: null,
       tokens: null,
       cost: null,
     });
-    expect(getTurnFooterData(messages, "2026-04-13T10:00:00.000Z", turn)).toEqual({
+    expect(getTurnFooterData([messages], "2026-04-13T10:00:00.000Z", turn)).toEqual({
       copyText: "Partial response",
       startedAt: Date.parse("2026-04-13T10:00:00.000Z"),
       durationMs: 8000,
@@ -181,7 +185,7 @@ describe("getTurnFooterData", () => {
     ];
 
     expect(
-      getTurnFooterData(messages, "2026-04-13T10:00:00.000Z", {
+      getTurnFooterData([messages], "2026-04-13T10:00:00.000Z", {
         turnId: "turn",
         tokens: { input: 100, output: 20, cache: { read: 5, write: 1 } },
         cost: 0.0123,

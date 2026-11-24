@@ -10,6 +10,7 @@ import path from "node:path";
 import { chromium } from "playwright";
 import Database from "better-sqlite3";
 import { createServer } from "vite";
+import { TELL_USER } from "../../shared/agent-message.ts";
 import { SCHEMA_SQL } from "../../shared/schema.ts";
 import { LOOPBACK_WEB_ORIGINS } from "../../shared/web-origins.ts";
 import { freePort } from "./remote-access/stack.mjs";
@@ -63,7 +64,15 @@ async function run() {
     directory
   );
   const chats = {};
-  for (const name of ["order", "long", "nested", "refusal", "claude-code", "codex-app-server"]) {
+  for (const name of [
+    "order",
+    "long",
+    "nested",
+    "bubbles",
+    "refusal",
+    "claude-code",
+    "codex-app-server",
+  ]) {
     const workspace = crypto.randomUUID(),
       session = crypto.randomUUID();
     chats[name] = { workspace, session };
@@ -252,22 +261,40 @@ async function run() {
       await page.goto(`${base}s/local/w/${chats[name].workspace}`, { timeout: 120_000 });
       await page.getByRole("log").waitFor();
     };
+    const chooseView = async (command) => {
+      await page.keyboard.press("Control+k");
+      await page.getByRole("dialog").getByRole("combobox").fill(command);
+      await page.getByRole("option", { name: command, exact: true }).click();
+    };
     const logView = page.getByRole("log");
     const order = () =>
       logView
         .locator(".assistant-turn p, button[aria-label*=' activity'], [role=separator][aria-label]")
         .evaluateAll((nodes) =>
-          nodes.map((node) =>
-            node.tagName === "BUTTON"
-              ? "activity"
-              : (node.getAttribute("aria-label") ?? node.textContent)
-          )
+          nodes
+            .filter((node) => !node.closest("[inert]"))
+            .map((node) =>
+              node.tagName === "BUTTON"
+                ? "activity"
+                : (node.getAttribute("aria-label") ?? node.textContent)
+            )
         );
     await go("order");
     if (desktopCss) await page.locator("html.electron").waitFor();
     const turn = fixture(chats.order.session, "order");
     await emit(...turn.start("Check the transcript order."), turn.text("Progress A"), turn.tool());
-    await logView.getByText("Progress A", { exact: true }).waitFor();
+    await logView
+      .getByRole("button", { name: "Expand activity, Activity · 1 tool call" })
+      .waitFor();
+    const liveText = await logView
+      .getByText("Progress A", { exact: true })
+      .evaluateHandle((el) => el.firstChild);
+    await chooseView("Show full run");
+    await logView.locator(".agent-words").waitFor({ state: "detached" });
+    assert(
+      await liveText.evaluate((node) => node?.isConnected),
+      "switching readings kept the text node"
+    );
     const first = logView.getByRole("button", { name: /Expand activity/ });
     await first.click();
     const groupId = await logView
@@ -282,7 +309,7 @@ async function run() {
     await emit(c1);
     await logView.getByRole("separator", { name: "Compacting", exact: true }).waitFor();
     await emit(
-      turn.text("Progress B"),
+      turn.send("Progress B"),
       turn.compact("first", "completed"),
       turn.tool(),
       turn.compact("second", "completed"),
@@ -344,6 +371,7 @@ async function run() {
       }
     );
 
+    await chooseView("Show chat bubbles");
     await check("a task keeps child progress and activity nested across two messages", async () => {
       const task = fixture(chats.nested.session, "nested");
       const parent = task.tool("task");
@@ -360,11 +388,13 @@ async function run() {
         task.end("end_turn")
       );
       await go("nested");
-      await logView.getByRole("button", { name: /Expand activity/ }).click();
+      await logView.getByRole("button", { name: /Expand activity, Worked/ }).click();
+      await logView.getByRole("button", { name: /Expand activity, Activity/ }).click();
       assert.equal(await logView.getByText("Child progress A", { exact: true }).count(), 0);
       await logView.getByRole("button", { name: "Expand agent Review the changes" }).click();
       await logView.getByText("Child progress B", { exact: true }).waitFor();
       assert.deepEqual(await order(), [
+        "activity",
         "activity",
         "Child progress A",
         "activity",
@@ -372,6 +402,135 @@ async function run() {
       ]);
     });
 
+    await check(
+      "parallel work and a kept answer retain their nodes across settlement",
+      async () => {
+        await go("bubbles");
+        const reply = fixture(chats.bubbles.session, "message");
+        const parallel = reply.tool();
+        const done = parallel.part.state;
+        parallel.part.state = {
+          status: "in_progress",
+          input: done.input,
+          title: "Checking the tag",
+          time: { start: 1 },
+        };
+        await emit(
+          ...reply.start("Check the release."),
+          parallel,
+          reply.send("The tag matches."),
+          reply.tool(),
+          reply.text("Ready.", "streaming")
+        );
+        await logView.getByText("The tag matches.", { exact: true }).waitFor();
+        await logView
+          .getByRole("button", { name: "Expand activity, Checking the tag · 1 tool call" })
+          .waitFor();
+        const liveAnswer = await logView.getByText("Ready.", { exact: true }).elementHandle();
+        const last = logView.getByRole("button", {
+          name: "Expand activity, Activity · 1 tool call",
+        });
+        const disclosure = await last.elementHandle();
+        await last.click();
+        const details = await page
+          .locator(`[id="${await disclosure.getAttribute("aria-controls")}"]`)
+          .elementHandle();
+        parallel.part.state = done;
+        await emit(parallel, reply.finishText("Ready."), reply.end("end_turn"));
+        const summary = logView.getByRole("button", { name: /^Expand activity, Worked for/ });
+        await summary.waitFor();
+        assert(await liveAnswer.evaluate((el) => el.isConnected && !el.closest("[inert]")));
+        assert(await details.evaluate((el) => el.isConnected && !!el.closest("[inert]")));
+        await summary.click();
+        assert(
+          await disclosure.evaluate(
+            (el) =>
+              el.isConnected &&
+              !el.closest("[inert]") &&
+              el.getAttribute("aria-expanded") === "true"
+          )
+        );
+        await logView.getByText("The tag matches.", { exact: true }).waitFor();
+        await page.reload();
+        await logView.getByText("Ready.", { exact: true }).waitFor();
+        assert.deepEqual(await order(), ["activity", "Ready."]);
+        const oldSend = logView.getByText("The tag matches.", { exact: true });
+        assert.equal(await oldSend.count(), 0, "unseen historical work is not mounted");
+        await summary.click();
+        const seen = await oldSend.elementHandle();
+        await logView.getByRole("button", { name: /^Collapse activity, Worked for/ }).click();
+        assert(await seen.evaluate((el) => el.isConnected && !!el.closest("[inert]")));
+      }
+    );
+    await check("a retained send joins only visible bubbles", async () => {
+      const turn = fixture(chats.bubbles.session, "joined");
+      await emit(
+        ...turn.start("Check the tag."),
+        turn.send("The tag is ready."),
+        turn.text("Checking approvals."),
+        turn.tool()
+      );
+      const sent = logView.getByText("The tag is ready.", { exact: true });
+      const corners = () =>
+        sent.evaluate((p) => {
+          const style = globalThis.getComputedStyle(p.closest("article"));
+          return [parseFloat(style.borderTopLeftRadius), parseFloat(style.borderBottomLeftRadius)];
+        });
+      await sent.waitFor();
+      const [outside, join] = await corners();
+      assert.ok(join < outside);
+      await emit(turn.end("end_turn"));
+      await logView
+        .locator('[data-message-id="joined-reply-1"]')
+        .getByRole("button", { name: /^Expand activity, Worked/ })
+        .waitFor();
+      assert.deepEqual(await corners(), [outside, outside]);
+    });
+    for (const harness of ["codex-app-server", "claude-code"]) {
+      await check(
+        `a stored ${harness} plan with no prose keeps its card after reload`,
+        async () => {
+          const { session } = chats[harness];
+          const planTurn = fixture(session, "plan-" + harness);
+          const prior = planTurn.tool(),
+            plan = planTurn.tool("switch_mode");
+          const input = { plan: "Verify the release before publishing." };
+          plan.part.toolName = harness === "codex-app-server" ? "plan" : "ExitPlanMode";
+          const time = { start: 1, end: 2 };
+          plan.part.state =
+            harness === "codex-app-server"
+              ? { status: "completed", input, output: "", time }
+              : {
+                  status: "failed",
+                  input,
+                  error: "The user doesn't want to proceed with this plan.",
+                  time,
+                };
+          await emit(
+            ...planTurn.start("Prepare a release plan."),
+            prior,
+            plan,
+            planTurn.end("end_turn")
+          );
+          await go(harness);
+          const stored = await backend.read("messages", { sessionId: session });
+          const reply = stored.messages.find((message) => message.id === plan.part.messageId);
+          assert.deepEqual(
+            reply.parts.map((part) => [part.type, part.toolName, part.state.status]),
+            [
+              ["tool", "Bash", "completed"],
+              ["tool", plan.part.toolName, plan.part.state.status],
+            ]
+          );
+          await page.reload();
+          const card = logView.getByText(input.plan, { exact: true });
+          await card.waitFor();
+          assert(await card.evaluate((el) => !el.closest("[inert]")));
+          assert.equal(await logView.getByRole("button", { name: "Copy response" }).count(), 0);
+        }
+      );
+    }
+    await chooseView("Show full run");
     await check("the long turn has twelve independent, single-line groups", async () => {
       const long = fixture(chats.long.session, "long");
       const events = long.start("Review the changes and run the checks.");
@@ -615,6 +774,17 @@ function fixture(sessionId, turnId) {
       });
     },
     text: (text, state = "done") => part("text", { text, state }),
+    send: (message) =>
+      part("tool", {
+        toolName: TELL_USER,
+        toolCallId: messageId + "-call-" + partIndex,
+        state: {
+          status: "completed",
+          input: { message },
+          output: "Sent",
+          time: { start: 1, end: 2 },
+        },
+      }),
     delta: (text) =>
       event("message.part.delta", {
         messageId,

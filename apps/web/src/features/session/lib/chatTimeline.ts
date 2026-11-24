@@ -8,7 +8,7 @@ import {
 import type { ConversationState } from "@shared/protocol-types";
 import { cn } from "@/shared/lib/utils";
 import { conversationView } from "./conversationView";
-import type { Compaction, Message, MessageRole, SessionTurn } from "../types";
+import type { Compaction, Message, SessionTurn } from "../types";
 import type { CloudEnvEntry } from "../store/cloudEnvStore";
 import type { WorkspaceStart } from "@/features/workspace/lib/startState";
 
@@ -24,7 +24,8 @@ export type AssistantTurnData = {
   record?: SessionTurn;
   messages: Message[];
   /** Only the final group of a settled turn carries its footer. */
-  footerMessages?: Message[];
+  footerGroups?: Message[][];
+  ended: boolean;
   afterUserId?: string;
   isStreaming: boolean;
   startedAt: string | null;
@@ -65,8 +66,8 @@ export interface ChatTimeline {
   /** What the agent is doing right now — the activity indicator's variant. */
   activity: AgentActivity;
   activeStartedAt: string | null;
-  /** The last RENDERED message's role, for the indicator's top margin. */
-  lastRole: MessageRole | null;
+  /** A prompt or empty transcript can show progress before a reply has its own slot. */
+  awaitingReply: boolean;
 }
 
 /**
@@ -106,7 +107,7 @@ export function buildChatTimeline(
     ),
     activity: agentActivity(conversation),
     activeStartedAt: turnStartedAt(rendered, openTurn),
-    lastRole: grouped.at(-1)?.type ?? null,
+    awaitingReply: grouped.at(-1)?.type !== "assistant",
   };
 }
 
@@ -172,7 +173,7 @@ function groupTurns(
 ): Turn[] {
   const unplaced = new Map(records.map((record) => [record.turnId, record]));
   const turns: Turn[] = [];
-  const splitReplies = new Map<string, Message[]>();
+  const splitReplies = new Map<string, Message[][]>();
   let index = 0;
   let user: Message | undefined;
   let startedAt: string | null = null;
@@ -194,8 +195,8 @@ function groupTurns(
 
     const continues = !!group.turnId && rendered[index]?.turn_id === group.turnId;
     const earlier = splitReplies.get(group.turnId);
-    if (earlier) earlier.push(...slice);
-    else if (continues) splitReplies.set(group.turnId, [...slice]);
+    if (earlier) earlier.push(slice);
+    else if (continues) splitReplies.set(group.turnId, [slice]);
     const record = continues ? undefined : unplaced.get(group.turnId);
     if (record) unplaced.delete(group.turnId);
     turns.push({
@@ -203,21 +204,24 @@ function groupTurns(
       turnId: group.turnId,
       record,
       messages: slice,
-      footerMessages: !continues && group.turnId !== openTurnId ? (earlier ?? slice) : undefined,
+      ended: group.turnId !== openTurnId,
+      footerGroups: !continues && group.turnId !== openTurnId ? (earlier ?? [slice]) : undefined,
       afterUserId: earlier ? user?.id : undefined,
       isStreaming: false,
       startedAt,
     });
   }
 
-  // A turn can end after a user message, including a steer, with no further reply.
+  // Reserve the same reply row before the first part and after a wordless end.
   for (const record of unplaced.values()) {
-    if (record.endedAt === undefined && !record.stopReason) continue;
+    const ended = record.endedAt !== undefined || !!record.stopReason;
+    if (!ended && record.turnId !== openTurnId) continue;
     let anchor = turns.findLastIndex(
       (item) => item.type === "user" && item.message.turn_id === record.turnId
     );
     const lastUser = turns[anchor];
-    if (anchor === -1) {
+    if (anchor === -1 && !ended) anchor = turns.length - 1;
+    else if (anchor === -1) {
       const at = record.startedAt ?? record.endedAt;
       if (at !== undefined) anchor = turns.findLastIndex((item) => itemEndTime(item) <= at);
     }
@@ -227,7 +231,8 @@ function groupTurns(
       turnId: record.turnId,
       record,
       messages: [],
-      footerMessages: earlier ?? [],
+      ended,
+      footerGroups: ended ? (earlier ?? [[]]) : undefined,
       afterUserId: earlier && lastUser?.type === "user" ? lastUser.message.id : undefined,
       isStreaming: false,
       startedAt: turnStartedAt(rendered, record),
@@ -286,7 +291,7 @@ function turnSpacingClasses(
   const bottomClass = (() => {
     if (turn.type === "compaction") return "pb-0";
     if (turn.type === "cloudEnv" || turn.type === "start") return "pb-0";
-    if (isUser) return USER_PADDING_CLASS;
+    if (isUser) return nextTurn?.type === "user" ? TIGHT_PADDING_CLASS : USER_PADDING_CLASS;
     // Assistant turn
     if (nextTurn?.type === "user") return "pb-0";
     if (nextTurn) return TIGHT_PADDING_CLASS;

@@ -506,18 +506,18 @@ describe("makeCloudFrameHandler", () => {
       events: [],
     });
     const settledHistory = [
-      { type: "assistant", turnId: "old", footerMessages: [] },
-      { type: "assistant", turnId: "Old", footerMessages: [] },
+      { type: "assistant", turnId: "old", footerGroups: [[]] },
+      { type: "assistant", turnId: "Old", footerGroups: [[]] },
     ];
     expect(items()).toMatchObject([
       ...settledHistory,
-      { type: "assistant", turnId: "t1", footerMessages: undefined, isStreaming: true },
+      { type: "assistant", turnId: "t1", footerGroups: undefined, isStreaming: true },
     ]);
 
     onFrame({ type: "turn.ended", turnId: "t1", stopReason: "end_turn", timestamp: base + 650 });
     const history = [
       ...settledHistory,
-      { type: "assistant", turnId: "t1", footerMessages: [{ id: "m1" }] },
+      { type: "assistant", turnId: "t1", footerGroups: [[{ id: "m1" }]] },
       {
         type: "compaction",
         compaction: {
@@ -554,12 +554,12 @@ describe("makeCloudFrameHandler", () => {
     });
     expect(items()).toMatchObject([
       ...history,
-      { type: "assistant", turnId: "t2", footerMessages: undefined, isStreaming: true },
+      { type: "assistant", turnId: "t2", footerGroups: undefined, isStreaming: true },
     ]);
     onFrame({ type: "turn.ended", turnId: "t2", stopReason: "end_turn", timestamp: base + 950 });
     expect(items()).toMatchObject([
       ...history,
-      { type: "assistant", turnId: "t2", footerMessages: [{ id: "m2" }] },
+      { type: "assistant", turnId: "t2", footerGroups: [[{ id: "m2" }]] },
       { type: "compaction", compaction: { compaction_id: "c2" } },
     ]);
     const page = qc.getQueryData<PaginatedMessages>(messagesKey(SESSION))!;

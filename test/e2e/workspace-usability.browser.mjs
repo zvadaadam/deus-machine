@@ -134,7 +134,7 @@ function App() {
           <button onClick={() => setPhase(p => p + 1)}>Advance turn</button>
           <button onClick={() => setLaterTool(true)}>Run another tool</button>
           <SessionProvider sessionStatus={phase === 1 ? "idle" : "working"} workspaceId="workspace" subagentMessages={new Map()}>
-            <AssistantTurn messages={messages} footerMessages={phase ? messages : undefined} isStreaming={phase === 0} turn={phase ? {turnId: "turn", stopReason: "end_turn", endedAt: 1} : undefined} />
+            <AssistantTurn view="bubbles" messages={messages} ended={phase > 0} footerGroups={phase ? [messages] : undefined} workingIndicator={phase === 0 ? <span>Working</span> : null} turn={phase ? {turnId: "turn", stopReason: "end_turn", endedAt: 1} : undefined} />
           </SessionProvider>
         </>}
       </main>
@@ -490,32 +490,28 @@ try {
   await page.screenshot({ path: path.join(artifacts, "cloud-desktop.png") });
 
   await page.getByRole("button", { name: "Chat", exact: true }).click();
-  await page.getByText("The useful answer stays visible.", { exact: true }).waitFor();
-  const disclosure = page.getByRole("button", { name: /Expand activity/ });
+  const answer = page.getByText("The useful answer stays visible.", { exact: true });
+  const disclosure = page.getByRole("button", { name: "Expand activity, Activity · 1 tool call" });
+  await disclosure.waitFor();
+  await answer.waitFor();
+  const activityId = await disclosure.getAttribute("aria-controls");
   await disclosure.click();
+  const details = page.locator(`[id="${activityId}"]`);
+  const node = await details.elementHandle();
   await page.getByRole("button", { name: "Toggle thinking details" }).waitFor();
-  const activityId = await page
-    .getByRole("button", { name: /Collapse activity/ })
-    .getAttribute("aria-controls");
-  await page.evaluate((id) => {
-    window.activityNode = document.getElementById(id);
-  }, activityId);
   await page.getByRole("button", { name: "Run another tool" }).click();
   await page.getByText("Build project · 1 tool call", { exact: true }).waitFor();
-  await page.waitForFunction(() => document.querySelector(".assistant-turn .opacity-60") === null);
   for (let i = 0; i < 2; i++) {
     await page.getByRole("button", { name: "Advance turn" }).click();
-    assert.equal(
-      await page.getByRole("button", { name: /Collapse activity/ }).getAttribute("aria-expanded"),
-      "true"
-    );
+    await page.getByRole("button", { name: "Copy response" }).waitFor();
     assert(
-      await page.evaluate((id) => window.activityNode === document.getElementById(id), activityId),
-      "Completing or starting another turn must not remount activity"
+      await node.evaluate((el) => el.isConnected),
+      "The open fold survives the end of the turn"
     );
   }
-  await page.getByRole("button", { name: /Collapse activity/ }).click();
-  await page.getByText("The useful answer stays visible.", { exact: true }).waitFor();
+  await page.getByRole("button", { name: /^Expand activity, Worked/ }).click();
+  await page.locator(`button[aria-controls="${activityId}"]`).click();
+  await answer.waitFor();
   await page.screenshot({ path: path.join(artifacts, "chat-desktop.png") });
 
   await page.getByRole("button", { name: "Files", exact: true }).click();
