@@ -104,16 +104,26 @@ it("folds a read steer between replies and finishes the same turn once", () => {
       "before",
       createTextPart({ sessionId, messageId: "before" }, "First reply", false)
     );
-    message("user", 2, steerMessageId("s"), createSteerEchoParts("Focus on the tests", "s")[0]);
+    message("assistant", 2, "in-progress", {
+      type: "tool",
+      id: "tool",
+      sessionId,
+      messageId: "in-progress",
+      toolCallId: "build",
+      toolName: "Bash",
+      state: { status: "in_progress", input: {}, title: "Building", time: { start: 1 } },
+    });
+    message("user", 3, steerMessageId("s"), createSteerEchoParts("Focus on the tests", "s")[0]);
     message(
       "assistant",
-      3,
+      4,
       "after",
       createTextPart({ sessionId, messageId: "after" }, "Second reply", false)
     );
 
     const bubbles = render("working");
     expect(bubbles).toMatch(/Review the change.*First reply.*Focus on the tests.*Second reply/s);
+    expect(bubbles).toContain('aria-label="Expand activity, Building · 1 tool call"');
     expect(bubbles).not.toMatch(/<article[^>]*\bopacity-60\b/);
 
     client.setQueryData(queryKeys.settings.all, { chat_view: "full" });
@@ -176,7 +186,7 @@ describe("session alert visibility", () => {
 });
 
 it.each(["needs_response", "needs_plan_response"] as const)(
-  "%s keeps the last turn open without presenting it as streaming",
+  "%s reads live work from the open turn and keeps the progress slot idle",
   (sessionStatus) => {
     // The request can reach the chat before its turn record or the next part update.
     const part = { sessionId: "session-1", messageId: "reply" };
@@ -219,7 +229,7 @@ it.each(["needs_response", "needs_plan_response"] as const)(
           })
         )
       );
-      expect(html).toContain('aria-label="Expand activity, Reasoning"');
+      expect(html).toContain('aria-label="Expand activity, Thinking"');
       expect(html).toContain(">README.md<");
       expect(html).not.toContain("Copy response");
       expect(html).not.toContain("Auto-compacted");

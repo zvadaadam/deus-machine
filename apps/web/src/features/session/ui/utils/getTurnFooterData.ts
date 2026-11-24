@@ -31,7 +31,7 @@ export function getTurnFooterData(
     copyText:
       groups
         .flatMap((group) => answerParts(group.flatMap((message) => message.parts ?? [])))
-        .map((part) => part.text)
+        .map((part) => part.text.trim())
         .join("\n\n") || null,
     startedAt: start,
     durationMs: start != null && end != null && end >= start ? end - start : null,

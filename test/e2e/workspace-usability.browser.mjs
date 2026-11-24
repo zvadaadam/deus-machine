@@ -25,6 +25,7 @@ import { GithubCloudAccess } from "@/features/settings/ui/sections/GithubCloudAc
 import { CloudSection } from "@/features/settings/ui/sections/CloudSection";
 import { OnboardingOverlay } from "@/features/onboarding/ui/OnboardingOverlay";
 import { AssistantTurn } from "@/features/session/ui/AssistantTurn";
+import { TurnFooterSlot } from "@/features/session/ui/TurnFooter";
 import { SessionComposer } from "@/features/session/ui/SessionComposer";
 import { SessionPanel } from "@/features/session/ui/SessionPanel";
 import { composerStore, emptyComposer, sessionComposerActions } from "@/features/session/store/sessionComposerStore";
@@ -112,6 +113,7 @@ function App() {
   const [view, setView] = useState(location.search.startsWith("?welcome") ? "Welcome" : location.search.startsWith("?direct") ? "Direct" : location.search === "?history" ? "History" : location.search ? "Onboarding" : "GitHub");
   const [phase, setPhase] = useState(0);
   const [laterTool, setLaterTool] = useState(false);
+  const [workedOpen, setWorkedOpen] = useState(false);
   const messages: any[] = [{ id: "m", session_id: "s", turn_id: "turn", role: "assistant", seq: 1, parts: [
     { type: "reasoning", id: "r", text: "Check the project before changing it.", state: "done" },
     { type: "tool", id: "t", toolCallId: "t", toolName: "Bash", kind: "execute", state: { status: "completed", input: {command: "bun test"}, output: "All checks passed", title: "Run tests" } },
@@ -134,7 +136,7 @@ function App() {
           <button onClick={() => setPhase(p => p + 1)}>Advance turn</button>
           <button onClick={() => setLaterTool(true)}>Run another tool</button>
           <SessionProvider sessionStatus={phase === 1 ? "idle" : "working"} workspaceId="workspace" subagentMessages={new Map()}>
-            <AssistantTurn view="bubbles" messages={messages} ended={phase > 0} footerGroups={phase ? [messages] : undefined} workingIndicator={phase === 0 ? <span>Working</span> : null} turn={phase ? {turnId: "turn", stopReason: "end_turn", endedAt: 1} : undefined} />
+            <AssistantTurn view="bubbles" messages={messages} ended={phase > 0} streaming={phase === 0} expanded={workedOpen} onToggleWorked={() => setWorkedOpen(!workedOpen)} footerGroups={phase ? [messages] : undefined} progressSlot={phase === 0 ? <TurnFooterSlot>Working</TurnFooterSlot> : undefined} turn={phase ? {turnId: "turn", stopReason: "end_turn", endedAt: 1} : undefined} />
           </SessionProvider>
         </>}
       </main>
@@ -509,7 +511,22 @@ try {
       "The open fold survives the end of the turn"
     );
   }
-  await page.getByRole("button", { name: /^Expand activity, Worked/ }).click();
+  const worked = page.getByRole("button", { name: /^Expand activity, Worked/ });
+  await page.keyboard.press("Tab");
+  await worked.focus();
+  assert(
+    await worked.evaluate((button) => {
+      const rows = document.getElementById(button.getAttribute("aria-controls"));
+      return (
+        rows &&
+        !rows.contains(button) &&
+        button.matches(":focus-visible") &&
+        globalThis.getComputedStyle(button).boxShadow.includes("2px inset")
+      );
+    }),
+    "Worked has visible keyboard focus outside its controlled rows"
+  );
+  await worked.press("Enter");
   await page.locator(`button[aria-controls="${activityId}"]`).click();
   await answer.waitFor();
   await page.screenshot({ path: path.join(artifacts, "chat-desktop.png") });

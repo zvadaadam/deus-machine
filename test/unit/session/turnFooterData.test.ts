@@ -104,6 +104,20 @@ describe("getTurnFooterData", () => {
     });
   });
 
+  it("trims each passage before joining the copied reply", () => {
+    const parts = ["\n  First paragraph.  ", "  Second paragraph.\n"].map((text, index) => ({
+      id: String(index),
+      sessionId: "session-1",
+      messageId: "message-1",
+      type: "text" as const,
+      state: "done" as const,
+      text,
+    }));
+    expect(getTurnFooterData([[createMessage({ parts })]]).copyText).toBe(
+      "First paragraph.\n\nSecond paragraph."
+    );
+  });
+
   it("falls back to the last assistant sent_at when no part timings are available", () => {
     const messages: Message[] = [
       createMessage({

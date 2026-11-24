@@ -71,7 +71,7 @@ export function WorkspaceStartState({ workspace, className }: WorkspaceStartStat
                   cloud={workspace.kind === "cloud"}
                   subagentMessages={NO_SUBAGENTS}
                 >
-                  <MessageItem message={waiting} isLastInTurn />
+                  <MessageItem message={waiting} />
                 </SessionProvider>
               </div>
             )}

@@ -1,15 +1,6 @@
-/**
- * Message Item
- *
- * Renders a single message in the chat:
- * - Assistant messages: rendered via PartsRenderer (Parts model)
- * - User messages: iMessage-style bubble with text + images
- */
-
 import { tempo } from "@/shared/lib/tempo";
 import type { Message } from "@/shared/types";
 import { readUserMessageContent } from "../lib/userMessageContent";
-import { PartsRenderer } from "./blocks";
 import { TextBlock } from "./blocks/TextBlock";
 import { bubbleClass, type BubbleJoins } from "./bubble";
 import { SentFrom } from "./SentFrom";
@@ -25,33 +16,14 @@ const COLLAPSE_MAX_HEIGHT = 144;
 
 interface MessageItemProps extends BubbleJoins {
   message: Message;
-  isLastInTurn?: boolean;
-  isStreamingTurn?: boolean;
 }
 
-/** Assistant message — renders via PartsRenderer. */
-const AssistantMessage = memo(function AssistantMessage({
+/** The person's message, including attachments and its joins with adjacent user bubbles. */
+export const MessageItem = memo(function MessageItem({
   message,
-  isLastInTurn = false,
-  isStreamingTurn = false,
+  previous,
+  next,
 }: MessageItemProps) {
-  if (!message.parts || message.parts.length === 0) return null;
-
-  return (
-    <div
-      className={cn(
-        "relative",
-        "mr-auto w-full max-w-full",
-        "flex min-w-0 flex-col gap-1 overflow-x-hidden"
-      )}
-    >
-      <PartsRenderer parts={message.parts} isStreamingTurn={isStreamingTurn && isLastInTurn} />
-    </div>
-  );
-});
-
-/** User message — iMessage-style bubble. */
-const UserMessage = memo(function UserMessage({ message, previous, next }: MessageItemProps) {
   const { copy, copied } = useCopyToClipboard();
   const [isExpanded, setIsExpanded] = useState(false);
   const [shouldCollapse, setShouldCollapse] = useState(false);
@@ -156,12 +128,4 @@ const UserMessage = memo(function UserMessage({ message, previous, next }: Messa
       </div>
     </div>
   );
-});
-
-/** Route to AssistantMessage or UserMessage based on role. */
-export const MessageItem = memo(function MessageItem(props: MessageItemProps) {
-  if (props.message.role === "assistant") {
-    return <AssistantMessage {...props} />;
-  }
-  return <UserMessage {...props} />;
 });

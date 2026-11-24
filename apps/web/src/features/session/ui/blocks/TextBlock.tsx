@@ -97,7 +97,7 @@ export function TextBlock({
 
   if (role === "user") {
     return (
-      <p className="text-foreground text-base font-normal whitespace-pre-wrap">
+      <p className="text-foreground text-base font-normal wrap-anywhere whitespace-pre-wrap">
         {referenceSegments.length
           ? referenceSegments.map((segment, i) => {
               if (segment.type === "text") return <span key={i}>{segment.text}</span>;

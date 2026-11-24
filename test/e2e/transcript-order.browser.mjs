@@ -11,6 +11,7 @@ import { chromium } from "playwright";
 import Database from "better-sqlite3";
 import { createServer } from "vite";
 import { TELL_USER } from "../../shared/agent-message.ts";
+import { DEUS_TOOLS_SERVER } from "../../shared/mcp-servers.ts";
 import { SCHEMA_SQL } from "../../shared/schema.ts";
 import { LOOPBACK_WEB_ORIGINS } from "../../shared/web-origins.ts";
 import { freePort } from "./remote-access/stack.mjs";
@@ -435,10 +436,26 @@ async function run() {
         const details = await page
           .locator(`[id="${await disclosure.getAttribute("aria-controls")}"]`)
           .elementHandle();
+        await disclosure.focus();
+        assert(await disclosure.evaluate((el) => el === globalThis.document.activeElement));
         parallel.part.state = done;
         await emit(parallel, reply.finishText("Ready."), reply.end("end_turn"));
         const summary = logView.getByRole("button", { name: /^Expand activity, Worked for/ });
         await summary.waitFor();
+        await page.waitForFunction(
+          (el) => el.closest(".fold-row").getBoundingClientRect().height === 0,
+          details
+        );
+        assert(
+          await liveAnswer.evaluate(
+            (el) => el.closest(".fold-row").getBoundingClientRect().height > 0
+          )
+        );
+        assert(await summary.evaluate((button) => button === globalThis.document.activeElement));
+        assert.equal(
+          await summary.getAttribute("aria-controls"),
+          await liveAnswer.evaluate((el) => el.closest('[aria-live="off"]').id)
+        );
         assert(await liveAnswer.evaluate((el) => el.isConnected && !el.closest("[inert]")));
         assert(await details.evaluate((el) => el.isConnected && !!el.closest("[inert]")));
         await summary.click();
@@ -460,6 +477,43 @@ async function run() {
         const seen = await oldSend.elementHandle();
         await logView.getByRole("button", { name: /^Collapse activity, Worked for/ }).click();
         assert(await seen.evaluate((el) => el.isConnected && !!el.closest("[inert]")));
+      }
+    );
+    await check(
+      "a turn ending while the reader is scrolled back stays open until closed",
+      async () => {
+        const turn = fixture(chats.bubbles.session, "reading");
+        const passage = Array.from(
+          { length: 48 },
+          (_, i) => `Check ${i + 1} before publishing.`
+        ).join("\n\n");
+        await emit(
+          ...turn.start("Verify the release."),
+          turn.text(passage),
+          turn.tool(),
+          turn.text("Verified.")
+        );
+        const group = logView.locator('[data-message-id="reading-reply-1"]');
+        await group.getByText("Verified.", { exact: true }).waitFor();
+        await logView.evaluate((pane) => {
+          pane.scrollTop = pane.scrollHeight;
+        });
+        await logView.hover();
+        await page.mouse.wheel(0, -500);
+        await page.waitForFunction(() =>
+          globalThis.document
+            .querySelector('button[aria-label="Scroll to bottom"]')
+            .parentElement.classList.contains("opacity-100")
+        );
+        await emit(turn.end("end_turn"));
+        const worked = group.getByRole("button", { name: /^Collapse activity, Worked/ });
+        await worked.waitFor();
+        assert.equal(await worked.getAttribute("aria-expanded"), "true");
+        await worked.press("Enter");
+        await group.getByRole("button", { name: /^Expand activity, Worked/ }).waitFor();
+        await go("bubbles");
+        await logView.getByText("Verified.", { exact: true }).waitFor();
+        await group.getByRole("button", { name: /^Expand activity, Worked/ }).waitFor();
       }
     );
     await check("a retained send joins only visible bubbles", async () => {
@@ -776,12 +830,14 @@ function fixture(sessionId, turnId) {
     text: (text, state = "done") => part("text", { text, state }),
     send: (message) =>
       part("tool", {
-        toolName: TELL_USER,
+        kind: "other",
+        toolName: `mcp__${DEUS_TOOLS_SERVER}__${TELL_USER}`,
+        mcp: { server: DEUS_TOOLS_SERVER, tool: TELL_USER },
         toolCallId: messageId + "-call-" + partIndex,
         state: {
           status: "completed",
           input: { message },
-          output: "Sent",
+          output: "Message sent.",
           time: { start: 1, end: 2 },
         },
       }),

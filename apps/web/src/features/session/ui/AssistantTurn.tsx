@@ -15,9 +15,12 @@ interface AssistantTurnProps {
   turn?: SessionTurn;
   footerGroups?: Message[][];
   ended: boolean;
+  streaming: boolean;
+  expanded: boolean;
+  onToggleWorked: (id: string) => void;
   agentMessages?: boolean;
   /** The current reply keeps its slot when a disconnect or error clears progress before its end. */
-  workingIndicator?: ReactElement | null;
+  progressSlot?: ReactElement;
   startedAt?: string | null;
 }
 
@@ -27,8 +30,11 @@ export const AssistantTurn = memo(function AssistantTurn({
   turn,
   footerGroups,
   ended,
+  streaming,
+  expanded,
+  onToggleWorked,
   agentMessages,
-  workingIndicator,
+  progressSlot,
   startedAt,
 }: AssistantTurnProps) {
   const parts = useMemo(() => messages.flatMap((message) => message.parts ?? []), [messages]);
@@ -39,7 +45,6 @@ export const AssistantTurn = memo(function AssistantTurn({
   const cancelled = turn?.stopReason === "cancelled";
   const notice = cancelled ? "Response stopped" : turnStopNotice(turn?.stopReason);
   const NoticeIcon = cancelled ? Square : TriangleAlert;
-  const footerContent = footer ? <TurnFooter {...footer} /> : workingIndicator;
   return (
     <div
       className="assistant-turn flex w-full min-w-0 flex-col"
@@ -50,7 +55,9 @@ export const AssistantTurn = memo(function AssistantTurn({
         bubbles={view === "bubbles"}
         agentMessages={agentMessages}
         ended={ended}
-        isStreamingTurn={!!workingIndicator}
+        streaming={streaming}
+        expanded={expanded}
+        onToggle={() => onToggleWorked(messages[0].id)}
         durationMs={footerGroups?.length === 1 ? footer?.durationMs : null}
       />
       <AnimatePresence initial={false}>
@@ -65,7 +72,13 @@ export const AssistantTurn = memo(function AssistantTurn({
           </Collapse>
         )}
       </AnimatePresence>
-      {footerContent !== undefined && <TurnFooterSlot>{footerContent}</TurnFooterSlot>}
+      {footer ? (
+        <TurnFooterSlot>
+          <TurnFooter {...footer} />
+        </TurnFooterSlot>
+      ) : (
+        progressSlot
+      )}
     </div>
   );
 });

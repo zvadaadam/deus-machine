@@ -13,16 +13,19 @@ function card(part: Part): "keep" | "card" | undefined {
   const name = toolCardName(part);
   if (
     name === "BrowserScreenshot" ||
-    name === "recording_stop" ||
     (part.state.status === "completed" && part.state.content?.some((item) => item.type === "image"))
   )
     return "keep";
+  if (name === "recording_stop") return part.state.status === "completed" ? "keep" : "card";
   if (part.kind === "switch_mode" || QUESTION_AND_PLAN.has(name))
-    return part.state.status === "completed" ? "card" : "keep";
+    return part.state.status === "pending" || part.state.status === "in_progress" ? "keep" : "card";
   return undefined;
 }
 
-type TurnBlock = Part | { type: "activity"; id: string; parts: Part[] };
+type TurnBlock =
+  | Part
+  | { type: "activity"; id: string; parts: Part[] }
+  | { type: "typing"; id: string };
 type Parts = readonly (Part | UnknownPart)[];
 
 /** The rows never change order. Only a running chat with agent messages condenses native words. */
@@ -31,8 +34,11 @@ export function assistantTurnContent(parts: Parts, condensed = false): TurnBlock
   let work: Part[] = [];
   function finishWork() {
     if (!work.length) return;
-    const first = work.find((part) => part.type !== "text") ?? work[0];
-    rows.push({ type: "activity", id: first.id, parts: work });
+    const first = work.find((part) => part.type !== "text");
+    const last = work.at(-1);
+    if (first) rows.push({ type: "activity", id: first.id, parts: work });
+    else if (last?.type === "text" && last.state === "streaming")
+      rows.push({ type: "typing", id: last.id });
     work = [];
   }
   for (const raw of parts) {

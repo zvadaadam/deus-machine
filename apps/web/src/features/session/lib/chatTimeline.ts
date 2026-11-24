@@ -65,6 +65,7 @@ export interface ChatTimeline {
   spacings: string[];
   /** What the agent is doing right now — the activity indicator's variant. */
   activity: AgentActivity;
+  openTurnId?: string;
   activeStartedAt: string | null;
   /** A prompt or empty transcript can show progress before a reply has its own slot. */
   awaitingReply: boolean;
@@ -106,6 +107,7 @@ export function buildChatTimeline(
       turnSpacingClasses(item, items[i - 1] ?? null, items[i + 1] ?? null, i === 0)
     ),
     activity: agentActivity(conversation),
+    openTurnId,
     activeStartedAt: turnStartedAt(rendered, openTurn),
     awaitingReply: grouped.at(-1)?.type !== "assistant",
   };

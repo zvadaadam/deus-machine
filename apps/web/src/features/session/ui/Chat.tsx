@@ -17,8 +17,8 @@ import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 
 import { useWorkingDuration } from "@/shared/hooks";
 import { useAutoScroll } from "../hooks";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useMemo, useRef, useEffect } from "react";
+import { measureElement, useVirtualizer } from "@tanstack/react-virtual";
+import { useCallback, useMemo, useRef, useEffect, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { CircularPixelGrid } from "./CircularPixelGrid";
 import { CloudEnvGroup, useCloudEnvEntries } from "./CloudEnvProgress";
@@ -131,6 +131,7 @@ export function Chat({
     spacings: turnSpacings,
     activity,
     activeStartedAt,
+    openTurnId,
     awaitingReply,
   } = useMemo(
     () => buildChatTimeline(messages, compactions, active, cloudEnvEntries, turns, workspaceStart),
@@ -210,6 +211,28 @@ export function Chat({
     userSendCount,
   });
 
+  const [previousTurn, setPreviousTurn] = useState(openTurnId);
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  if (previousTurn !== openTurnId) {
+    setPreviousTurn(openTurnId);
+    // Keep every stretch the reader could return to, including ones outside the virtual window.
+    if (showScrollButton && previousTurn) {
+      const next = new Set(expanded);
+      for (const item of timeline) {
+        if (item.type === "assistant" && item.turnId === previousTurn && item.messages[0])
+          next.add(item.messages[0].id);
+      }
+      setExpanded(next);
+    }
+  }
+  const toggleWorked = useCallback((id: string) => {
+    setExpanded((open) => {
+      const next = new Set(open);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }, []);
+
   const list = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
     count: timeline.length,
@@ -217,14 +240,23 @@ export function Chat({
     estimateSize,
     overscan: 8,
     getItemKey,
+    measureElement: (element, entry, instance) => {
+      // The first measurement corrects an estimate. Only a mounted turn can fold around the reader.
+      instance.shouldAdjustScrollPositionOnItemSizeChange = entry
+        ? (item, delta, v) => (delta < 0 ? item.end : item.start) < (v.scrollOffset ?? 0)
+        : undefined;
+      return measureElement(element, entry, instance);
+    },
     onChange: (v) => {
       if (list.current) list.current.style.height = `${v.getTotalSize()}px`;
     },
   });
 
-  const workingIndicator = working ? (
-    <WorkingIndicator activity={activity} startedAt={activeStartedAt} />
-  ) : null;
+  const progressSlot = (
+    <TurnFooterSlot>
+      {working && <WorkingIndicator activity={activity} startedAt={activeStartedAt} />}
+    </TurnFooterSlot>
+  );
   const showSessionError = !!errorMessage && (sessionStatus === "error" || active);
 
   return (
@@ -283,6 +315,7 @@ export function Chat({
                   height: virtualizer.getTotalSize(),
                   width: "100%",
                   position: "relative",
+                  overflowAnchor: "none", // TanStack already corrects the scroll position.
                 }}
               >
                 {virtualizer.getVirtualItems().map((virtualItem) => {
@@ -348,8 +381,11 @@ export function Chat({
                               turn={t.record}
                               footerGroups={t.footerGroups}
                               ended={t.ended}
+                              streaming={t.isStreaming && working}
+                              expanded={expanded.has(t.messages[0]?.id)}
+                              onToggleWorked={toggleWorked}
                               agentMessages={agentMessages}
-                              workingIndicator={t.isStreaming ? workingIndicator : undefined}
+                              progressSlot={t.isStreaming ? progressSlot : undefined}
                               startedAt={t.startedAt}
                             />
                           ))
@@ -428,9 +464,7 @@ export function Chat({
                   </m.div>
                 )}
               </AnimatePresence>
-              {awaitingReply && workingIndicator && (
-                <TurnFooterSlot>{workingIndicator}</TurnFooterSlot>
-              )}
+              {awaitingReply && working && progressSlot}
             </div>
           </>
         )}

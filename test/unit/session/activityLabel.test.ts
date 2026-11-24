@@ -82,14 +82,13 @@ it("uses the last active part, with the tool's title, running title or card name
   expect(activityLabel([pending], false)).toBe("Activity · 1 tool call");
 });
 
-it("describes native typing in condensed work and independently names a still-running parallel call", () => {
-  expect(
-    activityLabel(
-      [{ ...message, type: "text", id: "words", text: "Checking", state: "streaming" }],
-      true
-    )
-  ).toBe("Typing…");
-  expect(activityLabel([tool("Bash", { ...running, title: "Run tests" })], true)).toBe(
-    "Run tests · 1 tool call"
-  );
+it("labels a work run while its trailing native words stream", () => {
+  const text: Part = {
+    ...message,
+    type: "text",
+    id: "words",
+    text: "Checking",
+    state: "streaming",
+  };
+  expect(activityLabel([tool("Read", done), text], true)).toBe("Typing… · 1 tool call");
 });

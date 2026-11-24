@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { assistantTurnContent, staysAtEnd } from "@/features/session/lib/assistantTurnContent";
 import { TELL_USER } from "@shared/agent-message";
+import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
 import { getTurnFooterData } from "@/features/session/ui/utils/getTurnFooterData";
 import { extractChatResources } from "@/features/session/lib/chatResources";
 import { buildChatTimeline } from "@/features/session/lib/chatTimeline";
@@ -30,11 +31,20 @@ const reasoning: Part = {
 };
 const shape = (blocks: ReturnType<typeof assistantTurnContent>) =>
   blocks.map((block) =>
-    block.type === "activity" ? block.parts.map((part) => part.id) : block.id
+    block.type === "activity"
+      ? block.parts.map((part) => part.id)
+      : block.type === "typing"
+        ? "Typing…"
+        : block.id
   );
 
 const send = (id: string, words = id) =>
-  tool(id, { toolName: TELL_USER, state: { ...done, input: { message: words } } });
+  tool(id, {
+    kind: "other",
+    toolName: `mcp__${DEUS_TOOLS_SERVER}__${TELL_USER}`,
+    mcp: { server: DEUS_TOOLS_SERVER, tool: TELL_USER },
+    state: { ...done, input: { message: words }, output: "Message sent." },
+  });
 const n = text("note"),
   a = text("answer"),
   w = tool("work"),
@@ -73,7 +83,7 @@ const picture = tool("picture", {
 const recording = tool("recording", { toolName: "deus_chat_tools.recording_stop" });
 type RowShape = (string | string[])[];
 it.each<[string, Part[], RowShape, RowShape, string[]]>([
-  ["text only", [a], ["answer"], [["answer"]], ["answer"]],
+  ["text only", [a], ["answer"], [], ["answer"]],
   ["tools then text", [w, a], [["work"], "answer"], [["work", "answer"]], ["answer"]],
   [
     "words between tools",
@@ -86,7 +96,7 @@ it.each<[string, Part[], RowShape, RowShape, string[]]>([
     "send mid-run",
     [n, s, w, a],
     ["note", "send", ["work"], "answer"],
-    [["note"], "send", ["work", "answer"]],
+    ["send", ["work", "answer"]],
     ["answer"],
   ],
   ["a closing send", [w, s], [["work"], "send"], [["work"], "send"], ["send"]],
@@ -94,7 +104,7 @@ it.each<[string, Part[], RowShape, RowShape, string[]]>([
     "closing send and text",
     [w, s, a],
     [["work"], "send", "answer"],
-    [["work"], "send", ["answer"]],
+    [["work"], "send"],
     ["send", "answer"],
   ],
   [
@@ -143,36 +153,30 @@ it.each<[string, Part[], RowShape, RowShape, string[]]>([
     "words following a card",
     [n, question, a],
     ["note", "asking", "answer"],
-    [["note"], "asking", ["answer"]],
+    ["asking"],
     ["answer", "asking"],
   ],
   [
     "a pending plan without its protocol kind",
     [waitingPlan, a],
     ["waiting-plan", "answer"],
-    ["waiting-plan", ["answer"]],
+    ["waiting-plan"],
     ["answer", "waiting-plan"],
   ],
   [
     "a failed tool followed by an answer",
     [failedCommand, a],
     ["failed-command", "answer"],
-    ["failed-command", ["answer"]],
+    ["failed-command"],
     ["answer"],
   ],
-  ["an answered card", [answered, a], ["answered", "answer"], ["answered", ["answer"]], ["answer"]],
-  [
-    "a dismissed plan, with text",
-    [n, failed],
-    ["note", "dismissed"],
-    [["note"], "dismissed"],
-    ["note"],
-  ],
+  ["an answered card", [answered, a], ["answered", "answer"], ["answered"], ["answer"]],
+  ["a dismissed plan, with text", [n, failed], ["note", "dismissed"], ["dismissed"], ["note"]],
   [
     "a picture and a recording",
     [n, picture, w, recording],
     ["note", "picture", ["work"], "recording"],
-    [["note"], "picture", ["work"], "recording"],
+    ["picture", ["work"], "recording"],
     ["note", "picture", "recording"],
   ],
   [
@@ -206,17 +210,28 @@ it("retains a recorded prose boundary between calls and names an empty live text
   };
   expect(shape(assistantTurnContent([w, blank, b]))).toEqual([["work"], ["B"]]);
   expect(shape(assistantTurnContent([{ ...blank, state: "streaming" }], true))).toEqual([
-    ["empty"],
+    "Typing…",
   ]);
   expect(staysAtEnd([blank])).toEqual(new Set());
   expect(assistantTurnContent([s])[0]).toMatchObject({ type: "text", id: "send", text: "send" });
 });
 
 it("anchors condensed work to its first non-word so its disclosure survives settlement", () => {
+  const writing = { ...n, type: "text", text: "note", state: "streaming" } as const;
+  expect(assistantTurnContent([writing], true)).toEqual([{ type: "typing", id: "note" }]);
+  expect(assistantTurnContent([writing, a], true)).toEqual([]);
+  expect(assistantTurnContent([n], true)).toEqual([]);
   const parts = [n, w, a, b, s];
   expect(assistantTurnContent(parts, true)[0].id).toBe("work");
   expect(assistantTurnContent(parts)[1].id).toBe("work");
   expect(assistantTurnContent([n, reasoning, w], true)[0].id).toBe("think");
+});
+
+it.each([question, waitingPlan, recording])("keeps a cancelled $id as a card boundary", (part) => {
+  const cancelled = { ...part, state: { status: "cancelled" as const, input: {}, time } };
+  expect(shape(assistantTurnContent([w, cancelled, b]))).toEqual([["work"], part.id, ["B"]]);
+  expect(staysAtEnd([n, cancelled])).toEqual(new Set(["note"]));
+  expect(staysAtEnd([cancelled])).toEqual(new Set([part.id]));
 });
 
 it("recognizes media in stored chats and keeps a failed tool as a full-run card", () => {

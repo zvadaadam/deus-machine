@@ -1,4 +1,4 @@
-import { memo, useId, useState } from "react";
+import { memo, useId, useState, type Ref } from "react";
 import { ChevronRight } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
 import { Collapse } from "@/components/ui/collapse";
@@ -9,20 +9,23 @@ import { activityLabel } from "./utils/activityLabel";
 
 export function ActivityButton({
   label,
+  buttonRef,
   controls,
   expanded,
   onToggle,
 }: {
   label: string;
+  buttonRef?: Ref<HTMLButtonElement>;
   controls: string;
   expanded: boolean;
   onToggle: () => void;
 }) {
   return (
     <button
+      ref={buttonRef}
       type="button"
       onClick={onToggle}
-      className="text-muted-foreground focus-visible:ring-ring flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left text-sm opacity-80 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:outline-none"
+      className="text-muted-foreground focus-visible:inset-ring-ring flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left text-sm opacity-80 transition-opacity hover:opacity-100 focus-visible:inset-ring-2 focus-visible:outline-none"
       aria-expanded={expanded}
       aria-controls={controls}
       aria-label={`${expanded ? "Collapse" : "Expand"} activity, ${label}`}
