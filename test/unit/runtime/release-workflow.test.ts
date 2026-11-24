@@ -49,6 +49,15 @@ describe("release workflow", () => {
     return { ...result, output: readFileSync(output, "utf8") };
   }
 
+  it("deploys the published release tag to the web", () => {
+    expect(parsed.jobs["deploy-web"]).toMatchObject({
+      needs: expect.arrayContaining(["publish-release", "validate-and-bump"]),
+      if: "${{ !inputs.dry_run }}",
+      uses: "./.github/workflows/deploy.yml",
+      with: { service: "web", ref: "${{ needs.validate-and-bump.outputs.tag }}" },
+    });
+  });
+
   it("releases the pushed tag without incrementing it", () => {
     const result = resolve({ tag: "v0.3.10" });
     expect(result.status).toBe(0);

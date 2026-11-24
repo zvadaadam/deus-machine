@@ -454,3 +454,16 @@ jobs:
           gh release edit "$TAG" \
             --repo "${{ github.repository }}" \
             --draft=false
+
+  deploy-web:
+    needs: [validate-and-bump, publish-release]
+    if: ${{ !inputs.dry_run }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/deploy.yml
+    with:
+      service: web
+      ref: ${{ needs.validate-and-bump.outputs.tag }}
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

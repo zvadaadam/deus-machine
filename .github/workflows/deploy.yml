@@ -1,6 +1,5 @@
 # Deploy cloud services to Cloudflare.
-# Auto-deploys on push to main when relevant files change.
-# Can also be triggered manually via workflow_dispatch.
+# Main deploys relay and landing changes. Release deploys the tagged web app.
 #
 # Services:
 #   relay   — Cloudflare Worker (relay.deusmachine.ai)
@@ -19,12 +18,21 @@ on:
     branches: [main]
     paths:
       - "apps/cloud-relay/**"
-      - "apps/web/**"
       - "apps/landing/**"
-      - "shared/**"
-      - "package.json"
-      - "bun.lock"
-      - "tsconfig.web.json"
+      - "shared/types/relay.ts"
+  workflow_call:
+    inputs:
+      service:
+        required: true
+        type: string
+      ref:
+        required: true
+        type: string
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: true
+      CLOUDFLARE_ACCOUNT_ID:
+        required: true
   workflow_dispatch:
     inputs:
       service:
@@ -37,24 +45,23 @@ on:
           - landing
           - all
         default: all
+      ref:
+        description: "Release tag name for web/all (vX.Y.Z). Optional branch or tag for relay/landing."
+        type: string
 
 # Every job only builds and pushes to Cloudflare (via CLOUDFLARE_API_TOKEN);
 # the GITHUB_TOKEN never needs write access.
 permissions:
   contents: read
 
-concurrency:
-  group: deploy-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
   # ── Detect which services changed (for push events) ──────────────
   changes:
     name: Detect Changes
+    if: ${{ !inputs.service }}
     runs-on: ubuntu-latest
     outputs:
       relay: ${{ steps.filter.outputs.relay }}
-      web: ${{ steps.filter.outputs.web }}
       landing: ${{ steps.filter.outputs.landing }}
     steps:
       - uses: actions/checkout@v4
@@ -66,12 +73,6 @@ jobs:
             relay:
               - 'apps/cloud-relay/**'
               - 'shared/types/relay.ts'
-            web:
-              - 'apps/web/**'
-              - 'shared/**'
-              - 'package.json'
-              - 'bun.lock'
-              - 'tsconfig.web.json'
             landing:
               - 'apps/landing/**'
 
@@ -80,11 +81,14 @@ jobs:
     name: Deploy Cloud Relay
     needs: changes
     runs-on: ubuntu-latest
+    concurrency: deploy-relay
     if: >-
-      (github.event_name == 'workflow_dispatch' && contains(fromJSON('["relay","all"]'), github.event.inputs.service)) ||
-      (github.event_name == 'push' && needs.changes.outputs.relay == 'true')
+      !cancelled() &&
+      (inputs.service == 'relay' || inputs.service == 'all' || needs.changes.outputs.relay == 'true')
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -118,13 +122,13 @@ jobs:
   # ── Deploy Web App (Cloudflare Pages) ────────────────────────────
   deploy-web:
     name: Deploy Web App
-    needs: changes
     runs-on: ubuntu-latest
-    if: >-
-      (github.event_name == 'workflow_dispatch' && contains(fromJSON('["web","all"]'), github.event.inputs.service)) ||
-      (github.event_name == 'push' && needs.changes.outputs.web == 'true')
+    concurrency: deploy-web
+    if: inputs.service == 'web' || inputs.service == 'all'
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.ref }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -150,23 +154,20 @@ jobs:
           command: pages deploy apps/web/dist/web --project-name=deus --branch=main
 
   # ── Deploy Landing + Root Edge Router (Cloudflare Worker) ────────
-  # Serialized AFTER deploy-web: the router reserves `/assets/*` for the
-  # landing, so it must never go live while a Pages build still emits app
-  # bundles under that prefix (`/app-assets` is the web build's prefix) — the
-  # app shell would 404 its own JavaScript until deploy-web caught up. When
-  # deploy-web is skipped (landing-only change), the web side is unchanged and
-  # the landing deploys alone.
+  # A manual "all" deploy publishes the web assets before the router that serves them.
   deploy-landing:
     name: Deploy Landing
     needs: [changes, deploy-web]
     runs-on: ubuntu-latest
+    concurrency: deploy-landing
     if: >-
       !cancelled() &&
       (needs.deploy-web.result == 'success' || needs.deploy-web.result == 'skipped') &&
-      ((github.event_name == 'workflow_dispatch' && contains(fromJSON('["landing","all"]'), github.event.inputs.service)) ||
-      (github.event_name == 'push' && needs.changes.outputs.landing == 'true'))
+      (inputs.service == 'landing' || inputs.service == 'all' || needs.changes.outputs.landing == 'true')
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

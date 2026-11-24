@@ -833,6 +833,11 @@ Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `s
 - Column changes, pre-launch (now): `shared/schema.ts` is the whole schema, not a migration replay. To add a column, put it in `SCHEMA_SQL` and, if existing databases should keep working, in `ADDITIVE_COLUMNS` (nullable or defaulted); anything else is a reset. At startup the backend compares the database with a fresh copy of `SCHEMA_SQL` (a missing column, a NOT NULL that differs, a leftover column an insert would fail on) and stops on a mismatch. After the backend exits, the desktop offers **Start Fresh**, which moves the database and its SQLite side files to a dated name beside the original. The installed app reopens. Under `bun run dev`, Deus quits and logs how to start it again. The CLI prints `PRELAUNCH_SCHEMA_RESET_HINT` with its fresh data directory option.
 - Column changes, post-launch: the above stops applying. Deprecate by renaming with a `DEPRECATED_` prefix, never drop.
 
+## Releases
+
+A merge to `main` deploys the relay and landing when their files change.
+The desktop, npm CLI and hosted web ship together from a release tag. See [docs/releases.md](docs/releases.md).
+
 ## Testing
 
 Run `bun run check` before pushing. It runs the CI groups for this platform and
