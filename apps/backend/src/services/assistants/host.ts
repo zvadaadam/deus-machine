@@ -82,13 +82,14 @@ import { getDatabase } from "../../lib/database";
 import { AgentServerDisconnectedError, AppError, ChatBusyError } from "../../lib/errors";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
 import { liveTurnId } from "../agent/service";
+import { queuedMessages } from "../agent/queue";
 import { answer as answerToolRequest, pendingFor } from "../agent/tool-relay";
+import { continuedSettings, startSettings, type TurnSettings } from "../agent/turn-settings";
 import { sendMessage, stopSession } from "../agent/turns";
 import { invalidate, onInvalidate, runAsThisComputer as run } from "../query-engine";
 import { getServerName } from "../server-name";
 import { assertMayWrite, refusalFor, storedAccess } from "./access";
 import { homeRelative } from "./home-relative";
-import { continuedSettings, startSettings, type TurnSettings } from "./turn-settings";
 import { replyFor, waitingOf } from "./waiting";
 
 /** How long a first task waits for its workspace to be ready. */
@@ -158,6 +159,7 @@ interface Row {
   is_hidden: number | null;
   chat: number | null;
   s_error: string | null;
+  error_category: string | null;
   message_count: number | null;
   s_updated_at: string | null;
 }
@@ -168,7 +170,7 @@ const ROWS = `
     r.id AS repository_id, r.name AS repo_name, r.root_path,
     s.id AS session_id, s.status AS s_status, s.title AS s_title, s.agent_harness,
     s.started_by AS s_started_by, s.last_user_message_at, s.is_hidden, s.chat,
-    s.error_message AS s_error, s.message_count, s.updated_at AS s_updated_at
+    s.error_message AS s_error, s.error_category, s.message_count, s.updated_at AS s_updated_at
   FROM workspaces w JOIN repositories r ON r.id = w.repository_id
   LEFT JOIN sessions s ON s.workspace_id = w.id
   WHERE w.kind != 'cloud'`;
@@ -270,6 +272,14 @@ const AGENT_NAMES = new Intl.ListFormat("en").format(
 /** What a chat the host could not deliver its first task to says, the reason kept safe. */
 const NOT_DELIVERED = "Its first task could not be delivered.";
 
+function limitNote(id: string) {
+  const { resetsAt, continues } = queuedMessages(id).limit ?? {};
+  let note = "stopped on a usage limit";
+  if (resetsAt !== undefined)
+    note += `, resets ${new Date(resetsAt).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+  return continues ? `${note}, continues by itself` : note;
+}
+
 export function createDeusHost(): DeusHost {
   /** First tasks held for workspaces being set up, by the chat's id. */
   const firsts = new Map<string, Held>();
@@ -358,6 +368,8 @@ export function createDeusHost(): DeusHost {
           chat,
           current: row.current_session_id ? row.current_session_id === id : chat === 1,
           status,
+          ...(status === "error" &&
+            row.error_category === "usage_limit" && { note: limitNote(id) }),
           startedBy: readOrigin(row.s_started_by ?? (row.session_id ? null : row.ws_started_by)),
           harness: knownHarness(row.agent_harness),
           ...(title ? { title } : {}),
@@ -642,18 +654,20 @@ export function createDeusHost(): DeusHost {
           })),
       ];
       const running = liveTurnId(sessionId);
+      const last = lastEnded([sessionId]).get(sessionId);
       const turns: ViewTurn[] = facts.map((fact) => {
         const how = fact.turn_id === running || !fact.ended_at ? undefined : endedOf(fact);
         const failed = fact.outcome
           ? (JSON.parse(fact.outcome) as { error?: { message?: string } })
           : {};
+        const reason = [failed.error?.message, fact.turn_id === last?.turnId && entry.note]
+          .filter(Boolean)
+          .join("\n");
         return {
           turnId: fact.turn_id,
           outcome: how?.outcome ?? "running",
           ...(how?.cancelledBy ? { cancelledBy: how.cancelledBy } : {}),
-          ...(how?.outcome === "failed" && failed.error?.message
-            ? { error: failed.error.message }
-            : {}),
+          ...(how?.outcome === "failed" && reason && { error: reason }),
           messages: messages
             .filter((m) => m.turn_id === fact.turn_id)
             .map((m) => ({
@@ -664,7 +678,6 @@ export function createDeusHost(): DeusHost {
             })),
         };
       });
-      const last = lastEnded([sessionId]).get(sessionId);
       const read = rows.at(-1)?.seq ?? (after ? Number(after[1]) : 0);
       // Not past the first message of a turn that has not ended: its messages still change.
       const open = (

@@ -1,5 +1,6 @@
 import { RefreshCw } from "lucide-react";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -8,7 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Field, FieldContent, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Separator } from "@/components/ui/separator";
 import { useAgentAuth } from "../../api/settings.queries";
@@ -118,6 +118,16 @@ export function AISection({
               <SelectItem value="high">High</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <Label htmlFor="continue-after-limit">
+            When a usage limit resets, continue the chats it stopped.
+          </Label>
+          <Switch
+            id="continue-after-limit"
+            checked={settings.continue_after_usage_limit === true}
+            onCheckedChange={(on) => saveSetting("continue_after_usage_limit", on)}
+          />
         </div>
       </div>
     </div>

@@ -9,6 +9,7 @@ const { mockGetSessionRaw, mockGetCloudConfig, mockCreateSessionToken } = vi.hoi
 }));
 
 vi.mock("../../../src/lib/database", () => ({ getDatabase: vi.fn(() => ({})) }));
+vi.mock("../../../src/services/settings.service", () => ({ getSetting: () => null }));
 vi.mock("../../../src/db", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../src/db")>()),
   getSessionRaw: mockGetSessionRaw,

@@ -24,6 +24,7 @@ import { SCHEMA_SQL } from "@shared/schema";
 
 const { mockGetDatabase } = vi.hoisted(() => ({ mockGetDatabase: vi.fn() }));
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
+vi.mock("../../../src/services/settings.service", () => ({ getSetting: () => null }));
 
 import * as api from "@shared/api/sessions";
 import { operations } from "../../helpers";

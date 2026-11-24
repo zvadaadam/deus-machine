@@ -186,6 +186,7 @@ export function useGlobalSessionNotifications() {
         if (canNotify && !isWindowFocused()) {
           const title = match(category)
             .with("auth", () => "Authentication Error")
+            .with("usage_limit", () => "Usage limit reached")
             .with("rate_limit", () => "Rate Limited")
             .with("context_limit", () => "Context Limit Reached")
             .with("network", () => "Network Error")

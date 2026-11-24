@@ -237,6 +237,10 @@ If the engine reports no active turn, the chat settles at once. A confirmed canc
 withdraws the turn's cards at once and keeps the chat occupied for its final echoes and end.
 After 15 seconds without the end, the watchdog frees the chat and returns unread messages
 to the queue, leaving the turn's outcome to the engine. Rows paused by a stop or failure wait for Resume, which can be pressed before the turn ends.
+A local usage limit pauses even an empty queue. Resume appears only when there are rows. Pressing Continue
+before the reported reset schedules a turn one minute after it. The person can enable this for future limits in Settings.
+Pressing Continue after the reset starts the turn at once. While Deus stays open, the first waiting message goes, or “Continue.”
+with the chat's settings. A new send, Resume, Stop, hiding the chat or archiving its workspace clears the schedule.
 A steer read mid-turn splits one reply into groups with one footer (`groupTurns` in
 `session/lib/chatTimeline.ts`). Cloud chats keep their send, including the hosted web's
 direct lane. The operator's `send` to a busy chat still answers `busy`.
@@ -614,7 +618,8 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   links, give `read_session` the link's `session` value as `session`. Without it, pass the link's `id`
   as `session` to read the workspace's current chat (`workspace-context.ts`). A message another chat
   or an assistant sent shows "Sent from" above its bubble (`session/ui/SentFrom.tsx`), and the chip opens
-  the sending chat. A chat runs with full access or in plan mode, nothing
+  the sending chat. List, wait and read report a chat's usage limit, its known reset time and whether it will continue.
+  A chat runs with full access or in plan mode, nothing
   between: Deus approves a chat's tool requests itself. A mode between the
   two must route these tools' writes to the person before it ships.
 

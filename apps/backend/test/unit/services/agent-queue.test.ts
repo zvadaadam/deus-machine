@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventGapError, WireRequestError } from "@zvada/agent-server/client";
+import { createOperator } from "@zvada/agent-server/operator";
 import {
   createSteerEchoParts,
   createUserEchoParts,
@@ -9,6 +10,7 @@ import {
   WIRE_ERROR_CODES,
   type TurnCancelResult,
   type LifecycleEvent,
+  type SessionLimitsEvent,
   type TurnEndedEvent,
   type TurnStartParams,
   type TurnSteerParams,
@@ -29,6 +31,7 @@ import {
 import { subscribe } from "../../../src/services/streams";
 import { addConnection, closeAll } from "../../../src/services/ws.service";
 import { createDeusHost } from "../../../src/services/assistants/host";
+import * as settings from "../../../src/services/settings.service";
 import { answer, clearAll, pendingFor } from "../../../src/services/agent/tool-relay";
 import { resolveTurnApps } from "../../../src/services/integrations";
 import { operations } from "../../helpers";
@@ -1777,5 +1780,497 @@ describe("messages held for a local chat", () => {
     expect(snapshot).not.toHaveBeenCalled();
     invalidate([perChat.name], { sessionIds: [sessionId] });
     expect(snapshot).toHaveBeenCalledOnce();
+  });
+});
+
+describe("continuing a chat after a usage limit", () => {
+  const minute = 60_000;
+  const now = Date.UTC(2026, 10, 24, 3);
+  const resetsAt = now + 2 * minute;
+  const caller = {
+    kind: "external",
+    id: "window",
+    speaksAs: "person",
+    auth: LOCAL_CALLER,
+  } as const;
+  const choose = (on: boolean) => run(api.continueAfterLimit, { sessionId, on });
+  const preference = (on: boolean) =>
+    vi
+      .spyOn(settings, "getSetting")
+      .mockImplementation((key) => key === "continue_after_usage_limit" && on);
+  function windows(windows: SessionLimitsEvent["windows"], status?: SessionLimitsEvent["status"]) {
+    emit({
+      type: "session.limits",
+      sessionId,
+      turnId: agent.liveTurnId(sessionId)!,
+      windows,
+      status,
+      timestamp: seq,
+    });
+  }
+  function fail(category = "usage_limit", message = "Provider refused this turn") {
+    const turnId = agent.liveTurnId(sessionId)!;
+    const { harness, model, thinkingLevel, permissionMode } =
+      engine.startTurn.mock.lastCall![0].config;
+    const error = { category, message };
+    emit({ type: "error", sessionId, turnId, ...error, recoverable: false, timestamp: seq });
+    emit({
+      type: "turn.ended",
+      sessionId,
+      turnId,
+      stopReason: "error",
+      error,
+      timestamp: seq,
+      execution: { harness, model, thinkingLevel, permissionMode },
+    });
+  }
+  async function limited(reset = resetsAt) {
+    await send("A");
+    windows([{ id: "primary", usedPercent: 100, resetsAt: reset }], "limited");
+    fail();
+  }
+  beforeEach(() => vi.useFakeTimers({ now }));
+  afterEach(() => vi.restoreAllMocks());
+
+  it("uses the latest rejected Claude window reported during the failing turn", async () => {
+    const claude = (id: string) =>
+      run(api.sendMessage, { ...message(id), turnId: id, agentHarness: "claude-code" });
+    await claude("older");
+    windows([{ id: "seven_day_sonnet", status: "limited", resetsAt: resetsAt + 60 * minute }]);
+    end("older");
+    await claude("A");
+    windows([{ id: "week", status: "limited", resetsAt: resetsAt + minute }]);
+    windows([
+      { id: "five_hour", status: "limited", resetsAt },
+      { id: "warning", status: "warning", usedPercent: 100, resetsAt: resetsAt + 2 * minute },
+      { id: "expires", status: "limited", resetsAt: now },
+      { id: "ok", status: "ok", usedPercent: 100, resetsAt: resetsAt + 3 * minute },
+    ]);
+    fail();
+    expect(await queue()).toEqual({
+      items: [],
+      paused: "limit",
+      limit: { resetsAt: resetsAt + minute, continues: false },
+    });
+    await vi.advanceTimersByTimeAsync(10 * minute);
+    expect(starts()).toEqual(["older", "A"]);
+  });
+
+  it("keeps the time unknown when only the previous turn reported a limit", async () => {
+    preference(true);
+    await send("A");
+    windows([{ id: "five_hour", usedPercent: 100, resetsAt }], "limited");
+    end("A");
+    await send("B");
+    emit({
+      type: "session.limits",
+      sessionId,
+      turnId: "A",
+      timestamp: seq,
+      status: "limited",
+      windows: [{ id: "seven_day", usedPercent: 100, resetsAt: resetsAt + minute }],
+    });
+    fail();
+    expect((await queue()).limit).toEqual({ continues: false });
+    await vi.advanceTimersByTimeAsync(5 * minute);
+    expect(starts()).toEqual(["A", "B"]);
+  });
+
+  it.each([false, true])(
+    "uses each Codex pool's own report status (reversed %s)",
+    async (reverse) => {
+      await send("A");
+      const reports = [
+        () => windows([{ id: "five_hour", usedPercent: 100, resetsAt }], "limited"),
+        () => windows([{ id: "spark:five_hour", usedPercent: 100, resetsAt: resetsAt + minute }]),
+      ];
+      for (const report of reverse ? reports.reverse() : reports) report();
+      fail();
+      expect((await queue()).limit).toEqual({ resetsAt, continues: false });
+    }
+  );
+
+  it("drops a window that recovered or expired before the turn failed", async () => {
+    preference(true);
+    await send("A");
+    windows([
+      { id: "five_hour", status: "limited", resetsAt },
+      { id: "seven_day", status: "limited", resetsAt: resetsAt + minute },
+    ]);
+    windows([{ id: "seven_day", status: "ok" }]);
+    vi.setSystemTime(resetsAt);
+    fail();
+    expect((await queue()).limit).toEqual({ continues: false });
+  });
+
+  it.each(["empty", "expired", "partial", "available"] as const)(
+    "keeps a limit with no known reset (%s)",
+    async (report) => {
+      preference(true);
+      await run(api.sendMessage, {
+        ...message("A"),
+        turnId: "A",
+        agentHarness: report === "empty" ? "gemini" : "codex-app-server",
+      });
+      if (report !== "empty")
+        windows(
+          [
+            {
+              id: "primary",
+              usedPercent: report === "partial" ? 99 : 100,
+              resetsAt: report === "expired" ? now - 1 : resetsAt,
+            },
+          ],
+          report === "available" ? "ok" : "limited"
+        );
+      fail();
+      expect(await queue()).toEqual({ items: [], paused: "limit", limit: { continues: false } });
+      await expect(choose(true)).rejects.toThrow(/reset time/i);
+      await vi.advanceTimersByTimeAsync(10 * minute);
+      expect(starts()).toEqual(["A"]);
+    }
+  );
+
+  it.each([false, true])(
+    "a press at the reset continues immediately once (queued row %s)",
+    async (hasRow) => {
+      await send("A");
+      if (hasRow) await send("head");
+      windows([{ id: "primary", usedPercent: 100, resetsAt }], "limited");
+      fail();
+      if (hasRow) await choose(true);
+      await vi.advanceTimersByTimeAsync(resetsAt - now);
+      expect(starts()).toEqual(["A"]);
+      await choose(true);
+      expect(engine.startTurn.mock.lastCall![0].input).toBe(hasRow ? "Message head" : "Continue.");
+      await vi.advanceTimersByTimeAsync(2 * minute);
+      expect(starts()).toHaveLength(2);
+    }
+  );
+
+  it("sends the head with its own settings once, a minute after the reset", async () => {
+    await send("A");
+    await send("head");
+    await send("tail");
+    windows(
+      [
+        { id: "primary", usedPercent: 100, resetsAt: resetsAt + 17_321 },
+        { id: "secondary", usedPercent: 35, resetsAt: resetsAt + minute },
+      ],
+      "limited"
+    );
+    fail();
+    await choose(true);
+    await choose(true);
+    expect((await queue()).limit).toEqual({ resetsAt: resetsAt + 17_321, continues: true });
+    await vi.advanceTimersByTimeAsync(3 * minute + 17_320);
+    expect(starts()).toEqual(["A"]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(starts()).toEqual(["A", "head"]);
+    expect(engine.startTurn.mock.lastCall![0]).toMatchObject({
+      input: "Message head",
+      config: { model: "model-head" },
+    });
+    await vi.advanceTimersByTimeAsync(10 * minute);
+    expect(starts()).toEqual(["A", "head"]);
+    end("head");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(starts()).toEqual(["A", "head", "tail"]);
+  });
+
+  it("sends Continue with the latest turn's model, thinking level and permission mode", async () => {
+    await run(api.sendMessage, {
+      ...message("old"),
+      turnId: "z-first",
+      thinkingLevel: "low",
+      permissionMode: "bypass_permissions",
+    });
+    fail("rate_limit");
+    await run(api.sendMessage, {
+      ...message("new"),
+      turnId: "a-last",
+      thinkingLevel: "high",
+      permissionMode: "plan",
+    });
+    windows([{ id: "primary", usedPercent: 100, resetsAt }], "limited");
+    fail();
+    await choose(true);
+    await vi.advanceTimersByTimeAsync(3 * minute);
+    expect(engine.startTurn.mock.lastCall![0]).toMatchObject({
+      input: "Continue.",
+      config: { model: "model-new", thinkingLevel: "high", permissionMode: "plan" },
+    });
+  });
+
+  it("continues a rejected account window once even when the model was also refused", async () => {
+    preference(true);
+    await run(api.sendMessage, {
+      ...message("A"),
+      agentHarness: "claude-code",
+      model: "fable",
+      thinkingLevel: "high",
+      permissionMode: "plan",
+    });
+    windows([{ id: "five_hour", status: "limited", resetsAt }]);
+    const modelRefusal = "You've reached your Fable limit. Switch to another model.";
+    fail("usage_limit", modelRefusal);
+    expect((await queue()).limit).toEqual({ resetsAt, continues: true });
+    vi.setSystemTime(resetsAt + 8 * 60 * minute);
+    await vi.advanceTimersByTimeAsync(minute);
+    expect(engine.startTurn.mock.lastCall![0]).toMatchObject({
+      input: "Continue.",
+      config: {
+        harness: "claude-code",
+        model: "fable",
+        thinkingLevel: "high",
+        permissionMode: "plan",
+      },
+    });
+    fail("rate_limit", modelRefusal);
+    await vi.advanceTimersByTimeAsync(24 * 60 * minute);
+    expect(starts()).toHaveLength(2);
+    expect((await queue()).limit).toBeUndefined();
+    expect(await run(api.session, { sessionId })).toMatchObject({
+      status: "error",
+      error_category: "rate_limit",
+      error_message: modelRefusal,
+    });
+  });
+
+  it.each([false, true])(
+    "a second limit starts from the preference (%s), not the previous choice",
+    async (on) => {
+      preference(!on);
+      await limited();
+      await choose(true);
+      preference(on);
+      await vi.advanceTimersByTimeAsync(3 * minute);
+      windows([{ id: "primary", usedPercent: 100, resetsAt: now + 4 * minute }], "limited");
+      fail();
+      expect((await queue()).limit).toEqual({ resetsAt: now + 4 * minute, continues: on });
+      await vi.advanceTimersByTimeAsync(3 * minute);
+      expect(starts()).toHaveLength(on ? 3 : 2);
+    }
+  );
+
+  it.each(["cancel", "person", "operator", "resume", "stop", "archive", "hide", "delete"] as const)(
+    "clears the scheduled attempt on %s",
+    async (action) => {
+      preference(true);
+      await limited();
+      expect((await queue()).limit?.continues).toBe(true);
+      if (action === "person") await send("B");
+      if (action === "operator")
+        await createDeusHost().send(caller, sessionId, {
+          turnId: "B",
+          origin: { kind: "session", sessionId: "lead" },
+          message: "Manual follow-up",
+        });
+      if (action === "person" || action === "operator") end("B");
+      if (action === "cancel") await choose(false);
+      if (action === "resume") await run(api.resumeQueuedMessages, { sessionId });
+      if (action === "stop") {
+        engine.cancelTurn.mockResolvedValueOnce({ outcome: "no_active_turn" });
+        await stop();
+      }
+      if (action === "archive") db.exec("UPDATE workspaces SET state = 'archived'");
+      if (action === "hide") db.exec("UPDATE sessions SET is_hidden = 1");
+      if (action === "delete") db.exec("DELETE FROM sessions");
+      invalidate(["workspaces", "sessions"]);
+      expect((await queue()).limit?.continues).toBeFalsy();
+      await vi.advanceTimersByTimeAsync(10 * minute);
+      expect(starts()).toEqual(action === "person" || action === "operator" ? ["A", "B"] : ["A"]);
+    }
+  );
+
+  it("drains waiting rows when a later turn succeeds", async () => {
+    await send("A");
+    await send("waiting");
+    windows([{ id: "five_hour", status: "limited", resetsAt }]);
+    fail();
+    await choose(true);
+    await send("B");
+    end("B");
+    await vi.advanceTimersByTimeAsync(5 * minute);
+    expect(starts()).toEqual(["A", "B", "waiting"]);
+  });
+
+  it.each(["stopped", "failed"] as const)(
+    "preserves a standing %s pause until Resume",
+    async (reason) => {
+      preference(true);
+      await send("A");
+      await send("B");
+      if (reason === "stopped") {
+        engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "A" });
+        await stop();
+        end("A", "cancelled");
+      } else fail("network");
+      await send("C");
+      windows([{ id: "five_hour", usedPercent: 100, resetsAt }], "limited");
+      fail();
+      expect(await queue()).toEqual({
+        paused: reason,
+        items: [{ id: "B", text: "Message B", images: 0, state: "waiting" }],
+      });
+      expect(await run(api.session, { sessionId })).toMatchObject({
+        error_message: "Provider refused this turn",
+      });
+      await vi.advanceTimersByTimeAsync(5 * minute);
+      expect(starts()).toEqual(["A", "C"]);
+      await run(api.resumeQueuedMessages, { sessionId });
+      expect(starts()).toEqual(["A", "C", "B"]);
+    }
+  );
+
+  it.each([false, true])(
+    "honors Stop and an optional Resume (%s) if the same turn then reports a limit",
+    async (resume) => {
+      preference(true);
+      await send("A");
+      await send("waiting");
+      windows([{ id: "primary", usedPercent: 100, resetsAt }], "limited");
+      engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "A" });
+      await stop();
+      if (resume) await run(api.resumeQueuedMessages, { sessionId });
+      fail();
+      await vi.advanceTimersByTimeAsync(5 * minute);
+      expect((await queue()).paused).toBe(resume ? null : "stopped");
+      expect(starts()).toEqual(resume ? ["A", "waiting"] : ["A"]);
+    }
+  );
+
+  it("returns the sending head to a limit pause when its echo never arrived", async () => {
+    preference(true);
+    await send("A");
+    await send("head");
+    engine.startTurn.mockResolvedValueOnce(undefined);
+    end("A");
+    await vi.advanceTimersByTimeAsync(0);
+    expect((await queue()).items[0]?.state).toBe("sending");
+    windows([{ id: "five_hour", usedPercent: 100, resetsAt }], "limited");
+    fail();
+    expect(await queue()).toMatchObject({
+      paused: "limit",
+      limit: { resetsAt, continues: true },
+      items: [{ id: "head", state: "waiting" }],
+    });
+    await vi.advanceTimersByTimeAsync(3 * minute);
+    expect(engine.startTurn.mock.lastCall![0].input).toBe("Message head");
+    expect(starts()).toHaveLength(3);
+  });
+
+  it("retains a rate_limit's own words even with a future rejected window", async () => {
+    preference(true);
+    await send("A");
+    windows([{ id: "five_hour", status: "limited", resetsAt }]);
+    const refusal = "You've hit your 5-hour limit · resets 5:20am";
+    fail("rate_limit", refusal);
+    expect(await queue()).toEqual({ paused: null, items: [] });
+    expect(await run(api.session, { sessionId })).toMatchObject({ error_message: refusal });
+    await vi.advanceTimersByTimeAsync(5 * minute);
+    expect(starts()).toEqual(["A"]);
+  });
+
+  it("shares one clock between opted-in chats and releases it when none are armed", async () => {
+    const later = sessionId;
+    const offset = 17_321;
+    await limited(resetsAt + offset);
+    const idle = vi.getTimerCount();
+    await choose(true);
+    expect(vi.getTimerCount()).toBe(idle + 1);
+    await choose(false);
+    expect(vi.getTimerCount()).toBe(idle);
+    await choose(true);
+    sessionId = crypto.randomUUID();
+    db.prepare("INSERT INTO sessions (id, workspace_id) VALUES (?, 'w')").run(sessionId);
+    await limited();
+    const timers = vi.getTimerCount();
+    await choose(true);
+    expect(vi.getTimerCount()).toBe(timers);
+    engine.startTurn.mockResolvedValue(undefined);
+    const continuedChats = () =>
+      engine.startTurn.mock.calls.flatMap(([p]) => (p.input === "Continue." ? [p.sessionId] : []));
+    await vi.advanceTimersByTimeAsync(3 * minute - 1);
+    expect(continuedChats()).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(continuedChats()).toEqual([sessionId]);
+    const setTimer = vi.spyOn(globalThis, "setTimeout");
+    await vi.advanceTimersByTimeAsync(offset - 1);
+    expect(continuedChats()).toEqual([sessionId]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(continuedChats()).toEqual([sessionId, later]);
+    expect(setTimer).not.toHaveBeenCalledWith(expect.any(Function), minute);
+    expect(vi.getTimerCount()).toBe(timers - 1);
+    await vi.advanceTimersByTimeAsync(60 * minute);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("stops waiting when another turn starts, and leaves a newer stored turn alone", async () => {
+    preference(true);
+    await limited();
+    expect((await queue()).limit?.continues).toBe(true);
+    await agent.startTurn(sessionId, "other", "codex-app-server", "Elsewhere", {
+      cwd: "/tmp/repo",
+    });
+    expect((await queue()).limit).toBeUndefined();
+    windows([{ id: "primary", usedPercent: 100, resetsAt }], "limited");
+    fail();
+    expect((await queue()).limit).toEqual({ resetsAt, continues: true });
+    db.prepare(
+      "INSERT INTO turns (session_id, turn_id, started_at, ended_at) VALUES (?, 'newer', ?, ?)"
+    ).run(sessionId, seq + 1, seq + 2);
+    await vi.advanceTimersByTimeAsync(5 * minute);
+    expect(starts()).toEqual(["A", "other"]);
+  });
+
+  it("shows the fixed UTC reset and continuation choice in list, wait and read", async () => {
+    const reset = Date.UTC(2026, 10, 24, 4, 10);
+    const note = /stopped on a usage limit, resets 2026-11-24 04:10 UTC, continues by itself/g;
+    await limited(reset);
+    await choose(true);
+    const operator = createOperator(createDeusHost());
+    for (const [name, args] of [
+      ["list_sessions", {}],
+      ["wait_for_sessions", { sessions: [sessionId], wait: 0 }],
+      ["read_session", { session: sessionId }],
+    ] as const) {
+      const reply = await operator.call(name, args, caller);
+      expect(reply.match(note)).toHaveLength(1);
+    }
+    vi.setSystemTime(reset + 1);
+    expect(await operator.call("list_sessions", {}, caller)).toMatch(note);
+    await choose(false);
+    expect(await operator.call("list_sessions", {}, caller)).not.toContain("continues by itself");
+  });
+
+  it("reads the next full transcript page a minute after a usage limit", async () => {
+    await run(api.sendMessage, { ...message("A"), turnId: "A", content: "x".repeat(21_000) });
+    windows([{ id: "primary", usedPercent: 100, resetsAt }], "limited");
+    fail();
+    const operator = createOperator(createDeusHost());
+    const args = { session: sessionId, full: true };
+    const first = await operator.call("read_session", args, caller);
+    const page = first.match(/page: "([^"]+)"/)?.[1];
+    expect(page).toBeTruthy();
+    await vi.advanceTimersByTimeAsync(minute);
+    const second = await operator.call("read_session", { ...args, page }, caller);
+    expect(second).toContain("Provider refused this turn");
+  });
+
+  it("reopens a saved usage-limit error without a reset or an automatic send", async () => {
+    await limited();
+    await choose(true);
+    await agent.shutdown();
+    vi.clearAllTimers();
+    vi.resetModules();
+    const fresh = await import("../../../src/services/agent/queue");
+    const { createDeusHost } = await import("../../../src/services/assistants/host");
+    expect(fresh.queuedMessages(sessionId)).toEqual({ paused: null, items: [] });
+    expect(() => fresh.continueAfterLimit(sessionId, true)).toThrow(/reset time/i);
+    const [entry] = await createDeusHost().list(caller, {});
+    expect(entry).toMatchObject({ status: "error", note: "stopped on a usage limit" });
+    await vi.advanceTimersByTimeAsync(24 * 60 * minute);
+    expect(starts()).toEqual(["A"]);
   });
 });

@@ -246,6 +246,7 @@ export function SessionPanel({
           className={`${CONTENT_WIDTH_CLASSES} flex min-h-0 flex-1 flex-col`}
         >
           <Chat
+            sessionId={sessionId}
             messages={messages}
             compactions={compactions}
             turns={turns}
@@ -350,6 +351,7 @@ export function SessionPanel({
             >
               <div className={`${CONTENT_WIDTH_CLASSES} mx-auto flex min-h-0 flex-1 flex-col`}>
                 <Chat
+                  sessionId={sessionId}
                   messages={messages}
                   compactions={compactions}
                   turns={turns}

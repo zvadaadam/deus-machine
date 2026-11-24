@@ -56,7 +56,12 @@ import { OpenParts } from "./open-parts";
 
 // ---- Types ----
 
-export type TurnEnd = { event: TurnEndedEvent; status?: TurnOutcomeWrite["status"]; held: boolean };
+export type TurnEnd = {
+  event: TurnEndedEvent;
+  status?: TurnOutcomeWrite["status"];
+  held: boolean;
+  limit?: { resetsAt?: number };
+};
 
 export interface AgentEventHandler {
   /** Feed one sequenced wire envelope (post-dedupe, in seq order). */
@@ -425,8 +430,19 @@ export function createAgentEventHandler(
 
       if (!NOT_PUSHED.has(envelope.event.type)) pushEnvelope(envelope);
       const event = envelope.event;
-      if (event.type === "turn.ended")
-        return { event, status: outcome?.status, held: event.turnId === liveTurnId };
+      if (event.type === "turn.ended") {
+        const end: TurnEnd = { event, status: outcome?.status, held: event.turnId === liveTurnId };
+        if (
+          end.held &&
+          end.status === "error" &&
+          event.error?.category === "usage_limit" &&
+          (!outcome?.error || outcome.error.category === "usage_limit")
+        ) {
+          const resetsAt = Math.max(...(state.limitResets?.values() ?? []));
+          end.limit = resetsAt > Date.now() ? { resetsAt } : {};
+        }
+        return end;
+      }
     },
   };
 }
