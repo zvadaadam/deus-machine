@@ -796,7 +796,9 @@ describe("through MCP and as a chat's own tools", () => {
           expect(tools("before")).not.toContain(TELL_USER);
           preference = true;
           expect(instructions("before")).not.toContain(TELL_USER);
-          expect(instructions("after")).toContain(`\`${TELL_USER}\``);
+          expect(instructions("after")).toContain(
+            `\`${TELL_USER}\` tool of the \`${DEUS_TOOLS_SERVER}\` server, under the name your tool list gives it`
+          );
           preference = false;
           expect(tools("after")).toContain(TELL_USER);
           expect(instructions("after")).toContain(TELL_USER);

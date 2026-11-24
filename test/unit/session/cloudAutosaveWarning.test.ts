@@ -12,6 +12,7 @@ const session: Session = {
   id: "s",
   workspace_id: "w",
   agent_harness: "claude-code",
+  agent_messages: false,
   status: "working",
   message_count: 2,
   context_token_count: 0,

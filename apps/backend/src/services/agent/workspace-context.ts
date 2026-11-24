@@ -4,6 +4,7 @@
 import * as path from "path";
 import { OPERATOR_GUIDANCE, quote } from "@zvada/agent-server/operator";
 import { TELL_USER } from "@shared/agent-message";
+import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
 
 /**
  * Derives the project (repo) name from a worktree path.
@@ -51,9 +52,12 @@ const AGENT_DEVICE =
   "`agent-device help <topic>` has more (`dogfood` for exploratory QA, `debugging`, `react-native`).\n";
 
 export const AGENT_MESSAGES =
-  `While you work, use \`${TELL_USER}\` for anything the person should read before you finish. ` +
-  "Send the plan for a longer job, a finding that changes the plan, or an intermediate result they can use. " +
-  "Text between tool calls is folded into your work. Write your closing message once as your normal final reply.\n";
+  "The person reads your messages, not your working notes. While you work, send a message with " +
+  `the \`${TELL_USER}\` tool of the \`${DEUS_TOOLS_SERVER}\` server, under the name your tool list gives it, ` +
+  "when there is something they should read before you finish: a plan for a longer job, " +
+  "a finding they asked to hear before you act on it, a result on the way. Put related results in one message. " +
+  "Your final reply is the closing message, so do not send it with the tool as well. " +
+  "Anything else you write between tool calls is shown only as a note inside your work.\n";
 
 /**
  * Builds concise workspace context for any agent.
