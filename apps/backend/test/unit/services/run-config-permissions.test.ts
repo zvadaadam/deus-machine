@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { PermissionModeSchema } from "@zvada/agent-server/protocol";
+import { LOCAL_HARNESSES } from "@shared/harnesses";
 import { buildTurnStartParams } from "../../../src/services/agent/run-config";
 
 const workspace = { cwd: "/workspace", agentMessages: false };
 
-const harnesses = ["claude-code", "codex-app-server"] as const;
-
-it.each([...harnesses, "gemini"] as const)(
+it.each(LOCAL_HARNESSES)(
   "briefs %s on reading chat links for this computer's workspaces",
   (harness) => {
     const { config } = buildTurnStartParams("chat", "turn", harness, "Read this chat", workspace);
@@ -16,7 +15,7 @@ it.each([...harnesses, "gemini"] as const)(
   }
 );
 
-describe.each(harnesses)("%s local permission policy", (harness) => {
+describe.each(LOCAL_HARNESSES)("%s local permission policy", (harness) => {
   it.each([undefined, "native-session"])(
     "uses full access when the composer omits the mode (resume: %s)",
     (resume) => {
@@ -42,7 +41,7 @@ describe.each(harnesses)("%s local permission policy", (harness) => {
   });
 });
 
-describe.each(harnesses)("%s and the Simulator tab", (harness) => {
+describe.each(LOCAL_HARNESSES)("%s and the Simulator tab", (harness) => {
   it("names the tab's device to the agent, and nothing without one", () => {
     const simulator = { udid: "5E4E0C2F-7025-4AAE-86D4-75A9BCD7AF06" };
     const shown = buildTurnStartParams("session", "turn", harness, "Check it", {
@@ -55,7 +54,7 @@ describe.each(harnesses)("%s and the Simulator tab", (harness) => {
   });
 });
 
-describe.each(harnesses)("%s and agent-device", (harness) => {
+describe.each(LOCAL_HARNESSES)("%s and agent-device", (harness) => {
   it("briefs the agent on the bundled CLI and runs it in the workspace's session", () => {
     const params = buildTurnStartParams("chat-1", "turn", harness, "Open Settings", {
       ...workspace,

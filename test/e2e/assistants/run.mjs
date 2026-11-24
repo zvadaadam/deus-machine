@@ -36,19 +36,6 @@ const skip = (name, why) => {
   (report.skipped ??= []).push({ name, why });
   console.log(`SKIP: ${name} (${why})`);
 };
-/**
- * An expectation that fails because of a bug in the engine package, which is
- * fixed upstream, not here: said with its reason, not thrown. When it holds,
- * it passes and says the marker can go.
- */
-const knownFailure = (name, holds, why, evidence) => {
-  if (holds) {
-    check(`${name} (marked as a known failure: it now holds, so remove the marker)`, evidence);
-    return;
-  }
-  (report.knownFailures ??= []).push({ name, why, evidence });
-  console.log(`KNOWN FAILURE: ${name} (${why})`);
-};
 /** Model lists come from the engine (`agentModels`), which this agentless backend does not run. */
 const NO_ENGINE_MODELS =
   "needs the engine's live model list. This agentless host has only the catalog.";
@@ -1100,17 +1087,13 @@ try {
   const failedWait = ok(
     await chatgpt.call("wait_for_sessions", { sessions: [`${failedRow.slug}:1`], wait: 0 })
   );
-  assert(failedWait.includes(shownReason), failedWait);
-  for (const answer of [failedWait, failingStart]) assert(!answer.includes(directory), answer);
+  for (const answer of [failingStart, failedWait]) {
+    assert(answer.includes(shownReason), answer);
+    assert(!answer.includes(directory), answer);
+  }
   check(
-    "start_session in a project whose setup fails: the workspace is made (started_by the assistant) and ends in error, the answer says it could not be set up, and wait_for_sessions gives the stored reason with a home-relative project folder",
+    "start_session and wait_for_sessions both give the stored setup failure with a home-relative project folder",
     { started: failingStart, wait: failedWait, workspace: failedRow }
-  );
-  knownFailure(
-    "start_session's own answer gives the reason a new workspace could not be set up",
-    failingStart.includes(shownReason),
-    'engine package: ownOutcome (src/operator/operator.ts:1170, dist/operator/operator.js) renders the outcome with the entry read when the start was made (status setting_up, no error), so outcomeOf (operator.ts:508) prints its fallback "setup failed" instead of the host\'s reason; wait_for_sessions, which reads the entry again, gives it',
-    { answer: failingStart, reason: shownReason }
   );
   const removedFailed = ok(await chatgpt.call("archive", { workspaces: [`${failedRow.slug}:1`] }));
   assert.equal(
