@@ -28,10 +28,10 @@ New machine or broken toolchain? `bun run doctor` checks Node (22.x, see `.node-
 
 ## Cursor Cloud setup
 
-Fresh cloud images should have Bun available. If `command -v bun` fails, install it before any repo commands:
+Fresh cloud images should have Bun available. Install the version pinned in `package.json` if `bun --version` differs or Bun is missing.
 
 ```bash
-curl -fsSL https://bun.sh/install | bash
+curl -fsSL https://bun.sh/install | bash -s "bun-v$(node -p "require('./package.json').packageManager.split('@')[1]")"
 export PATH="$HOME/.bun/bin:$PATH"
 ```
 
@@ -45,7 +45,7 @@ bun run test:agent-server
 bun run dev:web
 ```
 
-`bun run dev:web` is the preferred cloud smoke because it rebuilds the Node native module ABI, starts the backend (which runs the agent engine in its process), and then starts Vite with the emitted backend port. Confirm the terminal shows `[AgentService] Engine started, agents: [claude-code, codex-app-server, gemini]`, `[BACKEND_PORT]...` and `Server ready!` before opening the frontend URL.
+`bun run dev:web` is the preferred cloud smoke. It checks that Node can open SQLite, repairs the native module if needed, starts the backend (including the agent engine), and points Vite at the port the backend reports. Confirm the terminal shows `[AgentService] Engine started, agents: [claude-code, codex-app-server, gemini]`, `[BACKEND_PORT]...` and `Server ready!` before opening the frontend URL.
 
 For browser-based UI smoke tests, install the Playwright browser after dependencies are installed:
 
@@ -223,7 +223,7 @@ A steer read mid-turn splits one reply into groups with one footer (`groupTurns`
 `session/lib/chatTimeline.ts`). Cloud chats keep their send, including the hosted web's
 direct lane. The operator's `send` to a busy chat still answers `busy`.
 
-A `fileChanges` subscription names one workspace. On macOS its first follower
+A `fileChanges` subscription names one workspace. On macOS or on Linux with Bun, its first follower
 opens a recursive watch on the local checkout. The last one leaving, including
 a dropped connection, closes it after three seconds so a quick return reuses
 the watch. An opening event confirms the watch and refreshes Files and Changes.
@@ -853,27 +853,29 @@ Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `s
 - Column changes, pre-launch (now): `shared/schema.ts` is the whole schema, not a migration replay. To add a column, put it in `SCHEMA_SQL` and, if existing databases should keep working, in `ADDITIVE_COLUMNS` (nullable or defaulted); anything else is a reset. At startup the backend compares the database with a fresh copy of `SCHEMA_SQL` (a missing column, a NOT NULL that differs, a leftover column an insert would fail on) and stops on a mismatch. After the backend exits, the desktop offers **Start Fresh**, which moves the database and its SQLite side files to a dated name beside the original. The installed app reopens. Under `bun run dev`, Deus quits and logs how to start it again. The CLI prints `PRELAUNCH_SCHEMA_RESET_HINT` with its fresh data directory option.
 - Column changes, post-launch: the above stops applying. Deprecate by renaming with a `DEPRECATED_` prefix, never drop.
 
+## Releases
+
+A merge to `main` deploys the relay and landing when their files change.
+The desktop, npm CLI and hosted web ship together from a release tag. See [docs/releases.md](docs/releases.md).
+
 ## Testing
 
-Desktop checks launch the app through `test/e2e/lib/launch-in-background.mjs` and browsers run headless so every test leaves the foreground to the person.
-
-```bash
-bun run test:backend          # apps/backend/test/unit/
-bun run test:agent-server     # apps/agent-server/test/
-bun run test:app              # test/unit/ (web app, desktop main, runtime scripts)
-bun run test:runtime-client   # packages/runtime-client/test/ (no app aliases or React)
-bun run test:e2e:cloud        # test/e2e/cloud/ (a cloud workspace in the real app, scripted platform)
-```
+Run `bun run check` before pushing. It runs the CI groups for this platform and
+reports each command. Use `bun run check <group>` for one group.
+The `test:e2e:*` runners are outside the gate, so run the ones your change touches (see [test/e2e/README.md](test/e2e/README.md)).
+Desktop checks launch the app through `test/e2e/lib/launch-in-background.mjs` and browsers run headless so every local test leaves the foreground to the person.
+The gate runs the packaged Electron smoke only in CI because it opens a window.
 
 Vitest with `vi.mock()` and `vi.hoisted()`. Tests live outside `src/` — never colocate.
 
-What ships is not what those run on, so two checks run the shipped thing. The
-packaged app's backend is Bun, with `bun:sqlite` behind `apps/backend/src/lib/sqlite.ts`
-and Bun's own terminal behind `openTerminal` in `services/pty.service.ts`:
-`bun run test:bun` runs `sqlite-parity.test.ts`, `pty-parity.test.ts` and
-`fs-watcher-parity.test.ts` on it
-(the same files run on Node inside `test:backend`); add a case there when the
-backend starts using another SQLite or terminal call. `bun run smoke:cli-package` packs the npm CLI, installs the
+The backend unit tests run the checkout on Node. The desktop ships a Bun backend,
+with `bun:sqlite` behind `apps/backend/src/lib/sqlite.ts` and Bun's own terminal
+behind `openTerminal` in `services/pty.service.ts`. `bun run test:bun` runs
+`sqlite-parity.test.ts`, `pty-parity.test.ts` and `fs-watcher-parity.test.ts` on
+that runtime. The same files run on Node inside `test:backend`. Add a case there
+when the backend starts using another SQLite or terminal call.
+
+`bun run smoke:cli-package` packs the npm CLI, installs the
 tarball into an empty folder and runs `deus --version` and `deus start`. It
 installs with npm, the one place npm is used, because that is how a person
 installs it.

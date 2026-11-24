@@ -12,9 +12,15 @@ function ignored(filename: string | null): boolean {
   return /(^|\/)(?:\.[^/]+|node_modules|target|dist|build)\//.test(filename);
 }
 
+export function canWatchWorkspace(): boolean {
+  // On Linux, Node 22 misses a delete after an atomic replace.
+  return (
+    process.platform === "darwin" || (process.platform === "linux" && Boolean(process.versions.bun))
+  );
+}
+
 function startWatch(workspaceId: string, workspacePath: string) {
-  // Enable Linux when its pinned runtime passes the recursive watch checks: Bun 1.3.6 leaks and misses deep edits, Node 22 misses a delete.
-  if (process.platform !== "darwin")
+  if (!canWatchWorkspace())
     throw new ValidationError("File watching is unavailable on this platform.");
 
   const scope = { workspaceId };

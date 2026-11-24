@@ -121,11 +121,12 @@ it("reports the file and line of a direct git call, including aliases and shell 
 
 it("keeps git process creation in the shared runner", () => {
   const skippedDirs = ["node_modules", "scripts", "test", "tests", "__tests__", "dist", "build"];
+  const cliBundles = path.join("apps", "cli", "bundles");
   // Node matches wildcard filenames case-insensitively on macOS and Windows.
   const foldCase = process.platform === "darwin" || process.platform === "win32";
   const files = globSync("{apps,shared,packages}/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}", {
     cwd: root,
-    exclude: (entry) => skippedDirs.includes(path.basename(entry)),
+    exclude: (entry) => entry === cliBundles || skippedDirs.includes(path.basename(entry)),
   })
     .map((file) => file.split(path.sep).join("/"))
     .filter((file) => !/\.(test|spec)\./.test(foldCase ? file.toLowerCase() : file));

@@ -43,16 +43,6 @@ function isUsablePython(candidate) {
   }
 }
 
-const selectedPython = pythonCandidates().find(isUsablePython);
-const env = { ...process.env };
-if (selectedPython) {
-  env.PYTHON = selectedPython;
-  console.log(`[native:node] using Python: ${selectedPython}`);
-} else {
-  delete env.PYTHON;
-  console.log("[native:node] no validated Python found; falling back to node-gyp discovery");
-}
-
 // node-pty 1.1's published prebuilds ship spawn-helper without its executable
 // bit, so every terminal fails with "posix_spawnp failed" until something
 // rebuilds node-pty. Every backend that runs from source (`bun run dev`,
@@ -61,6 +51,23 @@ const ptyPrebuilds = path.join(PROJECT_ROOT, "node_modules", "node-pty", "prebui
 for (const target of fs.existsSync(ptyPrebuilds) ? fs.readdirSync(ptyPrebuilds) : []) {
   const helper = path.join(ptyPrebuilds, target, "spawn-helper");
   if (fs.existsSync(helper)) fs.chmodSync(helper, 0o755);
+}
+
+try {
+  require("better-sqlite3")(":memory:").close();
+  return;
+} catch {
+  // Rebuild when the binary installed by better-sqlite3 cannot open a database in this Node.
+}
+
+const selectedPython = pythonCandidates().find(isUsablePython);
+const env = { ...process.env };
+if (selectedPython) {
+  env.PYTHON = selectedPython;
+  console.log(`[native:node] using Python: ${selectedPython}`);
+} else {
+  delete env.PYTHON;
+  console.log("[native:node] no validated Python found; falling back to node-gyp discovery");
 }
 
 try {

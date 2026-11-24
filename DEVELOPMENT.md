@@ -10,7 +10,7 @@ bun run doctor   # verifies the toolchain below
 | Tool                     | Needed for                                                | Notes                                                                                                                                                                                   |
 | ------------------------ | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Node 22.x                | everything                                                | Pinned in `.node-version`. Newer majors (Homebrew's default `node`) fail to compile `better-sqlite3`. Use `brew install node@22 && brew link --overwrite --force node@22`, or fnm/mise. |
-| Bun                      | everything                                                | CI pins the version in `package.json` `packageManager`. A newer local Bun works; don't commit lockfile rewrites.                                                                        |
+| Bun                      | everything                                                | CI and runtime builds require the Bun version in the root `packageManager` field. Run `bun run build:runtime` before `bun run package:mac:dir`, which uses the staged runtime.          |
 | Xcode Command Line Tools | native modules                                            | `xcode-select --install`                                                                                                                                                                |
 | Full Xcode               | iOS simulator, `bun run build:all`, `bun run package:mac` | The simulator helpers are universal binaries; Command Line Tools cannot link the x86_64 slice. `bun install` skips them without Xcode.                                                  |
 | `jq`, `gh`               | `scripts/bump-version.sh`, releases                       |                                                                                                                                                                                         |
@@ -18,6 +18,11 @@ bun run doctor   # verifies the toolchain below
 
 `apps/cloud-relay` and `apps/landing` are standalone packages with their own lockfiles, so a plain
 root `bun install` does not cover them and `bun run typecheck:all` fails until `bun run setup` has run.
+
+Before pushing, run `bun run check`. Its browser journeys need Chromium
+(`bunx playwright install chromium`) and its video tests need FFmpeg and ffprobe
+(`brew install ffmpeg` on macOS). On Linux, build the terminal binding once
+with `(cd node_modules/node-pty && bunx node-gyp rebuild)`.
 
 The dev backend opens the same database as the installed app
 (`~/Library/Application Support/com.deus.app/deus.db`), shared by every checkout. Set
