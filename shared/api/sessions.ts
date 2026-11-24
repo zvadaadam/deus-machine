@@ -73,7 +73,9 @@ export const sendMessage = write({
 });
 
 export type QueuedMessages = {
-  paused: "stopped" | "failed" | null;
+  paused: "stopped" | "failed" | "limit" | null;
+  /** The provider's reset time in epoch milliseconds, when known. */
+  limit?: { resetsAt?: number; continues: boolean };
   items: { id: string; text: string; images: number; state: "sending" | "steering" | "waiting" }[];
 };
 
@@ -126,6 +128,13 @@ export const removeQueuedMessage = write({
 export const resumeQueuedMessages = write({
   name: "resumeQueuedMessages",
   input: sessionId,
+  output: out<Record<string, never>>(),
+});
+
+/** Continue the local chat one minute after its reported reset, or cancel that continuation. */
+export const continueAfterLimit = write({
+  name: "continueAfterLimit",
+  input: sessionId.extend({ on: z.boolean() }),
   output: out<Record<string, never>>(),
 });
 

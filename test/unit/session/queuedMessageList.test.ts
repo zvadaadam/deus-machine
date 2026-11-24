@@ -157,6 +157,18 @@ it.each([
   expect(client.getQueryData(queryKey)).toEqual({ paused, items });
 });
 
+it("shows the limited queue's reset when known and keeps Resume available", () => {
+  const reset = new Date();
+  reset.setHours(5, 10, 0, 0);
+  for (const resetsAt of [reset.getTime(), undefined]) {
+    const html = render({ paused: "limit", limit: { resetsAt, continues: false }, items: [item] });
+    expect(html).toContain(
+      resetsAt ? "Queue paused until 05:10." : "Queue paused. A usage limit was reached."
+    );
+    expect(html).toContain(">Resume<");
+  }
+});
+
 it("keeps twenty rows in order with a full preview for truncated text", () => {
   const items = Array.from({ length: 20 }, (_, i) => ({
     ...item,
