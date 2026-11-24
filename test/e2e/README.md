@@ -407,8 +407,8 @@ takes about 13 seconds with the Postgres image pulled. It checks, in order:
   new workspace, set up for real, with `started_by` and the title; the same call
   made twice at once makes one workspace and the second answer is the first's
   result. A start whose setup fails (a project folder that is not a
-  repository) leaves the workspace in error, `wait_for_sessions` gives its
-  reason, and `archive` removes it.
+  repository) leaves the workspace in error. The start and `wait_for_sessions`
+  both give the stored reason with a home-relative folder, and `archive` removes the workspace.
 - The starts-per-minute limit: the eleventh start within a minute is refused
   (`limit_rate`) and makes no chat.
 - `wait_for_sessions` on a settled and a working chat: `until: any` answers at
@@ -441,16 +441,12 @@ takes about 13 seconds with the Postgres image pulled. It checks, in order:
   it, so with the computer away `initialize` and `tools/list` are refused (not
   on the account) rather than answered from memory.
 
-It prints `SKIP` for what needs the engine's model lists (`list_models`, and a
-start naming a model), and `KNOWN FAILURE` for one bug in the engine package:
-`start_session`'s own answer for a workspace whose setup failed reads "setup
-failed" rather than the reason, because it renders the entry read at the start
-(`src/operator/operator.ts`, `ownOutcome`). A message an assistant sends is not
-stored here (the engine's echo writes it), so `messages.origin` is the unit
-tests' to hold.
+It prints `SKIP` for what needs the engine's model lists (`list_models` and a
+start naming a model). The engine's echo stores a message an assistant sends,
+so the unit tests cover `messages.origin`.
 
 Logs, Worker state, the run's database and `results.json` (each check's
-evidence: the tools' own words, and what was skipped or is a known failure) go
+evidence includes the tools' own words and what was skipped) go
 to `.context/assistants-e2e/`.
 
 ### `controls.browser.mjs`

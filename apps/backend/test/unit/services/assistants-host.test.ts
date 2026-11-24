@@ -5,6 +5,7 @@
 // reached through MCP (`agentMcp`) and as a chat's own.
 
 import Database from "better-sqlite3";
+import { captureException } from "@sentry/node";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -750,21 +751,31 @@ describe("through MCP and as a chat's own tools", () => {
   it("shows the home-relative folder when a workspace fails to start and keeps the stored error", async () => {
     const folder = join(homedir(), "Developer", "shop");
     const error = `The project folder is missing: ${folder}.`;
-    insertWorkspace("w-missing", "missing", { state: "error", first: "s-missing" });
-    state.db.prepare("UPDATE workspaces SET error_message = ? WHERE id = 'w-missing'").run(error);
-
     const caller = assistantCaller();
-    const status = await call(caller, "wait_for_sessions", { sessions: ["missing:1"], wait: 1 });
-    const refusal = await call(caller, "send_message", { session: "missing:1", message: "go" });
+    const starting = call(caller, "start_session", {
+      project: "demo-shop",
+      message: "go",
+      wait: 5,
+    });
+    const row = state.db
+      .prepare("SELECT error_message FROM workspaces WHERE slug = 'new1'")
+      .pluck();
+    await vi.waitFor(() => expect(row.get()).toBeNull());
+    state.db
+      .prepare("UPDATE workspaces SET state = 'error', error_message = ? WHERE slug = 'new1'")
+      .run(error);
+    changed();
+    const start = await starting;
+    const status = await call(caller, "wait_for_sessions", { sessions: ["new1:1"], wait: 1 });
+    const refusal = await call(caller, "send_message", { session: "new1:1", message: "go" });
+    expect(start.isError).toBe(false);
     expect(status.isError).toBe(false);
     expect(refusal.isError).toBe(true);
-    for (const { text } of [status, refusal]) {
+    for (const { text } of [start, status, refusal]) {
       expect(text).toContain(`The project folder is missing: ${join("~", "Developer", "shop")}.`);
       expect(text).not.toContain(homedir());
     }
-    expect(
-      state.db.prepare("SELECT error_message FROM workspaces WHERE id = 'w-missing'").pluck().get()
-    ).toBe(error);
+    expect(row.get()).toBe(error);
   });
 
   it.each(["assistant", "chat"] as const)(
@@ -847,8 +858,7 @@ describe("through MCP and as a chat's own tools", () => {
     expect(waited.text).toContain("agent said:");
     for (const { text, isError } of [read, waited]) {
       expect(isError).toBe(false);
-      expect(text).toContain("Build finished.");
-      expect(text).toContain("Tests passed.");
+      expect(text).toMatch(/\| Build finished\.\n +\| \n +\| Tests passed\./);
       expect(text).not.toContain(TELL_USER);
     }
   });
@@ -975,19 +985,25 @@ describe("through MCP and as a chat's own tools", () => {
     }
   );
 
-  it("retains the unknown outcome of unclassified wire errors", async () => {
-    const args = { session: "lead:1", message: "go", wait: 1 };
-    state.sendRefusal = new WireRequestError(
-      WIRE_ERROR_CODES.harnessNotAvailable,
-      "private runtime details"
-    );
-    expect((await call(LOCAL_CALLER, "send_message", args)).text).toContain("not confirmed");
-    state.sendRefusal = new WireRequestError(
-      WIRE_ERROR_CODES.internalError,
-      "request timed out: turn/start"
-    );
-    expect((await call(LOCAL_CALLER, "send_message", args)).text).toContain("not confirmed");
-  });
+  it.each([
+    [WIRE_ERROR_CODES.harnessNotAvailable, "private runtime details"],
+    [WIRE_ERROR_CODES.internalError, "request timed out: turn/start"],
+  ] as const)(
+    "reports wire error %s once and leaves the send unconfirmed",
+    async (code, details) => {
+      const report = vi.mocked(captureException).mockClear();
+      state.sendRefusal = new WireRequestError(code, details);
+      const { text } = await call(LOCAL_CALLER, "send_message", {
+        session: "lead:1",
+        message: "go",
+        wait: 1,
+      });
+      expect(text).toContain("not confirmed");
+      expect(report).toHaveBeenCalledExactlyOnceWith(state.sendRefusal, {
+        tags: { operatorTool: "send_message" },
+      });
+    }
+  );
 
   it("an outside caller is told which computer it reaches: in the instructions and in whoami", async () => {
     const where =

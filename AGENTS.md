@@ -99,6 +99,9 @@ in Settings → AI Providers or during onboarding. The picker then lists the mod
 A model already chosen or recorded stays visible while the list is unavailable.
 Its chats have no Plan toggle. Deus declines a question from its question form. Deus tool cards
 show the call's input and status without result text. Gemini takes instructions once per conversation.
+In full access (`bypass_permissions`), the engine starts `agy` with `--dangerously-skip-permissions`.
+Commands can use the network, commit in the worktree and write outside it. Switching into or out
+of full access restarts `agy` and resumes the conversation.
 
 ### How agents drive a simulator (agent-device)
 
