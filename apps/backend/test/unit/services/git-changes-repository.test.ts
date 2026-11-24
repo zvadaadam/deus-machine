@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
@@ -599,22 +600,26 @@ it("streams all stderr and keeps its last MiB for a failed git command", async (
   expect(failure.stderr).toBe("é".repeat(Math.floor((1024 * 1024 - 3) / 2)) + "END");
 });
 
-it.each(["timeout", "abort", "overflow"])(
+it.for(["timeout", "abort", "overflow"])(
   "settles on %s while a detached post-commit helper holds the pipes",
-  async (stop) => {
+  async (stop, { onTestFinished }) => {
     await git("init", "-qb", "main");
-    const hook = path.join(root, ".git", "hooks", "post-commit");
+    // Both readers stay alive until this test releases the pipe, even on a slow host.
+    const fifo = path.join(root, "hold");
+    execFileSync("mkfifo", [fifo]);
+    const hold = fs.openSync(fifo, fs.constants.O_RDWR);
+    onTestFinished(() => fs.closeSync(hold));
     write(
       "detach.cjs",
-      `const helper = require("node:child_process").spawn("/bin/sleep", ["12"], { detached: true, stdio: "inherit" });
+      `const helper = require("node:child_process").spawn("cat", ["hold"], { detached: true, stdio: "inherit" });
 require("node:fs").writeFileSync("helper.pid", String(helper.pid));
 helper.unref();`
     );
     fs.writeFileSync(
-      hook,
+      path.join(root, ".git", "hooks", "post-commit"),
       `#!/bin/sh
 trap '' TERM
-sleep 12 >/dev/null 2>&1 &
+cat hold >/dev/null 2>&1 &
 echo $! > member.pid
 trap - TERM
 exec "${process.execPath}" detach.cjs
@@ -622,29 +627,42 @@ exec "${process.execPath}" detach.cjs
       { mode: 0o755 }
     );
     const controller = new AbortController();
-    const started = Date.now();
-    const running = runGit(
-      ["-c", "alias.finish=!git commit -q --allow-empty -m fixture && printf done", "finish"],
+    if (stop === "timeout") {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      onTestFinished(() => {
+        vi.useRealTimers();
+      });
+    }
+    const failure = await runGit(
+      [
+        "-c",
+        "alias.finish=!git commit -q --allow-empty -m fixture && echo ready >&2 && printf done",
+        "finish",
+      ],
       {
         cwd: root,
-        timeoutMs: stop === "timeout" ? 750 : 10_000,
         signal: controller.signal,
+        timeoutMs: stop === "timeout" ? 1 : undefined,
         maxOutputBytes: stop === "overflow" ? 1 : undefined,
+        onStderr: (output) => {
+          if (!output.includes("ready")) return;
+          if (stop === "timeout") vi.runAllTimers();
+          if (stop === "abort") controller.abort(new Error("Workspace archived"));
+        },
       }
     ).catch((error: unknown) => error);
+    if (stop === "abort") expect(failure).toBe(controller.signal.reason);
+    else if (stop === "timeout") expect(failure).toMatchObject({ code: null, timedOut: true });
+    else
+      expect(failure).toMatchObject({
+        code: null,
+        timedOut: false,
+        cause: { message: expect.stringContaining("exceeded its byte limit") },
+      });
     const pid = (name: string) => Number(fs.readFileSync(path.join(root, name + ".pid"), "utf8"));
-    try {
-      await vi.waitFor(() => expect(pid("helper")).toBeGreaterThan(0));
-      if (stop === "abort") controller.abort(new Error("Workspace archived"));
-      const failure = await running;
-      if (stop === "abort") expect(failure).toBe(controller.signal.reason);
-      else expect(failure).toMatchObject({ code: null, timedOut: stop === "timeout" });
-      expect(Date.now() - started).toBeLessThan(4000);
-      await vi.waitFor(() => expect(() => process.kill(pid("member"), 0)).toThrow());
-      expect(process.kill(pid("helper"), 0)).toBe(true);
-    } finally {
-      if (fs.existsSync(path.join(root, "helper.pid"))) process.kill(pid("helper"), "SIGKILL");
-    }
+    const member = pid("member");
+    await vi.waitFor(() => expect(() => process.kill(member, 0)).toThrow());
+    expect(process.kill(pid("helper"), 0)).toBe(true);
   }
 );
 

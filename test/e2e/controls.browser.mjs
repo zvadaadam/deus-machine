@@ -162,9 +162,11 @@ try {
     }),
     "Circular controls override the shared shape without retaining its squircle"
   );
-  const before = await primary.boundingBox();
   await primary.hover();
+  const before = await primary.boundingBox();
   await page.mouse.down();
+  await expect(primary.and(page.locator(":active"))).toBeVisible();
+  await primary.evaluate((el) => Promise.allSettled(el.getAnimations().map((a) => a.finished)));
   assertSameBounds(
     before,
     await primary.boundingBox(),
@@ -178,11 +180,9 @@ try {
   assert.equal(await page.getByText("Actions: 1", { exact: true }).count(), 1);
   await primary.focus();
   await page.keyboard.press("Tab");
-  assert(
-    await page
-      .getByRole("button", { name: "secondary", exact: true })
-      .evaluate((el) => el.matches(":focus-visible") && getComputedStyle(el).boxShadow !== "none")
-  );
+  const secondary = page.getByRole("button", { name: "secondary", exact: true });
+  await expect(secondary.and(page.locator(":focus-visible"))).toBeFocused();
+  await expect(secondary).not.toHaveCSS("box-shadow", "none");
   await page.getByRole("button", { name: "main", exact: true }).focus();
   await page.keyboard.press("ArrowDown");
   await page.getByRole("menuitem", { name: "Choose branch" }).waitFor();
@@ -227,6 +227,7 @@ try {
       });
     });
     await rows.nth(1).hover();
+    await list.locator(marker).filter({ hasText: "Rename branch" }).waitFor();
     await page.locator(`[data-slot="${slot}"][data-saw-travel]`).waitFor();
     if (itemRole === "option") {
       await page.getByPlaceholder("Branch command").hover();
@@ -276,9 +277,9 @@ try {
   }
   await page.getByRole("combobox", { name: "Environment" }).click();
   await page.getByRole("option", { name: "Local", exact: true }).click();
-  assert.equal(await page.getByRole("combobox", { name: "Environment" }).textContent(), "Local");
+  await expect(page.getByRole("combobox", { name: "Environment" })).toHaveText("Local");
   await page.getByRole("link", { name: "Link action" }).click();
-  assert(page.url().endsWith("#target"), "Button asChild preserves link behavior");
+  await expect(page, "Button asChild preserves link behavior").toHaveURL(/#target$/);
   const survivingTab = page.getByTestId("second-tabs").getByRole("tab", { name: "First" });
   const indicator = () =>
     survivingTab.evaluate((el) => {
@@ -297,18 +298,9 @@ try {
   );
   await survivingTab.focus();
   await page.keyboard.press("ArrowRight");
-  await page
-    .getByTestId("second-tabs")
-    .locator('[role="tab"][aria-selected="true"]')
-    .filter({ hasText: "Second" })
-    .waitFor();
-  assert.equal(
-    await page
-      .getByTestId("second-tabs")
-      .getByRole("tab", { name: "Second" })
-      .getAttribute("aria-selected"),
-    "true"
-  );
+  await expect(
+    page.getByTestId("second-tabs").getByRole("tab", { name: "Second" })
+  ).toHaveAttribute("aria-selected", "true");
   for (const theme of ["light", "dark"]) {
     await page.evaluate(async (t) => {
       document.documentElement.classList.toggle("dark", t === "dark");
@@ -326,21 +318,15 @@ try {
       .screenshot({ path: path.join(artifacts, `reference-${theme}.png`) });
   }
   const spinner = page.getByTestId("spinner");
-  assert.notEqual(await spinner.evaluate((el) => getComputedStyle(el).animationName), "none");
+  await expect(spinner).not.toHaveCSS("animation-name", "none");
   await page.emulateMedia({ reducedMotion: "reduce" });
-  assert.equal(await spinner.evaluate((el) => el.getAnimations().length), 0);
-  assert.equal(await primary.evaluate((el) => getComputedStyle(el).transitionDuration), "0.08s");
+  await expect.poll(() => spinner.evaluate((el) => el.getAnimations().length)).toBe(0);
+  await expect(primary).toHaveCSS("transition-duration", "0.08s");
 
-  // Pause at animationstart so even a slow CI machine can inspect the painted intermediate frames.
-  await page.evaluate(() => {
-    document.addEventListener("animationstart", ({ target, animationName }) => {
-      if (!target.matches('[data-slot="dropdown-menu-content"], [data-slot="dialog-content"]'))
-        return;
-      target
-        .getAnimations()
-        .find((a) => a.animationName === animationName)
-        ?.pause();
-    });
+  // Start paused: a busy renderer can deliver animationstart and animationend in one frame.
+  await page.addStyleTag({
+    content:
+      '[data-slot="dropdown-menu-content"], [data-slot="dialog-content"] { animation-play-state: paused !important }',
   });
   for (const [trigger, slot, enter, exit] of [
     ["main", "dropdown-menu-content", 160, 120],
@@ -496,6 +482,7 @@ try {
   // Nothing jumps. Measure the controls in both motion settings.
   for (const reducedMotion of ["no-preference", "reduce"]) {
     const sample = await browser.newPage({ reducedMotion, permissions: ["clipboard-write"] });
+    await sample.clock.install();
     await sample.goto(url + "#no-jumps");
     const strip = sample.getByRole("tablist", { name: "Content panel" });
     const files = strip.getByRole("tab", { name: "Files" });
@@ -513,6 +500,15 @@ try {
     });
     await files.click();
     await expect(files).toHaveAttribute("data-panel-at-selection", "files");
+    if (reducedMotion === "no-preference") {
+      await expect
+        .poll(() =>
+          files.evaluate((tab) =>
+            tab.getAnimations({ subtree: true }).map((a) => a.transitionProperty)
+          )
+        )
+        .toContain("grid-template-columns");
+    }
     const travel = await files.evaluate((tab) => {
       const width = () => tab.getBoundingClientRect().width;
       const move = tab
@@ -566,6 +562,9 @@ try {
     const pending = sample.getByRole("button", { name: "Toggle pending" });
     await pending.click();
     const skeleton = sample.locator('[data-slot="skeleton"]');
+    await expect
+      .poll(() => skeleton.evaluate((el) => el.getAnimations().map((a) => a.animationName)))
+      .toContain("fadeIn");
     const read = await skeleton.evaluate((placeholder) => {
       const animations = placeholder.getAnimations();
       const fade = animations.find((a) => a.animationName === "fadeIn");
@@ -592,23 +591,22 @@ try {
     await timeline.send("Animation.setPlaybackRate", { playbackRate: 1 });
 
     const changes = strip.getByRole("tab", { name: "Changes" });
-    await sample.clock.install();
     await changes.evaluate((button) => button.click());
+    await expect(changes).toHaveAttribute("aria-selected", "true");
     await changes.hover();
-    await sample.clock.fastForward(700);
-    const activeDescription = await changes.getAttribute("aria-describedby");
+    await sample.clock.runFor(700);
+    await expect(changes).not.toHaveAttribute("aria-describedby", /.+/);
     // Keep the pointer in the panel. Moving it to Files can dismiss the stale tooltip.
     await panel.hover();
     await files.evaluate((button) => button.click());
     await strip.getByRole("tab", { name: "Files", selected: true }).waitFor();
-    await sample.clock.fastForward(700);
-    assert.equal(await sample.locator('[data-slot="tooltip-content"]:visible').count(), 0);
-    assert.equal(activeDescription, null);
+    await sample.clock.runFor(700);
+    await expect(sample.locator('[data-slot="tooltip-content"]:visible')).toHaveCount(0);
 
     await changes.hover();
     const hint = sample.getByRole("tooltip", { name: "Changes" });
     await hint.waitFor();
-    assert.equal(await changes.getAttribute("aria-describedby"), await hint.getAttribute("id"));
+    await expect(changes).toHaveAttribute("aria-describedby", await hint.getAttribute("id"));
     await changes.click();
     await hint.waitFor({ state: "detached" });
     await panel.hover();
