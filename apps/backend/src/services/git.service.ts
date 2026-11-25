@@ -44,6 +44,47 @@ export async function verifyBranchExists(cwd: string, branch: string): Promise<s
   return "main";
 }
 
+/** The Git metadata outside a linked checkout that its sandbox needs for Git commands. */
+export async function linkedWorktreeGitDirectories(
+  cwd: string,
+  repositoryPath: string,
+  signal?: AbortSignal
+): Promise<string[] | undefined> {
+  const revParse = ["rev-parse", "--path-format=absolute"];
+  const options = { timeoutMs: 2000, maxOutputBytes: 32768, signal };
+  try {
+    const [worktree, repository, checkout] = await Promise.all([
+      runGit([...revParse, "--absolute-git-dir", "--git-common-dir"], { ...options, cwd }),
+      runGit([...revParse, "--git-common-dir"], { ...options, cwd: repositoryPath }),
+      fs.realpath(cwd),
+    ]);
+    const [gitDir, commonDir, ...rest] = worktree
+      .split(/\r?\n/)
+      .map((dir) => dir && path.normalize(dir));
+    if (
+      rest.length !== 1 ||
+      rest[0] !== "" ||
+      !gitDir ||
+      !commonDir ||
+      !path.isAbsolute(commonDir) ||
+      commonDir !== path.normalize(repository.replace(/\r?\n$/, "")) ||
+      path.dirname(gitDir) !== path.join(commonDir, "worktrees")
+    )
+      return;
+
+    // A gitfile can point at another checkout's metadata. Git's backpointer
+    // confirms this entry belongs to the workspace we are about to run in.
+    const gitfile = await fs.readFile(path.join(gitDir, "gitdir"), "utf8");
+    if (path.resolve(gitDir, gitfile.replace(/\r?\n$/, "")) !== path.join(checkout, ".git")) return;
+    return [gitDir, commonDir];
+  } catch (error) {
+    signal?.throwIfAborted();
+    if (!(error instanceof GitError) && !(error instanceof Error && "code" in error)) throw error;
+    // Missing or unreadable Git metadata needs no additional sandbox access.
+    return;
+  }
+}
+
 /** Prefer the remote refs for the workspace's target and default branches. */
 export async function resolveParentBranch(
   workspacePath: string,

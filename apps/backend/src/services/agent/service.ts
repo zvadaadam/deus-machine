@@ -52,6 +52,7 @@ import {
 import { invalidate } from "../query-engine";
 import { openWith } from "../streams";
 import { agentDeviceFor } from "../simulator-context";
+import { linkedWorktreeGitDirectories } from "../git.service";
 import { setupForTurn } from "../project-environment.service";
 import { handleAutomationToolRequest } from "../automations";
 import { getDatabase } from "../../lib/database";
@@ -176,17 +177,26 @@ export async function startTurn(
   turnId: string,
   agentHarness: AgentHarness,
   prompt: string,
-  options: Omit<DeusTurnOptions, "agentMessages"> & { signal?: AbortSignal }
+  options: Omit<DeusTurnOptions, "agentMessages" | "additionalDirectories"> & {
+    repositoryPath?: string | null;
+    signal?: AbortSignal;
+  }
 ): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
-  const { signal } = options;
+  const { signal, repositoryPath } = options;
   const stopped = Promise.withResolvers<never>();
   const onAbort = () => stopped.reject(signal?.reason);
   signal?.addEventListener("abort", onAbort);
-  const apps = await Promise.race([turnApps(agentHarness), stopped.promise]).finally(() =>
-    signal?.removeEventListener("abort", onAbort)
-  );
-  // Stop can arrive after the apps resolve and before this turn is registered.
+  const [apps, additionalDirectories] = await Promise.race([
+    Promise.all([
+      turnApps(agentHarness),
+      agentHarness === "gemini" && repositoryPath
+        ? linkedWorktreeGitDirectories(options.cwd, repositoryPath, signal)
+        : undefined,
+    ]),
+    stopped.promise,
+  ]).finally(() => signal?.removeEventListener("abort", onAbort));
+  // Stop can arrive after preparation and before this turn is registered.
   signal?.throwIfAborted();
   if (!getDatabase().prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId)) {
     throw new NotFoundError("This chat no longer exists.");
@@ -195,6 +205,7 @@ export async function startTurn(
   const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, {
     ...options,
     ...apps,
+    additionalDirectories,
     agentMessages: hasAgentMessages(sessionId),
     setup: setupForTurn(sessionId),
     agentDeviceSession: device.session,

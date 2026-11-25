@@ -15,11 +15,15 @@
  * back — see agent-commands-send.test.ts for that half.
  */
 
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WireRequestError } from "@zvada/agent-server/client";
 import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
 import { api } from "@shared/api";
+import { runGit } from "@shared/lib/git-process";
 import { SCHEMA_SQL } from "@shared/schema";
 import repoHandlers from "../../../src/api/repos";
 import sessionHandlers from "../../../src/api/sessions";
@@ -142,6 +146,71 @@ describe("agentService.startTurn", () => {
     await expect(start()).resolves.toBeUndefined();
 
     expect(agentService.liveTurnId(SESSION)).toBe(TURN);
+  });
+
+  it.each([
+    { harness: "gemini", checkout: "linked", granted: true },
+    { harness: "claude-code", checkout: "linked", granted: false },
+    { harness: "gemini", checkout: "primary", granted: false },
+    { harness: "gemini", checkout: "foreign", granted: false },
+    { harness: "gemini", checkout: "redirected", granted: false },
+  ] as const)("scopes Git directories for $harness in a $checkout checkout", async (scenario) => {
+    const temp = await realpath(await mkdtemp(path.join(tmpdir(), "deus-gemini-git-")));
+    try {
+      const repo = path.join(temp, "main repo");
+      const linked = path.join(repo, ".deus", "sandbox");
+      const sibling = path.join(repo, ".deus", "sibling");
+      await runGit(["init", repo], { cwd: temp });
+      await runGit(
+        [
+          "-c",
+          "user.name=Test",
+          "-c",
+          "user.email=test@example.test",
+          "-c",
+          "commit.gpgSign=false",
+          "commit",
+          "--allow-empty",
+          "-m",
+          "initial",
+        ],
+        { cwd: repo }
+      );
+      await runGit(["worktree", "add", "--detach", linked], { cwd: repo });
+      await runGit(["worktree", "add", "--detach", sibling], { cwd: repo });
+      const commonDir = path.join(repo, ".git");
+      const linkedDir = path.join(commonDir, "worktrees", "sandbox");
+      if (scenario.checkout === "redirected") {
+        await writeFile(
+          path.join(linked, ".git"),
+          `gitdir: ${path.join(commonDir, "worktrees", "sibling")}\n`
+        );
+      }
+      const repositoryPath = scenario.checkout === "foreign" ? path.join(temp, "other repo") : repo;
+      if (repositoryPath !== repo) await runGit(["init", repositoryPath], { cwd: temp });
+      const cwd = scenario.checkout === "primary" ? repo : linked;
+      mockLinkStartTurn.mockResolvedValue({ sessionId: SESSION, turnId: TURN });
+
+      await agentService.startTurn(SESSION, TURN, scenario.harness, "hello", {
+        cwd,
+        repositoryPath,
+        permissionMode: "default",
+        resume: "native-session",
+      });
+
+      expect(mockLinkStartTurn).toHaveBeenCalledOnce();
+      const { config } = mockLinkStartTurn.mock.calls[0]![0];
+      expect(config).toMatchObject({
+        cwd,
+        permissionMode: "default",
+        resumeSessionId: "native-session",
+      });
+      expect(config.additionalDirectories).toEqual(
+        scenario.granted ? [linkedDir, commonDir] : undefined
+      );
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
   });
 
   it("pushes the recorded message tool to both reads before publishing the turn's first event", async () => {

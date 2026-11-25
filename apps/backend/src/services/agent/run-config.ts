@@ -73,6 +73,8 @@ export function withoutImageParts(input: AgentInput): AgentInput {
 export interface DeusTurnOptions {
   cwd: string;
   agentMessages: boolean;
+  /** Exact Git metadata roots a linked checkout needs in the Gemini sandbox. */
+  additionalDirectories?: string[];
   model?: string;
   thinkingLevel?: ThinkingLevel;
   permissionMode?: PermissionMode;
@@ -110,6 +112,9 @@ export function buildTurnStartParams(
     config: {
       harness: agentHarness,
       cwd: options.cwd,
+      ...(options.additionalDirectories && {
+        additionalDirectories: options.additionalDirectories,
+      }),
       model: options.model,
       thinkingLevel: options.thinkingLevel,
       systemPromptAppend: buildSystemPromptAppend(

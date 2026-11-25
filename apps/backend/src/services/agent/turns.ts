@@ -380,6 +380,7 @@ async function sendMessageOnce(
     const preparing = new AbortController();
     const done = agentService.startTurn(sessionId, turnId, agentHarness, content, {
       cwd,
+      repositoryPath: workspace?.root_path,
       signal: preparing.signal,
       model,
       thinkingLevel: readThinkingLevel(input.thinkingLevel),
