@@ -157,7 +157,7 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
   if (type === "end" || type === "snapshot") return true;
   const error = "error" in reason && reason.error;
   const prior = turn.setup?.prior;
-  // An unsent claim without a failure of its own leaves the chat as if it had never been made.
+  // An unsent claim without its own failure restores the latest the previous turn reported (its end or a fatal error), otherwise what the claim found.
   if (error) persistSessionStatus(id, "error", error.message, error.category);
   else if (prior && (refused || by)) persistSessionStatus(id, ...prior);
   else if (!refused) persistStopStatus(id);
