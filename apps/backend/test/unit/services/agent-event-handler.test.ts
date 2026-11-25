@@ -26,11 +26,13 @@ import type { ChangeWrite, TurnOutcomeWrite } from "../../../src/services/agent/
 const {
   mockPersistAgentSessionId,
   mockPersistChanges,
+  mockPersistTurn,
   mockPersistSessionError,
   mockPersistSessionTitle,
   mockPersistSessionWorking,
   mockInvalidate,
   mockPublish,
+  mockResetSubscribers,
   mockOpenWith,
   mockRefreshPr,
   mockRestoreCloudSnapshot,
@@ -39,11 +41,13 @@ const {
   mockRestoreCloudSnapshot: vi.fn<(...args: any[]) => any>(),
   mockPersistAgentSessionId: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
   mockPersistChanges: vi.fn<(...args: any[]) => any>(),
+  mockPersistTurn: vi.fn(() => ({ ok: true })),
   mockPersistSessionError: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
   mockPersistSessionTitle: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
   mockPersistSessionWorking: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
   mockInvalidate: vi.fn<(...args: any[]) => any>(),
   mockPublish: vi.fn<(...args: any[]) => any>(),
+  mockResetSubscribers: vi.fn(),
   mockOpenWith: vi.fn<(...args: any[]) => any>(),
   mockRefreshPr: vi.fn<(...args: any[]) => any>(),
   outcomes: [] as Array<{ turn: ConversationTurn; outcome: TurnOutcomeWrite }>,
@@ -52,6 +56,7 @@ const {
 vi.mock("../../../src/services/agent/persistence", () => ({
   persistAgentSessionId: mockPersistAgentSessionId,
   persistChanges: mockPersistChanges,
+  persistTurn: mockPersistTurn,
   persistSessionError: mockPersistSessionError,
   persistSessionTitle: mockPersistSessionTitle,
   persistSessionWorking: mockPersistSessionWorking,
@@ -60,6 +65,7 @@ vi.mock("../../../src/services/agent/persistence", () => ({
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
 vi.mock("../../../src/services/streams", () => ({
   publish: mockPublish,
+  resetSubscribers: mockResetSubscribers,
   openWith: mockOpenWith,
 }));
 vi.mock("../../../src/services/pr-snapshot.service", () => ({
@@ -1059,6 +1065,29 @@ describe("agent event handler (canonical lifecycle stream)", () => {
   // ==========================================================================
 
   describe("turn admission mirror", () => {
+    it("notifies the open chat when its admitted turn with a user message ends locally", () => {
+      const interrupted = vi.fn(() => ["unread"]);
+      const handler = createAgentEventHandler(interrupted);
+      handler.beginTurn(SESSION, TURN);
+      handler.handle(
+        envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
+      );
+      handler.handle(envelope(messageStarted({ role: "user", outputIndex: 0 })));
+      handler.handle(envelope(partEvent));
+      mockPublish.mockClear();
+      handler.giveUpTurn(SESSION, TURN, "cancelled");
+      expect(mockPersistTurn).toHaveBeenCalledWith(SESSION, {
+        turnId: TURN,
+        stopReason: "cancelled",
+        endedAt: expect.any(Number),
+        undeliveredSteers: ["unread"],
+      });
+      expect(mockResetSubscribers).toHaveBeenCalledExactlyOnceWith(sessionEvents, {
+        sessionId: SESSION,
+      });
+      expect(mockPublish).not.toHaveBeenCalled();
+    });
+
     it("adopts a cloud turn started by another client after our turn ends", () => {
       handler.beginTurn(SESSION, TURN);
       handler.handle(

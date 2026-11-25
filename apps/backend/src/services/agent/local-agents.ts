@@ -49,11 +49,11 @@ export class LocalAgents {
   }
 
   /**
-   * Each harness's CLI and login, and the sign-ins under way. No `env`, as
-   * Deus's turns send none: the CLI and login they run on.
+   * One harness's CLI and login (all by default), and the sign-ins under way.
+   * No `env`, as Deus's turns send none: the CLI and login they run on.
    */
-  async status(): Promise<AgentAuthAnswer> {
-    const harnesses = [...LOCAL_HARNESSES];
+  async status(harness?: AgentHarness): Promise<AgentAuthAnswer> {
+    const harnesses = harness ? [harness] : [...LOCAL_HARNESSES];
     const [clis, auth] = await Promise.all([
       this.client.listClis(harnesses),
       this.client.authStatus({ harnesses }),
