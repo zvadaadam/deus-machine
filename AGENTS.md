@@ -235,7 +235,9 @@ The rules above `transition` in `services/agent/queue.ts` say who may resume eac
 During local app setup, Stop returns the chat to idle at once, except for an agent's or
 assistant's first task, which ends in an error saying it was not delivered. The person
 keeps their draft, a queue head waits first, and an operator's send is refused
-with “Stopped before it started.” Once the start request reaches the wire, Stop
+with “Stopped before it started.” The operator can read who stopped that send
+until the chat's next admission or archive. Its end stays out of the transcript.
+Once the start request reaches the wire, Stop
 waits for its answer (up to 30 seconds) and cancels the turn if it is still live.
 If the engine reports no active turn, the chat settles at once. A confirmed cancel withdraws the cards
 and keeps the chat occupied for final echoes. If no end arrives within 15 seconds of confirmation, the watchdog

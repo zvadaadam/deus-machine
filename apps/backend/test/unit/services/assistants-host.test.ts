@@ -79,11 +79,13 @@ vi.mock("../../../src/services/agent/tool-relay", () => ({
   isPrompt: (method: string) => method === "askUserQuestion" || method === "exitPlanMode",
 }));
 vi.mock("../../../src/services/agent/turns", () => ({
+  currentTurnId: (sessionId: string) => state.live.get(sessionId),
+  stoppedBeforeStart: () => undefined,
   sendMessage: async (input: Record<string, unknown>, origin?: unknown) => {
     if (state.sendRefusal) throw state.sendRefusal;
+    state.live.set(input.sessionId as string, input.turnId as string);
     if (state.sending) await state.sending;
     state.sent.push({ input, origin });
-    state.live.set(input.sessionId as string, input.turnId as string);
     return { turnId: input.turnId };
   },
   stopSession: async ({ sessionId }: { sessionId: string }, by: unknown) => {

@@ -24,7 +24,13 @@ import {
   type StopAsked,
 } from "./service";
 import { continuedSettings } from "./turn-settings";
-import { previousSend, requireSameHarness, retryReadSteer, sendMessage } from "./turns";
+import {
+  previousSend,
+  requireSameHarness,
+  retryReadSteer,
+  sendMessage,
+  stoppedBeforeStart,
+} from "./turns";
 
 type Input = ParsedInputOf<typeof api.sendMessage>;
 type Message = Input & { turnId: string };
@@ -723,6 +729,7 @@ function interrupted(
   gone: boolean,
   cause: InterruptionCause
 ) {
+  if (turnId && stoppedBeforeStart(sessionId)?.turnId === turnId) cause = "cancelled";
   const q = queueToPause(sessionId, cause === "cancelled");
   if (!q) return;
   const kept = gone && turnId !== undefined ? recoverSteers(q, turnId) : undefined;

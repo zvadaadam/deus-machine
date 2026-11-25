@@ -28,7 +28,7 @@ import {
   persistSessionError,
   persistSessionWorking,
 } from "./persistence";
-import { invalidate } from "../query-engine";
+import { invalidate, onInvalidate } from "../query-engine";
 import * as agentService from "./service";
 import { toEngineInput, withoutImageParts } from "./run-config";
 import {
@@ -52,10 +52,55 @@ const admissionsOf = new WeakMap<object, Map<string, Admission>>();
 const ADMISSION_KEPT_MS = 10 * 60_000;
 
 /** Stop interrupts app setup. Once turn/start is on the wire, Stop waits for its answer. */
-const admitting = new Map<
-  string,
-  { turnId: string; preparing: AbortController; done: Promise<void> }
->();
+type Starting = { turnId: string; preparing: AbortController; done: Promise<void> };
+type SetupEnd = { turnId: string; outcome: "cancelled"; cancelledBy: Origin };
+const admitting = new Map<string, Starting | SetupEnd>();
+
+function startingTurn(sessionId: string) {
+  const entry = admitting.get(sessionId);
+  return entry && "preparing" in entry ? entry : undefined;
+}
+
+export function currentTurnId(sessionId: string) {
+  return agentService.liveTurnId(sessionId) ?? startingTurn(sessionId)?.turnId;
+}
+
+export function stoppedBeforeStart(sessionId: string) {
+  const entry = admitting.get(sessionId);
+  return entry && "cancelledBy" in entry ? entry : undefined;
+}
+
+class SetupStop extends ConflictError {
+  constructor(readonly by: Origin) {
+    super("Stopped before it started.");
+  }
+}
+
+// A turn stopped before the wire ends in memory; it was never in the transcript.
+let unwatchEnds: (() => void) | undefined;
+function recordSetupStop(sessionId: string, turnId: string, cancelledBy: Origin) {
+  admitting.set(sessionId, { turnId, cancelledBy, outcome: "cancelled" });
+  unwatchEnds ??= onInvalidate((resources, ctx) => {
+    if (
+      ctx?.sessionIds?.length ||
+      !(resources.includes("workspaces") || resources.includes("sessions"))
+    )
+      return;
+    const ended = [...admitting.keys()].filter((id) => stoppedBeforeStart(id));
+    const gone = getDatabase()
+      .prepare<[string], { id: string }>(
+        `SELECT value AS id FROM json_each(?) WHERE NOT EXISTS (
+         SELECT 1 FROM sessions s JOIN workspaces w ON s.workspace_id = w.id
+         WHERE s.id = value AND s.is_hidden = 0 AND w.state != 'archived')`
+      )
+      .all(JSON.stringify(ended));
+    for (const { id } of gone) admitting.delete(id);
+    if (ended.length === gone.length) {
+      unwatchEnds?.();
+      unwatchEnds = undefined;
+    }
+  });
+}
 
 export function requireSameHarness(current: string, requested: string): void {
   if (current !== requested)
@@ -387,11 +432,13 @@ async function sendMessageOnce(
       resume: existingAgentSessionId || undefined,
       ...(origin ? { origin } : {}),
     });
-    admitting.set(sessionId, { turnId, preparing, done });
+    const admission = { turnId, preparing, done };
+    admitting.set(sessionId, admission);
     try {
       await done;
     } catch (err) {
-      if (err === preparing.signal.reason) {
+      if (err instanceof SetupStop && err === preparing.signal.reason) {
+        recordSetupStop(sessionId, turnId, err.by);
         settleStopped(sessionId, turnId);
         throw err;
       }
@@ -413,7 +460,7 @@ async function sendMessageOnce(
       throw err;
     } finally {
       // A quick turn can end and start its successor before its admission reply.
-      if (admitting.get(sessionId)?.done === done) admitting.delete(sessionId);
+      if (admitting.get(sessionId) === admission) admitting.delete(sessionId);
     }
   }
 
@@ -456,21 +503,18 @@ export async function stopSession(
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new NotFoundError("Session not found");
 
-  const admission = admitting.get(sessionId);
-  const targetTurnId = admission?.turnId ?? agentService.liveTurnId(sessionId);
+  const targetTurnId = currentTurnId(sessionId);
+  const admission = startingTurn(sessionId);
   agentService.notifyStopAsked(sessionId, {
     by,
     turnId: targetTurnId,
-    endedAt: admission && getTurn(db, sessionId, admission.turnId)?.endedAt,
+    endedAt: targetTurnId ? getTurn(db, sessionId, targetTurnId)?.endedAt : undefined,
   });
-  if (admission) {
-    admission.preparing.abort(new ConflictError("Stopped before it started."));
-    try {
-      await admission.done;
-    } catch {
-      return { unconfirmed: false };
-    }
-    if (agentService.liveTurnId(sessionId) !== targetTurnId) return { unconfirmed: false };
+  if (admission && admission.turnId === targetTurnId) {
+    admission.preparing.abort(new SetupStop(by));
+    // A lost reply can leave the named turn running.
+    await admission.done.catch(() => {});
+    if (currentTurnId(sessionId) !== targetTurnId) return { unconfirmed: false };
   }
   const mine = JSON.stringify(by);
   const key = `${sessionId}\0${targetTurnId}`;
@@ -519,7 +563,7 @@ export async function stopSession(
   }
 
   // The requested turn may have ended and a successor started during the RPC.
-  const live = admitting.get(sessionId)?.turnId ?? agentService.liveTurnId(sessionId);
+  const live = currentTurnId(sessionId);
   if (
     (live !== undefined && live !== targetTurnId) ||
     (result?.outcome === "no_active_turn" && result.activeTurnId !== undefined)
@@ -556,11 +600,10 @@ function scheduleCancelWatchdog(
     try {
       // A successor may still be preparing its apps. Without either owner the
       // status guard below distinguishes a settled chat from one left active.
-      const held = agentService.liveTurnId(sessionId);
-      const live = admitting.get(sessionId)?.turnId ?? held;
+      const live = currentTurnId(sessionId);
       if (live !== undefined && live !== cancelledTurnId) return;
       if (confirmed) {
-        if (held && held === cancelledTurnId) settleStopped(sessionId, held, "cancelled");
+        if (live) settleStopped(sessionId, live, "cancelled");
         return;
       }
 

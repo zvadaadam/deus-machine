@@ -41,6 +41,7 @@ import {
 import { subscribe } from "../../../src/services/streams";
 import { addConnection, closeAll } from "../../../src/services/ws.service";
 import { createDeusHost } from "../../../src/services/assistants/host";
+import * as workspaceInit from "../../../src/services/workspace-init.service";
 import { answerMcp, withSessionTools } from "../../../src/services/assistants/operator";
 import * as access from "../../../src/services/assistants/access";
 import * as settings from "../../../src/services/settings.service";
@@ -311,6 +312,167 @@ afterEach(async () => {
   invalidate(["sessions"]);
   db.close();
   vi.resetAllMocks();
+});
+
+describe("stopping the current turn", () => {
+  const host = createDeusHost();
+  const operator = createOperator(host);
+  const stopFromChat = () => operator.call("stop_sessions", { sessions: [sessionId] }, chatCaller);
+  const view = () => host.view(chatCaller, sessionId, { last: 1 });
+  const fact = (id: string) => host.turn(chatCaller, sessionId, id);
+
+  it("O1: a chat stops setup by name and leaves a waiting row held until removed", async () => {
+    db.exec("INSERT INTO sessions (id, workspace_id) VALUES ('lead', 'w')");
+    const by = { kind: "session", sessionId: "lead", name: "checkout:2" };
+    const release = holdAppSetup();
+    const starting = send("A").catch((error: unknown) => error);
+    await send("later");
+    const duringSetup = await view();
+    const result = await stopFromChat();
+    release();
+    expect(await starting).toMatchObject({ message: "Stopped before it started." });
+    expect(duringSetup).toMatchObject({ running: "A", status: "working" });
+    expect(result).toContain('"checkout:1": stopped');
+    expect(await fact("A")).toMatchObject({
+      state: "ended",
+      outcome: "cancelled",
+      cancelledBy: by,
+    });
+    expect(await run(api.messages, { sessionId })).toMatchObject({ messages: [], turns: [] });
+    expect(await queue()).toMatchObject({
+      paused: "stopped",
+      stoppedBy: by,
+      items: [waitingRow("later")],
+    });
+    await remove("later");
+    expect(await queue()).toEqual({ paused: null, items: [] });
+    expect(starts()).toEqual([]);
+    expect(engine.cancelTurn).not.toHaveBeenCalled();
+  });
+
+  it("O2: an interrupt during app setup sees the end and admits the replacement", async () => {
+    const release = holdAppSetup();
+    const starting = send("A").catch((error: unknown) => error);
+    const result = await operator.call(
+      "send_message",
+      { session: sessionId, message: "Take B instead", when: "interrupt", wait: 0 },
+      chatCaller
+    );
+    release();
+    expect(result).toContain(`stopped "checkout:1"'s turn; sent to "checkout:1"`);
+    expect(await starting).toMatchObject({ message: "Stopped before it started." });
+    expect(engine.startTurn.mock.calls.map(([p]) => p.input)).toEqual(["Take B instead"]);
+    expect(await view()).toMatchObject({ running: starts()[0], status: "working" });
+  });
+
+  it("O3: Stop on the wire waits for a lost reply, then cancels the turn whose events arrived", async () => {
+    const wire = pendingStart();
+    const lost = expect(send("A")).rejects.toThrow("lost ack");
+    await vi.waitFor(() => expect(starts()).toEqual(["A"]));
+    emit({ type: "turn.started", sessionId, turnId: "A", timestamp: seq });
+    engine.cancelTurn.mockImplementationOnce(async () => {
+      end("A", "cancelled");
+      return { outcome: "cancelled", turnId: "A" };
+    });
+    const stopping = stop();
+    expect(engine.cancelTurn).not.toHaveBeenCalled();
+    wire.reject(new Error("lost ack"));
+    await lost;
+    await stopping;
+    expect(engine.cancelTurn.mock.calls).toEqual([[sessionId, "A"]]);
+    expect(await fact("A")).toMatchObject({ state: "ended", cancelledBy: fromPerson });
+  });
+
+  it.each(["person", "operator"] as const)(
+    "O6: the %s stops live A with B in setup and holds the waiting row for A",
+    async (who) => {
+      await send("A");
+      emit({
+        type: "error",
+        sessionId,
+        turnId: "A",
+        timestamp: seq,
+        message: "Failed",
+        category: "internal",
+        recoverable: false,
+      });
+      const release = holdAppSetup();
+      const starting = send("B").catch((error: unknown) => error);
+      await send("later");
+      const duringSetup = await view();
+      engine.cancelTurn.mockImplementationOnce(async () => {
+        end("A", "cancelled");
+        return { outcome: "cancelled", turnId: "A" };
+      });
+      const result = who === "person" ? await stop() : await stopFromChat();
+      const held = await queue();
+      await remove("later");
+      const empty = await queue();
+      release();
+      expect(await starting).toEqual({ turnId: "B" });
+      expect(duringSetup).toMatchObject({ running: "A" });
+      expect(engine.cancelTurn.mock.calls).toEqual([[sessionId, "A"]]);
+      if (who === "operator") expect(result).toContain('"checkout:1": stopped');
+      expect(held).toMatchObject({
+        paused: "stopped",
+        stoppedBy:
+          who === "person" ? fromPerson : { kind: "session", sessionId: chatCaller.sessionId },
+        items: [waitingRow("later")],
+      });
+      expect(empty).toEqual({ paused: null, items: [] });
+      expect(starts()).toEqual(["A", "B"]);
+    }
+  );
+
+  it.each(["archive", "hide", "delete"] as const)(
+    "keeps only the last pre-wire end and forgets it on %s",
+    async (action) => {
+      for (const id of ["A", "B", "C"]) {
+        holdAppSetup();
+        const aborted = expect(send(id)).rejects.toThrow("Stopped before it started");
+        await stop();
+        await aborted;
+        expect(await fact(id)).toMatchObject({ state: "ended", cancelledBy: fromPerson });
+      }
+      expect(await fact("A")).toEqual({ state: "unknown" });
+      expect(await fact("B")).toEqual({ state: "unknown" });
+      if (action === "archive") db.exec("UPDATE workspaces SET state = 'archived'");
+      else if (action === "hide") db.exec("UPDATE sessions SET is_hidden = 1");
+      else db.exec("DELETE FROM sessions");
+      invalidate(["workspaces", "sessions"]);
+      expect(await fact("C")).toEqual({ state: "unknown" });
+    }
+  );
+
+  it("O7: a held first task becomes a named turn as soon as its workspace is ready", async () => {
+    db.exec(`INSERT INTO workspaces (id, repository_id, slug, state, first_session_id)
+      VALUES ('new', 'r', 'new', 'initializing', 'first-chat')`);
+    vi.spyOn(workspaceInit, "createLocalWorkspace").mockResolvedValue({
+      workspaceId: "new",
+      firstSessionId: "first-chat",
+    });
+    const entry = await host.start!(windowCaller, {
+      turnId: "first-task",
+      project: { id: "r", name: "repo" },
+      message: "Build it",
+      origin: fromPerson,
+    });
+    expect(await host.view(windowCaller, entry.id, {})).toMatchObject({ status: "setting_up" });
+    const release = holdAppSetup();
+    db.exec(`INSERT INTO sessions (id, workspace_id) VALUES ('first-chat', 'new');
+      UPDATE workspaces SET state = 'ready', current_session_id = 'first-chat' WHERE id = 'new'`);
+    invalidate(["workspaces"]);
+    const reading = await host.view(windowCaller, entry.id, {});
+    expect(reading.running).toBe("first-task");
+    expect(await host.cancel!(windowCaller, entry.id, reading.running)).toBe("stopped");
+    release();
+    expect(starts()).toEqual([]);
+    expect(await host.turn(windowCaller, entry.id, "first-task")).toMatchObject({
+      state: "ended",
+      outcome: "cancelled",
+      cancelledBy: fromPerson,
+    });
+  });
 });
 
 describe("messages held for a local chat", () => {
@@ -2030,7 +2192,7 @@ describe("the operator's queue and steer contract", () => {
         { items: [{ id, state: release ? "sending" : "waiting" }] },
       ]);
       if (release) {
-        expect(await host.turn(caller, sessionId, id)).toEqual({ state: "unknown" });
+        expect(await host.turn(caller, sessionId, id)).toEqual({ state: "running", steers: {} });
         release();
         await vi.waitFor(async () =>
           expect(await host.turn(caller, sessionId, id)).toEqual({ state: "running", steers: {} })

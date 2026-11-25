@@ -91,11 +91,10 @@ import {
   DifferentTurnMessageError,
 } from "../../lib/errors";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
-import { liveTurnId } from "../agent/service";
 import { QueueLimitError, queuedMessages, enqueueMessage, steerMessage } from "../agent/queue";
 import { answer as answerToolRequest, pendingFor } from "../agent/tool-relay";
 import { continuedSettings, startSettings, type TurnSettings } from "../agent/turn-settings";
-import { sendMessage, stopSession } from "../agent/turns";
+import { currentTurnId, sendMessage, stoppedBeforeStart, stopSession } from "../agent/turns";
 import { invalidate, onInvalidate, runAsThisComputer as run } from "../query-engine";
 import { getServerName } from "../server-name";
 import { assertMayWrite, refusalFor, storedAccess } from "./access";
@@ -453,9 +452,10 @@ export function createDeusHost(): DeusHost {
     const id = row.session_id;
     if (row.state === "archived" || row.is_hidden) return "archived";
     if (!id) return row.state === "error" ? "error" : "setting_up";
-    if (firsts.has(id)) return "setting_up";
+    const current = currentTurnId(id);
+    if (firsts.has(id) && !current) return "setting_up";
     if (pendingFor(id).some((request) => waitingOf(request))) return "needs_input";
-    if (ACTIVE_TURN_STATUSES.includes(row.s_status ?? "") || liveTurnId(id)) return "working";
+    if (ACTIVE_TURN_STATUSES.includes(row.s_status ?? "") || current) return "working";
     if (row.s_status === "error") return "error";
     return ended?.outcome === "cancelled" ? "stopped" : "idle";
   }
@@ -686,11 +686,11 @@ export function createDeusHost(): DeusHost {
 
   /** The chat's turn ended or not, read again at each change, for a stop to confirm. */
   async function ended(sessionId: string, turnId: string): Promise<boolean> {
-    if (liveTurnId(sessionId) !== turnId) return true;
+    if (currentTurnId(sessionId) !== turnId) return true;
     return new Promise<boolean>((resolve) => {
       const timer = setTimeout(() => finish(false), STOP_WAIT_MS);
       const stop = onInvalidate(() => {
-        if (liveTurnId(sessionId) !== turnId) finish(true);
+        if (currentTurnId(sessionId) !== turnId) finish(true);
       });
       function finish(done: boolean) {
         clearTimeout(timer);
@@ -702,7 +702,7 @@ export function createDeusHost(): DeusHost {
 
   /** Stop this turn, by whoever asks, and confirm its end. */
   async function stopTurn(caller: Who, sessionId: string, turnId: string): Promise<CancelOutcome> {
-    if (liveTurnId(sessionId) !== turnId) return "not_running";
+    if (currentTurnId(sessionId) !== turnId) return "not_running";
     mayTouch(caller, sessionId);
     // Named like a send's sender, so every reader sees who stopped it, not an id.
     let by = originOf(caller);
@@ -809,7 +809,7 @@ export function createDeusHost(): DeusHost {
             cancelled_by: null,
           })),
       ];
-      const running = liveTurnId(sessionId);
+      const running = currentTurnId(sessionId);
       const last = lastEnded([sessionId], true).get(sessionId);
       const turns: ViewTurn[] = facts.map((fact) => {
         const outcome = savedOutcome(fact.outcome);
@@ -863,8 +863,11 @@ export function createDeusHost(): DeusHost {
     },
 
     async turn(_caller, sessionId, turnId): Promise<TurnFact> {
-      if (liveTurnId(sessionId) === turnId)
+      if (currentTurnId(sessionId) === turnId)
         return { state: "running", steers: steerReceipts(sessionId, turnId) };
+      const stopped = stoppedBeforeStart(sessionId);
+      if (stopped?.turnId === turnId)
+        return { state: "ended", outcome: stopped.outcome, cancelledBy: stopped.cancelledBy };
       const row = getDatabase()
         .prepare(
           "SELECT ended_at, outcome, cancelled_by FROM turns WHERE session_id = ? AND turn_id = ?"
@@ -955,11 +958,7 @@ export function createDeusHost(): DeusHost {
         if (turnId) return stopTurn(caller, sessionId, turnId);
         const held = firsts.get(sessionId);
         if (!held) return "not_running";
-        if (held.sending) {
-          // Being handed to the engine: wait for its admission, then stop it by its minted id.
-          await held.sending;
-          return stopTurn(caller, sessionId, held.input.turnId);
-        }
+        if (currentTurnId(sessionId)) return stopTurn(caller, sessionId, held.input.turnId);
         assertMayWrite(appCaller(caller));
         drop(sessionId);
         return "first_task_dropped";
