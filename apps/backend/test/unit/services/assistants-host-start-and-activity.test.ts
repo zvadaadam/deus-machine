@@ -1,5 +1,7 @@
+import { setTimeout as delay } from "node:timers/promises";
 import Database from "better-sqlite3";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import type { AgentServerClient } from "@zvada/agent-server/client";
 import { createOperator, type StartInput } from "@zvada/agent-server/operator";
 import type { AgentAuthAnswer } from "@shared/agent-auth";
 import { agentAuth } from "@shared/api/settings";
@@ -8,11 +10,13 @@ import { SCHEMA_SQL } from "@shared/schema";
 import { handle, LOCAL_CALLER, Registry } from "../../../src/api/registry";
 import { ChatBusyError } from "../../../src/lib/errors";
 import type { AgentLinkOptions } from "../../../src/services/agent/client";
+import type { LocalAgents } from "../../../src/services/agent/local-agents";
 import * as agent from "../../../src/services/agent/service";
 import * as turns from "../../../src/services/agent/turns";
 import { createDeusHost } from "../../../src/services/assistants/host";
 import { invalidate, serveOperations } from "../../../src/services/query-engine";
 
+vi.mock("node:timers/promises", { spy: true });
 vi.mock("../../../src/lib/database", () => ({ getDatabase: () => db, DB_PATH: ":memory:" }));
 const openLink = vi.hoisted(() => vi.fn<(options: AgentLinkOptions) => unknown>());
 vi.mock("../../../src/services/agent/client", () => ({ AgentLink: { open: openLink } }));
@@ -25,7 +29,9 @@ vi.mock("../../../src/services/workspace-checkout", () => ({
 }));
 
 let db: Database.Database;
-const readAuth = vi.hoisted(() => vi.fn<() => Promise<AgentAuthAnswer>>());
+const listClis = vi.fn<AgentServerClient["listClis"]>();
+const authStatus = vi.fn<AgentServerClient["authStatus"]>();
+let readAuth: MockInstance<LocalAgents["status"]>;
 const caller = { kind: "external", id: "window", speaksAs: "person", auth: LOCAL_CALLER } as const;
 const first: StartInput = {
   turnId: "first",
@@ -35,15 +41,25 @@ const first: StartInput = {
 };
 const workspace = { id: "w", name: "work" };
 
-beforeEach(() => {
+beforeEach(async () => {
   db = new Database(":memory:");
   db.exec(SCHEMA_SQL);
   db.exec(`
     INSERT INTO repositories (id, name, root_path) VALUES ('r', 'Project', '/repo');
     INSERT INTO workspaces (id, repository_id, slug, state) VALUES ('w', 'r', 'work', 'ready');
   `);
-  readAuth.mockReset().mockResolvedValue({ clis: [], auth: [], logins: [] });
-  serveOperations(new Registry([handle(agentAuth, readAuth)]));
+  listClis.mockReset().mockResolvedValue([]);
+  authStatus.mockReset().mockResolvedValue([]);
+  openLink.mockReset().mockResolvedValue({
+    getAgents: () => [],
+    isConnected: () => true,
+    engine: { onAuthUpdated: () => () => {}, onCliProgress: () => () => {}, listClis, authStatus },
+    close: vi.fn(),
+  });
+  await agent.init();
+  const local = agent.getLocalAgents();
+  readAuth = vi.spyOn(local, "status");
+  serveOperations(new Registry([handle(agentAuth, () => local.status())]));
 });
 
 describe("starting on a local agent", () => {
@@ -53,6 +69,14 @@ describe("starting on a local agent", () => {
     auth: [{ harness, state: "signed_out", methods: [] }],
     logins: [],
   };
+
+  function useReadinessClock() {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    // The promise timer imported by the host otherwise keeps real time.
+    vi.mocked(delay).mockImplementationOnce(
+      (ms, value) => new Promise((resolve) => setTimeout(resolve, ms, value))
+    );
+  }
 
   it.each([false, true])(
     "refuses a signed-out agent before creating a workspace or chat (existing: %s)",
@@ -85,12 +109,60 @@ describe("starting on a local agent", () => {
     }
   );
 
+  it("refuses a fast Codex sign-out while Claude's login is still pending", async () => {
+    const chosen = "codex-app-server";
+    const claude = Promise.withResolvers<AgentAuthAnswer["auth"]>();
+    listClis.mockResolvedValue([{ harness: chosen, state: "ready" }]);
+    authStatus.mockImplementation(({ harnesses } = {}) =>
+      harnesses?.includes("claude-code")
+        ? claude.promise
+        : Promise.resolve([{ harness: chosen, state: "signed_out", methods: [] }])
+    );
+    const all = agent.getLocalAgents().status();
+    try {
+      const send = vi.spyOn(turns, "sendMessage").mockResolvedValue({ turnId: first.turnId });
+      const start = createDeusHost().start!(caller, { ...first, workspace, harness: chosen });
+      await expect(start).rejects.toThrow(/Codex is signed out/);
+      expect(listClis).toHaveBeenLastCalledWith([chosen]);
+      expect(authStatus).toHaveBeenLastCalledWith({ harnesses: [chosen] });
+      expect(send).not.toHaveBeenCalled();
+    } finally {
+      claude.resolve([]);
+      await all;
+    }
+  });
+
+  it("refuses a sign-out that takes two seconds to read", async () => {
+    useReadinessClock();
+    const login = Promise.withResolvers<AgentAuthAnswer>();
+    readAuth.mockReturnValue(login.promise);
+    const send = vi.spyOn(turns, "sendMessage").mockResolvedValue({ turnId: first.turnId });
+    const start = createDeusHost().start!(caller, { ...first, workspace, harness });
+    await vi.advanceTimersByTimeAsync(2_000);
+    login.resolve(signedOut);
+    await expect(start).rejects.toThrow(/Claude Code is signed out/);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("starts after three seconds when the chosen agent's login is still pending", async () => {
+    useReadinessClock();
+    const login = Promise.withResolvers<AgentAuthAnswer>();
+    readAuth.mockReturnValue(login.promise);
+    const send = vi.spyOn(turns, "sendMessage").mockResolvedValue({ turnId: first.turnId });
+    const start = createDeusHost().start!(caller, { ...first, workspace, harness });
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect.soft(send).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect.soft(send).toHaveBeenCalledOnce();
+    login.resolve(signedOut);
+    await expect(start).resolves.toMatchObject({ harness });
+  });
+
   it.each([
     ["the CLI is missing", async () => ({ ...signedOut, clis: [{ harness, state: "missing" }] })],
     ["the login is unknown", async () => ({ ...signedOut, auth: [] })],
     ["the read reports failure", async () => ({ ...signedOut, error: "Engine disconnected" })],
     ["the read rejects", () => Promise.reject(new Error("Connection lost"))],
-    ["the read is still pending", () => new Promise<AgentAuthAnswer>(() => {})],
   ] as const)("admits the first task when %s", async (_, read) => {
     readAuth.mockImplementation(read);
     const send = vi.spyOn(turns, "sendMessage").mockResolvedValue({ turnId: first.turnId });
@@ -99,11 +171,12 @@ describe("starting on a local agent", () => {
     await host.list(caller, {});
     expect(entry.harness).toBe(harness);
     expect(send).toHaveBeenCalledOnce();
-    expect(readAuth).toHaveBeenCalledTimes(1);
+    expect(readAuth).toHaveBeenCalledExactlyOnceWith(harness);
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await agent.shutdown();
   vi.useRealTimers();
   db.close();
 });
@@ -188,20 +261,12 @@ describe("a chat's last activity", () => {
   let seq: number;
   let host: ReturnType<typeof createDeusHost>;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(now);
     seq = 0;
-    openLink.mockReset().mockResolvedValue({
-      getAgents: () => [],
-      isConnected: () => true,
-      engine: { onAuthUpdated: () => () => {}, onCliProgress: () => () => {} },
-      close: vi.fn(),
-    });
-    await agent.init();
     host = createDeusHost();
   });
-  afterEach(() => agent.shutdown());
 
   function prompted(id: string) {
     db.prepare(

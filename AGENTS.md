@@ -585,8 +585,8 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   inside the app's archive queue). A chat's number is stored when it is
   made (`sessions.chat`, a trigger) and never moves. `list_models` shows each local agent's
   readiness beside its models using the same CLI and login check as Settings → AI Providers,
-  onboarding and `deus status` (`shared/agent-readiness.ts`). `start_session` gives that check
-  300 ms and refuses a signed-out agent before creating a workspace or chat. A follow-up uses the chat's
+  onboarding and `deus status` (`shared/agent-readiness.ts`). `start_session` gives the chosen agent's
+  check 3 seconds and refuses a reported sign-out before making a workspace or chat. A follow-up uses the chat's
   recorded model as its composer would (`turn-settings.ts`). Without a recorded model, the host
   uses the agent's default in the engine catalog (which can differ from the composer's
   account default because a send does not wait for a model list) or refuses the

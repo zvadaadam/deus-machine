@@ -92,7 +92,7 @@ import {
   DifferentTurnMessageError,
 } from "../../lib/errors";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
-import { lastOutputAt } from "../agent/service";
+import { getLocalAgents, lastOutputAt } from "../agent/service";
 import { QueueLimitError, queuedMessages, enqueueMessage, steerMessage } from "../agent/queue";
 import { answer as answerToolRequest, pendingFor } from "../agent/tool-relay";
 import { continuedSettings, startSettings, type TurnSettings } from "../agent/turn-settings";
@@ -934,13 +934,11 @@ export function createDeusHost(): DeusHost {
             `start_session: agent: ${JSON.stringify(input.harness)} does not run here; the agents are ${AGENT_NAMES}. Nothing was started.`
           );
         // A cold CLI check can take seconds. Only a known sign-out refuses a start.
-        const refusal = await Promise.race([
-          run(agentAuth, {}).then(
-            (answer) => signedOutStart(answer, harness),
-            () => undefined
-          ),
-          delay(300, undefined, { ref: false }),
-        ]);
+        const status = await Promise.race([
+          Promise.resolve().then(() => getLocalAgents().status(harness)),
+          delay(3_000, undefined, { ref: false }),
+        ]).catch(() => undefined);
+        const refusal = status && signedOutStart(status, harness);
         if (refusal) throw new OperatorError("unsupported", refusal);
         const settings = await startSettings(harness, input);
         if (input.workspace) {
