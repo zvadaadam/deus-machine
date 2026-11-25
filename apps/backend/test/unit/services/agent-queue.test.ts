@@ -616,30 +616,24 @@ describe("stopping the current turn", () => {
     expect(starts()).toEqual(["A", "B"]);
   });
 
-  it("O6: the operator stops live A with B in setup and holds the waiting row for A", async () => {
-    const { release, starting } = await startBWhileALives();
-    await send("later");
-    const duringSetup = await view();
+  it("credits the operator who stops the turn that reported a fatal error and holds the queued send", async () => {
+    await send("A");
+    fatalError("A");
+    await send("B");
     engine.cancelTurn.mockImplementationOnce(async () => {
       end("A", "cancelled");
       return { outcome: "cancelled", turnId: "A" };
     });
-    const result = await stopFromChat();
-    const held = await queue();
-    await remove("later");
-    const empty = await queue();
-    release();
-    expect(await starting).toEqual({ turnId: "B" });
-    expect(duringSetup).toMatchObject({ running: "A" });
+    expect(await stopFromChat()).toContain('"checkout:1": stopped');
     expect(engine.cancelTurn.mock.calls).toEqual([[sessionId, "A"]]);
-    expect(result).toContain('"checkout:1": stopped');
-    expect(held).toMatchObject({
+    expect(await queue()).toMatchObject({
       paused: "stopped",
       stoppedBy: { kind: "session", sessionId: chatCaller.sessionId },
-      items: [waitingRow("later")],
+      items: [waitingRow("B")],
     });
-    expect(empty).toEqual({ paused: null, items: [] });
-    expect(starts()).toEqual(["A", "B"]);
+    await remove("B");
+    expect(await queue()).toEqual({ paused: null, items: [] });
+    expect(starts()).toEqual(["A"]);
   });
 
   async function startBWhileALives() {
