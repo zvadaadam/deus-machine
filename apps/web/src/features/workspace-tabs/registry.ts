@@ -19,6 +19,7 @@ import {
 import { match } from "ts-pattern";
 import type { Settings } from "@shared/types/settings";
 import { capabilities, type CapabilityName } from "@/platform/capabilities";
+import { getDeploymentMode } from "@/shared/config/backend.config";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { deriveTitleFromUrl, isBlankUrl } from "@/features/browser/types";
 import { basenameOfPath, type ContentTab, type WorkspaceTab, type WorkspaceTabKind } from "./types";
@@ -98,6 +99,12 @@ const TOOL_DEFINITIONS: Record<ContentTab, ToolDefinition> = {
     visibilityKey: "experimental_simulator",
     localGates: true,
   },
+  device: {
+    label: "Device",
+    description: "View and control a local iOS or Android device",
+    keywords: ["ios", "android", "simulator", "emulator", "phone"],
+    icon: Smartphone,
+  },
   config: {
     label: "Agent",
     description: "Skills, commands, MCP & hooks",
@@ -124,6 +131,7 @@ export const TAB_KIND_ICONS: Record<WorkspaceTabKind, typeof GitBranch> = {
   changes: TOOL_DEFINITIONS.changes.icon,
   files: TOOL_DEFINITIONS.files.icon,
   simulator: TOOL_DEFINITIONS.simulator.icon,
+  device: TOOL_DEFINITIONS.device.icon,
   config: TOOL_DEFINITIONS.config.icon,
 };
 
@@ -142,6 +150,7 @@ export function getWorkspaceTabTitle(tab: WorkspaceTab): string {
       { kind: "changes" },
       { kind: "files" },
       { kind: "simulator" },
+      { kind: "device" },
       { kind: "config" },
       ({ kind }) => TOOL_DEFINITIONS[kind].label
     )
@@ -155,6 +164,10 @@ export function isTabVisible(
   visibility: ContentTabVisibility = {}
 ): boolean {
   if (isCloudDirectWebMode()) return false;
+  if (tab === "device") {
+    const mode = getDeploymentMode();
+    return !visibility.cloud && (mode === "electron" || mode === "web-dev");
+  }
   const item = TOOL_DEFINITIONS[tab];
   if (!item) return false;
   if (item.localGates && visibility.cloud === true) return true;

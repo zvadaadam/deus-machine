@@ -10,7 +10,7 @@
  * than being prop-drilled through every panel component.
  */
 
-import { useLayoutEffect, useState } from "react";
+import { lazy, Suspense, useLayoutEffect, useState } from "react";
 import { match } from "ts-pattern";
 import { TerminalHost } from "@/features/terminal";
 import { BrowserHost } from "@/features/browser";
@@ -48,6 +48,8 @@ function useLastWhile<T>(active: boolean, value: T, key: string): T | null {
   }, [active, key]);
   return active ? value : (last?.value ?? null);
 }
+
+const DevicePanel = lazy(() => import("@/features/device/DevicePanel"));
 
 interface ContentViewProps {
   workspace: Workspace;
@@ -127,6 +129,20 @@ export function ContentView({
     .with({ kind: "file" }, (tab) => (
       <FileTabView key={`${workspace.id}:${tab.id}`} workspace={workspace} filePath={tab.path} />
     ))
+    .with(
+      { kind: "device" },
+      () =>
+        panelVisible &&
+        !cloud && (
+          <Suspense fallback={null}>
+            <DevicePanel
+              key={workspace.id}
+              workspaceId={workspace.id}
+              defaultSession={workspace.current_session_id ?? null}
+            />
+          </Suspense>
+        )
+    )
     .with({ kind: "config" }, () => <AgentConfigPanel workspace={workspace} />)
     .with({ kind: "browser" }, { kind: "terminal" }, { kind: "simulator" }, () => null)
     .exhaustive();

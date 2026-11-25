@@ -10,7 +10,14 @@ import { match } from "ts-pattern";
 import { deriveTitleFromUrl, isBlankUrl } from "@/features/browser/types";
 
 /** Tool tabs available in the workspace pane (kept aligned with legacy ContentTab). */
-export type ContentTab = "changes" | "files" | "config" | "terminal" | "browser" | "simulator";
+export type ContentTab =
+  | "changes"
+  | "files"
+  | "config"
+  | "terminal"
+  | "browser"
+  | "simulator"
+  | "device";
 
 /** All tab kinds supported by the right-side browser-style tab bar. */
 export type WorkspaceTabKind = "new-tab" | ContentTab | "file";
@@ -30,6 +37,7 @@ export type WorkspaceTab =
       /** True for a cloud workspace's singleton sandbox preview tab (persists without a URL). */
       cloud?: boolean;
     }
+  | { id: string; kind: "device" }
   | { id: string; kind: "simulator" }
   | { id: string; kind: "config" };
 
@@ -90,6 +98,7 @@ export function createToolTab(
     .with("changes", () => ({ id: createTabId("changes"), kind: "changes" as const }))
     .with("files", () => ({ id: createTabId("files"), kind: "files" as const }))
     .with("config", () => ({ id: createTabId("config"), kind: "config" as const }))
+    .with("device", () => ({ id: createTabId("device"), kind: "device" as const }))
     .with("simulator", () => ({ id: createTabId("simulator"), kind: "simulator" as const }))
     .with("terminal", () => createTerminalTab(options?.terminalTitle ?? "Terminal 1"))
     .with("browser", () =>

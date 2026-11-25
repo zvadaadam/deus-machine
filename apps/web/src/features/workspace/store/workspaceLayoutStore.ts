@@ -142,7 +142,13 @@ function sanitizeWorkspaceTabV12(raw: unknown): WorkspaceTab | null {
   if (kind === "new-tab") {
     return { id: raw.id, kind: "new-tab" };
   }
-  if (kind === "changes" || kind === "files" || kind === "simulator" || kind === "config") {
+  if (
+    kind === "changes" ||
+    kind === "files" ||
+    kind === "simulator" ||
+    kind === "device" ||
+    kind === "config"
+  ) {
     return { id: raw.id, kind };
   }
   if (kind === "file") {

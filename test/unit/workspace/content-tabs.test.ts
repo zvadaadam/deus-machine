@@ -19,6 +19,14 @@ describe("content tab visibility", () => {
     expect(anyContentTabVisible()).toBe(false);
   });
 
+  it("shows Device in local web workspaces without an experimental toggle", () => {
+    vi.stubEnv("VITE_BACKEND_PORT", "3333");
+    expect(isTabVisible("device", {}, tabsFor({ kind: "worktree" }))).toBe(true);
+    expect(isTabVisible("device", {}, tabsFor({ kind: "cloud" }))).toBe(false);
+    vi.stubEnv("VITE_BACKEND_PORT", "");
+    expect(isTabVisible("device", {}, tabsFor({ kind: "worktree" }))).toBe(false);
+  });
+
   it("hides the simulator when the backend capability is unavailable", () => {
     expect(isTabVisible("simulator", simulatorOn, { simulatorAvailable: false })).toBe(false);
   });
