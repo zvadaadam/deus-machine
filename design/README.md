@@ -64,15 +64,16 @@ plans, and media stay visible outside it; ordinary failed tools remain grouped i
 Activity. `AssistantTurn.tsx` and nested `PartsRenderer.tsx` share `PartBlock.tsx`; turn
 details and provider attribution are unchanged.
 
-#### Pending `deus.pen` sync (PR #453)
+#### Chat bubbles (PR #453)
 
-- `DS/UserBubble` (`Ntvyq`) and bubble surface variables (`--user-bubble`,
-  `--user-bubble-top`, `--user-bubble-border`, `--agent-bubble` in `apps/web/src/global.css`):
-  code now renders user bubbles with a subtle bottom-to-top cool-rose gradient
-  (`--user-bubble` → `--user-bubble-top`) and a 13% `--primary` inset ring, and agent
-  bubbles with `--agent-bubble` (`#171717` dark / `#ececea` light). `design/deus.pen`
-  was not edited here (Pencil MCP unavailable in this session) and still carries the
-  flat `#1A1A1A` fill on `DS/UserBubble`.
+`DS/UserBubble` (`Ntvyq`) and the light-sheet user bubbles in `48` and `49` fill with a
+bottom-to-top linear gradient from `user-bubble` to `user-bubble-top`, with a 1px inner
+`user-bubble-border` stroke (the code's `ring-1 ring-inset`). `DS/AgentBubble` (`Ag7Bb`,
+board `15`) is an agent's message in the bubbles chat view (`TextBlock.tsx` with `bubble`),
+filled with `agent-bubble`. The four variables mirror `--user-bubble`, `--user-bubble-top`,
+`--user-bubble-border` and `--agent-bubble` in `global.css`. The CSS mixes them from
+`--primary` with `color-mix(in oklch, …)`, which Pencil cannot express, so the file stores
+the values Chromium resolves them to (the border at 13% alpha).
 
 #### PR #383 canvas review (September 14)
 
@@ -323,7 +324,7 @@ Pencil variables are named after their custom property in `apps/web/src/global.c
 | `text-primary` … `text-disabled`                                         | `--text-*` — the five-level text hierarchy              |
 | `border-subtle` `border-default` `border-strong` `sidebar-border`        | `--border-*`, `--sidebar-border`                        |
 | `hover-overlay`                                                          | `hover:bg-foreground/[0.04]`                            |
-| `accent`                                                                 | `--accent` (the user bubble surface)                    |
+| `user-bubble` `user-bubble-top` `user-bubble-border` `agent-bubble`      | `--user-bubble*`, `--agent-bubble` — the chat bubbles   |
 | `composer-bg`                                                            | `bg-bg-muted/75` — the composer glass                   |
 | `primary` `primary-foreground` `success` `warning` `destructive`         | the semantic signals                                    |
 | `accent-green` `accent-red` `accent-gold` + `-muted` variants            | `--accent-*`                                            |
@@ -371,6 +372,7 @@ line heights and tracking are the real values; only the outlines differ.
 | `DS/ToolRow`                                                         | `session/ui/tools/components/BaseToolRenderer.tsx` (header row)                            |
 | `DS/TurnStatsHeader`                                                 | `session/ui/TurnStatsHeader.tsx`                                                           |
 | `DS/UserBubble`                                                      | `session/ui/MessageItem.tsx` (`UserMessage`)                                               |
+| `DS/AgentBubble`                                                     | `session/ui/blocks/TextBlock.tsx` (`bubble`, the bubbles chat view)                        |
 | `DS/Composer`                                                        | `session/ui/MessageInput.tsx` — the glass pill + toolbar                                   |
 | `DS/HeaderRunButton`                                                 | `features/workspace/ui/HeaderRunButton.tsx`                                                |
 | `DS/CloudEnvProgress`                                                | `features/session/ui/CloudEnvProgress.tsx`                                                 |
