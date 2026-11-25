@@ -43,14 +43,15 @@ type Turn = {
   setup?: Setup;
   stops?: Set<Origin>;
   credited?: Origin;
-  timer?: NodeJS.Timeout;
-  confirmed?: boolean;
 };
 type Last = { turnId: string; nativeEnd: false | NativeEnd };
 type Chat = {
+  pendingStops: number;
   turn?: Turn;
   last?: Last;
   setupStop?: { turnId: string; by: Origin };
+  timer?: NodeJS.Timeout;
+  confirmed?: boolean;
 };
 const chats = new Map<string, Chat>();
 const notify = (id: string) =>
@@ -66,8 +67,10 @@ export function competingEnd(id: string, winner?: string) {
 }
 
 export function claimTurn(id: string, turnId: string, setup?: Setup, sentAt?: number): boolean {
-  const chat: Chat = chats.get(id) ?? {};
-  if (chat.turn) return false;
+  const old = chats.get(id);
+  if (old?.turn) return false;
+  clearTimeout(old?.timer);
+  const chat: Chat = { pendingStops: 0, last: old?.last, setupStop: old?.setupStop };
   chat.turn = { turnId, phase: setup ? "preparing" : "starting", setup, sentAt };
   chats.set(id, chat);
   return true;
@@ -134,7 +137,8 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
     delete turn.setup;
     return false;
   }
-  clearTimeout(turn.timer);
+  clearTimeout(chat.timer);
+  delete chat.timer;
   delete chat.turn;
   const refused = type === "refused" || type === "withdrawn";
   const by =
@@ -146,7 +150,7 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
     chat.last = { turnId, nativeEnd: type === "end" && reason };
     if (type !== "snapshot") credit(id, turn);
   }
-  if (!chat.last && !chat.setupStop) chats.delete(id);
+  if (!chat.last && !chat.setupStop && !chat.pendingStops) chats.delete(id);
   if (type === "end" || type === "snapshot") return true;
   const error = "error" in reason && reason.error;
   const prior = turn.setup?.prior;
@@ -178,66 +182,67 @@ export function refuseTurn(id: string, turnId: string, error?: ErrorInfo) {
 }
 
 // The engine can end the turn before cancel answers. Hold the credit from the ask.
-export function askStop(id: string, by: Origin) {
-  const turn = chats.get(id)?.turn;
+export function askStop(id: string, origin: Origin) {
+  // Two Stops from the same caller still have separate answers.
+  const by = { ...origin };
+  const chat = chats.get(id) ?? { pendingStops: 0 };
+  chat.pendingStops++;
+  chats.set(id, chat);
+  const turn = chat.turn;
   if (turn) (turn.stops ??= new Set()).add(by);
   turnNotices.queue?.(id, { type: "stop", turnId: turn?.turnId, by });
-  return turn;
-}
 
-export function answerStop(
-  id: string,
-  turn: Turn | undefined,
-  by: Origin,
-  result: TurnCancelResult | undefined
-) {
-  if (turn) {
-    if (!result || result.outcome === "no_active_turn") {
-      turn.stops?.delete(by);
-      if (turn.credited) credit(id, turn);
-    } else credit(id, turn);
-  }
-  const live = chats.get(id)?.turn;
-  if ((live && live !== turn) || (result?.outcome === "no_active_turn" && result.activeTurnId))
-    return { unconfirmed: false };
-  const unconfirmed = !result || result.outcome === "unconfirmed";
-  if (!live) {
-    if (!unconfirmed) {
+  /** A confirmed cancel holds the chat for final echoes, at most 15 s. An unconfirmed cancel only warns. */
+  return (result?: TurnCancelResult) => {
+    chat.pendingStops--;
+    if (turn) {
+      // A Stop with no effect passes its credit to the next.
+      if (!result || result.outcome === "no_active_turn") turn.stops?.delete(by);
+      credit(id, turn);
+    }
+    // The requested turn can end and a successor start during the RPC.
+    if (chats.get(id) !== chat || (result?.outcome === "no_active_turn" && result.activeTurnId))
+      return { unconfirmed: false };
+    const unconfirmed = !result || result.outcome === "unconfirmed";
+    if (result?.outcome === "no_active_turn" && chat.turn) {
+      releaseTurn(id, chat.turn.turnId, { type: "gone" });
+    } else if (!chat.turn && !unconfirmed) {
       const saved = persistStopStatus(id);
       if (saved.ok && saved.value) notify(id);
-    }
-  } else if (result?.outcome === "no_active_turn") {
-    releaseTurn(id, live.turnId, { type: "gone" });
-  } else if (!live.timer || (!live.confirmed && !unconfirmed)) {
-    // Confirmation starts the 15 seconds for final echoes. Later Stops cannot postpone it.
-    clearTimeout(live.timer);
-    live.confirmed = !unconfirmed;
-    live.timer = setTimeout(() => {
-      live.timer = undefined;
-      const owner = holdingTurn(id);
-      if (owner && owner !== live) return;
-      try {
-        if (live.confirmed) {
-          if (owner) releaseTurn(id, live.turnId, { type: "cancelled" });
-        } else {
-          const warning = persistStopStatus(id, owner ? null : "error");
-          if (!warning.ok || !warning.value) return;
-          reportInterruption(id, live.turnId, !owner);
+    } else if (!chat.timer || (!chat.confirmed && !unconfirmed)) {
+      clearTimeout(chat.timer);
+      chat.confirmed = !unconfirmed;
+      chat.timer = setTimeout(() => {
+        delete chat.timer;
+        if (!unconfirmed) {
+          if (chat.turn) releaseTurn(id, chat.turn.turnId, { type: "cancelled" });
+          return;
+        }
+        // A lost handler can leave an active row with nobody to settle it.
+        const saved = persistStopStatus(id, chat.turn ? null : "error");
+        if (saved.ok && saved.value) {
+          reportInterruption(id, turn?.turnId, !chat.turn);
           notify(id);
         }
-      } catch (error) {
-        console.error("[Agent] Stop deadline failed:", error);
-      }
-    }, 15_000);
-    live.timer.unref?.();
-  }
-  return { unconfirmed };
+      }, 15_000);
+      chat.timer.unref?.();
+    }
+    return { unconfirmed };
+  };
 }
 
 export function forgetChatTurns(id?: string) {
-  // A lost handler still owes its pending Stop a warning and its steers back at the deadline.
   if (id === undefined) {
+    for (const chat of chats.values()) clearTimeout(chat.timer);
     chats.clear();
     delete turnNotices.stored;
-  } else chats.delete(id);
+  } else {
+    const chat = chats.get(id);
+    if (chat && (chat.timer || chat.pendingStops)) {
+      // An unconfirmed Stop still owes the lost handler's steers back at its deadline.
+      delete chat.turn;
+      delete chat.last;
+      delete chat.setupStop;
+    } else chats.delete(id);
+  }
 }

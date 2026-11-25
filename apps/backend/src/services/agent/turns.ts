@@ -33,7 +33,6 @@ import {
   refuseTurn,
   releaseTurn,
   askStop,
-  answerStop,
   turnNotices,
 } from "./chat-turn";
 import * as agentService from "./service";
@@ -400,9 +399,8 @@ export async function stopSession(
 ): Promise<{ unconfirmed: boolean }> {
   if (!getSessionRaw(getDatabase(), sessionId)) throw new NotFoundError("Session not found");
 
-  // Two concurrent Stops from the same caller still have separate answers.
-  by = { ...by };
-  const turn = askStop(sessionId, by);
+  const turn = holdingTurn(sessionId);
+  const answer = askStop(sessionId, by);
   const turnId = turn?.turnId;
   if (turn?.setup) {
     const { setup } = turn;
@@ -412,10 +410,7 @@ export async function stopSession(
     }
     // Once on the wire, the start can still succeed. Only cancel it if it survives the answer.
     await setup.done;
-    if (holdingTurn(sessionId) !== turn) {
-      answerStop(sessionId, turn, by, undefined);
-      return { unconfirmed: false };
-    }
+    if (holdingTurn(sessionId) !== turn) return answer({ outcome: "no_active_turn" });
   }
   let result: Awaited<ReturnType<typeof agentService.stopSession>> | undefined;
   try {
@@ -425,7 +420,7 @@ export async function stopSession(
   } catch (err) {
     console.error("[CommandHandler] Could not stop the turn:", err);
   }
-  return answerStop(sessionId, turn, by, result);
+  return answer(result);
 }
 
 function startError(err: unknown) {
