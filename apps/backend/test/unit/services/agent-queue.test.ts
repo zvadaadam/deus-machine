@@ -331,6 +331,12 @@ describe("stopping the current turn", () => {
   it("O1: a chat stops setup by name and leaves a waiting row held until removed", async () => {
     db.exec("INSERT INTO sessions (id, workspace_id) VALUES ('lead', 'w')");
     const by = { kind: "session", sessionId: "lead", name: "checkout:2" };
+    const frames: { type: string }[] = [];
+    const window = addConnection(
+      { close() {}, send: (frame) => frames.push(JSON.parse(String(frame))) },
+      null
+    );
+    subscribe(window, "transcript", api.sessionEvents, { sessionId });
     const release = holdAppSetup();
     const starting = send("A").catch((error: unknown) => error);
     await send("later");
@@ -346,6 +352,7 @@ describe("stopping the current turn", () => {
       cancelledBy: by,
     });
     expect(await run(api.messages, { sessionId })).toMatchObject({ messages: [], turns: [] });
+    expect(frames.map((frame) => frame.type)).toEqual(["q:subscribed"]);
     expect(await queue()).toMatchObject({
       paused: "stopped",
       stoppedBy: by,
@@ -490,12 +497,15 @@ describe("stopping the current turn", () => {
   it.each(["archive", "hide", "delete"] as const)(
     "keeps only the last pre-wire end and forgets it on %s",
     async (action) => {
+      let previous: string | undefined;
       for (const id of ["A", "B", "C"]) {
         holdAppSetup();
         const aborted = expect(send(id)).rejects.toThrow("Stopped before it started");
+        if (previous) expect(await fact(previous)).toEqual({ state: "unknown" });
         await stop();
         await aborted;
         expect(await fact(id)).toMatchObject({ state: "ended", cancelledBy: fromPerson });
+        previous = id;
       }
       expect(await fact("A")).toEqual({ state: "unknown" });
       expect(await fact("B")).toEqual({ state: "unknown" });
