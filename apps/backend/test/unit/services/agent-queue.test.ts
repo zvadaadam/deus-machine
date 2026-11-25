@@ -248,6 +248,15 @@ function echo(
   for (const frame of echoFrames(turnId, input, steerId, origin)) emit(frame);
 }
 
+function reply(turnId: string, text: string, state: "streaming" | "done" = "done") {
+  const messageId = `reply-${turnId}`;
+  const stamp = { sessionId, turnId, messageId, outputIndex: 1, timestamp: seq };
+  emit({ type: "message.started", ...stamp, role: "assistant" });
+  const part = { type: "text", id: `part-${turnId}`, sessionId, messageId, text, state } as const;
+  emit({ type: "message.part", ...stamp, partIndex: 0, part });
+  if (state === "done") emit({ type: "message.ended", ...stamp });
+}
+
 function question(turnId: string) {
   emit({
     type: "elicitation.requested",
@@ -346,6 +355,14 @@ describe("stopping the current turn", () => {
     expect(await starting).toMatchObject({ message: "Stopped before it started." });
     expect(duringSetup).toMatchObject({ running: "A", status: "working" });
     expect(result).toContain('"checkout:1": stopped');
+    expect(await operator.call("list_sessions", {}, chatCaller)).toMatch(/checkout:1\s+stopped/);
+    expect(await operator.call("read_session", { session: sessionId }, chatCaller)).toContain(
+      "(status: stopped)"
+    );
+    expect(await view()).toMatchObject({
+      status: "stopped",
+      lastEnded: { turnId: "A", outcome: "cancelled", cancelledBy: by, steers: {} },
+    });
     expect(await fact("A")).toMatchObject({
       state: "ended",
       outcome: "cancelled",
@@ -362,6 +379,37 @@ describe("stopping the current turn", () => {
     expect(await queue()).toEqual({ paused: null, items: [] });
     expect(starts()).toEqual([]);
     expect(engine.cancelTurn).not.toHaveBeenCalled();
+  });
+
+  it("a wait wakes stopped and reads the credited setup end after an earlier reply", async () => {
+    await send("previous");
+    reply("previous", "Fixed the test.");
+    end("previous");
+    holdAppSetup();
+    const starting = expect(send("A")).rejects.toThrow("Stopped before it started.");
+    const watching = Promise.withResolvers<void>();
+    const waiter = createOperator({
+      ...host,
+      async view(...args) {
+        const reading = await host.view(...args);
+        if (reading.running === "A") watching.resolve();
+        return reading;
+      },
+    });
+    const waiting = waiter.call(
+      "wait_for_sessions",
+      { sessions: [sessionId], wait: 5 },
+      chatCaller
+    );
+    await watching.promise;
+    await stop();
+    await starting;
+    expect(await view()).toMatchObject({
+      status: "stopped",
+      lastEnded: { turnId: "A", outcome: "cancelled", cancelledBy: fromPerson },
+      turns: [{ turnId: "previous", messages: [{ parts: [{ text: "Fixed the test." }] }] }],
+    });
+    expect(await waiting).toContain("status: stopped");
   });
 
   it("O2: an interrupt during app setup sees the end and admits the replacement", async () => {

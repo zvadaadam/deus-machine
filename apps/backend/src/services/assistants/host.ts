@@ -471,7 +471,7 @@ export function createDeusHost(): DeusHost {
     if (pendingFor(id).some((request) => waitingOf(request))) return "needs_input";
     if (ACTIVE_TURN_STATUSES.includes(row.s_status ?? "") || current) return "working";
     if (row.s_status === "error") return "error";
-    return ended?.outcome === "cancelled" ? "stopped" : "idle";
+    return stoppedBeforeStart(id) || ended?.outcome === "cancelled" ? "stopped" : "idle";
   }
 
   /** The entries the rows make: each workspace's chats by their number, its first before its row exists. */
@@ -819,7 +819,10 @@ export function createDeusHost(): DeusHost {
           })),
       ];
       const running = currentTurnId(sessionId);
-      const last = lastEnded([sessionId], true).get(sessionId)?.turn;
+      const stopped = stoppedBeforeStart(sessionId);
+      const last = stopped
+        ? { ...stopped, steers: {} }
+        : lastEnded([sessionId], true).get(sessionId)?.turn;
       const turns: ViewTurn[] = facts.map((fact) => {
         const outcome = savedOutcome(fact.outcome);
         const how = fact.turn_id === running || !fact.ended_at ? undefined : endedOf(fact, outcome);
