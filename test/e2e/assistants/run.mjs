@@ -642,10 +642,9 @@ try {
   );
 
   // ---- 5c. A change of access closes the assistant's connections ----
-  // A held call (a wait on a chat still working) ends when the person changes
-  // the access, not when its wait would have.
+  // An outside caller naming no sessions waits for a change even when every chat has settled.
   const heldStarted = Date.now();
-  const held = chatgpt.call("wait_for_sessions", { sessions: ["forge:1"], wait: 60 });
+  const held = chatgpt.call("wait_for_sessions", { wait: 60 });
   await new Promise((resolve) => setTimeout(resolve, 2_000));
   await mac.write("setAssistantAccess", { clientId: chatgpt.clientId, access: "operate" });
   const heldAnswer = await held;
@@ -657,7 +656,7 @@ try {
     "The connection to Studio Mac closed before it answered. What was asked may or may not have happened. (Studio Mac ended the connection: Assistant access changed.) Check before repeating it."
   );
   check(
-    `A change of access closes the assistant's open connections: a wait_for_sessions held on a working chat ends ${heldMs}ms after it began (its wait was 60s), and the model reads that the computer closed the connection because the access changed`,
+    `Changing assistant access closes its 60-second wait for session changes after ${heldMs}ms and tells the model why the computer closed the connection`,
     { held: heldAnswer.text, ms: heldMs }
   );
 
