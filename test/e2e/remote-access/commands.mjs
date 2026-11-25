@@ -29,15 +29,16 @@ Run bun run deus-remote-lab <command> [--timeout <seconds>].
   assistant call <tool> [json]            Call a tool with the approved assistant
 
 Timeout defaults to 120 seconds. JSON arguments are objects. A successful follow
-ends with a count. Exit codes are 0 for done, 1 for failure and 2 when a wait
-times out. A timed-out device wait includes its state and observed entries.`;
+ends with a count. Exit codes are 0 for done, 2 for a timeout while the lab is
+still up, and 1 for other failures, including failed startup. A timed-out device
+wait includes its state and observed entries.`;
 
-export function failure(error) {
+export function failure(error, labRunning) {
   // Node's socket and child-process APIs wrap an expired AbortSignal as the cause.
   const cause = error.cause?.name === "TimeoutError" ? error.cause : error;
   return {
     reason: cause.message,
-    exitCode: cause.name === "TimeoutError" ? 2 : 1,
+    exitCode: labRunning && cause.name === "TimeoutError" ? 2 : 1,
     ...(error.entries ? { state: error.state, entries: error.entries } : {}),
   };
 }
@@ -62,6 +63,8 @@ export function parse(argv) {
   const command = ["host", "device", "fault", "assistant"].includes(group)
     ? group + " " + (positionals.shift() ?? "")
     : group;
+  if (["up", "down", "status"].includes(command) && positionals.length)
+    throw new Error(command + " takes no arguments");
   if (values.since !== undefined && command !== "device state")
     throw new Error("--since belongs to device state");
   if (values.for !== undefined && command !== "device follow")
@@ -124,6 +127,7 @@ export async function runCommand(lab, { command, args, since, duration }, signal
       return device().wait(op, signal);
     case "device call": {
       arity(2, 3);
+      // The CLI imports this module for every command. Only a device call needs the API here.
       const { ops } = await import("../../../shared/api/index.ts");
       const { runtime } = device(),
         decl = ops.find((d) => d.name === op);

@@ -48,6 +48,7 @@ export function createLab({ root, agnt, directory }) {
   const jwtSecret = crypto.randomUUID(),
     spawnToken = crypto.randomUUID();
   let cloudPort, relayPort, cloudUrl, jwks;
+  const sessionAccounts = new Map();
   const devices = new Map(),
     assistants = [];
   const lab = {
@@ -73,11 +74,10 @@ export function createLab({ root, agnt, directory }) {
           ["Desktop", "deus-machine-desktop"],
           ["Web", "deus-web"],
         ]) {
-          lab.sessions[account + suffix] = await stack.session(
-            jwtSecret,
-            "user_" + account,
-            client
-          );
+          const accountId = "user_" + account;
+          const session = await stack.session(jwtSecret, accountId, client);
+          sessionAccounts.set(session, accountId);
+          lab.sessions[account + suffix] = session;
         }
       }
       lab.hostDb = await stack.hostDatabase("Studio Mac", "Before restart");
@@ -188,6 +188,8 @@ export function createLab({ root, agnt, directory }) {
     },
     viewer(name, { bearer, grant, machineId, wrapSocket }) {
       if (devices.has(name)) throw new Error("Device name already in use: " + name);
+      const account = sessionAccounts.get(bearer);
+      if (!account) throw new Error("Unknown fixture session for device " + name);
       const log = [];
       const record = (event, fields = {}) =>
         log.push({
@@ -248,7 +250,7 @@ export function createLab({ root, agnt, directory }) {
       const runtime = new QueryRuntimeClient(
         {
           host: machineId,
-          account: bearer === lab.sessions.aliceWeb ? "user_alice" : "user_bob",
+          account,
           grant: name,
         },
         {

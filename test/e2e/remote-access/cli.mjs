@@ -33,6 +33,9 @@ async function launch(signal) {
         }),
       ]);
       if (!message.listening) throw new Error(message.reason);
+    } catch (error) {
+      child.kill();
+      throw error;
     } finally {
       if (child.connected) child.disconnect();
       child.unref();
@@ -46,10 +49,8 @@ async function main(argv) {
     console.log(help);
     return;
   }
-  const { command, timeout, args } = parse(argv);
+  const { command, timeout } = parse(argv);
   if (!command) throw new Error("Choose a command (see --help)");
-  if (["up", "down", "status"].includes(command) && args.length)
-    throw new Error(command + " takes no arguments");
   const deadline = Date.now() + timeout;
   // Give a timed-out wait time to report its final entries over the local socket.
   const signal = AbortSignal.timeout(timeout + 1000);
@@ -91,7 +92,7 @@ async function main(argv) {
   }
 }
 main(process.argv.slice(2)).catch((error) => {
-  const answer = failure(error);
+  const answer = failure(error, false);
   console.log(JSON.stringify(answer));
   process.exitCode = answer.exitCode;
 });

@@ -7,7 +7,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
-import { SignJWT, importJWK } from "jose";
+import { SignJWT, decodeJwt, importJWK } from "jose";
 import { WebSocket as NodeSocket } from "ws";
 import { RELAY_PROTOCOL } from "../../../shared/types/relay.ts";
 import { connectBackend } from "../lib/operations.mjs";
@@ -34,6 +34,10 @@ const { stack, cloudApi, clientTicket, pair, code, signIn, relayStatus, connecte
 try {
   await lab.up();
   const { sessions, hostDb, signingKey } = lab;
+  for (const session of Object.values(sessions)) {
+    const { exp, iat } = decodeJwt(session);
+    assert.equal(exp - iat, 24 * 60 * 60, "fixture sessions last 24 hours");
+  }
 
   // ---- 1. Registration ----
   assert.equal((await relayStatus()).state, "signed_out");
@@ -234,15 +238,21 @@ try {
 
     // A slow Deus Cloud (700ms each way on every ticket request) only slows dialing.
     const slowCloud = viewer("Slow Cloud", {
-      bearer: sessions.aliceWeb,
+      bearer: sessions.aliceDesktop,
       grant: grantA,
       machineId: machineA,
     });
+    assert.equal(slowCloud.runtime.identity.account, "user_alice");
     lab.latencyMs = 700;
     await slowCloud.runtime.connect();
     await until(() => title(slowCloud) === "Through the relay");
+    const dial = events(slowCloud, "dial").at(-1);
+    const open = events(slowCloud, "open").at(-1);
+    assert.ok(open.ms - dial.ms >= 2 * lab.latencyMs, "the dial includes both ticket delays");
     lab.latencyMs = 0;
-    const waitForRevocation = slowCloud.wait("revoked", AbortSignal.timeout(500)).catch(failure);
+    const waitForRevocation = slowCloud
+      .wait("revoked", AbortSignal.timeout(500))
+      .catch((error) => failure(error, true));
     const followEntries = [],
       snapshots = [],
       terminal = [];

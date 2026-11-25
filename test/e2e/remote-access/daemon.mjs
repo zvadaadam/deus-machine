@@ -18,6 +18,7 @@ const lab = createLab({
 });
 let phase = "starting",
   idle,
+  activeCommands = 0,
   busy,
   shutdown;
 const peers = new Set();
@@ -61,8 +62,11 @@ function stop(requester) {
     await busy?.catch(() => {});
     try {
       await lab.close();
-    } finally {
       phase = "stopped";
+    } catch (error) {
+      phase = "failed";
+      throw error;
+    } finally {
       try {
         await save();
       } finally {
@@ -74,8 +78,6 @@ function stop(requester) {
   return shutdown;
 }
 async function dispatch(cmd, signal, emit, socket) {
-  if (["up", "down", "status"].includes(cmd.command) && cmd.args.length)
-    throw new Error(cmd.command + " takes no arguments");
   if (cmd.command === "status") return status();
   if (cmd.command === "down") {
     await stop(socket);
@@ -85,11 +87,15 @@ async function dispatch(cmd, signal, emit, socket) {
   if (cmd.command === "up") {
     if (busy || phase === "ready") throw new Error("Lab is already up or starting");
     busy = (async () => {
+      signal.throwIfAborted();
       await lab.up();
+      signal.throwIfAborted();
       await lab.signIn();
       await lab.connectedAs();
+      signal.throwIfAborted();
       if (!shutdown) phase = "ready";
       await save();
+      signal.throwIfAborted();
     })();
     try {
       await busy;
@@ -130,20 +136,23 @@ const server = createServer((socket) => {
     const emit = (data) => {
       if (!socket.destroyed) socket.write(JSON.stringify(data) + "\n");
     };
-    let timer;
+    let timer, cmd;
     try {
-      const { argv, deadline } = JSON.parse(line),
-        cmd = parse(argv);
+      const { argv, deadline } = JSON.parse(line);
+      cmd = parse(argv);
       const remaining = Math.min(cmd.timeout, deadline - Date.now());
       if (!Number.isFinite(remaining)) throw new Error("Invalid command deadline");
-      if (!shutdown) resetIdle();
       const timeout = new AbortController();
       const expired = new DOMException("Command timed out", "TimeoutError");
       if (remaining <= 0) timeout.abort(expired);
       else timer = setTimeout(() => timeout.abort(expired), remaining);
       const signal = AbortSignal.any([timeout.signal, gone.signal]);
-      if (cmd.command !== "device wait") signal.throwIfAborted();
-      const operation = dispatch(cmd, signal, emit, socket);
+      if (cmd.command !== "up" && cmd.command !== "device wait") signal.throwIfAborted();
+      clearTimeout(idle);
+      activeCommands++;
+      const operation = dispatch(cmd, signal, emit, socket).finally(() => {
+        if (--activeCommands === 0 && !shutdown) resetIdle();
+      });
       // A wait reports the state and entries it observed, including on timeout.
       const answer =
         cmd.command === "device wait" || cmd.command === "device follow"
@@ -156,7 +165,7 @@ const server = createServer((socket) => {
             ]);
       emit(answer);
     } catch (error) {
-      emit(failure(error));
+      emit(failure(error, phase === "ready" && cmd?.command !== "up"));
     } finally {
       clearTimeout(timer);
       socket.end();

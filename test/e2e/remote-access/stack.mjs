@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createWriteStream } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { once } from "node:events";
 import { createServer } from "node:net";
 import path from "node:path";
@@ -39,6 +39,18 @@ export async function freePort() {
   return port;
 }
 
+function runSync(command, args, options = {}) {
+  const result = spawnSync(command, args, {
+    ...options,
+    encoding: "utf8",
+    timeout: 60_000,
+    killSignal: "SIGKILL",
+  });
+  if (result.error) throw result.error;
+  assert.equal(result.status, 0, `${command} failed: ${result.stderr}`);
+  return result.stdout;
+}
+
 export function createStack({ root, agnt, directory }) {
   const processes = new Set();
   const cleanups = [];
@@ -60,7 +72,6 @@ export function createStack({ root, agnt, directory }) {
   }
 
   async function stop(owned) {
-    processes.delete(owned);
     if (owned.child.exitCode === null && owned.child.signalCode === null) {
       const exited = once(owned.child, "exit");
       owned.child.kill("SIGTERM");
@@ -68,13 +79,22 @@ export function createStack({ root, agnt, directory }) {
       await exited;
       clearTimeout(timer);
     }
+    processes.delete(owned);
     owned.log.end();
   }
 
   async function postgres() {
     const port = await freePort();
     const name = `deus-remote-access-e2e-${process.pid}-${Date.now()}`;
-    const started = spawnSync("docker", [
+    // A remote Docker endpoint would create the fixture on someone else's computer.
+    const endpoint =
+      process.env.DOCKER_HOST ??
+      runSync("docker", ["context", "inspect", "--format", "{{.Endpoints.docker.Host}}"]).trim();
+    if (!endpoint.startsWith("unix://"))
+      throw new Error("The lab needs a local Docker Unix socket");
+    const docker = (...args) => runSync("docker", ["--host", endpoint, ...args]);
+    cleanups.push(() => docker("rm", "-f", name));
+    docker(
       "run",
       "-d",
       "--rm",
@@ -90,51 +110,34 @@ export function createStack({ root, agnt, directory }) {
       "POSTGRES_DB=agnt",
       "--tmpfs",
       "/var/lib/postgresql/data",
-      "postgres:16-alpine",
-    ]);
-    assert.equal(started.status, 0, `docker run failed: ${started.stderr}`);
-    cleanups.push(() => spawnSync("docker", ["rm", "-f", name]));
-    await until(
-      () => spawnSync("docker", ["exec", name, "pg_isready", "-U", "agnt"]).status === 0,
-      30_000,
-      "Postgres"
+      "postgres:16-alpine"
     );
+    await until(() => docker("exec", name, "pg_isready", "-U", "agnt"), 30_000, "Postgres");
     // pg_isready can answer before the TCP listener accepts the migration client.
     await until(
-      () =>
-        spawnSync("docker", ["exec", name, "psql", "-U", "agnt", "-d", "agnt", "-c", "select 1"])
-          .status === 0,
+      () => docker("exec", name, "psql", "-U", "agnt", "-d", "agnt", "-c", "select 1"),
       30_000,
       "Postgres queries"
     );
     const url = `postgres://agnt:agnt@127.0.0.1:${port}/agnt`;
-    const migrated = spawnSync("bunx", ["--bun", "drizzle-kit", "migrate"], {
+    runSync("bunx", ["--bun", "drizzle-kit", "migrate"], {
       cwd: path.join(agnt, "apps/backend"),
       env: { ...process.env, DATABASE_URL: url },
-      encoding: "utf8",
     });
-    assert.equal(migrated.status, 0, `AGNT migrations failed: ${migrated.stderr}`);
-    const sql = (statement) => {
-      const result = spawnSync(
-        "docker",
-        [
-          "exec",
-          name,
-          "psql",
-          "-U",
-          "agnt",
-          "-d",
-          "agnt",
-          "-v",
-          "ON_ERROR_STOP=1",
-          "-c",
-          statement,
-        ],
-        { encoding: "utf8" }
+    const sql = (statement) =>
+      docker(
+        "exec",
+        name,
+        "psql",
+        "-U",
+        "agnt",
+        "-d",
+        "agnt",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-c",
+        statement
       );
-      assert.equal(result.status, 0, result.stderr);
-      return result.stdout;
-    };
     return { url, sql, container: name, address: `127.0.0.1:${port}` };
   }
 
@@ -148,10 +151,23 @@ export function createStack({ root, agnt, directory }) {
     };
   }
 
-  async function worker({ name, config, port, persist, wrangler, cwd, env = {}, args = [] }) {
+  async function worker({
+    name,
+    config,
+    port,
+    persist,
+    wrangler,
+    cwd,
+    env = {},
+    envContent = "",
+    args = [],
+  }) {
     const file =
       typeof config === "string" ? config : path.join(directory, `${name}.wrangler.json`);
     if (typeof config !== "string") await writeFile(file, JSON.stringify(config, null, 2));
+    // An explicit env file selects only fixture bindings, even from a configured AGNT checkout.
+    const envFile = path.join(directory, `${name}.env`);
+    await writeFile(envFile, envContent);
     const owned = run(
       process.execPath,
       [
@@ -159,6 +175,8 @@ export function createStack({ root, agnt, directory }) {
         "dev",
         "--config",
         file,
+        "--env-file",
+        envFile,
         "--local",
         "--ip",
         "127.0.0.1",
@@ -171,7 +189,15 @@ export function createStack({ root, agnt, directory }) {
         ...args,
       ],
       name,
-      { cwd, env: { WRANGLER_SEND_METRICS: "false", ...env } }
+      {
+        cwd,
+        env: {
+          ...env,
+          WRANGLER_SEND_METRICS: "false",
+          CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "true",
+          CLOUDFLARE_INCLUDE_PROCESS_ENV: "false",
+        },
+      }
     );
     const base = `http://127.0.0.1:${port}`;
     await until(
@@ -225,20 +251,14 @@ export function createStack({ root, agnt, directory }) {
   }
 
   async function relay({ port, jwks, persist }) {
-    // Select the fixture environment explicitly so a checkout's .dev.vars cannot enter this stack.
-    const envFile = path.join(directory, `relay-${port}.env`);
-    await writeFile(envFile, `ENVIRONMENT=e2e\nRELAY_TICKET_JWKS=${jwks}\n`);
     const owned = await worker({
       name: `relay-${port}`,
       port,
       persist,
       wrangler: path.join(root, "apps/cloud-relay/node_modules/wrangler/bin/wrangler.js"),
       config: path.join(root, "apps/cloud-relay/wrangler.toml"),
-      env: {
-        CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "true",
-        CLOUDFLARE_INCLUDE_PROCESS_ENV: "false",
-      },
-      args: ["--name", "deus-relay-e2e", "--env-file", envFile],
+      envContent: `ENVIRONMENT=e2e\nRELAY_TICKET_JWKS=${jwks}\n`,
+      args: ["--name", "deus-relay-e2e"],
     });
     return { ...owned, ws: `ws://127.0.0.1:${port}` };
   }
@@ -246,7 +266,7 @@ export function createStack({ root, agnt, directory }) {
   /** A Deus backend with its own SQLite database and a ready workspace. */
   async function hostDatabase(name, title) {
     const dir = path.join(directory, name);
-    spawnSync("mkdir", ["-p", dir]);
+    await mkdir(dir, { recursive: true });
     const database = path.join(dir, "deus.db");
     const db = new Database(database);
     db.exec(SCHEMA_SQL);
@@ -339,7 +359,7 @@ export function createStack({ root, agnt, directory }) {
   }
 
   /** A Deus Cloud session exactly as `session-issuer.ts` signs it. */
-  async function session(jwtSecret, accountId, client, ttlSeconds = 3600) {
+  async function session(jwtSecret, accountId, client) {
     const now = Math.floor(Date.now() / 1000);
     return new SignJWT({ type: "deus_cloud_session", client })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
@@ -347,13 +367,21 @@ export function createStack({ root, agnt, directory }) {
       .setAudience("agnt-backend")
       .setSubject(accountId)
       .setIssuedAt(now)
-      .setExpirationTime(now + ttlSeconds)
+      .setExpirationTime(now + 24 * 60 * 60)
       .sign(new TextEncoder().encode(jwtSecret));
   }
 
   async function close() {
-    for (const owned of [...processes].reverse()) await stop(owned);
-    for (const cleanup of cleanups.reverse()) cleanup();
+    const failures = [];
+    const stops = [...processes].reverse().map((owned) => () => stop(owned));
+    for (const cleanup of [...stops, ...cleanups.splice(0).reverse()]) {
+      try {
+        await cleanup();
+      } catch (error) {
+        failures.push(error.message);
+      }
+    }
+    if (failures.length) throw new Error(failures.join("\n"));
   }
 
   return { run, stop, postgres, keys, cloud, relay, hostDatabase, host, session, close };
