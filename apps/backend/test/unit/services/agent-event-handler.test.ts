@@ -201,6 +201,16 @@ describe("agent event handler (canonical lifecycle stream)", () => {
     vi.clearAllMocks();
     outcomes.length = 0;
     mockPersistChanges.mockImplementation(stubPersistChanges as never);
+    mockRestoreCloudSnapshot.mockImplementation(
+      (sessionId: string, snapshot: SessionSnapshotEvent) => {
+        const { events, messageIds } = projectCloudSnapshot(snapshot);
+        const conversation = events.reduce(
+          (state, event) => reduceConversationWithChanges(state, { ...event, sessionId }).state,
+          emptyConversation()
+        );
+        return { ok: true, value: { conversation, messageIds, providerCredentialSources: {} } };
+      }
+    );
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
     handler = createAgentEventHandler();
@@ -677,19 +687,6 @@ describe("agent event handler (canonical lifecycle stream)", () => {
           },
         ],
       });
-      mockRestoreCloudSnapshot.mockImplementation(
-        (sessionId: string, restored: SessionSnapshotEvent) => ({
-          ok: true,
-          value: {
-            conversation: projectCloudSnapshot(restored).events.reduce(
-              (state, event) => reduceConversationWithChanges(state, { ...event, sessionId }).state,
-              emptyConversation()
-            ),
-            messageIds: ["msg-1"],
-            providerCredentialSources: {},
-          },
-        })
-      );
       handler.hydrateCloudSnapshot(SESSION, snapshot);
       handler.handle(
         envelope({
@@ -1063,6 +1060,50 @@ describe("agent event handler (canonical lifecycle stream)", () => {
   // ==========================================================================
   // Turn admission mirror
   // ==========================================================================
+
+  describe("cloud snapshots", () => {
+    function restore(state: Partial<SessionSnapshotEvent["state"]>) {
+      const snapshot = SessionSnapshotEventSchema.parse({
+        type: "session.snapshot",
+        state: {
+          sessionId: SESSION,
+          organizationId: "org",
+          workspaceId: "w",
+          status: "ready",
+          ...state,
+        },
+      });
+      handler.hydrateCloudSnapshot(SESSION, snapshot);
+    }
+
+    it("adopts another client's turn on a free chat", () => {
+      restore({ currentTurnId: "browser-turn" });
+      expect(handler.liveTurnId(SESSION)).toBe("browser-turn");
+    });
+
+    it("releases the turn the snapshot replaced and leaves the successor's status alone on replay", () => {
+      handler.beginTurn(SESSION, TURN);
+      handler.handle(
+        envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
+      );
+      restore({
+        currentTurnId: "browser-turn",
+        turns: [{ turnId: TURN, startedAt: T, endedAt: T + 1, stopReason: "end_turn" }],
+      });
+      expect(handler.liveTurnId(SESSION)).toBe("browser-turn");
+      expect(mockPersistTurn).not.toHaveBeenCalled();
+      handler.handle(envelope(turnEnded({ stopReason: "cancelled", timestamp: T + 2 })));
+      expect(lastOutcome()).toBeUndefined();
+      expect(handler.liveTurnId(SESSION)).toBe("browser-turn");
+    });
+
+    it("keeps our pending send when the snapshot has not seen it yet", () => {
+      handler.beginTurn(SESSION, TURN);
+      restore({ currentTurnId: null });
+      expect(handler.liveTurnId(SESSION)).toBe(TURN);
+      expect(mockRestoreCloudSnapshot).toHaveBeenCalledWith(SESSION, expect.anything(), true);
+    });
+  });
 
   describe("turn admission mirror", () => {
     it("notifies the open chat when its admitted turn with a user message ends locally", () => {

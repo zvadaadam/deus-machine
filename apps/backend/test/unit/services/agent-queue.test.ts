@@ -488,6 +488,22 @@ describe("stopping the current turn", () => {
     expect(await queue()).toEqual({ paused: null, items: [] });
   });
 
+  it.fails(
+    "reports the read steer when its turn loses the start reply without a turn row",
+    async () => {
+      const wire = pendingStart();
+      const lost = expect(send("A")).rejects.toThrow("lost reply");
+      await vi.waitFor(() => expect(starts()).toEqual(["A"]));
+      await steerMessage({ ...message("follow-up"), turnId: "A" }, fromChat, "follow-up");
+      echo("A", "follow-up", message("follow-up").content, fromChat);
+      expect(await fact("A")).toEqual({ state: "running", steers: { "follow-up": "read" } });
+      expect((await run(api.messages, { sessionId })).turns).toEqual([]);
+      wire.reject(new Error("lost reply"));
+      await lost;
+      expect(await fact("A")).toMatchObject({ state: "ended", steers: { "follow-up": "read" } });
+    }
+  );
+
   it("O4: A's lost start reply leaves B working in app setup and stoppable", async () => {
     const wire = pendingStart();
     const lost = expect(send("A")).rejects.toThrow("late reply");
@@ -3787,6 +3803,18 @@ describe("operating another chat's queue", () => {
     }
   );
 
+  it("takes the person's Resume after an agent resumes a live replay failure and waits for the end", async () => {
+    await failLiveReplay();
+    expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
+    expect(await resumeQueuedMessages(sessionId, fromChat)).toMatchObject({ outcome: "resumed" });
+    expect(await resumeQueuedMessages(sessionId)).toMatchObject({ outcome: "resumed" });
+    expect(await queue()).toMatchObject({ paused: null, items: [waitingRow("R")] });
+    expect(starts()).toEqual(["A"]);
+    end("A");
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "R"]));
+    expect(await queue()).toEqual({ paused: null, items: [] });
+  });
+
   it("honors a person's Resume after an agent resumes an unconfirmed replay gap with a live engine error", async () => {
     await failLiveReplay();
     emit({
@@ -3935,6 +3963,19 @@ describe("operating another chat's queue", () => {
       expect((await queue()).paused).toBeNull();
     }
   );
+
+  it("keeps a successor's failure open to an agent's Resume when an older cancel replays", async () => {
+    await send("A");
+    end("A");
+    await sendInOrder("B", "R");
+    end("B", "error");
+    const held = await queue();
+    expect(held).toMatchObject({ paused: "failed", items: [waitingRow("R")] });
+    end("A", "cancelled");
+    expect(await queue()).toEqual(held);
+    expect(await resumeQueuedMessages(sessionId, fromChat)).toMatchObject({ outcome: "resumed" });
+    expect(starts()).toEqual(["A", "B", "R"]);
+  });
 
   it.each(["agent Stop", "failure"] as const)(
     "a successor’s independent cancel replaces an earlier %s",
