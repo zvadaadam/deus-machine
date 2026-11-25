@@ -3502,27 +3502,20 @@ describe("operating another chat's queue", () => {
     });
   });
 
-  it("keeps the person's empty Stop when Send follows it before app setup aborts", async () => {
+  it("starts a fresh send without Resume after an empty Stop during app setup", async () => {
     const releaseApps = holdAppSetup();
     const aborted = expect(send("A")).rejects.toThrow("Stopped before it started");
     await vi.waitFor(() => expect(resolveTurnApps).toHaveBeenCalled());
     expect(wireTurnId()).toBeUndefined();
     const stopping = stop();
-    const queued = send("R");
+    const fresh = send("R");
     await Promise.all([
       aborted,
       expect(stopping).resolves.toEqual({ unconfirmed: false }),
-      expect(queued).resolves.toEqual({ queued: true, turnId: "R" }),
+      expect(fresh).resolves.toEqual({ turnId: "R" }),
     ]);
     releaseApps();
-    expect(await queue()).toMatchObject({
-      paused: "stopped",
-      stoppedBy: fromPerson,
-      items: [waitingRow("R")],
-    });
-    expect(await resumeQueuedMessages(sessionId, fromChat)).toEqual({ outcome: "person_only" });
-    expect(starts()).toEqual([]);
-    await resumeInWindow();
+    expect(await queue()).toEqual({ paused: null, items: [] });
     expect(starts()).toEqual(["R"]);
   });
 
