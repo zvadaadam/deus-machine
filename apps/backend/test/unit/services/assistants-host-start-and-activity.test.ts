@@ -371,6 +371,18 @@ describe("a chat's last activity", () => {
     expect(await activity("busy")).toBe(now - 5_000);
   });
 
+  it.each([
+    { type: "permission.resolved", outcome: { outcome: "selected", optionId: "allow" } },
+    { type: "elicitation.resolved", outcome: { action: "accept" } },
+  ] as const)("$type keeps the time of the agent's last output", async (answer) => {
+    prompted("asking");
+    const turn = { sessionId: "asking", turnId: "a" };
+    const lastOutput = now - 5_000;
+    emit({ ...turn, type: "turn.started", timestamp: lastOutput });
+    emit({ ...turn, ...answer, requestId: "request", timestamp: now });
+    expect(await activity("asking")).toBe(lastOutput);
+  });
+
   it("uses the timestamp on a new kind of event from the live turn", async () => {
     prompted("new-event");
     const turn = { sessionId: "new-event", turnId: "t" };

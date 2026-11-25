@@ -381,6 +381,8 @@ export function createAgentEventHandler(
         : envelope.event.type === "turn.started";
       if (
         live &&
+        envelope.event.type !== "permission.resolved" &&
+        envelope.event.type !== "elicitation.resolved" &&
         typeof stamped.timestamp === "number" &&
         (typeof messageId !== "string" ||
           findConversationMessage(conversation, messageId)?.role !== "user")
