@@ -270,6 +270,7 @@ export function beginOAuth(input: SignInStart): Promise<string> {
 }
 
 async function startSignIn(input: SignInStart): Promise<string> {
+  await initVault();
   const attempt: Attempt = {
     connectionId: input.connectionId,
     state: crypto.randomBytes(32).toString("base64url"),
@@ -285,7 +286,6 @@ async function startSignIn(input: SignInStart): Promise<string> {
   }
   // Keep the registered client: the callback exchanges the code as it. Tokens
   // the connection already holds stay until the new sign-in lands.
-  await initVault();
   const progress = provider.progress();
   if (!progress || !writeCredential(input.connectionId, progress)) {
     throw new Error("The connection was removed before its sign-in began");
@@ -397,6 +397,7 @@ export async function oauthAccessToken(
   client?: RegisteredClient | null,
   options: { force?: boolean } = {}
 ): Promise<string | null> {
+  await initVault("read");
   const credential = readCredential<OAuthCredential>(connectionId);
   const problem = credential ? null : vaultProblem();
   if (problem) throw new Error(problem);

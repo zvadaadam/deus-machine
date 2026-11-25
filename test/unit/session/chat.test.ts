@@ -1,4 +1,4 @@
-import { createElement, useState } from "react";
+import React, { createElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -11,8 +11,10 @@ import {
 } from "@zvada/agent-server/protocol/factories";
 import { describe, expect, it, vi } from "vitest";
 import { foldEvent, messagesKey } from "@/features/session/lib/agentEventFold";
+import { useOpenChatStore } from "@/features/session/lib/openChat";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { Chat } from "@/features/session/ui/Chat";
+import * as activity from "@/features/session/ui/TurnStatsHeader";
 import { SessionProvider } from "@/features/session/context";
 import type { SessionStatus } from "@shared/enums";
 import type { LifecycleEvent, Part, ReportedOrigin } from "@shared/protocol-types";
@@ -46,21 +48,37 @@ const messages: Message[] = [
   },
 ];
 
+function reply(turnId: string, seq: number, text: string): Message {
+  const ctx = { sessionId: messages[0].session_id, messageId: `${turnId}-${seq}` };
+  return {
+    ...messages[0],
+    id: ctx.messageId,
+    turn_id: turnId,
+    role: "assistant",
+    seq,
+    parts: [createReasoningPart(ctx, "Checking", false), createTextPart(ctx, text, false)],
+  };
+}
+
+function renderChat(client: QueryClient, props: Parameters<typeof Chat>[0]) {
+  virtualization.mockReturnValueOnce({ width: 800, height: 900 });
+  return renderToStaticMarkup(
+    createElement(
+      QueryClientProvider,
+      { client },
+      createElement(SessionProvider, {
+        sessionStatus: props.sessionStatus,
+        subagentMessages: new Map(),
+        children: createElement(Chat, props),
+      })
+    )
+  );
+}
+
 it("keeps a deferred reply visible when the next turn starts in an Agent messages chat", () => {
   const client = new QueryClient();
   const a = { turnId: "turn-1", startedAt: 1 };
   const b = { turnId: "turn-2", startedAt: 3 };
-  function reply(turnId: string, seq: number, text: string): Message {
-    const ctx = { sessionId: "session-1", messageId: `${turnId}-reply` };
-    return {
-      ...messages[0],
-      id: ctx.messageId,
-      turn_id: turnId,
-      role: "assistant",
-      seq,
-      parts: [createReasoningPart(ctx, "Checking", false), createTextPart(ctx, text, false)],
-    };
-  }
   const first = [...messages, reply(a.turnId, 1, "Answer from A.")];
   const next = [
     ...first,
@@ -110,6 +128,41 @@ it("keeps a deferred reply visible when the next turn starts in an Agent message
   }
 });
 
+it("keeps Worked open when older messages of the same reply are prepended", () => {
+  const client = new QueryClient();
+  const sessionId = messages[0].session_id;
+  const steer = {
+    ...messages[0],
+    id: steerMessageId("s"),
+    seq: 3,
+    parts: createSteerEchoParts("Go on", "s"),
+  };
+  const page = [reply("turn-1", 2, "Later answer"), steer, reply("turn-1", 4, "After steer")];
+  const render = (rows: Message[]) =>
+    renderChat(client, { sessionId, messages: rows, loading: false, sessionStatus: "idle" });
+  // Read the live fold state on each static render, as a mounted chat does.
+  const useSnapshot = React.useSyncExternalStore;
+  const snapshots = vi
+    .spyOn(React, "useSyncExternalStore")
+    .mockImplementation((subscribe, read, initial) =>
+      useSnapshot(subscribe, read, subscribe === useOpenChatStore.subscribe ? read : initial)
+    );
+  const buttons = vi.spyOn(activity, "ActivityButton");
+  try {
+    expect(render(page).match(/Expand activity, Worked/g)).toHaveLength(2);
+    buttons.mock.calls[0][0].onToggle();
+    expect(render(page)).toContain("Collapse activity, Worked");
+    expect(render([reply("turn-1", 1, "Earlier work"), ...page])).toMatch(
+      /Collapse activity, Worked.*Earlier work.*Expand activity, Worked/s
+    );
+  } finally {
+    buttons.mockRestore();
+    snapshots.mockRestore();
+    useOpenChatStore.setState({ transcriptFolds: {} });
+    client.clear();
+  }
+});
+
 it("folds a read steer between replies and finishes the same turn once", () => {
   const client = new QueryClient();
   const sessionId = "chat";
@@ -143,24 +196,7 @@ it("folds a read steer between replies and finishes the same turn once", () => {
   function render(sessionStatus: SessionStatus, agentMessages = false) {
     const page = client.getQueryData<PaginatedMessages>(messagesKey(sessionId))!;
     expect(page.turns.map((turn) => turn.turnId)).toEqual([turnId]);
-    virtualization.mockReturnValueOnce({ width: 800, height: 900 });
-    return renderToStaticMarkup(
-      createElement(
-        QueryClientProvider,
-        { client },
-        createElement(SessionProvider, {
-          sessionStatus,
-          subagentMessages: new Map(),
-          children: createElement(Chat, {
-            sessionId,
-            ...page,
-            loading: false,
-            sessionStatus,
-            agentMessages,
-          }),
-        })
-      )
-    );
+    return renderChat(client, { sessionId, ...page, loading: false, sessionStatus, agentMessages });
   }
   try {
     feed({ type: "turn.started", ...stamp });

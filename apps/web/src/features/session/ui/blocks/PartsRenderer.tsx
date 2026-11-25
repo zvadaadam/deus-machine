@@ -9,6 +9,7 @@ import { PartBlock } from "./PartBlock";
 import { ChatResourceCards } from "./ChatResourceCards";
 
 interface PartsRendererProps {
+  rowId?: string;
   parts: Array<Part | UnknownPart>;
   rows: TurnBlock[];
   stays?: Set<string> | null;
@@ -19,6 +20,7 @@ interface PartsRendererProps {
 }
 
 export const PartsRenderer = memo(function PartsRenderer({
+  rowId,
   parts,
   rows,
   stays,
@@ -30,11 +32,7 @@ export const PartsRenderer = memo(function PartsRenderer({
   const { workspacePath } = useSession();
   const id = useId();
   const worked = useRef<HTMLButtonElement>(null);
-  const [open = false, toggle] = useTranscriptFold(
-    parts[0]?.sessionId,
-    "worked",
-    parts[0]?.messageId
-  );
+  const [open = false, toggle] = useTranscriptFold(parts[0]?.sessionId, "worked", rowId);
   const visibleIds = bubbles && !open ? stays : null;
   const resources = useMemo(
     () =>

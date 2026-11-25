@@ -293,34 +293,36 @@ export function useSendMessage() {
         });
       });
 
-      patchWorkspaceSessionStatus(queryClient, sessionId, "working");
-
-      return turnId;
+      const previousStatus = patchWorkspaceSessionStatus(queryClient, sessionId, "working");
+      return { turnId, previousStatus };
     },
 
-    onSuccess: (result, { sessionId }, optimisticTurnId) => {
-      if (!result?.queued || optimisticTurnId === undefined) return;
-      dropOptimisticMessage(queryClient, sessionId, optimisticTurnId);
+    onSuccess: (result, { sessionId }, optimistic) => {
+      if (!result?.queued || !optimistic) return;
+      dropOptimisticMessage(queryClient, sessionId, optimistic.turnId);
       void queryClient.invalidateQueries({ queryKey: ["workspaces", "by-repo"] });
     },
 
-    onError: (error, { sessionId }, optimisticTurnId) => {
+    onError: (error, { sessionId }, optimistic) => {
       // A failed or uncertain backend delivery should surface its connection
       // state. The cloud-direct channel owns its own connectivity UI, and a
       // runtime that was replaced (another host or account) says nothing about
       // the connection now in use.
       const owner = runtimeForQueryClient(queryClient);
       const replaced = owner && ["disposed", "revoked"].includes(owner.getState());
+      const kind = error instanceof RuntimeError ? error.kind : undefined;
       if (
-        error instanceof RuntimeError &&
-        (error.kind === "unavailable" || error.kind === "unknown-outcome") &&
+        (kind === "unavailable" || kind === "unknown-outcome") &&
         !replaced &&
         !isDirectSessionCached(queryClient, sessionId)
       ) {
         emitSendAttemptFailed();
       }
-      if (optimisticTurnId !== undefined)
-        dropOptimisticMessage(queryClient, sessionId, optimisticTurnId);
+      if (optimistic) {
+        dropOptimisticMessage(queryClient, sessionId, optimistic.turnId);
+        if (kind === "unavailable" && optimistic.previousStatus)
+          patchWorkspaceSessionStatus(queryClient, sessionId, optimistic.previousStatus, "working");
+      }
       void queryClient.invalidateQueries({ queryKey: ["workspaces", "by-repo"] });
     },
 

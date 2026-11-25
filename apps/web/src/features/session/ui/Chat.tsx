@@ -368,6 +368,7 @@ export function Chat({
                           ))
                           .with({ type: "assistant" }, (t) => (
                             <AssistantTurn
+                              rowId={String(virtualItem.key)}
                               view={view}
                               messages={t.messages}
                               turn={t.record}

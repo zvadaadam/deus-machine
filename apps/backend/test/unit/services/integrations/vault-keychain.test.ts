@@ -37,9 +37,10 @@ vi.mock("@shared/integrations/catalog", () => ({
 vi.mock("../../../../src/services/integrations/checks", () => ({ checkApp: vi.fn() }));
 
 import { startIntegrations } from "../../../../src/services/integrations";
-import { connectApp } from "../../../../src/services/integrations/apps";
+import { addCustomApp, connectApp, uninstallApp } from "../../../../src/services/integrations/apps";
 import {
   createConnection,
+  getInstallation,
   listConnections,
   readCredential,
 } from "../../../../src/services/integrations/store";
@@ -92,11 +93,34 @@ describe("a Mac's first app sign-in", () => {
     const starting = startIntegrations(4100);
     expect(state.reads).toHaveLength(0);
     await starting;
+    await connectApp({ appId: "context7" });
     createConnection({ appId: "github", kind: "cli", status: "active" });
     await startIntegrations(4100);
     expect(state.reads).toHaveLength(0);
     expect(state.create).not.toHaveBeenCalled();
     expect(fs.existsSync(keyFile())).toBe(false);
+  });
+
+  it("leaves a replacement custom server disconnected when a connect was waiting for the key", async () => {
+    const custom = {
+      name: "Notes",
+      transport: { type: "http", url: "https://first.example.test/mcp" },
+      auth: { kind: "bearer", label: "Key" },
+    } as const;
+    const { appId } = addCustomApp(custom);
+    const connecting = connectApp({ appId, values: { token: "fixture" } });
+    expect(state.reads).toHaveLength(1);
+    uninstallApp(appId);
+    expect(
+      addCustomApp({
+        ...custom,
+        transport: { type: "http", url: "https://second.example.test/mcp" },
+      })
+    ).toEqual({ appId });
+    state.reads[0]!(null, { stdout: KEYCHAIN_KEY });
+    await expect(connecting).rejects.toThrow(/changed/i);
+    expect(getInstallation("app", appId)?.connectionId).toBeNull();
+    expect(listConnections(appId)).toHaveLength(0);
   });
 
   it.each([

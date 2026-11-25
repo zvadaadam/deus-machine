@@ -281,6 +281,40 @@ describe("backend prompt delivery", () => {
     }
   });
 
+  const prompt = {
+    sessionId: SESSION,
+    content: "Send this once",
+    turnId: "turn-once",
+    agentHarness: "claude-code",
+    model: "opus",
+    thinkingLevel: "high",
+  } as const;
+
+  function workspaceWithStatus(status: Session["status"]) {
+    const chats = [
+      { id: SESSION, status },
+      { id: "another-chat", status: "working" },
+    ];
+    return { id: "w1", current_session_id: SESSION, session_status: status, chats };
+  }
+
+  it("restores the chat to idle when the host stays offline and no update arrives", async () => {
+    const { useSendMessage } = await import("@/features/session/api/session.queries");
+    const client = state.queryClient!;
+    const key = queryKeys.workspaces.byRepo("active");
+    const list = (status: Session["status"]) => [{ workspaces: [workspaceWithStatus(status)] }];
+    client.setQueryData(key, list("idle"));
+    state.isConnected.mockReturnValue(false);
+    state.connect.mockImplementationOnce(() => {
+      expect(client.getQueryData(key)).toEqual(list("working"));
+      throw new RuntimeError("unavailable", "Host offline");
+    });
+    await expect(useSendMessage().mutateAsync(prompt)).rejects.toThrow("Host offline");
+    expect(client.getQueryData(key)).toEqual(list("idle"));
+    expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    expect(state.call).not.toHaveBeenCalled();
+  });
+
   it.each([
     { stage: "connect", failure: new RuntimeError("unavailable", "Host offline"), notices: 1 },
     {
@@ -296,25 +330,18 @@ describe("backend prompt delivery", () => {
       const client = state.queryClient!;
       const active = queryKeys.workspaces.byRepo("active");
       const archived = queryKeys.workspaces.byRepo("archived");
-      const workspace = { id: "w1", current_session_id: SESSION, session_status: "idle" };
-      client.setQueryData(active, [{ repo_id: "r1", workspaces: [workspace] }]);
+      client.setQueryData(active, [{ repo_id: "r1", workspaces: [workspaceWithStatus("idle")] }]);
       client.setQueryData(archived, []);
-      const updated = [{ repo_id: "r1", workspaces: [workspace, { id: "another-workspace" }] }];
+      const status = stage === "connect" ? "error" : "working";
+      const updated = [
+        { repo_id: "r1", workspaces: [workspaceWithStatus(status), { id: "another-workspace" }] },
+      ];
       state.isConnected.mockReturnValue(stage === "call");
       state[stage].mockImplementationOnce(() => {
         client.setQueryData(active, updated);
         throw failure;
       });
-      await expect(
-        useSendMessage().mutateAsync({
-          sessionId: SESSION,
-          content: "Send this once",
-          turnId: "turn-once",
-          agentHarness: "claude-code",
-          model: "opus",
-          thinkingLevel: "high",
-        })
-      ).rejects.toBe(failure);
+      await expect(useSendMessage().mutateAsync(prompt)).rejects.toBe(failure);
       expect(client.getQueryData(active)).toEqual(updated);
       expect(client.getQueryState(active)?.isInvalidated).toBe(true);
       expect(client.getQueryState(archived)?.isInvalidated).toBe(true);
