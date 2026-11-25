@@ -24,6 +24,7 @@ import { isUnknownEvent, type AnyLifecycleEvent } from "@shared/protocol-types";
 import {
   persistAgentSessionId,
   persistSessionStatus,
+  type SessionProjection,
   type TurnOutcomeWrite,
   type WriteResult,
 } from "./persistence";
@@ -95,17 +96,18 @@ export function applySessionFacts(
   owner: string | undefined,
   sessionId: string,
   event: AnyLifecycleEvent,
-  conversation: ConversationState
+  conversation: ConversationState,
+  deferred?: { prior?: SessionProjection }
 ): SessionFactWrite[] {
   if (isUnknownEvent(event)) return [];
-  const rejectedSend =
-    event.type === "error" && event._meta?.cloudErrorCode === "MESSAGE_SEND_FAILED";
+  const otherError =
+    event.type === "error" && (deferred || event._meta?.cloudErrorCode === "MESSAGE_SEND_FAILED");
   if (
     owner !== undefined &&
     "turnId" in event &&
     event.turnId !== undefined &&
     event.turnId !== owner &&
-    !rejectedSend
+    !otherError
   )
     return [];
 
@@ -160,6 +162,10 @@ export function applySessionFacts(
       )
         return [];
       facts.errorReported = true;
+      if (deferred) {
+        deferred.prior = ["error", e.message, e.category];
+        return [];
+      }
       const result = persistSessionStatus(sessionId, "error", e.message, e.category);
       return [{ fact: "session-error", result }];
     })

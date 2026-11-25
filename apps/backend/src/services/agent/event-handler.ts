@@ -404,10 +404,11 @@ export function createAgentEventHandler(): AgentEventHandler {
       // product plumbing only this process has.
       for (const write of applySessionFacts(
         facts,
-        envelope.event.type === "turn.started" ? holder?.turnId : owner,
+        event.type === "turn.started" ? holder?.turnId : owner,
         sessionId,
-        envelope.event,
-        conversation
+        event,
+        conversation,
+        deferred ? holder.setup : undefined
       )) {
         persistAndInvalidate(write.result, SESSION_RESOURCES, sessionId);
       }
