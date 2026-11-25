@@ -82,6 +82,11 @@ describe("native replay through the published engine, SQLite and desktop fold", 
   let db: Database.Database;
   let handler: ReturnType<typeof createAgentEventHandler>;
   let ui: AgentStreamContext;
+  function startOnWire(turnId: string) {
+    if (!claimTurn(SESSION, turnId)) return false;
+    handler.resetTurnFacts(SESSION);
+    return true;
+  }
   beforeEach(() => {
     forgetChatTurns();
     vi.clearAllMocks();
@@ -183,7 +188,7 @@ describe("native replay through the published engine, SQLite and desktop fold", 
       });
       try {
         persistSessionWorking(SESSION);
-        claimTurn(SESSION, "turn-1");
+        startOnWire("turn-1");
         await client.startTurn({
           sessionId: SESSION,
           turnId: "turn-1",
@@ -223,7 +228,7 @@ describe("native replay through the published engine, SQLite and desktop fold", 
             "offline"
           );
         // Delivery damage belongs to one turn, not the whole session.
-        claimTurn(SESSION, "next");
+        startOnWire("next");
         persistSessionWorking(SESSION);
         await client.startTurn({
           sessionId: SESSION,
@@ -243,7 +248,7 @@ describe("native replay through the published engine, SQLite and desktop fold", 
   );
 
   it("keeps Stop available on unconfirmed loss and ignores a late reply after a successor starts", () => {
-    claimTurn(SESSION, "lost");
+    startOnWire("lost");
     admitTurn(SESSION, "lost");
     const gap = {
       sessionId: SESSION,
@@ -256,10 +261,10 @@ describe("native replay through the published engine, SQLite and desktop fold", 
       status: "working",
       error_message: expect.stringContaining("not confirmed it stopped"),
     });
-    expect(claimTurn(SESSION, "unsafe")).toBe(false);
+    expect(startOnWire("unsafe")).toBe(false);
     handler.settleEventGap(SESSION, "lost", true);
     expect(row()).toMatchObject({ status: "error" });
-    expect(claimTurn(SESSION, "new")).toBe(true);
+    expect(startOnWire("new")).toBe(true);
     persistSessionWorking(SESSION);
     handler.settleEventGap(SESSION, "lost", true);
     expect(holdingTurn(SESSION)?.turnId).toBe("new");
@@ -324,7 +329,7 @@ describe("native replay through the published engine, SQLite and desktop fold", 
       },
     });
     expect(row()).toMatchObject({ status: "error", error_message: "New failure" });
-    claimTurn(SESSION, "pending");
+    startOnWire("pending");
     expect(handler.handleEventGap({ ...gap, reason: "server_restarted" })).toBeUndefined();
     expect(holdingTurn(SESSION)?.turnId).toBe("pending");
   });
@@ -332,7 +337,7 @@ describe("native replay through the published engine, SQLite and desktop fold", 
   it.each(["server_restarted", "session_missing"] as const)(
     "settles an already-damaged turn when %s proves it gone",
     (reason) => {
-      claimTurn(SESSION, "lost");
+      startOnWire("lost");
       admitTurn(SESSION, "lost");
       handler.handleEventGap({
         sessionId: SESSION,
@@ -345,7 +350,7 @@ describe("native replay through the published engine, SQLite and desktop fold", 
         status: "error",
         error_message: expect.stringContaining("transcript is incomplete"),
       });
-      expect(claimTurn(SESSION, "retry")).toBe(true);
+      expect(startOnWire("retry")).toBe(true);
     }
   );
 });
