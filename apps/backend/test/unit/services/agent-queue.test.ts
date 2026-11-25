@@ -41,10 +41,12 @@ import {
 import { subscribe } from "../../../src/services/streams";
 import { addConnection, closeAll } from "../../../src/services/ws.service";
 import { createDeusHost } from "../../../src/services/assistants/host";
+import { answerMcp, withSessionTools } from "../../../src/services/assistants/operator";
+import * as access from "../../../src/services/assistants/access";
 import * as settings from "../../../src/services/settings.service";
 import { answer, clearAll, pendingFor } from "../../../src/services/agent/tool-relay";
 import { resolveTurnApps } from "../../../src/services/integrations";
-import { operations } from "../../helpers";
+import { assistantCaller, operations } from "../../helpers";
 
 const engine = vi.hoisted(() => ({
   open: vi.fn<(options: AgentLinkOptions) => unknown>(),
@@ -127,9 +129,35 @@ const read = (id: string) => run(api.queuedMessage, { sessionId, id });
 const remove = (id: string) => run(api.removeQueuedMessage, { sessionId, id });
 const resumeInWindow = () => run(api.resumeQueuedMessages, { sessionId });
 const stop = () => run(api.stopSession, { sessionId });
+function callQueueMcp(caller: typeof LOCAL_CALLER, name: string, args: Record<string, unknown>) {
+  return answerMcp(
+    {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name, arguments: { session: sessionId, ...args } },
+    },
+    caller
+  );
+}
 function stopped(turnId: string, by?: Origin) {
   engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId });
   return by ? stopSession({ sessionId }, by) : stop();
+}
+async function queueTool(
+  action: "read_queue" | "send_now" | "remove" | "resume",
+  id?: string,
+  caller: string = fromChat.sessionId,
+  mode: "plan" | "bypass_permissions" = "bypass_permissions"
+) {
+  const tools = withSessionTools({ name: "deus", tools: [], call: vi.fn() });
+  const result = await tools.call(
+    action === "read_queue" ? action : "manage_queue",
+    action === "read_queue" ? { session: sessionId } : { session: sessionId, action, message: id },
+    { sessionId: caller, turnId: "sender-turn", harness: "claude-code", permissionMode: mode },
+    new AbortController().signal
+  );
+  return result.content.map((part) => (part.type === "text" ? part.text : "")).join("");
 }
 async function loseStartReply(started = true) {
   const wire = pendingStart();
@@ -1946,6 +1974,20 @@ describe("the operator's queue and steer contract", () => {
     }
   );
 
+  it("uses the same waiting and steering counts in the operator, list, view and manage_queue", async () => {
+    await send("active");
+    for (const id of ["promote", "waiting", "remove"]) await enqueue(id);
+    await queueTool("send_now", "promote");
+    const answer = await sendFromChat("fresh");
+    const note = "2 messages queued, 2 messages being steered";
+    expect(answer).toContain(`note: ${note}`);
+    expect((await host.list(caller, {})).find((entry) => entry.id === sessionId)?.note).toBe(note);
+    expect((await host.view(caller, sessionId, { last: 1 })).note).toBe(note);
+    expect(await queueTool("remove", "remove")).toBe(
+      "Removed. 1 message queued, 2 messages being steered."
+    );
+  });
+
   it.each(["end_turn", "cancelled"] as const)(
     "shows the ended turn, receipt and recovered row on the first wake after %s",
     async (reason) => {
@@ -2484,6 +2526,51 @@ describe("operating another chat's queue", () => {
   const task = (id: string, origin: Origin = fromChat) =>
     enqueueMessage({ ...message(id), turnId: id }, origin);
 
+  it("reads the order, states, senders, first lines and copyable ids", async () => {
+    await send("active");
+    const id = "opaque  id\n1";
+    await enqueueMessage(
+      { ...message("task"), turnId: id, content: 'Fix "x".\nSecond line' },
+      fromChat
+    );
+    await send("person");
+    db.prepare("INSERT INTO sessions (id, workspace_id, chat) VALUES ('peer', 'w', 3)").run();
+    await task("sibling", { kind: "session", sessionId: "peer" });
+    await steerMessage({ ...message("steer"), turnId: "active" }, fromAssistant);
+    const read = await queueTool("read_queue");
+    expect(read).toContain('1. steering · from "Reviewer"');
+    expect(read).toContain(
+      `2. waiting · from you · ${JSON.stringify('Fix "x".')} · message ${JSON.stringify(id)}`
+    );
+    expect(read).toContain("3. waiting · from the person");
+    expect(read).toContain('4. waiting · from "checkout:3"');
+    expect(read).not.toContain("Second line");
+    expect(await queueTool("remove", id)).toBe(
+      "Removed. 2 messages queued, 1 message being steered."
+    );
+    expect(await queueTool("remove", id)).toMatch(/no longer waiting/);
+  });
+
+  it("clips only the first line of each queue preview, keeping the id and hold whole", async () => {
+    await send("active");
+    const id = "opaque ".repeat(35).trimEnd();
+    const edge = "a".repeat(159);
+    await enqueueMessage(
+      { ...message(id), turnId: id, content: edge + "🌴" + "x".repeat(50000) },
+      fromChat
+    );
+    await enqueueMessage(
+      { ...message("short"), turnId: "short", content: edge + "🌴\nsecond line" },
+      fromAssistant
+    );
+    end("active", "error");
+    const text = await queueTool("read_queue");
+    expect(text).toContain(`"${edge}…" · message ${JSON.stringify(id)}`);
+    expect(text).toContain(`"${edge}🌴" · message "short"`);
+    expect(text).not.toContain("second line");
+    expect(text).toMatch(/held after an error$/);
+  });
+
   it("resolves a view's queue senders without opening unrelated workspace entries", async () => {
     db.exec(`
       INSERT INTO sessions (id, workspace_id, chat) VALUES ('peer', 'w', 3);
@@ -2500,6 +2587,302 @@ describe("operating another chat's queue", () => {
     expect(
       db.prepare("SELECT first_session_id FROM workspaces WHERE id = 'unrelated'").pluck().get()
     ).toBeNull();
+  });
+
+  it("uses the sender's current unambiguous reference for its rows and its Stop", async () => {
+    db.exec(`
+      INSERT INTO repositories (id, name, root_path) VALUES ('other', 'Other project', '/tmp/other');
+      INSERT INTO workspaces (id, repository_id, slug, state)
+        VALUES ('another', 'other', 'checkout', 'ready');
+      INSERT INTO sessions (id, workspace_id, chat) VALUES ('peer', 'another', 2);
+    `);
+    const peer = { kind: "session", sessionId: "peer" } as const;
+    await send("active");
+    await task("one", peer);
+    await task("two", { ...peer, name: "old:1" });
+    await stopped("active", peer);
+    end("active", "cancelled");
+    const prepare = vi.spyOn(db, "prepare");
+    const linked = await queueTool("read_queue");
+    const globalLists = prepare.mock.calls.filter(
+      ([sql]) => sql.includes("w.title AS ws_title") && /w.kind != 'cloud'\s+ORDER BY/.test(sql)
+    );
+    expect(globalLists).toHaveLength(1); // The package resolves the target once.
+    prepare.mockRestore();
+    expect(linked.match(/from "Other project\/checkout:2"/g)).toHaveLength(2);
+    expect(linked).toContain('held: stopped by "Other project/checkout:2"');
+    db.prepare("DELETE FROM sessions WHERE id = ?").run(peer.sessionId);
+    const gone = await queueTool("read_queue");
+    expect(gone.match(/from a chat that is gone/g)).toHaveLength(2);
+    expect(gone).toContain("held: stopped by a chat that is gone");
+  });
+
+  it("shows the sending head until the turn echoes it", async () => {
+    await send("active");
+    await task("head");
+    engine.startTurn.mockResolvedValueOnce(undefined);
+    end("active");
+    await vi.waitFor(() => expect(agent.liveTurnId(sessionId)).toBe("head"));
+    expect(await queueTool("read_queue")).toContain('1. sending · from you · "Message head"');
+    echo("head", undefined, "Message head", fromChat);
+    expect(await queueTool("read_queue")).toContain("The queue is empty.");
+  });
+
+  it.each(["send_now", "remove"] as const)(
+    "refuses %s on the person's and another agent's rows",
+    async (action) => {
+      await sendInOrder("active", "person");
+      await task("assistant", fromAssistant);
+      for (const id of ["person", "assistant"]) {
+        expect(await queueTool(action, id)).toMatch(
+          /refused \(not_yours\).*only its sender or the person can change it/i
+        );
+      }
+      expect(await ids()).toEqual(["person", "assistant"]);
+      expect(engine.steerTurn).not.toHaveBeenCalled();
+    }
+  );
+
+  it("gives an external assistant its own rows and the person every row and their Stop", async () => {
+    await send("active");
+    await task("chat");
+    await task("mine", { kind: "assistant", id: "assistant:reviewer", name: "Reviewer" });
+    await task("theirs", fromAssistant);
+    vi.spyOn(access, "currentHost").mockReturnValue(null);
+    vi.spyOn(access, "storedAccess").mockReturnValue("operate");
+    vi.spyOn(access, "assertMayWrite").mockImplementation(() => {});
+    const manage = (caller: typeof LOCAL_CALLER, action: string, message?: string) =>
+      callQueueMcp(caller, "manage_queue", { action, message });
+    const assistant = assistantCaller("operate", "reviewer");
+    for (const id of ["chat", "theirs"]) {
+      expect(await manage(assistant, "remove", id)).toMatchObject({
+        result: {
+          isError: true,
+          content: [
+            { text: expect.stringContaining("Only its sender or the person can change it") },
+          ],
+        },
+      });
+    }
+    await manage(assistant, "remove", "mine");
+    expect(await ids()).toEqual(["chat", "theirs"]);
+    await task("extra", fromAssistant);
+    await manage(LOCAL_CALLER, "send_now", "extra");
+    expect(engine.steerTurn.mock.lastCall?.[0].origin).toEqual(fromAssistant);
+    echo("active", lastSteerId(), message("extra").content, fromAssistant);
+    await manage(LOCAL_CALLER, "remove", "theirs");
+    expect(await ids()).toEqual(["chat"]);
+    await stopped("active");
+    end("active", "cancelled");
+    await send("successor");
+    await stopped("successor", fromAssistant);
+    end("successor", "cancelled");
+    await resumeQueuedMessages(sessionId, fromAssistant);
+    expect(await queue()).toMatchObject({ paused: "stopped", stoppedBy: fromPerson });
+    await manage(LOCAL_CALLER, "resume");
+    expect(starts()).toEqual(["active", "successor", "chat"]);
+  });
+
+  it("sends its own row into the named turn once", async () => {
+    await send("active");
+    await task("row");
+    const sent = await queueTool("send_now", "row");
+    expect(sent).toContain('Sent into turn "active"');
+    expect(sent).toContain("not yet read");
+    expect(sent).toContain("keeps its place");
+    const { steerId, input, origin } = engine.steerTurn.mock.lastCall![0];
+    expect(origin).toEqual(fromChat);
+    echo("active", steerId, input, origin);
+    expect(await queueTool("send_now", "row")).toMatch(/no longer waiting/);
+    expect(engine.steerTurn).toHaveBeenCalledOnce();
+    expect(await queueTool("resume")).toMatch(/nothing to resume/);
+  });
+
+  it("reports a read when the steer echo precedes the send_now answer", async () => {
+    await send("active");
+    await task("mine");
+    engine.steerTurn.mockImplementationOnce(async ({ turnId, steerId, input, origin }) => {
+      echo(turnId, steerId, input, origin);
+      return { outcome: "steered", steerId: steerId! };
+    });
+    expect(await queueTool("send_now", "mine")).toBe('Read in turn "active".');
+  });
+
+  it("reports an unconfirmed send_now and keeps the row in place for a late read", async () => {
+    await sendInOrder("active", "first");
+    await task("mine");
+    engine.steerTurn.mockRejectedValueOnce(new Error("timed out"));
+    expect(await queueTool("send_now", "mine")).toMatch(/^Delivery unconfirmed\./i);
+    expect((await queue()).items).toMatchObject([
+      waitingRow("first"),
+      { id: "mine", state: "steering" },
+    ]);
+    const { steerId, input, origin } = engine.steerTurn.mock.lastCall![0];
+    echo("active", steerId, input, origin);
+    expect(await ids()).toEqual(["first"]);
+  });
+
+  it("keeps a promoted row in place when its preceding row is removed before refusal", async () => {
+    await sendInOrder("active", "X");
+    await task("R");
+    await send("Y");
+    const rpc = pendingSteer();
+    const result = queueTool("send_now", "R");
+    await vi.waitFor(() => expect(engine.steerTurn).toHaveBeenCalledOnce());
+    expect((await queue()).items.map(({ id, state }) => [id, state])).toEqual([
+      ["X", "waiting"],
+      ["R", "steering"],
+      ["Y", "waiting"],
+    ]);
+    await remove("X");
+    rpc.resolve({ outcome: "unsupported" });
+    expect(await result).toMatch(/did not take it.*position 1/i);
+    expect(await ids()).toEqual(["R", "Y"]);
+    expect((await queue()).items[0]?.state).toBe("waiting");
+  });
+
+  it.each(["window arrow", "send_now"] as const)(
+    "keeps the row in place during the RPC, then applies the %s fallback",
+    async (source) => {
+      await sendInOrder("active", "X");
+      await task("R");
+      await send("Y");
+      const rpc = pendingSteer();
+      const sending = source === "window arrow" ? steerRow("R") : queueTool("send_now", "R");
+      await vi.waitFor(() => expect(engine.steerTurn).toHaveBeenCalledOnce());
+      expect((await queue()).items).toMatchObject([
+        { id: "X" },
+        { id: "R", state: "steering" },
+        { id: "Y" },
+      ]);
+      rpc.resolve({ outcome: "no_active_turn" });
+      await sending;
+      expect(await ids()).toEqual(source === "window arrow" ? ["R", "X", "Y"] : ["X", "R", "Y"]);
+    }
+  );
+
+  it.each(["window arrow", "send_now"] as const)(
+    "recovers an unread %s at its fallback position when the turn ends first",
+    async (source) => {
+      await sendInOrder("active", "X");
+      await task("R");
+      const rpc = pendingSteer();
+      const sending = source === "window arrow" ? steerRow("R") : queueTool("send_now", "R");
+      await vi.waitFor(() => expect(engine.steerTurn).toHaveBeenCalledOnce());
+      end("active", "cancelled", [lastSteerId()]);
+      rpc.resolve({ outcome: "steered", steerId: lastSteerId() });
+      await sending;
+      expect(await ids()).toEqual(source === "window arrow" ? ["R", "X"] : ["X", "R"]);
+      expect(await queueTool("send_now", "R")).toContain("its own turn");
+      expect(engine.steerTurn).toHaveBeenCalledOnce();
+    }
+  );
+
+  it.each(["stopped", "question", "unsupported", "stale target", "unnamed"] as const)(
+    "runs a fresh steer kept for a %s turn only as its own turn",
+    async (why) => {
+      await send("A");
+      engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "A" });
+      if (why === "stopped") await stop();
+      if (why === "question") question("A");
+      if (why === "unsupported") engine.steerTurn.mockResolvedValueOnce({ outcome: "unsupported" });
+      const turnId = why === "stale target" ? "old" : why === "unnamed" ? undefined : "A";
+      await expect(steerMessage({ ...message("S"), turnId }, fromChat, "S")).resolves.toEqual({
+        outcome: "queued",
+      });
+      if (why !== "stopped") await stop();
+      end("A", "cancelled");
+      await send("B");
+      await resumeInWindow();
+      await send("later");
+      expect(await queueTool("send_now", "S")).toContain("waits for its own turn in its place");
+      expect(await ids()).toEqual(["S", "later"]);
+      expect(engine.steerTurn.mock.calls.map(([p]) => p.turnId)).toEqual(
+        why === "unsupported" ? ["A"] : []
+      );
+      end("B");
+      await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "S"]));
+    }
+  );
+
+  it("keeps a second unread steer for its own turn after the first one starts", async () => {
+    await send("first");
+    await steerMessage({ ...message("one"), turnId: "first" }, fromChat, "one");
+    await steerMessage({ ...message("two"), turnId: "first" }, fromChat, "two");
+    end("first", "end_turn", ["one", "two"]);
+    await vi.waitFor(() => expect(starts()).toEqual(["first", "one"]));
+    await expect(
+      steerMessage({ ...message("two"), turnId: "one" }, fromChat, "two")
+    ).rejects.toThrow(/different message/i);
+    expect(await queueTool("send_now", "two")).toMatch(/its own turn.*in (its|this) place/i);
+    expect(engine.steerTurn).toHaveBeenCalledTimes(2);
+    end("one");
+    await vi.waitFor(() => expect(starts()).toEqual(["first", "one", "two"]));
+  });
+
+  it.each(["question", "plan"] as const)(
+    "reports the %s that blocked the row's promotion",
+    async (card) => {
+      await sendInOrder("active", "first");
+      await task("row");
+      (card === "question" ? question : plan)("active");
+      expect(await steerQueuedMessage(sessionId, "row", "active", "in_place")).toBe(card);
+      expect(await queueTool("send_now", "row")).toContain(`Waiting behind the chat's ${card}`);
+      expect(await ids()).toEqual(["first", "row"]);
+    }
+  );
+
+  it("reports a row started as its own turn when the target has just gone idle", async () => {
+    await send("active");
+    await task("row");
+    engine.steerTurn.mockImplementationOnce(async () => {
+      emit({ type: "session.ended", sessionId, reason: "idle", timestamp: seq });
+      db.prepare("UPDATE sessions SET status = 'idle' WHERE id = ?").run(sessionId);
+      return { outcome: "no_active_turn" };
+    });
+    expect(await queueTool("send_now", "row")).toBe("Started as its own turn.");
+    expect(starts()).toEqual(["active", "row"]);
+  });
+
+  it("keeps its row in place while held after an error, then resumes in order", async () => {
+    await sendInOrder("active", "later");
+    await task("mine");
+    end("active", "error");
+    expect(await queueTool("send_now", "mine")).toContain("held after an error");
+    expect(await ids()).toEqual(["later", "mine"]);
+    expect(starts()).toEqual(["active"]);
+    expect(await queueTool("resume")).toBe('Resumed. Started turn "later". 1 message queued.');
+    expect(starts()).toEqual(["active", "later"]);
+  });
+
+  it("send_now honors the person's Stop even after another turn starts", async () => {
+    await sendInOrder("active", "first");
+    await task("mine");
+    await stopped("active");
+    end("active", "cancelled");
+    await send("successor");
+    expect(await queueTool("send_now", "mine")).toContain("held: stopped by the person");
+    expect(await ids()).toEqual(["first", "mine"]);
+    expect(engine.steerTurn).not.toHaveBeenCalled();
+  });
+
+  it("send_now lets an idle open queue start its first waiting row", async () => {
+    await sendInOrder("active", "first");
+    await task("mine");
+    emit({ type: "session.ended", sessionId, reason: "idle", timestamp: seq });
+    db.prepare("UPDATE sessions SET status = 'idle' WHERE id = ?").run(sessionId);
+    await queueTool("send_now", "mine");
+    expect(starts()).toEqual(["active", "first"]);
+    expect(await ids()).toEqual(["mine"]);
+  });
+
+  it("records who stopped an idle chat with waiting rows", async () => {
+    await sendInOrder("active", "later");
+    end("active", "error");
+    engine.cancelTurn.mockResolvedValueOnce({ outcome: "no_active_turn" });
+    await stopSession({ sessionId }, fromAssistant);
+    expect(await queue()).toMatchObject({ paused: "stopped", stoppedBy: fromAssistant });
+    expect(await queueTool("read_queue")).toContain('held: stopped by "Reviewer"');
   });
 
   it("records who stopped the chat during app setup", async () => {
@@ -2562,6 +2945,32 @@ describe("operating another chat's queue", () => {
       expect(await queue()).toEqual({ paused: null, items: [] });
     }
   );
+
+  it("keeps an agent's stop on the hold after the turn ends and lets another agent resume", async () => {
+    await sendInOrder("active", "later");
+    await stopped("active", fromChat);
+    end("active", "cancelled");
+    expect(await queue()).toMatchObject({ paused: "stopped", stoppedBy: fromChat });
+    expect(await queueTool("read_queue")).toContain("held: stopped by you");
+    expect(await queueTool("resume", undefined, "peer")).toBe(
+      'Resumed. Started turn "later". Nothing waits.'
+    );
+  });
+
+  it("gives the person's Stop precedence over an agent's on the same hold", async () => {
+    await sendInOrder("active", "later");
+    engine.cancelTurn.mockResolvedValue({ outcome: "cancelled", turnId: "active" });
+    await stopSession({ sessionId }, fromChat);
+    await stop();
+    await stopSession({ sessionId }, fromAssistant);
+    end("active", "cancelled");
+    expect(await queue()).toMatchObject({ paused: "stopped", stoppedBy: fromPerson });
+    expect(await queueTool("read_queue")).toContain("held: stopped by the person");
+    expect(await queueTool("resume")).toContain(
+      "refused (person_only): Nothing was resumed. The queue is held: stopped by the person."
+    );
+    expect(starts()).toEqual(["active"]);
+  });
 
   it.each([false, true])(
     "holds an empty queue through Stop until its turn settles (last row removed: %s)",
@@ -2637,6 +3046,48 @@ describe("operating another chat's queue", () => {
     expect(await queue()).toEqual({ paused: null, items: [] });
   });
 
+  it.each(["Stop", "failure"] as const)(
+    "shows an empty %s until its turn settles, then drains the next turn’s rows",
+    async (cause) => {
+      await send("A");
+      if (cause === "Stop") await stopped("A");
+      else {
+        await task("last");
+        agent.notifyTurnInterrupted(sessionId, "A", false);
+        await remove("last");
+      }
+      const hold = cause === "Stop" ? "held: stopped by the person" : "held after an error";
+      const host = createDeusHost();
+      const list = () => createOperator(host).call("list_sessions", {}, windowCaller);
+      expect(await list()).toContain(hold);
+      expect((await host.view(windowCaller, sessionId, { last: 1 })).note).toBe(hold);
+      expect(await queueTool("read_queue")).toContain(hold);
+      end("A", cause === "Stop" ? "cancelled" : "error");
+      expect(await queue()).toEqual({ paused: null, items: [] });
+      expect(await list()).not.toContain("held");
+      await sendInOrder("B", "R");
+      end("B");
+      expect((await queue()).items).toMatchObject([{ id: "R", state: "sending" }]);
+      await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "R"]));
+    }
+  );
+
+  it("keeps the person's Stop when their independently started successor fails with person rows waiting", async () => {
+    await send("active");
+    await stopped("active");
+    await task("agent-row");
+    end("active", "cancelled");
+    await sendInOrder("successor", "person-row");
+    await expect(steer("for successor")).resolves.toEqual({ outcome: "steered" });
+    echo("successor", lastSteerId());
+    end("successor", "error");
+    expect(await ids()).toEqual(["agent-row", "person-row"]);
+    expect(await queueTool("resume")).toMatch(/refused \(person_only\)/);
+    expect(starts()).toEqual(["active", "successor"]);
+    await resumeInWindow();
+    expect(starts()).toEqual(["active", "successor", "agent-row"]);
+  });
+
   it.each(["Stop", "failure", "cancel"] as const)(
     "forgets an empty settled %s and starts the next row",
     async (cause) => {
@@ -2678,6 +3129,18 @@ describe("operating another chat's queue", () => {
       expect(await queue()).toMatchObject({ paused: null, items: [waitingRow("R")] });
     }
   );
+
+  it("honors a person's Resume after an agent resumed a live failure", async () => {
+    await loseStartReply();
+    await resumeQueuedMessages(sessionId, fromChat);
+    expect(await queueTool("read_queue")).toContain("The queue is open.");
+    expect(await queueTool("resume")).toBe("There is nothing to resume.");
+    engine.startTurn.mockRejectedValueOnce(busyReply());
+    expect(await resumeQueuedMessages(sessionId)).toMatchObject({ outcome: "resumed" });
+    end("A", "cancelled");
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "R", "R"]));
+    expect(await queue()).toEqual({ paused: null, items: [] });
+  });
 
   it.each(["end_turn", "error", "server_restarted"] as const)(
     "drains after an agent resumes a live failure and the turn settles with %s",
@@ -2749,6 +3212,98 @@ describe("operating another chat's queue", () => {
     expect(await ids()).toEqual(["tail"]);
   });
 
+  it.each(["cancelled", "unconfirmed"] as const)(
+    "keeps replay cancellation for the person when the RPC answers %s before the terminal",
+    async (outcome) => {
+      await send("active");
+      await task("later");
+      engine.cancelTurn.mockResolvedValueOnce({ outcome, turnId: "active" });
+      gap("replay_failed");
+      await vi.waitFor(async () => expect((await queue()).paused).toBe("stopped"));
+      expect(await queueTool("resume")).toMatch(/refused \(person_only\)/);
+      expect(agent.liveTurnId(sessionId)).toBe(outcome === "unconfirmed" ? "active" : undefined);
+      end("active", "cancelled");
+      expect(await queue()).toMatchObject({ paused: "stopped", items: [{ id: "later" }] });
+      expect(await queue()).not.toHaveProperty("stoppedBy");
+      expect(await queueTool("resume")).toMatch(/refused \(person_only\)/);
+      expect(starts()).toEqual(["active"]);
+    }
+  );
+
+  it("settles a failed replay as a failure when the engine confirms that no turn is active", async () => {
+    await send("active");
+    await task("later");
+    engine.cancelTurn.mockResolvedValueOnce({ outcome: "no_active_turn" });
+    gap("replay_failed");
+    await vi.waitFor(async () => expect((await queue()).paused).toBe("failed"));
+    expect(agent.liveTurnId(sessionId)).toBeUndefined();
+    expect(await queueTool("resume")).toContain('Started turn "later"');
+    expect(starts()).toEqual(["active", "later"]);
+  });
+
+  it.each(["person", "agent"] as const)(
+    "applies a successor's unconfirmed replay cancel under a %s Stop",
+    async (who) => {
+      await send("A");
+      await task("later");
+      await stopped("A", who === "person" ? fromPerson : fromChat);
+      end("A", "cancelled");
+      await send("B");
+      engine.cancelTurn.mockResolvedValueOnce({ outcome: "unconfirmed", turnId: "B" });
+      gap("replay_failed");
+      await vi.waitFor(async () =>
+        expect(await run(api.session, { sessionId })).toMatchObject({ error_category: "network" })
+      );
+      expect(agent.liveTurnId(sessionId)).toBe("B");
+      expect(await steer("aimed at B")).toEqual({ outcome: "queued" });
+      expect(engine.steerTurn).not.toHaveBeenCalled();
+      expect(await queueTool("resume")).toMatch(/refused \(person_only\)/);
+      if (who === "person") expect((await queue()).stoppedBy).toEqual(fromPerson);
+      else expect(await queue()).not.toHaveProperty("stoppedBy");
+      await resumeInWindow();
+      expect(await steer("after Resume")).toEqual({ outcome: "steered" });
+      const id = lastSteerId();
+      expect(engine.steerTurn).toHaveBeenCalledOnce();
+      end("B", "cancelled", [id]);
+      await vi.waitFor(() => expect(starts()).toEqual(["A", "B", id]));
+      expect((await queue()).paused).toBeNull();
+    }
+  );
+
+  it.each(["agent Stop", "failure"] as const)(
+    "a successor’s independent cancel replaces an earlier %s",
+    async (prior) => {
+      await send("A");
+      await task("later");
+      if (prior === "agent Stop") await stopped("A", fromChat);
+      end("A", prior === "failure" ? "error" : "cancelled");
+      await send("B");
+      const held = await queue();
+      end("A");
+      expect(await queue()).toEqual(held);
+      end("B", "cancelled");
+      expect(await queue()).toMatchObject({ paused: "stopped", items: [{ id: "later" }] });
+      expect(await queue()).not.toHaveProperty("stoppedBy");
+      expect(await queueTool("resume")).toMatch(/refused \(person_only\)/);
+      expect(starts()).toEqual(["A", "B"]);
+    }
+  );
+
+  it("keeps the actual Stop on the same turn through its replay cancellation and terminal", async () => {
+    await send("A");
+    await task("later");
+    engine.cancelTurn.mockResolvedValue({ outcome: "unconfirmed", turnId: "A" });
+    await stopSession({ sessionId }, fromAssistant);
+    gap("replay_failed");
+    await vi.waitFor(async () =>
+      expect(await run(api.session, { sessionId })).toMatchObject({ error_category: "network" })
+    );
+    expect((await queue()).stoppedBy).toEqual(fromAssistant);
+    end("A", "cancelled");
+    expect((await queue()).stoppedBy).toEqual(fromAssistant);
+    expect(await queueTool("resume")).toContain('Started turn "later"');
+  });
+
   it.each(["confirmed absence", "rejected start"] as const)(
     "releases an empty settled failure after %s, without another terminal",
     async (cause) => {
@@ -2774,6 +3329,50 @@ describe("operating another chat's queue", () => {
     }
   );
 
+  it("leaves a cancellation without a Stop for the person to resume", async () => {
+    await send("active");
+    await task("later");
+    // Replay recovery cancels the engine directly. Its terminal can beat the cancel reply.
+    engine.cancelTurn.mockImplementationOnce(async () => {
+      end("active", "cancelled");
+      return { outcome: "cancelled", turnId: "active" };
+    });
+    gap("replay_failed");
+    await resumeQueuedMessages(sessionId, fromAssistant);
+    const hold = "held: stopped without a recorded Stop; only the person can resume it";
+    expect(await queue()).not.toHaveProperty("stoppedBy");
+    expect(await queueTool("read_queue")).toContain(hold);
+    engine.cancelTurn.mockResolvedValueOnce({ outcome: "no_active_turn" });
+    await stopSession({ sessionId }, fromChat);
+    expect(await queueTool("resume")).toContain(
+      `refused (person_only): Nothing was resumed. The queue is ${hold}.`
+    );
+    expect(starts()).toEqual(["active"]);
+    await resumeInWindow();
+    expect(starts()).toEqual(["active", "later"]);
+  });
+
+  it.each(["read_queue", "resume"] as const)(
+    "refuses the chat's own queue (%s)",
+    async (action) => {
+      expect(await queueTool(action, undefined, sessionId)).toMatch(/refused \(self\)/);
+    }
+  );
+
+  it("allows only read_queue in plan mode and with read-only assistant access", async () => {
+    expect(await queueTool("read_queue", undefined, "lead", "plan")).toContain("queue is empty");
+    expect(await queueTool("resume", undefined, "lead", "plan")).toContain("refused (read_only)");
+    vi.spyOn(access, "currentHost").mockReturnValue(null);
+    vi.spyOn(access, "storedAccess").mockReturnValue("read");
+    const call = (name: string, args: Record<string, unknown>) =>
+      callQueueMcp(assistantCaller("read"), name, args);
+    expect(await call("read_queue", {})).toMatchObject({
+      result: { content: [{ text: expect.stringContaining("queue is empty") }] },
+    });
+    expect(await call("manage_queue", { action: "resume" })).toMatchObject({
+      result: { isError: true, content: [{ text: expect.stringContaining("refused (access)") }] },
+    });
+  });
 });
 
 describe("continuing a chat after a usage limit", () => {
@@ -2819,6 +3418,52 @@ describe("continuing a chat after a usage limit", () => {
   }
   beforeEach(() => vi.useFakeTimers({ now }));
   afterEach(() => vi.restoreAllMocks());
+
+  it.each([false, true])(
+    "refuses an agent's resume before the reset and reports automatic continuation (%s)",
+    async (on) => {
+      await limited();
+      await choose(on);
+      await resumeQueuedMessages(sessionId, fromAssistant);
+      expect((await queue()).paused).toBe("limit");
+      const text = await queueTool("resume");
+      expect(text).toContain("refused (busy)");
+      expect(text).toContain("resets 2026-11-24 03:02 UTC");
+      expect(text).toContain(on ? "continues by itself" : "automatic continuation is off");
+      expect(text).toContain("Nothing waits.");
+      expect(await queueTool("read_queue")).toContain("held: stopped on a usage limit");
+      expect((await queue()).paused).toBe("limit");
+    }
+  );
+
+  it.each([false, true])(
+    "resumes after the reset with only a waiting message (row %s)",
+    async (hasRow) => {
+      await send("active");
+      if (hasRow) await send("later");
+      windows([{ id: "primary", usedPercent: 100, resetsAt }], "limited");
+      fail();
+      await choose(true);
+      vi.setSystemTime(resetsAt + 1);
+      expect(await queueTool("resume")).toContain(
+        hasRow ? 'Started turn "later"' : "Nothing waits."
+      );
+      await vi.advanceTimersByTimeAsync(2 * minute);
+      expect(starts()).toEqual(hasRow ? ["active", "later"] : ["active"]);
+    }
+  );
+
+  it("leaves a usage limit without a reset time to the person", async () => {
+    await send("active");
+    fail();
+    await resumeQueuedMessages(sessionId, fromChat);
+    expect((await queue()).paused).toBe("limit");
+    expect(await queueTool("resume")).toContain(
+      "refused (person_only): Nothing was resumed. The queue is held: stopped on a usage limit, no reset time was reported, the person decides"
+    );
+    expect((await queue()).paused).toBe("limit");
+    expect(starts()).toEqual(["active"]);
+  });
 
   it("uses the latest rejected Claude window reported during the failing turn", async () => {
     const claude = (id: string) =>

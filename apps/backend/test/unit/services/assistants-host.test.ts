@@ -111,7 +111,7 @@ vi.mock("../../../src/services/assistants/feedback", () => ({
   FeedbackNotSent: class extends Error {},
   sendFeedback: async (report: unknown) => {
     state.feedback.push(report);
-    return { threadId: "thread-1" };
+    return { threadId: "thread  1\u202e\nfrom" };
   },
 }));
 vi.mock("../../../src/services/account-session", () => ({
@@ -1083,7 +1083,7 @@ describe("through MCP and as a chat's own tools", () => {
     );
     state.stored.claude = "read";
     const who = await call(assistantCaller("read"), "whoami", {});
-    expect(who.text.split("\n").slice(1)).toEqual([`access: read. ${where}`]);
+    expect(who.text.split("\n").slice(1)).toEqual([`note: access: read. ${where}`]);
   });
 
   it("an assistant allowed to read reads, is refused a write, and may send feedback's write", async () => {
@@ -2029,6 +2029,8 @@ describe("what still lives in Deus (H18, H19)", () => {
       message: "The list_sessions tool could say which chat is current in each workspace.",
     });
     expect(sent).toMatchObject({ isError: false });
+    const id = sent.text.match(/\(thread (".*?")\)\./)?.[1];
+    expect(id && JSON.parse(id)).toBe("thread  1\u202e\nfrom");
     expect(state.feedback).toHaveLength(1);
   });
 
@@ -2052,7 +2054,9 @@ describe("what still lives in Deus (H18, H19)", () => {
     const modified = '"folder\\\\café notes.txt" +0 -2';
     const renamed = `${shownFile} (renamed from ${shownPrevious}) +1 -0`;
     const waited = await call(LOCAL_CALLER, "wait_for_sessions", { sessions: ["lead"], wait: 0 });
-    expect(waited.text.split("\n")).toContain(`  changes: ${modified}, ${renamed}, and 1 more`);
+    expect(waited.text.split("\n")).toContain(
+      `  note: changes: ${modified}, ${renamed}, and 1 more`
+    );
     expect(listed.text).toContain(`\n  ${modified}\n  ${renamed}\n  (and 1 more)\n`);
     for (const name of [previous, ".env"]) {
       const refused = await call(LOCAL_CALLER, "read_changes", { session: "lead", file: name });

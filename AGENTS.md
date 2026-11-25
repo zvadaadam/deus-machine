@@ -544,8 +544,8 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   `list_sessions`, `read_session`, `wait_for_sessions`, `list_models`,
   `start_session`, `send_message`, `answer_request`, `stop_sessions` and
   `archive`, their words, waits, rules and limits; Deus is their host
-  (`services/assistants/host.ts`) and adds `read_changes`, `add_project` and
-  `send_feedback` (a report about Deus itself to the Deus team's Hivenet board,
+  (`services/assistants/host.ts`) and adds `read_queue`, `manage_queue`, `read_changes`,
+  `add_project` and `send_feedback` (a report about Deus itself to the Deus team's Hivenet board,
   `services/assistants/feedback.ts`: the report alone,
   `consent.telemetry: false`). The registry refuses project removal as an assistant operation.
   Neither the assistant nor the chat tool list offers it.
@@ -556,7 +556,7 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   is kept (`started_by`, `messages.origin`), and the agent reading a message
   is told who sent it. On a working chat, `send_message` steers the turn it saw by
   default. If the turn ends before reading the message, it goes first in the queue.
-  A kept steer runs only as its own turn. The host finds read
+  A kept steer runs only as its own turn, even with `send_now`. The host finds read
   steers in `messages.steer_id` and kept ones in `turns.outcome.undeliveredSteers`.
   For a new workspace, `start` holds the first task until its chat is ready and sends
   it as the turn the package minted. A stop drops it. If setup takes over 30 minutes,
@@ -623,9 +623,13 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   links, give `read_session` the link's `session` value as `session`. Without it, pass the link's `id`
   as `session` to read the workspace's current chat (`workspace-context.ts`). "Sent from"
   names the sender on a queued row and above its bubble, including a steer read mid-turn.
-  The chip opens the sending chat (`session/ui/SentFrom.tsx`). An agent or assistant queuing
-  its own waiting text gets the row's position without adding a row. The person's sends skip this check.
-  List, wait and read report a chat's usage limit, its known reset time and whether it will continue.
+  The chip opens the sending chat (`session/ui/SentFrom.tsx`). List, wait and read say what
+  waits and what holds it, including a usage limit's known reset time and whether the chat
+  will continue. An agent or assistant queuing its own waiting text gets the row's
+  position without adding a row. The person's sends skip this check.
+  `read_queue` lists another chat's rows. With `manage_queue` a sender can request Resume,
+  send or remove its own waiting row. `send_now` keeps an unread row in place and reports any hold.
+  This window and paired devices speak as the person and may change any row.
   A chat runs with full access or in plan mode, nothing
   between: Deus approves a chat's tool requests itself. A mode between the
   two must route these tools' writes to the person before it ships.

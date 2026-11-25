@@ -365,6 +365,31 @@ function queueNote(queue: sessions.QueuedMessages, hold?: string) {
     .join(", ");
 }
 
+export function queueView(caller: Who, sessionId: string) {
+  const by = originOf(caller);
+  const queue = queuedMessages(sessionId);
+  const senderName = queueSenderNames(
+    [queue.stoppedBy, ...queue.items.map((row) => row.origin)],
+    by
+  );
+  const hold = queueHold(queue, senderName);
+  return { items: queue.items, by, senderName, hold, note: queueNote(queue, hold) };
+}
+
+/** A chat may be sent to, stopped or answered now: the caller allowed, the chat and its workspace not archived. */
+export function mayTouch(caller: Who, sessionId: string) {
+  assertMayWrite(appCaller(caller));
+  const found = getDatabase()
+    .prepare(
+      "SELECT s.is_hidden, w.state, w.kind FROM sessions s JOIN workspaces w ON w.id = s.workspace_id WHERE s.id = ?"
+    )
+    .get(sessionId) as { is_hidden: number; state: string; kind: string } | undefined;
+  if (!found || found.kind === "cloud")
+    throw new OperatorError("not_found", "That session is gone. Nothing was done.");
+  if (found.is_hidden || found.state === "archived")
+    throw new Refused({ code: "archived", sessions: [sessionId] });
+}
+
 export function createDeusHost(): DeusHost {
   /** First tasks held for workspaces being set up, by the chat's id. */
   const firsts = new Map<string, Held>();
@@ -534,20 +559,6 @@ export function createDeusHost(): DeusHost {
     } else if (input.origin.kind === "session" && agentSetups() >= AGENT_SETUPS) {
       throw new Refused({ code: "limit_setting_up", retryAfter: 30 });
     }
-  }
-
-  /** A chat may be sent to, stopped or answered now: the caller allowed, the chat and its workspace not archived. */
-  function mayTouch(caller: Who, sessionId: string) {
-    assertMayWrite(appCaller(caller));
-    const found = getDatabase()
-      .prepare(
-        "SELECT s.is_hidden, w.state, w.kind FROM sessions s JOIN workspaces w ON w.id = s.workspace_id WHERE s.id = ?"
-      )
-      .get(sessionId) as { is_hidden: number; state: string; kind: string } | undefined;
-    if (!found || found.kind === "cloud")
-      throw new OperatorError("not_found", "That session is gone. Nothing was done.");
-    if (found.is_hidden || found.state === "archived")
-      throw new Refused({ code: "archived", sessions: [sessionId] });
   }
 
   /** A busy refusal lets the operator stop the caller's turns. Check everything a stop cannot change first. */
