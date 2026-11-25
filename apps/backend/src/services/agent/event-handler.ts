@@ -401,7 +401,7 @@ export function createAgentEventHandler(): AgentEventHandler {
         sessionId,
         event,
         conversation,
-        deferred ? holder.setup : undefined
+        deferred ? holder?.setup : undefined
       )) {
         persistAndInvalidate(write.result, sessionId);
       }

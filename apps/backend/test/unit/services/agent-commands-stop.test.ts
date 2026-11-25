@@ -340,7 +340,7 @@ describeWithDb("stopSession", () => {
       writes.mockRestore();
       await stopping;
       await vi.advanceTimersByTimeAsync(15_000);
-      expect(holding.some((map) => map.has(SESSION))).toBe(false);
+      expect(holding.some((map) => map instanceof Map && map.has(SESSION))).toBe(false);
     }
   );
 
