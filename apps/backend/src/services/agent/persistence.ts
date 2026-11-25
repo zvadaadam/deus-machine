@@ -228,7 +228,7 @@ export interface TurnOutcomeWrite {
   error?: { message: string; category: string };
 }
 
-export function persistStopCredit(id: string, turnId: string, by?: Origin) {
+export function persistStopCredit(id: string, turnId: string, by?: Origin): WriteResult<void> {
   try {
     getDatabase()
       .prepare(
@@ -236,22 +236,30 @@ export function persistStopCredit(id: string, turnId: string, by?: Origin) {
        ON CONFLICT(session_id, turn_id) DO UPDATE SET cancelled_by = excluded.cancelled_by`
       )
       .run(id, turnId, by ? JSON.stringify(by) : null);
+    return { ok: true, value: undefined };
   } catch (error) {
-    failed("Stop credit", error);
+    return failed("Stop credit", error);
   }
 }
 
 /** A lost link can leave a row active. A warning on a live turn keeps its card available. */
-export function persistStopStatus(id: string, status: "idle" | "error" | null = "idle") {
-  const warning = status === "idle" ? null : "The agent never confirmed the stop request.";
-  const { changes } = getDatabase()
-    .prepare(
-      `UPDATE sessions SET status = COALESCE(?, status), error_message = COALESCE(error_message, ?),
+export function persistStopStatus(
+  id: string,
+  status: "idle" | "error" | null = "idle"
+): WriteResult<boolean> {
+  try {
+    const warning = status === "idle" ? null : "The agent never confirmed the stop request.";
+    const { changes } = getDatabase()
+      .prepare(
+        `UPDATE sessions SET status = COALESCE(?, status), error_message = COALESCE(error_message, ?),
        error_category = COALESCE(error_category, ?), updated_at = datetime('now')
      WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
-    )
-    .run(status, warning, warning && "internal", id, ...ACTIVE_TURN_STATUSES);
-  return changes > 0;
+      )
+      .run(status, warning, warning && "internal", id, ...ACTIVE_TURN_STATUSES);
+    return { ok: true, value: changes > 0 };
+  } catch (error) {
+    return failed("Stop status", error);
+  }
 }
 
 /** Persist a turn and its optional session status atomically, even without messages. */

@@ -1,4 +1,4 @@
-import type { Origin, TurnCancelResult } from "@zvada/agent-server/protocol";
+import type { Origin, TurnCancelResult, TurnEndedEvent } from "@zvada/agent-server/protocol";
 import { invalidate } from "../query-engine";
 import {
   persistSessionError,
@@ -8,20 +8,27 @@ import {
   type TurnOutcomeWrite,
 } from "./persistence";
 
-type Interrupted = (
-  id: string,
-  turnId: string | undefined,
-  gone: boolean,
-  cause?: "cancelled"
-) => string[] | undefined;
+type NativeEnd = {
+  type: "end";
+  turnId: string;
+  held: boolean;
+  cancelled: boolean;
+  status?: TurnOutcomeWrite["status"];
+  limit?: { resetsAt?: number };
+};
+export type TurnNotice =
+  | NativeEnd
+  | { type: "stop"; turnId?: string; by: Origin }
+  | { type: "interrupted"; turnId?: string; gone: boolean; cause: "failure" | "cancelled" }
+  | { type: "available" };
 export const turnNotices: {
-  interrupted?: Interrupted;
+  queue?: (id: string, notice: TurnNotice) => string[] | undefined;
+  withdrawCards?: (id: string, turnId: string) => void;
   stored?: (id: string, turnId: string) => void;
 } = {};
 type Setup = {
   controller: AbortController;
   done: Promise<void>;
-  firstTask?: boolean;
 };
 type Turn = {
   turnId: string;
@@ -73,24 +80,39 @@ export function admitTurn(
   if (outputAt !== undefined) turn.lastOutputAt = outputAt;
 }
 
+// The engine can end the turn before cancel answers. Hold the credit from the ask.
 export function askStop(id: string, by: Origin) {
   const turn = chats.get(id)?.turn;
   if (turn) (turn.stops ??= new Set()).add(by);
+  turnNotices.queue?.(id, { type: "stop", turnId: turn?.turnId, by });
   return turn;
 }
 
 function credit(id: string, turn: Turn) {
   const first = turn.stops?.values().next().value;
-  if (first !== turn.credited) {
-    persistStopCredit(id, turn.turnId, first);
+  if (first !== turn.credited && persistStopCredit(id, turn.turnId, first).ok)
     turn.credited = first;
-  }
+}
+
+export function reportInterruption(
+  id: string,
+  turnId: string | undefined,
+  gone: boolean,
+  cause: "failure" | "cancelled" = "failure"
+) {
+  if (gone && turnId) turnNotices.withdrawCards?.(id, turnId);
+  return turnNotices.queue?.(id, { type: "interrupted", turnId, gone, cause });
 }
 
 type End = "native" | "refused" | "withdrawn" | "cancelled" | "gone";
 type ErrorInfo = NonNullable<TurnOutcomeWrite["error"]>;
 
-export function releaseTurn(id: string, turnId: string | undefined, end?: End, error?: ErrorInfo) {
+export function releaseTurn(
+  id: string,
+  turnId: string | undefined,
+  end?: End,
+  detail?: ErrorInfo | "busy_after_end"
+) {
   const chat = chats.get(id);
   const turn = chat?.turn;
   const nativeEnd = end === undefined || end === "native";
@@ -114,11 +136,15 @@ export function releaseTurn(id: string, turnId: string | undefined, end?: End, e
     if (!chat.last) chats.delete(id);
   }
   if (nativeEnd) return true;
-  if (error) persistSessionError(id, error.message, error.category);
+  if (end === "refused" && typeof detail !== "object" && !turn?.stops?.size) {
+    if (detail === "busy_after_end") turnNotices.queue?.(id, { type: "available" });
+    return true;
+  }
+  if (typeof detail === "object") persistSessionError(id, detail.message, detail.category);
   else if (end !== "refused") persistStopStatus(id);
-  if (end === "refused" && !error && !turn?.stops?.size) return true;
   const cause = end === "cancelled" ? "cancelled" : undefined;
-  const kept = end === "withdrawn" ? undefined : turnNotices.interrupted?.(id, turnId, true, cause);
+  const kept =
+    turnId && end !== "withdrawn" ? reportInterruption(id, turnId, true, cause) : undefined;
   if (turnId && !setupStop && !refused) {
     const saved = persistTurn(id, {
       turnId,
@@ -126,16 +152,30 @@ export function releaseTurn(id: string, turnId: string | undefined, end?: End, e
       stopReason: cause ?? "error",
       undeliveredSteers: kept,
     });
+    notify(id);
     if (saved.ok) turnNotices.stored?.(id, turnId);
-  }
-  notify(id);
+  } else notify(id);
   return true;
 }
 
-export function refuseTurn(id: string, turnId: string, error?: ErrorInfo) {
+/** Free the chat before invalidation. Its next row can start after the window receives this end. */
+export function endTurn({ sessionId, turnId, stopReason }: TurnEndedEvent) {
+  const held = releaseTurn(sessionId, turnId, "native");
+  return (status: NativeEnd["status"], limit?: NativeEnd["limit"]) =>
+    turnNotices.queue?.(sessionId, {
+      type: "end",
+      turnId,
+      cancelled: stopReason === "cancelled",
+      held,
+      status,
+      limit,
+    });
+}
+
+export function refuseTurn(id: string, turnId: string, detail?: ErrorInfo | "busy_after_end") {
   const turn = chats.get(id)?.turn;
   if (turn?.turnId !== turnId) return false;
-  if (turn.phase !== "running") return releaseTurn(id, turnId, "refused", error);
+  if (turn.phase !== "running") return releaseTurn(id, turnId, "refused", detail);
   delete turn.setup;
   return false;
 }
@@ -157,7 +197,10 @@ export function answerStop(
     return { unconfirmed: false };
   const unconfirmed = !result || result.outcome === "unconfirmed";
   if (!live) {
-    if (!unconfirmed && persistStopStatus(id)) notify(id);
+    if (!unconfirmed) {
+      const saved = persistStopStatus(id);
+      if (saved.ok && saved.value) notify(id);
+    }
   } else if (result?.outcome === "no_active_turn") {
     releaseTurn(id, live.turnId, "gone");
   } else if (!live.timer || (!live.confirmed && !unconfirmed)) {
@@ -171,8 +214,10 @@ export function answerStop(
       try {
         if (live.confirmed) {
           if (owner) releaseTurn(id, live.turnId, "cancelled");
-        } else if (persistStopStatus(id, owner ? null : "error")) {
-          turnNotices.interrupted?.(id, live.turnId, !owner);
+        } else {
+          const warning = persistStopStatus(id, owner ? null : "error");
+          if (!warning.ok || !warning.value) return;
+          reportInterruption(id, live.turnId, !owner);
           notify(id);
         }
       } catch (error) {

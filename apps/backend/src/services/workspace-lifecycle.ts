@@ -6,7 +6,7 @@
 import { isDeepStrictEqual } from "node:util";
 import type { RepoRemovalConfirmation } from "@shared/api/repos";
 import { sessionEvents } from "@shared/api/sessions";
-import { ACTIVE_TURN_STATUSES, type InitFetchIssue, type SetupStatus } from "@shared/enums";
+import type { InitFetchIssue, SetupStatus } from "@shared/enums";
 import { CLOUD_PROJECT_REMOVAL_REASON } from "@shared/types/repository";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getWorkspaceRaw, START_RECOVERABLE, type WorkspaceRow } from "../db";
@@ -280,12 +280,12 @@ export function repoRemoval(repoId: string, holdingTurn: HoldingTurn) {
     );
   }
   const chats = db
-    .prepare<[string], { id: string; status: string }>(
-      `SELECT s.id, s.status FROM sessions s JOIN workspaces w ON w.id = s.workspace_id
+    .prepare<[string], { id: string }>(
+      `SELECT s.id FROM sessions s JOIN workspaces w ON w.id = s.workspace_id
         WHERE w.repository_id = ?`
     )
     .all(repoId);
-  if (chats.some(({ id, status }) => ACTIVE_TURN_STATUSES.includes(status) || holdingTurn(id))) {
+  if (chats.some(({ id }) => holdingTurn(id))) {
     throw new ConflictError(
       "A chat in an archived workspace is still working. Restore the workspace and stop it, or wait for it to finish."
     );

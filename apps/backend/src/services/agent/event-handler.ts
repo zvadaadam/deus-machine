@@ -20,11 +20,7 @@ import {
   type RestoredCloudConversation,
 } from "@shared/cloud-session-snapshot";
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
-import type {
-  ConversationChange,
-  ConversationState,
-  TurnEndedEvent,
-} from "@zvada/agent-server/protocol";
+import type { ConversationChange, ConversationState } from "@zvada/agent-server/protocol";
 import {
   isLiveEnvelope,
   isUnknownEvent,
@@ -48,9 +44,11 @@ import { refreshPrSnapshotForSession } from "../pr-snapshot.service";
 import { restoreCloudSnapshot } from "./cloud/snapshot";
 import {
   admitTurn,
+  endTurn,
   holdingTurn,
   lastTurn,
   releaseTurn,
+  reportInterruption,
   forgetChatTurns,
   turnNotices,
 } from "./chat-turn";
@@ -58,16 +56,9 @@ import { OpenParts } from "./open-parts";
 
 // ---- Types ----
 
-export type TurnEnd = {
-  event: TurnEndedEvent;
-  status?: TurnOutcomeWrite["status"];
-  held: boolean;
-  limit?: { resetsAt?: number };
-};
-
 export interface AgentEventHandler {
   /** Feed one sequenced wire envelope (post-dedupe, in seq order). */
-  handle(envelope: DecodedWireEventEnvelope): TurnEnd | void;
+  handle(envelope: DecodedWireEventEnvelope): void;
   /** Restore durable cloud history without executing historical live effects. */
   hydrateCloudSnapshot(
     sessionId: string,
@@ -265,7 +256,7 @@ export function createAgentEventHandler(): AgentEventHandler {
         SESSION_RESOURCES,
         sessionId
       );
-      turnNotices.interrupted?.(sessionId, turnId, false, cause);
+      reportInterruption(sessionId, turnId, false, cause);
     },
 
     handleTitle(sessionId, title) {
@@ -366,8 +357,8 @@ export function createAgentEventHandler(): AgentEventHandler {
             turnProviderCredentialSource(envelope.event)
           );
 
-      if (envelope.event.type === "turn.ended")
-        releaseTurn(sessionId, envelope.event.turnId, "native");
+      const event = envelope.event;
+      const ended = event.type === "turn.ended" ? endTurn(event) : undefined;
       const stale = new Set<LiveName>();
       for (const write of writes) {
         if (!write.result.ok) {
@@ -423,23 +414,18 @@ export function createAgentEventHandler(): AgentEventHandler {
         .otherwise(() => {});
 
       if (!NOT_PUSHED.has(envelope.event.type)) pushEnvelope(envelope);
-      const event = envelope.event;
-      if (event.type === "turn.ended") {
-        const end: TurnEnd = {
-          event,
-          status: outcome?.status,
-          held: event.turnId === holder?.turnId,
-        };
+      if (event.type === "turn.ended" && ended) {
+        let limit;
         if (
-          end.held &&
-          end.status === "error" &&
+          event.turnId === holder?.turnId &&
+          outcome?.status === "error" &&
           event.error?.category === "usage_limit" &&
-          (!outcome?.error || outcome.error.category === "usage_limit")
+          (!outcome.error || outcome.error.category === "usage_limit")
         ) {
           const resetsAt = Math.max(...(state.limitResets?.values() ?? []));
-          end.limit = resetsAt > Date.now() ? { resetsAt } : {};
+          limit = resetsAt > Date.now() ? { resetsAt } : {};
         }
-        return end;
+        ended(outcome?.status, limit);
       }
     },
   };

@@ -14,9 +14,8 @@ import {
 import { invalidate, onInvalidate } from "../query-engine";
 import { getSetting } from "../settings.service";
 import { toEngineInput } from "./run-config";
-import type { TurnEnd } from "./event-handler";
-import { provideTurnWatcher, steerTurn, type InterruptionCause, type StopAsked } from "./service";
-import { holdingTurn, lastTurn } from "./chat-turn";
+import { steerTurn } from "./service";
+import { holdingTurn, lastTurn, turnNotices, type TurnNotice } from "./chat-turn";
 import { continuedSettings } from "./turn-settings";
 import {
   previousSend,
@@ -52,11 +51,10 @@ type Item = {
   recoveredSteer?: Pick<Steer, "turnId" | "id">;
 };
 
-type AffectedTurn = { turnId?: string; outstanding: boolean };
 type Pause =
   | { reason: "resumed"; turnId: string; scope: "failure" | "turn" }
-  | ({ reason: "stopped"; by?: Origin } & AffectedTurn)
-  | ({ reason: "failed" } & AffectedTurn)
+  | { reason: "stopped"; turnId?: string; by?: Origin }
+  | { reason: "failed"; turnId?: string }
   | { reason: "limit"; turnId: string; limit: NonNullable<api.QueuedMessages["limit"]> }
   | null;
 interface Queue {
@@ -70,12 +68,8 @@ function hold(q: Queue) {
 }
 
 type PauseEvent =
-  | ({ type: "stop" } & StopAsked)
-  | { type: "interrupted"; turnId?: string; gone: boolean; cause: InterruptionCause }
-  | ({ type: "end"; turnId: string; cancelled: boolean; missingEcho: boolean } & Pick<
-      TurnEnd,
-      "held" | "status" | "limit"
-    >)
+  | Extract<TurnNotice, { type: "stop" | "interrupted" }>
+  | (Extract<TurnNotice, { type: "end" }> & { missingEcho: boolean })
   | { type: "resume"; by?: Origin }
   | { type: "schedule"; on: boolean }
   | { type: "clear_limit" | "empty" };
@@ -101,6 +95,7 @@ function transition(
   event: PauseEvent
 ): "open" | "person_only" | "before_reset" | undefined {
   const prior = q.pause;
+  const holder = holdingTurn(q.sessionId)?.turnId;
   switch (event.type) {
     case "resume": {
       if (!prior) return "open";
@@ -118,7 +113,7 @@ function transition(
         }
       }
       q.pause =
-        prior.reason !== "limit" && prior.outstanding && prior.turnId
+        prior.reason !== "limit" && prior.turnId && prior.turnId === holder
           ? {
               reason: "resumed",
               turnId: prior.turnId,
@@ -128,7 +123,10 @@ function transition(
       return;
     }
     case "empty":
-      if ((prior?.reason === "stopped" || prior?.reason === "failed") && !prior.outstanding)
+      if (
+        (prior?.reason === "stopped" || prior?.reason === "failed") &&
+        (!holder || holder !== prior.turnId)
+      )
         q.pause = null;
       return;
     case "clear_limit":
@@ -141,23 +139,19 @@ function transition(
   const { turnId } = event;
   const sameTurn = turnId !== undefined && prior?.turnId === turnId;
   if (event.type === "end" && !event.held && !event.missingEcho && !sameTurn) return;
-  const outstanding =
-    turnId !== undefined &&
-    ((event.type === "stop" && event.endedAt === undefined) ||
-      (event.type === "interrupted" && !event.gone));
   const cancelled =
     event.type === "end" ? event.cancelled : event.type === "stop" || event.cause === "cancelled";
   const limited = event.type === "end" && event.limit;
   const resumed = sameTurn && prior.reason === "resumed" && (!cancelled || prior.scope === "turn");
   if (event.type !== "stop" && resumed && !limited) {
-    if (!outstanding) q.pause = null;
+    if (turnId !== holder) q.pause = null;
   } else if (cancelled) {
     const by = event.type === "stop" ? event.by : undefined;
     const keep =
       prior?.reason === "stopped" && by?.kind !== "person" && (sameTurn || !agentOrigin(prior.by));
-    q.pause = { reason: "stopped", by: keep ? prior.by : by, turnId, outstanding };
+    q.pause = { reason: "stopped", by: keep ? prior.by : by, turnId };
   } else if (prior?.reason === "stopped" || (prior?.reason === "failed" && event.type === "end")) {
-    if (sameTurn && !outstanding) prior.outstanding = false;
+    return;
   } else if (limited) {
     const continues =
       limited.resetsAt !== undefined && getSetting("continue_after_usage_limit") === true;
@@ -166,7 +160,7 @@ function transition(
     event.type === "interrupted" ||
     (event.type === "end" && (event.status === "error" || event.missingEcho))
   ) {
-    q.pause = { reason: "failed", turnId, outstanding };
+    q.pause = { reason: "failed", turnId };
   } else if (prior?.reason === "resumed") q.pause = null;
 }
 
@@ -675,7 +669,7 @@ function settleSteer(steer: Steer, receipt: "read" | "queued") {
   steer.answer.resolve(receipt);
 }
 
-function userEcho(sessionId: string, turnId: string, steerId?: string) {
+export function userEcho(sessionId: string, turnId: string, steerId?: string) {
   const q = queues.get(sessionId);
   if (!q) return;
   const index = q.items.findIndex((item) => {
@@ -725,39 +719,25 @@ function queueToPause(id: string, keepEmpty: boolean) {
   return queues.get(id) ?? (keepEmpty && localChat(id) ? queueFor(id) : undefined);
 }
 
-/** A live turn can still echo. Once it is gone, its unread steers can be resumed as turns. */
-function interrupted(
-  sessionId: string,
-  turnId: string | undefined,
-  gone: boolean,
-  cause: InterruptionCause
-) {
-  const q = queueToPause(sessionId, cause === "cancelled");
+/** A live turn can still echo. Once it is gone, return its unread steers to the queue. */
+turnNotices.queue = (id, event) => {
+  if (event.type === "available") {
+    void drain(queues.get(id));
+    return;
+  }
+  const keepEmpty =
+    event.type === "stop" || (event.type === "end" ? !!event.limit : event.cause === "cancelled");
+  const q = queueToPause(id, keepEmpty);
   if (!q) return;
-  const kept = gone && turnId !== undefined ? recoverSteers(q, turnId) : undefined;
-  if (gone && turnId !== undefined) recoverAttempt(q, turnId);
-  changed(q, { type: "interrupted", turnId, gone, cause });
-  if (gone) void drain(q);
+  if (event.type === "stop") {
+    changed(q, event);
+    return;
+  }
+  const gone = event.type === "end" || event.gone;
+  const turnId = gone ? event.turnId : undefined;
+  const kept = turnId !== undefined ? recoverSteers(q, turnId) : undefined;
+  const missingEcho = turnId !== undefined && recoverAttempt(q, turnId);
+  changed(q, event.type === "end" ? { ...event, missingEcho } : event);
+  if (event.type === "end" ? event.status : gone) void drain(q);
   return kept;
-}
-
-function turnEnded({ event: { sessionId, turnId, stopReason }, status, held, limit }: TurnEnd) {
-  const cancelled = stopReason === "cancelled";
-  const q = queueToPause(sessionId, !!limit);
-  if (!q) return;
-  recoverSteers(q, turnId);
-  const missingEcho = recoverAttempt(q, turnId);
-  changed(q, { type: "end", turnId, cancelled, held, status, limit, missingEcho });
-  if (status) void drain(q);
-}
-
-provideTurnWatcher({
-  turnEnded,
-  startCleared: (id) => void drain(queues.get(id)),
-  userEcho,
-  stopAsked(id, stop) {
-    const q = queueToPause(id, true);
-    if (q) changed(q, { type: "stop", ...stop });
-  },
-  interrupted,
-});
+};

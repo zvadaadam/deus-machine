@@ -169,11 +169,10 @@ export function previousSend(
  */
 export async function sendMessage(
   input: ParsedInputOf<typeof api.sendMessage>,
-  origin?: Origin,
-  firstTask = false
+  origin?: Origin
 ): Promise<{ turnId: string }> {
   const turnId = input.turnId;
-  if (!turnId) return sendMessageOnce(input, origin, firstTask);
+  if (!turnId) return sendMessageOnce(input, origin);
   const previous = previousSend(input, turnId, origin);
   if (previous) return previous;
   const key = `${input.sessionId}\0${turnId}`;
@@ -182,7 +181,7 @@ export async function sendMessage(
   const db = getDatabase();
   let admissions = admissionsOf.get(db);
   if (!admissions) admissionsOf.set(db, (admissions = new Map()));
-  const done = sendMessageOnce(input, origin, firstTask);
+  const done = sendMessageOnce(input, origin);
   admissions.set(key, { ...request, done });
   // A send that failed was not admitted: a retry runs anew.
   const kept = admissions;
@@ -196,8 +195,7 @@ export async function sendMessage(
 async function sendMessageOnce(
   input: ParsedInputOf<typeof api.sendMessage>,
   /** Who sent it when not the person: the operator's host passes it; the operation's input never carries one. */
-  origin?: Origin,
-  firstTask = false
+  origin?: Origin
 ): Promise<{ turnId: string }> {
   const { sessionId, content, model, agentHarness } = input;
   const permissionMode = readPermissionMode(input.permissionMode);
@@ -215,11 +213,13 @@ async function sendMessageOnce(
   if (session && session.message_count > 0) requireSameHarness(session.agent_harness, agentHarness);
 
   if (session?.is_hidden) throw new ConflictError("That chat is archived; it takes no messages.");
+  // The workspace decides the transport and local cwd before a send changes the chat.
   const workspace = session ? getWorkspaceForMiddleware(db, session.workspace_id) : undefined;
   const isCloud = workspace?.kind === "cloud";
   const holder = holdingTurn(sessionId);
   if (holder && holder.phase !== "running")
     throw new ChatBusyError("The agent is starting another turn — wait for it to begin.");
+  // Another client can start a cloud turn before this backend receives its events.
   if (holder || (isCloud && session && ACTIVE_TURN_STATUSES.includes(session.status))) {
     throw new ChatBusyError(
       session?.status === "needs_response" || session?.status === "needs_plan_response"
@@ -227,10 +227,7 @@ async function sendMessageOnce(
         : "The agent is still working — wait for the current turn to finish."
     );
   }
-  let cwd: string | undefined;
-  if (workspace && !isCloud) {
-    cwd = computeWorkspacePath(workspace) ?? undefined;
-  }
+  const cwd = workspace && !isCloud ? computeWorkspacePath(workspace) : undefined;
 
   // AGNT chooses no harness, model or thinking level and refuses a turn that
   // leaves one out. Read all three in the platform's vocabulary here, before
@@ -275,11 +272,12 @@ async function sendMessageOnce(
     }
   }
 
+  // The window matches its optimistic message to the engine's echo by this id on both transports.
   const turnId = input.turnId ?? uuidv7();
   const sentAt = Date.now();
   const last = lastTurn(sessionId);
   const start = isCloud ? undefined : Promise.withResolvers<void>();
-  const setup = start && { controller: new AbortController(), done: start.promise, firstTask };
+  const setup = start && { controller: new AbortController(), done: start.promise };
   if (setup) claimTurn(sessionId, turnId, setup, sentAt);
   const working = persistSessionWorking(sessionId);
   if (!working.ok) {
@@ -363,9 +361,8 @@ async function sendMessageOnce(
         throw err;
       }
       if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
-        const refused = refuseTurn(sessionId, turnId);
         // The engine's end can reach a waiting row while this strict send still holds the chat.
-        if (refused && lastTurn(sessionId) !== last) agentService.notifyStartCleared(sessionId);
+        refuseTurn(sessionId, turnId, lastTurn(sessionId) !== last ? "busy_after_end" : undefined);
         throw new ChatBusyError(
           "The agent is still working — wait for the current turn to finish."
         );
@@ -377,8 +374,8 @@ async function sendMessageOnce(
     }
   }
 
-  // The sidebar and checkout cleanup use this date as proof the workspace took a prompt.
-  // A refusal must leave it available for a first send.
+  // The sidebar orders by this date, and checkout cleanup skips a workspace once it has a prompt.
+  // A refused send must leave the previous date in place.
   if (persistLastUserMessageAt(sessionId, new Date(sentAt).toISOString()).ok)
     invalidate(["workspaces", "sessions"], { sessionIds: [sessionId] });
 
@@ -400,17 +397,13 @@ export async function stopSession(
   by = { ...by };
   const turn = askStop(sessionId, by);
   const turnId = turn?.turnId;
-  agentService.notifyStopAsked(sessionId, {
-    by,
-    turnId,
-    endedAt: turnId ? getTurn(db, sessionId, turnId)?.endedAt : undefined,
-  });
   if (turn?.setup) {
     const { setup } = turn;
     if (turn.phase === "preparing") {
       setup.controller.abort(new ConflictError("Stopped before it started."));
       releaseTurn(sessionId, turn.turnId, "cancelled");
     }
+    // Once on the wire, the start can still succeed. Only cancel it if it survives the answer.
     await setup.done;
     if (holdingTurn(sessionId) !== turn) {
       answerStop(sessionId, turn, by, undefined);
