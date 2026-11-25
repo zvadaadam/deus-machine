@@ -34,8 +34,6 @@ export type SimPhase =
   | { phase: "running"; udid: string; stream: StreamInfo; app: InstalledApp }
   | { phase: "error"; message: string; canRetry: boolean };
 
-export type SimPhaseLabel = SimPhase["phase"];
-
 // ---------------------------------------------------------------------------
 // Events — the things that can happen
 // ---------------------------------------------------------------------------

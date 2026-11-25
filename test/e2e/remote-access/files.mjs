@@ -194,7 +194,7 @@ export async function testRelayedFiles({
     await card.scrollIntoViewIfNeeded();
     await inBounds(card, "recording card");
     await page.screenshot({ path: path.join(output, "recording-card-mobile.png") });
-    const freshMovie = await recover(movie, movieUrl, "media", () => card.click());
+    const freshMovie = await recover(movie, movieUrl, "media", () => card.press("Enter"));
     const player = page.getByRole("dialog", { name: "Recording player" });
     const video = await player.locator("video").elementHandle();
     assert(
@@ -204,6 +204,14 @@ export async function testRelayedFiles({
     const stage = player.locator("video").locator("..");
     const seek = stage.locator("+ div");
     const chapter = player.getByRole("button", { name: "0:05 Review" });
+    const close = player.getByRole("button", { name: "Close player" });
+    const isFocused = (node) => node === node.ownerDocument.activeElement;
+    await page.waitForFunction(isFocused, await close.elementHandle());
+    await page.keyboard.press("Shift+Tab");
+    assert.ok(await chapter.evaluate(isFocused), "backward Tab wraps to the last chapter");
+    await page.keyboard.press("Tab");
+    assert.ok(await close.evaluate(isFocused), "forward Tab stays in the player");
+    await page.screenshot({ path: path.join(output, "recording-player-keyboard.png") });
     await chapter.click({ trial: true });
     await inBounds(stage.locator("svg.lucide-play"), "play control");
     const bar = await inBounds(seek, "seek bar");
@@ -219,6 +227,10 @@ export async function testRelayedFiles({
     await page.screenshot({ path: path.join(output, "recording-player-mobile.png") });
     await seek.click({ position: { x: bar.width / 4, y: bar.height / 2 } });
     await page.waitForFunction((v) => !v.seeking && v.currentTime >= 2 && v.currentTime < 3, video);
+    await page.keyboard.press("Escape");
+    await player.waitFor({ state: "detached" });
+    await page.waitForFunction(isFocused, await card.elementHandle());
+    await page.screenshot({ path: path.join(output, "recording-card-focus-return.png") });
     await revoke();
     await get(freshMovie, 404);
   } finally {

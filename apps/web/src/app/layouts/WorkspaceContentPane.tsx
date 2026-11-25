@@ -130,7 +130,6 @@ export function WorkspaceContentPane({
   );
 
   useWorkspaceTabShortcuts({
-    enabled: true,
     tabs: visibleWorkspaceTabs,
     activeTabId: effectiveActiveTab.id,
     onSelectTab: handleShortcutSelectTab,

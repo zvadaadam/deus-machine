@@ -112,7 +112,7 @@ export function NewTabView({
 }: NewTabViewProps) {
   const settings = useSettings().data;
   const [query, setQuery] = useState("");
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listboxId = useId();
   const optionDomId = (index: number) => `${listboxId}-option-${index}`;
@@ -176,7 +176,10 @@ export function NewTabView({
     return items;
   }, [query, flatFiles, visibleTools]);
 
-  const clampedIndex = results.length > 0 ? Math.min(selectedIndex, results.length - 1) : 0;
+  const selectedIndex = Math.max(
+    0,
+    results.findIndex((item) => item.id === selectedId)
+  );
 
   async function openUrl(url: string) {
     const destination = await openAddressFromChat(
@@ -203,17 +206,14 @@ export function NewTabView({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "ArrowDown") {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       if (results.length === 0) return;
       event.preventDefault();
-      setSelectedIndex((prev) => (prev + 1) % results.length);
-    } else if (event.key === "ArrowUp") {
-      if (results.length === 0) return;
-      event.preventDefault();
-      setSelectedIndex((prev) => (prev - 1 + results.length) % results.length);
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      setSelectedId(results[(selectedIndex + step + results.length) % results.length].id);
     } else if (event.key === "Enter") {
       event.preventDefault();
-      const chosen = results[clampedIndex];
+      const chosen = results[selectedIndex];
       if (chosen) executeResult(chosen);
     } else if (event.key === "Escape") {
       if (query) {
@@ -246,12 +246,12 @@ export function NewTabView({
               aria-controls={listboxId}
               aria-autocomplete="list"
               aria-activedescendant={
-                hasQuery && results[clampedIndex] ? optionDomId(clampedIndex) : undefined
+                hasQuery && results[selectedIndex] ? optionDomId(selectedIndex) : undefined
               }
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value);
-                setSelectedIndex(0);
+                setSelectedId(null);
               }}
               onKeyDown={handleKeyDown}
               placeholder="Search files or enter a URL"
@@ -267,7 +267,7 @@ export function NewTabView({
                 aria-label="Clear search"
                 onClick={() => {
                   setQuery("");
-                  setSelectedIndex(0);
+                  setSelectedId(null);
                   inputRef.current?.focus();
                 }}
                 className="control-interaction text-text-muted hover:text-text-secondary hover:bg-control-hover flex size-5 shrink-0 items-center justify-center rounded-full"
@@ -288,7 +288,7 @@ export function NewTabView({
               <Glide follow="data-selected" className="bg-control-hover rounded-lg" />
               {results.length > 0 ? (
                 results.map((item, index) => {
-                  const selected = index === clampedIndex;
+                  const selected = index === selectedIndex;
                   return (
                     <button
                       key={item.id}
@@ -297,7 +297,7 @@ export function NewTabView({
                       role="option"
                       aria-selected={selected}
                       data-selected={selected ? "true" : undefined}
-                      onMouseEnter={() => setSelectedIndex(index)}
+                      onMouseEnter={() => setSelectedId(item.id)}
                       onClick={() => executeResult(item)}
                       className={cn(
                         "relative flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors",

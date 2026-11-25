@@ -17,6 +17,7 @@ interface PartsRendererProps {
   ended?: boolean;
   streaming?: boolean;
   workedLabel?: string;
+  onOpenWorked?: () => void;
 }
 
 export const PartsRenderer = memo(function PartsRenderer({
@@ -28,6 +29,7 @@ export const PartsRenderer = memo(function PartsRenderer({
   streaming = false,
   ended,
   workedLabel,
+  onOpenWorked,
 }: PartsRendererProps) {
   const { workspacePath } = useSession();
   const id = useId();
@@ -66,7 +68,10 @@ export const PartsRenderer = memo(function PartsRenderer({
               buttonRef={worked}
               controls={id}
               expanded={open}
-              onToggle={toggle}
+              onToggle={() => {
+                if (!open) onOpenWorked?.();
+                toggle();
+              }}
               label={workedLabel}
             />
           </div>

@@ -608,14 +608,25 @@ async function run() {
         .waitFor();
       assert.deepEqual(await corners(), [outside, outside]);
     });
+    const waitForIdleBottom = (targetPage = page) =>
+      targetPage.waitForFunction(async () => {
+        const pane = globalThis.document.getElementById("chat-messages");
+        const top = pane.scrollTop;
+        // The chase retires after ten idle frames at its target.
+        for (let i = 0; i < 11; i++) {
+          await new Promise(globalThis.requestAnimationFrame);
+          if (pane.scrollTop !== top || Math.abs(pane.scrollHeight - pane.clientHeight - top) > 1)
+            return false;
+        }
+        return true;
+      });
     await check(
       "auto-scroll resumes for in-place streaming growth after idle and stays grounded when the turn folds",
       async () => {
         const turn = fixture(chats.bubbles.session, "streaming-scroll");
         await emit(...turn.start("Stream a long update."));
         await logView.getByText("Stream a long update.", { exact: true }).waitFor();
-        // Wait past the chase loop's 10-frame (~166ms) idle self-stop.
-        await page.waitForTimeout(350);
+        await waitForIdleBottom();
         for (let i = 1; i <= 16; i++) {
           await emit(
             turn.send(`Update ${i}: verifying smooth follow while the existing message grows.`)
@@ -654,8 +665,22 @@ async function run() {
           false,
           "folding a settled turn at the bottom should not pause auto-scroll"
         );
+      }
+    );
+    for (const [name, gap] of [
+      ["opening a settled Worked fold while following does not chase to the bottom", 0],
+      ["opening Worked after resuming 12 px from the bottom keeps the disclosure in place", 12],
+      [
+        "opening Worked just after Jump while its chase is active keeps the disclosure in place",
+        null,
+      ],
+    ]) {
+      await check(name, async () => {
+        await logView.evaluate((pane) => {
+          pane.scrollTop = pane.scrollHeight;
+        });
+        await waitForIdleBottom();
         // Gentle 1px upward scroll ticks after idle must still accumulate and pause follow.
-        await page.waitForTimeout(250);
         await logView.evaluate((pane) => {
           for (let i = 0; i < 40; i++) {
             pane.scrollTop = Math.max(0, pane.scrollTop - 1);
@@ -667,29 +692,34 @@ async function run() {
             .querySelector('button[aria-label="Scroll to bottom"]')
             .parentElement.classList.contains("opacity-100")
         );
-      }
-    );
-    await check(
-      "opening a settled Worked fold while following does not chase to the bottom",
-      async () => {
         const worked = logView
           .locator('[data-message-id="streaming-scroll-reply-1"]')
           .getByRole("button", { name: /^Expand activity, Worked/ });
-        const before = await worked.evaluate((btn) => {
+        const before = await worked.evaluate((btn, gap) => {
           const pane = btn.closest('[role="log"]');
-          const jump = globalThis.document.querySelector(
-            'button[aria-label="Scroll to bottom"]'
-          ).parentElement;
-          // Open Worked when follow resumes, before the next animation frame can run.
-          const resumed = new globalThis.MutationObserver(() => {
-            if (!jump.classList.contains("opacity-0")) return;
-            resumed.disconnect();
-            btn.click();
-          });
-          resumed.observe(jump, { attributeFilter: ["class"] });
-          pane.scrollTop = pane.scrollHeight;
-          return { scrollHeight: pane.scrollHeight, btnTop: btn.getBoundingClientRect().top };
-        });
+          const jump = globalThis.document.querySelector('button[aria-label="Scroll to bottom"]');
+          const bottom = pane.scrollHeight - pane.clientHeight;
+          const expected = {
+            scrollHeight: pane.scrollHeight,
+            scrollTop: bottom,
+            btnTop: btn.getBoundingClientRect().top + pane.scrollTop - bottom,
+          };
+          if (gap === null) {
+            // Reduced motion reaches the old bottom on Jump's first frame. Open before its next one.
+            jump.click();
+            globalThis.requestAnimationFrame(() => btn.click());
+          } else {
+            // Open on passive resume, before its first chase frame could run.
+            const resumed = new globalThis.MutationObserver(() => {
+              if (!jump.parentElement.classList.contains("opacity-0")) return;
+              resumed.disconnect();
+              btn.click();
+            });
+            resumed.observe(jump.parentElement, { attributeFilter: ["class"] });
+            pane.scrollTop = bottom - gap;
+          }
+          return expected;
+        }, gap);
         const collapse = logView
           .locator('[data-message-id="streaming-scroll-reply-1"]')
           .getByRole("button", { name: /^Collapse activity, Worked/ });
@@ -711,6 +741,11 @@ async function run() {
             btnTop: btn.getBoundingClientRect().top,
           };
         });
+        await collapse.click();
+        assert.ok(
+          Math.abs(after.scrollTop - before.scrollTop) <= 1,
+          `expected the old bottom at ${before.scrollTop}px, got ${after.scrollTop}px`
+        );
         assert.ok(
           after.scrollHeight - (after.scrollTop + after.clientHeight) > 100,
           "opening Worked while following should not chase to the bottom"
@@ -719,9 +754,18 @@ async function run() {
           Math.abs(after.btnTop - before.btnTop) < 40,
           `Worked button shifted by ${after.btnTop - before.btnTop}px`
         );
-        await collapse.click();
-      }
-    );
+      });
+    }
+    await check("a new live turn still follows after the reader opens Worked", async () => {
+      const previous = logView.locator('[data-message-id="streaming-scroll-reply-1"]');
+      await previous.getByRole("button", { name: /^Expand activity, Worked/ }).click();
+      await previous.getByRole("button", { name: /^Collapse activity, Worked/ }).waitFor();
+      const next = fixture(chats.bubbles.session, "follow-after-worked");
+      await emit(...next.start("Continue after the fold."), next.send("Checking the next change."));
+      await logView.getByText("Checking the next change.", { exact: true }).waitFor();
+      await waitForIdleBottom();
+      await emit(next.text("Finished checking."), next.end("end_turn"));
+    });
     await check(
       "gentle 1px upward scroll ticks pause an active normal-motion chase on an agent_messages chat",
       async () => {
@@ -741,7 +785,7 @@ async function run() {
             .waitFor();
           // Let initial mount chase settle, then push a burst of tell_user bubbles so
           // a fresh normal-motion chase starts with large remaining distance.
-          await motionPage.waitForTimeout(350);
+          await waitForIdleBottom(motionPage);
           const burst = [];
           for (let i = 1; i <= 28; i++) {
             burst.push(

@@ -251,9 +251,10 @@ export function useAutoScroll({
         recheck = setTimeout(handleScroll, remaining);
         return;
       }
-      // At the exact bottom, follow is already restored. Starting an idle chase
-      // would scroll a newly opened Worked disclosure out of view.
-      resume(maxScrollTop - currentScrollTop >= 1);
+      // Close the small gap now, before a disclosure can change the target.
+      container.scrollTop = maxScrollTop;
+      lastScrollTopRef.current = container.scrollTop;
+      resume(false);
     };
 
     container.addEventListener("scroll", handleScroll, { passive: true });
@@ -348,6 +349,7 @@ export function useAutoScroll({
 
   return {
     showScrollButton,
+    stopChase,
     handleScrollToBottomClick: scrollToBottom,
     transcriptRef: setTranscriptNode,
     liveTailRef: setLiveTailNode,

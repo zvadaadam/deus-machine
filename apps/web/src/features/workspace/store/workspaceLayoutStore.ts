@@ -213,7 +213,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
       }),
       {
         name: "workspace-layout-store",
-        version: 12,
+        version: 13,
         partialize: (state) => ({ layouts: stripEphemeralLayouts(state.layouts) }),
         // Pre-launch: obsolete layout preferences fall back to defaults; history lives in the DB.
         migrate: () => ({ layouts: {} }),

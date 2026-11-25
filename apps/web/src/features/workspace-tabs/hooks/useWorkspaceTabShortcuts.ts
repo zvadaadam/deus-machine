@@ -12,21 +12,17 @@ import { isTextFieldFocused } from "@/shared/lib/keyboard";
 import type { WorkspaceTab } from "../types";
 
 export function useWorkspaceTabShortcuts({
-  enabled,
   tabs,
   activeTabId,
   onSelectTab,
   onCloseTab,
 }: {
-  enabled: boolean;
   tabs: WorkspaceTab[];
   activeTabId: string;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
 }) {
   useEffect(() => {
-    if (!enabled) return;
-
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
       // Meta+1..9 only (Control+1..9 is reserved for location/org switching).
@@ -64,5 +60,5 @@ export function useWorkspaceTabShortcuts({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [enabled, tabs, activeTabId, onSelectTab, onCloseTab]);
+  }, [tabs, activeTabId, onSelectTab, onCloseTab]);
 }

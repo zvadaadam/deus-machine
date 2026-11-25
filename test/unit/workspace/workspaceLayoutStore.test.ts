@@ -8,7 +8,10 @@ import { DEFAULT_NEW_TAB_ID } from "@/features/workspace-tabs/types";
 import { getTerminalInitialCommand } from "@/features/terminal/store/terminalTaskStore";
 
 const storage = vi.hoisted(() => {
-  const storage = { getItem: () => null, setItem: vi.fn<(key: string, value: string) => void>() };
+  const storage = {
+    getItem: vi.fn<() => string | null>(() => null),
+    setItem: vi.fn<(key: string, value: string) => void>(),
+  };
   vi.stubGlobal("window", { localStorage: storage });
   return storage;
 });
@@ -29,6 +32,31 @@ describe("workspaceLayoutStore", () => {
     expect(resolved.tabs).toHaveLength(1);
     expect(resolved.activeTabId).toBe(DEFAULT_NEW_TAB_ID);
     expect(resolved.activeTab).toEqual({ id: DEFAULT_NEW_TAB_ID, kind: "new-tab" });
+  });
+
+  it("resets v12 layouts before the next workspace write", async () => {
+    storage.getItem.mockReturnValueOnce(
+      JSON.stringify({
+        version: 12,
+        state: {
+          layouts: {
+            a: {
+              workspaceTabs: [{ id: "changes", kind: "changes" }, null],
+              activeWorkspaceTabId: "gone",
+            },
+            b: { workspaceTabs: { broken: true } },
+          },
+        },
+      })
+    );
+    await useWorkspaceLayoutStore.persist.rehydrate();
+    expect(useWorkspaceLayoutStore.getState().layouts).toEqual({});
+    workspaceLayoutActions.openFileTab("a", "README.md");
+    const saved = JSON.parse(storage.setItem.mock.lastCall![1]);
+    expect(saved.version).toBe(13);
+    expect(saved.state.layouts.a.workspaceTabs).toEqual([
+      { id: expect.any(String), kind: "file", path: "README.md" },
+    ]);
   });
 
   it("opens a dedicated file tab when opening a file in files target and queues reveal state", () => {
