@@ -36,7 +36,7 @@ interface StagedContent extends KeptDraft {
   imageAttachments: ImageAttachment[];
 }
 
-function stagedContent(row: KeptDraft = storedRow.parse({})): StagedContent {
+export function stagedContent(row: KeptDraft = storedRow.parse({})): StagedContent {
   return { ...row, pastedTexts: [], imageAttachments: [] };
 }
 

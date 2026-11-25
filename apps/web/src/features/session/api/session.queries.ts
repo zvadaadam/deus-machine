@@ -14,7 +14,6 @@ import { willQueueMessage } from "../lib/queuedMessages";
 import { returnContentToComposer } from "../lib/returnToComposer";
 import { composerStore } from "../store/sessionComposerStore";
 import { patchWorkspaceSessionStatus } from "../lib/agentEventFold";
-import { SendRejectedError, rollbackSendStatus } from "../lib/sendRollback";
 import {
   useIsDirectSession,
   isDirectSessionCached,
@@ -23,10 +22,9 @@ import {
 import { getDirectSession } from "../cloud/directSessionRegistry";
 import { uuidv7 } from "@shared/lib/uuid";
 import type { Session, SessionStatus } from "../types";
-import type { RepoGroup } from "@shared/types/workspace";
 import { track } from "@/platform/analytics";
 
-import { call, connect, isConnected, OpError } from "@/platform/ws";
+import { call, connect, isConnected } from "@/platform/ws";
 import { RuntimeError, runtimeForQueryClient } from "@/platform/ws/runtime-client";
 import { emitSendAttemptFailed } from "@/features/connection";
 import type { AgentHarness } from "@/shared/agents";
@@ -250,27 +248,18 @@ export function useSendMessage() {
       // response the disarmed read-lanes can never render — a bubble stuck
       // forever. Reject so onError rolls it back deterministically.
       if (isDirectSessionCached(queryClient, sessionId)) {
-        throw new SendRejectedError("The cloud connection isn't ready yet — try again in a moment");
+        throw new Error("The cloud connection isn't ready yet — try again in a moment");
       }
 
       // Capture the cache's owner before waiting for connection. A host change
       // disposes this client; it cannot redirect the pending send to the new host.
       const backend = runtimeForQueryClient(queryClient) ?? { isConnected, connect, call };
       if (!backend.isConnected()) await backend.connect();
-      try {
-        if (mode === "steer") {
-          await backend.call(api.steerMessage, { ...input, turnId });
-          return;
-        }
-        return await backend.call(api.sendMessage, { ...input, turnId });
-      } catch (error) {
-        // The host understood the send and refused it: sending again would only
-        // be refused again. Anything else (a lost reply, no connection) is
-        // rethrown as it is and never resubmitted: a lost reply can follow a
-        // turn that did start.
-        if (error instanceof OpError) throw new SendRejectedError(error.message);
-        throw error;
+      if (mode === "steer") {
+        await backend.call(api.steerMessage, { ...input, turnId });
+        return;
       }
+      return backend.call(api.sendMessage, { ...input, turnId });
     },
 
     onMutate: async ({ sessionId, content, model, turnId, mode }) => {
@@ -279,12 +268,6 @@ export function useSendMessage() {
       if (mode === "steer" || willQueueMessage(session?.workspace_kind, session?.status)) return;
       await queryClient.cancelQueries({
         queryKey: queryKeys.sessions.messages(sessionId),
-      });
-
-      // Snapshot workspace-by-repo cache before optimistic update so we can
-      // restore the exact prior status on error (instead of hardcoding "idle").
-      const previousWorkspaceByRepo = queryClient.getQueriesData<RepoGroup[]>({
-        queryKey: ["workspaces", "by-repo"],
       });
 
       // The bubble carries the send's turn id and engine `Part`s — the same
@@ -312,16 +295,16 @@ export function useSendMessage() {
 
       patchWorkspaceSessionStatus(queryClient, sessionId, "working");
 
-      return { previousWorkspaceByRepo, turnId };
+      return turnId;
     },
 
-    onSuccess: (result, { sessionId }, context) => {
-      if (!result?.queued || !context) return;
-      dropOptimisticMessage(queryClient, sessionId, context.turnId);
+    onSuccess: (result, { sessionId }, optimisticTurnId) => {
+      if (!result?.queued || optimisticTurnId === undefined) return;
+      dropOptimisticMessage(queryClient, sessionId, optimisticTurnId);
       void queryClient.invalidateQueries({ queryKey: ["workspaces", "by-repo"] });
     },
 
-    onError: (_err, variables, context) => {
+    onError: (error, { sessionId }, optimisticTurnId) => {
       // A failed or uncertain backend delivery should surface its connection
       // state. The cloud-direct channel owns its own connectivity UI, and a
       // runtime that was replaced (another host or account) says nothing about
@@ -329,27 +312,16 @@ export function useSendMessage() {
       const owner = runtimeForQueryClient(queryClient);
       const replaced = owner && ["disposed", "revoked"].includes(owner.getState());
       if (
-        _err instanceof Error &&
+        error instanceof RuntimeError &&
+        (error.kind === "unavailable" || error.kind === "unknown-outcome") &&
         !replaced &&
-        !isDirectSessionCached(queryClient, variables.sessionId)
+        !isDirectSessionCached(queryClient, sessionId)
       ) {
-        const msg = _err.message.toLowerCase();
-        if (
-          (_err instanceof RuntimeError &&
-            (_err.kind === "unavailable" || _err.kind === "unknown-outcome")) ||
-          msg.includes("not connected") ||
-          msg.includes("disconnected") ||
-          msg.includes("connection failed")
-        ) {
-          emitSendAttemptFailed();
-        }
+        emitSendAttemptFailed();
       }
-      if (!context) return;
-      dropOptimisticMessage(queryClient, variables.sessionId, context.turnId);
-      // Put the sidebar's status back — by REFETCH after a server rejection,
-      // or uncertain delivery, and by snapshot only for failures before dispatch.
-      // See sendRollback.ts.
-      rollbackSendStatus(queryClient, _err, context.previousWorkspaceByRepo);
+      if (optimisticTurnId !== undefined)
+        dropOptimisticMessage(queryClient, sessionId, optimisticTurnId);
+      void queryClient.invalidateQueries({ queryKey: ["workspaces", "by-repo"] });
     },
 
     onSettled: async (_, error, variables) => {

@@ -9,7 +9,8 @@ import { registerDirectSession } from "@/features/session/cloud/directSessionReg
 import { queryKeys } from "@/shared/api/queryKeys";
 import { api } from "@shared/api";
 import type { PaginatedMessages, Session } from "@shared/types/session";
-import { OpError } from "@/platform/ws/runtime-client";
+import { OpError, RuntimeError } from "@/platform/ws/runtime-client";
+import { emitSendAttemptFailed } from "@/features/connection";
 
 const state = vi.hoisted(() => ({
   queryClient: null as QueryClient | null,
@@ -42,11 +43,10 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
     },
   };
 });
-vi.mock("@/platform/ws", async () => ({
+vi.mock("@/platform/ws", () => ({
   call: state.call,
   connect: state.connect,
   isConnected: state.isConnected,
-  OpError: (await import("@/platform/ws/runtime-client")).OpError,
 }));
 vi.mock("sonner", () => ({ toast: { error: state.error } }));
 vi.mock("@/features/connection", () => ({ emitSendAttemptFailed: vi.fn() }));
@@ -281,34 +281,47 @@ describe("backend prompt delivery", () => {
     }
   });
 
-  it("does not resubmit a prompt after losing the reply", async () => {
-    const { useSendMessage } = await import("@/features/session/api/session.queries");
-    const { RuntimeError } = await import("@/platform/ws/runtime-client");
-    const failure = new RuntimeError("unknown-outcome", "Acknowledgment lost");
-    state.call.mockRejectedValue(failure);
-    await expect(
-      useSendMessage().mutateAsync({
-        sessionId: SESSION,
-        content: "Run this once",
-        turnId: "turn-once",
-      })
-    ).rejects.toBe(failure);
-    expect(state.call).toHaveBeenCalledTimes(1);
-    expect(state.call.mock.calls[0][0]).toBe(api.sendMessage);
-  });
-
-  it("does not resubmit an authoritative rejection", async () => {
-    const { useSendMessage } = await import("@/features/session/api/session.queries");
-    state.call.mockRejectedValue(new OpError("Already running"));
-    await expect(
-      useSendMessage().mutateAsync({
-        sessionId: SESSION,
-        content: "Run this once",
-        turnId: "turn-rejected",
-      })
-    ).rejects.toThrow("Already running");
-    expect(state.call).toHaveBeenCalledTimes(1);
-  });
+  it.each([
+    { stage: "connect", failure: new RuntimeError("unavailable", "Host offline"), notices: 1 },
+    {
+      stage: "call",
+      failure: new RuntimeError("unknown-outcome", "Acknowledgment lost"),
+      notices: 1,
+    },
+    { stage: "call", failure: new OpError("Agent server is disconnected"), notices: 0 },
+  ] as const)(
+    "preserves newer workspace lists and reports connection trouble by kind ($failure.kind)",
+    async ({ stage, failure, notices }) => {
+      const { useSendMessage } = await import("@/features/session/api/session.queries");
+      const client = state.queryClient!;
+      const active = queryKeys.workspaces.byRepo("active");
+      const archived = queryKeys.workspaces.byRepo("archived");
+      const workspace = { id: "w1", current_session_id: SESSION, session_status: "idle" };
+      client.setQueryData(active, [{ repo_id: "r1", workspaces: [workspace] }]);
+      client.setQueryData(archived, []);
+      const updated = [{ repo_id: "r1", workspaces: [workspace, { id: "another-workspace" }] }];
+      state.isConnected.mockReturnValue(stage === "call");
+      state[stage].mockImplementationOnce(() => {
+        client.setQueryData(active, updated);
+        throw failure;
+      });
+      await expect(
+        useSendMessage().mutateAsync({
+          sessionId: SESSION,
+          content: "Send this once",
+          turnId: "turn-once",
+          agentHarness: "claude-code",
+          model: "opus",
+          thinkingLevel: "high",
+        })
+      ).rejects.toBe(failure);
+      expect(client.getQueryData(active)).toEqual(updated);
+      expect(client.getQueryState(active)?.isInvalidated).toBe(true);
+      expect(client.getQueryState(archived)?.isInvalidated).toBe(true);
+      expect(state.call).toHaveBeenCalledTimes(stage === "call" ? 1 : 0);
+      expect(emitSendAttemptFailed).toHaveBeenCalledTimes(notices);
+    }
+  );
 
   it("keeps a send waiting for connection on its original runtime when that runtime is disposed", async () => {
     const { useSendMessage } = await import("@/features/session/api/session.queries");

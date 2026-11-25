@@ -98,15 +98,11 @@ export function SessionErrorCard({
     action = harness ? <LoginAction harness={harness} /> : <AIProvidersButton />;
   } else if (category === "auth" || category === PROVIDER_ACCOUNT_CATEGORY) {
     action = <AIProvidersButton />;
-  } else if (onRetryInNewChat) {
+  } else if (category === "context_limit" && onRetryInNewChat) {
     action = (
-      <Button
-        variant={category === "context_limit" ? "outline" : "ghost"}
-        size="xs"
-        onClick={() => onRetryInNewChat()}
-      >
+      <Button variant="outline" size="xs" onClick={() => onRetryInNewChat()}>
         <MessageSquarePlus className="mr-1.5 size-3.5" />
-        {category === "context_limit" ? "New session" : "New chat"}
+        New session
       </Button>
     );
   }
@@ -116,9 +112,6 @@ export function SessionErrorCard({
       <div className="min-w-[min(100%,16rem)] flex-1">
         <p className="text-destructive/80 text-xs font-medium">{title}</p>
         <p className="text-foreground/80 mt-0.5 text-sm break-words">{description}</p>
-        {category === "rate_limit" && onRetryInNewChat && (
-          <p className="text-muted-foreground mt-1 text-xs">Start a new chat to try again.</p>
-        )}
         {category === "process_exit" && (
           <p className="text-muted-foreground mt-1 text-xs">
             The agent process exited unexpectedly. Try sending your message again.

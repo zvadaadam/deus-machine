@@ -707,26 +707,32 @@ async function run() {
         );
       });
     }
-    await check(
-      "the rate-limit action creates a chat where the workspace supports it",
-      async () => {
-        const { session, workspace } = chats.order;
-        const rate = fixture(session, "rate-local");
-        await emit(
-          ...rate.start("Try the account again."),
-          rate.error("rate_limit", "Usage limit reached.")
-        );
-        await go("order");
-        const card = logView.getByRole("alert");
-        await card.getByText("Start a new chat to try again.", { exact: true }).waitFor();
-        const count = () =>
-          db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE workspace_id=?").get(workspace).n;
-        const before = count();
-        await card.getByRole("button", { name: "New chat", exact: true }).click();
-        await until("the new local chat", () => count() === before + 1);
-        await page.getByRole("tab", { name: "New chat", exact: true, selected: true }).waitFor();
+    await check("only a context limit offers to open a new session", async () => {
+      const { session, workspace } = chats.order;
+      await go("order");
+      const card = logView.getByRole("alert");
+      for (const [category, message] of [
+        ["rate_limit", "Try the account again later."],
+        ["process_exit", "The agent process stopped."],
+      ]) {
+        const turn = fixture(session, category);
+        await emit(...turn.start("Continue."), turn.error(category, message), turn.end("error"));
+        await card.getByText(message, { exact: true }).waitFor();
+        assert.equal(await card.getByRole("button", { name: "New chat", exact: true }).count(), 0);
       }
-    );
+      const full = fixture(session, "context-full");
+      await emit(
+        ...full.start("Continue."),
+        full.error("context_limit", "Conversation is full."),
+        full.end("error")
+      );
+      const count = () =>
+        db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE workspace_id=?").get(workspace).n;
+      const before = count();
+      await card.getByRole("button", { name: "New session", exact: true }).click();
+      await until("the new local chat", () => count() === before + 1);
+      await page.getByRole("tab", { name: "New chat", exact: true, selected: true }).waitFor();
+    });
     const hostedPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
     hostedPage.setDefaultTimeout(12_000);
     await hostedPage.addInitScript(() => {

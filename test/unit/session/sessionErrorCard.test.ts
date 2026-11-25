@@ -58,13 +58,13 @@ describe("a send the cloud refused", () => {
     expect(html).not.toContain("New chat");
   });
 
-  it("keeps the retry for a refusal with no way out, its sentence whole", () => {
+  it("shows the full reason for an unrecognized refusal", () => {
     const html = render(
       "MESSAGE_SEND_FAILED",
       "TURN_ID_IN_USE: This turn was admitted concurrently; retry with a new turn ID."
     );
     expect(html).toContain("This turn was admitted concurrently; retry with a new turn ID.");
-    expect(html).toContain("New chat");
+    expect(html).not.toContain("New chat");
     expect(html).not.toContain("Open AI Providers");
   });
 
@@ -75,18 +75,30 @@ describe("a send the cloud refused", () => {
   });
 });
 
-it("only offers starting a chat when the action is available", () => {
+it.each(["process_exit", "rate_limit"])("keeps a %s error in the current chat", (category) => {
+  const html = renderToStaticMarkup(
+    createElement(SessionErrorCard, {
+      sessionId: "chat",
+      message: "The agent stopped",
+      category,
+      onRetryInNewChat: vi.fn(),
+    })
+  );
+  expect(html).toContain("The agent stopped");
+  expect(html).not.toMatch(/new chat|<button/i);
+});
+
+it("offers a new session for a context limit when the chat can open one", () => {
   for (const onRetryInNewChat of [undefined, vi.fn()]) {
     const html = renderToStaticMarkup(
       createElement(SessionErrorCard, {
         sessionId: "chat",
-        message: "Usage limit reached",
-        category: "rate_limit",
+        message: "This conversation is full",
+        category: "context_limit",
         onRetryInNewChat,
       })
     );
-    expect(html.includes("Start a new chat")).toBe(!!onRetryInNewChat);
-    expect(html.includes("New chat")).toBe(!!onRetryInNewChat);
+    expect(html.includes("New session")).toBe(!!onRetryInNewChat);
   }
 });
 
