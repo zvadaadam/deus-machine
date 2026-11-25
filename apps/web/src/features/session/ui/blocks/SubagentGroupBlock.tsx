@@ -35,7 +35,7 @@ export function SubagentGroupBlock({
   childMessages,
   subagent,
 }: SubagentGroupBlockProps) {
-  const { sessionStatus, workspaceId, workspacePath, cloud, subagentMessages } = useSession();
+  const session = useSession();
   // The protocol normalizes subagent metadata onto the tool part; the raw
   // tool input is the fallback for harnesses that report neither.
   const { description, prompt, subagent_type } = toolUse.input ?? {};
@@ -47,14 +47,10 @@ export function SubagentGroupBlock({
     compactAgentLabel(prompt) ||
     "Agent";
 
-  const isRunning = sessionStatus === "working" && !toolResult;
+  const isRunning = session.sessionStatus === "working" && !toolResult;
   const isError = toolResult?.is_error;
 
-  const [isExpanded = false, toggle] = useTranscriptFold(
-    childMessages[0]?.session_id,
-    "agent",
-    toolUse.id
-  );
+  const [isExpanded, toggle] = useTranscriptFold("agent", toolUse.id);
 
   // Count tool parts across child messages
   const toolCount = useMemo(() => {
@@ -137,14 +133,7 @@ export function SubagentGroupBlock({
       <AnimatePresence initial={false}>
         {isExpanded && childMessages.length > 0 && (
           <Collapse className="mt-0.5 ml-6">
-            <SessionProvider
-              sessionStatus={sessionStatus}
-              workspaceId={workspaceId}
-              workspacePath={workspacePath}
-              cloud={cloud}
-              subagentMessages={subagentMessages}
-              insideSubagent={true}
-            >
+            <SessionProvider {...session} insideSubagent>
               <SubagentMessageList messages={childMessages} />
             </SessionProvider>
           </Collapse>

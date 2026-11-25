@@ -325,20 +325,26 @@ describe("starting a workspace", () => {
     const warn = vi.spyOn(console, "warn");
     await initializeWorkspace(add("w", "vega"));
     expect(row("w").init_fetch_issue).toBe("no_origin");
-    expect([...error.mock.calls, ...warn.mock.calls].flat().join(" ")).not.toMatch(
-      /no such remote/i
-    );
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
   });
 
-  it("still starts and records a failed fetch when git cannot read the remote", async () => {
-    const args = ["remote", "get-url", "origin"];
-    const git = vi
-      .spyOn(await import("@shared/lib/git-process"), "runGit")
-      .mockRejectedValueOnce(new GitError(args, { code: 128, stderr: "could not read config" }));
-    await initializeWorkspace(add("w", "vega"));
-    expect(git).toHaveBeenNthCalledWith(1, args, expect.anything());
-    expect(row("w")).toMatchObject({ state: "ready", init_fetch_issue: "failed" });
-  });
+  it.each([2, 128])(
+    "still starts and warns when git cannot read the remote (exit %i)",
+    async (code) => {
+      const warn = vi.spyOn(console, "warn");
+      const args = ["config", "--get", "remote.origin.url"];
+      const git = vi
+        .spyOn(await import("@shared/lib/git-process"), "runGit")
+        .mockRejectedValueOnce(new GitError(args, { code, stderr: "could not read config" }));
+      await initializeWorkspace(add("w", "vega"));
+      expect(git).toHaveBeenNthCalledWith(1, args, expect.anything());
+      expect(row("w")).toMatchObject({ state: "ready", init_fetch_issue: "failed" });
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        expect.stringMatching(/^.*could not read config$/)
+      );
+    }
+  );
 
   it("takes another name instead of reusing or removing one that is taken on disk", async () => {
     // Left from a reset database: a folder with someone's work, and a branch.

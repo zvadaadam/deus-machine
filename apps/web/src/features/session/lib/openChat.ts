@@ -4,6 +4,7 @@
 // (useChatTabs); the view takes exactly that request, once.
 
 import { create } from "zustand";
+import { useSession } from "../context";
 import { showWorkspace } from "@/features/workspace/lib/openWorkspace";
 import { workspaceLayoutActions } from "@/features/workspace/store";
 
@@ -26,18 +27,20 @@ export const useOpenChatStore = create<OpenChatState>(() => ({
 }));
 
 export function useTranscriptFold(
-  sessionId: string | undefined,
-  kind: "worked" | "activity" | "thought" | "agent",
-  id: string | undefined
+  kind: "worked" | "activity" | "thought" | "agent" | "tool" | "message",
+  id: string | undefined,
+  defaultOpen = false
 ) {
+  const { sessionId } = useSession();
   const key = JSON.stringify([sessionId, kind, id]);
-  const expanded = useOpenChatStore((state) => state.transcriptFolds[key]);
+  const stored = useOpenChatStore((state) => state.transcriptFolds[key]);
+  const expanded = stored ?? defaultOpen;
   function toggle() {
     useOpenChatStore.setState(({ transcriptFolds }) => ({
-      transcriptFolds: { ...transcriptFolds, [key]: !transcriptFolds[key] },
+      transcriptFolds: { ...transcriptFolds, [key]: !expanded },
     }));
   }
-  return [expanded, toggle] as const;
+  return [expanded, toggle, stored !== undefined] as const;
 }
 
 let next = 0;

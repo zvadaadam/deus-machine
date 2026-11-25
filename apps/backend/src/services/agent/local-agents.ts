@@ -86,6 +86,7 @@ export class LocalAgents {
     const before = this.cliFailures.get(harness);
     const report = (cli: Omit<HarnessCli, "harness" | "state">) => {
       if (this.cliFailures.get(harness) !== before) return;
+      // The backend supplies this failure when the engine sent no failed progress.
       this.publishCliProgress({
         harness,
         phase: "failed",

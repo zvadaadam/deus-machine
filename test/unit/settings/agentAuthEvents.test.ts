@@ -62,18 +62,27 @@ it("reads workspace models again when installation or sign-in finishes", async (
   await vi.waitFor(() => expect(client.getQueryState(models)?.isInvalidated).toBe(true));
 });
 
-it("toasts the engine's reason when the first install progress is a failure", () => {
+it.each([
+  [
+    "gemini",
+    "The engine refused the install",
+    "Couldn’t install Gemini: The engine refused the install",
+  ],
+  ["codex-app-server", "  ", "Couldn’t install Codex: The install failed."],
+])("names the agent and install when %s fails", (harness, error, message) => {
+  vi.mocked(toast.error).mockClear();
   const client = observe();
   const key = queryKeys.settings.agentAuth;
   client.setQueryData<AgentAuthAnswer>(key, {
-    clis: [{ harness: "gemini", state: "missing" }],
+    clis: [{ harness, state: "missing" }],
     auth: [],
     logins: [],
   });
-  const error = "The engine refused the install";
   const [cli] = vi.mocked(useStream).mock.calls;
-  cli![2]({ harness: "gemini", phase: "failed", version: "", receivedBytes: 0, error });
-  expect(toast.error).toHaveBeenCalledExactlyOnceWith(error);
+  cli![2]({ harness, phase: "failed", version: "", receivedBytes: 0, error });
+  expect(toast.error).toHaveBeenCalledExactlyOnceWith(message, {
+    id: `cli-install-${harness}`,
+  });
   expect(client.getQueryData<AgentAuthAnswer>(key)?.clis[0]).toMatchObject({
     state: "failed",
     error,

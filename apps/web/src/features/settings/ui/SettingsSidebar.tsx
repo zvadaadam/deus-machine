@@ -50,7 +50,7 @@ export function SettingsSidebar() {
   }, [setOpen]);
 
   return (
-    <Sidebar variant="inset" collapsible="offcanvas" className="p-0">
+    <Sidebar className="p-0">
       <SidebarHeader className="px-3.5 py-3">
         <button
           type="button"

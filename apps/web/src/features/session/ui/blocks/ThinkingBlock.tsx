@@ -22,7 +22,7 @@ interface ThinkingBlockProps {
 }
 
 export function ThinkingBlock({ part, durationSec }: ThinkingBlockProps) {
-  const [isExpanded = false, toggle] = useTranscriptFold(part.sessionId, "thought", part.id);
+  const [isExpanded, toggle] = useTranscriptFold("thought", part.id);
 
   const durationLabel = durationSec != null && durationSec > 0 ? `for ${durationSec}s` : undefined;
 

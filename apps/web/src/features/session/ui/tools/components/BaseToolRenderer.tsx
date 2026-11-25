@@ -14,7 +14,8 @@
  */
 
 import { Collapse } from "@/components/ui/collapse";
-import { useCallback, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useTranscriptFold } from "@/features/session/lib/openChat";
+import type { KeyboardEvent, ReactNode } from "react";
 import { ChevronRight, X } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
@@ -46,7 +47,7 @@ export function BaseToolRenderer({
   icon,
   toolUse,
   toolResult,
-  defaultExpanded = false, // Collapsed by default (explicit is better than implicit)
+  defaultExpanded,
   isLoading = false,
   showContentOnError = false,
   children,
@@ -56,22 +57,13 @@ export function BaseToolRenderer({
   const isError = toolResult?.is_error;
   const missingResult = !toolResult && !isLoading;
 
-  // Errors never auto-expand — agents self-correct and errors are transient.
-  // The X icon swap on the collapsed row is the error signal; users expand when they want details.
-  const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
-  const isExpanded = manualExpanded !== null ? manualExpanded : defaultExpanded;
-  const toggleExpanded = useCallback(() => {
-    setManualExpanded(!isExpanded);
-  }, [isExpanded]);
+  const [isExpanded, toggleExpanded] = useTranscriptFold("tool", toolUse.id, defaultExpanded);
 
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      toggleExpanded();
-    },
-    [toggleExpanded]
-  );
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    toggleExpanded();
+  }
 
   function details() {
     if (missingResult) {

@@ -19,15 +19,19 @@ export function KillShellToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
           shell {shell_id?.substring(0, 6) ?? "..."}
         </span>
       )}
-      renderContent={() =>
-        !isLoading && (
+      renderContent={() => {
+        if (isLoading) return null;
+        if (toolResult?.content === "Cancelled") {
+          return <div className="text-muted-foreground px-2 pb-2 text-xs">Cancelled</div>;
+        }
+        return (
           <div className="px-2 pb-2">
             <div className="text-success-foreground bg-success/10 border-success/20 rounded-md border p-2 text-xs">
               Background process terminated successfully
             </div>
           </div>
-        )
-      }
+        );
+      }}
     />
   );
 }

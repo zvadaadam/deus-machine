@@ -91,7 +91,7 @@ export async function connectApp(input: ConnectAppInput): Promise<ConnectAppResu
   const values = input.values ?? {};
   const fromCli = auth.kind === "bearer" && values.fromCli === "gh" && auth.cliToken === "gh";
   if (!fromCli && (auth.kind === "bearer" || auth.kind === "header" || auth.kind === "env")) {
-    await initVault();
+    await initVault("seal");
     // A custom server can be removed and its id reused while the Keychain answers.
     if (!isDeepStrictEqual(app, findApp(app.id))) {
       throw new ConflictError("This app changed while connecting. Connect again.");

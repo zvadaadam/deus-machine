@@ -13,6 +13,9 @@ const state = vi.hoisted(() => ({
   dir: "",
   db: null as Database.Database | null,
   reads: [] as Answer[],
+  read(done: Answer) {
+    this.reads.push(done);
+  },
   create: vi.fn(),
 }));
 vi.mock("../../../../src/lib/database", () => ({
@@ -25,7 +28,7 @@ vi.mock("child_process", async (original) => ({
   ...(await original<typeof import("child_process")>()),
   // `security find-generic-password`: held until the test answers it.
   execFile: (_file: string, _args: string[], _options: unknown, done: Answer) => {
-    state.reads.push(done);
+    state.read(done);
   },
   spawn: state.create,
 }));
@@ -38,6 +41,8 @@ vi.mock("../../../../src/services/integrations/checks", () => ({ checkApp: vi.fn
 
 import { startIntegrations } from "../../../../src/services/integrations";
 import { addCustomApp, connectApp, uninstallApp } from "../../../../src/services/integrations/apps";
+import { findApp } from "../../../../src/services/integrations/catalog";
+import { credentialsFor } from "../../../../src/services/integrations/credentials";
 import {
   createConnection,
   getInstallation,
@@ -59,7 +64,7 @@ const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
 /** What an earlier run sealed under the Keychain's key. */
 async function sealedEarlier(value: unknown): Promise<string> {
   process.env.DEUS_VAULT_KEY = KEYCHAIN_KEY;
-  await initVault();
+  await initVault("seal");
   const sealed = seal(value);
   delete process.env.DEUS_VAULT_KEY;
   __resetVaultKeyForTests();
@@ -165,12 +170,43 @@ describe("a Mac's first app sign-in", () => {
     expect(state.reads).toHaveLength(1);
     expect(state.create).not.toHaveBeenCalled();
   });
+
+  it("creates one key when a credential check and a connect queue behind a missing-key read", async () => {
+    process.env.DEUS_VAULT_KEY = "cd".repeat(32);
+    await connectApp({ appId: "sentry", values: { token: "earlier" } });
+    delete process.env.DEUS_VAULT_KEY;
+    __resetVaultKeyForTests();
+
+    const starting = startIntegrations(4100);
+    const checking = credentialsFor(findApp("sentry")!, listConnections("sentry")[0]!);
+    const values = { EXA_API_KEY: "fixture" };
+    const connecting = connectApp({ appId: "exa", values });
+    expect(state.reads).toHaveLength(1);
+    vi.spyOn(state, "read").mockImplementation((done) => {
+      if (state.create.mock.calls.length) done(null, { stdout: KEYCHAIN_KEY });
+      else done({ code: 44 });
+    });
+    state.reads[0]!({ code: 44 });
+
+    await Promise.all([starting, checking, connecting]);
+    expect(state.create).toHaveBeenCalledOnce();
+    expect(readCredential(listConnections("exa")[0]!.id)).toEqual({ values });
+  });
 });
 
 describe("the vault while the Keychain is being asked", () => {
+  it("starts a fresh lookup after a test resets an unanswered one", async () => {
+    const first = initVault("read");
+    __resetVaultKeyForTests();
+    const next = initVault("read");
+    for (const done of state.reads) done(null, { stdout: KEYCHAIN_KEY });
+    await Promise.all([first, next]);
+    expect(state.reads).toHaveLength(2);
+  });
+
   it("makes up no key of its own, and uses the Keychain's once it answers", async () => {
     const saved = await sealedEarlier({ token: "saved-sign-in" });
-    const starting = initVault();
+    const starting = initVault("seal");
     expect(state.reads).toHaveLength(1);
 
     // A request that arrives first is refused, not served with a new key.
@@ -188,7 +224,7 @@ describe("the vault while the Keychain is being asked", () => {
 
   it("stays shut when the Keychain does not answer", async () => {
     const saved = await sealedEarlier("kept");
-    const starting = initVault();
+    const starting = initVault("seal");
     state.reads[0]!(Object.assign(new Error("timed out"), { code: null }));
     await starting;
     expect(vaultProblem()).toMatch(/Keychain is locked/);

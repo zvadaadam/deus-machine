@@ -67,6 +67,7 @@ function renderChat(client: QueryClient, props: Parameters<typeof Chat>[0]) {
       QueryClientProvider,
       { client },
       createElement(SessionProvider, {
+        sessionId: props.sessionId,
         sessionStatus: props.sessionStatus,
         subagentMessages: new Map(),
         children: createElement(Chat, props),
@@ -91,6 +92,7 @@ it("keeps a deferred reply visible when the next turn starts in an Agent message
     const [step, advance] = useState(0);
     if (step < through) advance(step + 1);
     return Chat({
+      sessionId: messages[0].session_id,
       loading: false,
       agentMessages: true,
       sessionStatus: step === 1 ? "idle" : "working",
@@ -104,6 +106,7 @@ it("keeps a deferred reply visible when the next turn starts in an Agent message
         QueryClientProvider,
         { client },
         createElement(SessionProvider, {
+          sessionId: messages[0].session_id,
           sessionStatus: through === 1 ? "idle" : "working",
           subagentMessages: new Map(),
           children: createElement(Handoff, { through }),
@@ -312,22 +315,15 @@ describe("session alert visibility", () => {
 });
 
 it.each(["worktree", "cloud"] as const)("paints %s user messages on mount", (workspaceKind) => {
-  virtualization.mockReturnValueOnce({ width: 800, height: 600 });
   const client = new QueryClient();
   try {
-    const html = renderToStaticMarkup(
-      createElement(
-        QueryClientProvider,
-        { client },
-        createElement(Chat, {
-          sessionId: "session-1",
-          messages,
-          sessionStatus: "working",
-          loading: false,
-          workspaceKind,
-        })
-      )
-    );
+    const html = renderChat(client, {
+      sessionId: "session-1",
+      messages,
+      sessionStatus: "working",
+      loading: false,
+      workspaceKind,
+    });
     expect(html).toContain('data-message-id="message-1"');
     expect(html).not.toContain("chat-item-enter");
   } finally {
@@ -374,6 +370,7 @@ it.each(["needs_response", "needs_plan_response"] as const)(
           QueryClientProvider,
           { client },
           createElement(SessionProvider, {
+            sessionId: part.sessionId,
             sessionStatus,
             subagentMessages: new Map(),
             children: chat,

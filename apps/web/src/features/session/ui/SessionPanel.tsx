@@ -230,6 +230,7 @@ export function SessionPanel({
 
   const body = (
     <SessionProvider
+      sessionId={sessionId}
       sessionStatus={effectiveSessionStatus}
       workspaceId={workspaceId ?? null}
       workspacePath={workspacePath}
@@ -253,7 +254,7 @@ export function SessionPanel({
         hasOlder={hasOlder}
         loadingOlder={loadOlderMutation.isPending}
         onLoadOlder={handleLoadOlder}
-        onRetryInNewChat={onOpenNewTab}
+        onNewChat={onOpenNewTab}
         workspaceRepoName={workspaceRepoName}
         workspaceParentBranch={workspaceParentBranch}
         workspaceStart={workspaceStart}

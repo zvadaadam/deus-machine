@@ -227,6 +227,7 @@ describe("a card's line counts", () => {
     });
     const html = renderToStaticMarkup(
       createElement(SessionProvider, {
+        sessionId: read.sessionId,
         sessionStatus: "idle",
         subagentMessages: new Map(),
         children: createElement(ToolPartBlock, { part: read }),
@@ -241,6 +242,7 @@ describe("a card's line counts", () => {
   it("shows +3 for a three-line write ending in a newline", () => {
     const html = renderToStaticMarkup(
       createElement(SessionProvider, {
+        sessionId: "s1",
         sessionStatus: "idle",
         subagentMessages: new Map(),
         children: createElement(WriteToolRenderer, {

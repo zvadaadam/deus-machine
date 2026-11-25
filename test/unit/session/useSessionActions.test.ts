@@ -168,7 +168,7 @@ describe("Stop delivery", () => {
   });
 });
 
-describe("backend prompt delivery", () => {
+describe("prompt delivery", () => {
   beforeEach(() => {
     storageForLocalSession();
   });
@@ -315,34 +315,69 @@ describe("backend prompt delivery", () => {
     expect(state.call).not.toHaveBeenCalled();
   });
 
+  it("restores an offline hosted chat to idle when its direct channel is missing", async () => {
+    const { useSendMessage } = await import("@/features/session/api/session.queries");
+    const client = state.queryClient!;
+    vi.stubEnv("VITE_CLOUD_DIRECT", "1");
+    state.isConnected.mockReturnValue(false);
+    client.setQueryData<Session>(queryKeys.sessions.detail(SESSION), (row) => ({
+      ...row!,
+      workspace_kind: "cloud",
+      provider_session_id: "provider-session",
+    }));
+    const key = queryKeys.workspaces.byRepo("active");
+    const idle = [{ workspaces: [workspaceWithStatus("idle")] }];
+    client.setQueryData(key, idle);
+    await expect(useSendMessage().mutateAsync(prompt)).rejects.toThrow(
+      "The cloud connection isn't ready yet"
+    );
+    expect(client.getQueryData(key)).toEqual(idle);
+    expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    expect(state.call).not.toHaveBeenCalled();
+  });
+
   it.each([
-    { stage: "connect", failure: new RuntimeError("unavailable", "Host offline"), notices: 1 },
+    {
+      stage: "connect",
+      failure: new RuntimeError("unavailable", "Host offline"),
+      serverStatus: "error",
+      notices: 1,
+    },
     {
       stage: "call",
       failure: new RuntimeError("unknown-outcome", "Acknowledgment lost"),
+      serverStatus: "working",
       notices: 1,
     },
-    { stage: "call", failure: new OpError("Agent server is disconnected"), notices: 0 },
+    {
+      stage: "call",
+      failure: new OpError("Agent server is disconnected"),
+      serverStatus: null,
+      notices: 0,
+    },
   ] as const)(
-    "preserves newer workspace lists and reports connection trouble by kind ($failure.kind)",
-    async ({ stage, failure, notices }) => {
+    "reconciles the sidebar and reports connection trouble by kind ($failure.kind)",
+    async ({ stage, failure, serverStatus, notices }) => {
       const { useSendMessage } = await import("@/features/session/api/session.queries");
       const client = state.queryClient!;
       const active = queryKeys.workspaces.byRepo("active");
       const archived = queryKeys.workspaces.byRepo("archived");
-      client.setQueryData(active, [{ repo_id: "r1", workspaces: [workspaceWithStatus("idle")] }]);
+      const initial = [{ repo_id: "r1", workspaces: [workspaceWithStatus("idle")] }];
+      client.setQueryData(active, initial);
       client.setQueryData(archived, []);
-      const status = stage === "connect" ? "error" : "working";
-      const updated = [
-        { repo_id: "r1", workspaces: [workspaceWithStatus(status), { id: "another-workspace" }] },
+      const updated = serverStatus && [
+        {
+          repo_id: "r1",
+          workspaces: [workspaceWithStatus(serverStatus), { id: "another-workspace" }],
+        },
       ];
       state.isConnected.mockReturnValue(stage === "call");
       state[stage].mockImplementationOnce(() => {
-        client.setQueryData(active, updated);
+        if (updated) client.setQueryData(active, updated);
         throw failure;
       });
       await expect(useSendMessage().mutateAsync(prompt)).rejects.toBe(failure);
-      expect(client.getQueryData(active)).toEqual(updated);
+      expect(client.getQueryData(active)).toEqual(updated ?? initial);
       expect(client.getQueryState(active)?.isInvalidated).toBe(true);
       expect(client.getQueryState(archived)?.isInvalidated).toBe(true);
       expect(state.call).toHaveBeenCalledTimes(stage === "call" ? 1 : 0);

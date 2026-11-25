@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import type { AgentAuthAnswer, HarnessCliProgress } from "@shared/agent-auth";
 import { api } from "@shared/api";
 import { call } from "@/platform/ws";
+import { getAgentLabel } from "@/shared/agents";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useStream } from "@/shared/hooks/useStream";
 import { queryKeys } from "@/shared/api/queryKeys";
@@ -98,7 +99,10 @@ export function useAgentAuthEvents(): void {
       );
       if (progress.phase === "ready") readLoginAndModels();
       if (progress.phase === "failed") {
-        toast.error(progress.error?.trim() || "The install failed.");
+        const reason = progress.error?.trim() || "The install failed.";
+        toast.error(`Couldn’t install ${getAgentLabel(progress.harness)}: ${reason}`, {
+          id: `cli-install-${progress.harness}`,
+        });
         void readAgain(queryKeys.settings.agentAuth);
       }
     },

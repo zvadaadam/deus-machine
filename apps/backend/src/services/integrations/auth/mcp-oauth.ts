@@ -270,7 +270,7 @@ export function beginOAuth(input: SignInStart): Promise<string> {
 }
 
 async function startSignIn(input: SignInStart): Promise<string> {
-  await initVault();
+  await initVault("seal");
   const attempt: Attempt = {
     connectionId: input.connectionId,
     state: crypto.randomBytes(32).toString("base64url"),

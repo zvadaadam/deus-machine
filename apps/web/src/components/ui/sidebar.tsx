@@ -159,15 +159,11 @@ function SidebarProvider({
 
 function Sidebar({
   side = "left",
-  variant = "inset",
-  collapsible = "offcanvas",
   className,
   children,
   ...props
 }: React.ComponentProps<"div"> & {
   side?: "left" | "right";
-  variant?: "inset";
-  collapsible?: "offcanvas";
 }) {
   const { isMobile, state, open, hoverOpen, setHoverOpen, openMobile, setOpenMobile } =
     useSidebar();
@@ -235,9 +231,9 @@ function Sidebar({
     <div
       className="group peer text-sidebar-foreground hidden md:block"
       data-state={state}
-      data-collapsible={state === "collapsed" ? collapsible : ""}
+      data-collapsible={state === "collapsed" ? "offcanvas" : ""}
       data-hover-reveal={hoverOpen ? "true" : "false"}
-      data-variant={variant}
+      data-variant="inset"
       data-side={side}
       data-slot="sidebar"
     >

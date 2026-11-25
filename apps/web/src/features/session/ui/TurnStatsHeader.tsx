@@ -50,7 +50,7 @@ export const TurnStatsHeader = memo(function TurnStatsHeader({
   streaming: boolean;
 }) {
   // A closed work row in saved history needs its presence handler only after the first opening.
-  const [expanded, toggle] = useTranscriptFold(parts[0]?.sessionId, "activity", rowId);
+  const [expanded, toggle, wasToggled] = useTranscriptFold("activity", rowId);
   const [expandedOnMount] = useState(expanded);
   const id = useId();
   return (
@@ -58,10 +58,10 @@ export const TurnStatsHeader = memo(function TurnStatsHeader({
       <ActivityButton
         controls={id}
         label={activityLabel(parts, streaming)}
-        expanded={!!expanded}
+        expanded={expanded}
         onToggle={toggle}
       />
-      {expanded !== undefined && (
+      {wasToggled && (
         <AnimatePresence initial={!expandedOnMount}>
           {expanded && (
             <Collapse

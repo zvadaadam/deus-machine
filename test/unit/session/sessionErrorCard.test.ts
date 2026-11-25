@@ -19,7 +19,7 @@ const render = (code: unknown, message: unknown) => {
       message: refusal.message,
       category: refusal.category,
       agentHarness: "claude-code",
-      onRetryInNewChat: vi.fn(),
+      onNewChat: vi.fn(),
     })
   );
 };
@@ -81,24 +81,24 @@ it.each(["process_exit", "rate_limit"])("keeps a %s error in the current chat", 
       sessionId: "chat",
       message: "The agent stopped",
       category,
-      onRetryInNewChat: vi.fn(),
+      onNewChat: vi.fn(),
     })
   );
   expect(html).toContain("The agent stopped");
   expect(html).not.toMatch(/new chat|<button/i);
 });
 
-it("offers a new session for a context limit when the chat can open one", () => {
-  for (const onRetryInNewChat of [undefined, vi.fn()]) {
+it("offers New chat for a context limit when the chat can open a tab", () => {
+  for (const onNewChat of [undefined, vi.fn()]) {
     const html = renderToStaticMarkup(
       createElement(SessionErrorCard, {
         sessionId: "chat",
         message: "This conversation is full",
         category: "context_limit",
-        onRetryInNewChat,
+        onNewChat,
       })
     );
-    expect(html.includes("New session")).toBe(!!onRetryInNewChat);
+    expect(html.includes("New chat")).toBe(!!onNewChat);
   }
 });
 
@@ -115,7 +115,7 @@ describe("a usage limit", () => {
         category: "usage_limit",
         message: providerMessage,
         cloud,
-        onRetryInNewChat: vi.fn(),
+        onNewChat: vi.fn(),
       })
     );
   }

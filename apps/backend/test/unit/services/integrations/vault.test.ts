@@ -32,8 +32,15 @@ afterEach(() => {
 });
 
 describe("the vault", () => {
-  it("seals so the stored form says nothing, and opens what it sealed", async () => {
+  it("reads by default and creates a missing key only when asked to seal", async () => {
     await initVault();
+    expect(fs.existsSync(keyFile())).toBe(false);
+    await initVault("seal");
+    expect(open(seal("saved"))).toBe("saved");
+  });
+
+  it("seals so the stored form says nothing, and opens what it sealed", async () => {
+    await initVault("seal");
     const sealed = seal({ token: "sntrys_secret", nested: { n: 1 } });
     expect(sealed).not.toContain("sntrys_secret");
     expect(open(sealed)).toEqual({ token: "sntrys_secret", nested: { n: 1 } });
@@ -42,7 +49,7 @@ describe("the vault", () => {
   });
 
   it("keeps its key in a file only the user can read, and reuses it", async () => {
-    await initVault();
+    await initVault("seal");
     const sealed = seal("kept");
     expect(fs.statSync(keyFile()).mode & 0o777).toBe(0o600);
     __resetVaultKeyForTests(); // a restart
@@ -51,7 +58,7 @@ describe("the vault", () => {
   });
 
   it("a lost or changed key opens nothing instead of throwing", async () => {
-    await initVault();
+    await initVault("seal");
     const sealed = seal("gone");
     fs.rmSync(keyFile());
     __resetVaultKeyForTests();
@@ -63,7 +70,7 @@ describe("the vault", () => {
   });
 
   it("a damaged value opens nothing", async () => {
-    await initVault();
+    await initVault("seal");
     const sealed = seal("intact");
     const tampered = `${sealed.slice(0, -2)}${sealed.endsWith("A") ? "B" : "A"}A`;
     expect(open(tampered)).toBeNull();
@@ -71,7 +78,7 @@ describe("the vault", () => {
 
   it("DEUS_VAULT_KEY overrides the file", async () => {
     process.env.DEUS_VAULT_KEY = "ab".repeat(32);
-    await initVault();
+    await initVault("seal");
     const sealed = seal("env");
     expect(fs.existsSync(keyFile())).toBe(false);
     __resetVaultKeyForTests();

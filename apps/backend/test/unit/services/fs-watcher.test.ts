@@ -168,31 +168,38 @@ describe("the fileChanges subscription", () => {
       "dist/app",
       ".deus/other/src",
       "src/.deus/environment.json",
+      "src/.cache/a",
+      ".venv/lib/site-packages/pkg.py",
+      ".github/.cache/a",
     ])
       changed(name);
     vi.advanceTimersByTime(500);
     expect(frames).toHaveLength(0);
-    for (const name of [
+    const heard = [
       ".github/workflows/ci.yml",
       ".vscode/settings.json",
-      "src/.cache/a",
+      ".devcontainer/devcontainer.json",
+      ".husky/pre-commit",
+      "src/.config/tool.toml",
+      ".storybook/main.ts",
       ".deus",
       ".deus/environment.json",
       ".gitignore",
       "src/.save-tmp",
       null,
       "",
-    ]) {
+    ];
+    for (const name of heard) {
       changed(name);
       vi.advanceTimersByTime(500);
     }
-    expect(frames.map((f) => f.data)).toEqual(Array(9).fill(null));
+    expect(frames.map((f) => f.data)).toEqual(Array(heard.length).fill(null));
     for (let i = 0; i < 20; i++) {
       changed(".DS_Store");
       vi.advanceTimersByTime(10);
     }
     vi.advanceTimersByTime(499);
-    expect(frames).toHaveLength(10);
+    expect(frames).toHaveLength(heard.length + 1);
   });
 
   it.each(["dist", "literal\\node_modules\\source"])(

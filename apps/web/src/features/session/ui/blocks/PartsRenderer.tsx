@@ -32,7 +32,7 @@ export const PartsRenderer = memo(function PartsRenderer({
   const { workspacePath } = useSession();
   const id = useId();
   const worked = useRef<HTMLButtonElement>(null);
-  const [open = false, toggle] = useTranscriptFold(parts[0]?.sessionId, "worked", rowId);
+  const [open, toggle] = useTranscriptFold("worked", rowId);
   const visibleIds = bubbles && !open ? stays : null;
   const resources = useMemo(
     () =>

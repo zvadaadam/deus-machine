@@ -174,7 +174,6 @@ export function RecordingStopToolRenderer({ toolUse, toolResult, isLoading }: To
         toolUse={toolUse}
         toolResult={toolResult}
         isLoading={isLoading}
-        showContentOnError
         renderSummary={() =>
           !isLoading &&
           !toolResult?.is_error && (

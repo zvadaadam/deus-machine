@@ -118,13 +118,14 @@ export function vaultProblem(): string | null {
 let initializing: Promise<void> | null = null;
 
 /** Startup looks up the key for existing credentials. Only a connect may create it. */
-export async function initVault(mode: "read" | "seal" = "seal"): Promise<void> {
-  // A connect can arrive while startup is looking for a key that was lost.
-  if (initializing) await initializing;
+export async function initVault(mode: "read" | "seal" = "read"): Promise<void> {
+  // A queued read may start another lookup before a waiting connect resumes.
+  while (initializing) await initializing;
   if (cachedKey || blocked === "locked") return;
-  return (initializing ??= loadKey(mode).finally(() => {
+  initializing = loadKey(mode).finally(() => {
     initializing = null;
-  }));
+  });
+  return initializing;
 }
 
 async function loadKey(mode: "read" | "seal"): Promise<void> {
@@ -194,6 +195,7 @@ function encodePart(part: string | Buffer): string {
 
 /** @internal Tests swap keys between cases. */
 export function __resetVaultKeyForTests(): void {
+  initializing = null;
   cachedKey = null;
   blocked = null;
 }

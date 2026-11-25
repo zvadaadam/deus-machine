@@ -707,7 +707,7 @@ async function run() {
         );
       });
     }
-    await check("only a context limit offers to open a new session", async () => {
+    await check("only a context limit offers to open a new chat", async () => {
       const { session, workspace } = chats.order;
       await go("order");
       const card = logView.getByRole("alert");
@@ -729,7 +729,7 @@ async function run() {
       const count = () =>
         db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE workspace_id=?").get(workspace).n;
       const before = count();
-      await card.getByRole("button", { name: "New session", exact: true }).click();
+      await card.getByRole("button", { name: "New chat", exact: true }).click();
       await until("the new local chat", () => count() === before + 1);
       await page.getByRole("tab", { name: "New chat", exact: true, selected: true }).waitFor();
     });

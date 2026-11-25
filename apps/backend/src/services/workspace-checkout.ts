@@ -4,6 +4,7 @@
 import fs from "fs";
 import path from "path";
 import type { InitFetchIssue } from "@shared/enums";
+import { getErrorMessage } from "@shared/lib/errors";
 import { getDatabase } from "../lib/database";
 import { GitError, runGit } from "@shared/lib/git-process";
 import { processGroupsStopped } from "@shared/lib/process-groups";
@@ -140,10 +141,15 @@ async function refreshSource(
   const cwd = ctx.repoRootPath;
   let issue: InitFetchIssue | null = null;
   try {
-    await runGit(["remote", "get-url", "origin"], { cwd, signal });
+    await runGit(["config", "--get", "remote.origin.url"], { cwd, signal });
   } catch (error) {
     signal.throwIfAborted();
-    issue = error instanceof GitError && error.code === 2 ? "no_origin" : "failed";
+    issue = error instanceof GitError && error.code === 1 ? "no_origin" : "failed";
+    if (issue === "failed") {
+      console.warn(
+        `[WORKSPACE] Could not read origin: ${getErrorMessage(error).replace(/[\r\n]+/g, " ")}`
+      );
+    }
   }
   if (!issue) {
     try {

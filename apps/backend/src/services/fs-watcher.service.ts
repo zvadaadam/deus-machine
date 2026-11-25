@@ -5,11 +5,24 @@ import { invalidateCache } from "./files.service";
 import { publish, refuseSubscribers } from "./streams";
 
 const watchers = new Map<string, ReturnType<typeof startWatch>>();
+const watchedDotFolders = new Set([
+  ".github",
+  ".vscode",
+  ".devcontainer",
+  ".husky",
+  ".config",
+  ".storybook",
+]);
+const ignoredFolders = new Set(["node_modules", "target", "dist", "build"]);
 
 function ignored(filename: string | null): boolean {
   if (!filename || filename === ".deus/environment.json") return false;
   // Ignore descendants only. The leaf can be a regular file or an editor's hidden temporary file.
-  return /(^|\/)(?:\.git|\.deus|node_modules|target|dist|build)\//.test(filename);
+  const folders = filename.split("/");
+  folders.pop();
+  return folders.some((folder) =>
+    folder.startsWith(".") ? !watchedDotFolders.has(folder) : ignoredFolders.has(folder)
+  );
 }
 
 export function canWatchWorkspace(): boolean {

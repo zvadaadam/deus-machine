@@ -67,7 +67,7 @@ interface SessionErrorCardProps {
   category?: string;
   agentHarness?: string | null;
   cloud?: boolean;
-  onRetryInNewChat?: () => void;
+  onNewChat?: () => void;
 }
 
 export function SessionErrorCard({
@@ -76,7 +76,7 @@ export function SessionErrorCard({
   category,
   agentHarness,
   cloud,
-  onRetryInNewChat,
+  onNewChat,
 }: SessionErrorCardProps) {
   const title = match(category)
     .with("auth", () => "Authentication Error")
@@ -98,11 +98,11 @@ export function SessionErrorCard({
     action = harness ? <LoginAction harness={harness} /> : <AIProvidersButton />;
   } else if (category === "auth" || category === PROVIDER_ACCOUNT_CATEGORY) {
     action = <AIProvidersButton />;
-  } else if (category === "context_limit" && onRetryInNewChat) {
+  } else if (category === "context_limit" && onNewChat) {
     action = (
-      <Button variant="outline" size="xs" onClick={() => onRetryInNewChat()}>
+      <Button variant="outline" size="xs" onClick={() => onNewChat()}>
         <MessageSquarePlus className="mr-1.5 size-3.5" />
-        New session
+        New chat
       </Button>
     );
   }

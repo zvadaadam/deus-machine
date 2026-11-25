@@ -320,7 +320,7 @@ export function useSendMessage() {
       }
       if (optimistic) {
         dropOptimisticMessage(queryClient, sessionId, optimistic.turnId);
-        if (kind === "unavailable" && optimistic.previousStatus)
+        if (kind !== "unknown-outcome" && optimistic.previousStatus)
           patchWorkspaceSessionStatus(queryClient, sessionId, optimistic.previousStatus, "working");
       }
       void queryClient.invalidateQueries({ queryKey: ["workspaces", "by-repo"] });
