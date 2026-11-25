@@ -593,6 +593,8 @@ describe("stopping the current turn", () => {
 
   it("can retry the original send id after a refused start returns its steer", async () => {
     await refuseStartWithKeptSteer();
+    expect(wireTurnId()).toBeUndefined();
+    expect(lastTurn(sessionId)).toBeUndefined();
     expect(await queue()).toMatchObject({ items: [waitingRow("follow-up")] });
     expect((await run(api.messages, { sessionId })).turns).toEqual([]);
     await expect(send("A")).resolves.toEqual({ turnId: "A" });
@@ -614,13 +616,11 @@ describe("stopping the current turn", () => {
     expect(engine.cancelTurn).not.toHaveBeenCalled();
   });
 
-  it.fails("reports a kept steer when the start is refused before any event", async () => {
-    await refuseStartWithKeptSteer();
-    expect(wireTurnId()).toBeUndefined();
-    expect(lastTurn(sessionId)).toBeUndefined();
-    expect((await run(api.messages, { sessionId })).turns).toEqual([]);
-    expect(await queue()).toMatchObject({ items: [waitingRow("follow-up")] });
-    expect(await fact("A")).toMatchObject({ state: "ended", steers: { "follow-up": "queued" } });
+  describe("a start refused before any event", () => {
+    beforeEach(refuseStartWithKeptSteer);
+    it.fails("reports the kept steer in turn()", async () => {
+      expect(await fact("A")).toMatchObject({ state: "ended", steers: { "follow-up": "queued" } });
+    });
   });
 
   it("O4: A's lost start reply leaves B working in app setup and stoppable", async () => {
