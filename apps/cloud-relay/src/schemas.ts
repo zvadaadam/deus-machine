@@ -3,41 +3,29 @@
 
 import { z } from "zod";
 
-// pair_response has a secondary discriminator on `success` — Zod v3's
-// discriminatedUnion only supports one discriminator key, so we validate
-// the pair_response shape with a union + superRefine on the outer schema.
-const pairResponseSchema = z
-  .object({
-    type: z.literal("pair_response"),
-    pairId: z.string(),
-    success: z.boolean(),
-    deviceToken: z.string().optional(),
-    reason: z.string().optional(),
-  })
-  .superRefine((f, ctx) => {
-    if (f.success && !f.deviceToken) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "deviceToken is required when success is true",
-        path: ["deviceToken"],
-      });
-    }
-    if (!f.success && !f.reason) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "reason is required when success is false",
-        path: ["reason"],
-      });
-    }
-  });
+export const FILE_SEGMENT = /^[A-Za-z0-9_-]{22}$/;
+const streamId = z.number().int().min(0).max(0xffff_ffff);
 
-// Top-level schema: discriminatedUnion on "type" for all frame types except
-// pair_response (which needs the extra refinement). We use z.union to combine
-// the discriminatedUnion with the refined pair_response schema.
+// Pairing has a second discriminator: success requires a token, failure requires a reason.
+const pairResponse = z.object({ type: z.literal("pair_response"), pairId: z.string() });
+const pairResponseSchema = z.discriminatedUnion("success", [
+  pairResponse.extend({
+    success: z.literal(true),
+    deviceToken: z.string().min(1),
+    reason: z.string().optional(),
+  }),
+  pairResponse.extend({
+    success: z.literal(false),
+    deviceToken: z.string().optional(),
+    reason: z.string().min(1),
+  }),
+]);
+
 const baseFrameSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("register"),
     serverName: z.string().max(200).optional(),
+    routeKey: z.string().regex(FILE_SEGMENT).optional(),
   }),
   z.object({
     type: z.literal("data"),
@@ -50,6 +38,13 @@ const baseFrameSchema = z.discriminatedUnion("type", [
     allowed: z.boolean(),
     reason: z.string().optional(),
   }),
+  z.object({
+    type: z.literal("file_head"),
+    streamId,
+    status: z.number().int(),
+    headers: z.record(z.string()),
+  }),
+  z.object({ type: z.literal("file_end"), streamId, error: z.string().optional() }),
   z.object({ type: z.literal("pong") }),
 ]);
 

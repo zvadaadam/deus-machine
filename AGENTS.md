@@ -465,6 +465,10 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   `pair_request`. It has no public status route and holds no minting key.
   The relay keeps no viewer credential and closes every viewer when a new host
   tunnel registers, so interactive clients dial again with a fresh ticket.
+  A file request without the route key still wakes that computer's relay object,
+  so a large enough flood can slow its chat. Checking the key at the edge would
+  need a secret in the relay, which holds none. A device that was once paired
+  keeps the route key until the Mac restarts.
 - **The Mac** approves each device once (pairing code, or the QR link
   `/s/<machine>#pair=CODE`, whose fragment never reaches a server) and binds the
   grant to the relay-verified account and this machine id

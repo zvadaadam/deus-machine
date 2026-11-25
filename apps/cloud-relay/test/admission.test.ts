@@ -167,7 +167,11 @@ describe("Worker admission", () => {
         },
         env
       );
-    return { request, forwarded };
+    return {
+      request,
+      forwarded,
+      file: (path: string, init?: RequestInit) => app.request(path, init, env),
+    };
   }
 
   it("forwards a verified ticket's binding and overwrites a forged one", async () => {
@@ -203,6 +207,48 @@ describe("Worker admission", () => {
       (await request(`/api/servers/${MACHINE}/tunnel`, `${RELAY_PROTOCOL}, ${client}`)).status
     ).toBe(403);
     expect((await request(`/api/servers/short/connect`)).status).toBe(400);
+    expect(forwarded).toHaveLength(0);
+  });
+
+  it("routes file GET and HEAD with only Range", async () => {
+    const { file, forwarded } = await worker();
+    const key = "K".repeat(22),
+      handle = "_".repeat(22);
+    for (const method of ["GET", "HEAD"]) {
+      const response = await file(`/api/servers/${MACHINE}/files/${key}/${handle}?extra=1`, {
+        method,
+        headers: { range: "bytes=3-4", authorization: "test", "x-deus-relay-admission": "test" },
+      });
+      expect(response.status).toBe(200);
+      const sent = forwarded.at(-1)!;
+      expect(sent.method).toBe(method);
+      expect(new URL(sent.url).pathname).toBe(`/files/${key}/${handle}`);
+      expect(new URL(sent.url).search).toBe("");
+      expect([...sent.headers]).toEqual([["range", "bytes=3-4"]]);
+    }
+  });
+
+  it("gives malformed file routes and wrong methods the same 404 without looking up the object", async () => {
+    const { file, forwarded } = await worker();
+    const part = "-".repeat(22);
+    for (const [method, path] of [
+      ["GET", `bad/files/${part}/${part}`],
+      ["GET", `${MACHINE}/files`],
+      ["GET", `${MACHINE}/files/${part}`],
+      ["GET", `${MACHINE}/files/short/${part}`],
+      ["GET", `${MACHINE}/files/${part}/${part}x`],
+      ["GET", `${MACHINE}/files/${part}/${part}/extra`],
+      ["POST", `${MACHINE}/files/${part}/${part}`],
+    ]) {
+      const res = await file(`/api/servers/${path}`, { method });
+      expect(res.status).toBe(404);
+      expect([...res.headers]).toEqual([
+        ["cache-control", "private"],
+        ["referrer-policy", "no-referrer"],
+        ["x-content-type-options", "nosniff"],
+      ]);
+      expect(await res.text()).toBe("");
+    }
     expect(forwarded).toHaveLength(0);
   });
 
