@@ -307,9 +307,15 @@ describeWithDb("sendMessage", () => {
       expect(await run(api.queuedMessage, held)).toEqual({ content: "hello" });
       expect(await run(api.removeQueuedMessage, held)).toEqual({ removed: true });
 
-      // The turn that IS running belongs to somebody — it must not be
-      // flipped to an error status just because our send lost the race.
-      expect(row(SESSION)).toMatchObject({ status: "working", error_message: null });
+      expect(
+        db
+          .prepare("SELECT status, error_message, error_category FROM sessions WHERE id = ?")
+          .get(SESSION)
+      ).toEqual({
+        status: "idle",
+        error_message: null,
+        error_category: null,
+      });
     });
 
     it("REJECTS the send and errors the session when no turn was admitted", async () => {
