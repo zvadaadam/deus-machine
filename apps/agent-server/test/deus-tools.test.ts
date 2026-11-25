@@ -52,14 +52,30 @@ describe("deusTools", () => {
   it("is one source the engine gives every harness, its arguments described in JSON Schema", async () => {
     expect(server.name).toBe(DEUS_TOOLS_SERVER);
     const diff = server.tools.find((tool) => tool.name === "GetWorkspaceDiff")!;
+    expect(diff.description).toContain("path relative to the workspace, such as `src/index.ts`");
     expect(diff.inputSchema).toMatchObject({
       type: "object",
       properties: {
-        file: { type: "string", description: expect.stringContaining("relative to the workspace") },
+        file: {
+          type: "string",
+          description: expect.stringMatching(/relative to the workspace.*`src\/index\.ts`/),
+        },
         stat: { type: "boolean" },
       },
     });
     expect(diff.inputSchema).not.toHaveProperty("$schema");
+    const diffComment = server.tools.find((tool) => tool.name === "DiffComment")!;
+    expect(diffComment.inputSchema).toMatchObject({
+      properties: {
+        comments: {
+          items: {
+            properties: {
+              file: { type: "string", description: expect.stringContaining("Workspace-relative") },
+            },
+          },
+        },
+      },
+    });
     // A call's arguments are checked before the tool runs.
     await expect(
       getRegisteredTools(server).GetWorkspaceDiff.handler({ stat: "yes" })
