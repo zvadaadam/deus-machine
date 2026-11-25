@@ -49,6 +49,115 @@ afterEach(() => {
 });
 
 describe("network faults", () => {
+  it("wakes a waiting retry immediately and starts backoff over if that dial fails", async () => {
+    const f = fixture();
+    f.client.wake();
+    expect(f.sockets).toHaveLength(0);
+    await online(f);
+    f.socket.close(1006);
+    await vi.advanceTimersByTimeAsync(20);
+    f.socket.close(1006); // The next retry would wait 40 ms.
+    f.client.wake();
+    f.client.wake();
+    expect(f.sockets).toHaveLength(3);
+    await Promise.resolve();
+    f.socket.close(1006);
+    await vi.advanceTimersByTimeAsync(19);
+    expect(f.sockets).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(f.sockets).toHaveLength(4);
+    await vi.advanceTimersByTimeAsync(20);
+    expect(f.sockets).toHaveLength(4);
+  });
+
+  it("preserves a handshake started by an offline listener when the viewer wakes", async () => {
+    const dials: Array<(socket: Socket) => void> = [];
+    const f = fixture({ open: () => new Promise<Socket>((resolve) => dials.push(resolve)) });
+    const ready = f.client.connect();
+    const original = new Socket();
+    dials[0](original);
+    await Promise.resolve();
+    original.open();
+    original.message({ type: "connected" });
+    await ready;
+
+    const outcome = vi.fn();
+    const stop = f.client.onStateChange((state) => {
+      if (state === "offline") void f.client.connect().then(() => outcome("connected"), outcome);
+    });
+    original.close(1006);
+    stop();
+    expect(dials).toHaveLength(2);
+    f.client.wake();
+    await vi.advanceTimersByTimeAsync(20);
+    expect(dials).toHaveLength(2);
+    const replacement = new Socket();
+    dials[1](replacement);
+    await Promise.resolve();
+    replacement.open();
+    replacement.message({ type: "connected" });
+    await Promise.resolve();
+    expect(outcome).toHaveBeenCalledExactlyOnceWith("connected");
+  });
+
+  it("redials at the base delay after the relay reports that the host is away", async () => {
+    const f = fixture();
+    await online(f);
+    for (const delay of [20, 40]) {
+      f.socket.close(1013);
+      await vi.advanceTimersByTimeAsync(delay);
+      f.socket.open();
+    }
+    f.socket.message({ type: "server_reconnecting" });
+    f.socket.close(1012);
+    await vi.advanceTimersByTimeAsync(19);
+    expect(f.sockets).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(f.sockets).toHaveLength(4);
+  });
+
+  it("probes a healthy connection on wake while its sent write waits for the answer", async () => {
+    const f = fixture();
+    await online(f);
+    const write = f.client.sendMutate("create", {});
+    const [{ id }] = f.socket.frames("q:mutate");
+    f.client.wake();
+    const probes = f.socket.frames("ping");
+    f.socket.message({ type: "pong", id: probes[0]?.id });
+    await vi.advanceTimersByTimeAsync(50);
+    f.socket.message({ type: "q:mutate_result", id, success: true, data: "created" });
+    await expect(write).resolves.toMatchObject({ success: true, data: "created" });
+    expect(probes).toHaveLength(1);
+    expect(f.sockets).toHaveLength(1);
+  });
+
+  it("keeps one probe when two wakes arrive just before the scheduled heartbeat", async () => {
+    const f = fixture();
+    await online(f);
+    await vi.advanceTimersByTimeAsync(99);
+    f.client.wake();
+    f.client.wake();
+    expect(f.socket.frames("ping")).toHaveLength(1);
+    f.socket.message({ type: "pong", id: f.socket.frames("ping")[0].id });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(f.socket.frames("ping")).toHaveLength(1);
+  });
+
+  it("redials a silent connection after the wake probe times out", async () => {
+    const f = fixture();
+    await online(f);
+    f.client.wake();
+    await vi.advanceTimersByTimeAsync(49);
+    expect(f.client.isConnected()).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(f.socket.readyState).toBe(3);
+    await vi.advanceTimersByTimeAsync(20);
+    expect(f.sockets).toHaveLength(2);
+    f.socket.open();
+    f.socket.message({ type: "connected" });
+    expect(f.client.isConnected()).toBe(true);
+  });
+
   it("detects a silent open socket, retains stale data, restores reads and never replays a write", async () => {
     const f = fixture();
     f.client.retainQuery("rows", {}, ["rows"]);
