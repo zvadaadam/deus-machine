@@ -88,6 +88,17 @@ describe("getShellEnvironment", () => {
     expect(first).toBe(second); // Same reference
   });
 
+  it("caches an empty environment when the login shell fails", async () => {
+    mockExecFileSync.mockImplementationOnce(() => {
+      throw Object.assign(new Error("shell timed out"), { signal: "SIGKILL" });
+    });
+
+    const { getShellEnvironment } = await importFresh();
+    expect(getShellEnvironment()).toEqual({});
+    expect(getShellEnvironment()).toEqual({});
+    expect(mockExecFileSync).toHaveBeenCalledTimes(1);
+  });
+
   it("handles empty environment section", async () => {
     mockExecFileSync.mockReturnValue("_SHELL_ENV_DELIMITER__SHELL_ENV_DELIMITER_");
 

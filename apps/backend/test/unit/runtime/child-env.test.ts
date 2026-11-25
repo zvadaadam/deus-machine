@@ -18,6 +18,8 @@ describe("backend child process environment", () => {
     process.env.NODE_PATH =
       "/Applications/Deus.app/Contents/Resources/app.asar.unpacked/node_modules";
     process.env.DATABASE_PATH = "/tmp/deus.db";
+    process.env.DEUS_DEV_ROOT = "/tmp/checkout";
+    process.env.NODE_ENV = "production";
     process.env.PORT = "1234";
     process.env.PATH = "/Applications/Deus.app/Contents/Resources/bin:/usr/bin:/bin";
 
@@ -38,6 +40,8 @@ describe("backend child process environment", () => {
     expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined();
     expect(env.NODE_PATH).toBeUndefined();
     expect(env.DATABASE_PATH).toBeUndefined();
+    expect(env.DEUS_DEV_ROOT).toBeUndefined();
+    expect(env.NODE_ENV).toBeUndefined();
     expect(env.PORT).toBeUndefined();
   });
 });

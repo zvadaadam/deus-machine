@@ -1,4 +1,7 @@
 import { EventEmitter } from "node:events";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { workspaceLink } from "@shared/workspace-link";
 
@@ -6,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   events: new Map<string, (...args: unknown[]) => void>(),
   windows: [] as MockWindow[],
   packaged: true,
+  getAppPath: vi.fn(),
   hidden: false,
   focusApp: vi.fn(),
   ready: vi.fn(),
@@ -59,6 +63,7 @@ vi.mock("electron", () => ({
     get isPackaged() {
       return mocks.packaged;
     },
+    getAppPath: mocks.getAppPath,
     setAsDefaultProtocolClient: mocks.setAsDefaultProtocolClient,
     setPath: vi.fn(),
     requestSingleInstanceLock: () => true,
@@ -163,6 +168,23 @@ function pendingBackend() {
   return { fail: (message: string) => reject(new Error(message)) };
 }
 
+it("creates and uses the checkout data directory on a first dev launch", async () => {
+  const checkout = mkdtempSync(join(tmpdir(), "deus-desktop-data-"));
+  vi.stubEnv("DEUS_USER_DATA_DIR", undefined);
+  mocks.packaged = false;
+  mocks.getAppPath.mockReturnValue(checkout);
+  mocks.spawn.mockResolvedValue({ port: 1421 });
+  try {
+    const { app } = await import("electron");
+    await import("../../../apps/desktop/main/index");
+    const dataDir = join(checkout, ".deus-dev");
+    expect(existsSync(dataDir)).toBe(true);
+    expect(app.setPath).toHaveBeenCalledWith("userData", dataDir);
+  } finally {
+    rmSync(checkout, { recursive: true, force: true });
+  }
+});
+
 it("shows no failure when a Quit stops the backend while it is starting", async () => {
   const backend = pendingBackend();
   await import("../../../apps/desktop/main/index");
@@ -185,6 +207,19 @@ it("still reports a backend that fails to start on its own", async () => {
   await vi.waitFor(() =>
     expect(mocks.showMessageBox).toHaveBeenCalledWith(
       expect.objectContaining({ message: "Failed to Start" })
+    )
+  );
+});
+
+it("asks the person to retry when the database is still owned", async () => {
+  const { DatabaseInUseError } = await import("@shared/runtime");
+  mocks.spawn.mockRejectedValue(new DatabaseInUseError("/fixture/deus.db"));
+  await import("../../../apps/desktop/main/index");
+  await vi.waitFor(() =>
+    expect(mocks.showMessageBox).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Another Deus is using this data (still closing, or the deus CLI). Try again.",
+      })
     )
   );
 });
