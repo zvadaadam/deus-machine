@@ -162,7 +162,7 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
     const interrupted = !refused || !!error || !!turn.stops?.size;
     const kept = turnNotices.recover?.(id, turnId, interrupted);
     const cause = type === "cancelled" ? "cancelled" : undefined;
-    if (!by && (!refused || kept?.length)) {
+    if (!by && !refused) {
       const saved = persistTurn(id, {
         turnId,
         endedAt: Date.now(),
