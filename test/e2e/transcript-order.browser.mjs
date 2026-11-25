@@ -640,6 +640,28 @@ async function run() {
           false,
           "folding a settled turn at the bottom should not pause auto-scroll"
         );
+        // Gentle 1px upward scroll ticks after idle must still accumulate and pause follow.
+        await page.waitForTimeout(250);
+        await logView.evaluate((pane) => {
+          for (let i = 0; i < 40; i++) {
+            pane.scrollTop = Math.max(0, pane.scrollTop - 1);
+            pane.dispatchEvent(new Event("scroll"));
+          }
+        });
+        await page.waitForFunction(() =>
+          globalThis.document
+            .querySelector('button[aria-label="Scroll to bottom"]')
+            .parentElement.classList.contains("opacity-100")
+        );
+        await logView.evaluate((pane) => {
+          pane.scrollTop = pane.scrollHeight;
+        });
+        await page.waitForFunction(
+          () =>
+            !globalThis.document
+              .querySelector('button[aria-label="Scroll to bottom"]')
+              .parentElement.classList.contains("opacity-100")
+        );
       }
     );
     for (const harness of ["codex-app-server", "claude-code"]) {

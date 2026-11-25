@@ -245,17 +245,25 @@ export function useAutoScroll({
     let recheck: ReturnType<typeof setTimeout>;
     const handleScroll = () => {
       clearTimeout(recheck);
+      const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+      if (lastScrollTopRef.current > maxScrollTop) {
+        lastScrollTopRef.current = maxScrollTop;
+      }
       const currentScrollTop = container.scrollTop;
       const movedUp = currentScrollTop < lastScrollTopRef.current - 2;
-      lastScrollTopRef.current = currentScrollTop;
+      if (currentScrollTop > lastScrollTopRef.current) {
+        lastScrollTopRef.current = currentScrollTop;
+      }
 
       if (!isPausedRef.current) {
         // Chase loop may have self-stopped (idle at bottom). If the user
         // then scrolls upward away from bottom, pause NOW — otherwise the
         // next update would yank them back. Require an actual upward move
-        // so content growing below the fold never triggers a false pause.
+        // (accumulated against the baseline so 1px trackpad ticks still trip
+        // it) so content growing below the fold never triggers a false pause.
         if (chaseRafRef.current === null && movedUp && !isAtBottom(container)) {
           log("scroll listener: chase idle + scrolled up → PAUSE");
+          lastScrollTopRef.current = currentScrollTop;
           isPausedRef.current = true;
           pausedAtRef.current = Date.now();
           setShowScrollButton(true);

@@ -59,9 +59,20 @@ connection state and navigation to the three setup owners; it has no duplicate c
 
 `DS/TurnStatsHeader` now summarizes **Activity**, not SDK message boundaries. The chat in
 `DS/SessionPanel` shows the default collapsed activity state. Expanding reveals tools and
-reasoning and stays open through completion and the next turn. Answer text, failed tools,
-questions, plans, and media stay visible outside it. `AssistantTurn.tsx` and nested
-`PartsRenderer.tsx` share `PartBlock.tsx`; turn details and provider attribution are unchanged.
+reasoning and stays open through completion and the next turn. Answer text, questions,
+plans, and media stay visible outside it; ordinary failed tools remain grouped inside
+Activity. `AssistantTurn.tsx` and nested `PartsRenderer.tsx` share `PartBlock.tsx`; turn
+details and provider attribution are unchanged.
+
+#### Pending `deus.pen` sync (PR #453)
+
+- `DS/UserBubble` (`Ntvyq`) and bubble surface variables (`--user-bubble`,
+  `--user-bubble-top`, `--user-bubble-border`, `--agent-bubble` in `apps/web/src/global.css`):
+  code now renders user bubbles with a subtle bottom-to-top cool-rose gradient
+  (`--user-bubble` → `--user-bubble-top`) and a 13% `--primary` inset ring, and agent
+  bubbles with `--agent-bubble` (`#171717` dark / `#ececea` light). `design/deus.pen`
+  was not edited here (Pencil MCP unavailable in this session) and still carries the
+  flat `#1A1A1A` fill on `DS/UserBubble`.
 
 #### PR #383 canvas review (September 14)
 
