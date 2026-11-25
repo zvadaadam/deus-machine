@@ -7,7 +7,7 @@ import { ArrowUp, FolderGit2, FolderOpen, GitBranch } from "lucide-react";
 import { capabilities } from "@/platform/capabilities";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { cn } from "@/shared/lib/utils";
-import { useSessionComposer } from "@/features/session/hooks/useSessionComposer";
+import { useHomeComposer } from "@/features/session/hooks/useSessionComposer";
 import {
   extractImagesFromClipboard,
   buildMessageContent,
@@ -136,7 +136,7 @@ export function HomeView({
     missingPastedTexts,
     dismissMissingAttachments,
     clearSent,
-  } = useSessionComposer(HOME_COMPOSER_ID);
+  } = useHomeComposer();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 

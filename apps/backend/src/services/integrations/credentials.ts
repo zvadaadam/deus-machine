@@ -18,7 +18,7 @@ import { cloudServer } from "./auth/cloud-accounts";
 import { oauthAccessToken } from "./auth/mcp-oauth";
 import { integrationsChanged } from "./events";
 import { readCredential, updateConnection, type ConnectionRow } from "./store";
-import { vaultProblem } from "./vault";
+import { initVault, vaultProblem } from "./vault";
 
 /** What the vault holds for a `secret` connection: a pasted key, or a local server's variables. */
 export interface SecretCredential {
@@ -127,7 +127,8 @@ export async function credentialsFor(
           ? { ok: true, headers: { Authorization: `Bearer ${token}` }, env: {} }
           : { ok: false, reason: "The GitHub CLI is not signed in (gh auth login)", reauth: true };
       })
-      .with("secret", (): Credentials => {
+      .with("secret", async (): Promise<Credentials> => {
+        await initVault("read");
         const credential = readCredential<SecretCredential>(connection.id);
         if (!credential) {
           const problem = vaultProblem();

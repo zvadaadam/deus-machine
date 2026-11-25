@@ -4,6 +4,7 @@ import { AnimatePresence } from "framer-motion";
 import { Collapse } from "@/components/ui/collapse";
 import { cn } from "@/shared/lib/utils";
 import type { Part } from "@shared/protocol-types";
+import { useTranscriptFold } from "../lib/openChat";
 import { PartBlock } from "./blocks/PartBlock";
 import { activityLabel } from "./utils/activityLabel";
 
@@ -40,25 +41,28 @@ export function ActivityButton({
 }
 
 export const TurnStatsHeader = memo(function TurnStatsHeader({
+  rowId,
   parts,
   streaming,
 }: {
+  rowId: string;
   parts: Part[];
   streaming: boolean;
 }) {
   // A closed work row in saved history needs its presence handler only after the first opening.
-  const [expanded, setExpanded] = useState<boolean>();
+  const [expanded, toggle, wasToggled] = useTranscriptFold("activity", rowId);
+  const [expandedOnMount] = useState(expanded);
   const id = useId();
   return (
     <>
       <ActivityButton
         controls={id}
         label={activityLabel(parts, streaming)}
-        expanded={!!expanded}
-        onToggle={() => setExpanded(!expanded)}
+        expanded={expanded}
+        onToggle={toggle}
       />
-      {expanded !== undefined && (
-        <AnimatePresence>
+      {wasToggled && (
+        <AnimatePresence initial={!expandedOnMount}>
           {expanded && (
             <Collapse
               id={id}

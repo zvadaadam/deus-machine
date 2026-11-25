@@ -1601,7 +1601,8 @@ WSS  api.deusmachine.ai/sessions/:providerId/ws?v=…&amp;token=…</code></pre>
             <strong>caller mints the turnId</strong> (the correlation key exists before anything is
             sent), the wire carries <strong>no credentials ever</strong> (agnt resolves them at
             dispatch), and the user's message converges from
-            <strong>three producers onto one row</strong> by derived id.
+            <strong>three producers onto one row</strong> by derived id. This walkthrough predates
+            the removal of <code>SendRejectedError</code> and <code>rollbackSendStatus</code>.
           </p>
 
           <h3>Routing the mutation</h3>

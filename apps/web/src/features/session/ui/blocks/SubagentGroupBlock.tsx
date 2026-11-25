@@ -8,7 +8,7 @@
  */
 
 import { Collapse } from "@/components/ui/collapse";
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { ChevronRight, Cpu, Loader2 } from "lucide-react";
 import NumberFlow from "@number-flow/react";
 import { AnimatePresence } from "framer-motion";
@@ -19,6 +19,7 @@ import type { SubagentMetadata } from "@shared/protocol-types";
 
 import { SubagentMessageList } from "./SubagentMessageList";
 import { useSession, SessionProvider } from "../../context";
+import { useTranscriptFold } from "../../lib/openChat";
 
 interface SubagentGroupBlockProps {
   toolUse: ToolUseBlock;
@@ -34,7 +35,7 @@ export function SubagentGroupBlock({
   childMessages,
   subagent,
 }: SubagentGroupBlockProps) {
-  const { sessionStatus, workspaceId, workspacePath, cloud, subagentMessages } = useSession();
+  const session = useSession();
   // The protocol normalizes subagent metadata onto the tool part; the raw
   // tool input is the fallback for harnesses that report neither.
   const { description, prompt, subagent_type } = toolUse.input ?? {};
@@ -46,10 +47,10 @@ export function SubagentGroupBlock({
     compactAgentLabel(prompt) ||
     "Agent";
 
-  const isRunning = sessionStatus === "working" && !toolResult;
+  const isRunning = session.sessionStatus === "working" && !toolResult;
   const isError = toolResult?.is_error;
 
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, toggle] = useTranscriptFold("agent", toolUse.id);
 
   // Count tool parts across child messages
   const toolCount = useMemo(() => {
@@ -66,7 +67,7 @@ export function SubagentGroupBlock({
     <div className="flex flex-col gap-0.5">
       <button
         type="button"
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={toggle}
         className={cn(
           "group flex items-center gap-2 px-2 py-1.5 text-sm",
           "w-full cursor-pointer text-left",
@@ -132,14 +133,7 @@ export function SubagentGroupBlock({
       <AnimatePresence initial={false}>
         {isExpanded && childMessages.length > 0 && (
           <Collapse className="mt-0.5 ml-6">
-            <SessionProvider
-              sessionStatus={sessionStatus}
-              workspaceId={workspaceId}
-              workspacePath={workspacePath}
-              cloud={cloud}
-              subagentMessages={subagentMessages}
-              insideSubagent={true}
-            >
+            <SessionProvider {...session} insideSubagent>
               <SubagentMessageList messages={childMessages} />
             </SessionProvider>
           </Collapse>

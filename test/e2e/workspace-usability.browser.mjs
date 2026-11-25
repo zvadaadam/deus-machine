@@ -25,6 +25,7 @@ import { GithubCloudAccess } from "@/features/settings/ui/sections/GithubCloudAc
 import { CloudSection } from "@/features/settings/ui/sections/CloudSection";
 import { OnboardingOverlay } from "@/features/onboarding/ui/OnboardingOverlay";
 import { AssistantTurn } from "@/features/session/ui/AssistantTurn";
+import { MessageItem } from "@/features/session/ui/MessageItem";
 import { TurnFooterSlot } from "@/features/session/ui/TurnFooter";
 import { SessionComposer } from "@/features/session/ui/SessionComposer";
 import { SessionPanel } from "@/features/session/ui/SessionPanel";
@@ -117,6 +118,10 @@ function App() {
     { type: "reasoning", id: "r", text: "Check the project before changing it.", state: "done" },
     { type: "tool", id: "t", toolCallId: "t", toolName: "Bash", kind: "execute", state: { status: "completed", input: {command: "bun test"}, output: "All checks passed", title: "Run tests" } },
     { type: "text", id: "a", text: "The useful answer stays visible.", state: phase ? "done" : "streaming" },
+    { type: "tool", id: "image", toolCallId: "image", toolName: "Read", kind: "read", state: {
+      status: "completed", input: {file_path: "pixel.png"}, output: "",
+      content: [{type: "image", mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"}],
+    } },
     ...(laterTool ? [{ type: "tool", id: "t2", toolCallId: "t2", toolName: "Bash", kind: "execute", state: {status: phase ? "completed" : "in_progress", input: {command: "bun run build"}, title: "Build project", output: ""} }] : []),
   ] }];
   return <QueryClientProvider client={client}><TooltipProvider>
@@ -134,8 +139,11 @@ function App() {
         {view === "Chat" && <>
           <button onClick={() => setPhase(p => p + 1)}>Advance turn</button>
           <button onClick={() => setLaterTool(true)}>Run another tool</button>
-          <SessionProvider sessionStatus={phase === 1 ? "idle" : "working"} workspaceId="workspace" subagentMessages={new Map()}>
-            <AssistantTurn view="bubbles" messages={messages} ended={phase > 0} streaming={phase === 0} footerGroups={phase ? [messages] : undefined} progressSlot={phase === 0 ? <TurnFooterSlot>Working</TurnFooterSlot> : undefined} turn={phase ? {turnId: "turn", stopReason: "end_turn", endedAt: 1} : undefined} />
+          <SessionProvider sessionId="s" sessionStatus={phase === 1 ? "idle" : "working"} workspaceId="workspace" subagentMessages={new Map()}>
+            <MessageItem message={{id: "prompt", session_id: "s", turn_id: "turn", role: "user", seq: 0, parts: [
+              {type: "text", id: "prompt-text", text: "Please check this change. ".repeat(100), state: "done"},
+            ]}} />
+            <AssistantTurn rowId="turn:turn" view="bubbles" messages={messages} ended={phase > 0} streaming={phase === 0} footerGroups={phase ? [messages] : undefined} progressSlot={phase === 0 ? <TurnFooterSlot>Working</TurnFooterSlot> : undefined} turn={phase ? {turnId: "turn", stopReason: "end_turn", endedAt: 1} : undefined} />
           </SessionProvider>
         </>}
       </main>
@@ -492,11 +500,30 @@ try {
 
   await page.getByRole("button", { name: "Chat", exact: true }).click();
   const answer = page.getByText("The useful answer stays visible.", { exact: true });
-  const disclosure = page.getByRole("button", { name: "Expand activity, Activity · 1 tool call" });
+  const disclosure = page.getByRole("button", { name: /activity, Activity · 1 tool call/ });
   await disclosure.waitFor();
   await answer.waitFor();
-  const activityId = await disclosure.getAttribute("aria-controls");
   await disclosure.click();
+  const bash = page.getByRole("button", { name: /Bash tool details$/ });
+  const read = page.getByRole("button", { name: /Read tool details$/ });
+  const longMessage = page.getByRole("button", { name: /^Show (more|less)$/ });
+  await longMessage.click();
+  await bash.click();
+  assert.equal(await read.getAttribute("aria-expanded"), "true", "An image Read opens by default");
+  await read.click();
+  assert.equal(await read.getAttribute("aria-expanded"), "false", "Its first click closes it");
+  await page.getByRole("button", { name: "Cloud", exact: true }).click();
+  await bash.waitFor({ state: "detached" });
+  await page.getByRole("button", { name: "Chat", exact: true }).click();
+  assert.equal(await longMessage.getAttribute("aria-expanded"), "true", "The message stays open");
+  await longMessage.click();
+  assert.equal(await bash.getAttribute("aria-expanded"), "true", "Bash stays open after remount");
+  assert.equal(
+    await read.getAttribute("aria-expanded"),
+    "false",
+    "Read stays closed after remount"
+  );
+  const activityId = await disclosure.getAttribute("aria-controls");
   const details = page.locator(`[id="${activityId}"]`);
   const node = await details.elementHandle();
   await page.getByRole("button", { name: "Toggle thinking details" }).waitFor();

@@ -9,15 +9,19 @@
 
 import { LoginError, type AgentServerClient, type LoginHandle } from "@zvada/agent-server/client";
 import {
+  classifyError,
   signedInBy,
   type AuthLogin,
   type HarnessAuth,
+  type HarnessCli,
+  type HarnessCliProgress,
   type ModelList,
 } from "@zvada/agent-server/protocol";
 import type { AgentAuthAnswer, AgentSignInAnswer } from "@shared/agent-auth";
 import type { AgentHarness } from "@shared/enums";
 import { LOCAL_HARNESSES } from "@shared/harnesses";
 import { agentAuthChanges, agentCliProgress } from "@shared/api/settings";
+import { getErrorMessage } from "@shared/lib/errors";
 import { ValidationError } from "../../lib/errors";
 import { publish } from "../streams";
 
@@ -30,6 +34,7 @@ function answerOf(handle: LoginHandle): AuthLogin {
 export class LocalAgents {
   /** Sign-ins this backend started and has not seen end: their code and cancel need the handle. */
   private readonly handles = new Map<string, LoginHandle>();
+  private readonly cliFailures = new Map<string, number>();
   private readonly offs: (() => void)[];
 
   constructor(private readonly client: AgentServerClient) {
@@ -39,7 +44,7 @@ export class LocalAgents {
         if (update.login) this.handles.delete(update.login.loginId);
         publish(agentAuthChanges, {}, update);
       }),
-      client.onCliProgress((progress) => publish(agentCliProgress, {}, progress)),
+      client.onCliProgress((progress) => this.publishCliProgress(progress)),
     ];
   }
 
@@ -69,11 +74,36 @@ export class LocalAgents {
     );
   }
 
+  private publishCliProgress(progress: HarnessCliProgress): void {
+    if (progress.phase === "failed") {
+      this.cliFailures.set(progress.harness, (this.cliFailures.get(progress.harness) ?? 0) + 1);
+    }
+    publish(agentCliProgress, {}, progress);
+  }
+
   /** Start this agent's install. The engine reports progress on `agentCliProgress`. */
   prepareCli(harness: AgentHarness): void {
-    this.client.prepareClis([harness]).catch((error: unknown) => {
-      console.warn("[LocalAgents] CLI install failed:", error);
-    });
+    const before = this.cliFailures.get(harness);
+    const report = (cli: Omit<HarnessCli, "harness" | "state">) => {
+      if (this.cliFailures.get(harness) !== before) return;
+      // The backend supplies this failure when the engine sent no failed progress.
+      this.publishCliProgress({
+        harness,
+        phase: "failed",
+        version: cli.version ?? "",
+        receivedBytes: cli.receivedBytes ?? 0,
+        totalBytes: cli.totalBytes,
+        error: cli.error,
+        category: cli.category,
+      });
+    };
+    this.client.prepareClis([harness]).then(
+      (clis) => {
+        const failed = clis.find((cli) => cli.harness === harness && cli.state === "failed");
+        if (failed) report(failed);
+      },
+      (error: unknown) => report({ error: getErrorMessage(error), category: classifyError(error) })
+    );
   }
 
   /**

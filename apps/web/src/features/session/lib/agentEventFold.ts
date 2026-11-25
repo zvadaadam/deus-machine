@@ -547,27 +547,33 @@ export function patchSessionDetail(
 export function patchWorkspaceSessionStatus(
   qc: QueryClient,
   sessionId: string,
-  status: SessionStatus
-): void {
+  status: SessionStatus,
+  expected?: SessionStatus
+): SessionStatus | null {
+  let previousStatus: SessionStatus | null = null;
+  const matches = (value: SessionStatus | null) => expected === undefined || value === expected;
   qc.setQueriesData<RepoGroup[]>({ queryKey: ["workspaces", "by-repo"] }, (old) =>
     Array.isArray(old)
       ? old.map((group) => ({
           ...group,
           workspaces: group.workspaces.map((workspace) => {
-            const current = workspace.current_session_id === sessionId;
-            if (!current && !workspace.chats?.some((chat) => chat.id === sessionId))
-              return workspace;
+            const current =
+              workspace.current_session_id === sessionId && matches(workspace.session_status);
+            const chat = workspace.chats?.find(
+              (row) => row.id === sessionId && matches(row.status)
+            );
+            if (!current && !chat) return workspace;
+            previousStatus ??= chat?.status ?? workspace.session_status;
             return {
               ...workspace,
               session_status: current ? status : workspace.session_status,
-              chats: workspace.chats?.map((chat) =>
-                chat.id === sessionId ? { ...chat, status } : chat
-              ),
+              chats: workspace.chats?.map((row) => (row === chat ? { ...row, status } : row)),
             };
           }),
         }))
       : old
   );
+  return previousStatus;
 }
 
 // ---- Transcript order (snapshot backfill) ----
