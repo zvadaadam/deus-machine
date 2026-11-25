@@ -500,21 +500,34 @@ describe("stopping the current turn", () => {
     expect(await queue()).toEqual({ paused: null, items: [] });
   });
 
-  it.fails(
-    "reports the read steer when its turn loses the start reply without a turn row",
-    async () => {
-      const wire = pendingStart();
-      const lost = expect(send("A")).rejects.toThrow("lost reply");
-      await vi.waitFor(() => expect(starts()).toEqual(["A"]));
-      await steerMessage({ ...message("follow-up"), turnId: "A" }, fromChat, "follow-up");
-      echo("A", "follow-up", message("follow-up").content, fromChat);
-      expect(await fact("A")).toEqual({ state: "running", steers: { "follow-up": "read" } });
-      expect((await run(api.messages, { sessionId })).turns).toEqual([]);
-      wire.reject(new Error("lost reply"));
-      await lost;
-      expect(await fact("A")).toMatchObject({ state: "ended", steers: { "follow-up": "read" } });
-    }
-  );
+  it("keeps the turn and its read steer through a lost start reply until its end", async () => {
+    const wire = pendingStart();
+    const lost = expect(send("A")).rejects.toThrow("lost reply");
+    await vi.waitFor(() => expect(starts()).toEqual(["A"]));
+    await steerMessage({ ...message("follow-up"), turnId: "A" }, fromChat, "follow-up");
+    echo("A", "follow-up", message("follow-up").content, fromChat);
+    expect((await run(api.messages, { sessionId })).turns).toEqual([]);
+    wire.reject(new Error("lost reply"));
+    await lost;
+    expect(await fact("A")).toEqual({ state: "running", steers: { "follow-up": "read" } });
+    end("A");
+    expect(await fact("A")).toMatchObject({ state: "ended", steers: { "follow-up": "read" } });
+  });
+
+  it.fails("reports a kept steer when the start is refused before any event", async () => {
+    const wire = pendingStart();
+    const refused = expect(send("A")).rejects.toThrow("start refused");
+    await vi.waitFor(() => expect(starts()).toEqual(["A"]));
+    await expect(
+      steerMessage({ ...message("follow-up"), turnId: "A" }, fromChat, "follow-up")
+    ).resolves.toEqual({ outcome: "steered" });
+    wire.reject(new WireRequestError(WIRE_ERROR_CODES.internalError, "start refused"));
+    await refused;
+    expect(wireTurnId()).toBeUndefined();
+    expect((await run(api.messages, { sessionId })).turns).toEqual([]);
+    expect(await queue()).toMatchObject({ items: [waitingRow("follow-up")] });
+    expect(await fact("A")).toMatchObject({ state: "ended", steers: { "follow-up": "queued" } });
+  });
 
   it("O4: A's lost start reply leaves B working in app setup and stoppable", async () => {
     const wire = pendingStart();
