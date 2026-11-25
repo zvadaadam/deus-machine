@@ -717,7 +717,7 @@ describe("stopping the current turn", () => {
     expect(starts()).toEqual(["previous", "B"]);
   });
 
-  it("O7: a held first task becomes a named turn as soon as its workspace is ready", async () => {
+  async function startHeldFirstTask() {
     db.exec(`INSERT INTO workspaces (id, repository_id, slug, state, first_session_id)
       VALUES ('new', 'r', 'new', 'initializing', 'first-chat')`);
     vi.spyOn(workspaceInit, "createLocalWorkspace").mockResolvedValue({
@@ -726,15 +726,22 @@ describe("stopping the current turn", () => {
     });
     const entry = await host.start!(windowCaller, {
       turnId: "first-task",
+      harness: "codex-app-server",
       project: { id: "r", name: "repo" },
       message: "Build it",
       origin: fromPerson,
     });
     expect(await host.view(windowCaller, entry.id, {})).toMatchObject({ status: "setting_up" });
+    sessionId = entry.id;
     const release = holdAppSetup();
     db.exec(`INSERT INTO sessions (id, workspace_id) VALUES ('first-chat', 'new');
       UPDATE workspaces SET state = 'ready', current_session_id = 'first-chat' WHERE id = 'new'`);
     invalidate(["workspaces"]);
+    return { entry, release };
+  }
+
+  it("O7: a held first task becomes a named turn as soon as its workspace is ready", async () => {
+    const { entry, release } = await startHeldFirstTask();
     const reading = await host.view(windowCaller, entry.id, {});
     expect(reading.running).toBe("first-task");
     expect(await host.cancel!(windowCaller, entry.id, reading.running)).toBe("stopped");
@@ -745,6 +752,49 @@ describe("stopping the current turn", () => {
       outcome: "cancelled",
       cancelledBy: fromPerson,
     });
+    expect(await host.view(windowCaller, entry.id, {})).toMatchObject({
+      status: "error",
+      lastEnded: { turnId: "first-task", outcome: "cancelled", cancelledBy: fromPerson },
+    });
+  });
+
+  it("interrupts a first task in app setup and delivers the replacement", async () => {
+    const { entry, release } = await startHeldFirstTask();
+    const result = await operator.call(
+      "send_message",
+      { session: entry.id, message: "Do this instead", when: "interrupt", wait: 0 },
+      windowCaller
+    );
+    release();
+    expect(result).toContain(`stopped "new:1"'s turn; sent to "new:1"`);
+    expect(engine.startTurn.mock.calls.map(([p]) => p.input)).toEqual(["Do this instead"]);
+    expect(await view()).toMatchObject({ status: "working", running: starts()[0] });
+  });
+
+  it("queues the default operator steer first during a first task's app setup and honors Stop", async () => {
+    const { release } = await startHeldFirstTask();
+    await send("tail");
+    const result = await operator.call(
+      "send_message",
+      { session: sessionId, message: "Check this first", wait: 0 },
+      windowCaller
+    );
+    expect(result).toContain(
+      'turn "first-task" did not take it; the product queued it as its own turn.'
+    );
+    expect(await queue()).toMatchObject({
+      paused: null,
+      items: [{ text: "Check this first", state: "waiting" }, waitingRow("tail")],
+    });
+    expect(engine.steerTurn).not.toHaveBeenCalled();
+    await stop();
+    release();
+    expect(starts()).toEqual([]);
+    expect(await queue()).toMatchObject({ paused: "stopped", stoppedBy: fromPerson });
+    await resumeInWindow();
+    expect(engine.startTurn.mock.calls.map(([p]) => p.input)).toEqual(["Check this first"]);
+    end(starts()[0]!);
+    await vi.waitFor(() => expect(starts().at(-1)).toBe("tail"));
   });
 });
 

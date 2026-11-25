@@ -758,7 +758,7 @@ export function createDeusHost(): DeusHost {
           "unsupported",
           `send_message: this chat's agent ${JSON.stringify(session.agent_harness)} does not run here. Nothing was sent.`
         );
-      if (firsts.has(sessionId))
+      if (firsts.has(sessionId) && !currentTurnId(sessionId))
         throw new Refused({ code: "busy", detail: "This chat is being set up." });
       const { turns } = await run(sessions.messages, { sessionId, limit: 50 });
       const settings = continuedSettings(harness, turns);

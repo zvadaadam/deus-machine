@@ -1387,10 +1387,14 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     ready(entry);
     // The operator saw an idle chat before the host checked its first task.
     vi.spyOn(host, "list").mockResolvedValueOnce([{ ...entry, status: "idle" }]);
-    const follow = { session: entry.id, message: "follow up", wait: 0 };
-    await expect(createOperator(host).call("send_message", follow, assistantWho())).rejects.toThrow(
-      "This chat is being set up."
+    vi.spyOn(host, "view").mockResolvedValueOnce({ status: "idle", turns: [], waiting: [] });
+    state.sendRefusal = new ChatBusyError(
+      "The agent is starting another turn — wait for it to begin."
     );
+    const follow = { session: entry.id, message: "follow up", wait: 0 };
+    await expect(
+      createOperator(host).call("send_message", follow, assistantWho())
+    ).resolves.toContain("another turn started there first.");
     const stopping = host.cancel!(LEAD as never, entry.id);
     admit();
     expect(await stopping).toBe("stopped");
