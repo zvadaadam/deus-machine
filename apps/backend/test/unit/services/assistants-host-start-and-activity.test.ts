@@ -53,6 +53,7 @@ beforeEach(async () => {
   openLink.mockReset().mockResolvedValue({
     getAgents: () => [],
     isConnected: () => true,
+    startTurn: async () => {},
     engine: { onAuthUpdated: () => () => {}, onCliProgress: () => () => {}, listClis, authStatus },
     close: vi.fn(),
   });
@@ -284,7 +285,16 @@ describe("a chat's last activity", () => {
     (await host.list(caller, {})).find((entry) => entry.id === id)?.lastActivityAt;
 
   it("lists equally old prompts as 12m ago for a silent turn and 5s ago for one starting a tool", async () => {
-    prompted("silent");
+    vi.setSystemTime(prompt);
+    db.exec("INSERT INTO sessions (id, workspace_id, title) VALUES ('silent', 'w', 'silent')");
+    await turns.sendMessage({
+      sessionId: "silent",
+      turnId: "quiet",
+      content: "Work quietly",
+      agentHarness: "claude-code",
+      model: "opus",
+    });
+    vi.setSystemTime(now);
     prompted("busy");
     const sessionId = "busy";
     const turn = { sessionId, turnId: "b" };
@@ -307,6 +317,8 @@ describe("a chat's last activity", () => {
         state: { status: "in_progress", input: {}, time: { start: timestamp } },
       },
     });
+    expect(agent.liveTurnId("silent")).toBe("quiet");
+    expect(agent.lastOutputAt("silent")).toBeUndefined();
     const list = await createOperator(host).call("list_sessions", {}, caller);
     expect(list).toMatch(/working[^\n]*"silent"[^\n]*12m ago/);
     expect(list).toMatch(/working[^\n]*"busy"[^\n]*5s ago/);
