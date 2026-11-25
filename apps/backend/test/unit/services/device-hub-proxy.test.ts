@@ -31,7 +31,7 @@ describe("Device Hub proxy", () => {
         return;
       }
       res.writeHead(200, { "content-type": "application/json", "set-cookie": token });
-      res.end(JSON.stringify({ device: "a", execToken: token, shareUrl: "unused" }));
+      res.end(JSON.stringify({ device: "a", token, execToken: token, shareUrl: "unused" }));
     });
     sockets = new WebSocketServer({ server: vendor });
     sockets.on("connection", (ws, req) => {
@@ -88,6 +88,15 @@ describe("Device Hub proxy", () => {
     expect(auth).toBe("Bearer " + token);
     ws.close();
     await once(ws, "close");
+  });
+  it("withholds a response that contains the bearer in an unexpected field", async () => {
+    const response = await fetch(base + "/vendor/serve-sim/helper/abc/webrtc/offer", {
+      method: "POST",
+      body: JSON.stringify({ nested: { detail: "credential " + token } }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(response.status).toBe(502);
+    expect(await response.text()).not.toContain(token);
   });
   it("refuses foreign origins, nonlocal connections and unrelated hub routes before forwarding", async () => {
     const path = "/vendor/serve-sim/api";

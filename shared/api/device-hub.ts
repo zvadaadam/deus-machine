@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { HubDevice, HubStatus } from "../types/device-hub";
+import type { HubDevice, HubInventory, HubStatus } from "../types/device-hub";
 import { out, read, write } from "./op";
 import { stream, type ScopeOf } from "./stream";
 
@@ -17,7 +17,7 @@ export const retryDeviceHub = write({ name: "retryDeviceHub", output: out<void>(
 
 export const deviceHubDevices = read({
   name: "deviceHubDevices",
-  output: out<{ devices: HubDevice[]; warnings: string[] }>(),
+  output: out<HubInventory>(),
 });
 
 export const startHubDevice = write({

@@ -1,6 +1,9 @@
 import { z } from "zod";
-import type { HubDevice } from "@shared/types/device-hub";
+import { getErrorMessage } from "@shared/lib/errors";
+import type { HubDevice, HubInventory } from "@shared/types/device-hub";
 import { AppError, ConflictError } from "../../lib/errors";
+import { hasSimulatorToolchain, listDevices, simctl } from "../simulator-context";
+import { hasAndroidToolchain } from "./android-sdk";
 import type { HubEndpoint } from "./manager";
 
 const device = z.object({
@@ -10,7 +13,7 @@ const device = z.object({
   platform: z.enum(["ios", "android"]),
   booted: z.boolean(),
 });
-const errors = z.array(z.object({ message: z.string(), error: z.string().optional() }));
+const errors = z.array(z.object({ message: z.string(), error: z.string().nullish() }));
 const inventory = z.object({ simulators: z.array(device), emulators: z.array(device), errors });
 const action = z.object({
   ok: z.boolean(),
@@ -19,27 +22,17 @@ const action = z.object({
   serial: z.string().optional(),
 });
 
-function reasons(issues: z.infer<typeof errors>) {
-  return issues.map((issue) => {
-    const detail = issue.error?.split("\n", 1)[0] ?? "";
-    if (detail.includes("ENOENT") && issue.message.startsWith("[android-utils]"))
-      return `Android SDK unavailable. ${detail}`;
-    if (
-      issue.message.startsWith("[apple-utils]") &&
-      /ENOENT|unable to find utility|command line tools|invalid active developer path|requires Xcode/i.test(
-        issue.message + " " + issue.error
-      )
-    )
-      return `iOS requires Xcode. ${issue.message} ${detail}`.trim();
-    return `${issue.message} ${detail}`.trim();
-  });
+function toolDetail(issues: z.infer<typeof errors>) {
+  return issues
+    .flatMap((issue) => [issue.message, issue.error])
+    .filter(Boolean)
+    .join("\n");
 }
 
 async function request(hub: HubEndpoint | null, path: string, body?: object) {
-  if (!hub) throw new ConflictError("Device Hub is not running.");
-  let res: Response;
+  if (!hub) throw new ConflictError("Devices are not running.");
   try {
-    res = await fetch(hub.origin + path, {
+    const res = await fetch(hub.origin + path, {
       method: body ? "POST" : "GET",
       redirect: "error",
       headers: { authorization: `Bearer ${hub.token}`, "content-type": "application/json" },
@@ -52,37 +45,100 @@ async function request(hub: HubEndpoint | null, path: string, body?: object) {
     if (!res.ok && !action.safeParse(value).success) throw new Error();
     return value;
   } catch {
-    throw new AppError(502, "Device Hub did not answer the device request.");
+    throw new AppError(502, "The device service did not answer.");
   }
 }
 
-export async function listHubDevices(hub: HubEndpoint | null) {
-  const list = inventory.parse(await request(hub, "/api/devices"));
-  return { devices: [...list.simulators, ...list.emulators], warnings: reasons(list.errors) };
+async function iosDevices(): Promise<HubDevice[]> {
+  const all = await listDevices();
+  return all
+    .filter((sim) => sim.runtime.startsWith("iOS "))
+    .map((sim) => ({
+      platform: "ios",
+      id: sim.udid,
+      name: sim.name,
+      version: sim.runtime,
+      booted: sim.state === "Booted",
+    }));
+}
+
+async function listSimulators() {
+  const available = await hasSimulatorToolchain();
+  if (available) {
+    try {
+      return { available, devices: await iosDevices(), detail: null };
+    } catch (error) {
+      return { available, devices: [], detail: getErrorMessage(error) };
+    }
+  }
+  return { available, devices: [], detail: null };
+}
+
+async function hubInventory(hub: HubEndpoint | null) {
+  return inventory.parse(await request(hub, "/api/devices"));
+}
+
+export async function listHubDevices(hub: HubEndpoint | null): Promise<HubInventory> {
+  const [list, ios, android] = await Promise.all([
+    hubInventory(hub),
+    listSimulators(),
+    hasAndroidToolchain(),
+  ]);
+  const known = new Set(list.simulators.map((sim) => sim.id));
+  return {
+    devices: [
+      ...list.simulators,
+      ...ios.devices.filter((sim) => !known.has(sim.id)),
+      ...list.emulators,
+    ],
+    available: { ios: ios.available, android },
+    detail: [toolDetail(list.errors), ios.detail].filter(Boolean).join("\n") || null,
+  };
 }
 
 export async function startHubDevice(
   hub: HubEndpoint | null,
   target: Pick<HubDevice, "platform" | "id">
 ) {
-  const { devices } = await listHubDevices(hub);
-  const selected = devices.find((d) => d.platform === target.platform && d.id === target.id);
+  const list = await hubInventory(hub);
+  const known = (target.platform === "ios" ? list.simulators : list.emulators).find(
+    (d) => d.id === target.id
+  );
+  let selected = known;
+  if (!selected && target.platform === "ios") {
+    const ios = await listSimulators();
+    if (!ios.available) throw new ConflictError("iOS Simulators need Xcode.");
+    if (ios.detail) throw new AppError(503, "iOS simulators could not be listed.", ios.detail);
+    selected = ios.devices.find((device) => device.id === target.id);
+  }
   if (!selected) throw new ConflictError("This device is no longer available.");
+
   const perform = async (path: string, body: object) => {
     const result = action.parse(await request(hub, path, body));
     if (!result.ok)
       throw new ConflictError(
-        [result.error, ...reasons(result.errors ?? [])].filter(Boolean).join(" ") ||
-          "Device Hub could not start this device."
+        "The device could not start.",
+        [result.error, toolDetail(result.errors ?? [])].filter(Boolean).join("\n")
       );
     return result;
   };
   let id = selected.id;
   if (!selected.booted) {
-    const result = await perform("/api/devices/boot", selected);
-    id = result.serial ?? id;
+    if (known) {
+      const result = await perform("/api/devices/boot", selected);
+      id = result.serial ?? id;
+    } else {
+      // A simulator that has never booted has no hub inventory entry.
+      try {
+        await simctl(["boot", id], { timeout: 90_000 });
+      } catch (error) {
+        const current = await listDevices().catch(() => []);
+        const state = current.find((sim) => sim.udid === id)?.state;
+        if (state !== "Booted" && state !== "Booting")
+          throw new ConflictError("The simulator could not boot.", getErrorMessage(error));
+      }
+    }
   }
-  // simctl boot alone does not attach a capture session.
   if (selected.platform === "ios") await perform("/vendor/serve-sim/grid/api/start", { udid: id });
   return { ...selected, id, booted: true };
 }

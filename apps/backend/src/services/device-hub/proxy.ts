@@ -17,6 +17,7 @@ const postRoutes = [
   /^\/vendor\/serve-emu\/webrtc\/(offer|close)$/,
 ];
 const sockets = new Set(["/vendor/serve-sim/helper/ws", "/vendor/serve-emu/ws"]);
+const privateFields = new Set(["token", "execToken", "shareUrl", "appIconEndpoint"]);
 
 function bridgeSocket(url: URL, headers: Record<string, string>): WSEvents<WebSocket> {
   let upstream: WebSocket;
@@ -27,7 +28,7 @@ function bridgeSocket(url: URL, headers: Record<string, string>): WSEvents<WebSo
       let bytes = 0;
       url.protocol = "ws:";
       upstream = new WebSocket(url, { headers, handshakeTimeout: 5000 });
-      upstream.on("error", () => downstream.close(1011, "Device Hub disconnected."));
+      upstream.on("error", () => downstream.close(1011, "The device disconnected."));
       upstream.on("close", () => downstream.close());
       upstream.on("message", (data, binary) => {
         if (downstream.bufferedAmount > 8 * 1024 * 1024)
@@ -62,13 +63,13 @@ export function deviceHubRoutes(
   const app = new Hono();
   app.all(prefix + "/*", async (c) => {
     if (!isLocalhost(getClientIp(c)))
-      return c.json({ error: "Device Hub requires a local connection." }, 403);
+      return c.json({ error: "Devices require a local connection." }, 403);
     const path = c.req.path.slice(prefix.length);
     const ws = c.req.header("upgrade")?.toLowerCase() === "websocket";
     const routes = c.req.method === "GET" ? getRoutes : c.req.method === "POST" ? postRoutes : [];
     if (ws ? !sockets.has(path) : !routes.some((route) => route.test(path))) return c.notFound();
     const hub = endpoint();
-    if (!hub) return c.json({ error: "Device Hub is not running." }, 503);
+    if (!hub) return c.json({ error: "Devices are not running." }, 503);
     const url = new URL(path, hub.origin);
     url.search = new URL(c.req.url).search;
     url.searchParams.delete("token");
@@ -98,19 +99,19 @@ export function deviceHubRoutes(
         // serve-sim's discovery returns its host command credential even to a media viewer.
         const data = await res.json();
         const json = JSON.stringify(data, (key, value) =>
-          key === "execToken" || key === "shareUrl" || key === "appIconEndpoint" ? undefined : value
+          privateFields.has(key) ? undefined : value
         );
         if (json.includes(hub.token))
-          return c.json({ error: "Unexpected private hub response." }, 502);
+          return c.json({ error: "Unexpected private device response." }, 502);
         return new Response(json, { status: res.status, headers: responseHeaders });
       }
       if (!res.ok) {
         await res.body?.cancel();
-        return c.json({ error: `Device Hub returned HTTP ${res.status}.` }, 502);
+        return c.json({ error: `The device service returned HTTP ${res.status}.` }, 502);
       }
       return new Response(res.body, { status: res.status, headers: responseHeaders });
     } catch {
-      return c.json({ error: "Lost the connection to Device Hub." }, 502);
+      return c.json({ error: "Lost the device connection." }, 502);
     }
   });
   return app;

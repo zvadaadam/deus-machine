@@ -157,7 +157,7 @@ export function resolveSimulatorCapabilities({
 const TOOLCHAIN_TTL_MS = 60_000;
 let toolchain: { available: boolean; checkedAt: number } | null = null;
 
-async function hasSimulatorToolchain(): Promise<boolean> {
+export async function hasSimulatorToolchain(): Promise<boolean> {
   if (toolchain && Date.now() - toolchain.checkedAt < TOOLCHAIN_TTL_MS) return toolchain.available;
   let available = false;
   try {

@@ -194,8 +194,6 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "^4.0.0",
-    "three": "0.186.0",
-    "three-mesh-bvh": "0.9.10",
     "tsx": "^4.21.0",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.50.0",

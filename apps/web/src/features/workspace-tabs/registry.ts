@@ -50,6 +50,7 @@ export interface ToolDefinition {
   capabilityGate?: CapabilityName;
   /** Simulator tab needs a device to show: this Mac's local simulator. */
   requiresSimulator?: boolean;
+  requiresLocalBackend?: boolean;
   /** The gates above are this computer's own panel's: a cloud workspace's tab
    *  is served by the cloud computer and always shows. */
   localGates?: boolean;
@@ -103,6 +104,7 @@ const TOOL_DEFINITIONS: Record<ContentTab, ToolDefinition> = {
     label: "Device",
     description: "View and control a local iOS or Android device",
     keywords: ["ios", "android", "simulator", "emulator", "phone"],
+    requiresLocalBackend: true,
     icon: Smartphone,
   },
   config: {
@@ -164,12 +166,12 @@ export function isTabVisible(
   visibility: ContentTabVisibility = {}
 ): boolean {
   if (isCloudDirectWebMode()) return false;
-  if (tab === "device") {
-    const mode = getDeploymentMode();
-    return !visibility.cloud && (mode === "electron" || mode === "web-dev");
-  }
   const item = TOOL_DEFINITIONS[tab];
   if (!item) return false;
+  if (item.requiresLocalBackend) {
+    const mode = getDeploymentMode();
+    if (visibility.cloud || (mode !== "electron" && mode !== "web-dev")) return false;
+  }
   if (item.localGates && visibility.cloud === true) return true;
   if (item.capabilityGate && !capabilities[item.capabilityGate]) return false;
   if (item.requiresSimulator && visibility.simulatorAvailable !== true) return false;

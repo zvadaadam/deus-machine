@@ -1,11 +1,10 @@
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DeviceHub, hubVersion } from "../../../src/services/device-hub/manager";
 import type { HubStatus } from "@shared/types/device-hub";
 
-vi.mock("../../../src/services/device-hub/prepare", () => ({ prepareHub: vi.fn() }));
 vi.mock("device-use/engine", () => ({ simulatorEnv: (env: NodeJS.ProcessEnv) => env }));
 
 describe("Device Hub lifecycle", () => {
@@ -25,13 +24,21 @@ if (process.env.BUN_BE_BUN !== "1") process.exit(20);
 if (process.argv[2] === "install") {
   if (!process.argv.includes("--frozen-lockfile") || !fs.existsSync("bun.lock")) process.exit(21);
   fs.mkdirSync("node_modules/expo-device-hub/dist/server", { recursive: true });
+  fs.writeFileSync("node_modules/expo-device-hub/package.json", JSON.stringify({version: "${hubVersion}"}));
   fs.writeFileSync("node_modules/expo-device-hub/dist/server/cli.mjs", "");
+  if (process.env.FIXTURE_OFFLINE) console.error("Could not download package\\nregistry connection timed out");
   process.exit(process.env.FIXTURE_OFFLINE ? 1 : 0);
 }
-if (!process.argv.includes("--require-token")) process.exit(22);
+const directory = process.env.EXPO_DEVICE_HUB_STATE_DIR;
+if (!process.argv.includes("--require-token") || process.argv[process.argv.indexOf("--host") + 1] !== "127.0.0.1") process.exit(22);
+if ((fs.statSync(directory).mode & 0o777) !== 0o700 || (fs.statSync(process.env.SERVE_SIM_STATE_DIR).mode & 0o777) !== 0o700 || fs.readdirSync(directory).length) process.exit(23);
 process.on("SIGTERM", () => { if (!process.env.FIXTURE_STUCK) process.exit(0); });
 fs.writeFileSync("pid", String(process.pid));
-fs.writeFileSync(3, JSON.stringify({ port: 19821, token: "x".repeat(43) }) + "\\n");
+function publish(port, pid) {
+  fs.writeFileSync(directory + "/server-" + port + ".json", JSON.stringify({pid, port, url:"http://127.0.0.1:" + port, token: "x".repeat(43)}), {mode:0o600});
+}
+publish(19820, process.pid + 1);
+if (!process.env.FIXTURE_NO_DISCOVERY) publish(19821, process.pid);
 setInterval(() => {}, 1000);
 `
     );
@@ -51,7 +58,7 @@ setInterval(() => {}, 1000);
   const wait = (phase: HubStatus["phase"]) =>
     vi.waitFor(() => expect(hub.status.phase).toBe(phase), { timeout: 5000 });
   const view = { workspaceId: "w", deviceId: null, platform: null };
-  const installed = () => join(directory, "hub", hubVersion);
+  const installed = () => join(directory, "hub", hubVersion, "runtime");
 
   it("installs once, shares one process, and reuses it across a brief disconnect", async () => {
     const leave = hub.follow(view);
@@ -60,6 +67,8 @@ setInterval(() => {}, 1000);
     const pid = await readFile(join(installed(), "pid"), "utf8");
     expect(phases.filter((s) => s.phase === "installing")).toHaveLength(1);
     expect(JSON.stringify(phases)).not.toContain("token");
+    expect(hub.endpoint?.origin).toBe("http://127.0.0.1:19821");
+    expect((await stat(join(directory, "hub/state/server-19821.json"))).mode & 0o777).toBe(0o600);
     leave();
     leaveSecond();
     const reopen = hub.follow(view);
@@ -94,13 +103,34 @@ setInterval(() => {}, 1000);
     hub.follow(view);
     await wait("error");
     expect(await readdir(join(directory, "hub"))).toEqual([]);
-    // A stock or interrupted installation at this version cannot perform the private handshake.
-    const unprepared = join(installed(), "node_modules/expo-device-hub/dist/server");
-    await mkdir(unprepared, { recursive: true });
-    await writeFile(join(unprepared, "cli.mjs"), "");
+    expect(hub.status).toEqual({
+      phase: "error",
+      message: "Devices could not be set up.",
+      detail: "Could not download package\nregistry connection timed out",
+    });
+    const wrongPackage = join(installed(), "node_modules/expo-device-hub");
+    await mkdir(wrongPackage, { recursive: true });
+    await writeFile(join(wrongPackage, "package.json"), JSON.stringify({ version: "0.25.0" }));
+    await mkdir(join(directory, "hub/state"), { recursive: true });
+    await writeFile(join(directory, "hub/state/stale-file"), "stale");
+
     vi.stubEnv("FIXTURE_OFFLINE", "");
     hub.retry();
     await wait("ready");
+  });
+
+  it("keeps a different process's discovery private and cancels a start still waiting for its child", async () => {
+    vi.stubEnv("FIXTURE_NO_DISCOVERY", "1");
+    hub.follow(view);
+    await vi.waitFor(
+      async () => {
+        await stat(join(directory, "hub/state/server-19820.json"));
+      },
+      { timeout: 5000 }
+    );
+    expect(hub.endpoint).toBeNull();
+    await hub.shutdown();
+    expect(hub.status.phase).toBe("idle");
   });
 
   it("reaps a hub that ignores SIGTERM before shutdown returns", async () => {

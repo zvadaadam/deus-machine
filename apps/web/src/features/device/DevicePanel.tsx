@@ -12,11 +12,32 @@ import * as api from "@shared/api/device-hub";
 import { HUB_STREAM_MODE, type HubDevice, type HubStatus } from "@shared/types/device-hub";
 import { getErrorMessage } from "@shared/lib/errors";
 import { Button } from "@/components/ui/button";
-import { call } from "@/platform/ws";
+import { call, OpError } from "@/platform/ws";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { resolveBackendEndpoints } from "@/shared/config/backend.config";
 import { useStream } from "@/shared/hooks/useStream";
 import { attachImageFiles, composerTarget } from "@/features/session/store/sessionComposerStore";
 import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
+
+function DeviceDetails({ detail }: { detail?: string | null }) {
+  if (!detail) return null;
+  return (
+    <details className="text-muted-foreground mt-1 text-left text-xs">
+      <summary className="cursor-pointer">Technical details</summary>
+      <pre className="mt-1 max-h-28 overflow-auto break-words whitespace-pre-wrap">{detail}</pre>
+    </details>
+  );
+}
+
+const deviceKey = (device: HubDevice) => device.platform + ":" + device.id;
 
 type ReportDevice = (device: HubDevice | null) => void;
 
@@ -43,7 +64,7 @@ function Screen({
       if (!session) return;
       const target = composerTarget(session);
       const shot = await client.screenshot({ format: "png" });
-      if (!shot) throw new Error("Device Hub could not capture the screen.");
+      if (!shot) throw new Error("The device could not capture a screenshot.");
       const attached = await attachImageFiles(target, [
         new File([shot.blob], "device-screenshot.png", { type: shot.blob.type }),
       ]);
@@ -111,7 +132,7 @@ function Devices({
   const cache = useQueryClient();
   const savedKey = ["deviceHubSelection", instance, workspaceId];
   const [active, setActive] = useState(() => cache.getQueryData<HubDevice>(savedKey));
-  const [id, setId] = useState(active?.id ?? "");
+  const [id, setId] = useState(active ? deviceKey(active) : "");
   const list = useQuery({
     queryKey: ["deviceHubDevices", instance],
     queryFn: () => call(api.deviceHubDevices),
@@ -130,13 +151,13 @@ function Devices({
     onSuccess(device) {
       cache.setQueryData(savedKey, device);
       setActive(device);
-      setId(device.id);
+      setId(deviceKey(device));
       void list.refetch();
     },
   });
   const devices = list.data?.devices ?? [];
-  const selected = devices.find((d) => d.id === id);
-  const viewing = active && selected?.booted && active.id === selected.id;
+  const selected = devices.find((d) => deviceKey(d) === id);
+  const viewing = active && selected?.booted && deviceKey(active) === id;
   const failure = list.error ?? start.error ?? endpoints.error;
   let placeholder = "Choose a device";
   if (list.isPending) placeholder = "Finding devices…";
@@ -144,32 +165,39 @@ function Devices({
   return (
     <>
       <div className="border-border-subtle flex min-w-0 items-center gap-2 border-b p-2">
-        <select
-          aria-label="Device"
-          className="border-border-subtle bg-control-surface h-8 min-w-0 flex-1 rounded-lg border px-2 text-sm"
-          disabled={start.isPending}
+        <Select
           value={id}
-          onFocus={() => void list.refetch()}
-          onChange={(e) => {
-            setId(e.target.value);
+          disabled={start.isPending}
+          onOpenChange={(open) => {
+            if (open) void list.refetch();
+          }}
+          onValueChange={(value) => {
+            setId(value);
             setActive(undefined);
             cache.removeQueries({ queryKey: savedKey, exact: true });
             start.reset();
           }}
         >
-          <option value="">{placeholder}</option>
-          {(["ios", "android"] as const).map((platform) => (
-            <optgroup key={platform} label={platform === "ios" ? "iOS" : "Android"}>
-              {devices
-                .filter((d) => d.platform === platform)
-                .map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name} · {d.version}
-                  </option>
-                ))}
-            </optgroup>
-          ))}
-        </select>
+          <SelectTrigger size="sm" aria-label="Device" className="min-w-0 flex-1">
+            <SelectValue placeholder={placeholder} />
+          </SelectTrigger>
+          <SelectContent>
+            {(["ios", "android"] as const).map((platform) => {
+              const group = devices.filter((device) => device.platform === platform);
+              if (!group.length) return null;
+              return (
+                <SelectGroup key={platform}>
+                  <SelectLabel>{platform === "ios" ? "iOS" : "Android"}</SelectLabel>
+                  {group.map((device) => (
+                    <SelectItem key={device.id} value={deviceKey(device)}>
+                      {device.name} · {device.version}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              );
+            })}
+          </SelectContent>
+        </Select>
         <Button
           size="sm"
           variant="secondary"
@@ -181,14 +209,21 @@ function Devices({
         </Button>
       </div>
       {failure && (
-        <p role="alert" className="text-destructive p-3 text-sm">
+        <div role="alert" className="text-destructive p-3 text-sm">
           {getErrorMessage(failure)}{" "}
           {list.error && (
             <Button variant="link" size="xs" onClick={() => void list.refetch()}>
               Retry
             </Button>
           )}
-        </p>
+          <DeviceDetails
+            detail={
+              failure instanceof OpError && typeof failure.details === "string"
+                ? failure.details
+                : null
+            }
+          />
+        </div>
       )}
       {viewing && endpoints.data && (
         <DeviceClientProvider
@@ -205,13 +240,19 @@ function Devices({
           <Screen session={session} device={active} onDisplay={onDisplay} />
         </DeviceClientProvider>
       )}
-      {!!list.data?.warnings.length && (
-        <div className="border-border-subtle text-muted-foreground mt-auto border-t px-3 py-2 text-xs">
-          {list.data.warnings.map((w) => (
-            <p key={w}>{w}</p>
-          ))}
-        </div>
-      )}
+      {list.data &&
+        (!list.data.available.ios || !list.data.available.android || list.data.detail) && (
+          <div className="border-border-subtle text-muted-foreground mt-auto border-t px-3 py-2 text-xs">
+            {!list.data.available.ios && <p>iOS Simulators need Xcode.</p>}
+            {!list.data.available.android && (
+              <p>Android emulators need the Android SDK (Android Studio).</p>
+            )}
+            {list.data.available.ios && list.data.available.android && (
+              <p>Some devices could not be listed.</p>
+            )}
+            <DeviceDetails detail={list.data.detail} />
+          </div>
+        )}
     </>
   );
 }
@@ -259,11 +300,12 @@ export default function DevicePanel({
               <Button size="xs" variant="link" onClick={() => retry.mutate()}>
                 Retry
               </Button>
+              <DeviceDetails detail={status.detail} />
             </>
           ) : status.phase === "installing" ? (
-            "Installing Device Hub…"
+            "Setting up devices…"
           ) : (
-            "Starting Device Hub…"
+            "Starting devices…"
           )}
         </div>
       )}

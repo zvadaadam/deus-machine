@@ -7,8 +7,7 @@ import { getConnection } from "../services/ws.service";
 import { handle } from "./registry";
 
 function requireLocal(relayed: boolean, deviceId: string | null) {
-  if (relayed || deviceId)
-    throw new AppError(403, "Device Hub is available on this computer only.");
+  if (relayed || deviceId) throw new AppError(403, "Devices are available on this computer only.");
 }
 
 onFollow(api.deviceHubStatus, (scope, connectionId) => {
