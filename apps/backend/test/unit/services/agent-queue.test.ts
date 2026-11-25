@@ -431,6 +431,27 @@ describe("stopping the current turn", () => {
     expect(after).not.toContain("— turn cancelled");
   });
 
+  it("offers to wait on the chat still in app setup when the other chat has settled", async () => {
+    db.exec("INSERT INTO sessions (id, workspace_id) VALUES ('settled', 'w')");
+    const release = holdAppSetup();
+    const starting = send("A");
+    try {
+      const waited = await operator.call(
+        "wait_for_sessions",
+        { sessions: ["checkout:2", "checkout:1"], wait: 2 },
+        windowCaller
+      );
+      expect(waited).toContain("1 of 2 settled (until: any)");
+      expect(waited.split("\n").slice(-2)).toEqual([
+        '- "checkout:1": working',
+        '  -> wait_for_sessions(sessions: ["checkout:1"])',
+      ]);
+    } finally {
+      release();
+      await starting;
+    }
+  });
+
   it("a wait wakes stopped and reads the credited setup end after an earlier reply", async () => {
     await send("previous");
     reply("previous", "Fixed the test.");
