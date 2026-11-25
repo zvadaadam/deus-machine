@@ -258,7 +258,7 @@ export function createLab({ root, agnt, directory }) {
           authenticate: () => ({ type: "authenticate", token: grant }),
           onAuthFailure: () => record("auth-failure"),
           heartbeatIntervalMs: 300,
-          heartbeatTimeoutMs: 1500,
+          heartbeatTimeoutMs: 5_000,
           open: async () => {
             record("dial");
             let ticket;

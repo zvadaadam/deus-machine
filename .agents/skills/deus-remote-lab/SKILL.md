@@ -153,7 +153,7 @@ After restart, verify that the approved writer can read and the original phone s
 Chain dependent steps on exit 0. A failure, including a failed `up`, exits 1. Read `reason` and the log named by `status`.
 Exit 2 means a command timed out while the lab stayed up, including a wait, a live follow that got no snapshot or a command past `--timeout`.
 A timed-out wait includes only entries seen during the wait. Use `device state` for earlier history.
-Lab devices probe every 300 ms and declare a connection dead after 1.5 s without a reply, much faster than the app, so outages show within seconds and ping/pong frames fill the log.
+Lab devices probe every 300 ms and declare a connection dead after 5 s without a reply, much faster than the app, so outages show within seconds and ping/pong frames fill the log.
 Skip `ping` and `pong` frames when reading other transitions. Keep them as evidence for `blackhole`.
 Hand over the commands, JSON, exit codes, state transitions, follow lines and log paths.
 
