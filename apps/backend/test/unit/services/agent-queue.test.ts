@@ -672,12 +672,17 @@ describe("stopping the current turn", () => {
     expect(await queue()).toEqual({ paused: null, items: [] });
   });
 
-  it("keeps only the last pre-wire end until the next admission", async () => {
+  it("keeps the last pre-wire end until the next turn is released", async () => {
     let previous: string | undefined;
     for (const id of ["A", "B", "C"]) {
       holdAppSetup();
       const aborted = expect(send(id)).rejects.toThrow("Stopped before it started");
-      if (previous) expect(await fact(previous)).toEqual({ state: "unknown" });
+      if (previous)
+        expect(await fact(previous)).toMatchObject({
+          state: "ended",
+          outcome: "cancelled",
+          cancelledBy: fromPerson,
+        });
       await stop();
       await aborted;
       expect(await fact(id)).toMatchObject({ state: "ended", cancelledBy: fromPerson });
@@ -686,6 +691,12 @@ describe("stopping the current turn", () => {
     expect(await fact("A")).toEqual({ state: "unknown" });
     expect(await fact("B")).toEqual({ state: "unknown" });
     await send("D");
+    expect(await fact("C")).toMatchObject({
+      state: "ended",
+      outcome: "cancelled",
+      cancelledBy: fromPerson,
+    });
+    end("D");
     expect(await fact("C")).toEqual({ state: "unknown" });
   });
 
