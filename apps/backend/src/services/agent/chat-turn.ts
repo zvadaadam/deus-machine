@@ -42,13 +42,17 @@ type Turn = {
   timer?: NodeJS.Timeout;
   confirmed?: boolean;
 };
-type Last = { turnId: string; nativeEnd: boolean; setupStop?: Origin };
-const chats = new Map<string, { turn?: Turn; last?: Last }>();
+type Last = { turnId: string; nativeEnd: boolean };
+const chats = new Map<
+  string,
+  { turn?: Turn; last?: Last; setupStop?: { turnId: string; by: Origin } }
+>();
 const notify = (id: string) =>
   invalidate(["workspaces", "sessions", "session"], { sessionIds: [id] });
 
 export const holdingTurn = (id: string): Readonly<Turn> | undefined => chats.get(id)?.turn;
 export const lastTurn = (id: string): Readonly<Last> | undefined => chats.get(id)?.last;
+export const setupStop = (id: string) => chats.get(id)?.setupStop;
 
 // A local turn holds its chat through its end, even after an error changes the status column.
 export function claimTurn(id: string, turnId: string, setup?: Setup, sentAt?: number): boolean {
@@ -129,12 +133,14 @@ export function releaseTurn(
       : undefined;
   if (chat && turn) {
     clearTimeout(turn.timer);
-    if (!refused) {
-      chat.last = { turnId: turn.turnId, nativeEnd, setupStop };
-      if (end && !setupStop) credit(id, turn);
+    if (setupStop) chat.setupStop = { turnId: turn.turnId, by: setupStop };
+    else if (!refused) {
+      delete chat.setupStop;
+      chat.last = { turnId: turn.turnId, nativeEnd };
+      if (end) credit(id, turn);
     }
     delete chat.turn;
-    if (!chat.last) chats.delete(id);
+    if (!chat.last && !chat.setupStop) chats.delete(id);
   }
   if (nativeEnd) return true;
   if (detail === "busy_after_end" && chat?.last) restoreEndedStatus(id, chat.last.turnId);

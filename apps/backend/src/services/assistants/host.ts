@@ -91,7 +91,7 @@ import {
   DifferentTurnMessageError,
 } from "../../lib/errors";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
-import { holdingTurn, lastTurn } from "../agent/chat-turn";
+import { holdingTurn, setupStop } from "../agent/chat-turn";
 import { getLocalAgents } from "../agent/service";
 import { QueueLimitError, queuedMessages, enqueueMessage, steerMessage } from "../agent/queue";
 import { answer as answerToolRequest, pendingFor } from "../agent/tool-relay";
@@ -464,7 +464,7 @@ export function createDeusHost(): DeusHost {
     if (pendingFor(id).some((request) => waitingOf(request))) return "needs_input";
     if (holdingTurn(id)) return "working";
     if (row.s_status === "error") return "error";
-    return lastTurn(id)?.setupStop || ended?.outcome === "cancelled" ? "stopped" : "idle";
+    return setupStop(id) || ended?.outcome === "cancelled" ? "stopped" : "idle";
   }
 
   /** The entries the rows make: each workspace's chats by their number, its first before its row exists. */
@@ -810,10 +810,10 @@ export function createDeusHost(): DeusHost {
           })),
       ];
       const running = holdingTurn(sessionId)?.turnId;
-      const prior = lastTurn(sessionId);
-      const stopped = prior?.setupStop && {
+      const prior = setupStop(sessionId);
+      const stopped = prior && {
         turnId: prior.turnId,
-        cancelledBy: prior.setupStop,
+        cancelledBy: prior.by,
         outcome: "cancelled" as const,
       };
       const last = stopped
@@ -876,9 +876,9 @@ export function createDeusHost(): DeusHost {
     async turn(_caller, sessionId, turnId): Promise<TurnFact> {
       if (holdingTurn(sessionId)?.turnId === turnId)
         return { state: "running", steers: steerReceipts(sessionId, turnId) };
-      const last = lastTurn(sessionId);
-      if (last?.turnId === turnId && last.setupStop)
-        return { state: "ended", outcome: "cancelled", cancelledBy: last.setupStop };
+      const last = setupStop(sessionId);
+      if (last?.turnId === turnId)
+        return { state: "ended", outcome: "cancelled", cancelledBy: last.by };
       const row = getDatabase()
         .prepare(
           "SELECT ended_at, outcome, cancelled_by FROM turns WHERE session_id = ? AND turn_id = ?"
