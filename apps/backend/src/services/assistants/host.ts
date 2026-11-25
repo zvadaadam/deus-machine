@@ -431,8 +431,11 @@ export function createDeusHost(): DeusHost {
   function lastEnded(ids: readonly string[], includeReceipts = false) {
     const found = getDatabase()
       .prepare(
-        `SELECT session_id, turn_id, outcome, cancelled_by, MAX(ended_at) AS ended_at FROM turns
-         WHERE ended_at IS NOT NULL AND session_id IN (SELECT value FROM json_each(?)) GROUP BY session_id`
+        `SELECT * FROM (
+           SELECT session_id, turn_id, ended_at, outcome, cancelled_by,
+             ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY ended_at DESC, end_seq DESC) AS n
+           FROM turns WHERE ended_at IS NOT NULL AND session_id IN (SELECT value FROM json_each(?))
+         ) WHERE n = 1`
       )
       .all(JSON.stringify(ids)) as {
       session_id: string;

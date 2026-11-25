@@ -406,6 +406,24 @@ describe("stopping the current turn", () => {
     );
   });
 
+  it("list_sessions names the later turn's stopper when both ends have the same timestamp", async () => {
+    db.exec("INSERT INTO sessions (id, workspace_id) VALUES ('lead', 'w')");
+    const timestamp = Date.now();
+    for (const [turnId, by] of [
+      ["A", fromAssistant],
+      ["B", fromPerson],
+    ] as const) {
+      await send(turnId);
+      await stopped(turnId, by);
+      emit({ type: "turn.ended", sessionId, turnId, stopReason: "cancelled", timestamp });
+    }
+
+    expect(await fact("B")).toMatchObject({ outcome: "cancelled", cancelledBy: fromPerson });
+    expect(await operator.call("list_sessions", {}, chatCaller)).toMatch(
+      /checkout:1\s+stopped by the person/
+    );
+  });
+
   it("list_sessions names the chat that stopped app setup after an earlier Stop", async () => {
     db.exec("INSERT INTO sessions (id, workspace_id) VALUES ('lead', 'w')");
     await send("previous");
