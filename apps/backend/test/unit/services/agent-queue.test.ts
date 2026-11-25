@@ -902,6 +902,38 @@ describe("stopping the current turn", () => {
     expect(await ids()).toEqual([]);
   });
 
+  it.each(["stopped in setup", "refused on the wire"] as const)(
+    "keeps the engine's busy fence when the operator's send is %s",
+    async (when) => {
+      await send("A");
+      await outliveStop("A");
+      engine.startTurn.mockRejectedValueOnce(busyReply("A"));
+      await send("B");
+      const setup = when === "stopped in setup";
+      const release = setup ? holdAppSetup() : undefined;
+      const wire = setup ? undefined : pendingStart();
+      const sending = expect(
+        host.send(windowCaller, sessionId, {
+          message: "Message C",
+          turnId: "C",
+          origin: fromPerson,
+        })
+      ).rejects.toThrow(setup ? /Stopped before it started/ : /start refused/);
+      await vi.waitFor(() =>
+        expect(holdingTurn(sessionId)?.phase).toBe(setup ? "preparing" : "starting")
+      );
+      const stopping = stopSession({ sessionId }, fromAssistant);
+      wire?.reject(new Error("start refused"));
+      release?.();
+      await Promise.all([sending, stopping]);
+      await resumeQueuedMessages(sessionId, fromChat);
+      expect(await ids()).toEqual(["B"]);
+      expect(starts().filter((id) => id === "B")).toHaveLength(1);
+      end("A");
+      await vi.waitFor(() => expect(starts().filter((id) => id === "B")).toHaveLength(2));
+    }
+  );
+
   it("retries the busy head on each person's Resume with the original send id", async () => {
     await send("A");
     await outliveStop("A");
@@ -929,6 +961,25 @@ describe("stopping the current turn", () => {
     end("B");
     await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "B", "C"]));
   });
+
+  it.each(["evicted", "log_reset", "subscription_refused"] as const)(
+    "keeps the turn running after a %s gap until its end reports the missed output",
+    async (reason) => {
+      await send("A");
+      engine.open.mock.calls[0]![0].onEventGap!({
+        sessionId,
+        reason,
+        error: new EventGapError("lost"),
+      });
+      expect(engine.cancelTurn).not.toHaveBeenCalled();
+      expect(await fact("A")).toMatchObject({ state: "running" });
+      end("A");
+      expect(await run(api.session, { sessionId })).toMatchObject({
+        status: "error",
+        error_category: "network",
+      });
+    }
+  );
 
   it.each(["before", "after"])(
     "waits for the winner named by busy when a different late end arrives %s the reply",
