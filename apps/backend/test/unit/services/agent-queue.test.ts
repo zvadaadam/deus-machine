@@ -1480,10 +1480,19 @@ describe("messages held for a local chat", () => {
         await vi.advanceTimersByTimeAsync(0);
       }
       expect(wireTurnId()).toBeUndefined();
+      const {
+        status: prior,
+        error_message,
+        error_category,
+      } = (await run(api.session, { sessionId }))!;
       engine.startTurn.mockRejectedValueOnce(busyReply("A"));
       await expect(send("B")).resolves.toEqual({ turnId: "B", queued: true });
       expect(wireTurnId()).toBeUndefined();
-      expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
+      expect(await run(api.session, { sessionId })).toMatchObject({
+        status: prior,
+        error_message,
+        error_category,
+      });
       const status = vi.fn(() =>
         db.prepare("SELECT status FROM sessions WHERE id = ?").pluck().get(sessionId)
       );
