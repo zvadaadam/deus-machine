@@ -60,6 +60,7 @@ yarn-error.log*
 *.db-wal
 deus.db
 database/
+/.deus-dev/
 
 # Logs
 logs/

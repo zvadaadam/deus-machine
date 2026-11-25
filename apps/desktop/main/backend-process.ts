@@ -5,9 +5,14 @@ import { delimiter, join, resolve as resolvePath } from "path";
 import { createInterface } from "node:readline";
 import { app, BrowserWindow } from "electron";
 import crypto from "crypto";
-import { DEUS_DB_FILENAME, PACKAGED_SYSTEM_PATHS } from "../../../shared/runtime";
+import {
+  DATABASE_IN_USE,
+  DatabaseInUseError,
+  DEUS_DB_FILENAME,
+  PACKAGED_SYSTEM_PATHS,
+} from "../../../shared/runtime";
 import { extendCliPath, getDevStagedCliDirectory } from "../../../shared/lib/cli-path";
-import { BACKEND_CHILD_ENV_DENYLIST } from "../../../shared/lib/child-env";
+import { createBackendChildEnv } from "../../../shared/lib/child-env";
 import { handleKeepAwakeLine, setKeepAwakeWanted } from "./keep-awake";
 import { getLaunchPath } from "./shell-env";
 import { rendererOrigin } from "./app-protocol";
@@ -182,12 +187,12 @@ export async function spawnBackend(hooks: BackendSpawnHooks = {}): Promise<{ por
       `deus-runtime executable is missing or not executable: ${runtime.runtimeExecutable}`
     );
   }
-  // Dev only: an explicit DATABASE_PATH wins — the isolation seam the backend
-  // already honors, so a worktree dev run can point at a scratch database
-  // instead of the real userData one (whose schema may not match the branch).
-  // A PACKAGED app never honors it: stray shell env must not redirect the
-  // real database (same doctrine as BACKEND_CHILD_ENV_DENYLIST).
-  const override = !app.isPackaged && process.env.DATABASE_PATH;
+  // Only a checkout's own DATABASE_PATH may override its data directory.
+  const childEnv =
+    app.isPackaged || process.env.DEUS_PACKAGED === "1"
+      ? createBackendChildEnv()
+      : { ...process.env };
+  const override = childEnv.DATABASE_PATH;
   // The dev SQLite driver trims filenames. A blank or :memory: filename has no file to recover.
   const filename = override ? override.trim() : join(app.getPath("userData"), DEUS_DB_FILENAME);
   const dbPath =
@@ -220,12 +225,6 @@ export async function spawnBackend(hooks: BackendSpawnHooks = {}): Promise<{ por
 
     const backendArgs = runtime.runtimeExecutable ? ["backend"] : [runtime.backendEntry!];
 
-    const childEnv: NodeJS.ProcessEnv = { ...process.env };
-    if (runtime.runtimeExecutable) {
-      for (const key of BACKEND_CHILD_ENV_DENYLIST) {
-        delete childEnv[key];
-      }
-    }
     Object.assign(childEnv, sharedEnv, {
       PORT: "0",
       // The one page that may use the backend from this computer: the window's.
@@ -297,11 +296,12 @@ export async function spawnBackend(hooks: BackendSpawnHooks = {}): Promise<{ por
       }
     });
 
-    let outdatedDatabase = false;
+    let databaseFailure: "schema" | "owned" | undefined;
     createInterface({ input: child.stderr }).on("line", (line: string) => {
       const trimmed = line.trim();
       if (!trimmed) return;
-      if (line === PRELAUNCH_SCHEMA_MISMATCH) outdatedDatabase = true;
+      if (line === PRELAUNCH_SCHEMA_MISMATCH) databaseFailure = "schema";
+      if (line === DATABASE_IN_USE) databaseFailure = "owned";
       hooks.onStderrLine?.("backend", trimmed);
       if (!hooks.onStderrLine) console.error("[backend:stderr]", trimmed);
     });
@@ -318,9 +318,13 @@ export async function spawnBackend(hooks: BackendSpawnHooks = {}): Promise<{ por
         const error = new Error(`Backend exited before starting (code=${code}, signal=${signal})`);
         exitedBeforeStart = error;
         // exit can precede the last stderr lines. An inherited pipe still has the startup deadline.
-        child.once("close", () =>
-          fail(outdatedDatabase && code && dbPath ? new OutdatedDatabaseError(dbPath) : error)
-        );
+        child.once("close", () => {
+          if (code && dbPath) {
+            if (databaseFailure === "schema") return fail(new OutdatedDatabaseError(dbPath));
+            if (databaseFailure === "owned") return fail(new DatabaseInUseError(dbPath));
+          }
+          fail(error);
+        });
         return;
       }
       if (!isQuitting) scheduleRestart(hooks);

@@ -2,12 +2,14 @@ import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getDevStagedCliDirectory } from "../../shared/lib/cli-path";
+import { createBackendChildEnv } from "../../shared/lib/child-env";
 import { LOOPBACK_WEB_ORIGINS, WEB_ORIGINS_ENV } from "../../shared/web-origins";
 
 const runtimeDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(runtimeDir, "../..");
 let stopping = false;
 const nodeExecutable = process.env.NODE_EXECUTABLE || "node";
+const childEnv = process.env.DEUS_PACKAGED === "1" ? createBackendChildEnv() : process.env;
 
 function log(message: string): void {
   console.log(`[dev] ${message}`);
@@ -22,7 +24,7 @@ function spawnCommand(
     const child = spawn(command, args, {
       cwd: projectRoot,
       stdio: "inherit",
-      env: { ...process.env, ...env },
+      env: { ...childEnv, ...env },
     });
     child.on("exit", (code) => resolve(code ?? 0));
   });
@@ -57,7 +59,7 @@ function startBackend(): Promise<{ process: ChildProcess; port: number } | null>
       cwd: path.join(projectRoot, "apps", "backend"),
       stdio: ["ignore", "pipe", "pipe"],
       env: {
-        ...process.env,
+        ...childEnv,
         PORT: "0",
         // The web app Vite serves (port 1420, or the next free one).
         [WEB_ORIGINS_ENV]: LOOPBACK_WEB_ORIGINS,
