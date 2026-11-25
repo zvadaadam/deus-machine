@@ -1,10 +1,157 @@
 {
-  "version": 1,
+  "version": 2,
   "skills": {
+    "az-ai-answer-audit": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/marketing/az-ai-answer-audit/SKILL.md",
+      "computedHash": "ce2259fd9fab94e9232259dc3a8e0d6d3c63b6941c4e320bde241353ef380dda"
+    },
+    "az-brand-name-explore": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/marketing/az-brand-name-explore/SKILL.md",
+      "computedHash": "e7016364e20f4a4dee85de857863c06c717c0dfb29d7f3422f767a52d6c73422"
+    },
+    "az-call-advisor": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/az-call-advisor/SKILL.md",
+      "computedHash": "06949703f96706ce14766c7e2c98a4869a44236d109c7d96ec9b2688c9850774"
+    },
+    "az-call-worker": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/az-call-worker/SKILL.md",
+      "computedHash": "98f03d01eec933d9ca01a03e08f9c7cd1a69a5a1bf001d00627df1cbe8f1f017"
+    },
+    "az-code-review": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/az-code-review/SKILL.md",
+      "computedHash": "c40ef20c1ee7f5a138d91ebf5e259660dbe77fa5b31d902c025a155380ed34f3"
+    },
+    "az-complexity-check": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/az-complexity-check/SKILL.md",
+      "computedHash": "abce3ff9b59a910788cd9b8fb5f8151ac44b6c8b23467d83a5065b6ee15bce73"
+    },
+    "az-design-roundtable": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/product-design/az-design-roundtable/SKILL.md",
+      "computedHash": "bea23cfbd8bd080055a437a0da250f7659879270079bb84aa68aa9a83b726340"
+    },
+    "az-deslop": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/az-deslop/SKILL.md",
+      "computedHash": "cbee93b31b6b8b090df1d90ad63e9168bb0db1e00eaae96fc245e4976b139cef"
+    },
+    "az-devs-roundtable": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/az-devs-roundtable/SKILL.md",
+      "computedHash": "95b8415065b01ba44e1a0f285d9aac09eb70aec3c9efde95be3c7accc5a364cd"
+    },
+    "az-geo-optimize": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/marketing/az-geo-optimize/SKILL.md",
+      "computedHash": "a1a638c57dfaaa8ee270131825ad97fa98a5ad5a0bd6a36512f5151616a38cb5"
+    },
+    "az-greenlight-pr": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/az-greenlight-pr/SKILL.md",
+      "computedHash": "54b7f08ef6c79f1d823c57ae2c053b3f6532b969881bc5217dbdc6879819c25d"
+    },
+    "az-implementation-rehearsal": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/az-implementation-rehearsal/SKILL.md",
+      "computedHash": "5e7bad62b2f1054dd93358bb6b2f08dc8e058c031054eb30f36741d3330ebbe3"
+    },
+    "az-interview-me": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/productivity/az-interview-me/SKILL.md",
+      "computedHash": "e0a1ba3ef4c1bf3e9ba05de9a86a0a6d515b65d949ac43ed5a1b3b02463102a7"
+    },
+    "az-multi-workspace-lead": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/az-multi-workspace-lead/SKILL.md",
+      "computedHash": "213d51cd2f0898e6296ffb6bd2c7944fabb859a700629a4cfcf23a2cb4df9047"
+    },
+    "az-noah-zender-it": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/productivity/az-noah-zender-it/SKILL.md",
+      "computedHash": "58d7a9663c4cafede5687a4a8d7e12c2cd63e783a64435938e0d03af87e98551"
+    },
+    "az-product-rehearsal": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/product-design/az-product-rehearsal/SKILL.md",
+      "computedHash": "e4d57d4fece845e5f527ee75c90dbeca93cd1c0cb8d4d7e1bbcf7c841a06f146"
+    },
+    "az-setup-agent-workflow": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/az-setup-agent-workflow/SKILL.md",
+      "computedHash": "cf7d1d3fa49df93ce02896fe205aa5a66abd251787cc04bf58444b5857e3b1d6"
+    },
+    "az-skills-feedback": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/az-skills-feedback/SKILL.md",
+      "computedHash": "9ded0fbeb357820b16231df09711420dba4689262445155438fb984d36d80e38"
+    },
+    "az-tour": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/az-tour/SKILL.md",
+      "computedHash": "15776a8115638151c757919b69ab9cd0fa406891f88a57fa0590c3f30adadc0b"
+    },
+    "az-verify-harness": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/az-verify-harness/SKILL.md",
+      "computedHash": "ff44b5d77e849a6a2a8f41355e6c256e46601d7f1650e7793b23e14923c228e9"
+    },
+    "az-workspace-coordinator": {
+      "source": "zvadaadam/az-skills",
+      "commit": "d04453e5e6221eebca65eaed327578d0ecaf3e6f",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/az-workspace-coordinator/SKILL.md",
+      "computedHash": "805fbd1a5880e5524f980c1501f3106c1c9891d07b75aa933a822d04d4f46817"
+    },
     "make-interfaces-feel-better": {
       "source": "jakubkrehel/make-interfaces-feel-better",
       "sourceType": "github",
-      "computedHash": "54b6e221bbe4e2d1a8461c3f9ecabe69daf891f964e9ee5e699c323daa018f2e"
+      "computedHash": ""
     }
   }
 }
