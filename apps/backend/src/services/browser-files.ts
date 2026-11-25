@@ -100,9 +100,8 @@ export function fileRange(
   if (!match)
     return { status: 200, start: 0, length: size, headers: { "Content-Length": String(size) } };
   const start = Number(match[1]);
-  const end = match[2] ? Number(match[2]) : size - 1;
-  if (start >= size || end >= size || start > end)
-    return { status: 416, headers: { "Content-Range": `bytes */${size}` } };
+  const end = match[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
+  if (start > end) return { status: 416, headers: { "Content-Range": `bytes */${size}` } };
   const length = end - start + 1;
   return {
     status: 206,

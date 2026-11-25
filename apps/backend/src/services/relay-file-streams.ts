@@ -87,7 +87,7 @@ export class RelayFileStreams {
         stat.ino !== entry.ino
       )
         throw new Error("File changed");
-      const range = fileRange(stat.size, frame.range);
+      const range = fileRange(stat.size, frame.method === "GET" ? frame.range : undefined);
       if (range.status === 416) throw new Error("Range not satisfiable");
       this.reply({
         type: "file_head",

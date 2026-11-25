@@ -187,14 +187,14 @@ describe("fileSearch", () => {
 
 describe("fileUrl", () => {
   it.each([
-    ["ws://relay.test", "http:"],
-    ["https://relay.test", "https:"],
-    ["http://relay.test", "http:"],
-  ])("uses the file origin configured by %s", async (override, protocol) => {
+    ["ws://staging-relay.test:8787", "http://staging-relay.test:8787"],
+    ["https://relay.test", "https://relay.test"],
+    ["http://relay.test", "http://relay.test"],
+  ])("uses the file origin configured by %s", async (override, origin) => {
     relay.relayUrl = override;
     const relayed = operations(fileHandlers, { relayed: true, deviceId: "phone", assistant: null });
     const { url } = await relayed(api.fileUrl, { kind: "preview", ...workspace, path: "a.png" });
-    expect(new URL(url).protocol).toBe(protocol);
+    expect(new URL(url).origin).toBe(origin);
   });
 
   it("gives direct callers the existing recording and workspace paths", async () => {

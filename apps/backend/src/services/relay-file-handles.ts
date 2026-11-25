@@ -27,7 +27,10 @@ export class FileHandles {
       if (entry.expires <= now) this.entries.delete(handle);
       else if (
         entry.deviceId === deviceId &&
-        entry.source.kind === file.source.kind &&
+        (file.source.kind === "recording"
+          ? entry.source.kind === "recording"
+          : entry.source.kind === "preview" &&
+            entry.source.workspaceId === file.source.workspaceId) &&
         entry.realPath === file.realPath &&
         entry.dev === file.stat.dev &&
         entry.ino === file.stat.ino

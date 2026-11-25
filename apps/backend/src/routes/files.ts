@@ -30,7 +30,7 @@ app.get("/files/stream", (c) => {
   const file = c.req.query("path");
   if (!file) throw new ValidationError("path parameter is required");
   const { realPath, type, stat } = resolveBrowserFile({ kind: "recording", path: file });
-  const range = fileRange(stat.size, c.req.header("range"));
+  const range = fileRange(stat.size, c.req.method === "GET" ? c.req.header("range") : undefined);
   if (range.status === 416) return new Response(null, { status: 416, headers: range.headers });
   const stream =
     range.status === 206

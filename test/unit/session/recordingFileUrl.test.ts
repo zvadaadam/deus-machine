@@ -72,7 +72,7 @@ afterEach(() => {
 });
 
 it.each([true, false])(
-  "recovers a recording at the failed position (paused=%s)",
+  "restores a recording after a time update arrives before metadata (paused=%s)",
   async (paused) => {
     vi.mocked(call).mockResolvedValue({ url: renewed });
     const media = recording();
@@ -91,9 +91,10 @@ it.each([true, false])(
     expect(cache.getQueryData(["fileUrl", "recording", path])).toBe(renewed);
     player.src = renewed;
     player.currentTime = 0;
+    media.onProgress(video);
     media.onLoadedMetadata(video);
-    expect(player.currentTime).toBe(17);
-    expect(player.play).toHaveBeenCalledTimes(paused ? 0 : 1);
+    expect.soft(player.currentTime).toBe(17);
+    expect.soft(player.play).toHaveBeenCalledTimes(paused ? 0 : 1);
 
     const notify = vi.spyOn(toast, "error");
     // Metadata and a time update at the failed position do not mean the reload worked.

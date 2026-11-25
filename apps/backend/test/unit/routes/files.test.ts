@@ -138,15 +138,33 @@ describe("file containment and recording ranges", () => {
     expect(mockCreateReadStream).not.toHaveBeenCalled();
   });
 
-  it("answers a recording range with exactly its span and preserves the existing 416", async () => {
-    const url = "/files/stream?path=/tmp/movie.mp4";
-    const partial = await app.request(url, { headers: { range: "bytes=2-4" } });
+  const url = "/files/stream?path=/tmp/movie.mp4";
+
+  it.each([
+    { range: "bytes=2-4", start: 2, end: 4 },
+    { range: "bytes=4-99", start: 4, end: 6 },
+  ])("serves the available bytes for $range", async ({ range, start, end }) => {
+    const partial = await app.request(url, { headers: { range } });
     expect(partial.status).toBe(206);
-    expect(partial.headers.get("content-range")).toBe("bytes 2-4/7");
+    expect(partial.headers.get("content-range")).toBe(`bytes ${start}-${end}/7`);
     expect(partial.headers.get("content-length")).toBe("3");
-    expect(mockCreateReadStream).toHaveBeenCalledWith("/tmp/movie.mp4", { start: 2, end: 4 });
-    const outside = await app.request(url, { headers: { range: "bytes=7-" } });
-    expect(outside.status).toBe(416);
-    expect(outside.headers.get("content-range")).toBe("bytes */7");
+    expect(mockCreateReadStream).toHaveBeenCalledWith("/tmp/movie.mp4", { start, end });
+  });
+
+  it.each(["bytes=7-", "bytes=8-99"])(
+    "returns 416 for a start outside the file (%s)",
+    async (range) => {
+      const outside = await app.request(url, { headers: { range } });
+      expect(outside.status).toBe(416);
+      expect(outside.headers.get("content-range")).toBe("bytes */7");
+    }
+  );
+
+  it("ignores Range on HEAD and reports the full recording length", async () => {
+    const head = await app.request(url, { method: "HEAD", headers: { range: "bytes=2-4" } });
+    expect(head.status).toBe(200);
+    expect(head.headers.get("content-length")).toBe("7");
+    expect(head.headers.has("content-range")).toBe(false);
+    expect(head.body).toBeNull();
   });
 });

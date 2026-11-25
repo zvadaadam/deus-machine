@@ -103,11 +103,10 @@ it("answers HEAD, an unsatisfiable range and a changed file without sending byte
   expect(wire).toContainEqual({
     type: "file_head",
     streamId: 1,
-    status: 206,
+    status: 200,
     headers: {
       "Content-Type": "video/mp4",
-      "Content-Length": "6",
-      "Content-Range": `bytes 5-10/${contents.length}`,
+      "Content-Length": String(contents.length),
       "Accept-Ranges": "bytes",
     },
   });
@@ -118,6 +117,21 @@ it("answers HEAD, an unsatisfiable range and a changed file without sending byte
   await wait(() => expect(io.closed).toBe(3));
   expect(wire).toContainEqual({ type: "file_head", streamId: 3, status: 404, headers: {} });
   expect(chunks).toHaveLength(0);
+});
+
+it("sends the remaining bytes when a GET range extends past the end", async () => {
+  const start = contents.length - 3;
+  request(1, { range: `bytes=${start}-${contents.length + 99}` });
+  await wait(() => expect(io.closed).toBe(1));
+  expect(wire[0]).toMatchObject({
+    type: "file_head",
+    status: 206,
+    headers: {
+      "Content-Length": "3",
+      "Content-Range": `bytes ${start}-${contents.length - 1}/${contents.length}`,
+    },
+  });
+  expect(chunks).toEqual([{ id: 1, bytes: contents.subarray(start) }]);
 });
 
 it("assembles short disk reads into ordered full chunks and resumes only within returned credit", async () => {

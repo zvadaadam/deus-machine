@@ -36,3 +36,16 @@ it("preserves issued links at capacity and reuses slots after expiry", () => {
   vi.advanceTimersByTime(3_600_000);
   expect(handles.issue("overflow", file)).toHaveLength(22);
 });
+
+it("reuses a preview handle only within the same workspace, even for the same file", () => {
+  const handles = new FileHandles();
+  const preview = (workspaceId: string) => ({
+    source: { kind: "preview" as const, path: "photo.png", workspaceId },
+    realPath: "/shared/photo.png",
+    type: "image/png",
+    stat,
+  });
+  const first = handles.issue("phone", preview("first"));
+  expect(handles.issue("phone", preview("second"))).not.toBe(first);
+  expect(handles.issue("phone", preview("first"))).toBe(first);
+});
