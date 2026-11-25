@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Loader2, X, Code, BookOpen } from "lucide-react";
+import { Loader2, X, Code, BookOpen, FolderOpen, ArrowUpRight } from "lucide-react";
 import { CopyIcon } from "@/components/ui/copy-icon";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { highlightFileLines } from "@/shared/lib/syntaxHighlighter";
@@ -20,6 +20,10 @@ interface FileViewerProps {
   filePath: string;
   /** Optional close handler — renders a close button in the header */
   onClose?: () => void;
+  /** Reveal this file inside the Files explorer tree tab */
+  onRevealInFiles?: () => void;
+  /** Open this file in its own dedicated workspace tab */
+  onOpenInNewTab?: () => void;
 }
 
 /**
@@ -34,7 +38,13 @@ interface FileViewerProps {
  * - Copy button
  * - Loading/error states
  */
-export function FileViewer({ workspaceId, filePath, onClose }: FileViewerProps) {
+export function FileViewer({
+  workspaceId,
+  filePath,
+  onClose,
+  onRevealInFiles,
+  onOpenInNewTab,
+}: FileViewerProps) {
   const { copy, copied } = useCopyToClipboard();
   const isMarkdown = isMarkdownFile(filePath);
   const [showRawMarkdown, setShowRawMarkdown] = useState(false);
@@ -99,7 +109,7 @@ export function FileViewer({ workspaceId, filePath, onClose }: FileViewerProps) 
   return (
     <div className="bg-background flex h-full flex-col overflow-hidden">
       {/* Header - Fixed at top, h-10 matches DiffViewer */}
-      <div className="flex-shrink-0">
+      <div className="border-border-subtle flex-shrink-0 border-b">
         <div className="flex h-10 items-center justify-between gap-4 px-4">
           {/* Left: File path hierarchy */}
           <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
@@ -109,12 +119,14 @@ export function FileViewer({ workspaceId, filePath, onClose }: FileViewerProps) 
               className="text-muted-foreground/70 flex-shrink-0"
             />
             {pathContext && (
-              <span className="text-muted-foreground/50 font-normal">{pathContext}</span>
+              <span className="text-muted-foreground/50 min-w-0 truncate font-normal">
+                {pathContext}
+              </span>
             )}
-            <span className="text-foreground font-medium">{filename || "Untitled"}</span>
+            <span className="text-foreground shrink-0 font-medium">{filename || "Untitled"}</span>
           </div>
 
-          {/* Right: Toggle + Copy + Close buttons */}
+          {/* Right: Toggle + Copy + Tab/Tree + Close buttons */}
           <div className="flex items-center gap-1">
             {/* Markdown preview/raw toggle */}
             {isMarkdown && !isLoading && !error && content && (
@@ -126,6 +138,32 @@ export function FileViewer({ workspaceId, filePath, onClose }: FileViewerProps) 
                 aria-label={showRawMarkdown ? "Show preview" : "Show raw markdown"}
               >
                 {showRawMarkdown ? <BookOpen className="h-3 w-3" /> : <Code className="h-3 w-3" />}
+              </button>
+            )}
+
+            {/* Reveal in Files explorer */}
+            {onRevealInFiles && (
+              <button
+                type="button"
+                onClick={onRevealInFiles}
+                className="control-interaction text-muted-foreground hover:text-foreground flex h-5 w-5 items-center justify-center rounded-lg"
+                title="Show in Files"
+                aria-label="Show in Files"
+              >
+                <FolderOpen className="h-3 w-3" />
+              </button>
+            )}
+
+            {/* Open in dedicated tab */}
+            {onOpenInNewTab && (
+              <button
+                type="button"
+                onClick={onOpenInNewTab}
+                className="control-interaction text-muted-foreground hover:text-foreground flex h-5 w-5 items-center justify-center rounded-lg"
+                title="Open in new tab"
+                aria-label="Open in new tab"
+              >
+                <ArrowUpRight className="h-3 w-3" />
               </button>
             )}
 

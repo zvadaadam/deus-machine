@@ -96,37 +96,64 @@ export function ChangesView({
   const handleUnpin = useCallback(() => setFileTreePinned(false), [setFileTreePinned]);
 
   const activeFilterLabel = changesFilterLabel(changesFilter);
+  const diffTotals = useMemo(
+    () =>
+      filteredFileChanges.reduce(
+        (acc, file) => ({
+          additions: acc.additions + (file.additions ?? 0),
+          deletions: acc.deletions + (file.deletions ?? 0),
+        }),
+        { additions: 0, deletions: 0 }
+      ),
+    [filteredFileChanges]
+  );
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Header — filter dropdown (left) + review button (right) */}
-      <div className="border-border-subtle flex h-10 flex-shrink-0 items-center justify-between border-b px-4">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="control-interaction text-text-muted hover:text-text-secondary flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm"
-            >
-              <SlidersHorizontal className="h-[11px] w-[11px]" />
-              <span>{activeFilterLabel}</span>
-              <ChevronDown className="h-[10px] w-[10px]" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-[140px]">
-            {CHANGES_FILTER_OPTIONS.map(([value, label]) => (
-              <DropdownMenuItem
-                key={value}
-                onClick={() => setChangesFilter(value)}
-                className="gap-2 text-xs"
+      {/* Header — filter dropdown + diff summary (left), review button (right) */}
+      <div className="border-border-subtle flex h-10 flex-shrink-0 items-center justify-between gap-2 border-b px-4">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="control-interaction text-text-muted hover:text-text-secondary flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm"
               >
-                <Check
-                  className={cn("h-3 w-3", changesFilter === value ? "opacity-100" : "opacity-0")}
-                />
-                {label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+                <SlidersHorizontal className="h-[11px] w-[11px]" />
+                <span>{activeFilterLabel}</span>
+                <ChevronDown className="h-[10px] w-[10px]" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="min-w-[140px]">
+              {CHANGES_FILTER_OPTIONS.map(([value, label]) => (
+                <DropdownMenuItem
+                  key={value}
+                  onClick={() => setChangesFilter(value)}
+                  className="gap-2 text-xs"
+                >
+                  <Check
+                    className={cn("h-3 w-3", changesFilter === value ? "opacity-100" : "opacity-0")}
+                  />
+                  {label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {!error && filteredFileChanges.length > 0 && (
+            <div className="text-text-muted flex items-center gap-2 text-xs tabular-nums">
+              <span>
+                {filteredFileChanges.length} {filteredFileChanges.length === 1 ? "file" : "files"}
+              </span>
+              {(diffTotals.additions > 0 || diffTotals.deletions > 0) && (
+                <span className="flex items-center gap-1 font-mono text-[11px]">
+                  <span className="text-accent-green">+{diffTotals.additions}</span>
+                  <span className="text-accent-red">-{diffTotals.deletions}</span>
+                </span>
+              )}
+            </div>
+          )}
+        </div>
 
         <div className="flex shrink-0 items-center gap-2">
           {onReview && !error && filteredFileChanges.length > 0 && (

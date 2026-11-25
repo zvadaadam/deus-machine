@@ -9,15 +9,18 @@ import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
 import { failedToStart, hasCheckout } from "@/features/workspace/lib/startState";
 import type { ThinkingLevel } from "@/shared/agents";
 import { HomeView, type Repository } from "@/features/repository";
-import { useWorkspaceLayout } from "@/features/workspace";
-import type { ContentTab } from "@/features/workspace/store";
+import { useWorkspacePanelMode } from "@/features/workspace";
 import { useFileWatcher } from "@/features/file-browser/hooks/useFileWatcher";
 import { useSimulatorCapabilities } from "@/features/simulator";
 import { workspaceLayoutActions } from "@/features/workspace/store";
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
-import { ContentTabBar } from "./ContentTabBar";
-import { CONTENT_TABS, isTabVisible, anyContentTabVisible, tabsFor } from "./content-tabs";
+import {
+  getVisibleTools,
+  anyContentTabVisible,
+  tabsFor,
+  type ContentTab,
+} from "@/features/workspace-tabs";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { PRActions } from "@/features/workspace/ui/PRActions";
 import { useSettings } from "@/features/settings/api/settings.queries";
@@ -32,11 +35,11 @@ import { track } from "@/platform/analytics";
 import { ConnectionBanner, useConnectionState } from "@/features/connection";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { ChatArea } from "./ChatArea";
-import { ContentView } from "./ContentView";
 import { MobileLayout } from "./MobileLayout";
 import { useAutomationForWorkspace } from "@/features/automations";
 import { uiActions } from "@/shared/stores/uiStore";
 import { useWorkspaceActions } from "./hooks/useWorkspaceActions";
+import { WorkspaceContentPane } from "./WorkspaceContentPane";
 import { WorkspacePanels } from "./WorkspacePanels";
 import { WorkspacePanelButton } from "./WorkspacePanelButton";
 import { WorkspaceToolShortcuts } from "./WorkspaceToolShortcuts";
@@ -77,6 +80,17 @@ interface MainContentProps {
   onWorkspaceClick: (workspace: Workspace) => void;
 }
 
+function trackToolOpened(tool: ContentTab, workspaceId: string | null) {
+  const tabEventMap: Partial<Record<ContentTab, () => void>> = {
+    terminal: () => track("terminal_opened", { workspace_id: workspaceId ?? undefined }),
+    browser: () => track("browser_opened", { workspace_id: workspaceId ?? undefined }),
+    simulator: () => track("simulator_opened", { workspace_id: workspaceId ?? undefined }),
+    changes: () => track("diff_viewed", { workspace_id: workspaceId ?? undefined }),
+    files: () => track("files_opened", { workspace_id: workspaceId ?? undefined }),
+  };
+  tabEventMap[tool]?.();
+}
+
 export function MainContent({
   selectedWorkspace,
   onArchive,
@@ -97,13 +111,10 @@ export function MainContent({
   const isMobile = useIsMobile();
 
   const selectedWorkspaceId = selectedWorkspace?.id ?? null;
-  // Provenance: the automation whose held sandbox this workspace is (if any)
-  // — renders the header chip that jumps to the automation's run history.
   const workspaceAutomation = useAutomationForWorkspace(selectedWorkspaceId);
-  const { contentTab, setContentTab, panelMode, setPanelMode } =
-    useWorkspaceLayout(selectedWorkspaceId);
+  const { panelMode, setPanelMode } = useWorkspacePanelMode(selectedWorkspaceId);
 
-  // Effective tab: if the stored tab is hidden by experimental settings, fall back to "changes".
+  // Tab visibility gates (local settings/capabilities vs cloud computer)
   const experimentalSettings = useSettings().data;
   const simulatorCapabilities = useSimulatorCapabilities({
     enabled: experimentalSettings?.experimental_simulator === true,
@@ -111,20 +122,17 @@ export function MainContent({
   const simulatorAvailable =
     experimentalSettings?.experimental_simulator === true &&
     simulatorCapabilities.data.available === true;
-  // A cloud workspace's tabs are its computer's, whatever this one's settings say.
   const workspaceKind = selectedWorkspace?.kind;
   const tabVisibility = useMemo(
     () => tabsFor(workspaceKind ? { kind: workspaceKind } : null, simulatorAvailable),
     [workspaceKind, simulatorAvailable]
   );
-  const effectiveContentTab = isTabVisible(contentTab, experimentalSettings, tabVisibility)
-    ? contentTab
-    : "changes";
-  // No tab can serve (web-direct hides them all) → chat-only layout: the chat
-  // pane renders full-width and the content pane + splitter don't mount. The
-  // same for a workspace that failed to start: its page is the failure. One
-  // that is still starting keeps the layout it is about to need, so nothing
-  // moves when it becomes ready.
+
+  const visibleTools = useMemo(
+    () => getVisibleTools(experimentalSettings, tabVisibility),
+    [experimentalSettings, tabVisibility]
+  );
+
   const contentPaneAvailable =
     anyContentTabVisible(experimentalSettings, tabVisibility) &&
     !(selectedWorkspace && failedToStart(selectedWorkspace));
@@ -147,12 +155,9 @@ export function MainContent({
     handleRunTask,
   } = useWorkspaceActions({
     selectedWorkspace,
-    setContentTab,
   });
 
   const statusMutation = useUpdateWorkspaceStatus();
-  // Web-direct has no status mutation (workflow status is Mac-side state), so
-  // the header menu doesn't render — WorkspaceHeader gates on the handler.
   const webDirect = isCloudDirectWebMode();
 
   const cloudState =
@@ -161,34 +166,21 @@ export function MainContent({
     if (selectedWorkspaceId) void wakeCloudWorkspace(selectedWorkspaceId);
   }, [selectedWorkspaceId]);
 
-  // Only start watching and querying diffs once the worktree checkout is complete.
   const isReady = selectedWorkspace?.state === "ready";
-
-  // Watch workspace for file changes (event-driven cache invalidation). Only a
-  // folder on this computer can be watched here (rule 1): a cloud workspace's
-  // files are on its computer.
   const watchedFolder = isReady && selectedWorkspace ? localFolder(selectedWorkspace) : null;
   const isWatched = useFileWatcher(watchedFolder ? selectedWorkspaceId : null);
 
-  // --- Content tab change ---
-  const handleContentTabChange = useCallback(
-    (tab: ContentTab) => {
-      setContentTab(tab);
-      // Track feature surface adoption — fire on every user-initiated tab switch.
-      // We use a static map instead of ts-pattern here because these are all
-      // simple string→event mappings with no branching logic.
-      const tabEventMap: Partial<Record<ContentTab, () => void>> = {
-        terminal: () =>
-          track("terminal_opened", { workspace_id: selectedWorkspaceId ?? undefined }),
-        browser: () => track("browser_opened", { workspace_id: selectedWorkspaceId ?? undefined }),
-        simulator: () =>
-          track("simulator_opened", { workspace_id: selectedWorkspaceId ?? undefined }),
-        changes: () => track("diff_viewed", { workspace_id: selectedWorkspaceId ?? undefined }),
-        files: () => track("files_opened", { workspace_id: selectedWorkspaceId ?? undefined }),
-      };
-      tabEventMap[tab]?.();
+  // --- Workspace tool shortcut handler (chat-only rail) ---
+  const handleToolShortcutSelect = useCallback(
+    (tool: ContentTab) => {
+      if (!selectedWorkspaceId) return;
+      workspaceLayoutActions.openToolTab(selectedWorkspaceId, tool, {
+        reveal: true,
+        cloud: workspaceKind === "cloud",
+      });
+      trackToolOpened(tool, selectedWorkspaceId);
     },
-    [setContentTab, selectedWorkspaceId]
+    [selectedWorkspaceId, workspaceKind]
   );
 
   usePanelShortcuts({
@@ -197,16 +189,12 @@ export function MainContent({
     onModeChange: setPanelMode,
   });
 
-  // Insert code review prompt into the active chat's composer. Goes
-  // straight through the composer store — no SessionPanel ref round-trip,
-  // which means it works even if the chat panel is collapsed.
   const handleInsertReviewPrompt = useCallback(() => {
     if (!selectedWorkspaceId) return;
     const sid = workspaceLayoutActions.getLayout(selectedWorkspaceId).activeChatTabSessionId;
     if (sid) sessionComposerActions.appendDraft(sid, REVIEW_CODE);
   }, [selectedWorkspaceId]);
 
-  // A pull request needs a branch, and a branch needs the checkout.
   const prActions = selectedWorkspace && hasCheckout(selectedWorkspace) && (
     <PRActions
       state={prState}
@@ -222,7 +210,6 @@ export function MainContent({
 
   return (
     <SidebarInset className="min-w-0">
-      {/* Connection banner — appears at top of content area when WS is down */}
       <ConnectionBanner />
 
       <div
@@ -230,7 +217,6 @@ export function MainContent({
         className={cn(
           "bg-bg-surface flex h-full min-w-0 flex-1 overflow-hidden transition-[border-radius,border-color,opacity]",
           sidebarOpen ? "tempo-slow" : "tempo-slow-exit",
-          // Mobile: edge-to-edge, no border/rounding (sidebar is a Sheet overlay)
           isMobile
             ? "border-0"
             : cn(
@@ -242,7 +228,6 @@ export function MainContent({
           isDisconnected && "opacity-60"
         )}
       >
-        {/* Sidebar toggle -- visible when sidebar collapsed (desktop) or always on mobile welcome */}
         {(!sidebarOpen || isMobile) && !selectedWorkspace && (
           <button
             type="button"
@@ -257,7 +242,6 @@ export function MainContent({
 
         {selectedWorkspace ? (
           isMobile ? (
-            /* Mobile: single-panel layout with bottom tab bar */
             <MobileLayout
               key={selectedWorkspace.id}
               workspace={selectedWorkspace}
@@ -361,10 +345,8 @@ export function MainContent({
                       </div>
                       {contentPaneAvailable && view === "chat" && (
                         <WorkspaceToolShortcuts
-                          items={CONTENT_TABS.filter((item) =>
-                            isTabVisible(item.id, experimentalSettings, tabVisibility)
-                          )}
-                          onSelect={handleContentTabChange}
+                          items={visibleTools}
+                          onSelect={handleToolShortcutSelect}
                           onEnvironment={() =>
                             uiActions.openEnvironmentSettings(
                               selectedWorkspace.repository_id,
@@ -378,47 +360,17 @@ export function MainContent({
                 }
                 content={
                   contentPaneAvailable ? (
-                    <div
-                      className={cn(
-                        "flex h-full min-w-0 flex-col pr-2 pb-2",
-                        view === "content" && "pl-2"
-                      )}
-                    >
-                      <div
-                        data-slot="workspace-tool-header"
-                        className="drag-region flex h-11 shrink-0 items-center gap-2 px-2"
-                      >
-                        {view === "content" && (
-                          <WorkspacePanelButton
-                            action="hide"
-                            onClick={() => setPanelMode("chat")}
-                          />
-                        )}
-                        <ContentTabBar
-                          activeTab={effectiveContentTab}
-                          onTabChange={handleContentTabChange}
-                          workspaceId={selectedWorkspaceId}
-                          visibility={tabVisibility}
-                        />
-                        {prActions}
-                      </div>
-                      <div className="border-border-subtle bg-bg-elevated flex min-h-0 flex-1 overflow-hidden rounded-lg border">
-                        <ContentView
-                          workspace={selectedWorkspace}
-                          activeTab={effectiveContentTab}
-                          panelVisible={view !== "chat"}
-                          isWatched={isWatched}
-                          onReview={handleInsertReviewPrompt}
-                          visibility={tabVisibility}
-                          toolbarAction={
-                            <WorkspacePanelButton
-                              action={view === "content" ? "restore" : "expand"}
-                              onClick={() => setPanelMode(view === "content" ? "split" : "content")}
-                            />
-                          }
-                        />
-                      </div>
-                    </div>
+                    <WorkspaceContentPane
+                      workspace={selectedWorkspace}
+                      view={view}
+                      onModeChange={setPanelMode}
+                      visibility={tabVisibility}
+                      isWatched={isWatched}
+                      onReview={handleInsertReviewPrompt}
+                      environmentTasks={environmentTasks}
+                      onRunTask={handleRunTask}
+                      prActions={prActions}
+                    />
                   ) : undefined
                 }
               />

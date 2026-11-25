@@ -13,20 +13,15 @@ import { toast } from "sonner";
 import { useProjectEnvironment } from "@/features/workspace/api/workspace.queries";
 import { api } from "@shared/api";
 import { call } from "@/platform/ws";
-import { queueTerminalTask } from "@/features/terminal/store/terminalTaskStore";
-import type { ContentTab } from "@/features/workspace/store";
+import { workspaceLayoutActions } from "@/features/workspace/store";
 import type { Workspace } from "@/shared/types";
 import { prTargetBranch } from "@/features/workspace/lib/prState";
 
 interface UseWorkspaceActionsOptions {
   selectedWorkspace: Workspace | null;
-  setContentTab: (tab: ContentTab) => void;
 }
 
-export function useWorkspaceActions({
-  selectedWorkspace,
-  setContentTab,
-}: UseWorkspaceActionsOptions) {
+export function useWorkspaceActions({ selectedWorkspace }: UseWorkspaceActionsOptions) {
   // PR handler bridge: ChatArea sets it, WorkspaceHeader consumes it.
   // Setter must be called as `setXxxHandler(() => handler)` — passing a
   // function directly causes React to invoke it as a state updater (see bf516c6).
@@ -88,9 +83,11 @@ export function useWorkspaceActions({
         .then(({ command }) => {
           // Open a new terminal tab running the task command (scoped to this
           // workspace so it can only run in its own repo)
-          queueTerminalTask(selectedWorkspace.id, taskName, command);
-          // Explicit navigation reveals the terminal if the workspace panel is hidden.
-          setContentTab("terminal");
+          workspaceLayoutActions.openTerminalTab(selectedWorkspace.id, {
+            title: taskName,
+            initialCommand: command,
+            reveal: true,
+          });
         })
         .catch((err) => {
           toast.error(
@@ -98,7 +95,7 @@ export function useWorkspaceActions({
           );
         });
     },
-    [selectedWorkspace, setContentTab]
+    [selectedWorkspace]
   );
 
   return {

@@ -305,7 +305,20 @@ try {
   await composer().fill("");
   check("the cloud `/` menu lists nothing from this computer's folders");
 
-  await page.getByRole("tab", { name: "Agent" }).click();
+  const agentTab = page
+    .getByRole("tablist", { name: "Workspace tabs" })
+    .getByRole("tab", { name: "Agent", exact: true });
+  if ((await agentTab.count()) > 0) {
+    await agentTab.click();
+  } else {
+    const newTabView = page.locator('[data-slot="new-tab-view"]');
+    if (!(await newTabView.isVisible())) {
+      await page.getByRole("button", { name: "New tab", exact: true }).click();
+      await newTabView.waitFor();
+    }
+    await newTabView.getByRole("button", { name: "Agent", exact: true }).click();
+    await agentTab.waitFor();
+  }
   await page.getByText("This workspace's agent runs in the cloud").waitFor();
   await page.screenshot({ path: path.join(shots, "2-agent-tab-cloud.png") });
   check("the Agent tab says in one line that this computer's configuration does not apply");

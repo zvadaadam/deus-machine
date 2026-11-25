@@ -16,7 +16,8 @@ interface TerminalProps {
   cloudWorkspaceId?: string;
   /** Command to execute automatically after shell init (e.g. task execution, "claude login") */
   initialCommand?: string;
-  getInitialCommand?: (id: string) => string | undefined;
+  /** Read + atomically remove a one-shot initial command right at PTY dispatch time. */
+  consumeInitialCommand?: (id: string) => string | undefined;
   /** Whether this terminal is visible (active tab AND panel visible). Used to refit on visibility change. */
   visible?: boolean;
 }
@@ -108,13 +109,14 @@ export function Terminal({
   id,
   workspacePath,
   initialCommand,
-  getInitialCommand,
+  consumeInitialCommand,
   visible = true,
   cloudWorkspaceId,
 }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const inlineCommandDispatchedRef = useRef(false);
 
   // xterm must never be OPENED into a hidden/zero-size container: its
   // renderer caches broken dimensions and every later write throws
@@ -136,7 +138,7 @@ export function Terminal({
     let disposed = false;
     let ready = false;
     let dead = false;
-    const commandToRun = initialCommand ?? getInitialCommand?.(id);
+    let initialCmdTimer: ReturnType<typeof setTimeout> | null = null;
 
     // Create xterm instance with theme-aware colors
     const xterm = new XTerm({
@@ -204,6 +206,11 @@ export function Terminal({
           return;
         }
         dead = true;
+        ready = false;
+        if (initialCmdTimer !== null) {
+          clearTimeout(initialCmdTimer);
+          initialCmdTimer = null;
+        }
         if (output.error) xterm.write(`\r\n\x1b[31m${output.error}\x1b[0m\r\n`);
         xterm.write("\r\n\x1b[90mSession ended — press Enter to restart\x1b[0m\r\n");
       });
@@ -217,19 +224,28 @@ export function Terminal({
         ...(cloudWorkspaceId ? { cloudWorkspaceId } : {}),
       })
         .then(() => {
-          if (!disposed && spawnId === ptyId) {
+          if (!disposed && !dead && spawnId === ptyId) {
             ready = true;
-            // Auto-run initial command after shell init settles
-            if (commandToRun) {
-              setTimeout(() => {
-                if (!disposed) {
-                  const encoded = Array.from(new TextEncoder().encode(commandToRun + "\n"));
-                  call(api.ptyWrite, { id: spawnId, data: encoded }).catch((err) => {
-                    console.error("Failed to write initial command:", err);
-                  });
-                }
-              }, 300);
-            }
+            // Auto-run initial command once after shell init settles.
+            // Consumed inside the dispatch callback so pre-dispatch spawn failures,
+            // early PTY exits, or StrictMode cleanups preserve the command for retry,
+            // while remounts (e.g. returning from Home) never re-run it.
+            initialCmdTimer = setTimeout(() => {
+              initialCmdTimer = null;
+              if (disposed || dead || spawnId !== ptyId) return;
+              let commandToRun: string | undefined;
+              if (initialCommand && !inlineCommandDispatchedRef.current) {
+                inlineCommandDispatchedRef.current = true;
+                commandToRun = initialCommand;
+              } else if (consumeInitialCommand) {
+                commandToRun = consumeInitialCommand(id);
+              }
+              if (!commandToRun) return;
+              const encoded = Array.from(new TextEncoder().encode(commandToRun + "\n"));
+              call(api.ptyWrite, { id: spawnId, data: encoded }).catch((err) => {
+                console.error("Failed to write initial command:", err);
+              });
+            }, 300);
           }
         })
         .catch((err) => {
@@ -260,6 +276,7 @@ export function Terminal({
 
     return () => {
       disposed = true;
+      if (initialCmdTimer !== null) clearTimeout(initialCmdTimer);
       resizeObserver.disconnect();
       inputDisposable.dispose();
       stopOutput();
@@ -268,7 +285,7 @@ export function Terminal({
       });
       xterm.dispose();
     };
-  }, [activated, id, workspacePath, initialCommand, getInitialCommand]);
+  }, [activated, id, workspacePath, cloudWorkspaceId, initialCommand, consumeInitialCommand]);
 
   // Refit terminal when becoming visible — container may have resized while hidden
   useEffect(() => {
