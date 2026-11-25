@@ -51,6 +51,9 @@ function createTestDb(): Database.Database {
   db.prepare(
     `INSERT INTO sessions (id, workspace_id, agent_harness, status) VALUES (?, 'w1', 'claude-code', 'working')`
   ).run(SESSION);
+  db.prepare("INSERT INTO turns (session_id, turn_id, started_at) VALUES (?, 'turn-1', 1)").run(
+    SESSION
+  );
   return db;
 }
 
