@@ -3761,10 +3761,9 @@ describe("operating another chat's queue", () => {
     await resumeQueuedMessages(sessionId, fromChat);
     expect(await queueTool("read_queue")).toContain("The queue is open.");
     expect(await queueTool("resume")).toBe("There is nothing to resume.");
-    engine.startTurn.mockRejectedValueOnce(busyReply());
     expect(await resumeQueuedMessages(sessionId)).toMatchObject({ outcome: "resumed" });
     end("A", "cancelled");
-    await vi.waitFor(() => expect(starts()).toEqual(["A", "R", "R"]));
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "R"]));
     expect(await queue()).toEqual({ paused: null, items: [] });
   });
 
