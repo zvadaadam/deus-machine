@@ -37,6 +37,12 @@ If `up` reports “Lab is already up or starting”, `status` shows the phase, d
 After a `kill -9` of the daemon, read `status` before the next `up` replaces `lab.json`. Use `last` to identify and manually remove any surviving lab processes and Postgres container.
 The next `up` starts in a fresh directory with a unique container name and newly allocated ports.
 
+## Sign in an outside client
+
+After `lab up`, read `services.cloud.address` and `services.relay.address` from `lab status`.
+Have the runner capture `lab client-session` stdout directly into its private bootstrap. Exclude that reply from logs, traces and handover evidence.
+The iOS journey describes the bootstrap file and when to delete it in its [README](https://github.com/zvadaadam/deus-ios/blob/master/ios/Tests/E2E/README.md).
+
 ## Pair a second device and see the approval
 
 Capture the Mac’s one-use code privately and record the issuer’s exit (`$?`).
