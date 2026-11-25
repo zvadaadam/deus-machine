@@ -239,6 +239,8 @@ with “Stopped before it started.” The operator can read who stopped that sen
 until the chat's next admission or archive. Its end stays out of the transcript.
 Once the start request reaches the wire, Stop
 waits for its answer (up to 30 seconds) and cancels the turn if it is still live.
+If the start reply is lost after the turn's events arrive, the chat keeps working
+and its queue advances at the turn's end.
 If the engine reports no active turn, the chat settles at once. A confirmed cancel withdraws the cards
 and keeps the chat occupied for final echoes. If no end arrives within 15 seconds of confirmation, the watchdog
 frees the chat, records the local end and returns unread steers to the queue. A late engine end can update the outcome.

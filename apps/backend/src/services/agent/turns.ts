@@ -452,11 +452,7 @@ async function sendMessageOnce(
           "The agent is still working — wait for the current turn to finish."
         );
       }
-      // Every other rejection — harness unavailable, shutting down, invalid
-      // params, a transport that died mid-request — means no turn was admitted,
-      // so the session must not be left sitting on "working".
-      if (err instanceof WireRequestError) handleAgentRejection(sessionId, turnId, err.message);
-      else handleAgentError(sessionId, turnId, err);
+      handleAgentError(sessionId, turnId, err);
       throw err;
     } finally {
       // A quick turn can end and start its successor before its admission reply.
@@ -636,20 +632,17 @@ function scheduleCancelWatchdog(
 
 // ---- Helpers ----
 
-function handleAgentRejection(sessionId: string, turnId: string, reason?: string): void {
-  const msg = reason || "Agent rejected the message";
-  console.error(`[CommandHandler] Agent rejected sendMessage for session=${sessionId}: ${msg}`);
-  persistSessionError(sessionId, msg, "internal");
-  const gone = agentService.liveTurnId(sessionId) !== turnId;
-  agentService.notifyTurnInterrupted(sessionId, turnId, gone);
-  invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
-}
-
 function handleAgentError(sessionId: string, turnId: string, err: unknown): void {
-  const errorMsg = err instanceof Error ? err.message : String(err);
-  console.error("[CommandHandler] Failed to forward to agent-server:", errorMsg);
-  persistSessionError(sessionId, `Agent server communication failed: ${errorMsg}`, "internal");
-  const gone = agentService.liveTurnId(sessionId) !== turnId;
-  agentService.notifyTurnInterrupted(sessionId, turnId, gone);
+  // Events can confirm admission even when its reply is lost.
+  if (agentService.liveTurnId(sessionId) === turnId) return;
+  const message =
+    err instanceof WireRequestError
+      ? err.message || "Agent rejected the message"
+      : `Agent server communication failed: ${err instanceof Error ? err.message : String(err)}`;
+  console.error(`[CommandHandler] Failed to start turn: session=${sessionId} ${message}`);
+  const current = currentTurnId(sessionId);
+  if (current === undefined || current === turnId)
+    persistSessionError(sessionId, message, "internal");
+  agentService.notifyTurnInterrupted(sessionId, turnId, true);
   invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
 }
