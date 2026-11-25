@@ -14,6 +14,7 @@ import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useStream } from "@/shared/hooks/useStream";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { track } from "@/platform/analytics";
+import { finishAgentInstall } from "../lib/local-agent-installs";
 import type { Settings } from "../types";
 import { DEFAULT_THINKING_LEVEL } from "@shared/models";
 import { readThinkingLevel, type ThinkingLevel } from "@shared/protocol";
@@ -53,7 +54,7 @@ function withProgress(answer: AgentAuthAnswer, progress: HarnessCliProgress): Ag
         ? {
             harness: cli.harness,
             state,
-            version: progress.version,
+            version: progress.version || cli.version,
             receivedBytes: progress.receivedBytes,
             ...(progress.totalBytes !== undefined && { totalBytes: progress.totalBytes }),
             ...(progress.error && { error: progress.error }),
@@ -97,12 +98,16 @@ export function useAgentAuthEvents(): void {
       queryClient.setQueryData<AgentAuthAnswer>(queryKeys.settings.agentAuth, (answer) =>
         answer ? withProgress(answer, progress) : answer
       );
-      if (progress.phase === "ready") readLoginAndModels();
+      if (progress.phase === "ready") {
+        finishAgentInstall(progress.harness);
+        readLoginAndModels();
+      }
       if (progress.phase === "failed") {
         const reason = progress.error?.trim() || "The install failed.";
-        toast.error(`Couldn’t install ${getAgentLabel(progress.harness)}: ${reason}`, {
-          id: `cli-install-${progress.harness}`,
-        });
+        finishAgentInstall(
+          progress.harness,
+          `Couldn’t install ${getAgentLabel(progress.harness)}: ${reason}`
+        );
         void readAgain(queryKeys.settings.agentAuth);
       }
     },

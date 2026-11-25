@@ -102,6 +102,18 @@ describe("onboarding Claude account status", () => {
     expect(html.match(/>Install<\/button>/g)).toHaveLength(1);
   });
 
+  it("offers Try again for a failed install with a version and shows the reason for an unavailable CLI", () => {
+    auth.data!.clis = [
+      clis[0]!,
+      { harness: "gemini", state: "failed", version: "1.5.14", error: "Download failed" },
+      { harness: "codex-app-server", state: "failed", error: "Codex is unavailable" },
+    ];
+    const html = render();
+    expect(html.match(/>Try again<\/button>/g)).toHaveLength(1);
+    expect(html).toContain("its install failed: Download failed");
+    expect(html).toContain(">Codex is unavailable<");
+  });
+
   it("waits for the login read before offering an action", () => {
     auth.data = undefined;
     auth.isFetching = true;
