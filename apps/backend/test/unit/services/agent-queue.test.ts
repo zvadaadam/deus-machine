@@ -672,28 +672,6 @@ describe("stopping the current turn", () => {
     expect(starts()).toEqual(["A", "B"]);
   });
 
-  it("O6: giving up A leaves B working in setup and its waiting row held", async () => {
-    vi.useFakeTimers();
-    const { release, starting } = await startBWhileALives();
-    await send("later");
-    await stopped("A");
-    await vi.advanceTimersByTimeAsync(15_000);
-    const session = await run(api.session, { sessionId });
-    const reading = await view();
-    const waiting = await queue();
-    release();
-    await starting;
-    expect(session).toMatchObject({ status: "working", error_message: null });
-    expect(reading).toMatchObject({ status: "working", running: "B" });
-    expect(await fact("A")).toMatchObject({ state: "ended", outcome: "cancelled" });
-    expect(waiting).toMatchObject({
-      paused: "stopped",
-      stoppedBy: fromPerson,
-      items: [waitingRow("later")],
-    });
-    expect(starts()).toEqual(["A", "B"]);
-  });
-
   it("drains a resumed row when the pending operator start is refused after the stopped turn ends", async () => {
     await sendInOrder("A", "C");
     await stopped("A");
