@@ -4,8 +4,11 @@
 // (`hostTools`), and deus's Claude embed-tier options (tool policy, checkpoint hooks).
 
 import { AgentRuntime, createAgentRegistry, type AgentRegistry } from "@zvada/agent-server/core";
+import { spawn } from "node:child_process";
 import { LOCAL_HARNESSES } from "@shared/harnesses";
+import { createBackendChildEnv } from "@shared/lib/child-env";
 import { deusTools } from "../deus-tools";
+import { getShellEnvironment } from "../environment";
 import { chatTools } from "../../host-link";
 import { trackedSessions } from "../../session-tracker";
 import { createCheckpoint } from "./checkpoint";
@@ -13,6 +16,7 @@ import { decideToolUse } from "./tool-policy";
 
 let registry: AgentRegistry | undefined;
 let runtime: AgentRuntime | undefined;
+const SHELL_RUNTIME_KEYS = ["NODE_ENV", "PORT", "NODE_PATH", "BUN_OPTIONS"] as const;
 
 async function checkpointHook(
   kind: "start" | "end",
@@ -29,6 +33,17 @@ export function getRegistry(): AgentRegistry {
     harnesses: [...LOCAL_HARNESSES],
     // The engine uses a staged CLI or its verified pin. It downloads agy on first use.
     provision: { mode: "pinned" },
+    // Harnesses merge their environment with process.env before reaching this hook.
+    nativeProcesses: {
+      spawn: (command, args, options) => {
+        const env = createBackendChildEnv({}, options.env);
+        const shell = getShellEnvironment();
+        for (const key of SHELL_RUNTIME_KEYS) {
+          if (shell[key] !== undefined) env[key] = shell[key];
+        }
+        return spawn(command, args, { ...options, env });
+      },
+    },
     hostTools: ({ sessionId }) => chatTools(deusTools(sessionId)),
     claudeCode: {
       // Sub-agent text must reach the wire. Claude's own Cron* tools are off by

@@ -887,6 +887,8 @@ the catalog can move to a package the day Deus Cloud reads it too.
 
 Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 13 tables: `repositories`, `workspaces`, `sessions`, `messages`, `turns`, `parts`, `compactions`, `paired_devices`, `assistants`, `automations`, `automation_runs`, `extension_installations`, `integration_connections`.
 
+- Checkout launchers and `cli:backend` use `.deus-dev/deus.db` in their checkout by default. They accept `DATABASE_PATH` from a development shell and discard it from a legacy shell marked `DEUS_PACKAGED=1`. The dev desktop uses the same directory for its Electron profile, so each new worktree starts signed out.
+- Before it opens the database, each backend takes a SQLite write lock on the `.owner` sidecar. It waits up to ten seconds for an earlier backend to finish closing. The OS releases the lock on exit, including a crash.
 - `repositories.root_path` is nullable (a project not on this computer).
 - Turn accounting, execution, provider account snapshots and outcomes belong to `turns`, keyed by `(session_id, turn_id)`. Messages contain transcript content only.
 - Only the backend writes to DB

@@ -17,6 +17,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import type BetterSqlite3 from "better-sqlite3";
+import { DATABASE_IN_USE, DatabaseInUseError } from "@shared/runtime";
 import { PRELAUNCH_SCHEMA_MISMATCH, SCHEMA_SQL } from "@shared/schema";
 import { isMissingSchemaObject, openSqliteDatabase } from "../../../src/lib/sqlite";
 
@@ -245,11 +246,17 @@ describe(`the backend's database (${engine})`, () => {
   let backendDir: string;
   let closeDatabase: () => void;
   let store: typeof import("../../../src/services/automations/store");
-  const originalDatabasePath = process.env.DATABASE_PATH;
+  const originalEnv = {
+    DATABASE_PATH: process.env.DATABASE_PATH,
+    NODE_ENV: process.env.NODE_ENV,
+    DEUS_TEST_DB_OWNER_NO_WAIT: process.env.DEUS_TEST_DB_OWNER_NO_WAIT,
+  };
 
   beforeAll(async () => {
     backendDir = mkdtempSync(path.join(os.tmpdir(), "deus-sqlite-parity-backend-"));
     process.env.DATABASE_PATH = path.join(backendDir, "deus.db");
+    process.env.NODE_ENV = "test";
+    process.env.DEUS_TEST_DB_OWNER_NO_WAIT = "1";
     const database = await import("../../../src/lib/database");
     closeDatabase = database.closeDatabase;
     const opened = database.initDatabase();
@@ -259,14 +266,34 @@ describe(`the backend's database (${engine})`, () => {
 
   afterAll(() => {
     closeDatabase();
-    if (originalDatabasePath === undefined) delete process.env.DATABASE_PATH;
-    else process.env.DATABASE_PATH = originalDatabasePath;
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
     rmSync(backendDir, { recursive: true, force: true });
   });
 
   it("knows a session that no longer exists from one that does", () => {
     expect(store.sessionExists("session-1")).toBe(true);
     expect(store.sessionExists("deleted-session")).toBe(false);
+  });
+
+  it("reuses its connection and can start after the owner releases the sidecar", async () => {
+    const database = await import("../../../src/lib/database");
+    expect(database.initDatabase()).toBe(database.getDatabase());
+    closeDatabase();
+
+    const owner = openSqliteDatabase(`${database.DB_PATH}.owner`);
+    const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      owner.exec("BEGIN IMMEDIATE");
+      expect(database.initDatabase).toThrow(DatabaseInUseError);
+      expect(stderr).toHaveBeenCalledWith(DATABASE_IN_USE);
+    } finally {
+      owner.close();
+      stderr.mockRestore();
+    }
+    expect(database.initDatabase().prepare("SELECT 1 AS ready").get()).toEqual({ ready: 1 });
   });
 
   it("refuses a busy database and offers a reset only after it can check the schema", async () => {

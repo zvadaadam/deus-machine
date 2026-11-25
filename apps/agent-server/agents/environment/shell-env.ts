@@ -48,7 +48,7 @@ const STRIPPED_ENV_KEYS = [
 
 /**
  * Lazily captures and returns the user's interactive login-shell environment.
- * Results are cached after the first call.
+ * Cache the result, including a failure, so starting a harness never retries a hung shell.
  */
 export function getShellEnvironment(): Record<string, string> {
   if (shellEnvironment !== null) {
@@ -58,19 +58,25 @@ export function getShellEnvironment(): Record<string, string> {
   const shell = process.env.SHELL || "/bin/zsh";
   const command = `echo -n "${DELIMITER}"; env; echo -n "${DELIMITER}"; exit`;
 
-  const output = execFileSync(shell, ["-ilc", command], {
-    encoding: "utf8",
-    timeout: 5_000,
-    // An interactive shell ignores SIGTERM, so a profile that hangs would hold
-    // the backend's start for as long as it hangs: kill it outright.
-    killSignal: "SIGKILL",
-    // What a profile prints to stderr stays out of the backend's log.
-    stdio: ["pipe", "pipe", "ignore"],
-    env: {
-      // Prevent Oh My Zsh from blocking with auto-update prompts
-      DISABLE_AUTO_UPDATE: "true",
-    },
-  });
+  let output: string;
+  try {
+    output = execFileSync(shell, ["-ilc", command], {
+      encoding: "utf8",
+      timeout: 5_000,
+      // An interactive shell ignores SIGTERM, so a hung profile must be killed outright.
+      killSignal: "SIGKILL",
+      stdio: ["pipe", "pipe", "ignore"],
+      env: { DISABLE_AUTO_UPDATE: "true" },
+    });
+  } catch (error) {
+    // The error can contain the environment the shell had already printed.
+    const { code, signal } = error as { code?: string; signal?: string };
+    console.error(
+      `Failed to load shell environment (${code ?? signal ?? "error"}), continuing without it`
+    );
+    shellEnvironment = {};
+    return shellEnvironment;
+  }
 
   const env = parseEnv(output);
 
