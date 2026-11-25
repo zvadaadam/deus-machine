@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { resolveDefaultDatabasePath } from "@shared/runtime";
@@ -13,7 +13,7 @@ let directory: string;
 let filename: string;
 
 beforeEach(() => {
-  directory = mkdtempSync(join(tmpdir(), "deus-db-owner-"));
+  directory = realpathSync.native(mkdtempSync(join(tmpdir(), "deus-db-owner-")));
   filename = join(directory, "deus.db");
   vi.stubEnv("DEUS_PACKAGED", undefined);
   vi.stubEnv("DATABASE_PATH", filename);

@@ -19,12 +19,7 @@ const fixturePids = new Set();
 function launch(preload) {
   const child = spawn(
     process.execPath,
-    [
-      "--import",
-      "tsx",
-      ...(preload ? ["--import", `./test/e2e/lib/${preload}.mjs`] : []),
-      "apps/backend/src/server.ts",
-    ],
+    ["--import", "tsx", "--import", `./test/e2e/lib/${preload}.mjs`, "apps/backend/src/server.ts"],
     {
       cwd: root,
       env: {
@@ -56,6 +51,16 @@ function launch(preload) {
     }
   }
   return { child, exited, line };
+}
+
+async function expectFailedShutdown({ child, line }, diagnostic) {
+  let stderr = "";
+  child.stderr.on("data", (chunk) => (stderr += chunk));
+  const closed = once(child, "close");
+  child.kill("SIGTERM");
+  await line("Closing database connection");
+  assert.deepEqual(await closed, [1, null]);
+  assert.match(stderr, diagnostic);
 }
 
 let host;
@@ -104,16 +109,13 @@ try {
     `Stuck agent ${agentPid} and child ${childPid} gone at backend exit. Replacement healthy after ${seconds}s.`
   );
 
-  let stderr = "";
-  next.child.stderr.on("data", (chunk) => (stderr += chunk));
-  const closed = once(next.child, "close");
-  next.child.kill("SIGTERM");
-  assert.deepEqual(await closed, [1, null]);
-  assert.match(stderr, /Shutdown failed: Error: fixture device disconnect failed/);
-  const recovered = launch();
+  await expectFailedShutdown(next, /Shutdown failed: Error: fixture device disconnect failed/);
+  const recovered = launch("reject-engine-shutdown");
   const recoveredPort = await recovered.line("[BACKEND_PORT]");
   assert((await fetch(`http://127.0.0.1:${recoveredPort}/api/health`)).ok);
   console.log("Teardown failure exited 1. Replacement acquired the database and served health.");
+  await expectFailedShutdown(recovered, /Engine shutdown failed: Error: fixture engine rejection/);
+  console.log("Engine shutdown rejection was logged and the backend exited 1.");
 } finally {
   host?.close();
   for (const { child } of children) child.stdin.end();

@@ -207,9 +207,13 @@ function shutdown() {
   // First, so a checkout or a setup script stops while the rest shuts down.
   stopProcessGroups();
   const report = process.exitCode === 1 ? Sentry.close(2000) : undefined;
-  void Promise.allSettled([agentService.shutdown(), report]).then(() => {
+  void Promise.allSettled([agentService.shutdown(), report]).then(([engine]) => {
     try {
       try {
+        if (engine.status === "rejected") {
+          process.exitCode = 1;
+          console.error("[server] Engine shutdown failed:", engine.reason);
+        }
         destroyAllSimulators();
         destroyAllPtySessions();
         destroyAllWatchers();

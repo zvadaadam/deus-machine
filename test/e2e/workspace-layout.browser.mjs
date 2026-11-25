@@ -251,32 +251,44 @@ try {
   assert.equal(await omnibox.getAttribute("aria-expanded"), "false");
   const fileReads = () => requests.filter((url) => url === "/api/query/workspaceFiles").length;
   assert.equal(fileReads(), 0, "a cold New Tab has not requested the file tree");
-  const filesReply = Promise.withResolvers();
-  await page.route(
-    "**/api/query/workspaceFiles",
-    async (route) => {
-      await filesReply.promise;
-      await route.continue();
-    },
-    { times: 1 }
-  );
-  await Promise.all([page.waitForRequest("**/api/query/workspaceFiles"), omnibox.press("r")]);
-  assert.equal(await omnibox.getAttribute("aria-expanded"), "true");
-  await omnibox.press("ArrowDown");
-  const browserOption = page.getByRole("option", { name: /^Browser/ });
-  assert.equal(await browserOption.getAttribute("aria-selected"), "true");
-  filesReply.resolve();
   const readme = page.getByRole("option").filter({ hasText: "README.md" });
-  await readme.waitFor();
-  assert.equal(fileReads(), 1, "the first keystroke requested the file tree");
-  await page.screenshot({ path: path.join(artifacts, "new-tab-first-keystroke.png") });
-  assert.equal(
-    await omnibox.getAttribute("aria-activedescendant"),
-    await browserOption.getAttribute("id")
-  );
-  await omnibox.press("Enter");
-  await tabs.getByRole("tab", { name: "Browser", selected: true }).hover();
-  await page.getByRole("button", { name: "Close Browser", exact: true }).click();
+  async function openBrowserWithHeldFiles(query, moveDown = false) {
+    const before = fileReads();
+    const filesReply = Promise.withResolvers();
+    await page.route(
+      "**/api/query/workspaceFiles",
+      async (route) => {
+        await filesReply.promise;
+        await route.continue();
+      },
+      { times: 1 }
+    );
+    await Promise.all([
+      page.waitForRequest("**/api/query/workspaceFiles"),
+      omnibox.pressSequentially(query),
+    ]);
+    assert.equal(await omnibox.getAttribute("aria-expanded"), "true");
+    if (moveDown) await omnibox.press("ArrowDown");
+    const browserOption = page.getByRole("option", { name: /^Browser/ });
+    assert.equal(await browserOption.getAttribute("aria-selected"), "true");
+    filesReply.resolve();
+    await readme.waitFor();
+    assert.equal(fileReads(), before + 1, "the first keystroke requested the file tree");
+    assert.equal(
+      await omnibox.getAttribute("aria-activedescendant"),
+      await browserOption.getAttribute("id")
+    );
+    await page.screenshot({
+      path: path.join(
+        artifacts,
+        moveDown ? "new-tab-first-keystroke.png" : "new-tab-default-selection.png"
+      ),
+    });
+    await omnibox.press("Enter");
+    await tabs.getByRole("tab", { name: "Browser", selected: true }).hover();
+    await page.getByRole("button", { name: "Close Browser", exact: true }).click();
+  }
+  await openBrowserWithHeldFiles("r", true);
   await omnibox.fill("README");
   await readme.click();
   const readmeTab = tabs.getByRole("tab", { name: "README.md", exact: true });
@@ -409,6 +421,7 @@ try {
   await view("split");
   // Launcher isolation across workspaces, Delete-key close + focus restore, and rapid same-pixel close.
   await page.evaluate(() => window.selectWorkspace("rapid"));
+  await openBrowserWithHeldFiles("re");
   const rapidOmnibox = page.getByRole("combobox", { name: "Search files or enter a URL" });
   await rapidOmnibox.fill("should-not-leak");
   await page.evaluate(() => window.selectWorkspace("second"));

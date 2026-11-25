@@ -233,6 +233,7 @@ async function startBackendProcess(opts: {
 }): Promise<{ process: ChildProcess; backendPort: number } | null> {
   const { backendEntry, backendCwd, env, onUnexpectedExit } = opts;
   const parentEnv = { ...process.env };
+  delete parentEnv.DATABASE_PATH; // start() supplies the CLI's chosen database below.
   clearInheritedPackagedEnv(parentEnv);
 
   return new Promise((resolve) => {

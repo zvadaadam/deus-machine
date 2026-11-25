@@ -243,6 +243,22 @@ try {
   check("the local `/` menu lists the skill in the workspace's own folder");
 
   // 2. The cloud chat. Rule 2: an internet link opens in the person's browser.
+  const releasePreview = Promise.withResolvers();
+  let heldLookups = 0;
+  await page.routeWebSocket(
+    (url) => url.pathname === "/ws",
+    (route) => {
+      const host = route.connectToServer();
+      host.onMessage(async (raw) => {
+        const frame = JSON.parse(String(raw));
+        if (frame.data === TEMPLATE || frame.event === "cloudPreviewChanges") {
+          if (frame.data === TEMPLATE) heldLookups++;
+          await releasePreview.promise;
+        }
+        route.send(raw);
+      });
+    }
+  );
   await page.goto(`${appUrl}s/local/w/${cloudWorkspace}`);
   await page.getByText("Cloud reach", { exact: true }).first().waitFor();
   await page.getByRole("link", { name: "the docs" }).click();
@@ -251,10 +267,27 @@ try {
   );
   check("an internet link in a cloud chat opens in the person's browser");
 
+  const address = page.getByRole("combobox", { name: "Search files or enter a URL" });
+  const frame = page.locator('iframe[title="Cloud computer preview"]');
+  for (const path of ["older", "latest"]) {
+    const before = heldLookups;
+    await address.fill(`localhost:5173/${path}`);
+    await address.press("Enter");
+    await until(`the ${path} preview lookup to be held`, () => heldLookups > before);
+  }
+  releasePreview.resolve();
+  await until(
+    "the latest submission to open",
+    async () => (await frame.getAttribute("src")) === "https://5173-reach.sandbox.test/latest"
+  );
+  await page.getByRole("tab", { name: "Browser", selected: true }).waitFor();
+  check(
+    "two submissions from a cold New Tab open the latest address when the earlier reply arrives first"
+  );
+
   // A localhost link is on the cloud computer: its preview, at that port and path, with
   // this computer's own browser setting off and in a plain browser.
   await page.getByRole("link", { name: "the preview" }).click();
-  const frame = page.locator('iframe[title="Cloud computer preview"]');
   await frame.waitFor();
   // The panel opens on its stored port and takes the link's a moment later.
   await until(
@@ -280,7 +313,6 @@ try {
 
   const tabs = page.getByRole("tablist", { name: "Workspace tabs" });
   const addTab = page.getByRole("button", { name: "New tab", exact: true });
-  const address = page.getByRole("combobox", { name: "Search files or enter a URL" });
   await addTab.click();
   await address.fill("localhost:3000/ready?tab=2#result");
   await address.press("Enter");

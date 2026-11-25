@@ -114,6 +114,7 @@ export function NewTabView({
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const latestSubmission = useRef(0);
   const listboxId = useId();
   const optionDomId = (index: number) => `${listboxId}-option-${index}`;
 
@@ -180,13 +181,19 @@ export function NewTabView({
     0,
     results.findIndex((item) => item.id === selectedId)
   );
+  const activeResult = results[selectedIndex];
+  if (activeResult && activeResult.id !== selectedId) setSelectedId(activeResult.id);
 
   async function openUrl(url: string) {
+    const submission = ++latestSubmission.current;
     const destination = await openAddressFromChat(
       workspace.id,
       url,
       { cloud, folder: localFolder(workspace) },
-      { replaceTabId: tabId }
+      {
+        replaceTabId: tabId,
+        isStale: () => inputRef.current === null || submission !== latestSubmission.current,
+      }
     );
     if (destination === "browser-tab" || destination === "cloud-preview") {
       track("browser_opened", { workspace_id: workspace.id });
@@ -213,8 +220,7 @@ export function NewTabView({
       setSelectedId(results[(selectedIndex + step + results.length) % results.length].id);
     } else if (event.key === "Enter") {
       event.preventDefault();
-      const chosen = results[selectedIndex];
-      if (chosen) executeResult(chosen);
+      if (activeResult) executeResult(activeResult);
     } else if (event.key === "Escape") {
       if (query) {
         event.preventDefault();
@@ -245,9 +251,7 @@ export function NewTabView({
               aria-expanded={hasQuery}
               aria-controls={listboxId}
               aria-autocomplete="list"
-              aria-activedescendant={
-                hasQuery && results[selectedIndex] ? optionDomId(selectedIndex) : undefined
-              }
+              aria-activedescendant={activeResult ? optionDomId(selectedIndex) : undefined}
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value);

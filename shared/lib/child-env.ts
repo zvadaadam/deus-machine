@@ -1,6 +1,6 @@
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { isAbsolute, join, parse, sep } from "node:path";
 import { resolveDefaultDatabasePath } from "../runtime";
 
 /** Backend settings withheld from the processes it starts. */
@@ -42,22 +42,36 @@ export function defaultDatabasePathForEnv(env: NodeJS.ProcessEnv, devRoot?: stri
   });
 }
 
-function sameDatabaseFile(candidate: string, installed: string): boolean {
-  if (!candidate || candidate === ":memory:") return false;
-  try {
-    return realpathSync.native(candidate) === realpathSync.native(installed);
-  } catch {
-    return resolve(candidate) === resolve(installed); // One or both files do not exist yet.
+function resolveDatabaseFile(filename: string, cwd: string): string {
+  const absolute = isAbsolute(filename) ? filename : `${cwd}${sep}${filename}`;
+  let target = parse(absolute).root;
+  // Follow each existing directory before interpreting "..", even for a new database.
+  for (const part of absolute.slice(target.length).split(sep)) {
+    target = join(target, part);
+    if (existsSync(target)) target = realpathSync.native(target);
   }
+  return target;
+}
+
+export function prepareDevBackendEnv(env: NodeJS.ProcessEnv, backendCwd: string): void {
+  const override = env.DATABASE_PATH;
+  const legacyShell = env.DEUS_PACKAGED === "1";
+  if (legacyShell) clearBackendChildEnv(env);
+  if (!override) return;
+
+  const filename = override.trim();
+  const database =
+    filename && filename !== ":memory:" ? resolveDatabaseFile(filename, backendCwd) : ":memory:";
+  if (legacyShell && database === resolveDatabaseFile(defaultDatabasePathForEnv(env), backendCwd)) {
+    return;
+  }
+  if (database !== database.trimEnd()) {
+    throw new Error(`Cannot use "${database}" because its filename ends in whitespace.`);
+  }
+  env.DATABASE_PATH = database;
 }
 
 /** Older installed versions passed their own runtime settings to agent shells. */
 export function clearInheritedPackagedEnv(env: NodeJS.ProcessEnv): void {
-  if (env.DEUS_PACKAGED !== "1") return;
-  const installed = defaultDatabasePathForEnv(env);
-  const override = env.DATABASE_PATH;
-  clearBackendChildEnv(env);
-  if (override !== undefined && !sameDatabaseFile(override.trim(), installed)) {
-    env.DATABASE_PATH = override;
-  }
+  if (env.DEUS_PACKAGED === "1") prepareDevBackendEnv(env, process.cwd());
 }

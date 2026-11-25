@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -13,7 +13,7 @@ afterEach(() => {
 
 describe("backend child process environment", () => {
   it("drops dotted and symlinked spellings of the installed database, and keeps a custom file", () => {
-    const home = mkdtempSync(join(tmpdir(), "deus-legacy-env-"));
+    const home = realpathSync.native(mkdtempSync(join(tmpdir(), "deus-legacy-env-")));
     try {
       const installed = resolveDefaultDatabasePath({
         platform: process.platform,
@@ -40,7 +40,14 @@ describe("backend child process environment", () => {
       const link = join(dirname(installed), "link");
       symlinkSync(child, link);
       const throughParent = `${link}/../${basename(installed)}`;
-      expect(fromLegacyShell(throughParent)).toBe(throughParent);
+      expect(fromLegacyShell(throughParent)).toBe(join(home, "custom", basename(installed)));
+      expect(fromLegacyShell(`${link}/../new.db`)).toBe(join(home, "custom", "new.db"));
+
+      const padded = `${installed} `;
+      writeFileSync(padded, "");
+      const paddedAlias = join(home, "padded.db");
+      symlinkSync(padded, paddedAlias);
+      expect(() => fromLegacyShell(paddedAlias)).toThrow(/filename ends in whitespace/);
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

@@ -109,7 +109,11 @@ export async function openAddressFromChat(
   workspaceId: string,
   url: string,
   base: Pick<ChatPlace, "cloud" | "folder">,
-  { external = false, replaceTabId }: { external?: boolean; replaceTabId?: string } = {}
+  {
+    external = false,
+    replaceTabId,
+    isStale,
+  }: { external?: boolean; replaceTabId?: string; isStale?: () => boolean } = {}
 ) {
   const place = chatPlaceNow(workspaceId, base);
   const needsTemplate = place.previewTemplate === undefined && needsPreviewAddress(url, place);
@@ -122,6 +126,7 @@ export async function openAddressFromChat(
     if (
       state === "disposed" ||
       state === "revoked" ||
+      isStale?.() ||
       (replaceTabId && !isCurrentLauncher(workspaceId, replaceTabId))
     ) {
       tab?.cancel();

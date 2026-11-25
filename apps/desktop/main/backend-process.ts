@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "child_process";
 import { pushCloudCredentialsToBackend, setBackendAuthToken } from "./deus-cloud-provision";
 import { existsSync, statSync, writeFileSync } from "fs";
-import { delimiter, join, resolve as resolvePath } from "path";
+import { delimiter, join } from "path";
 import { createInterface } from "node:readline";
 import { app, BrowserWindow } from "electron";
 import crypto from "crypto";
@@ -13,7 +13,7 @@ import {
   PACKAGED_SYSTEM_PATHS,
 } from "../../../shared/runtime";
 import { extendCliPath, getDevStagedCliDirectory } from "../../../shared/lib/cli-path";
-import { createBackendChildEnv, clearInheritedPackagedEnv } from "../../../shared/lib/child-env";
+import { createBackendChildEnv, prepareDevBackendEnv } from "../../../shared/lib/child-env";
 import { handleKeepAwakeLine, setKeepAwakeWanted } from "./keep-awake";
 import { getLaunchPath } from "./shell-env";
 import { rendererOrigin } from "./app-protocol";
@@ -190,15 +190,11 @@ export async function spawnBackend(hooks: BackendSpawnHooks = {}): Promise<{ por
     );
   }
   const childEnv = app.isPackaged ? createBackendChildEnv() : { ...process.env };
-  if (!app.isPackaged) clearInheritedPackagedEnv(childEnv);
-  const override = childEnv.DATABASE_PATH;
-  // The dev SQLite driver trims filenames. A blank or :memory: filename has no file to recover.
-  const filename = override ? override.trim() : join(app.getPath("userData"), DEUS_DB_FILENAME);
-  const dbPath =
-    filename && filename !== ":memory:" ? resolvePath(runtime.backendCwd, filename) : undefined;
+  if (!app.isPackaged) prepareDevBackendEnv(childEnv, runtime.backendCwd);
+  const dbPath = childEnv.DATABASE_PATH || join(app.getPath("userData"), DEUS_DB_FILENAME);
 
   const sharedEnv: NodeJS.ProcessEnv = {
-    DATABASE_PATH: dbPath ?? ":memory:",
+    DATABASE_PATH: dbPath,
     PATH: buildRuntimePath(runtime),
     ...(runtime.resourcesPath
       ? { DEUS_PACKAGED: "1", DEUS_RESOURCES_PATH: runtime.resourcesPath }
@@ -318,7 +314,7 @@ export async function spawnBackend(hooks: BackendSpawnHooks = {}): Promise<{ por
         exitedBeforeStart = error;
         // exit can precede the last stderr lines. An inherited pipe still has the startup deadline.
         child.once("close", () => {
-          if (code && dbPath) {
+          if (code && dbPath !== ":memory:") {
             if (databaseFailure === "schema") return fail(new OutdatedDatabaseError(dbPath));
             if (databaseFailure === "owned") return fail(new DatabaseInUseError(dbPath));
           }
