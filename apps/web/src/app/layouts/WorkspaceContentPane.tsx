@@ -3,10 +3,9 @@
  * and active content view so tab/title churn never re-renders MainContent or ChatArea.
  */
 
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, type ReactNode } from "react";
 import { useFileChanges, useWorkspaceTabsState } from "@/features/workspace";
 import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
-import { onLocalhost } from "@/features/workspace/lib/reach";
 import {
   workspaceLayoutActions,
   type WorkspacePanelMode,
@@ -21,26 +20,13 @@ import {
   type ContentTab,
   type ContentTabVisibility,
 } from "@/features/workspace-tabs";
-import { cloudPreviewActions } from "@/features/browser/cloud/cloudPreviewStore";
 import { useSettings } from "@/features/settings/api/settings.queries";
 import { cn } from "@/shared/lib/utils";
 import { track } from "@/platform/analytics";
-import { native } from "@/platform/native";
 import type { Workspace } from "@/shared/types";
 import type { ProjectTask } from "@shared/types/project-environment";
 import { ContentView } from "./ContentView";
 import { WorkspacePanelButton } from "./WorkspacePanelButton";
-
-function trackToolOpened(tool: ContentTab, workspaceId: string) {
-  const tabEventMap: Partial<Record<ContentTab, () => void>> = {
-    terminal: () => track("terminal_opened", { workspace_id: workspaceId }),
-    browser: () => track("browser_opened", { workspace_id: workspaceId }),
-    simulator: () => track("simulator_opened", { workspace_id: workspaceId }),
-    changes: () => track("diff_viewed", { workspace_id: workspaceId }),
-    files: () => track("files_opened", { workspace_id: workspaceId }),
-  };
-  tabEventMap[tool]?.();
-}
 
 interface WorkspaceContentPaneProps {
   workspace: Workspace;
@@ -49,6 +35,7 @@ interface WorkspaceContentPaneProps {
   visibility: ContentTabVisibility;
   isWatched: boolean;
   onReview: () => void;
+  onOpenTool: (tool: ContentTab, replaceTabId: string) => void;
   environmentTasks?: ProjectTask[];
   onRunTask?: (taskName: string) => void;
   prActions: ReactNode;
@@ -61,6 +48,7 @@ export function WorkspaceContentPane({
   visibility,
   isWatched,
   onReview,
+  onOpenTool,
   environmentTasks,
   onRunTask,
   prActions,
@@ -69,22 +57,8 @@ export function WorkspaceContentPane({
   const isCloud = workspace.kind === "cloud";
   const panelVisible = view !== "chat";
 
-  const {
-    workspaceTabs,
-    activeTabId,
-    migratedActiveTool,
-    selectTab,
-    addNewTab,
-    closeTab,
-    reorderTabs,
-  } = useWorkspaceTabsState(workspaceId);
-
-  // Resolve any preserved v11 selected tool (e.g. Terminal or cloud Browser) once workspace kind is known.
-  useEffect(() => {
-    if (!migratedActiveTool) return;
-    workspaceLayoutActions.resolveMigratedTool(workspaceId, { cloud: isCloud });
-  }, [workspaceId, isCloud, migratedActiveTool]);
-
+  const { workspaceTabs, activeTabId, selectTab, addNewTab, closeTab, reorderTabs } =
+    useWorkspaceTabsState(workspaceId);
   const closeWithFocusRef = useRef<((tabId: string) => void) | null>(null);
 
   const experimentalSettings = useSettings().data;
@@ -115,19 +89,6 @@ export function WorkspaceContentPane({
   );
   const fileChangesCount = fileChangesData?.files?.length ?? 0;
 
-  const handleNewTabOpenTool = useCallback(
-    (tool: ContentTab, replaceTabId: string) => {
-      workspaceLayoutActions.openToolTab(workspaceId, tool, {
-        replaceTabId,
-        forceNew: tool === "terminal" || (!isCloud && tool === "browser"),
-        cloud: isCloud,
-        reveal: true,
-      });
-      trackToolOpened(tool, workspaceId);
-    },
-    [workspaceId, isCloud]
-  );
-
   const handleNewTabOpenFile = useCallback(
     (path: string, replaceTabId: string) => {
       workspaceLayoutActions.openFileTab(workspaceId, path, {
@@ -137,34 +98,6 @@ export function WorkspaceContentPane({
       track("files_opened", { workspace_id: workspaceId });
     },
     [workspaceId]
-  );
-
-  const handleNewTabOpenUrl = useCallback(
-    (url: string, replaceTabId: string) => {
-      if (isCloud) {
-        // Cloud workspaces preview sandbox ports via CloudPreviewPanel; external URLs open in host browser.
-        const preview = onLocalhost(url);
-        if (preview) {
-          cloudPreviewActions.show(workspaceId, preview.port, preview.rest);
-          workspaceLayoutActions.openToolTab(workspaceId, "browser", {
-            replaceTabId,
-            cloud: true,
-            reveal: true,
-          });
-          track("browser_opened", { workspace_id: workspaceId });
-          return;
-        }
-        void native.window.openExternal(url);
-        return;
-      }
-
-      workspaceLayoutActions.openBrowserTab(workspaceId, url, {
-        replaceTabId,
-        reveal: true,
-      });
-      track("browser_opened", { workspace_id: workspaceId });
-    },
-    [workspaceId, isCloud]
   );
 
   const handleShortcutSelectTab = useCallback(
@@ -197,7 +130,6 @@ export function WorkspaceContentPane({
   );
 
   useWorkspaceTabShortcuts({
-    enabled: true,
     tabs: visibleWorkspaceTabs,
     activeTabId: effectiveActiveTab.id,
     onSelectTab: handleShortcutSelectTab,
@@ -248,9 +180,8 @@ export function WorkspaceContentPane({
           visibility={visibility}
           environmentTasks={environmentTasks}
           onRunTask={onRunTask}
-          onOpenTool={handleNewTabOpenTool}
+          onOpenTool={onOpenTool}
           onOpenFile={handleNewTabOpenFile}
-          onOpenUrl={handleNewTabOpenUrl}
         />
       </div>
     </div>

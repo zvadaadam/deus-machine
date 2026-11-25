@@ -1,7 +1,7 @@
+import { initDatabase, closeDatabase, DB_PATH } from "./lib/database";
 import * as Sentry from "@sentry/node";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
-import { initDatabase, closeDatabase, DB_PATH } from "./lib/database";
 import { stopProcessGroups } from "@shared/lib/process-groups";
 import { beforeBreadcrumb } from "@shared/lib/sentry-breadcrumb";
 import {
@@ -175,7 +175,8 @@ const server = serve(
   (info) => {
     void onListening(info.port).catch((error) => {
       console.error("[server] Startup failed:", error);
-      process.exit(1);
+      process.exitCode = 1;
+      shutdown();
     });
   }
 );
@@ -187,17 +188,8 @@ injectWebSocket(server);
 process.on("uncaughtException", (error, origin) => {
   console.error("[FATAL] Uncaught Exception:", origin, error);
   Sentry.captureException(error);
-  stopProcessGroups();
-  Sentry.close(2000).finally(() => {
-    destroyAllSimulators();
-    destroyAllPtySessions();
-    destroyAllWatchers();
-    void agentService.shutdown();
-    try {
-      closeDatabase();
-    } catch {}
-    process.exit(1);
-  });
+  process.exitCode = 1;
+  shutdown();
 });
 
 process.on("unhandledRejection", (reason) => {
@@ -214,19 +206,42 @@ function shutdown() {
   console.log("\nShutting down...");
   // First, so a checkout or a setup script stops while the rest shuts down.
   stopProcessGroups();
-  void agentService.shutdown().finally(() => {
-    destroyAllSimulators();
-    destroyAllPtySessions();
-    destroyAllWatchers();
-    stopLocalServerDiscovery();
-    disconnectFromRelay();
-    closeAllWsConnections();
-    closeDatabase();
-    process.exit(0);
+  const report = process.exitCode === 1 ? Sentry.close(2000) : undefined;
+  void Promise.allSettled([agentService.shutdown(), report]).then(([engine]) => {
+    try {
+      try {
+        if (engine.status === "rejected") {
+          process.exitCode = 1;
+          console.error("[server] Engine shutdown failed:", engine.reason);
+        }
+        destroyAllSimulators();
+        destroyAllPtySessions();
+        destroyAllWatchers();
+        stopLocalServerDiscovery();
+        disconnectFromRelay();
+        closeAllWsConnections();
+      } finally {
+        closeDatabase();
+      }
+    } catch (error) {
+      process.exitCode = 1;
+      console.error("[server] Shutdown failed:", error);
+    } finally {
+      process.exit();
+    }
   });
 }
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 // Started by the desktop: stop when it does, even if it crashed or was killed.
-if (stopWhenStdinEnds(shutdown)) console.log("[server] Stopping when the desktop does");
+if (stopWhenStdinEnds(shutdown)) {
+  // After a force-quit there is no reader for either log pipe. Reporting
+  // EPIPE as a fatal exception would write to the same broken pipe again.
+  for (const output of [process.stdout, process.stderr]) {
+    output.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code !== "EPIPE") throw error;
+    });
+  }
+  console.log("[server] Stopping when the desktop does");
+}

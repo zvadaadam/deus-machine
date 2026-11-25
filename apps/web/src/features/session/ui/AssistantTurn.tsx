@@ -13,6 +13,7 @@ import { Square, TriangleAlert } from "lucide-react";
 
 interface AssistantTurnProps {
   rowId: string;
+  onOpenWorked?: () => void;
   view: ChatView;
   messages: Message[];
   turn?: SessionTurn;
@@ -27,6 +28,7 @@ interface AssistantTurnProps {
 
 export const AssistantTurn = memo(function AssistantTurn({
   rowId,
+  onOpenWorked,
   messages,
   view,
   turn,
@@ -62,6 +64,7 @@ export const AssistantTurn = memo(function AssistantTurn({
     >
       <PartsRenderer
         rowId={rowId}
+        onOpenWorked={onOpenWorked}
         parts={parts}
         rows={rows}
         stays={stays}

@@ -118,6 +118,27 @@ describe("openAddress", () => {
       { to: "cloud-preview", port: 5173, rest: "/dash?a=1" },
     ],
     [
+      "cloud, IPv6 with a query and fragment",
+      "http://[::1]:5173/settings?tab=1#top",
+      cloud,
+      false,
+      { to: "cloud-preview", port: 5173, rest: "/settings?tab=1#top" },
+    ],
+    [
+      "cloud, default HTTPS port",
+      "https://localhost/secure",
+      cloud,
+      false,
+      { to: "cloud-preview", port: 443, rest: "/secure" },
+    ],
+    [
+      "cloud, default HTTP port",
+      "http://localhost/health",
+      cloud,
+      false,
+      { to: "cloud-preview", port: 80, rest: "/health" },
+    ],
+    [
       "cloud, 127.0.0.1",
       "http://127.0.0.1:8080/",
       cloud,

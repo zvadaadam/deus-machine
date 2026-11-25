@@ -1,11 +1,14 @@
+import { homedir } from "node:os";
+import { resolve } from "node:path";
+import { resolveDefaultDatabasePath } from "../runtime";
+
 /** Backend settings withheld from the processes it starts. */
-export const BACKEND_CHILD_ENV_DENYLIST = [
+const BACKEND_CHILD_ENV_DENYLIST = [
   "BUN_OPTIONS",
   "DATABASE_PATH",
   "DEUS_BACKEND_PORT",
   "DEUS_BUNDLED_BIN_DIR",
   "DEUS_DATA_DIR",
-  "DEUS_DEV_ROOT",
   "DEUS_NATIVE_MODULES",
   "DEUS_PACKAGED",
   "DEUS_RESOURCES_PATH",
@@ -16,13 +19,44 @@ export const BACKEND_CHILD_ENV_DENYLIST = [
   "PORT",
 ] as const;
 
+export function clearBackendChildEnv(env: NodeJS.ProcessEnv): void {
+  for (const key of BACKEND_CHILD_ENV_DENYLIST) delete env[key];
+}
+
 export function createBackendChildEnv(
   overrides: NodeJS.ProcessEnv = {},
   base: NodeJS.ProcessEnv = process.env
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...base };
-  for (const key of BACKEND_CHILD_ENV_DENYLIST) {
-    delete env[key];
-  }
+  clearBackendChildEnv(env);
   return { ...env, ...overrides };
+}
+
+export function defaultDatabasePathForEnv(env: NodeJS.ProcessEnv, devRoot?: string): string {
+  return resolveDefaultDatabasePath({
+    platform: process.platform,
+    homeDir: env.HOME || homedir(),
+    xdgDataHome: env.XDG_DATA_HOME,
+    devRoot,
+  });
+}
+
+export function prepareDevBackendEnv(env: NodeJS.ProcessEnv, backendCwd: string): void {
+  const override = env.DATABASE_PATH;
+  const legacyShell = env.DEUS_PACKAGED === "1";
+  if (legacyShell) clearBackendChildEnv(env);
+  if (!override) return;
+
+  const filename = override.trim() || ":memory:";
+  const database = filename === ":memory:" ? filename : resolve(backendCwd, filename);
+  if (legacyShell && database === resolve(defaultDatabasePathForEnv(env))) {
+    console.warn("Dropped inherited DATABASE_PATH because it matches the installed database path.");
+    return;
+  }
+  env.DATABASE_PATH = database;
+}
+
+/** Older installed versions passed their own runtime settings to agent shells. */
+export function clearInheritedPackagedEnv(env: NodeJS.ProcessEnv): void {
+  if (env.DEUS_PACKAGED === "1") prepareDevBackendEnv(env, process.cwd());
 }

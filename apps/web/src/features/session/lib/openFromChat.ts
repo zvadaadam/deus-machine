@@ -1,12 +1,11 @@
 /**
- * Carries out rule 2 (features/workspace/lib/reach.ts) for the chat: the
- * links in a reply and the actions on its resource cards. The rule decides;
- * this only does what it said.
+ * Carries out rule 2 (features/workspace/lib/reach.ts) for chat links, resource
+ * cards and addresses entered in New Tab.
  */
 import { match } from "ts-pattern";
 import { toast } from "sonner";
 import { api } from "@shared/api";
-import { call, getRuntimeClient } from "@/platform/ws";
+import { getRuntimeClient } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 import type { Settings } from "@shared/types/settings";
 import { native } from "@/platform/native";
@@ -14,12 +13,16 @@ import { capabilities } from "@/platform/capabilities";
 import { readFileUrl } from "@/features/file-browser/api/fileUrl";
 import { getErrorMessage } from "@shared/lib/errors";
 import { isMobileViewport } from "@/shared/hooks/use-mobile";
-import { isTabVisible, tabsFor } from "@/app/layouts/content-tabs";
+import { isTabVisible, tabsFor } from "@/features/workspace-tabs/registry";
 import {
   cloudPreviewActions,
   useCloudPreviewStore,
 } from "@/features/browser/cloud/cloudPreviewStore";
-import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
+import {
+  resolveWorkspaceTabs,
+  workspaceLayoutActions,
+} from "@/features/workspace/store/workspaceLayoutStore";
+import { useWorkspaceStore } from "@/features/workspace/store/workspaceStore";
 import {
   needsPreviewAddress,
   openAddress,
@@ -87,35 +90,57 @@ export function chatPlaceNow(
   };
 }
 
+function isCurrentLauncher(workspaceId: string, tabId: string) {
+  const layout = workspaceLayoutActions.getLayout(workspaceId);
+  const { activeTab } = resolveWorkspaceTabs(layout);
+  return (
+    useWorkspaceStore.getState().selectedWorkspaceId === workspaceId &&
+    layout.panelMode !== "chat" &&
+    activeTab.kind === "new-tab" &&
+    activeTab.id === tabId
+  );
+}
+
 /**
- * An address clicked in the chat (a link, or a card's "Open" / "Open in External
- * Browser"), carried out from the click. Rule 2 decides it at once unless it needs
- * the cloud computer's preview address and this window has not heard it
- * (`needsPreviewAddress`): only then is the address asked first. A browser lets a
- * click open a tab only while it handles the click, so a decision that may end in
- * the person's browser after that request (`external`) reserves the tab now and
- * sends it there, or closes it when nothing opens.
+ * A browser allows a new tab during the original gesture. If an external action
+ * must first ask for the cloud computer's preview address, reserve that tab now.
  */
 export async function openAddressFromChat(
   workspaceId: string,
   url: string,
   base: Pick<ChatPlace, "cloud" | "folder">,
-  external = false
-): Promise<void> {
+  {
+    external = false,
+    replaceTabId,
+    isStale,
+  }: { external?: boolean; replaceTabId?: string; isStale?: () => boolean } = {}
+) {
   const place = chatPlaceNow(workspaceId, base);
-  if (place.previewTemplate !== undefined || !needsPreviewAddress(url, place)) {
-    await openFromChat(workspaceId, openAddress(url, place, external));
-    return;
+  const needsTemplate = place.previewTemplate === undefined && needsPreviewAddress(url, place);
+  const tab = needsTemplate && external ? native.window.openExternalPending() : null;
+  if (needsTemplate) {
+    const runtime = getRuntimeClient();
+    place.previewTemplate =
+      (await runtime.call(api.cloudPreview, { workspaceId }).catch(() => null)) ?? null;
+    const state = runtime.getState();
+    if (
+      state === "disposed" ||
+      state === "revoked" ||
+      isStale?.() ||
+      (replaceTabId && !isCurrentLauncher(workspaceId, replaceTabId))
+    ) {
+      tab?.cancel();
+      return "none";
+    }
   }
-  const tab = external ? native.window.openExternalPending() : null;
-  const previewTemplate = (await call(api.cloudPreview, { workspaceId }).catch(() => null)) ?? null;
-  const opening = openAddress(url, { ...place, previewTemplate }, external);
+  const opening = openAddress(url, place, external);
   if (tab && opening.to === "external") {
     await tab.open(opening.url);
-    return;
+  } else {
+    tab?.cancel();
+    await openFromChat(workspaceId, opening, replaceTabId);
   }
-  tab?.cancel();
-  await openFromChat(workspaceId, opening);
+  return opening.to;
 }
 
 /** A resource card's action, carried out from the click (addresses as `openAddressFromChat`). */
@@ -125,22 +150,26 @@ export async function runChatAction(
   base: Pick<ChatPlace, "cloud" | "folder">
 ): Promise<void> {
   if (action.kind === "deus-browser" || action.kind === "system-browser") {
-    await openAddressFromChat(workspaceId, action.url, base, action.kind === "system-browser");
+    await openAddressFromChat(workspaceId, action.url, base, {
+      external: action.kind === "system-browser",
+    });
     return;
   }
   await openFromChat(workspaceId, openingOf(action, chatPlaceNow(workspaceId, base)));
 }
 
-function showInBrowserTab(workspaceId: string, url: string): void {
-  workspaceLayoutActions.openBrowserTab(workspaceId, url, { reveal: true });
-}
-
-export async function openFromChat(workspaceId: string, opening: ChatOpening): Promise<void> {
+export async function openFromChat(
+  workspaceId: string,
+  opening: ChatOpening,
+  replaceTabId?: string
+): Promise<void> {
   await match(opening)
-    .with({ to: "browser-tab" }, ({ url }) => showInBrowserTab(workspaceId, url))
+    .with({ to: "browser-tab" }, ({ url }) =>
+      workspaceLayoutActions.openBrowserTab(workspaceId, url, { replaceTabId })
+    )
     .with({ to: "cloud-preview" }, ({ port, rest }) => {
       cloudPreviewActions.show(workspaceId, port, rest);
-      workspaceLayoutActions.openContentTab(workspaceId, "browser", { cloud: true });
+      workspaceLayoutActions.openBrowserTab(workspaceId, "", { cloud: true, replaceTabId });
     })
     .with({ to: "external" }, ({ url }) => native.window.openExternal(url))
     .with({ to: "file-preview" }, async ({ path }) => {
@@ -148,7 +177,7 @@ export async function openFromChat(workspaceId: string, opening: ChatOpening): P
       try {
         const url = await readFileUrl(["preview", path, workspaceId]);
         if (tab) await tab.open(url);
-        else showInBrowserTab(workspaceId, url);
+        else workspaceLayoutActions.openBrowserTab(workspaceId, url);
       } catch (error) {
         tab?.cancel();
         toast.error(getErrorMessage(error));

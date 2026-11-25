@@ -37,7 +37,15 @@ function seedRecording(hostDb, outputPath, thumbnailPath) {
     state: {
       status: "completed",
       input: {},
-      output: JSON.stringify({ outputPath, thumbnailPath }),
+      output: JSON.stringify({
+        outputPath,
+        thumbnailPath,
+        duration: 10,
+        chapters: [
+          { time: 0, title: "Opening" },
+          { time: 5, title: "Review" },
+        ],
+      }),
       time: { start: now, end: now },
     },
   };
@@ -66,7 +74,15 @@ function seedRecording(hostDb, outputPath, thumbnailPath) {
   }
 }
 
-export async function testRelayedFiles({ root, hostDb, page, workspaceUrl, relayUrl, revoke }) {
+export async function testRelayedFiles({
+  root,
+  output,
+  hostDb,
+  page,
+  workspaceUrl,
+  relayUrl,
+  revoke,
+}) {
   const temp = await mkdtemp(path.join(tmpdir(), "deus-recording-"));
   try {
     const movie = path.join(temp, "recording.webm"),
@@ -165,33 +181,56 @@ export async function testRelayedFiles({ root, hostDb, page, workspaceUrl, relay
       "the card did not load the renewed thumbnail"
     );
 
-    const freshMovie = await recover(movie, movieUrl, "media", () =>
-      page.getByRole("button", { name: "Open recording player" }).click()
-    );
-    const video = await page
-      .getByRole("button", { name: "Close player" })
-      .locator("..")
-      .locator("video")
-      .elementHandle();
+    const viewport = page.viewportSize();
+    assert.equal(viewport.width, 390);
+    async function inBounds(locator, name) {
+      const box = await locator.boundingBox();
+      assert.ok(box && box.width > 0 && box.height > 0, name + " is visible");
+      assert.ok(box.x >= 0 && box.x + box.width <= viewport.width, name + " fits horizontally");
+      assert.ok(box.y >= 0 && box.y + box.height <= viewport.height, name + " fits vertically");
+      return box;
+    }
+    const card = page.getByRole("button", { name: "Open recording player" });
+    await card.scrollIntoViewIfNeeded();
+    await inBounds(card, "recording card");
+    await page.screenshot({ path: path.join(output, "recording-card-mobile.png") });
+    const freshMovie = await recover(movie, movieUrl, "media", () => card.press("Enter"));
+    const player = page.getByRole("dialog", { name: "Recording player" });
+    const video = await player.locator("video").elementHandle();
     assert(
       await video.evaluate((v, fresh) => v.src === fresh, freshMovie),
       "the player did not use its renewed URL"
     );
-    await video.evaluate(async (v) => {
-      v.muted = true;
-      await v.play();
-    });
-    await page.waitForFunction((v) => v.currentTime > 0, video);
-    const target = await video.evaluate((v) => {
-      v.pause();
-      const time = v.duration * 0.6;
-      v.currentTime = time;
-      return time;
-    });
-    await page.waitForFunction(
-      ([v, time]) => !v.seeking && Math.abs(v.currentTime - time) < 0.05,
-      [video, target]
-    );
+    const stage = player.locator("video").locator("..");
+    const seek = stage.locator("+ div");
+    const chapter = player.getByRole("button", { name: "0:05 Review" });
+    const close = player.getByRole("button", { name: "Close player" });
+    const isFocused = (node) => node === node.ownerDocument.activeElement;
+    await page.waitForFunction(isFocused, await close.elementHandle());
+    await page.keyboard.press("Shift+Tab");
+    assert.ok(await chapter.evaluate(isFocused), "backward Tab wraps to the last chapter");
+    await page.keyboard.press("Tab");
+    assert.ok(await close.evaluate(isFocused), "forward Tab stays in the player");
+    await page.screenshot({ path: path.join(output, "recording-player-keyboard.png") });
+    await chapter.click({ trial: true });
+    await inBounds(stage.locator("svg.lucide-play"), "play control");
+    const bar = await inBounds(seek, "seek bar");
+    const timeline = await inBounds(player.getByText("Timeline", { exact: true }), "timeline");
+    assert.ok(timeline.y >= bar.y + bar.height - 1, "chapters follow the seek bar");
+    assert.ok(Math.abs(timeline.width - bar.width) <= 1, "player and timeline share the width");
+    await stage.click();
+    await page.waitForFunction((v) => !v.paused && v.currentTime > 0, video);
+    await chapter.click();
+    await page.waitForFunction((v) => !v.seeking && v.currentTime >= 5, video);
+    await stage.click();
+    await page.waitForFunction((v) => v.paused, video);
+    await page.screenshot({ path: path.join(output, "recording-player-mobile.png") });
+    await seek.click({ position: { x: bar.width / 4, y: bar.height / 2 } });
+    await page.waitForFunction((v) => !v.seeking && v.currentTime >= 2 && v.currentTime < 3, video);
+    await page.keyboard.press("Escape");
+    await player.waitFor({ state: "detached" });
+    await page.waitForFunction(isFocused, await card.elementHandle());
+    await page.screenshot({ path: path.join(output, "recording-card-focus-return.png") });
     await revoke();
     await get(freshMovie, 404);
   } finally {

@@ -8,42 +8,31 @@
  */
 
 import { useEffect } from "react";
+import { isTextFieldFocused } from "@/shared/lib/keyboard";
 import type { WorkspaceTab } from "../types";
 
-function isTextFieldFocused(): boolean {
-  const el = document.activeElement as HTMLElement | null;
-  return (
-    !!el &&
-    (el.tagName === "INPUT" ||
-      el.tagName === "TEXTAREA" ||
-      el.isContentEditable ||
-      el.getAttribute("role") === "textbox")
-  );
-}
-
 export function useWorkspaceTabShortcuts({
-  enabled,
   tabs,
   activeTabId,
   onSelectTab,
   onCloseTab,
 }: {
-  enabled: boolean;
   tabs: WorkspaceTab[];
   activeTabId: string;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
 }) {
   useEffect(() => {
-    if (!enabled) return;
-
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       // Meta+1..9 only (Control+1..9 is reserved for location/org switching).
       if (event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
         const digit = /^Digit([1-9])$/.exec(event.code)?.[1];
         if (digit) {
           const target = tabs[Number(digit) - 1];
           if (!target) return;
+          if (document.querySelector('[role="dialog"]:not([data-state="closed"], [inert] *)'))
+            return;
           event.preventDefault();
           onSelectTab(target.id);
           return;
@@ -71,5 +60,5 @@ export function useWorkspaceTabShortcuts({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [enabled, tabs, activeTabId, onSelectTab, onCloseTab]);
+  }, [tabs, activeTabId, onSelectTab, onCloseTab]);
 }

@@ -28,12 +28,14 @@ import {
 import { Glide } from "@/components/ui/glide";
 import { cn } from "@/shared/lib/utils";
 import { useSettings } from "@/features/settings/api/settings.queries";
+import { openAddressFromChat } from "@/features/session/lib/openFromChat";
+import { localFolder } from "@/features/workspace/lib/reach";
+import { track } from "@/platform/analytics";
 import { useFiles } from "@/features/file-browser/api/useFiles";
 import { PierreFileIcon } from "@/features/file-browser/lib/pierreIcons";
 import { useFileChanges } from "@/features/workspace/api/workspace.queries";
 import { useLocalServers } from "@/features/browser/api/browser.queries";
-import { useSimulatorStatusStore } from "@/features/simulator/store";
-import { useCloudSimulatorStore } from "@/features/simulator/cloud/cloudSimulatorStore";
+import { useSimulatorActive } from "@/features/simulator/useSimulatorActive";
 import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
 import { locationOf } from "@/features/sidebar/lib/location";
 import { uiActions } from "@/shared/stores/uiStore";
@@ -54,11 +56,10 @@ interface NewTabViewProps {
   onRunTask?: (taskName: string) => void;
   onOpenTool: (tool: ContentTab, replaceTabId: string) => void;
   onOpenFile: (path: string, replaceTabId: string) => void;
-  onOpenUrl: (url: string, replaceTabId: string) => void;
 }
 
 type OmniboxResult =
-  | { id: string; kind: "url"; url: string; label: string; subtitle: string }
+  | { id: string; kind: "url"; url: string }
   | { id: string; kind: "file"; path: string; name: string; directory: string }
   | { id: string; kind: "tool"; tool: ContentTab; label: string; description: string };
 
@@ -108,35 +109,29 @@ export function NewTabView({
   onRunTask,
   onOpenTool,
   onOpenFile,
-  onOpenUrl,
 }: NewTabViewProps) {
   const settings = useSettings().data;
   const [query, setQuery] = useState("");
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const latestSubmission = useRef(0);
   const listboxId = useId();
   const optionDomId = (index: number) => `${listboxId}-option-${index}`;
 
   const cloud = workspace.kind === "cloud";
   const gateStage = cloudGateStage(workspace);
+  const hasQuery = query.trim().length > 0;
   const canQueryFiles = panelVisible && workspace.state === "ready" && !gateStage;
 
   const browserVisible = isTabVisible("browser", settings, visibility);
   const visibleTools = useMemo(() => getVisibleTools(settings, visibility), [settings, visibility]);
 
   // Live workspace signals for subtle metadata on tiles
-  const { data: filesData } = useFiles(canQueryFiles ? workspace.id : null, {
-    enabled: canQueryFiles,
-  });
+  const { data: filesData } = useFiles(canQueryFiles && hasQuery ? workspace.id : null);
   const { data: changesData } = useFileChanges(canQueryFiles ? workspace : null, isWatched);
   const fileChangesCount = changesData?.files?.length ?? 0;
 
-  // Simulator live indicator
-  const simPhase = useSimulatorStatusStore((s) => s.phases[workspace.id]);
-  const cloudSimStatus = useCloudSimulatorStore((s) => s.byWorkspace[workspace.id]?.status ?? null);
-  const simulatorActive = Boolean(
-    (simPhase && simPhase !== "idle" && simPhase !== "error") || cloudSimStatus === "ready"
-  );
+  const simulatorActive = useSimulatorActive(workspace.id);
 
   const flatFiles = useMemo(() => flattenFileTree(filesData?.files ?? []), [filesData?.files]);
 
@@ -149,13 +144,7 @@ export function NewTabView({
     const parsedUrl = parseOmniboxUrl(trimmed);
 
     if (parsedUrl) {
-      items.push({
-        id: `url:${parsedUrl}`,
-        kind: "url",
-        url: parsedUrl,
-        label: parsedUrl,
-        subtitle: browserVisible ? "Open in Browser tab" : "Open in external browser",
-      });
+      items.push({ id: `url:${parsedUrl}`, kind: "url", url: parsedUrl });
     }
 
     const matchedFiles = searchWorkspaceFiles(flatFiles, trimmed, 7);
@@ -186,17 +175,34 @@ export function NewTabView({
     }
 
     return items;
-  }, [query, browserVisible, flatFiles, visibleTools]);
+  }, [query, flatFiles, visibleTools]);
 
-  const clampedIndex = results.length > 0 ? Math.min(selectedIndex, results.length - 1) : 0;
+  const selectedIndex = Math.max(
+    0,
+    results.findIndex((item) => item.id === selectedId)
+  );
+  const activeResult = results[selectedIndex];
+  if (activeResult && activeResult.id !== selectedId) setSelectedId(activeResult.id);
+
+  async function openUrl(url: string) {
+    const submission = ++latestSubmission.current;
+    const destination = await openAddressFromChat(
+      workspace.id,
+      url,
+      { cloud, folder: localFolder(workspace) },
+      {
+        replaceTabId: tabId,
+        isStale: () => inputRef.current === null || submission !== latestSubmission.current,
+      }
+    );
+    if (destination === "browser-tab" || destination === "cloud-preview") {
+      track("browser_opened", { workspace_id: workspace.id });
+    }
+  }
 
   function executeResult(result: OmniboxResult) {
     if (result.kind === "url") {
-      if (browserVisible) {
-        onOpenUrl(result.url, tabId);
-      } else {
-        window.open(result.url, "_blank", "noopener,noreferrer");
-      }
+      void openUrl(result.url);
       return;
     }
     if (result.kind === "file") {
@@ -207,26 +213,14 @@ export function NewTabView({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "ArrowDown") {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       if (results.length === 0) return;
       event.preventDefault();
-      setSelectedIndex((prev) => (prev + 1) % results.length);
-    } else if (event.key === "ArrowUp") {
-      if (results.length === 0) return;
-      event.preventDefault();
-      setSelectedIndex((prev) => (prev - 1 + results.length) % results.length);
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      setSelectedId(results[(selectedIndex + step + results.length) % results.length].id);
     } else if (event.key === "Enter") {
       event.preventDefault();
-      const chosen = results[clampedIndex];
-      if (chosen) {
-        executeResult(chosen);
-        return;
-      }
-      const parsed = parseOmniboxUrl(query);
-      if (parsed) {
-        if (browserVisible) onOpenUrl(parsed, tabId);
-        else window.open(parsed, "_blank", "noopener,noreferrer");
-      }
+      if (activeResult) executeResult(activeResult);
     } else if (event.key === "Escape") {
       if (query) {
         event.preventDefault();
@@ -234,9 +228,6 @@ export function NewTabView({
       }
     }
   }
-
-  const hasQuery = query.trim().length > 0;
-  const placeholder = browserVisible ? "Search files or enter a URL" : "Search workspace files";
 
   return (
     <div
@@ -248,7 +239,7 @@ export function NewTabView({
         <div style={stepStyle(0)} className="enter-step relative">
           <div
             className={cn(
-              "bg-input-surface border-border-default flex h-11 items-center gap-2.5 rounded-full border px-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-[border-color,box-shadow] dark:shadow-none",
+              "bg-input-surface border-border-default flex h-11 items-center gap-2.5 rounded-full border px-4 shadow-xs transition-[border-color,box-shadow] dark:shadow-none",
               "focus-within:border-border-strong focus-within:ring-primary/20 focus-within:ring-2"
             )}
           >
@@ -260,17 +251,15 @@ export function NewTabView({
               aria-expanded={hasQuery}
               aria-controls={listboxId}
               aria-autocomplete="list"
-              aria-activedescendant={
-                hasQuery && results[clampedIndex] ? optionDomId(clampedIndex) : undefined
-              }
+              aria-activedescendant={activeResult ? optionDomId(selectedIndex) : undefined}
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value);
-                setSelectedIndex(0);
+                setSelectedId(null);
               }}
               onKeyDown={handleKeyDown}
-              placeholder={placeholder}
-              aria-label={placeholder}
+              placeholder="Search files or enter a URL"
+              aria-label="Search files or enter a URL"
               autoComplete="off"
               spellCheck={false}
               data-1p-ignore
@@ -282,7 +271,7 @@ export function NewTabView({
                 aria-label="Clear search"
                 onClick={() => {
                   setQuery("");
-                  setSelectedIndex(0);
+                  setSelectedId(null);
                   inputRef.current?.focus();
                 }}
                 className="control-interaction text-text-muted hover:text-text-secondary hover:bg-control-hover flex size-5 shrink-0 items-center justify-center rounded-full"
@@ -303,7 +292,7 @@ export function NewTabView({
               <Glide follow="data-selected" className="bg-control-hover rounded-lg" />
               {results.length > 0 ? (
                 results.map((item, index) => {
-                  const selected = index === clampedIndex;
+                  const selected = index === selectedIndex;
                   return (
                     <button
                       key={item.id}
@@ -312,7 +301,7 @@ export function NewTabView({
                       role="option"
                       aria-selected={selected}
                       data-selected={selected ? "true" : undefined}
-                      onMouseEnter={() => setSelectedIndex(index)}
+                      onMouseEnter={() => setSelectedId(item.id)}
                       onClick={() => executeResult(item)}
                       className={cn(
                         "relative flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
@@ -322,10 +311,7 @@ export function NewTabView({
                       {item.kind === "url" ? (
                         <>
                           <Globe className="text-text-muted size-4 shrink-0" aria-hidden="true" />
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate font-medium">{item.label}</div>
-                            <div className="text-text-muted truncate text-xs">{item.subtitle}</div>
-                          </div>
+                          <span className="min-w-0 flex-1 truncate font-medium">{item.url}</span>
                           <CornerDownLeft
                             className="text-text-disabled size-3.5 shrink-0"
                             aria-hidden="true"
@@ -470,7 +456,7 @@ export function NewTabView({
             </div>
 
             {panelVisible && !cloud && browserVisible && (
-              <RunningLocallyStrip onOpenUrl={(url) => onOpenUrl(url, tabId)} />
+              <RunningLocallyStrip onOpenUrl={openUrl} />
             )}
           </>
         )}

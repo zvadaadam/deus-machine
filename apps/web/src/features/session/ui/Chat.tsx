@@ -212,6 +212,7 @@ export function Chat({
       : -1;
   const {
     showScrollButton,
+    stopChase,
     handleScrollToBottomClick,
     transcriptRef,
     liveTailRef,
@@ -371,6 +372,7 @@ export function Chat({
                           .with({ type: "assistant" }, (t) => (
                             <AssistantTurn
                               rowId={String(virtualItem.key)}
+                              onOpenWorked={stopChase}
                               view={view}
                               messages={t.messages}
                               turn={t.record}

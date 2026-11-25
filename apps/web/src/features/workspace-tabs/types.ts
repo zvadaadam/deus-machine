@@ -68,15 +68,14 @@ export function createTerminalTab(title: string): Extract<WorkspaceTab, { kind: 
 export function createBrowserTabItem(
   workspaceId: string | null | undefined,
   url = "",
-  options?: { title?: string; cloud?: boolean; id?: string; isMobileView?: boolean }
+  options?: { cloud?: boolean }
 ): Extract<WorkspaceTab, { kind: "browser" }> {
   const cleanUrl = isBlankUrl(url) ? "" : url;
   return {
-    id: options?.id ?? createTabId("browser", workspaceId),
+    id: createTabId("browser", workspaceId),
     kind: "browser",
     url: cleanUrl,
-    title: options?.title ?? (cleanUrl ? deriveTitleFromUrl(cleanUrl) : "Browser"),
-    ...(options?.isMobileView ? { isMobileView: true } : {}),
+    title: cleanUrl ? deriveTitleFromUrl(cleanUrl) : "Browser",
     ...(options?.cloud ? { cloud: true } : {}),
   };
 }

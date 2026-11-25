@@ -1,5 +1,8 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { createBackendChildEnv } from "@shared/lib/child-env";
+import { tmpdir } from "node:os";
+import { basename, dirname, join, relative } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createBackendChildEnv, prepareDevBackendEnv } from "@shared/lib/child-env";
+import { resolveDefaultDatabasePath } from "@shared/runtime";
 
 const originalEnv = { ...process.env };
 
@@ -8,6 +11,35 @@ afterEach(() => {
 });
 
 describe("backend child process environment", () => {
+  const home = join(tmpdir(), "deus-legacy-env");
+  const backendCwd = join(home, "apps", "backend");
+  const installed = resolveDefaultDatabasePath({
+    platform: process.platform,
+    homeDir: home,
+    xdgDataHome: home,
+  });
+  const relativeInstalled = relative(backendCwd, installed);
+
+  it.each([
+    ["1", installed, undefined],
+    ["1", `${dirname(installed)}/./${basename(installed)}`, undefined],
+    ["1", relativeInstalled, undefined],
+    ["1", "custom.db", join(backendCwd, "custom.db")],
+    [undefined, relativeInstalled, installed],
+  ])("resolves DATABASE_PATH with DEUS_PACKAGED=%s and path %s", (packaged, value, expected) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const env = { HOME: home, XDG_DATA_HOME: home, DEUS_PACKAGED: packaged, DATABASE_PATH: value };
+    prepareDevBackendEnv(env, backendCwd);
+    expect(env.DATABASE_PATH).toBe(expected);
+    if (expected === undefined) {
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        expect.stringMatching(/dropped.*DATABASE_PATH.*installed/i)
+      );
+    } else {
+      expect(warn).not.toHaveBeenCalled();
+    }
+  });
+
   it("scrubs packaged runtime internals while preserving caller overrides", () => {
     process.env.DEUS_PACKAGED = "1";
     process.env.DEUS_RUNTIME_EXECUTABLE =
@@ -18,7 +50,6 @@ describe("backend child process environment", () => {
     process.env.NODE_PATH =
       "/Applications/Deus.app/Contents/Resources/app.asar.unpacked/node_modules";
     process.env.DATABASE_PATH = "/tmp/deus.db";
-    process.env.DEUS_DEV_ROOT = "/tmp/checkout";
     process.env.NODE_ENV = "production";
     process.env.PORT = "1234";
     process.env.PATH = "/Applications/Deus.app/Contents/Resources/bin:/usr/bin:/bin";
@@ -40,7 +71,6 @@ describe("backend child process environment", () => {
     expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined();
     expect(env.NODE_PATH).toBeUndefined();
     expect(env.DATABASE_PATH).toBeUndefined();
-    expect(env.DEUS_DEV_ROOT).toBeUndefined();
     expect(env.NODE_ENV).toBeUndefined();
     expect(env.PORT).toBeUndefined();
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach, vi } from "vitest";
-import { anyContentTabVisible, isTabVisible, tabsFor } from "@/app/layouts/content-tabs";
+import { anyContentTabVisible, isTabVisible, tabsFor } from "@/features/workspace-tabs/registry";
 import type { Settings } from "@shared/types/settings";
 
 const simulatorOn: Settings = {

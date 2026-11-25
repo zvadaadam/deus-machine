@@ -7,10 +7,9 @@
  *    Whatever needs a local folder (an editor, Finder, this computer's agent
  *    configuration) offers nothing when it is null; what opens it here (an
  *    editor, Finder) also needs the desktop app (`openableFolder`).
- * 2. `openAddress` / `openFile`: what a click on an address or a file in the
- *    chat does. A local workspace's open on this computer; a cloud workspace's
- *    internet addresses open in the person's browser, its localhost addresses
- *    and files on the cloud computer.
+ * 2. `openAddress` / `openFile` decide where chat links, files and addresses
+ *    from New Tab open. A cloud workspace's internet addresses open in the
+ *    person's browser, its localhost addresses and files on the cloud computer.
  */
 import { match } from "ts-pattern";
 import type { Workspace } from "@shared/types/workspace";
@@ -92,7 +91,7 @@ export const CLOUD_FILE_UNSHOWN = "This file is on the cloud computer and can't 
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"]);
 
 /** The port and path of an address on localhost, or null for an address on the internet. */
-export function onLocalhost(url: string): { port: number; rest: string } | null {
+function onLocalhost(url: string): { port: number; rest: string } | null {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -114,8 +113,7 @@ export function needsPreviewAddress(url: string, place: Pick<ChatPlace, "cloud">
 }
 
 /**
- * An http(s) address from the chat. `external` is "Open in External Browser":
- * the person's browser even for a local workspace.
+ * An HTTP(S) address from chat or New Tab. `external` opens the person's browser.
  */
 export function openAddress(url: string, place: ChatPlace, external = false): ChatOpening {
   if (!place.cloud) {
