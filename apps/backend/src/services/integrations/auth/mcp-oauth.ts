@@ -46,7 +46,7 @@ import { ZodError } from "zod";
 import { getErrorMessage } from "@shared/lib/errors";
 import { markNeedsReauth } from "../events";
 import { readCredential, updateConnection, writeCredential } from "../store";
-import { vaultProblem } from "../vault";
+import { initVault, vaultProblem } from "../vault";
 import type { RegisteredClient } from "./clients";
 
 export interface OAuthCredential {
@@ -270,6 +270,7 @@ export function beginOAuth(input: SignInStart): Promise<string> {
 }
 
 async function startSignIn(input: SignInStart): Promise<string> {
+  await initVault("seal");
   const attempt: Attempt = {
     connectionId: input.connectionId,
     state: crypto.randomBytes(32).toString("base64url"),
@@ -396,6 +397,7 @@ export async function oauthAccessToken(
   client?: RegisteredClient | null,
   options: { force?: boolean } = {}
 ): Promise<string | null> {
+  await initVault("read");
   const credential = readCredential<OAuthCredential>(connectionId);
   const problem = credential ? null : vaultProblem();
   if (problem) throw new Error(problem);

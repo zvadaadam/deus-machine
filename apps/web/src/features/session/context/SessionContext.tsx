@@ -9,6 +9,7 @@ import { createContext, useContext, type ReactNode, useMemo } from "react";
 import type { Message, SessionStatus } from "../types";
 
 interface SessionContextValue {
+  sessionId: string;
   sessionStatus: SessionStatus;
   workspaceId: string | null;
   /** The workspace's folder on this computer (rule 1, `localFolder`); null in a cloud chat. */
@@ -24,6 +25,7 @@ interface SessionContextValue {
 const SessionContext = createContext<SessionContextValue | null>(null);
 
 interface SessionProviderProps {
+  sessionId: string;
   sessionStatus: SessionStatus;
   workspaceId?: string | null;
   workspacePath?: string | null;
@@ -34,6 +36,7 @@ interface SessionProviderProps {
 }
 
 export function SessionProvider({
+  sessionId,
   sessionStatus,
   workspaceId = null,
   workspacePath = null,
@@ -44,6 +47,7 @@ export function SessionProvider({
 }: SessionProviderProps) {
   const value = useMemo(
     () => ({
+      sessionId,
       sessionStatus,
       workspaceId,
       workspacePath: workspacePath || null,
@@ -51,7 +55,7 @@ export function SessionProvider({
       subagentMessages,
       insideSubagent,
     }),
-    [sessionStatus, workspaceId, workspacePath, cloud, subagentMessages, insideSubagent]
+    [sessionId, sessionStatus, workspaceId, workspacePath, cloud, subagentMessages, insideSubagent]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

@@ -95,7 +95,7 @@
     "@modelcontextprotocol/sdk": "1.29.0",
     "@napi-rs/canvas": "^0.1.97",
     "@sentry/node": "^10.40.0",
-    "@zvada/agent-server": "0.3.30",
+    "@zvada/agent-server": "0.3.31",
     "agent-browser": "^0.21.4",
     "agent-device": "0.21.39",
     "better-sqlite3": "^12.4.1",

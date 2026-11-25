@@ -24,6 +24,7 @@ import { setSignInReturnBase } from "./auth/callback";
 import { reconcileCloudAccounts } from "./cloud-apps";
 import { setGatewayPort } from "./gateway";
 import { resumeSkillInstalls } from "./skills";
+import { hasSealedCredentials } from "./store";
 import { initVault } from "./vault";
 
 export { completeOAuthCallback } from "./apps";
@@ -40,8 +41,7 @@ export async function startIntegrations(port: number): Promise<void> {
   setSignInReturnBase(`http://localhost:${port}`);
   setGatewayPort(port);
   try {
-    // The vault's key, found once here so no request waits on the Keychain.
-    await initVault();
+    if (hasSealedCredentials()) await initVault("read");
     resumeSkillInstalls();
   } catch (error) {
     console.warn("[Integrations] Startup failed:", getErrorMessage(error));

@@ -65,10 +65,10 @@ function toStringList(values: unknown): string[] {
     .filter((value) => value.length > 0);
 }
 
-export function AskUserQuestionToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { questions } = toolUse.input ?? {};
+export function AskUserQuestionToolRenderer(props: ToolRendererProps) {
+  const { questions } = props.toolUse.input ?? {};
   const questionList = toQuestionList(questions);
-  const output = toolResult ? extractText(toolResult.content) : "";
+  const output = extractText(props.toolResult?.content);
   const isCancelled = output.includes("cancelled");
 
   const firstQuestion = questionList.length > 0 ? (questionList[0].question ?? "") : "";
@@ -82,8 +82,7 @@ export function AskUserQuestionToolRenderer({ toolUse, toolResult }: ToolRendere
     <BaseToolRenderer
       toolName="Ask User"
       icon={<HelpCircle className={ICON_CLS} />}
-      toolUse={toolUse}
-      toolResult={toolResult}
+      {...props}
       renderSummary={() =>
         preview ? <span className="text-muted-foreground truncate">{preview}</span> : null
       }
@@ -128,18 +127,17 @@ export function AskUserQuestionToolRenderer({ toolUse, toolResult }: ToolRendere
   );
 }
 
-export function GetWorkspaceDiffToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { file, stat } = toolUse.input ?? {};
+export function GetWorkspaceDiffToolRenderer(props: ToolRendererProps) {
+  const { file, stat } = props.toolUse.input ?? {};
   const safeFile = typeof file === "string" ? file : "";
-  const output = toolResult ? extractText(toolResult.content) : "";
+  const output = extractText(props.toolResult?.content);
   const preview = safeFile ? getPathLeaf(safeFile, "all changes") : stat ? "stat" : "all changes";
 
   return (
     <BaseToolRenderer
       toolName="Workspace Diff"
       icon={<GitCompare className={ICON_CLS} />}
-      toolUse={toolUse}
-      toolResult={toolResult}
+      {...props}
       renderSummary={() => (
         <span className="text-muted-foreground truncate font-mono">{preview}</span>
       )}
@@ -154,18 +152,17 @@ export function GetWorkspaceDiffToolRenderer({ toolUse, toolResult }: ToolRender
   );
 }
 
-export function DiffCommentToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { comments } = toolUse.input ?? {};
+export function DiffCommentToolRenderer(props: ToolRendererProps) {
+  const { comments } = props.toolUse.input ?? {};
   const commentList = toDiffCommentList(comments);
-  const output = toolResult ? extractText(toolResult.content) : "";
+  const output = extractText(props.toolResult?.content);
   const count = commentList.length;
 
   return (
     <BaseToolRenderer
       toolName="Diff Comment"
       icon={<MessageCircle className={ICON_CLS} />}
-      toolUse={toolUse}
-      toolResult={toolResult}
+      {...props}
       renderSummary={() =>
         count > 0 ? (
           <span className="text-muted-foreground">
@@ -191,9 +188,9 @@ export function DiffCommentToolRenderer({ toolUse, toolResult }: ToolRendererPro
   );
 }
 
-export function GetTerminalOutputToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { source } = toolUse.input ?? {};
-  const output = toolResult ? extractText(toolResult.content) : "";
+export function GetTerminalOutputToolRenderer(props: ToolRendererProps) {
+  const { source } = props.toolUse.input ?? {};
+  const output = extractText(props.toolResult?.content);
   const headerMatch = output.match(/^\[(.+?)\]/);
   const sourceLabel = headerMatch?.[1] || source || "auto";
 
@@ -201,8 +198,7 @@ export function GetTerminalOutputToolRenderer({ toolUse, toolResult }: ToolRende
     <BaseToolRenderer
       toolName="Terminal Output"
       icon={<Terminal className={ICON_CLS} />}
-      toolUse={toolUse}
-      toolResult={toolResult}
+      {...props}
       renderSummary={() => <span className="text-muted-foreground">{sourceLabel}</span>}
       renderContent={() =>
         output ? (

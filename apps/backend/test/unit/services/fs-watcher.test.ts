@@ -25,9 +25,7 @@ vi.mock("node:fs", async (original) => ({
 }));
 vi.mock("../../../src/middleware/workspace-loader", () => ({ loadWorkspace: load }));
 vi.mock("../../../src/services/ws.service", () => ({
-  getConnection: (id: string) => ({
-    ws: { send: (raw: string) => clients.get(id)?.push(JSON.parse(raw)) },
-  }),
+  sendFrame: (id: string, frame: { type: string; data?: unknown }) => clients.get(id)?.push(frame),
 }));
 
 const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
@@ -160,39 +158,48 @@ describe("the fileChanges subscription", () => {
     expect(back.map((f) => f.type)).toEqual(["q:event"]);
   });
 
-  it("ignores private and generated subtrees, but hears recipes, hidden leaves and nameless events", () => {
+  it("ignores git, worktrees and generated subtrees, but hears edits under project dot-folders", () => {
     const frames = open("a");
     for (const name of [
       ".git/index.lock",
-      "src/.cache/a",
       "build/output",
       "foo/node_modules/pkg",
       "target/log",
       "dist/app",
       ".deus/other/src",
       "src/.deus/environment.json",
+      "src/.cache/a",
+      ".venv/lib/site-packages/pkg.py",
+      ".github/.cache/a",
     ])
       changed(name);
     vi.advanceTimersByTime(500);
     expect(frames).toHaveLength(0);
-    for (const name of [
+    const heard = [
+      ".github/workflows/ci.yml",
+      ".vscode/settings.json",
+      ".devcontainer/devcontainer.json",
+      ".husky/pre-commit",
+      "src/.config/tool.toml",
+      ".storybook/main.ts",
       ".deus",
       ".deus/environment.json",
       ".gitignore",
       "src/.save-tmp",
       null,
       "",
-    ]) {
+    ];
+    for (const name of heard) {
       changed(name);
       vi.advanceTimersByTime(500);
     }
-    expect(frames.map((f) => f.data)).toEqual(Array(6).fill(null));
+    expect(frames.map((f) => f.data)).toEqual(Array(heard.length).fill(null));
     for (let i = 0; i < 20; i++) {
       changed(".DS_Store");
       vi.advanceTimersByTime(10);
     }
     vi.advanceTimersByTime(499);
-    expect(frames).toHaveLength(7);
+    expect(frames).toHaveLength(heard.length + 1);
   });
 
   it.each(["dist", "literal\\node_modules\\source"])(

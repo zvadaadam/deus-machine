@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentServerClient, LoginError, type LoginHandle } from "@zvada/agent-server/client";
 import { AgentRuntime, createAgentRegistry } from "@zvada/agent-server/core";
@@ -231,4 +232,89 @@ describe("LocalAgents", () => {
     expect(client.authStatus).not.toHaveBeenCalled();
     expect(client.login).toHaveBeenCalledWith("claude-code", "console", { apiKey: "sk-test" });
   });
+
+  it("publishes the reason when the engine refuses an install before progress", async () => {
+    const { logins, client } = engine(signedOut);
+    const reason = "harness not available: gemini";
+    client.prepareClis.mockRejectedValueOnce(new Error(reason));
+    logins.prepareCli("gemini");
+    await Promise.resolve();
+    expect(published(mockPublish, agentCliProgress)).toEqual([
+      {
+        scope: {},
+        event: {
+          harness: "gemini",
+          phase: "failed",
+          version: "",
+          receivedBytes: 0,
+          error: reason,
+          category: "internal",
+        },
+      },
+    ]);
+  });
+
+  it("reports the engine's cache failure even when the install emits no progress", async () => {
+    const registry = createAgentRegistry({
+      harnesses: ["gemini"],
+      provision: {
+        mode: "pinned",
+        cacheDir: fileURLToPath(import.meta.url),
+        bundleDirs: [],
+        overrides: { agy: "" },
+      },
+    });
+    const server = new AgentServer(new AgentRuntime(registry));
+    const wire = channelPair();
+    server.attach(wire.server);
+    const client = await AgentServerClient.attach(wire.client);
+    const agents = new LocalAgents(client);
+    const progress = vi.fn();
+    const off = client.onCliProgress(progress);
+    try {
+      agents.prepareCli("gemini");
+      await vi.waitFor(() =>
+        expect(published(mockPublish, agentCliProgress)).toEqual([
+          {
+            scope: {},
+            event: expect.objectContaining({
+              harness: "gemini",
+              phase: "failed",
+              error: expect.stringContaining("CLI cache"),
+            }),
+          },
+        ])
+      );
+      expect(progress).not.toHaveBeenCalled();
+    } finally {
+      off();
+      agents.dispose();
+      await client.close();
+      await server.shutdown();
+    }
+  });
+
+  it.each(["returns a failed row", "rejects"])(
+    "forwards only the engine's failed progress when prepare %s",
+    async (ending) => {
+      const { logins, client, tellProgress } = engine(signedOut);
+      const progress: HarnessCliProgress = {
+        harness: "gemini",
+        phase: "failed",
+        version: "1.0",
+        receivedBytes: 5,
+        totalBytes: 10,
+        error: "Could not open the CLI cache",
+        category: "internal",
+      };
+      const result = Promise.withResolvers<HarnessCli[]>();
+      client.prepareClis.mockReturnValueOnce(result.promise);
+      logins.prepareCli("gemini");
+      tellProgress(progress);
+      if (ending === "rejects") result.reject(new Error("The wire closed"));
+      else result.resolve([{ harness: "gemini", state: "failed", error: "Install failed" }]);
+      await result.promise.catch(() => {});
+      expect(published(mockPublish, agentCliProgress)).toEqual([{ scope: {}, event: progress }]);
+    }
+  );
 });

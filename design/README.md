@@ -651,7 +651,7 @@ in step with it:
   sentence's width: the action wraps under the text instead of squeezing it into a
   column (`flex-wrap`, the text at least 16rem). A send the cloud refused for an AI
   provider account reads "AI account needed", the platform's sentence without codes,
-  and an outline "Open AI Providers" button in place of "Retry in new chat". A cloud
+  and an outline "Open AI Providers" button. A cloud
   chat's placeholder names "/ skills" only when its `/` menu has something. **Not drawn
   yet:** no board draws the account refusal card or the wrapped layout
 - A cloud workspace's things live on its computer. The header menu's rows carry a 6px dot

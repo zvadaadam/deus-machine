@@ -9,7 +9,8 @@ import { registerDirectSession } from "@/features/session/cloud/directSessionReg
 import { queryKeys } from "@/shared/api/queryKeys";
 import { api } from "@shared/api";
 import type { PaginatedMessages, Session } from "@shared/types/session";
-import { OpError } from "@/platform/ws/runtime-client";
+import { OpError, RuntimeError } from "@/platform/ws/runtime-client";
+import { emitSendAttemptFailed } from "@/features/connection";
 
 const state = vi.hoisted(() => ({
   queryClient: null as QueryClient | null,
@@ -42,11 +43,10 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
     },
   };
 });
-vi.mock("@/platform/ws", async () => ({
+vi.mock("@/platform/ws", () => ({
   call: state.call,
   connect: state.connect,
   isConnected: state.isConnected,
-  OpError: (await import("@/platform/ws/runtime-client")).OpError,
 }));
 vi.mock("sonner", () => ({ toast: { error: state.error } }));
 vi.mock("@/features/connection", () => ({ emitSendAttemptFailed: vi.fn() }));
@@ -168,7 +168,7 @@ describe("Stop delivery", () => {
   });
 });
 
-describe("backend prompt delivery", () => {
+describe("prompt delivery", () => {
   beforeEach(() => {
     storageForLocalSession();
   });
@@ -281,34 +281,117 @@ describe("backend prompt delivery", () => {
     }
   });
 
-  it("does not resubmit a prompt after losing the reply", async () => {
+  const prompt = {
+    sessionId: SESSION,
+    content: "Send this once",
+    turnId: "turn-once",
+    agentHarness: "claude-code",
+    model: "opus",
+    thinkingLevel: "high",
+  } as const;
+
+  function workspaceWithStatus(status: Session["status"]) {
+    const chats = [
+      { id: SESSION, status },
+      { id: "another-chat", status: "working" },
+    ];
+    return { id: "w1", current_session_id: SESSION, session_status: status, chats };
+  }
+
+  it("restores the chat to idle when the host stays offline and no update arrives", async () => {
     const { useSendMessage } = await import("@/features/session/api/session.queries");
-    const { RuntimeError } = await import("@/platform/ws/runtime-client");
-    const failure = new RuntimeError("unknown-outcome", "Acknowledgment lost");
-    state.call.mockRejectedValue(failure);
-    await expect(
-      useSendMessage().mutateAsync({
-        sessionId: SESSION,
-        content: "Run this once",
-        turnId: "turn-once",
-      })
-    ).rejects.toBe(failure);
-    expect(state.call).toHaveBeenCalledTimes(1);
-    expect(state.call.mock.calls[0][0]).toBe(api.sendMessage);
+    const client = state.queryClient!;
+    const key = queryKeys.workspaces.byRepo("active");
+    const list = (status: Session["status"]) => [{ workspaces: [workspaceWithStatus(status)] }];
+    client.setQueryData(key, list("idle"));
+    state.isConnected.mockReturnValue(false);
+    state.connect.mockImplementationOnce(() => {
+      expect(client.getQueryData(key)).toEqual(list("working"));
+      throw new RuntimeError("unavailable", "Host offline");
+    });
+    await expect(useSendMessage().mutateAsync(prompt)).rejects.toThrow("Host offline");
+    expect(client.getQueryData(key)).toEqual(list("idle"));
+    expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    expect(state.call).not.toHaveBeenCalled();
   });
 
-  it("does not resubmit an authoritative rejection", async () => {
+  it("restores an offline hosted chat to idle when its direct channel is missing", async () => {
     const { useSendMessage } = await import("@/features/session/api/session.queries");
-    state.call.mockRejectedValue(new OpError("Already running"));
-    await expect(
-      useSendMessage().mutateAsync({
-        sessionId: SESSION,
-        content: "Run this once",
-        turnId: "turn-rejected",
-      })
-    ).rejects.toThrow("Already running");
-    expect(state.call).toHaveBeenCalledTimes(1);
+    const client = state.queryClient!;
+    vi.stubEnv("VITE_CLOUD_DIRECT", "1");
+    state.isConnected.mockReturnValue(false);
+    client.setQueryData<Session>(queryKeys.sessions.detail(SESSION), (row) => ({
+      ...row!,
+      workspace_kind: "cloud",
+      provider_session_id: "provider-session",
+    }));
+    const key = queryKeys.workspaces.byRepo("active");
+    const idle = [{ workspaces: [workspaceWithStatus("idle")] }];
+    client.setQueryData(key, idle);
+    await expect(useSendMessage().mutateAsync(prompt)).rejects.toThrow(
+      "The cloud connection isn't ready yet"
+    );
+    expect(client.getQueryData(key)).toEqual(idle);
+    expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    expect(state.call).not.toHaveBeenCalled();
   });
+
+  it.each([
+    {
+      stage: "connect",
+      failure: new RuntimeError("unavailable", "Host offline"),
+      serverStatus: "error",
+      notices: 1,
+    },
+    {
+      stage: "call",
+      failure: new RuntimeError("unknown-outcome", "Acknowledgment lost"),
+      serverStatus: "working",
+      notices: 1,
+    },
+    {
+      stage: "call",
+      failure: new OpError("Agent server is disconnected"),
+      serverStatus: "error",
+      notices: 0,
+    },
+    {
+      stage: "call",
+      failure: new OpError(
+        "The agent is still working — wait for the current turn to finish.",
+        409
+      ),
+      serverStatus: "working",
+      notices: 0,
+    },
+  ] as const)(
+    "keeps the host's $serverStatus status after a send fails with $failure.message",
+    async ({ stage, failure, serverStatus, notices }) => {
+      const { useSendMessage } = await import("@/features/session/api/session.queries");
+      const client = state.queryClient!;
+      const active = queryKeys.workspaces.byRepo("active");
+      const archived = queryKeys.workspaces.byRepo("archived");
+      client.setQueryData(active, [{ repo_id: "r1", workspaces: [workspaceWithStatus("idle")] }]);
+      client.setQueryData(archived, []);
+      const updated = [
+        {
+          repo_id: "r1",
+          workspaces: [workspaceWithStatus(serverStatus), { id: "another-workspace" }],
+        },
+      ];
+      state.isConnected.mockReturnValue(stage === "call");
+      state[stage].mockImplementationOnce(() => {
+        client.setQueryData(active, updated);
+        throw failure;
+      });
+      await expect(useSendMessage().mutateAsync(prompt)).rejects.toBe(failure);
+      expect(client.getQueryData(active)).toEqual(updated);
+      expect(client.getQueryState(active)?.isInvalidated).toBe(true);
+      expect(client.getQueryState(archived)?.isInvalidated).toBe(true);
+      expect(state.call).toHaveBeenCalledTimes(stage === "call" ? 1 : 0);
+      expect(emitSendAttemptFailed).toHaveBeenCalledTimes(notices);
+    }
+  );
 
   it("keeps a send waiting for connection on its original runtime when that runtime is disposed", async () => {
     const { useSendMessage } = await import("@/features/session/api/session.queries");

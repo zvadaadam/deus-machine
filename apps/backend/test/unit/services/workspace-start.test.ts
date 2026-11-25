@@ -321,9 +321,50 @@ describe("starting a workspace", () => {
 
   it("records that origin was absent when upstream is the only remote", async () => {
     git("remote", "add", "upstream", root);
+    const error = vi.spyOn(console, "error");
+    const warn = vi.spyOn(console, "warn");
     await initializeWorkspace(add("w", "vega"));
     expect(row("w").init_fetch_issue).toBe("no_origin");
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
   });
+
+  it("fetches the latest commit from an origin defined only in .git/remotes/origin", async () => {
+    const origin = path.join(scratch, "origin");
+    gitIn(scratch, "clone", "-q", root, origin);
+    gitIn(origin, "config", "user.name", "Test User");
+    gitIn(origin, "config", "user.email", "test@example.test");
+    const latest = commit(origin, "tracked.txt", "second");
+    git("update-ref", "refs/remotes/origin/main", "main");
+    const remotes = path.join(root, ".git", "remotes");
+    fs.mkdirSync(remotes, { recursive: true });
+    fs.writeFileSync(path.join(remotes, "origin"), `URL: ${origin}\n`);
+
+    await initializeWorkspace(add("w", "vega"));
+
+    expect(row("w")).toMatchObject({ state: "ready", init_fetch_issue: null });
+    expect(gitIn(workspacePath("vega"), "rev-parse", "HEAD")).toBe(latest);
+  });
+
+  it.each([
+    [1, "could not read config"],
+    [128, "fatal: No such remote 'origin'"],
+  ] as const)(
+    "still starts and warns when git cannot read the remote (exit %i)",
+    async (code, stderr) => {
+      const warn = vi.spyOn(console, "warn");
+      const args = ["remote", "get-url", "origin"];
+      const git = vi
+        .spyOn(await import("@shared/lib/git-process"), "runGit")
+        .mockRejectedValueOnce(new GitError(args, { code, stderr }));
+      await initializeWorkspace(add("w", "vega"));
+      expect(git).toHaveBeenNthCalledWith(1, args, expect.anything());
+      expect(row("w")).toMatchObject({ state: "ready", init_fetch_issue: "failed" });
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        `[WORKSPACE] Could not read origin: git remote get-url origin ${stderr}`
+      );
+    }
+  );
 
   it("takes another name instead of reusing or removing one that is taken on disk", async () => {
     // Left from a reset database: a folder with someone's work, and a branch.

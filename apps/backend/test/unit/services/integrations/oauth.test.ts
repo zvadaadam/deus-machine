@@ -109,6 +109,23 @@ const bearer = async (options?: { fresh?: boolean }) => {
 };
 
 describe("signing in", () => {
+  it("checks an OAuth credential another backend saved after this backend started empty", async () => {
+    vi.resetModules();
+    const reader = await import("../../../../src/services/integrations");
+    const readerChecks = await import("../../../../src/services/integrations/checks");
+    await reader.startIntegrations(4124);
+    await signIn();
+    await readerChecks.checkApp("acme");
+    expect(acme()).toMatchObject({ readiness: "ready", checkError: null });
+  });
+
+  it("reuses the saved OAuth client when another backend begins sign-in again", async () => {
+    await approve();
+    __resetVaultKeyForTests();
+    await approve();
+    expect(provider.clients.size).toBe(1);
+  });
+
   it("registers Deus, signs in with PKCE, and the account's token reaches its requests", async () => {
     const result = await connectApp({ appId: "acme" });
     const authorize = new URL((result as { url: string }).url);

@@ -20,7 +20,7 @@ import type { WorkspaceStart } from "@/features/workspace/lib/startState";
 import { sessionComposerActions } from "../store/sessionComposerStore";
 import { ImageDropTarget } from "./ImageDropTarget";
 
-const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
+const CONTENT_CLASSES = "mx-auto flex min-h-0 w-full min-w-0 max-w-[960px] flex-1 flex-col";
 
 interface SessionPanelProps {
   sessionId: string;
@@ -185,9 +185,6 @@ export function SessionPanel({
   // Counter incremented when the human clicks Send — triggers auto-scroll resume
   const [userSendCount, setUserSendCount] = useState(0);
 
-  // Show compact button when there are enough messages to benefit from compacting
-  const showCompactButton = messages.length > 10;
-
   // Bridge parent's onCompact / onCreatePR / onSendAgentMessage / onStop
   // callbacks to the composer ref. Each wrapper reads the ref at call
   // time, so the handlers keep working across composer re-renders.
@@ -231,86 +228,84 @@ export function SessionPanel({
     resolveQuestion(sessionId, ["USER_CANCELLED"]);
   }, [resolveQuestion, sessionId]);
 
-  // If embedded, render without overlay but with message input
+  const body = (
+    <SessionProvider
+      sessionId={sessionId}
+      sessionStatus={effectiveSessionStatus}
+      workspaceId={workspaceId ?? null}
+      workspacePath={workspacePath}
+      cloud={workspaceKind === "cloud"}
+      subagentMessages={subagentMessages}
+    >
+      <Chat
+        sessionId={sessionId}
+        messages={messages}
+        compactions={compactions}
+        turns={turns}
+        loading={loading}
+        sessionStatus={effectiveSessionStatus}
+        errorMessage={cloudDirectState.error ?? session?.error_message}
+        errorCategory={
+          (cloudDirectState.error ? cloudDirectState.errorCategory : session?.error_category) ??
+          undefined
+        }
+        agentMessages={session?.agent_messages}
+        agentHarness={session?.agent_harness}
+        hasOlder={hasOlder}
+        loadingOlder={loadOlderMutation.isPending}
+        onLoadOlder={handleLoadOlder}
+        onNewChat={onOpenNewTab}
+        workspaceRepoName={workspaceRepoName}
+        workspaceParentBranch={workspaceParentBranch}
+        workspaceStart={workspaceStart}
+        isFirstSession={embedded && isFirstSession}
+        contextLost={contextLost}
+        onDismissContextLost={dismissContextLost}
+        userSendCount={userSendCount}
+        workspaceId={workspaceId ?? null}
+        workspaceKind={workspaceKind}
+      />
+
+      {session && (
+        <>
+          <PlanApprovalOverlay
+            request={pendingPlan}
+            agentHarness={session.agent_harness}
+            onApprove={handlePlanApprove}
+            onReject={handlePlanReject}
+          />
+          <AgentQuestionOverlay
+            key={pendingQuestion?.wsRequestId}
+            request={pendingQuestion}
+            agentHarness={session.agent_harness}
+            onSubmit={handleQuestionSubmit}
+            onDismiss={handleQuestionDismiss}
+          />
+        </>
+      )}
+
+      <SessionComposer
+        ref={composerRef}
+        sessionId={sessionId}
+        workspaceId={workspaceId}
+        workspaceKind={workspaceKind}
+        workspacePath={workspacePath}
+        targetBranch={workspaceParentBranch ?? undefined}
+        initialModel={initialModel}
+        historyConnection={direct ? cloudDirectState : undefined}
+        showCompactButton={!embedded && messages.length > 10}
+        onOpenNewTab={onOpenNewTab}
+        onAgentHarnessChange={onAgentHarnessChange}
+        onSendComplete={handleSendComplete}
+      />
+    </SessionProvider>
+  );
+
   if (embedded) {
     return (
-      <SessionProvider
-        sessionStatus={effectiveSessionStatus}
-        workspaceId={workspaceId ?? null}
-        workspacePath={workspacePath}
-        cloud={workspaceKind === "cloud"}
-        subagentMessages={subagentMessages}
-      >
-        <ImageDropTarget
-          composerId={sessionId}
-          className={`${CONTENT_WIDTH_CLASSES} flex min-h-0 flex-1 flex-col`}
-        >
-          <Chat
-            sessionId={sessionId}
-            messages={messages}
-            compactions={compactions}
-            turns={turns}
-            loading={loading}
-            sessionStatus={effectiveSessionStatus}
-            errorMessage={cloudDirectState.error ?? session?.error_message}
-            errorCategory={
-              (cloudDirectState.error ? cloudDirectState.errorCategory : session?.error_category) ??
-              undefined
-            }
-            agentMessages={session?.agent_messages}
-            agentHarness={session?.agent_harness}
-            hasOlder={hasOlder}
-            loadingOlder={loadOlderMutation.isPending}
-            onLoadOlder={handleLoadOlder}
-            onRetryInNewChat={onOpenNewTab}
-            workspaceRepoName={workspaceRepoName}
-            workspaceParentBranch={workspaceParentBranch}
-            workspaceStart={workspaceStart}
-            isFirstSession={isFirstSession}
-            contextLost={contextLost}
-            onDismissContextLost={dismissContextLost}
-            userSendCount={userSendCount}
-            workspaceId={workspaceId ?? null}
-            workspaceKind={workspaceKind}
-          />
-
-          {/* Agent-initiated interaction overlays — appear above the
-                composer. Render only when session has loaded (overlays
-                are irrelevant before that, and `agent_harness` is
-                session-derived). */}
-          {session && (
-            <>
-              <PlanApprovalOverlay
-                request={pendingPlan}
-                agentHarness={session.agent_harness}
-                onApprove={handlePlanApprove}
-                onReject={handlePlanReject}
-              />
-              <AgentQuestionOverlay
-                key={pendingQuestion?.wsRequestId}
-                request={pendingQuestion}
-                agentHarness={session.agent_harness}
-                onSubmit={handleQuestionSubmit}
-                onDismiss={handleQuestionDismiss}
-              />
-            </>
-          )}
-
-          <SessionComposer
-            ref={composerRef}
-            sessionId={sessionId}
-            workspaceId={workspaceId}
-            workspaceKind={workspaceKind}
-            workspacePath={workspacePath}
-            targetBranch={workspaceParentBranch ?? undefined}
-            initialModel={initialModel}
-            historyConnection={direct ? cloudDirectState : undefined}
-            onOpenNewTab={onOpenNewTab}
-            onAgentHarnessChange={onAgentHarnessChange}
-            onSendComplete={handleSendComplete}
-          />
-        </ImageDropTarget>
-      </SessionProvider>
+      <ImageDropTarget composerId={sessionId} className={CONTENT_CLASSES}>
+        {body}
+      </ImageDropTarget>
     );
   }
 
@@ -340,81 +335,8 @@ export function SessionPanel({
         </div>
 
         <ImageDropTarget composerId={sessionId} className="flex flex-1 overflow-hidden">
-          {/* Main Content Area */}
           <div className="flex min-h-0 flex-1 flex-col">
-            <SessionProvider
-              sessionStatus={effectiveSessionStatus}
-              workspaceId={workspaceId ?? null}
-              workspacePath={workspacePath}
-              cloud={workspaceKind === "cloud"}
-              subagentMessages={subagentMessages}
-            >
-              <div className={`${CONTENT_WIDTH_CLASSES} mx-auto flex min-h-0 flex-1 flex-col`}>
-                <Chat
-                  sessionId={sessionId}
-                  messages={messages}
-                  compactions={compactions}
-                  turns={turns}
-                  loading={loading}
-                  sessionStatus={effectiveSessionStatus}
-                  errorMessage={cloudDirectState.error ?? session?.error_message}
-                  errorCategory={
-                    (cloudDirectState.error
-                      ? cloudDirectState.errorCategory
-                      : session?.error_category) ?? undefined
-                  }
-                  agentMessages={session?.agent_messages}
-                  agentHarness={session?.agent_harness}
-                  hasOlder={hasOlder}
-                  loadingOlder={loadOlderMutation.isPending}
-                  onLoadOlder={handleLoadOlder}
-                  onRetryInNewChat={onOpenNewTab}
-                  workspaceRepoName={workspaceRepoName}
-                  workspaceParentBranch={workspaceParentBranch}
-                  workspaceStart={workspaceStart}
-                  contextLost={contextLost}
-                  onDismissContextLost={dismissContextLost}
-                  userSendCount={userSendCount}
-                  workspaceId={workspaceId ?? null}
-                  workspaceKind={workspaceKind}
-                />
-
-                {/* Agent-initiated interaction overlays — appear above the
-                      composer. Render only when session has loaded. */}
-                {session && (
-                  <>
-                    <PlanApprovalOverlay
-                      request={pendingPlan}
-                      agentHarness={session.agent_harness}
-                      onApprove={handlePlanApprove}
-                      onReject={handlePlanReject}
-                    />
-                    <AgentQuestionOverlay
-                      key={pendingQuestion?.wsRequestId}
-                      request={pendingQuestion}
-                      agentHarness={session.agent_harness}
-                      onSubmit={handleQuestionSubmit}
-                      onDismiss={handleQuestionDismiss}
-                    />
-                  </>
-                )}
-
-                <SessionComposer
-                  ref={composerRef}
-                  sessionId={sessionId}
-                  workspaceId={workspaceId}
-                  workspaceKind={workspaceKind}
-                  workspacePath={workspacePath}
-                  targetBranch={workspaceParentBranch ?? undefined}
-                  initialModel={initialModel}
-                  historyConnection={direct ? cloudDirectState : undefined}
-                  showCompactButton={showCompactButton}
-                  onOpenNewTab={onOpenNewTab}
-                  onAgentHarnessChange={onAgentHarnessChange}
-                  onSendComplete={handleSendComplete}
-                />
-              </div>
-            </SessionProvider>
+            <div className={CONTENT_CLASSES}>{body}</div>
           </div>
         </ImageDropTarget>
       </div>

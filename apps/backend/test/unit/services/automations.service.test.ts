@@ -53,8 +53,11 @@ const {
 
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
-const socketFor = vi.hoisted(() => vi.fn());
-vi.mock("../../../src/services/ws.service", () => ({ getConnection: socketFor }));
+const sendFrame = vi.hoisted(() => vi.fn());
+vi.mock("../../../src/services/ws.service", () => ({
+  getConnection: (id: string) => ({ deviceId: id }),
+  sendFrame,
+}));
 vi.mock("../../../src/services/agent", () => ({ answerToolRequest: vi.fn() }));
 vi.mock("../../../src/services/streams", () => ({
   resetSubscribers: mockResetSubscribers,
@@ -1277,7 +1280,7 @@ describeWithDb("openAutomationRun", () => {
     const { default: operations } = await import("../../../src/api/workspaces");
     engine.serveOperations(new Registry(operations));
     const frames = new Map(["window", "phone"].map((id) => [id, vi.fn()]));
-    socketFor.mockImplementation((id: string) => ({ deviceId: id, ws: { send: frames.get(id) } }));
+    sendFrame.mockImplementation((id, frame) => frames.get(id)?.(frame));
     for (const [id, send] of frames) {
       engine.handleFrame(id, { type: "q:subscribe", resource: "workspaces", id: "sidebar" });
       expect(send).toHaveBeenCalledOnce();
@@ -1290,7 +1293,7 @@ describeWithDb("openAutomationRun", () => {
       });
       for (const send of frames.values()) {
         expect(send).toHaveBeenCalledOnce();
-        expect(JSON.parse(send.mock.calls[0][0]).data[0].workspaces).toContainEqual(
+        expect(send.mock.calls[0][0].data[0].workspaces).toContainEqual(
           expect.objectContaining({ id: first.workspaceId, current_session_id: first.sessionId })
         );
       }

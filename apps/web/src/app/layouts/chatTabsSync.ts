@@ -6,6 +6,7 @@
  * changed, the same arrays come back, so React sees no update.
  */
 
+import { DEFAULT_AGENT_HARNESS } from "@shared/models";
 import { getAgentLabel } from "@/shared/agents";
 import type { Session } from "@/features/session/types";
 import type {
@@ -35,7 +36,7 @@ export function createPendingTab(): PendingChatTab {
     kind: "pending",
     id: "tab-default",
     label: NEW_CHAT_LABEL,
-    agentHarness: "claude-code",
+    agentHarness: DEFAULT_AGENT_HARNESS,
     hasStarted: false,
   };
 }

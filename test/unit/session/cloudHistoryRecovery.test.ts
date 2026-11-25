@@ -26,9 +26,9 @@ const { database, received, invalidate, refreshPr, send } = vi.hoisted(() => ({
   send: vi.fn(),
 }));
 vi.mock("../../../apps/backend/src/lib/database", () => ({ getDatabase: database }));
-// The streams are real; only the socket they send on is replaced.
+// Feed the desktop observer the serialized frames from the real stream publisher.
 vi.mock("../../../apps/backend/src/services/ws.service", () => ({
-  getConnection: () => ({ ws: { send: received } }),
+  sendFrame: (_connectionId: string, frame: object) => received(JSON.stringify(frame)),
 }));
 vi.mock("../../../apps/backend/src/services/query-engine", () => ({ invalidate }));
 vi.mock("../../../apps/backend/src/services/pr-snapshot.service", () => ({

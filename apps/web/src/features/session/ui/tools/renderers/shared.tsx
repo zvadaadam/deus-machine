@@ -24,7 +24,9 @@ function isImageResultBlock(block: unknown): block is ImageResultBlock {
   return (block as Record<string, unknown>).type === "image";
 }
 
-export function extractImage(content: unknown): { data: string; mediaType: string } | null {
+type ToolImage = { data: string; mediaType: string };
+
+export function extractImage(content: unknown): ToolImage | null {
   if (!Array.isArray(content)) return null;
 
   // Iterate through all image blocks — don't stop at the first one if its
@@ -43,7 +45,17 @@ export function extractImage(content: unknown): { data: string; mediaType: strin
   return null;
 }
 
-export function extractText(content: unknown): string {
+export function renderToolImage(image: ToolImage, alt: string) {
+  return (
+    <img
+      src={`data:${image.mediaType};base64,${image.data}`}
+      alt={alt}
+      className="border-border/40 max-w-full rounded-lg border shadow-sm"
+    />
+  );
+}
+
+export function extractText(content: unknown = ""): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content

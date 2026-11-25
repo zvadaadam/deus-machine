@@ -1,6 +1,7 @@
 import { tempo } from "@/shared/lib/tempo";
 import type { Message } from "@/shared/types";
 import { readUserMessageContent } from "../lib/userMessageContent";
+import { useTranscriptFold } from "../lib/openChat";
 import { TextBlock } from "./blocks/TextBlock";
 import { bubbleClass, type BubbleJoins } from "./bubble";
 import { SentFrom } from "./SentFrom";
@@ -25,7 +26,7 @@ export const MessageItem = memo(function MessageItem({
   next,
 }: MessageItemProps) {
   const { copy, copied } = useCopyToClipboard();
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, toggle] = useTranscriptFold("message", message.id);
   const [shouldCollapse, setShouldCollapse] = useState(false);
   const reduced = useReducedMotion();
   const contentRef = useRef<HTMLDivElement>(null);
@@ -110,7 +111,7 @@ export const MessageItem = memo(function MessageItem({
         {shouldCollapse && (
           <button
             type="button"
-            onClick={() => setIsExpanded(!isExpanded)}
+            onClick={toggle}
             className="text-secondary-foreground hover:text-foreground mt-2 flex items-center gap-1 text-xs font-normal transition-colors"
             aria-expanded={isExpanded}
             aria-controls={`message-content-${message.id}`}

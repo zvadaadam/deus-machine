@@ -112,7 +112,7 @@ export function AppSidebar({
   }
 
   return (
-    <Sidebar variant="inset" collapsible="offcanvas" className="p-0">
+    <Sidebar className="p-0">
       <SidebarHeader
         profile={profile}
         places={places}

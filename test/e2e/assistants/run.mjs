@@ -52,7 +52,7 @@ const WHERE =
 /** The operator package's refusal of a call the host's `authorize` does not allow. */
 const refusedAccess = (detail) =>
   `refused (access): You may not do this here. Nothing was done. ${detail}`;
-/** Every tool, in the order the computer lists them: the package's ten, then Deus's three. */
+/** Every tool, in the order the computer lists them. */
 const TOOLS = [
   "whoami",
   "list_sessions",
@@ -65,6 +65,8 @@ const TOOLS = [
   "stop_sessions",
   "archive",
   "read_changes",
+  "read_queue",
+  "manage_queue",
   "add_project",
   "send_feedback",
 ];
@@ -76,6 +78,7 @@ const READ_ONLY_TOOLS = [
   "wait_for_sessions",
   "list_models",
   "read_changes",
+  "read_queue",
 ];
 /** The tools that may undo or lose work: MCP's destructiveHint. */
 const DESTRUCTIVE_TOOLS = ["stop_sessions", "archive"];
@@ -489,7 +492,7 @@ try {
     );
   }
   check(
-    "From the URL alone the MCP SDK client meets the 401, reads the metadata, registers, signs in and connects; it is offered the package's ten session tools and Deus's three, with read-only, destructive and open-world hints set",
+    "The MCP SDK client signs in from the URL and sees every tool with its read-only, destructive and open-world hints",
     {
       trace: chatgpt.trace,
       tools: tools.map(
@@ -550,7 +553,7 @@ try {
   const who = ok(await chatgpt.call("whoami"));
   assert.equal(
     who,
-    `you are the assistant "${chatgpt.clientId}" (id "assistant:${chatgpt.clientId}")\naccess: read. ${WHERE}`
+    `you are the assistant "${chatgpt.clientId}" (id "assistant:${chatgpt.clientId}")\nnote: access: read. ${WHERE}`
   );
   const list = ok(await chatgpt.call("list_sessions"));
   // Every local chat not archived; the cloud one is not among them.
@@ -580,14 +583,17 @@ try {
   assert(cursor, `a cursor: ${read}`);
   const sameById = ok(await chatgpt.call("read_session", { session: seeded.voyager.sessionId }));
   assert.equal(sameById, read, "by its id, the same conversation");
+  assert.match(ok(await chatgpt.call("read_queue", { session: "voyager:1" })), /queue is empty/);
   const changedRead = ok(await chatgpt.call("read_changes", { session: "voyager:1" }));
   assert.match(changedRead, /"price\.js"/);
   assert.doesNotMatch(changedRead, /\.env/);
   const secretRead = await chatgpt.call("read_changes", { session: "voyager:1", file: ".env" });
   assert.equal(secretRead.isError, true, secretRead.text);
   assert(!secretRead.text.includes("sk_live"), "no content of an unchanged file");
-  const models = await chatgpt.call("list_models");
-  report.evidence.listModelsWithNoEngine = models;
+  const models = ok(await chatgpt.call("list_models"));
+  assert.match(models, /^claude-code \(default agent\)\n {2}- /m);
+  assert.match(models, /the agents' states could not be read\./);
+  check("list_models keeps the catalog when the engine cannot report readiness", models);
   skip(
     "list_models names the agents, their models and thinking levels, and the defaults",
     NO_ENGINE_MODELS
@@ -606,6 +612,7 @@ try {
     ["archive", { workspaces: ["harbor"] }],
     ["stop_sessions", { sessions: ["voyager:1"] }],
     ["send_message", { session: "voyager:1", message: "Ship it." }],
+    ["manage_queue", { session: "voyager:1", action: "resume" }],
     ["start_session", { project: "Remote test", workspace: "quarry", message: "Look around." }],
     ["add_project", { repository: "octocat/hello-world" }],
     ["answer_request", { session: "voyager:1", answer: "approve" }],
@@ -721,7 +728,7 @@ try {
   );
 
   // ---- 6. Operate ----
-  assert.equal(ok(await chatgpt.call("whoami")).split("\n")[1], `access: operate. ${WHERE}`);
+  assert.equal(ok(await chatgpt.call("whoami")).split("\n")[1], `note: access: operate. ${WHERE}`);
   const archived = ok(await chatgpt.call("archive", { workspaces: ["harbor"] }));
   assert.equal(archived, '- workspace "harbor": archived. Its branch and changes are kept.');
   await until(
@@ -1177,7 +1184,7 @@ try {
     readDb("SELECT COUNT(*) AS n FROM messages WHERE session_id = ?", seeded.forge.sessionId).n,
     0
   );
-  check("send_message to a working chat sends nothing and says so, with the wait to make", {
+  check("send_message reports that it sent nothing to a chat marked working without a live turn", {
     busy: busy.text,
   });
 

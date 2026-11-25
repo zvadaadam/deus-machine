@@ -22,6 +22,7 @@ import { tempo } from "@/shared/lib/tempo";
 import { cn } from "@/shared/lib/utils";
 import { useQueuedMessages } from "../api/session.queries";
 import { hasLimitReset, limitTime } from "../lib/queuedMessages";
+import { SentFrom } from "./SentFrom";
 
 type Row = QueuedMessages["items"][number];
 type Move = { id: string; before: string | null };
@@ -54,7 +55,7 @@ interface QueueControls {
 }
 
 function QueuedRow({
-  row: { id, text, images, state },
+  row: { id, text, images, state, origin },
   moving,
   sessionId,
   turnId,
@@ -94,6 +95,7 @@ function QueuedRow({
         <div
           className={cn(
             "border-border-subtle bg-bg-muted text-text-secondary mb-1 flex h-8 items-center gap-1 rounded-lg border px-0.5 text-sm pointer-coarse:h-12",
+            origin && "h-12 pointer-coarse:h-18",
             isDragging && "border-border-strong shadow-sm"
           )}
         >
@@ -113,7 +115,17 @@ function QueuedRow({
               </Button>
             )}
           </div>
-          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          <div
+            className={cn(
+              "flex min-w-0 flex-1 items-center gap-1.5",
+              origin && "grid grid-cols-[minmax(0,1fr)_auto] gap-y-0"
+            )}
+          >
+            {origin && (
+              <div className="col-span-full flex min-w-0">
+                <SentFrom origin={origin} />
+              </div>
+            )}
             {text && (
               <span className="truncate" title={text}>
                 {text}

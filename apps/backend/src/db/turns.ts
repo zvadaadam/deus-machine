@@ -87,6 +87,7 @@ export function saveTurn(db: Database.Database, sessionId: string, turn: Session
             stopReason: turn.stopReason,
             finishReason: turn.finishReason,
             error: turn.error,
+            undeliveredSteers: turn.undeliveredSteers,
           }
     ),
     json(turn.tokens),

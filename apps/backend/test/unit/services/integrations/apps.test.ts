@@ -95,7 +95,7 @@ import {
   uninstallSkill,
 } from "../../../../src/services/integrations/skills";
 import { credentialsFor } from "../../../../src/services/integrations/credentials";
-import { settleChecks } from "../../../../src/services/integrations/checks";
+import { checkApp, settleChecks } from "../../../../src/services/integrations/checks";
 import { markNeedsReauth } from "../../../../src/services/integrations/events";
 import {
   getConnection,
@@ -141,6 +141,17 @@ const gateway = (id: string) => ({
 });
 
 describe("apps", () => {
+  it("checks a pasted credential another backend saved after this backend started empty", async () => {
+    vi.resetModules();
+    const writer = await import("../../../../src/services/integrations/apps");
+    const writerChecks = await import("../../../../src/services/integrations/checks");
+    await writer.connectApp({ appId: "sentry", values: { token: "fixture" } });
+    await writerChecks.settleChecks();
+    await checkApp("sentry");
+    expect(app("sentry")).toMatchObject({ readiness: "ready", checkError: null });
+    expect(getConnection(getInstallation("app", "sentry")!.connectionId!)?.status).toBe("active");
+  });
+
   it("pushes state only: nothing installed is a few bytes, however large the catalog", () => {
     const pushed = getState();
     expect(pushed).toMatchObject({ apps: [], skills: [], plugins: [] });

@@ -25,7 +25,7 @@ const claude = (overrides: Partial<HarnessAuth> = {}): HarnessAuth => ({
 const clis: HarnessCli[] = [
   { harness: "claude-code", state: "ready", version: "0.3.288", source: "cache" },
   { harness: "codex-app-server", state: "missing" },
-  { harness: "gemini", state: "missing" },
+  { harness: "gemini", state: "missing", version: "1.5.14" },
 ];
 
 beforeEach(() => {
@@ -94,11 +94,24 @@ describe("onboarding Claude account status", () => {
     expect(html).toContain("Paste the code the sign-in page shows");
   });
 
-  it("offers to install an agent whose CLI the engine has not installed", () => {
+  it("offers Install only for a CLI the engine can install", () => {
     const html = render();
     expect(html).toContain(">Gemini</p>");
-    expect(html.match(/>Not installed yet</g)).toHaveLength(2);
-    expect(html.match(/>Install<\/button>/g)).toHaveLength(2);
+    expect(html).toContain(">Not available on this computer<");
+    expect(html).toContain(">installs with its first turn<");
+    expect(html.match(/>Install<\/button>/g)).toHaveLength(1);
+  });
+
+  it("offers Try again for a failed install with a version and shows the reason for an unavailable CLI", () => {
+    auth.data!.clis = [
+      clis[0]!,
+      { harness: "gemini", state: "failed", version: "1.5.14", error: "Download failed" },
+      { harness: "codex-app-server", state: "failed", error: "Codex is unavailable" },
+    ];
+    const html = render();
+    expect(html.match(/>Try again<\/button>/g)).toHaveLength(1);
+    expect(html).toContain("its install failed: Download failed");
+    expect(html).toContain(">Codex is unavailable<");
   });
 
   it("waits for the login read before offering an action", () => {
@@ -110,7 +123,7 @@ describe("onboarding Claude account status", () => {
     expect(html).not.toContain(">Check again</button>");
   });
 
-  it.each(["request", "envelope", "unknown"])(
+  it.each(["request", "envelope", "unknown", "missing CLI row"])(
     "offers another check after a %s failure, even with a cached login",
     (failure) => {
       auth.data = {
@@ -121,7 +134,13 @@ describe("onboarding Claude account status", () => {
       if (failure === "request") auth.isError = true;
       if (failure === "envelope") auth.data.error = "Agent server is disconnected";
       if (failure === "unknown") auth.data.auth[0] = claude({ state: "unknown" });
+      if (failure === "missing CLI row") {
+        auth.data.clis = clis.filter((cli) => cli.harness !== "claude-code");
+      }
       const html = render();
+      expect(html.match(/aria-label="Status could not be read"/g)).toHaveLength(
+        failure === "request" || failure === "envelope" ? clis.length : 1
+      );
       expect(html).toContain("Couldn’t check account");
       expect(html).toContain(">Check again</button>");
       expect(html).not.toContain(">Sign in</button>");

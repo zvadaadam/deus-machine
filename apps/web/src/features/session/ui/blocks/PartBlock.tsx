@@ -34,8 +34,7 @@ export function PartBlock({
         />
       ))
       .with({ type: "reasoning" }, (p: ReasoningPart) => {
-        const isActivelyStreaming = isStreaming && p.state === "streaming";
-        if (isActivelyStreaming) {
+        if (isStreaming && p.state === "streaming") {
           return <StreamingReasoningBlock key={p.id} text={p.text} />;
         }
         return <ThinkingBlock key={p.id} part={p} durationSec={getReasoningDurationSec(p)} />;
