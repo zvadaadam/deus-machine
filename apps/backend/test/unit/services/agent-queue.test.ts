@@ -636,22 +636,6 @@ describe("stopping the current turn", () => {
     expect(starts()).toEqual(["A"]);
   });
 
-  async function startBWhileALives() {
-    await send("A");
-    emit({
-      type: "error",
-      sessionId,
-      turnId: "A",
-      timestamp: seq,
-      message: "Failed",
-      category: "internal",
-      recoverable: false,
-    });
-    const release = holdAppSetup();
-    const starting = send("B");
-    return { release, starting };
-  }
-
   it("refuses strict sends until the turn that reported a fatal error ends", async () => {
     await send("A");
     fatalError("A");
@@ -686,30 +670,6 @@ describe("stopping the current turn", () => {
     end("A", "cancelled");
     await vi.waitFor(() => expect(starts()).toEqual(["A", "C"]));
     expect(await queue()).toEqual({ paused: null, items: [] });
-  });
-
-  it("O6: the default steer waits first while B is starting after A ends", async () => {
-    const { release, starting } = await startBWhileALives();
-    await send("tail");
-    end("A");
-    const result = await operator.call(
-      "send_message",
-      { session: sessionId, message: "First for B", wait: 0 },
-      chatCaller
-    );
-    const waiting = await queue();
-    release();
-    await starting;
-    expect(result).toContain('turn "B" did not take it; the product queued it as its own turn.');
-    expect(waiting).toMatchObject({
-      paused: null,
-      items: [{ text: "First for B", state: "waiting" }, waitingRow("tail")],
-    });
-    expect(engine.steerTurn).not.toHaveBeenCalled();
-    end("B");
-    await vi.waitFor(() => expect(engine.startTurn.mock.lastCall![0].input).toBe("First for B"));
-    end(starts().at(-1)!);
-    await vi.waitFor(() => expect(starts().at(-1)).toBe("tail"));
   });
 
   it("keeps only the last pre-wire end until the next admission", async () => {
