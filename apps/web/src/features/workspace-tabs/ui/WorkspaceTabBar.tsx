@@ -19,9 +19,11 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MutableRefObject,
+  type ReactNode,
 } from "react";
 import { Plus, X } from "lucide-react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useIsPresent, useReducedMotion } from "framer-motion";
 import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { Glide } from "@/components/ui/glide";
@@ -60,6 +62,22 @@ interface WorkspaceTabBarProps {
   onTabAdd: () => void;
   /** Reorder by `(draggedId, targetId)` against the full tab list so hidden tabs are preserved. */
   onTabReorder: (draggedId: string, targetId: string) => void;
+  /** Optional ref populated with the keyboard close+focus-recovery helper (shared by Delete and ⌘W). */
+  closeWithFocusRef?: MutableRefObject<((tabId: string) => void) | null>;
+}
+
+/** Keeps an exiting tab visually animated while immediately removing it from interaction & a11y trees. */
+function TabPresenceGuard({ children }: { children: ReactNode }) {
+  const isPresent = useIsPresent();
+  return (
+    <div
+      aria-hidden={!isPresent || undefined}
+      {...(!isPresent ? { inert: "" } : {})}
+      className={cn(!isPresent && "pointer-events-none")}
+    >
+      {children}
+    </div>
+  );
 }
 
 function getWrappedIndex(currentIndex: number, nextIndex: number, count: number): number {
@@ -175,7 +193,7 @@ function WorkspaceTabPill({
             role="tab"
             aria-label={title}
             aria-selected={isActive}
-            aria-controls={workspaceTabPanelDomId(tab.id)}
+            aria-controls={isActive ? workspaceTabPanelDomId(tab.id) : undefined}
             tabIndex={isActive ? 0 : -1}
             onClick={onSelect}
             onKeyDown={onKeyDown}
@@ -248,6 +266,7 @@ export function WorkspaceTabBar({
   onTabClose,
   onTabAdd,
   onTabReorder,
+  closeWithFocusRef,
 }: WorkspaceTabBarProps) {
   const reducedMotion = useReducedMotion();
   const [isDraggingAny, setIsDraggingAny] = useState(false);
@@ -325,6 +344,30 @@ export function WorkspaceTabBar({
     [tabs, onTabSelect]
   );
 
+  const closeTabWithFocus = useCallback(
+    (tabId: string) => {
+      const currentIndex = tabIds.indexOf(tabId);
+      if (currentIndex === -1) return;
+      const target = tabs[currentIndex];
+      const canClose = tabs.length > 1 || target.kind !== "new-tab";
+      if (!canClose) return;
+      const neighbor = tabs[currentIndex + 1]?.id ?? tabs[currentIndex - 1]?.id ?? "active";
+      pendingFocusTabIdRef.current = neighbor;
+      onTabClose(tabId);
+    },
+    [onTabClose, tabIds, tabs]
+  );
+
+  useEffect(() => {
+    if (!closeWithFocusRef) return;
+    closeWithFocusRef.current = closeTabWithFocus;
+    return () => {
+      if (closeWithFocusRef.current === closeTabWithFocus) {
+        closeWithFocusRef.current = null;
+      }
+    };
+  }, [closeWithFocusRef, closeTabWithFocus]);
+
   const handleTabKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLButtonElement>, tabId: string, canClose: boolean) => {
       const currentIndex = tabIds.indexOf(tabId);
@@ -344,22 +387,24 @@ export function WorkspaceTabBar({
         focusAndSelectIndex(tabs.length - 1);
       } else if (event.key === "Delete" && canClose) {
         event.preventDefault();
-        const neighbor = tabs[currentIndex + 1]?.id ?? tabs[currentIndex - 1]?.id ?? "active";
-        pendingFocusTabIdRef.current = neighbor;
-        onTabClose(tabId);
+        closeTabWithFocus(tabId);
       } else if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         onTabSelect(tabId);
       }
     },
-    [focusAndSelectIndex, onTabClose, onTabSelect, tabIds, tabs]
+    [closeTabWithFocus, focusAndSelectIndex, onTabSelect, tabIds, tabs]
   );
 
   function handleDragEnd(event: DragEndEvent) {
     setIsDraggingAny(false);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    onTabReorder(String(active.id), String(over.id));
+    const draggedId = String(active.id);
+    const targetId = String(over.id);
+    // Reject drops if either tab became hidden or closed mid-gesture.
+    if (!tabIds.includes(draggedId) || !tabIds.includes(targetId)) return;
+    onTabReorder(draggedId, targetId);
   }
 
   const activePillLayoutId = `workspace-active-tab-${workspaceId ?? "default"}`;
@@ -391,7 +436,7 @@ export function WorkspaceTabBar({
           onDragCancel={() => setIsDraggingAny(false)}
         >
           <SortableContext items={tabIds} strategy={horizontalListSortingStrategy}>
-            <AnimatePresence initial={false}>
+            <AnimatePresence initial={false} mode="popLayout">
               {tabs.map((tab, index) => {
                 const isActive = tab.id === activeTabId;
                 const canClose = tabs.length > 1 || tab.kind !== "new-tab";
@@ -404,30 +449,37 @@ export function WorkspaceTabBar({
                     exit={
                       reducedMotion
                         ? undefined
-                        : { width: 0, opacity: 0, scale: 0.96, transition: tempo.moderate.exit }
+                        : {
+                            opacity: 0,
+                            scale: 0.96,
+                            pointerEvents: "none",
+                            transition: tempo.moderate.exit,
+                          }
                     }
                     transition={tempo.moderate}
                     className={cn("shrink-0", !isDraggingAny && "overflow-x-clip")}
                   >
-                    <SortableWorkspaceTabShell id={tab.id}>
-                      {({ isDragging }) => (
-                        <WorkspaceTabPill
-                          tab={tab}
-                          index={index}
-                          isActive={isActive}
-                          isDragging={isDragging}
-                          suppressPillMotion={isDraggingAny}
-                          activePillLayoutId={activePillLayoutId}
-                          canClose={canClose}
-                          simulatorActive={simulatorActive}
-                          fileChangesCount={fileChangesCount}
-                          onSelect={() => onTabSelect(tab.id)}
-                          onClose={() => onTabClose(tab.id)}
-                          onKeyDown={(e) => handleTabKeyDown(e, tab.id, canClose)}
-                          tabRef={(node) => setTabRef(tab.id, node)}
-                        />
-                      )}
-                    </SortableWorkspaceTabShell>
+                    <TabPresenceGuard>
+                      <SortableWorkspaceTabShell id={tab.id}>
+                        {({ isDragging }) => (
+                          <WorkspaceTabPill
+                            tab={tab}
+                            index={index}
+                            isActive={isActive}
+                            isDragging={isDragging}
+                            suppressPillMotion={isDraggingAny}
+                            activePillLayoutId={activePillLayoutId}
+                            canClose={canClose}
+                            simulatorActive={simulatorActive}
+                            fileChangesCount={fileChangesCount}
+                            onSelect={() => onTabSelect(tab.id)}
+                            onClose={() => onTabClose(tab.id)}
+                            onKeyDown={(e) => handleTabKeyDown(e, tab.id, canClose)}
+                            tabRef={(node) => setTabRef(tab.id, node)}
+                          />
+                        )}
+                      </SortableWorkspaceTabShell>
+                    </TabPresenceGuard>
                   </motion.div>
                 );
               })}

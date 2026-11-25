@@ -111,6 +111,7 @@ export function ContentView({
         workspace={workspace}
         tabId={tab.id}
         visibility={visibility}
+        panelVisible={panelVisible}
         isWatched={isWatched}
         environmentTasks={environmentTasks}
         onRunTask={onRunTask}

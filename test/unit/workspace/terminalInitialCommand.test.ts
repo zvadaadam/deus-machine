@@ -116,6 +116,7 @@ describe("Terminal one-shot initial command dispatch", () => {
     clearTerminalInitialCommand("term-remount");
     clearTerminalInitialCommand("term-retry");
     clearTerminalInitialCommand("term-strict");
+    clearTerminalInitialCommand("term-early-exit");
   });
 
   it("dispatches an env task command once and does not re-run it after host remount (e.g. returning from Home)", async () => {
@@ -183,5 +184,34 @@ describe("Terminal one-shot initial command dispatch", () => {
     expect(decodeWrites()).toEqual(["bun run lint\n"]);
     expect(getTerminalInitialCommand("term-strict")).toBeUndefined();
     unmountSecond();
+  });
+
+  it("preserves the command when the PTY exits after ptySpawn ack before dispatch, and runs it on Enter retry", async () => {
+    callMock.mockResolvedValue({});
+    const outputHandlers: Array<(event: { type: string; error?: string }) => void> = [];
+    followMock.mockImplementation((_stream, _filter, cb) => {
+      outputHandlers.push(cb);
+      return () => {};
+    });
+
+    setTerminalInitialCommand("term-early-exit", "bun run check");
+
+    const unmount = mountTerminal("term-early-exit");
+    // Let ptySpawn resolve, then shell dies at 100ms before the 300ms settle timer fires.
+    await vi.advanceTimersByTimeAsync(100);
+    outputHandlers[0]?.({ type: "exit", error: "shell exited unexpectedly" });
+    await vi.advanceTimersByTimeAsync(300);
+
+    // Dead shell must NOT consume or write the initial command.
+    expect(decodeWrites()).toEqual([]);
+    expect(getTerminalInitialCommand("term-early-exit")).toBe("bun run check");
+
+    // User presses Enter to restart the shell; command runs once on the restarted PTY.
+    onDataCallbacks[0]?.("\r");
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(decodeWrites()).toEqual(["bun run check\n"]);
+    expect(getTerminalInitialCommand("term-early-exit")).toBeUndefined();
+    unmount();
   });
 });

@@ -47,6 +47,8 @@ interface NewTabViewProps {
   workspace: Workspace;
   tabId: string;
   visibility: ContentTabVisibility;
+  /** Whether the workspace content pane is visible (gates background file/diff queries). */
+  panelVisible?: boolean;
   isWatched?: boolean;
   environmentTasks?: ProjectTask[];
   onRunTask?: (taskName: string) => void;
@@ -100,6 +102,7 @@ export function NewTabView({
   workspace,
   tabId,
   visibility,
+  panelVisible = true,
   isWatched = false,
   environmentTasks,
   onRunTask,
@@ -116,7 +119,7 @@ export function NewTabView({
 
   const cloud = workspace.kind === "cloud";
   const gateStage = cloudGateStage(workspace);
-  const canQueryFiles = workspace.state === "ready" && !gateStage;
+  const canQueryFiles = panelVisible && workspace.state === "ready" && !gateStage;
 
   const browserVisible = isTabVisible("browser", settings, visibility);
   const visibleTools = useMemo(() => getVisibleTools(settings, visibility), [settings, visibility]);
@@ -466,7 +469,7 @@ export function NewTabView({
               </div>
             </div>
 
-            {!cloud && browserVisible && (
+            {panelVisible && !cloud && browserVisible && (
               <RunningLocallyStrip onOpenUrl={(url) => onOpenUrl(url, tabId)} />
             )}
           </>

@@ -261,10 +261,20 @@ try {
   const tabPanel = page.locator(`[role="tabpanel"][id="${controlledPanelId}"]`);
   assert.equal(await tabPanel.getAttribute("aria-labelledby"), activeTabId);
 
-  // Open a second tab and verify 2-tab drag-and-drop reorder works symmetrically.
+  // Open a second tab and verify aria-controls is only set on the active mounted tabpanel,
+  // plus 2-tab drag-and-drop reorder works symmetrically.
   await openFromNewTab("Changes");
   const changesTab = tabs.getByRole("tab", { name: "Changes", exact: true });
   await changesTab.waitFor();
+  assert.equal(
+    await readmeTab.getAttribute("aria-controls"),
+    null,
+    "inactive tabs omit aria-controls when their tabpanel is not mounted"
+  );
+  assert.ok(
+    await changesTab.getAttribute("aria-controls"),
+    "active tab sets aria-controls to its mounted tabpanel"
+  );
   const tabLabels = () =>
     tabs.getByRole("tab").evaluateAll((es) => es.map((e) => e.getAttribute("aria-label")));
   assert.deepEqual(await tabLabels(), ["README.md", "Changes"]);
@@ -395,6 +405,19 @@ try {
     "tab",
     "Delete close restores focus to a surviving tab"
   );
+  // Ctrl+W inside the workspace pane closes the active tab with the same focus restoration.
+  await tabs.getByRole("tab", { name: "Terminal 1", exact: true }).click();
+  await tabs.getByRole("tab", { name: "Terminal 1", exact: true }).focus();
+  await page.keyboard.press("Control+w");
+  assert.deepEqual(await tabLabels(), ["Changes", "Files"]);
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.getAttribute("role")),
+    "tab",
+    "workspace Ctrl+W restores focus to a surviving tab"
+  );
+  // Re-add Terminal 1 so we have 3 tabs for rapid same-pixel close.
+  await openFromNewTab("Terminal");
+  assert.deepEqual(await tabLabels(), ["Changes", "Files", "Terminal 2"]);
   // Rapid close-clicking at the exact same pixel closes uniform-width tabs consecutively.
   const firstTab = tabs.getByRole("tab", { name: "Changes", exact: true });
   await firstTab.hover();
@@ -404,9 +427,9 @@ try {
   const cx = closeBox.x + closeBox.width / 2;
   const cy = closeBox.y + closeBox.height / 2;
   await page.mouse.click(cx, cy);
-  assert.deepEqual(await tabLabels(), ["Files", "Terminal 1"]);
+  assert.deepEqual(await tabLabels(), ["Files", "Terminal 2"]);
   await page.mouse.click(cx, cy);
-  assert.deepEqual(await tabLabels(), ["Terminal 1"]);
+  assert.deepEqual(await tabLabels(), ["Terminal 2"]);
   await page.mouse.click(cx, cy);
   assert.deepEqual(await tabLabels(), ["New tab"]);
   await page.evaluate(() => window.selectWorkspace("first"));
@@ -483,6 +506,57 @@ try {
   assert.equal(await page.locator("#workspace-content").count(), 0);
   assert.equal(await createPR.count(), 0, "the hosted chat-only header has no PR controls");
   assert.equal(await page.getByRole("button", { name: "Show workspace", exact: true }).count(), 0);
+
+  // Rapid same-pixel close with motion ENABLED (50ms intervals during exit animation).
+  const motionPage = await browser.newPage({
+    viewport: { width: 1440, height: 900 },
+    reducedMotion: "no-preference",
+  });
+  motionPage.on("pageerror", (e) => {
+    errors.push(e.message);
+    console.error(e.stack);
+  });
+  await motionPage.goto(server.resolvedUrls.local[0]);
+  const motionTabs = motionPage.getByRole("tablist", { name: "Workspace tabs" });
+  const motionNewTab = motionPage.locator('[data-slot="new-tab-view"]');
+  await motionTabs.getByRole("tab", { name: "New tab", exact: true }).waitFor();
+  for (const label of ["Changes", "Files", "Agent"]) {
+    if (!(await motionNewTab.isVisible())) {
+      await motionPage.getByRole("button", { name: "New tab", exact: true }).click();
+      await motionNewTab.waitFor();
+    }
+    await motionNewTab.getByRole("button", { name: label, exact: true }).click();
+  }
+  const motionLabels = () =>
+    motionTabs
+      .locator('[role="tab"]:not([aria-hidden="true"])')
+      .evaluateAll((es) =>
+        es.filter((e) => !e.closest("[inert]")).map((e) => e.getAttribute("aria-label"))
+      );
+  assert.deepEqual(await motionLabels(), ["Changes", "Files", "Agent"]);
+  const motionFirst = motionTabs.getByRole("tab", { name: "Changes", exact: true });
+  await motionFirst.hover();
+  const motionCloseBox = await motionPage
+    .getByRole("button", { name: "Close Changes", exact: true })
+    .boundingBox();
+  const mx = motionCloseBox.x + motionCloseBox.width / 2;
+  const my = motionCloseBox.y + motionCloseBox.height / 2;
+  await motionPage.mouse.click(mx, my);
+  await motionPage.waitForTimeout(50);
+  await motionPage.mouse.click(mx, my);
+  await motionPage.waitForTimeout(50);
+  await motionPage.mouse.click(mx, my);
+  await motionPage.waitForFunction(() => {
+    const active = [
+      ...document.querySelectorAll('[role="tablist"][aria-label="Workspace tabs"] [role="tab"]'),
+    ]
+      .filter((e) => !e.closest("[inert]"))
+      .map((e) => e.getAttribute("aria-label"));
+    return active.length === 1 && active[0] === "New tab";
+  });
+  assert.deepEqual(await motionLabels(), ["New tab"]);
+  await motionPage.close();
+
   assert.deepEqual(errors, []);
   console.log(
     "PASS: real workspace views, six tools, icon weights, split restoration, composer DOM/draft preservation, per-workspace state, cloud gates, Files retry, environment target, keyboard and responsive layouts"

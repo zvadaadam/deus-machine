@@ -3,7 +3,7 @@
  * and active content view so tab/title churn never re-renders MainContent or ChatArea.
  */
 
-import { useCallback, useMemo, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useFileChanges, useWorkspaceTabsState } from "@/features/workspace";
 import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
 import { onLocalhost } from "@/features/workspace/lib/reach";
@@ -69,8 +69,23 @@ export function WorkspaceContentPane({
   const isCloud = workspace.kind === "cloud";
   const panelVisible = view !== "chat";
 
-  const { workspaceTabs, activeTabId, selectTab, addNewTab, closeTab, reorderTabs } =
-    useWorkspaceTabsState(workspaceId);
+  const {
+    workspaceTabs,
+    activeTabId,
+    migratedActiveTool,
+    selectTab,
+    addNewTab,
+    closeTab,
+    reorderTabs,
+  } = useWorkspaceTabsState(workspaceId);
+
+  // Resolve any preserved v11 selected tool (e.g. Terminal or cloud Browser) once workspace kind is known.
+  useEffect(() => {
+    if (!migratedActiveTool) return;
+    workspaceLayoutActions.resolveMigratedTool(workspaceId, { cloud: isCloud });
+  }, [workspaceId, isCloud, migratedActiveTool]);
+
+  const closeWithFocusRef = useRef<((tabId: string) => void) | null>(null);
 
   const experimentalSettings = useSettings().data;
 
@@ -160,12 +175,19 @@ export function WorkspaceContentPane({
     [selectTab, view, onModeChange]
   );
 
+  const handleShortcutCloseTab = useCallback(
+    (tabId: string) => {
+      (closeWithFocusRef.current ?? closeTab)(tabId);
+    },
+    [closeTab]
+  );
+
   useWorkspaceTabShortcuts({
     enabled: true,
     tabs: visibleWorkspaceTabs,
     activeTabId: effectiveActiveTab.id,
     onSelectTab: handleShortcutSelectTab,
-    onCloseTab: closeTab,
+    onCloseTab: handleShortcutCloseTab,
   });
 
   return (
@@ -186,6 +208,7 @@ export function WorkspaceContentPane({
           onTabClose={closeTab}
           onTabAdd={addNewTab}
           onTabReorder={reorderTabs}
+          closeWithFocusRef={closeWithFocusRef}
         />
         <div className="no-drag flex shrink-0 items-center gap-1.5">
           {prActions}
