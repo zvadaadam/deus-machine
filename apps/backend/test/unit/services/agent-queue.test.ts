@@ -725,7 +725,7 @@ describe("stopping the current turn", () => {
     await b;
     expect(before).toMatchObject({ running: "B" });
     expect(session).toMatchObject({ status: "working", error_message: null });
-    expect(await fact("A")).toEqual({ state: "unknown" });
+    expect(await fact("A")).toMatchObject({ state: "ended", outcome: "cancelled" });
     expect(await queue()).toEqual({ paused: null, items: [] });
     expect(starts()).toEqual(["previous", "B"]);
   });
