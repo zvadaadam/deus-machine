@@ -812,7 +812,15 @@ describe("stopping the current turn", () => {
     const release = holdAppSetup();
     const starting = expect(send("B")).rejects.toThrow("Stopped before it started");
     const message = "Sign in with a fresh account";
-    emit({ type: "error", sessionId, turnId: "A", timestamp: seq, category: "auth", message });
+    emit({
+      type: "error",
+      sessionId,
+      turnId: "A",
+      timestamp: seq,
+      category: "auth",
+      message,
+      recoverable: false,
+    });
     emit({
       type: "turn.ended",
       sessionId,
