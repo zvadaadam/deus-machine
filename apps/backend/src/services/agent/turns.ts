@@ -52,7 +52,12 @@ const admissionsOf = new WeakMap<object, Map<string, Admission>>();
 const ADMISSION_KEPT_MS = 10 * 60_000;
 
 /** Stop interrupts app setup. Once turn/start is on the wire, Stop waits for its answer. */
-type Starting = { turnId: string; preparing: AbortController; done: Promise<void> };
+type Starting = {
+  turnId: string;
+  preparing: AbortController;
+  done: Promise<void>;
+  stoppedBy?: Origin;
+};
 type SetupEnd = { turnId: string; outcome: "cancelled"; cancelledBy: Origin };
 const admitting = new Map<string, Starting | SetupEnd>();
 
@@ -70,10 +75,16 @@ export function stoppedBeforeStart(sessionId: string) {
   return entry && "cancelledBy" in entry ? entry : undefined;
 }
 
-class SetupStop extends ConflictError {
-  constructor(readonly by: Origin) {
-    super("Stopped before it started.");
-  }
+const STEER_READ = new ConflictError("The agent already read this message.");
+
+export async function withdrawSteerRetry(sessionId: string, turnId: string) {
+  const admission = startingTurn(sessionId);
+  if (admission?.turnId !== turnId) return false;
+  admission.preparing.abort(STEER_READ);
+  return admission.done.then(
+    () => false,
+    (error) => error === STEER_READ
+  );
 }
 
 // A turn stopped before the wire ends in memory; it was never in the transcript.
@@ -432,18 +443,23 @@ async function sendMessageOnce(
       resume: existingAgentSessionId || undefined,
       ...(origin ? { origin } : {}),
     });
-    const admission = { turnId, preparing, done };
+    const admission: Starting = { turnId, preparing, done };
     admitting.set(sessionId, admission);
     try {
       await done;
     } catch (err) {
-      if (err instanceof SetupStop && err === preparing.signal.reason) {
-        recordSetupStop(sessionId, turnId, err.by);
-        settleStopped(sessionId, turnId);
+      if (preparing.signal.aborted && err === preparing.signal.reason) {
+        if (admission.stoppedBy) {
+          recordSetupStop(sessionId, turnId, admission.stoppedBy);
+          settleStopped(sessionId, turnId);
+        } else if (currentTurnId(sessionId) === turnId) {
+          admitting.delete(sessionId);
+          settleStopped(sessionId);
+        }
         throw err;
       }
       if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
-        if (preparing.signal.aborted) agentService.notifyTurnInterrupted(sessionId, turnId, true);
+        if (admission.stoppedBy) agentService.notifyTurnInterrupted(sessionId, turnId, true);
         // Another turn won admission. Keep it working and return the typed refusal.
         console.warn(
           `[CommandHandler] sendMessage rejected, turn already active: session=${sessionId}`
@@ -507,7 +523,8 @@ export async function stopSession(
     endedAt: targetTurnId ? getTurn(db, sessionId, targetTurnId)?.endedAt : undefined,
   });
   if (admission && admission.turnId === targetTurnId) {
-    admission.preparing.abort(new SetupStop(by));
+    admission.stoppedBy ??= by;
+    admission.preparing.abort(new ConflictError("Stopped before it started."));
     // A lost reply can leave the named turn running.
     await admission.done.catch(() => {});
     if (currentTurnId(sessionId) !== targetTurnId) return { unconfirmed: false };

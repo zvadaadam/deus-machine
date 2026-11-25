@@ -2343,6 +2343,42 @@ describe("the operator's queue and steer contract", () => {
     }
   );
 
+  it.each(["empty", "tail", "stop"] as const)(
+    "withdraws a recovered steer's standalone send when its read arrives during app setup (%s)",
+    async (next) => {
+      const tail = next === "tail";
+      vi.useFakeTimers();
+      await send("active");
+      await steer();
+      const { steerId, input, origin } = engine.steerTurn.mock.lastCall![0];
+      if (tail) await send("later");
+      await stopped("active");
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      const release = holdAppSetup();
+      const resuming = resumeInWindow();
+      expect((await queue()).items[0]).toMatchObject({ id: steerId, state: "sending" });
+      echo("active", steerId, input, origin);
+      const stopping = next === "stop" ? stop() : undefined;
+      release();
+      await Promise.all([resuming, stopping]);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(starts()).toEqual(tail ? ["active", "later"] : ["active"]);
+      expect(await queue()).toEqual({ paused: null, items: [] });
+      expect(await run(api.session, { sessionId })).toMatchObject({
+        status: tail ? "working" : "idle",
+        error_message: null,
+      });
+      expect(await fact()).toMatchObject({ state: "ended", steers: { [steerId!]: "read" } });
+      expect(await host.turn(caller, sessionId, steerId!)).toMatchObject(
+        stopping
+          ? { state: "ended", outcome: "cancelled", cancelledBy: fromPerson }
+          : { state: "unknown" }
+      );
+    }
+  );
+
   it("accepts one steer for the named turn, acknowledges retries and records a read from message.started alone", async () => {
     await send("active");
     expect(await fact()).toEqual({ state: "running", steers: {} });

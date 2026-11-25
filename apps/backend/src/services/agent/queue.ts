@@ -30,6 +30,7 @@ import {
   retryReadSteer,
   sendMessage,
   stoppedBeforeStart,
+  withdrawSteerRetry,
 } from "./turns";
 
 type Input = ParsedInputOf<typeof api.sendMessage>;
@@ -688,6 +689,11 @@ function userEcho(sessionId: string, turnId: string, steerId?: string) {
   if (index < 0) return;
   const [item] = q.items.splice(index, 1);
   if (steerId !== undefined && item?.steer) settleSteer(item.steer, "read");
+  if (steerId !== undefined && item?.attempt?.state === "sending") {
+    void withdrawSteerRetry(sessionId, item.attempt.turnId).then((withdrawn) => {
+      if (withdrawn) void drain(q);
+    });
+  }
   changed(q);
 }
 

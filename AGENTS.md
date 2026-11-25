@@ -244,6 +244,7 @@ and its queue advances at the turn's end.
 If the engine reports no active turn, the chat settles at once. A confirmed cancel withdraws the cards
 and keeps the chat occupied for final echoes. If no end arrives within 15 seconds of confirmation, the watchdog
 frees the chat, records the local end and returns unread steers to the queue. A late engine end can update the outcome.
+A late read removes its recovered steer and withdraws the retry if it is still in app setup.
 If the cancel is unconfirmed and the turn is still live, the watchdog records a warning and leaves it running.
 Resume appears above held rows, even before the turn ends. At a usage limit, pressing Continue
 before the reported reset schedules a turn one minute after it. The person can enable this for future limits in Settings.
