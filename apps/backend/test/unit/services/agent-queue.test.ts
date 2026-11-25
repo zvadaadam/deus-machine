@@ -816,21 +816,25 @@ describe("stopping the current turn", () => {
     await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "B", "C"]));
   });
 
-  it("waits for the winner named by busy even when a different late end beats the reply", async () => {
-    await send("A");
-    await outliveStop("A");
-    const wire = pendingStart();
-    const sending = send("B");
-    await vi.waitFor(() => expect(starts()).toEqual(["A", "B"]));
-    end("A");
-    wire.reject(busyReply("winner"));
-    await sending;
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    expect(starts()).toEqual(["A", "B"]);
-    emit({ type: "turn.started", sessionId, turnId: "winner", timestamp: seq });
-    end("winner");
-    await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "B"]));
-  });
+  it.each(["before", "after"])(
+    "waits for the winner named by busy when a different late end arrives %s the reply",
+    async (when) => {
+      await send("A");
+      await outliveStop("A");
+      const wire = pendingStart();
+      const sending = send("B");
+      await vi.waitFor(() => expect(starts()).toEqual(["A", "B"]));
+      if (when === "before") end("A");
+      wire.reject(busyReply("winner"));
+      await sending;
+      if (when === "after") end("A");
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(starts()).toEqual(["A", "B"]);
+      emit({ type: "turn.started", sessionId, turnId: "winner", timestamp: seq });
+      end("winner");
+      await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "B"]));
+    }
+  );
 
   it("stores a local end before the queue can claim its next turn", async () => {
     vi.useFakeTimers();
@@ -851,6 +855,35 @@ describe("stopping the current turn", () => {
       expect(starts()).toEqual(["A", "B"]);
       expect(stored).toHaveBeenCalled();
       expect(stored.mock.results[0]!.value).toEqual(expect.any(Number));
+    } finally {
+      unwatch();
+    }
+  });
+
+  it("retries B on A’s late end after C was stopped in setup", async () => {
+    await send("A");
+    await outliveStop("A");
+    const release = holdAppSetup();
+    const cancelled = expect(send("C")).rejects.toThrow("Stopped before it started");
+    await stop();
+    release();
+    await cancelled;
+    engine.startTurn.mockRejectedValueOnce(busyReply("A"));
+    await expect(send("B")).resolves.toEqual({ turnId: "B", queued: true });
+    expect(starts()).toEqual(["A", "B"]);
+    const seen: string[] = [];
+    const unwatch = onInvalidate(() => {
+      const status = db
+        .prepare<[string], { status: string }>("SELECT status FROM sessions WHERE id = ?")
+        .get(sessionId)!.status;
+      seen.push(status);
+    });
+    try {
+      end("A");
+      await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "B"]));
+      expect(seen[0]).toBe("idle");
+      expect(seen.at(-1)).toBe("working");
+      expect(await queue()).toEqual({ paused: null, items: [] });
     } finally {
       unwatch();
     }

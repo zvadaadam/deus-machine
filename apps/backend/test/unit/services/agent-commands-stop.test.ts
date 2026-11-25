@@ -317,6 +317,17 @@ describeWithDb("stopSession", () => {
     });
   });
 
+  it("keeps a holderless Stop's deadline when the handler is lost before its reply", async () => {
+    forgetChatTurns(SESSION);
+    vi.spyOn(agentService, "stopSession").mockImplementation(async () => {
+      forgetChatTurns(SESSION);
+      throw new Error("link dropped");
+    });
+    await expect(stopSession({ sessionId: SESSION })).resolves.toEqual({ unconfirmed: true });
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(status()).toBe("error");
+  });
+
   it("disarms a detached Stop deadline on full teardown", async () => {
     vi.spyOn(agentService, "stopSession").mockRejectedValue(new Error("link dropped"));
     await stopSession({ sessionId: SESSION });
@@ -373,12 +384,27 @@ describeWithDb("stopSession", () => {
     }
   );
 
+  it("disarms a lost handler's deadline when a successor claims the chat", async () => {
+    vi.spyOn(agentService, "stopSession").mockResolvedValue({
+      outcome: "unconfirmed",
+      turnId: "turn-1",
+    });
+    await stopSession({ sessionId: SESSION });
+    expect(vi.getTimerCount()).toBe(1);
+    forgetChatTurns(SESSION);
+    admitTurn(SESSION, "turn-2", "start");
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(status()).toBe("working");
+    expect(mockInvalidate).not.toHaveBeenCalled();
+  });
+
   it("captures the watchdog's target before an unconfirmed reply", async () => {
     vi.spyOn(agentService, "stopSession").mockImplementation(async () => {
       releaseTurn(SESSION, "turn-1", { type: "native" });
       return { outcome: "unconfirmed", turnId: "turn-1" };
     });
     await stopSession({ sessionId: SESSION });
+    expect(vi.getTimerCount()).toBe(1);
     admitTurn(SESSION, "turn-1", "start");
     await vi.advanceTimersByTimeAsync(20_000);
     expect(status()).toBe("working");
