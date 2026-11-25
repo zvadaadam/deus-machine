@@ -152,7 +152,7 @@ export function answerStop(
       if (turn.credited) credit(id, turn);
     } else credit(id, turn);
   }
-  const live = holdingTurn(id);
+  const live = chats.get(id)?.turn;
   if ((live && live !== turn) || (result?.outcome === "no_active_turn" && result.activeTurnId))
     return { unconfirmed: false };
   const unconfirmed = !result || result.outcome === "unconfirmed";
