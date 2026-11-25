@@ -70,7 +70,7 @@ import {
   startCloudTurn,
 } from "../../../apps/backend/src/services/agent/cloud/driver";
 import {
-  persistSessionWorking,
+  persistSessionStatus,
   persistLastUserMessageAt,
 } from "../../../apps/backend/src/services/agent/persistence";
 import { getTurn, getTurnsForMessages } from "../../../apps/backend/src/db/turns";
@@ -376,7 +376,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
       has_older: false,
       has_newer: false,
     });
-    persistSessionWorking(SESSION);
+    persistSessionStatus(SESSION, "working");
     await startCloudTurn(SESSION, "rejected", "Hello", SELECTION);
     onFrame({
       type: "error",
@@ -404,7 +404,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
       const messageId = send.mock.calls.at(-1)![0].messageId;
       const prompt = message("echo-accepted", 0, "accepted", "user");
       if (admission === "turn.started") {
-        persistSessionWorking(SESSION);
+        persistSessionStatus(SESSION, "working");
         onFrame({ type: "turn.started", turnId: "accepted", sessionId: PROVIDER, timestamp: T });
         onFrame({
           type: "message.started",
@@ -430,7 +430,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
     const firstMessageId = send.mock.calls.at(-1)![0].messageId;
     onFrame(snapshot([], { turns: [ended("first")] }));
     await startCloudTurn(SESSION, "second", "Second", SELECTION);
-    persistSessionWorking(SESSION);
+    persistSessionStatus(SESSION, "working");
     onFrame({
       type: "error",
       code: "MESSAGE_SEND_FAILED",
@@ -576,7 +576,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
       has_newer: false,
     });
     claimTurn(SESSION, "pending");
-    persistSessionWorking(SESSION);
+    persistSessionStatus(SESSION, "working");
     const sentAt = new Date(T + 60_000).toISOString();
     persistLastUserMessageAt(SESSION, sentAt);
     onFrame(snapshot([message("old", 0, "turn-1", "user")], { turns: [ended("turn-1")] }));
@@ -591,7 +591,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
 
   it("releases an unobserved admission when the snapshot proves that turn ended", () => {
     claimTurn(SESSION, "turn-1");
-    persistSessionWorking(SESSION);
+    persistSessionStatus(SESSION, "working");
     onFrame(snapshot([message("old", 0)], { turns: [ended("turn-1")] }));
     expect(holdingTurn(SESSION)?.turnId).toBeUndefined();
     expect(sessionRow()).toMatchObject({ status: "idle" });

@@ -50,7 +50,7 @@ import {
 } from "../../../apps/backend/src/services/agent/chat-turn";
 import { createAgentEventHandler } from "../../../apps/backend/src/services/agent/event-handler";
 import { _reset, subscribe } from "../../../apps/backend/src/services/streams";
-import { persistSessionWorking } from "../../../apps/backend/src/services/agent/persistence";
+import { persistSessionStatus } from "../../../apps/backend/src/services/agent/persistence";
 
 const SESSION = "native-recovery";
 function gate() {
@@ -82,11 +82,6 @@ describe("native replay through the published engine, SQLite and desktop fold", 
   let db: Database.Database;
   let handler: ReturnType<typeof createAgentEventHandler>;
   let ui: AgentStreamContext;
-  function startOnWire(turnId: string) {
-    if (!claimTurn(SESSION, turnId)) return false;
-    handler.resetTurnFacts(SESSION);
-    return true;
-  }
   beforeEach(() => {
     forgetChatTurns();
     vi.clearAllMocks();
@@ -187,8 +182,8 @@ describe("native replay through the published engine, SQLite and desktop fold", 
         handler.handleEventGap(gap);
       });
       try {
-        persistSessionWorking(SESSION);
-        startOnWire("turn-1");
+        persistSessionStatus(SESSION, "working");
+        claimTurn(SESSION, "turn-1");
         await client.startTurn({
           sessionId: SESSION,
           turnId: "turn-1",
@@ -228,8 +223,8 @@ describe("native replay through the published engine, SQLite and desktop fold", 
             "offline"
           );
         // Delivery damage belongs to one turn, not the whole session.
-        startOnWire("next");
-        persistSessionWorking(SESSION);
+        claimTurn(SESSION, "next");
+        persistSessionStatus(SESSION, "working");
         await client.startTurn({
           sessionId: SESSION,
           turnId: "next",
@@ -248,7 +243,7 @@ describe("native replay through the published engine, SQLite and desktop fold", 
   );
 
   it("keeps Stop available on unconfirmed loss and ignores a late reply after a successor starts", () => {
-    startOnWire("lost");
+    claimTurn(SESSION, "lost");
     admitTurn(SESSION, "lost");
     const gap = {
       sessionId: SESSION,
@@ -261,11 +256,11 @@ describe("native replay through the published engine, SQLite and desktop fold", 
       status: "working",
       error_message: expect.stringContaining("not confirmed it stopped"),
     });
-    expect(startOnWire("unsafe")).toBe(false);
+    expect(claimTurn(SESSION, "unsafe")).toBe(false);
     handler.settleEventGap(SESSION, "lost", true);
     expect(row()).toMatchObject({ status: "error" });
-    expect(startOnWire("new")).toBe(true);
-    persistSessionWorking(SESSION);
+    expect(claimTurn(SESSION, "new")).toBe(true);
+    persistSessionStatus(SESSION, "working");
     handler.settleEventGap(SESSION, "lost", true);
     expect(holdingTurn(SESSION)?.turnId).toBe("new");
     expect(row()).toMatchObject({ status: "working", error_message: null });
@@ -329,7 +324,7 @@ describe("native replay through the published engine, SQLite and desktop fold", 
       },
     });
     expect(row()).toMatchObject({ status: "error", error_message: "New failure" });
-    startOnWire("pending");
+    claimTurn(SESSION, "pending");
     expect(handler.handleEventGap({ ...gap, reason: "server_restarted" })).toBeUndefined();
     expect(holdingTurn(SESSION)?.turnId).toBe("pending");
   });
@@ -337,7 +332,7 @@ describe("native replay through the published engine, SQLite and desktop fold", 
   it.each(["server_restarted", "session_missing"] as const)(
     "settles an already-damaged turn when %s proves it gone",
     (reason) => {
-      startOnWire("lost");
+      claimTurn(SESSION, "lost");
       admitTurn(SESSION, "lost");
       handler.handleEventGap({
         sessionId: SESSION,
@@ -350,7 +345,7 @@ describe("native replay through the published engine, SQLite and desktop fold", 
         status: "error",
         error_message: expect.stringContaining("transcript is incomplete"),
       });
-      expect(startOnWire("retry")).toBe(true);
+      expect(claimTurn(SESSION, "retry")).toBe(true);
     }
   );
 });

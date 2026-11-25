@@ -67,7 +67,7 @@ vi.mock(import("../../../src/services/agent/chat-turn"), async (original) => ({
     const turnId = state.live.get(id);
     if (turnId) return { turnId, phase: "running" as const };
   },
-  lastTurn: () => undefined,
+  setupStop: () => undefined,
 }));
 vi.mock("../../../src/services/agent/service", () => ({
   provideSessionTools: () => {},

@@ -1340,7 +1340,7 @@ describe("messages held for a local chat", () => {
     const admit = holdAdmission();
     const resuming = resumeInWindow();
     await vi.waitFor(() => expect(starts()).toEqual(["first", "head"]));
-    await agent.shutdown();
+    emit({ type: "session.ended", sessionId, reason: "idle", timestamp: seq });
     admit();
     await resuming;
     expect(await queue()).toMatchObject({
@@ -1919,7 +1919,7 @@ describe("messages held for a local chat", () => {
       else engine.cancelTurn.mockRejectedValue(new Error("link closed"));
       await expect(stop()).resolves.toEqual({ unconfirmed: true });
       expect((await queue()).paused).toBe("stopped");
-      await agent.shutdown();
+      emit({ type: "session.ended", sessionId, reason: "idle", timestamp: seq });
       await vi.advanceTimersByTimeAsync(15_000);
       expect(await queue()).toMatchObject({
         paused: "stopped",

@@ -208,7 +208,6 @@ function makeHandler() {
   return {
     handle: vi.fn(),
     hydrateCloudSnapshot: vi.fn(),
-    resetTurnFacts: vi.fn(),
     handleEventGap: vi.fn(),
     settleEventGap: vi.fn(),
     handleTitle: vi.fn(),
