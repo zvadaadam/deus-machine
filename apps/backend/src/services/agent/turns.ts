@@ -449,10 +449,12 @@ async function sendMessageOnce(
       await done;
     } catch (err) {
       if (preparing.signal.aborted && err === preparing.signal.reason) {
-        if (admission.stoppedBy) {
+        if (currentTurnId(sessionId) !== turnId) {
+          if (admission.stoppedBy) agentService.notifyTurnInterrupted(sessionId, turnId, true);
+        } else if (admission.stoppedBy) {
           recordSetupStop(sessionId, turnId, admission.stoppedBy);
           settleStopped(sessionId, turnId);
-        } else if (currentTurnId(sessionId) === turnId) {
+        } else {
           admitting.delete(sessionId);
           settleStopped(sessionId);
         }

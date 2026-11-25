@@ -507,6 +507,36 @@ describe("stopping the current turn", () => {
     }
   );
 
+  it("an older setup abort settling after a new admission leaves the new send working", async () => {
+    await send("previous");
+    end("previous");
+    const releaseA = holdAppSetup();
+    const aborted = expect(send("A")).rejects.toThrow("Stopped before it started");
+    const stopping = stop();
+    emit({
+      type: "error",
+      sessionId,
+      turnId: "previous",
+      timestamp: seq,
+      category: "internal",
+      message: "Late engine error",
+      recoverable: false,
+    });
+    const releaseB = holdAppSetup();
+    const b = send("B");
+    await Promise.all([aborted, stopping]);
+    const session = await run(api.session, { sessionId });
+    const before = await view();
+    releaseA();
+    releaseB();
+    await b;
+    expect(before).toMatchObject({ running: "B" });
+    expect(session).toMatchObject({ status: "working", error_message: null });
+    expect(await fact("A")).toEqual({ state: "unknown" });
+    expect(await queue()).toEqual({ paused: null, items: [] });
+    expect(starts()).toEqual(["previous", "B"]);
+  });
+
   it("O7: a held first task becomes a named turn as soon as its workspace is ready", async () => {
     db.exec(`INSERT INTO workspaces (id, repository_id, slug, state, first_session_id)
       VALUES ('new', 'r', 'new', 'initializing', 'first-chat')`);
