@@ -104,6 +104,57 @@ describeWithDb("stopSession", () => {
     expect(JSON.parse(row.cancelled_by)).toEqual({ kind: "session", sessionId: "second" });
   });
 
+  it("withdraws a pending stopper's credit when its no-effect answer follows the end", async () => {
+    const first = Promise.withResolvers<{ outcome: "no_active_turn" }>();
+    vi.spyOn(agentService, "stopSession")
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce({ outcome: "cancelled", turnId: "turn-1" });
+    const early = stopSession({ sessionId: SESSION }, { kind: "session", sessionId: "lead" });
+    await stopSession({ sessionId: SESSION });
+    releaseTurn(SESSION, "turn-1", "native");
+    const credit = () =>
+      db
+        .prepare<
+          [string],
+          { cancelled_by: string }
+        >("SELECT cancelled_by FROM turns WHERE turn_id = ?")
+        .get("turn-1")?.cancelled_by;
+    expect(credit()).toBe(JSON.stringify({ kind: "session", sessionId: "lead" }));
+    admitTurn(SESSION, "turn-2", "start");
+    first.resolve({ outcome: "no_active_turn" });
+    await early;
+    expect(credit()).toBe(JSON.stringify({ kind: "person" }));
+    expect(status()).toBe("working");
+  });
+
+  it("gives a confirmed Stop one deadline even when the person asks again", async () => {
+    vi.spyOn(agentService, "stopSession").mockResolvedValue({
+      outcome: "cancelled",
+      turnId: "turn-1",
+    });
+    await stopSession({ sessionId: SESSION });
+    await vi.advanceTimersByTimeAsync(5_000);
+    await stopSession({ sessionId: SESSION });
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(status()).toBe("idle");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("starts the grace period at confirmation and disarms it on the native end", async () => {
+    vi.spyOn(agentService, "stopSession")
+      .mockResolvedValueOnce({ outcome: "unconfirmed", turnId: "turn-1" })
+      .mockResolvedValueOnce({ outcome: "cancelled", turnId: "turn-1" });
+    await stopSession({ sessionId: SESSION });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await stopSession({ sessionId: SESSION });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(status()).toBe("working");
+    expect(vi.getTimerCount()).toBe(1);
+    releaseTurn(SESSION, "turn-1", "native");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("goes idle when the confirmed turn has already ended", async () => {
     vi.spyOn(agentService, "stopSession").mockImplementation(async () => {
       releaseTurn(SESSION, "turn-1", "native");
