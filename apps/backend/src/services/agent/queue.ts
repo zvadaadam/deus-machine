@@ -753,6 +753,7 @@ function turnEnded({ event: { sessionId, turnId, stopReason }, status, held, lim
 
 provideTurnWatcher({
   turnEnded,
+  startCleared: (id) => void drain(queues.get(id)),
   userEcho,
   stopAsked(id, stop) {
     const q = queueToPause(id, true);

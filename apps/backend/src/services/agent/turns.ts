@@ -279,6 +279,7 @@ async function sendMessageOnce(
 
   const turnId = input.turnId ?? uuidv7();
   const sentAt = Date.now();
+  const last = lastTurn(sessionId);
   const start = isCloud ? undefined : Promise.withResolvers<void>();
   const setup = start && { controller: new AbortController(), done: start.promise, firstTask };
   if (setup) claimTurn(sessionId, turnId, setup, sentAt);
@@ -367,6 +368,8 @@ async function sendMessageOnce(
       const refused = refuseTurn(sessionId, turnId);
       if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
         if (refused && stopped) agentService.notifyTurnInterrupted(sessionId, turnId, true);
+        // The engine's end can reach a waiting row while this strict send still holds the chat.
+        if (refused && lastTurn(sessionId) !== last) agentService.notifyStartCleared(sessionId);
         throw new ChatBusyError(
           "The agent is still working — wait for the current turn to finish."
         );

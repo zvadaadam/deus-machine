@@ -672,6 +672,22 @@ describe("stopping the current turn", () => {
     expect(await queue()).toEqual({ paused: null, items: [] });
   });
 
+  it("drains a waiting row when the engine end precedes a strict sender's busy answer", async () => {
+    await send("A");
+    await outliveStop("A");
+    const wire = pendingStart();
+    const refused = expect(
+      host.send(chatCaller, sessionId, { turnId: "B", message: "B", origin: fromChat })
+    ).rejects.toMatchObject({ refusal: { code: "busy" } });
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "B"]));
+    await expect(send("C")).resolves.toEqual({ turnId: "C", queued: true });
+    end("A");
+    wire.reject(busyReply("A"));
+    await refused;
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "C"]));
+    expect(await ids()).toEqual([]);
+  });
+
   it("keeps the last pre-wire end until the next turn is released", async () => {
     let previous: string | undefined;
     for (const id of ["A", "B", "C"]) {
