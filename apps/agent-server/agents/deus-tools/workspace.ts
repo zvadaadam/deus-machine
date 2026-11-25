@@ -24,7 +24,7 @@ export function createWorkspaceTools(sessionId: string): DeusTool[] {
           .string()
           .optional()
           .describe(
-            "Path relative to the workspace for one file's unified diff, e.g. src/index.ts."
+            "Path relative to the workspace for one file's unified diff, such as `src/index.ts`."
           ),
         stat: z.boolean().optional().describe("If true, return per-file additions and deletions."),
       },
@@ -57,7 +57,7 @@ export function createWorkspaceTools(sessionId: string): DeusTool[] {
       {
         comments: z.array(
           z.object({
-            file: z.string().describe("The file path to comment on"),
+            file: z.string().describe("Workspace-relative path of the file to comment on."),
             lineNumber: z.number().describe("The line number to comment on"),
             body: z.string().describe("The comment body/content"),
           })
