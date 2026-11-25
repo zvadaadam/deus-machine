@@ -74,11 +74,7 @@ export interface WorkspaceRow {
   updated_at: string;
 }
 
-/**
- * Workspace joined with repo + active session.
- * Used by GET /workspaces, GET /workspaces/:id, GET /workspaces/by-repo,
- * and the withWorkspace middleware.
- */
+/** Workspace with its repository and, when the query joins it, its active chat. */
 export interface WorkspaceWithDetailsRow {
   // From workspaces table
   id: string;

@@ -3,6 +3,8 @@
 // RelayDO for that machine (one Durable Object per registered computer).
 
 import { Hono } from "hono";
+import { fileNotFound } from "./file-streams";
+import { FILE_SEGMENT } from "./schemas";
 import { ADMISSION_HEADER } from "./relay-do";
 import { MACHINE_ID, TicketError, ticketFromProtocols, verifyTicket } from "./tickets";
 import type { Bindings } from "./types";
@@ -20,6 +22,24 @@ app.get("/health", (c) =>
     service: "deus-relay",
   })
 );
+
+app.get("/api/servers/:serverId/files/:routeKey/:handle", async (c) => {
+  const { serverId, routeKey, handle } = c.req.param();
+  if (!MACHINE_ID.test(serverId) || !FILE_SEGMENT.test(routeKey) || !FILE_SEGMENT.test(handle)) {
+    return fileNotFound("invalid file URL");
+  }
+  const headers = new Headers();
+  const range = c.req.header("range");
+  if (range !== undefined) headers.set("range", range);
+  const url = new URL(`/files/${routeKey}/${handle}`, c.req.url);
+  const request = new Request(url, { method: c.req.raw.method, headers, signal: c.req.raw.signal });
+  try {
+    return await c.env.RELAY.get(c.env.RELAY.idFromName(serverId)).fetch(request);
+  } catch {
+    return fileNotFound("object unavailable");
+  }
+});
+app.all("/api/servers/:serverId/files/*", () => fileNotFound("invalid file request"));
 
 // tunnel: the computer hosting the machine. connect/pair: the account's other devices.
 app.get("/api/servers/:serverId/:endpoint{tunnel|connect|pair}", async (c) => {

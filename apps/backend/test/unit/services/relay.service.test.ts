@@ -1,4 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtemp, rm, writeFile, type FileHandle } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { decodeChunk, MAX_CHUNK_BYTES } from "@shared/tunnel";
 import { RELAY_PROTOCOL, type RelayFrame, type ServerFrame } from "@shared/types/relay";
 
 type Handler = (...args: unknown[]) => void;
@@ -15,6 +19,8 @@ const transport = vi.hoisted(() => ({
     options?: { handshakeTimeout?: number };
   }>,
   query: vi.fn(),
+  opened: vi.fn<(file: FileHandle) => void>(),
+  binary: vi.fn<(data: Uint8Array, done: (error?: Error) => void) => void>(),
   unsubscribe: vi.fn(),
   /** The live reads told to answer again (`invalidate`): how a device list change reaches clients. */
   invalidate: vi.fn(),
@@ -45,6 +51,18 @@ const transport = vi.hoisted(() => ({
   admitAssistant: vi.fn(),
 }));
 
+vi.mock("node:fs/promises", async (original) => {
+  const disk = await original<typeof import("node:fs/promises")>();
+  return {
+    ...disk,
+    open: async (...args: Parameters<typeof disk.open>) => {
+      const descriptor = await disk.open(...args);
+      transport.opened(descriptor);
+      return descriptor;
+    },
+  };
+});
+
 vi.mock("ws", () => ({
   WebSocket: class {
     static OPEN = 1;
@@ -65,7 +83,11 @@ vi.mock("ws", () => ({
     on(event: string, handler: Handler) {
       this.handlers.set(event, handler);
     }
-    send(data: string | Buffer, options?: { binary: boolean }) {
+    send(data: string | Uint8Array, options?: { binary: boolean }, done?: (error?: Error) => void) {
+      if (options?.binary && typeof data !== "string" && done) {
+        transport.binary(data, done);
+        return;
+      }
       // A Buffer without binary:false becomes a binary WebSocket message.
       if (Buffer.isBuffer(data) && options?.binary !== false) throw new Error("Expected text");
       if (Buffer.byteLength(data) > 32 * 1024 * 1024) {
@@ -136,10 +158,20 @@ import {
 import { MachineRemovedError } from "../../../src/services/remote-machine.service";
 import { AssistantRefusedError } from "../../../src/services/assistants/token";
 import { connectedDeviceIds } from "../../../src/services/ws.service";
+import { resolveBrowserFile } from "../../../src/services/browser-files";
+import { fileHandles } from "../../../src/services/relay-file-handles";
 
 const MACHINE = "0123456789abcdef";
 const tunnel = () => transport.sockets.at(-1)!;
 const frames = () => tunnel().frames as ServerFrame[];
+
+async function recording() {
+  const dir = await mkdtemp(path.join(tmpdir(), "deus-tunnel-"));
+  onTestFinished(() => rm(dir, { recursive: true, force: true }));
+  const file = path.join(dir, "recording.mp4");
+  await writeFile(file, "abc");
+  return resolveBrowserFile({ kind: "recording", path: file });
+}
 
 function receive(frame: RelayFrame, socket = tunnel()): void {
   socket.handlers.get("message")!(JSON.stringify(frame));
@@ -193,7 +225,53 @@ afterEach(() => {
 });
 
 describe("account-bound tunnel", () => {
-  it("dials with the account's host ticket and registers by name only", () => {
+  it("answers JSON while a binary send is outstanding and ends the file when ws calls back", async () => {
+    vi.useRealTimers();
+    const handle = fileHandles.issue("phone", await recording());
+    receive({ type: "file_open", streamId: 5, method: "GET", handle, credit: MAX_CHUNK_BYTES });
+    await vi.waitFor(() => expect(transport.binary).toHaveBeenCalledOnce());
+    const [chunk, done] = transport.binary.mock.calls[0];
+    expect(decodeChunk(chunk)).toMatchObject({
+      ok: true,
+      streamId: 5,
+      payload: new TextEncoder().encode("abc"),
+    });
+    receive({ type: "ping" });
+    expect(
+      frames()
+        .slice(1)
+        .map((frame) => frame.type)
+    ).toEqual(["file_head", "pong"]);
+    done();
+    await vi.waitFor(() =>
+      expect(frames().at(-1)).toMatchObject({ type: "file_end", streamId: 5 })
+    );
+  });
+
+  it("closes an open descriptor when its tunnel closes during a send", async () => {
+    vi.useRealTimers();
+    const handle = fileHandles.issue("phone", await recording());
+    receive({ type: "file_open", streamId: 1, method: "GET", handle, credit: MAX_CHUNK_BYTES });
+    await vi.waitFor(() => expect(transport.binary).toHaveBeenCalledOnce());
+    const [descriptor] = transport.opened.mock.calls[0];
+    expect(descriptor.fd).toBeGreaterThanOrEqual(0);
+    tunnel().handlers.get("close")!(1006, "");
+    await vi.waitFor(() => expect(descriptor.fd).toBe(-1));
+    transport.binary.mock.calls[0][1]();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(frames().some((f) => f.type === "file_end")).toBe(false);
+  });
+
+  it("retires every device's existing file links when remote access is switched off", async () => {
+    const file = await recording();
+    const links = ["phone", "tablet"].map((device) => fileHandles.issue(device, file));
+    expect(links.every((link) => fileHandles.lookup(link))).toBe(true);
+    transport.remoteAccess = false;
+    reconcileRelay();
+    expect(links.map((link) => fileHandles.lookup(link))).toEqual([undefined, undefined]);
+  });
+
+  it("dials with the account's host ticket and registers the name and file route key", () => {
     expect(transport.obtainHostTicket).toHaveBeenCalledWith(
       transport.session,
       "Studio",
@@ -201,7 +279,13 @@ describe("account-bound tunnel", () => {
     );
     expect(tunnel().url).toBe(`wss://relay.deusmachine.ai/api/servers/${MACHINE}/tunnel`);
     expect(tunnel().protocols).toEqual([RELAY_PROTOCOL, "ticket-for-user_a"]);
-    expect(frames()).toEqual([{ type: "register", serverName: "Studio" }]);
+    expect(frames()).toEqual([
+      {
+        type: "register",
+        serverName: "Studio",
+        routeKey: expect.stringMatching(/^[A-Za-z0-9_-]{22}$/),
+      },
+    ]);
     expect(getRelayStatus()).toMatchObject({
       state: "connected",
       serverId: MACHINE,
@@ -239,6 +323,8 @@ describe("account-bound tunnel", () => {
 
   it("replaces the tunnel when the desktop switches accounts; the old socket's events are ignored", async () => {
     const first = tunnel();
+    const link = fileHandles.issue("phone", await recording());
+    expect(fileHandles.lookup(link)).toBeDefined();
     receive({
       type: "client_connected",
       clientId: "a-phone",
@@ -254,6 +340,7 @@ describe("account-bound tunnel", () => {
     };
     reconcileRelay();
     expect(first.close).toHaveBeenCalled();
+    expect(fileHandles.lookup(link)).toBeUndefined();
     await vi.waitFor(() => expect(transport.sockets).toHaveLength(2));
     const second = tunnel();
     expect(second.protocols).toEqual([RELAY_PROTOCOL, "ticket-for-user_b"]);

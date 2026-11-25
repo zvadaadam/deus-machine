@@ -16,6 +16,31 @@ describe("serverFrameSchema", () => {
     if (result.success) expect(result.data.serverName).toBe("My Server");
   });
 
+  it("preserves the route key and validates the host file control frames", () => {
+    const routeKey = "-".repeat(22);
+    expect(serverFrameSchema.parse({ type: "register", routeKey })).toEqual({
+      type: "register",
+      routeKey,
+    });
+    expect(serverFrameSchema.safeParse({ type: "register", routeKey: "bad" }).success).toBe(false);
+    const head = {
+      type: "file_head",
+      streamId: 0xffff_ffff,
+      status: 200,
+      headers: { "Content-Length": "2" },
+    };
+    const end = { type: "file_end", streamId: 0, error: "read failed" };
+    expect(serverFrameSchema.parse(head)).toEqual(head);
+    expect(serverFrameSchema.parse(end)).toEqual(end);
+    for (const frame of [
+      { ...head, headers: { x: 1 } },
+      { ...end, streamId: 0x1_0000_0000 },
+      { ...head, streamId: -1 },
+    ]) {
+      expect(serverFrameSchema.safeParse(frame).success).toBe(false);
+    }
+  });
+
   it("parses valid data frame", () => {
     const result = serverFrameSchema.safeParse({
       type: "data",

@@ -35,6 +35,21 @@ beforeEach(async () => {
 // ============================================================================
 
 describe("server tunnel registration", () => {
+  it("keeps the route key only on the registered socket and clears it on keyless registration", async () => {
+    const host = await registerServer(relay, state);
+    const routeKey = "k".repeat(22);
+    await relay.webSocketMessage(host, JSON.stringify({ type: "register", routeKey }));
+    expect(host.deserializeAttachment()).toEqual({
+      accountId: TEST_ACCOUNT,
+      role: "host",
+      routeKey,
+    });
+    expect(JSON.stringify(vi.mocked(storage.put).mock.calls)).not.toContain(routeKey);
+    await relay.webSocketMessage(host, JSON.stringify({ type: "register" }));
+    expect(host.deserializeAttachment()).toMatchObject({ accountId: TEST_ACCOUNT, role: "host" });
+    expect((host.deserializeAttachment() as { routeKey?: string }).routeKey).toBeUndefined();
+  });
+
   it("registration responds with registered; the ticket, not the frame, proved the host", async () => {
     const tunnelWs = await registerServer(relay, state);
     expect(storage._data.get("owner")).toBe(TEST_ACCOUNT);

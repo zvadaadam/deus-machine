@@ -13,9 +13,12 @@ export const RELAY_PROTOCOL = "deus.relay.v2";
 
 /** Frames sent from Deus server to relay via tunnel WebSocket */
 export type ServerFrame =
-  | { type: "register"; serverName?: string }
+  | { type: "register"; serverName?: string; routeKey?: string }
   | { type: "data"; clientId: string; payload: string }
   | { type: "auth_response"; clientId: string; allowed: boolean; reason?: string }
+  // Binary file chunks are MAX_CHUNK_BYTES each, except for a shorter final chunk that completes Content-Length.
+  | { type: "file_head"; streamId: number; status: number; headers: Record<string, string> }
+  | { type: "file_end"; streamId: number; error?: string }
   | { type: "pong" }
   // Pairing: desktop validated the code, returning the device token (or error)
   | { type: "pair_response"; pairId: string; success: true; deviceToken: string }
@@ -24,6 +27,16 @@ export type ServerFrame =
 /** Frames sent from relay to Deus server via tunnel WebSocket */
 export type RelayFrame =
   | { type: "registered" }
+  | {
+      type: "file_open";
+      streamId: number;
+      handle: string;
+      range?: string;
+      method: "GET" | "HEAD";
+      credit: number;
+    }
+  | { type: "file_credit"; streamId: number; bytes: number }
+  | { type: "file_cancel"; streamId: number }
   | { type: "client_connected"; clientId: string; deviceToken: string; accountId: string }
   | { type: "client_disconnected"; clientId: string }
   | { type: "data"; clientId: string; payload: string }

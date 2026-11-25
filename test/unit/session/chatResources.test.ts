@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  createWorkspacePreviewUrl,
   extractChatResources,
   extractMarkdownLinkDestinations,
   extractSingleLocalUrl,
@@ -189,13 +188,5 @@ describe("chatResources", () => {
     ].join("\n");
 
     expect(extractMarkdownLinkDestinations(markdown)).toEqual(["docs/README.md"]);
-  });
-
-  it("builds backend preview URLs for workspace paths", () => {
-    expect(
-      createWorkspacePreviewUrl("http://localhost:54196/api", "workspace 1", "assets/icon 1.png")
-    ).toBe(
-      "http://localhost:54196/api/workspaces/workspace%201/file-preview?path=assets%2Ficon%201.png"
-    );
   });
 });

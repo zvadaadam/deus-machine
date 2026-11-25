@@ -1,7 +1,8 @@
 // Cloudflare Durable Object for relay WebSocket multiplexing.
 // One DO per registered computer. Holds its tunnel + all client connections.
 // Uses the WebSocket Hibernation API for efficient connection handling.
-// All mutable state lives in ctx.storage to survive hibernation.
+// Durable state in ctx.storage and socket attachments survives hibernation.
+// HTTP file streams live in memory only while their responses are open.
 //
 // The Worker (index.ts) verifies each socket's Deus Cloud ticket and passes
 // its claims in ADMISSION_HEADER. This object pins the machine to the account
@@ -26,17 +27,25 @@ import {
   type RelayPairerFrame,
   type ServerFrame,
 } from "../../../shared/types/relay";
-import { clientAuthFrameSchema, pairerFrameSchema, serverFrameSchema } from "./schemas";
+import { fileNotFound, FileStreams } from "./file-streams";
+import {
+  clientAuthFrameSchema,
+  FILE_SEGMENT,
+  pairerFrameSchema,
+  serverFrameSchema,
+} from "./schemas";
 import { admissionSchema, type Admission, type RelayRole } from "./tickets";
 
 /** Set by the Worker after ticket verification; never trusted from a peer. */
 export const ADMISSION_HEADER = "x-deus-relay-admission";
 const RELAY_PROTOCOL_RESPONSE = { "Sec-WebSocket-Protocol": RELAY_PROTOCOL };
+const encoder = new TextEncoder();
 
-/** Survives hibernation with the socket: whose account and role it was admitted for. */
+/** The admitted identity and the registered host’s file route key survive socket hibernation. */
 interface SocketIdentity {
   accountId: string;
   role: RelayRole;
+  routeKey?: string;
 }
 
 /** Durable Object storage accepts at most 128 keys per delete. */
@@ -51,8 +60,28 @@ const PAIR_TIMEOUT_MS = 30_000;
 const COMPUTER_OFFLINE = "This computer is offline. Open Deus on it, then try again.";
 
 export class RelayDO extends DurableObject {
+  private readonly files = new FileStreams((host, frame) => this.safeSend(host, frame));
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    const segments = url.pathname.split("/");
+    if (segments[1] === "files") {
+      const [, , key, handle] = segments;
+      if (segments.length !== 4 || !FILE_SEGMENT.test(key) || !FILE_SEGMENT.test(handle)) {
+        return fileNotFound("invalid file URL");
+      }
+      for (const tunnel of this.ctx.getWebSockets("tunnel")) {
+        if (tunnel.readyState !== 1) continue;
+        const identity = tunnel.deserializeAttachment() as SocketIdentity | null;
+        if (
+          identity?.routeKey &&
+          crypto.subtle.timingSafeEqual(encoder.encode(key), encoder.encode(identity.routeKey))
+        ) {
+          return this.files.open(request, handle, tunnel);
+        }
+      }
+      return fileNotFound("no matching host");
+    }
     const handler = (
       {
         "/tunnel": this.handleTunnel,
@@ -113,6 +142,7 @@ export class RelayDO extends DurableObject {
     // stale connections from receiving messages meant for the new tunnel.
     const existingTunnels = this.ctx.getWebSockets("tunnel");
     for (const tunnel of existingTunnels) {
+      this.setFileRouteKey(tunnel);
       try {
         tunnel.close(1000, "New tunnel connection");
       } catch (err) {
@@ -188,6 +218,12 @@ export class RelayDO extends DurableObject {
     // A viewer, tunnel or pairer we closed may still deliver queued frames. Ignore them.
     if (ws.readyState !== 1) return;
     const tags = this.ctx.getTags(ws);
+    const host = tags.includes("tunnel");
+    if (host && !this.ctx.getWebSockets("tunnel").includes(ws)) return;
+    if (host && typeof message !== "string") {
+      this.files.chunk(ws, message);
+      return;
+    }
     const raw = typeof message === "string" ? message : new TextDecoder().decode(message);
 
     let json: unknown;
@@ -198,16 +234,18 @@ export class RelayDO extends DurableObject {
       return;
     }
 
-    if (tags.includes("tunnel")) {
-      if (!this.ctx.getWebSockets("tunnel").includes(ws)) return;
+    if (host) {
       const result = serverFrameSchema.safeParse(json);
       if (!result.success) {
-        console.error("relay: invalid server frame", result.error.issues);
+        // Zod issue paths can include arbitrary header names from a file_head.
+        console.error("relay: invalid server frame");
         return;
       }
-      // Cast is safe — Zod validated the shape, but its inferred type for pair_response
-      // uses `success: boolean` while our ServerFrame uses discriminated `true | false`.
-      await this.handleServerMessage(ws, result.data as ServerFrame);
+      if (result.data.type === "file_head" || result.data.type === "file_end") {
+        this.files.control(ws, result.data);
+      } else {
+        await this.handleServerMessage(ws, result.data);
+      }
     } else if (tags.includes("pairer")) {
       const pairId = tags.find((t) => t !== "pairer");
       if (!pairId) return;
@@ -250,6 +288,7 @@ export class RelayDO extends DurableObject {
 
     if (tags.includes("tunnel")) {
       await this.handleServerDisconnect(ws);
+      this.files.disconnect(ws);
     } else if (tags.includes("pairer")) {
       const pairId = tags.find((t) => t !== "pairer");
       if (pairId) {
@@ -389,7 +428,7 @@ export class RelayDO extends DurableObject {
     ws: WebSocket,
     frame: Extract<ServerFrame, { type: "register" }>
   ): Promise<void> {
-    // The tunnel's ticket already proved the host; registering only names it.
+    // The tunnel's ticket already proved the host.
     // Always update server name (user might have changed it)
     if (frame.serverName) {
       await this.ctx.storage.put("serverName", frame.serverName);
@@ -401,6 +440,8 @@ export class RelayDO extends DurableObject {
     // Clear the previous outage before admitting viewers on this host.
     await this.ctx.storage.delete("serverDisconnectedAt");
 
+    this.setFileRouteKey(ws, frame.routeKey);
+
     // Confirm registration to the WebSocket that sent it
     this.safeSend(ws, { type: "registered" });
 
@@ -408,6 +449,14 @@ export class RelayDO extends DurableObject {
 
     // Start heartbeat
     await this.scheduleNextAlarm();
+  }
+
+  private setFileRouteKey(ws: WebSocket, routeKey?: string): void {
+    // A tunnel serves files only under its registered key, and changing or dropping it ends its reads.
+    const identity = ws.deserializeAttachment() as SocketIdentity | null;
+    if (identity && identity.routeKey === routeKey) return;
+    this.files.disconnect(ws);
+    if (identity) ws.serializeAttachment({ ...identity, routeKey } satisfies SocketIdentity);
   }
 
   private closeViewersForNewHost(): void {
@@ -688,11 +737,13 @@ export class RelayDO extends DurableObject {
     return identity?.accountId ?? null;
   }
 
-  private safeSend(ws: WebSocket, data: RelayFrame | RelayClientFrame | RelayPairerFrame): void {
+  private safeSend(ws: WebSocket, data: RelayFrame | RelayClientFrame | RelayPairerFrame): boolean {
     try {
       ws.send(JSON.stringify(data));
+      return true;
     } catch (err) {
       console.error("relay: safeSend failed", err);
+      return false;
     }
   }
 }

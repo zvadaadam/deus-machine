@@ -24,6 +24,7 @@ vi.mock("node:fs", async (original) => ({
   watch,
 }));
 vi.mock("../../../src/middleware/workspace-loader", () => ({ loadWorkspace: load }));
+vi.mock("../../../src/services/relay.service", () => ({ getRelayStatus: vi.fn() }));
 vi.mock("../../../src/services/ws.service", () => ({
   sendFrame: (id: string, frame: { type: string; data?: unknown }) => clients.get(id)?.push(frame),
 }));

@@ -3,6 +3,9 @@
 import * as api from "@shared/api/files";
 import { AppError, ValidationError } from "../lib/errors";
 import { loadWorkspace } from "../middleware/workspace-loader";
+import { resolveBrowserFile } from "../services/browser-files";
+import { getRelayStatus } from "../services/relay.service";
+import { fileHandles } from "../services/relay-file-handles";
 import { watchWorkspace } from "../services/fs-watcher.service";
 import { resolveNode } from "../services/node/driver";
 import { onFollow, openWith } from "../services/streams";
@@ -24,6 +27,28 @@ onFollow(api.fileChanges, ({ workspaceId }) => {
 openWith(api.fileChanges, () => [null]);
 
 export default [
+  handle(api.fileUrl, (input, { caller }) => {
+    if (!caller.relayed) {
+      const route =
+        input.kind === "recording"
+          ? "/api/files/stream"
+          : `/api/workspaces/${encodeURIComponent(input.workspaceId)}/file-preview`;
+      return { url: `${route}?path=${encodeURIComponent(input.path)}` };
+    }
+    const { serverId, relayUrl } = getRelayStatus();
+    if (!caller.deviceId || !serverId) throw new AppError(403, "A paired device is required.");
+    const file = resolveBrowserFile(input);
+    if (file.type.startsWith("text/html"))
+      throw new ValidationError("HTML previews are available only on a direct connection.");
+    const handle = fileHandles.issue(caller.deviceId, file);
+    const url = new URL(
+      `/api/servers/${serverId}/files/${fileHandles.routeKey}/${handle}`,
+      relayUrl
+    );
+    if (url.protocol === "ws:") url.protocol = "http:";
+    if (url.protocol === "wss:") url.protocol = "https:";
+    return { url: url.href };
+  }),
   handle(api.workspaceFiles, ({ workspaceId }) => nodeOf(workspaceId).fsTree()),
   handle(api.fileContent, async ({ workspaceId, path }) => {
     const outcome = await nodeOf(workspaceId).fsRead(path);
