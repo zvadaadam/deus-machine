@@ -32,11 +32,7 @@ app.get("/files/stream", (c) => {
   const { realPath, type, stat } = resolveBrowserFile({ kind: "recording", path: file });
   const range = fileRange(stat.size, c.req.method === "GET" ? c.req.header("range") : undefined);
   if (range.status === 416) return new Response(null, { status: 416, headers: range.headers });
-  const stream =
-    range.status === 206
-      ? fs.createReadStream(realPath, { start: range.start, end: range.start + range.length - 1 })
-      : fs.createReadStream(realPath);
-  return new Response(toResponseBody(stream), {
+  const init = {
     status: range.status,
     headers: {
       ...range.headers,
@@ -44,7 +40,13 @@ app.get("/files/stream", (c) => {
       "Accept-Ranges": "bytes",
       "Cache-Control": "private, max-age=3600",
     },
-  });
+  };
+  if (c.req.method === "HEAD") return new Response(null, init);
+  const stream =
+    range.status === 206
+      ? fs.createReadStream(realPath, { start: range.start, end: range.start + range.length - 1 })
+      : fs.createReadStream(realPath);
+  return new Response(toResponseBody(stream), init);
 });
 
 export default app;

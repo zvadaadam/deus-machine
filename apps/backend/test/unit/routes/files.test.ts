@@ -164,7 +164,11 @@ describe("file containment and recording ranges", () => {
     const head = await app.request(url, { method: "HEAD", headers: { range: "bytes=2-4" } });
     expect(head.status).toBe(200);
     expect(head.headers.get("content-length")).toBe("7");
+    expect(head.headers.get("content-type")).toBe("video/mp4");
+    expect(head.headers.get("accept-ranges")).toBe("bytes");
+    expect(head.headers.get("cache-control")).toBe("private, max-age=3600");
     expect(head.headers.has("content-range")).toBe(false);
     expect(head.body).toBeNull();
+    expect(mockCreateReadStream).not.toHaveBeenCalled();
   });
 });
