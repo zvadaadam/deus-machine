@@ -7,16 +7,15 @@ const { pathToFileURL } = require('url');
 
 // Resolve tsx/esm absolutely so the bootstrap works regardless of CWD
 const tsxEsm = pathToFileURL(require.resolve('tsx/esm')).href;
+const devEnv = pathToFileURL(path.join(__dirname, 'dev-env.ts')).href;
 
 const child = spawn(
   process.execPath,
-  ['--import', tsxEsm, path.join(__dirname, 'src/server.ts')],
+  ['--import', tsxEsm, '--import', devEnv, path.join(__dirname, 'src/server.ts')],
   {
     stdio: 'inherit',
     env: {
       ...process.env,
-      // This bootstrap serves checkouts only, including dev:web and dev:backend.
-      DEUS_DEV_ROOT: path.join(__dirname, '../..'),
       // Point tsx at the backend tsconfig so @shared/* path aliases resolve
       TSX_TSCONFIG_PATH: path.join(__dirname, 'tsconfig.json'),
     },

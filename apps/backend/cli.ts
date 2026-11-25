@@ -25,6 +25,7 @@
 //   bun run cli:backend -- "Say hello"
 //   bun run cli:backend --db-only           # just dump latest session
 
+import "./dev-env";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import { AgentLink } from "./src/services/agent/client";
 import { hasAgentMessages } from "./src/services/agent/agent-messages";

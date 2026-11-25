@@ -7,12 +7,12 @@ import { getShellEnvironment } from "./shell-env";
 /**
  * Fold the login shell's environment into process.env once at startup —
  * process.env wins on conflicts (same precedence the legacy per-turn env
- * builder used). The engine spreads process.env under every harness
- * subprocess (and the backend every terminal), so this is all the env
- * plumbing a turn needs. The installed app too: its PATH (the bundled bin
- * folder, then the system folders) keeps precedence, and the login shell's
- * entries (Homebrew, nvm, bun, …) come after, so the bundled CLIs still win
- * (and are pinned through CLAUDE_CLI_PATH / CODEX_CLI_PATH as well).
+ * builder used). The engine merges process.env into each subprocess, then
+ * the native spawn hook strips the backend's runtime settings. The installed
+ * app's PATH (the bundled bin folder, then the system folders) keeps
+ * precedence, and the login shell's entries (Homebrew, nvm, bun, …) come
+ * after, so the bundled CLIs still win (and are pinned through
+ * CLAUDE_CLI_PATH / CODEX_CLI_PATH as well).
  */
 export function applyShellEnvironment(): void {
   try {

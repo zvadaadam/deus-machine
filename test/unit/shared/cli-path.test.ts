@@ -103,11 +103,16 @@ describe("cli path helpers", () => {
   });
 
   it("does not fall back to PATH in packaged runtime mode", () => {
+    const emptyBin = mkdtempSync(path.join(tmpdir(), "deus-cli-path-missing-"));
     process.env.DEUS_PACKAGED = "1";
-    process.env.DEUS_BUNDLED_BIN_DIR = "/Applications/Deus.app/Contents/Resources/bin";
+    process.env.DEUS_BUNDLED_BIN_DIR = emptyBin;
 
-    expect(resolveBundledCliPath("gh")).toBeNull();
-    expect(resolveCliExecutable("gh")).toBe("/Applications/Deus.app/Contents/Resources/bin/gh");
+    try {
+      expect(resolveBundledCliPath("gh")).toBeNull();
+      expect(resolveCliExecutable("gh")).toBe(path.join(emptyBin, "gh"));
+    } finally {
+      rmSync(emptyBin, { recursive: true, force: true });
+    }
   });
 
   it("uses DEUS_RESOURCES_PATH as the packaged runtime resources root", () => {

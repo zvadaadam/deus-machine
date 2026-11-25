@@ -2,7 +2,7 @@ import type BetterSqlite3 from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 import os from "os";
-import { resolveDefaultDatabasePath } from "../../../../shared/runtime";
+import { DATABASE_IN_USE, DatabaseInUseError, resolveDefaultDatabasePath } from "@shared/runtime";
 import {
   ADDITIVE_COLUMNS,
   BACKFILL_SQL,
@@ -38,13 +38,14 @@ function claimDatabase(filename: string): BetterSqlite3.Database {
   // so every backend contends for the same lock even during startup and shutdown.
   const owner = openSqliteDatabase(`${filename}.owner`);
   try {
-    owner.pragma("busy_timeout = 0");
+    // A forced desktop quit can leave its backend finishing shutdown briefly.
+    owner.pragma("busy_timeout = 10000");
     owner.exec("BEGIN IMMEDIATE");
     return owner;
   } catch (error) {
     owner.close();
     if (error instanceof Error && "code" in error && error.code === "SQLITE_BUSY") {
-      throw new Error(`Another Deus backend already owns the database at ${filename}.`);
+      throw new DatabaseInUseError(filename);
     }
     throw error;
   }
@@ -184,6 +185,7 @@ function initDatabase(): BetterSqlite3.Database {
     closeDatabaseHandles();
     // A whole stderr line after rollback and close, independent of how Node or Bun prints an Error.
     if (error instanceof PrelaunchSchemaError) console.error(PRELAUNCH_SCHEMA_MISMATCH);
+    if (error instanceof DatabaseInUseError) console.error(DATABASE_IN_USE);
     console.error("Failed to open database:", error);
     throw error;
   }

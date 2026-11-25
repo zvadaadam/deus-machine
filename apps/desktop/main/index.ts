@@ -52,7 +52,7 @@ import {
   initMainProcessLogging,
   logMainProcess,
 } from "./startup-diagnostics";
-import { resolveDefaultDataDir } from "../../../shared/runtime";
+import { DatabaseInUseError, resolveDefaultDataDir } from "../../../shared/runtime";
 
 // ---------------------------------------------------------------------------
 // Single Instance Lock
@@ -389,7 +389,10 @@ app.whenReady().then(async () => {
       ...(backup
         ? databaseRecoveryMessage(backup, devRendererUrl)
         : {
-            message: "Failed to Start",
+            message:
+              err instanceof DatabaseInUseError
+                ? "Deus is still closing. Try again."
+                : "Failed to Start",
             detail: formatStartupFailureDetail(err),
             buttons: ["Show Logs", "OK"],
           }),

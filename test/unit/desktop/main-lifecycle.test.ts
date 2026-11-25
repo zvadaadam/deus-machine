@@ -177,7 +177,7 @@ it("creates and uses the checkout data directory on a first dev launch", async (
   try {
     const { app } = await import("electron");
     await import("../../../apps/desktop/main/index");
-    const dataDir = join(checkout, "database");
+    const dataDir = join(checkout, ".deus-dev");
     expect(existsSync(dataDir)).toBe(true);
     expect(app.setPath).toHaveBeenCalledWith("userData", dataDir);
   } finally {
@@ -207,6 +207,17 @@ it("still reports a backend that fails to start on its own", async () => {
   await vi.waitFor(() =>
     expect(mocks.showMessageBox).toHaveBeenCalledWith(
       expect.objectContaining({ message: "Failed to Start" })
+    )
+  );
+});
+
+it("asks the person to retry when the database is still owned", async () => {
+  const { DatabaseInUseError } = await import("@shared/runtime");
+  mocks.spawn.mockRejectedValue(new DatabaseInUseError("/fixture/deus.db"));
+  await import("../../../apps/desktop/main/index");
+  await vi.waitFor(() =>
+    expect(mocks.showMessageBox).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Deus is still closing. Try again." })
     )
   );
 });

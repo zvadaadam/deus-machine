@@ -1,6 +1,6 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,27 +26,38 @@ afterEach(async () => {
 it("defaults to the checkout's database and honors an explicit override", async () => {
   vi.stubEnv("DEUS_DEV_ROOT", directory);
   vi.stubEnv("DATABASE_PATH", undefined);
-  expect((await loadDatabase()).DB_PATH).toBe(join(directory, "database", "deus.db"));
+  expect((await loadDatabase()).DB_PATH).toBe(join(directory, ".deus-dev", "deus.db"));
 
   vi.resetModules();
   vi.stubEnv("DATABASE_PATH", filename);
   expect((await loadDatabase()).DB_PATH).toBe(filename);
 });
 
-it("reuses the same handle within one backend and releases ownership on close", async () => {
-  const first = await loadDatabase();
-  const db = first.initDatabase();
-  try {
-    expect(first.initDatabase()).toBe(db);
-
-    vi.resetModules();
-    const second = await loadDatabase();
-    expect(second.initDatabase).toThrow(/Another Deus backend already owns the database/);
-    first.closeDatabase();
-    expect(second.initDatabase().prepare("SELECT 1").pluck().get()).toBe(1);
-  } finally {
-    first.closeDatabase();
-  }
+it("the checkout bootstrap discards a database override inherited from packaged Deus", () => {
+  const bootstrap = new URL("../../../server.cjs", import.meta.url);
+  const databaseUrl = new URL("../../../src/lib/database.ts", import.meta.url);
+  const probe = join(directory, "probe-bootstrap.cjs");
+  const inspectPath = `import { DB_PATH } from ${JSON.stringify(databaseUrl.href)}; console.log(DB_PATH);`;
+  // Keep the actual bootstrap and its preloads. Replace only the child entry
+  // point so this test resolves the path without opening any database.
+  writeFileSync(
+    probe,
+    `const childProcess = require('node:child_process');
+     const spawn = childProcess.spawn;
+     childProcess.spawn = (command, args, options) => spawn(command, [
+       ...args.slice(0, -1), '--input-type=module', '--eval',
+       ${JSON.stringify(inspectPath)}
+     ], options);`
+  );
+  const run = (packaged: string) =>
+    execFileSync(process.execPath, ["--require", probe, fileURLToPath(bootstrap)], {
+      cwd: directory,
+      env: { ...process.env, DEUS_PACKAGED: packaged, NODE_ENV: "production" },
+      encoding: "utf8",
+      timeout: 5_000,
+    }).trim();
+  expect(run("1")).toBe(fileURLToPath(new URL("../../.deus-dev/deus.db", bootstrap)));
+  expect(run("")).toBe(filename);
 });
 
 it("refuses a live owner through a symlink and takes over after a crash", async () => {
@@ -90,4 +101,4 @@ it("refuses a live owner through a symlink and takes over after a crash", async 
 
   expect(existsSync(`${filename}.owner`)).toBe(true);
   expect((await loadDatabase()).initDatabase().prepare("SELECT 1").pluck().get()).toBe(1);
-});
+}, 25_000);

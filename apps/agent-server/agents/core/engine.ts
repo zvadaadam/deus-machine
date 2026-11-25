@@ -4,7 +4,9 @@
 // (`hostTools`), and deus's Claude embed-tier options (tool policy, checkpoint hooks).
 
 import { AgentRuntime, createAgentRegistry, type AgentRegistry } from "@zvada/agent-server/core";
+import { spawn } from "node:child_process";
 import { LOCAL_HARNESSES } from "@shared/harnesses";
+import { createBackendChildEnv } from "@shared/lib/child-env";
 import { deusTools } from "../deus-tools";
 import { chatTools } from "../../host-link";
 import { trackedSessions } from "../../session-tracker";
@@ -29,6 +31,11 @@ export function getRegistry(): AgentRegistry {
     harnesses: [...LOCAL_HARNESSES],
     // The engine uses a staged CLI or its verified pin. It downloads agy on first use.
     provision: { mode: "pinned" },
+    // Harnesses merge their environment with process.env before reaching this hook.
+    nativeProcesses: {
+      spawn: (command, args, options) =>
+        spawn(command, args, { ...options, env: createBackendChildEnv({}, options.env) }),
+    },
     hostTools: ({ sessionId }) => chatTools(deusTools(sessionId)),
     claudeCode: {
       // Sub-agent text must reach the wire. Claude's own Cron* tools are off by
