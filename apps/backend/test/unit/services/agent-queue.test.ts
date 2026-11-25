@@ -26,6 +26,7 @@ import {
   releaseTurn,
   reportInterruption,
   holdingTurn,
+  lastTurn,
 } from "../../../src/services/agent/chat-turn";
 import * as agent from "../../../src/services/agent/service";
 import * as cloud from "../../../src/services/agent/cloud/driver";
@@ -528,6 +529,7 @@ describe("stopping the current turn", () => {
     wire.reject(new WireRequestError(WIRE_ERROR_CODES.internalError, "start refused"));
     await refused;
     expect(wireTurnId()).toBeUndefined();
+    expect(lastTurn(sessionId)).toBeUndefined();
     expect((await run(api.messages, { sessionId })).turns).toEqual([]);
     expect(await queue()).toMatchObject({ items: [waitingRow("follow-up")] });
     expect(await fact("A")).toMatchObject({ state: "ended", steers: { "follow-up": "queued" } });
