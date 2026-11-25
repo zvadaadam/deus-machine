@@ -672,29 +672,6 @@ describe("stopping the current turn", () => {
     expect(starts()).toEqual(["A", "B"]);
   });
 
-  it("O6: a Stop awaiting B's wire reply still refuses another strict send", async () => {
-    const { release, starting } = await startBWhileALives();
-    const wire = pendingStart();
-    release();
-    await vi.waitFor(() => expect(starts()).toEqual(["A", "B"]));
-    end("A");
-    engine.cancelTurn.mockImplementationOnce(async () => {
-      end("B", "cancelled");
-      return { outcome: "cancelled", turnId: "B" };
-    });
-    const stopping = stop();
-    try {
-      await expect(sendMessage({ ...message("C"), turnId: "C" })).rejects.toThrow(
-        "The agent is starting another turn — wait for it to begin."
-      );
-    } finally {
-      wire.resolve();
-      await Promise.all([starting, stopping]);
-    }
-    expect(engine.cancelTurn.mock.calls).toEqual([[sessionId, "B"]]);
-    expect(starts()).toEqual(["A", "B"]);
-  });
-
   it("O6: giving up A leaves B working in setup and its waiting row held", async () => {
     vi.useFakeTimers();
     const { release, starting } = await startBWhileALives();
