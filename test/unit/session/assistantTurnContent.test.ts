@@ -164,10 +164,10 @@ it.each<[string, Part[], RowShape, RowShape, string[]]>([
     ["answer", "waiting-plan"],
   ],
   [
-    "a failed tool followed by an answer",
-    [failedCommand, a],
-    ["failed-command", "answer"],
-    ["failed-command"],
+    "a failed tool stays inside activity without splitting work",
+    [w, failedCommand, b, a],
+    [["work", "failed-command", "B"], "answer"],
+    [["work", "failed-command", "B", "answer"]],
     ["answer"],
   ],
   ["an answered card", [answered, a], ["answered", "answer"], ["answered"], ["answer"]],
@@ -237,7 +237,7 @@ it.each([question, waitingPlan, recording])("keeps a cancelled $id as a card bou
   expect(staysAtEnd([cancelled])).toEqual(new Set([part.id]));
 });
 
-it("recognizes media in stored chats and keeps a failed tool as a full-run card", () => {
+it("recognizes media in stored chats and keeps a dismissed plan as a card boundary", () => {
   for (const part of [
     tool("old", {
       toolName: "mcp__deus__recording_stop",

@@ -52,7 +52,7 @@ export const MessageItem = memo(function MessageItem({
       <div
         className={cn(
           bubbleClass("user", { previous, next }),
-          "user-bubble bg-accent hover:bg-accent/80 relative ml-auto min-w-0 backdrop-blur-sm transition-colors"
+          "user-bubble bg-user-bubble from-user-bubble to-user-bubble-top ring-user-bubble-border relative ml-auto min-w-0 bg-linear-to-t ring-1 transition-colors ring-inset"
         )}
       >
         <div className="pointer-events-none absolute top-1.5 right-1.5 z-10 opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
@@ -62,7 +62,7 @@ export const MessageItem = memo(function MessageItem({
             onClick={handleCopy}
             active={copied}
             showLabel={false}
-            className="bg-accent/80 rounded-md backdrop-blur-sm"
+            className="bg-user-bubble-top/85 rounded-md backdrop-blur-sm"
           />
         </div>
 
@@ -99,7 +99,7 @@ export const MessageItem = memo(function MessageItem({
             ))}
 
             {shouldCollapse && !isExpanded && (
-              <div className="from-accent via-accent/60 pointer-events-none absolute right-0 bottom-0 left-0 h-12 bg-gradient-to-t to-transparent" />
+              <div className="from-user-bubble via-user-bubble/60 pointer-events-none absolute right-0 bottom-0 left-0 h-12 bg-gradient-to-t to-transparent" />
             )}
           </m.div>
         )}

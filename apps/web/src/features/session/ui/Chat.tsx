@@ -95,6 +95,7 @@ export function Chat({
 }: ChatProps) {
   // Chat owns its scroll behavior entirely — refs, hook, and button.
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   const { data: settings } = useSettings();
   const view = chatView(settings);
@@ -211,6 +212,7 @@ export function Chat({
     contentCount: messages.length + timeline.length,
     lastContentId: `${messages.at(-1)?.id ?? ""}:${timeline.length ? getItemKey(timeline.length - 1) : ""}`,
     messagesContainerRef,
+    contentRef,
     userSendCount,
   });
 
@@ -277,7 +279,7 @@ export function Chat({
           />
         ) : (
           <>
-            <div className="flex min-h-0 min-w-0 flex-col pb-32">
+            <div ref={contentRef} className="flex min-h-0 min-w-0 flex-col pb-32">
               {/* Load-older button — shown at the top when there are older messages */}
               {hasOlder && (
                 <div className="flex h-10 items-center justify-center">

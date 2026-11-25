@@ -118,7 +118,14 @@ describe("deusTools", () => {
       annotations: { readOnly: true },
       inputSchema: {
         required: ["message"],
-        properties: { message: { type: "string", pattern: "\\S" } },
+        properties: {
+          message: {
+            type: "string",
+            pattern: "\\S",
+            maxLength: 100_000,
+            description: expect.stringContaining("Markdown"),
+          },
+        },
       },
     });
     const caller = { ...CALLER, permissionMode: "plan" as const };

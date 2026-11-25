@@ -9,7 +9,6 @@ function card(part: Part): "keep" | "card" | undefined {
   if (part.type === "image") return "keep";
   if (part.type === "file" || part.type === "subagent") return "card";
   if (part.type !== "tool") return;
-  if (part.state.status === "failed") return "card";
   const name = toolCardName(part);
   if (
     name === "BrowserScreenshot" ||

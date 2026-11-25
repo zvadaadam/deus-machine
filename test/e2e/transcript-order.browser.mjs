@@ -594,6 +594,54 @@ async function run() {
         .waitFor();
       assert.deepEqual(await corners(), [outside, outside]);
     });
+    await check(
+      "auto-scroll resumes for in-place streaming growth after idle and stays grounded when the turn folds",
+      async () => {
+        const turn = fixture(chats.bubbles.session, "streaming-scroll");
+        await emit(...turn.start("Stream a long update."));
+        await logView.getByText("Stream a long update.", { exact: true }).waitFor();
+        // Wait past the chase loop's 10-frame (~166ms) idle self-stop.
+        await page.waitForTimeout(350);
+        for (let i = 1; i <= 16; i++) {
+          await emit(
+            turn.send(`Update ${i}: verifying smooth follow while the existing message grows.`)
+          );
+        }
+        await logView
+          .getByText("Update 16: verifying smooth follow while the existing message grows.", {
+            exact: true,
+          })
+          .waitFor();
+        await page.waitForFunction(() => {
+          const pane = globalThis.document.getElementById("chat-messages");
+          return pane && pane.scrollHeight - (pane.scrollTop + pane.clientHeight) <= 24;
+        });
+        assert.equal(
+          await page.evaluate(() =>
+            globalThis.document
+              .querySelector('button[aria-label="Scroll to bottom"]')
+              .parentElement.classList.contains("opacity-100")
+          ),
+          false,
+          "following in-place growth should not pause auto-scroll"
+        );
+        await emit(turn.text("Done streaming."), turn.end("end_turn"));
+        await logView.getByText("Done streaming.", { exact: true }).waitFor();
+        await page.waitForFunction(() => {
+          const pane = globalThis.document.getElementById("chat-messages");
+          return pane && pane.scrollHeight - (pane.scrollTop + pane.clientHeight) <= 24;
+        });
+        assert.equal(
+          await page.evaluate(() =>
+            globalThis.document
+              .querySelector('button[aria-label="Scroll to bottom"]')
+              .parentElement.classList.contains("opacity-100")
+          ),
+          false,
+          "folding a settled turn at the bottom should not pause auto-scroll"
+        );
+      }
+    );
     for (const harness of ["codex-app-server", "claude-code"]) {
       await check(
         `a stored ${harness} plan with no prose keeps its card after reload`,

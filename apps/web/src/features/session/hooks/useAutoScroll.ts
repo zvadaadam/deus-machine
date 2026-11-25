@@ -45,6 +45,8 @@ interface UseAutoScrollOptions {
   contentCount: number;
   lastContentId: string | null;
   messagesContainerRef: RefObject<HTMLDivElement>;
+  /** Inner scroll-content wrapper observed for in-place height changes (streaming tokens, tell_user bubbles, folds). */
+  contentRef?: RefObject<HTMLDivElement | null>;
   /** Incremented by the UI when the human clicks Send. Triggers resume + jump to bottom. */
   userSendCount: number;
 }
@@ -54,6 +56,7 @@ export function useAutoScroll({
   contentCount,
   lastContentId,
   messagesContainerRef,
+  contentRef,
   userSendCount,
 }: UseAutoScrollOptions) {
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -61,6 +64,8 @@ export function useAutoScroll({
   const isPausedRef = useRef(false);
   const pausedAtRef = useRef(0);
   const chaseRafRef = useRef<number | null>(null);
+  const lastScrollTopRef = useRef(0);
+  const suppressResizeRef = useRef(false);
 
   const prevContentCountRef = useRef(contentCount);
   const prevLastContentIdRef = useRef<string | null>(lastContentId);
@@ -84,6 +89,7 @@ export function useAutoScroll({
 
     let idleFrames = 0;
     let lastWrittenScrollTop = -1;
+    let prevScrollHeight = -1;
     let graceFrames = GRACE_FRAMES;
     let tickCount = 0;
 
@@ -100,8 +106,19 @@ export function useAutoScroll({
       const scrollTop = el.scrollTop;
       const scrollHeight = el.scrollHeight;
       const clientHeight = el.clientHeight;
-      const target = scrollHeight - clientHeight;
+      const target = Math.max(0, scrollHeight - clientHeight);
       const distance = target - scrollTop;
+
+      // Content shrank (e.g. a settled turn folding under "Worked"): the browser
+      // clamps scrollTop downward, which must not look like an upward user scroll.
+      if (
+        prevScrollHeight >= 0 &&
+        scrollHeight < prevScrollHeight - 1 &&
+        lastWrittenScrollTop >= 0
+      ) {
+        lastWrittenScrollTop = Math.min(lastWrittenScrollTop, target);
+      }
+      prevScrollHeight = scrollHeight;
 
       // Log every 30th tick to avoid spam, but always log key events
       const shouldLogTick = tickCount % 30 === 1;
@@ -124,6 +141,7 @@ export function useAutoScroll({
           );
           if (!nearBottom) {
             log(`tick ${tickCount}: → PAUSING (not near bottom)`);
+            lastScrollTopRef.current = scrollTop;
             pauseFromLoop();
             chaseRafRef.current = null;
             return;
@@ -141,6 +159,7 @@ export function useAutoScroll({
       // Snap when close enough or when the step is too small to move pixels
       if (distance < 1) {
         if (distance > 0) el.scrollTop = target;
+        lastScrollTopRef.current = el.scrollTop;
         if (++idleFrames >= 10) {
           log(`tick ${tickCount}: idle self-stop (10 idle frames)`);
           chaseRafRef.current = null;
@@ -166,6 +185,7 @@ export function useAutoScroll({
       if (el.scrollTop === lastWrittenScrollTop) {
         if (++idleFrames >= 10) {
           log(`tick ${tickCount}: idle self-stop (stalled)`);
+          lastScrollTopRef.current = el.scrollTop;
           chaseRafRef.current = null;
           return;
         }
@@ -174,6 +194,7 @@ export function useAutoScroll({
       }
 
       lastWrittenScrollTop = el.scrollTop;
+      lastScrollTopRef.current = el.scrollTop;
       chaseRafRef.current = requestAnimationFrame(tick);
     };
 
@@ -220,17 +241,21 @@ export function useAutoScroll({
     const container = messagesContainerRef.current;
     if (!container) return;
 
+    lastScrollTopRef.current = container.scrollTop;
     let recheck: ReturnType<typeof setTimeout>;
     const handleScroll = () => {
       clearTimeout(recheck);
+      const currentScrollTop = container.scrollTop;
+      const movedUp = currentScrollTop < lastScrollTopRef.current - 2;
+      lastScrollTopRef.current = currentScrollTop;
+
       if (!isPausedRef.current) {
         // Chase loop may have self-stopped (idle at bottom). If the user
-        // then scrolls away from bottom, we must pause NOW — otherwise
-        // the next message arrival will restart the chase and yank them
-        // back to the bottom. The in-loop backward detection only works
-        // while the loop is running; this covers the stopped-loop gap.
-        if (chaseRafRef.current === null && !isAtBottom(container)) {
-          log("scroll listener: chase idle + scrolled away → PAUSE");
+        // then scrolls upward away from bottom, pause NOW — otherwise the
+        // next update would yank them back. Require an actual upward move
+        // so content growing below the fold never triggers a false pause.
+        if (chaseRafRef.current === null && movedUp && !isAtBottom(container)) {
+          log("scroll listener: chase idle + scrolled up → PAUSE");
           isPausedRef.current = true;
           pausedAtRef.current = Date.now();
           setShowScrollButton(true);
@@ -252,8 +277,37 @@ export function useAutoScroll({
     };
   }, [messagesContainerRef, resume]);
 
-  // A turn can reveal its answer without adding a message.
+  // ── In-place content growth observer ────────────────────────────────
+  // Restarts the chase loop when the active turn grows without adding a
+  // new message (streaming tokens, tell_user bubbles, expanding cards,
+  // or virtualizer re-measurements after initial mount).
   const contentReady = contentCount > 0;
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") return;
+    const target = contentRef?.current ?? messagesContainerRef.current?.firstElementChild;
+    if (!target) return;
+
+    const observer = new ResizeObserver(() => {
+      if (suppressResizeRef.current) {
+        suppressResizeRef.current = false;
+        return;
+      }
+      const container = messagesContainerRef.current;
+      if (!container || isPausedRef.current || chaseRafRef.current !== null) return;
+      if (!isAtBottom(container)) {
+        log("ResizeObserver: content grew while following — restarting chase");
+        startChase();
+      }
+    });
+
+    observer.observe(target);
+    if (messagesContainerRef.current && messagesContainerRef.current !== target) {
+      observer.observe(messagesContainerRef.current);
+    }
+    return () => observer.disconnect();
+  }, [contentReady, contentRef, messagesContainerRef, startChase]);
+
+  // A turn can reveal its answer without adding a message.
   useEffect(() => {
     stopChase();
     if (contentReady && !isPausedRef.current) startChase();
@@ -272,6 +326,7 @@ export function useAutoScroll({
     const container = messagesContainerRef.current;
     if (container) {
       container.scrollTop = container.scrollHeight;
+      lastScrollTopRef.current = container.scrollTop;
     }
     resume();
   }, [userSendCount, messagesContainerRef, resume]);
@@ -292,6 +347,7 @@ export function useAutoScroll({
     if (count <= prevCount) return;
     if (lastId === prevLastId) {
       log("message effect: prepend detected, ignoring");
+      suppressResizeRef.current = true;
       return;
     }
 
