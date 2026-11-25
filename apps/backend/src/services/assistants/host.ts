@@ -227,7 +227,7 @@ function endedOf(
 
 /** A first task the host holds while its workspace is being set up. */
 interface Held {
-  claimed: boolean;
+  phase: "held" | "delivering";
   caller: Who;
   workspaceId: string;
   input: StartInput;
@@ -460,7 +460,7 @@ export function createDeusHost(): DeusHost {
     const id = row.session_id;
     if (row.state === "archived" || row.is_hidden) return "archived";
     if (!id) return row.state === "error" ? "error" : "setting_up";
-    if (firsts.get(id)?.claimed === false) return "setting_up";
+    if (firsts.get(id)?.phase === "held") return "setting_up";
     if (pendingFor(id).some((request) => waitingOf(request))) return "needs_input";
     if (holdingTurn(id)) return "working";
     if (row.s_status === "error") return "error";
@@ -616,7 +616,7 @@ export function createDeusHost(): DeusHost {
     settings: TurnSettings
   ) {
     const first = firsts.get(sessionId);
-    if (first) first.claimed = true;
+    if (first) first.phase = "delivering";
     try {
       mayTouch(caller, sessionId);
       if (input.title) {
@@ -666,14 +666,14 @@ export function createDeusHost(): DeusHost {
    * Hold the first task until its chat is ready. A failed, archived or over-age
    * start drops it. Stop aborts app setup at once and waits for a start already on the wire.
    */
-  function hold(sessionId: string, held: Omit<Held, "unwatch" | "since" | "claimed">) {
+  function hold(sessionId: string, held: Omit<Held, "unwatch" | "since" | "phase">) {
     const stop = onInvalidate((resources) => {
       if (resources.includes("workspaces")) look();
     });
-    const entry: Held = { ...held, claimed: false, since: Date.now(), unwatch: stop };
+    const entry: Held = { ...held, phase: "held", since: Date.now(), unwatch: stop };
     firsts.set(sessionId, entry);
     function look() {
-      if (entry.claimed || firsts.get(sessionId) !== entry) return;
+      if (entry.phase === "delivering" || firsts.get(sessionId) !== entry) return;
       const w = getDatabase()
         .prepare("SELECT state, current_session_id FROM workspaces WHERE id = ?")
         .get(held.workspaceId) as { state: string; current_session_id: string | null } | undefined;
@@ -750,7 +750,7 @@ export function createDeusHost(): DeusHost {
           "unsupported",
           `send_message: this chat's agent ${JSON.stringify(session.agent_harness)} does not run here. Nothing was sent.`
         );
-      if (firsts.get(sessionId)?.claimed === false)
+      if (firsts.get(sessionId)?.phase === "held")
         throw new Refused({ code: "busy", detail: "This chat is being set up." });
       const { turns } = await run(sessions.messages, { sessionId, limit: 50 });
       const settings = continuedSettings(harness, turns);
@@ -977,7 +977,7 @@ export function createDeusHost(): DeusHost {
         // A Stop which saw setup may arrive just after the first task claimed the chat.
         const first = firsts.get(sessionId);
         if (!first) return "not_running";
-        if (first.claimed) return stopTurn(caller, sessionId, first.input.turnId);
+        if (first.phase === "delivering") return stopTurn(caller, sessionId, first.input.turnId);
         assertMayWrite(appCaller(caller));
         drop(sessionId);
         return "first_task_dropped";
