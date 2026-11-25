@@ -22,12 +22,7 @@ import {
 import * as api from "@shared/api/sessions";
 import { findConversationMessage } from "@shared/conversation-rows";
 import { SCHEMA_SQL } from "@shared/schema";
-import {
-  releaseTurn,
-  reportInterruption,
-  holdingTurn,
-  lastTurn,
-} from "../../../src/services/agent/chat-turn";
+import { reportInterruption, holdingTurn, lastTurn } from "../../../src/services/agent/chat-turn";
 import * as agent from "../../../src/services/agent/service";
 import * as cloud from "../../../src/services/agent/cloud/driver";
 import {
@@ -2227,13 +2222,13 @@ describe("messages held for a local chat", () => {
     expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
   });
 
-  it("settling a superseded turn's question leaves the new turn's plan waiting", async () => {
+  it("finishing A's delayed question response leaves B's plan waiting", async () => {
     await send("A");
-    const settled = Promise.withResolvers<void>();
+    const finishQuestion = Promise.withResolvers<void>();
     const relay = toolRelay.relay;
     const questionRelay = vi
       .spyOn(toolRelay, "relay")
-      .mockImplementationOnce((request) => relay(request).finally(() => settled.promise));
+      .mockImplementationOnce((request) => relay(request).finally(() => finishQuestion.promise));
     question("A");
     questionRelay.mockRestore();
     await outliveStop("A");
@@ -2242,8 +2237,7 @@ describe("messages held for a local chat", () => {
     end("A");
     await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "B"]));
     plan("B");
-    releaseTurn(sessionId, "A", "gone");
-    settled.resolve();
+    finishQuestion.resolve();
     await vi.waitFor(() => expect(engine.respondElicitation).toHaveBeenCalled());
     expect(pendingFor(sessionId)).toMatchObject([{ method: "exitPlanMode" }]);
     expect(await run(api.session, { sessionId })).toMatchObject({ status: "needs_plan_response" });

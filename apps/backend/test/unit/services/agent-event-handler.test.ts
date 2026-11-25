@@ -1194,14 +1194,26 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       });
     });
 
-    it("records a native ACK that returns after an instant terminal", () => {
-      claimTurn(SESSION, TURN);
-      handler.handle(
-        envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
-      );
-      handler.handle(envelope(turnEnded()));
-      admitTurn(SESSION, TURN);
+    it.each([false, true])(
+      "a late ACK leaves the chat free after its turn ends (a second turn ended: %s)",
+      (secondEnded) => {
+        claimTurn(SESSION, TURN);
+        handler.handle(envelope(turnEnded()));
+        if (secondEnded) {
+          claimTurn(SESSION, "second");
+          handler.handle(envelope(turnEnded({ turnId: "second" })));
+        }
+        admitTurn(SESSION, TURN);
+        expect(holdingTurn(SESSION)).toBeUndefined();
+        expect(lastTurn(SESSION)?.turnId).toBe(secondEnded ? "second" : TURN);
+      }
+    );
 
+    it("keeps a replayed start and end in the history after a later turn has ended", () => {
+      handler.handle(envelope(turnEnded({ turnId: "historical", timestamp: T - 1 })));
+      claimTurn(SESSION, TURN);
+      handler.handle(envelope(turnEnded()));
+      outcomes.length = 0;
       handler.handle(
         envelope({
           type: "turn.started",

@@ -229,7 +229,7 @@ describe("agentService.startTurn", () => {
     }
   );
 
-  it("does NOT roll back a turn it never registered", async () => {
+  it("passes the wire's busy refusal through the service while another turn holds the chat", async () => {
     ownership.claimTurn(SESSION, "earlier-turn");
     const abort = vi.spyOn(ownership, "refuseTurn");
     mockLinkStartTurn.mockRejectedValue(
