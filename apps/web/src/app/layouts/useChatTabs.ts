@@ -536,6 +536,8 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       if (isModKey && !e.shiftKey && key === "w") {
         if (mainTabs.length <= 1 || !activeMainTabId) return;
         if (isTextFieldFocused()) return;
+        // Do not close a chat tab while focus is inside the workspace tabs/content pane.
+        if (document.activeElement?.closest('[data-slot="workspace-content-pane"]')) return;
         e.preventDefault();
         handleTabClose(activeMainTabId);
       }
