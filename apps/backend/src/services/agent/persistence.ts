@@ -101,15 +101,16 @@ export function persistMessages(
     }
 
     const upsert = db.prepare(
-      `INSERT INTO messages (id, session_id, role, turn_id, model, sent_at, parent_tool_call_id, origin)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO messages (id, session_id, role, turn_id, model, sent_at, parent_tool_call_id, origin, steer_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          role = excluded.role,
          turn_id = excluded.turn_id,
          model = COALESCE(excluded.model, messages.model),
          sent_at = COALESCE(excluded.sent_at, messages.sent_at),
          parent_tool_call_id = COALESCE(excluded.parent_tool_call_id, messages.parent_tool_call_id),
-         origin = COALESCE(excluded.origin, messages.origin)`
+         origin = COALESCE(excluded.origin, messages.origin),
+         steer_id = COALESCE(excluded.steer_id, messages.steer_id)`
     );
     for (const message of messages) {
       upsert.run(
@@ -121,7 +122,8 @@ export function persistMessages(
         iso(message.startedAt),
         message.parentToolCallId ?? null,
         // Who sent a user message, as the engine echoed it: never a client's word.
-        message.role === "user" && message.origin ? JSON.stringify(message.origin) : null
+        message.role === "user" && message.origin ? JSON.stringify(message.origin) : null,
+        message.role === "user" ? (message.steerId ?? null) : null
       );
     }
     return { ok: true, value: undefined };

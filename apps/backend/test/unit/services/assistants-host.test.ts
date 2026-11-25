@@ -359,6 +359,7 @@ describe("chats as sessions", () => {
       turnId: "t1",
       outcome: "cancelled",
       cancelledBy: { kind: "person" },
+      steers: {},
     });
     expect(view.turns.map((t) => [t.turnId, t.outcome])).toEqual([
       ["t1", "cancelled"],
@@ -375,7 +376,10 @@ describe("chats as sessions", () => {
       state: "ended",
       outcome: "cancelled",
     });
-    expect(await host.turn(LOCAL_CALLER as never, "s-lead", "t2")).toEqual({ state: "running" });
+    expect(await host.turn(LOCAL_CALLER as never, "s-lead", "t2")).toEqual({
+      state: "running",
+      steers: {},
+    });
     expect(await host.turn(LOCAL_CALLER as never, "s-lead", "nope")).toEqual({ state: "unknown" });
   });
 });
@@ -543,12 +547,12 @@ describe("sending and starting", () => {
       input: { sessionId: "s-lead", turnId: "t9", content: "hi" },
       origin: LEAD,
     });
-    state.sendRefusal = new ChatBusyError(
-      "The agent is still working — wait for the current turn to finish."
+    state.live.delete("s-lead");
+    state.sendRefusal = new ChatBusyError("Another turn won admission");
+    const follow = { session: "lead:1", message: "follow up", wait: 0 };
+    expect(await createOperator(host).call("send_message", follow, assistantWho())).toContain(
+      'nothing was sent to "lead:1": another turn started there first.'
     );
-    await expect(
-      host.send(LEAD as never, "s-lead", { turnId: "t10", message: "hi", origin: LEAD })
-    ).rejects.toMatchObject({ refusal: { code: "busy" } });
   });
 
   it("a new workspace holds its first task and sends it as the minted turn once ready; a stop drops it", async () => {
@@ -1376,6 +1380,12 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     let admit!: () => void;
     state.sending = new Promise<void>((resolve) => (admit = resolve));
     ready(entry);
+    // The operator saw an idle chat before the host checked its first task.
+    vi.spyOn(host, "list").mockResolvedValueOnce([{ ...entry, status: "idle" }]);
+    const follow = { session: entry.id, message: "follow up", wait: 0 };
+    await expect(createOperator(host).call("send_message", follow, assistantWho())).rejects.toThrow(
+      "This chat is being set up."
+    );
     const stopping = host.cancel!(LEAD as never, entry.id);
     admit();
     expect(await stopping).toBe("stopped");

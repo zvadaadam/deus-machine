@@ -216,13 +216,14 @@ last turn record is the open turn. A replay can append an older end, so otherwis
 chat's working status until that record arrives.
 
 While a local chat works, Enter on a keyboard and Send on a phone queue the message.
-Command-Enter (Ctrl-Enter outside macOS) and a waiting row's send arrow ask to steer
-the turn the window shows. If that turn is gone, unnamed or cannot take the message,
-the message goes first in the queue and starts its own turn when the chat is free
-and the queue is not paused. With a question or plan card open, a steer naming
-an older turn still goes first. Otherwise a new message appends and a waiting row stays in place.
+Command-Enter (Ctrl-Enter outside macOS) asks to steer the turn on screen. The person's
+row arrow does the same, except on a kept steer, which it moves first for its own turn.
+If the turn is gone, unnamed or cannot take the message, the fresh steer or the arrow's
+row goes first. With a question or plan open, a new message appends and a row stays in
+place unless the steer names an older turn.
 The backend holds up to 20 messages per chat in memory (`services/agent/queue.ts`).
-Each composer follows `queuedMessages` for the text and picture count in
+At most five can come from agents and assistants together, including unread steers.
+Each composer follows `queuedMessages` for the sender, text and picture count in
 `session/ui/QueuedMessageList.tsx`. Edit reads a waiting row's full content with
 `queuedMessage`, puts it in the composer, then calls `removeQueuedMessage`.
 Dragging a waiting row's grip, or using Space and the arrow keys, calls
@@ -246,7 +247,7 @@ Pressing Continue after the reset starts the turn at once. While Deus stays open
 with the chat's settings. A new send, Resume, Stop, hiding the chat or archiving its workspace clears the schedule.
 A steer read mid-turn splits one reply into groups with one footer (`groupTurns` in
 `session/lib/chatTimeline.ts`). Cloud chats keep their send, including the hosted web's
-direct lane. The operator's `send` to a busy chat still answers `busy`.
+direct lane.
 
 A `fileChanges` subscription names one workspace. On macOS or on Linux with Bun, its first follower
 opens a recursive watch on the local checkout. The last one leaving, including
@@ -553,14 +554,13 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   not listed); a workspace being set up is its first chat under the id minted
   with it (`first_session_id`). Who started each workspace, chat and message
   is kept (`started_by`, `messages.origin`), and the agent reading a message
-  is told when an agent or an assistant sent it. The package holds nothing
-  between calls. A message to a busy chat is sent within the call if its turn ends
-  on its own in time and the chat stays free. If a person's queued message starts
-  at that end, the waiting call finds the chat busy again and sends nothing. A refusal
-  says why. The host holds only a new workspace's first task. `start` takes it and
-  sends it as the turn the package minted once the first chat is ready. A start that took
-  longer than 30 minutes sends nothing, and the chat says so in its error; a stop
-  drops it. At its commit, in one synchronous step, the host refuses
+  is told who sent it. On a working chat, `send_message` steers the turn it saw by
+  default. If the turn ends before reading the message, it goes first in the queue.
+  A kept steer runs only as its own turn. The host finds read
+  steers in `messages.steer_id` and kept ones in `turns.outcome.undeliveredSteers`.
+  For a new workspace, `start` holds the first task until its chat is ready and sends
+  it as the turn the package minted. A stop drops it. If setup takes over 30 minutes,
+  the chat says its first task could not be delivered. At its commit, in one synchronous step, the host refuses
   (`Refused`): a start by an archived chat or into an archived workspace; a
   fourth agent-started local workspace while three are starting or running setup.
   It also refuses an archive whose members are still starting, still working
@@ -621,9 +621,11 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   chats per starter and starts per minute are limited. The turn's
   instructions carry the package's `OPERATOR_GUIDANCE`. For this computer's `deus://workspace`
   links, give `read_session` the link's `session` value as `session`. Without it, pass the link's `id`
-  as `session` to read the workspace's current chat (`workspace-context.ts`). A message another chat
-  or an assistant sent shows "Sent from" above its bubble (`session/ui/SentFrom.tsx`), and the chip opens
-  the sending chat. List, wait and read report a chat's usage limit, its known reset time and whether it will continue.
+  as `session` to read the workspace's current chat (`workspace-context.ts`). "Sent from"
+  names the sender on a queued row and above its bubble, including a steer read mid-turn.
+  The chip opens the sending chat (`session/ui/SentFrom.tsx`). An agent or assistant queuing
+  its own waiting text gets the row's position without adding a row. The person's sends skip this check.
+  List, wait and read report a chat's usage limit, its known reset time and whether it will continue.
   A chat runs with full access or in plan mode, nothing
   between: Deus approves a chat's tool requests itself. A mode between the
   two must route these tools' writes to the person before it ships.

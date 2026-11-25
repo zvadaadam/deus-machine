@@ -350,6 +350,12 @@ function readOrigin(stored: string | null): ReportedOrigin | null {
   }
 }
 
+export function sameOrigin(a: Origin | undefined, b: Origin) {
+  if (a?.kind === "session") return b.kind === "session" && a.sessionId === b.sessionId;
+  if (a?.kind === "assistant") return b.kind === "assistant" && a.id === b.id;
+  return b.kind === "person";
+}
+
 export function encodeOrigin(origin?: Origin | null): string | null {
   return origin && origin.kind !== "person" ? JSON.stringify(origin) : null;
 }

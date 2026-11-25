@@ -298,6 +298,14 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
       ).toEqual({ model: "claude-opus-5", parent_tool_call_id: "tool-7" });
     });
 
+    it("keeps a user message's steer receipt through a thinner replay", () => {
+      writeMessage(started({ role: "user", steerId: "read" }));
+      writeMessage(started({ role: "user" }));
+      expect(db.prepare("SELECT steer_id FROM messages WHERE id = 'msg-1'").get()).toEqual({
+        steer_id: "read",
+      });
+    });
+
     it("refuses a message for an unknown session instead of throwing", () => {
       const result = writeMessage(started({ sessionId: "nope" }));
       expect(result).toEqual({ ok: false, error: "session not found" });

@@ -113,10 +113,13 @@ export default [
   handle(api.sendMessage, queue.sendOrQueue),
   handle(api.queuedMessages, ({ sessionId }) => queue.queuedMessages(sessionId)),
   handle(api.queuedMessage, ({ sessionId, id }) => queue.queuedMessage(sessionId, id)),
-  handle(api.steerMessage, queue.steerMessage),
-  handle(api.steerQueuedMessage, ({ sessionId, id, turnId }) =>
-    queue.steerQueuedMessage(sessionId, id, turnId)
-  ),
+  handle(api.steerMessage, (input) => queue.steerMessage(input)),
+  handle(api.steerQueuedMessage, async ({ sessionId, id, turnId }) => {
+    const outcome = await queue.steerQueuedMessage(sessionId, id, turnId, "front");
+    if (outcome === "unconfirmed") return { outcome } as const;
+    if (outcome === "read" || outcome === "acknowledged") return { outcome: "steered" } as const;
+    return { outcome: outcome === "sent" || outcome === "gone" ? "gone" : "queued" } as const;
+  }),
   handle(api.moveQueuedMessage, ({ sessionId, id, before }) =>
     queue.moveQueuedMessage(sessionId, id, before)
   ),

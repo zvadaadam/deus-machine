@@ -1179,7 +1179,7 @@ try {
     readDb("SELECT COUNT(*) AS n FROM messages WHERE session_id = ?", seeded.forge.sessionId).n,
     0
   );
-  check("send_message to a working chat sends nothing and says so, with the wait to make", {
+  check("send_message reports that it sent nothing to a chat marked working without a live turn", {
     busy: busy.text,
   });
 

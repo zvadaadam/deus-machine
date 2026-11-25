@@ -4,7 +4,7 @@
 
 import { createHash } from "node:crypto";
 import { WireRequestError } from "@zvada/agent-server/client";
-import { WIRE_ERROR_CODES, type Origin } from "@zvada/agent-server/protocol";
+import { WIRE_ERROR_CODES, type AgentInput, type Origin } from "@zvada/agent-server/protocol";
 import type * as api from "@shared/api/sessions";
 import type { ParsedInputOf } from "@shared/api/op";
 import { uuidv7 } from "@shared/lib/uuid";
@@ -17,6 +17,7 @@ import {
   AgentServerDisconnectedError,
   ChatBusyError,
   ConflictError,
+  DifferentTurnMessageError,
   NotFoundError,
   ValidationError,
 } from "../../lib/errors";
@@ -29,6 +30,7 @@ import {
 } from "./persistence";
 import { invalidate } from "../query-engine";
 import * as agentService from "./service";
+import { toEngineInput, withoutImageParts } from "./run-config";
 import {
   startCloudTurn,
   cancelCloudTurn,
@@ -55,19 +57,6 @@ const admitting = new Map<
   { turnId: string; preparing: AbortController; done: Promise<void> }
 >();
 
-/** A retry of an existing turn goes through admission even while its chat is busy. */
-export function knownTurn(sessionId: string, turnId: string): boolean {
-  const db = getDatabase();
-  return (
-    admissionsOf.get(db)?.has(`${sessionId}\0${turnId}`) === true ||
-    !!getTurn(db, sessionId, turnId)
-  );
-}
-
-export function differentTurnMessage(): ConflictError {
-  return new ConflictError("A different message was already sent as this turn. Nothing was sent.");
-}
-
 export function requireSameHarness(current: string, requested: string): void {
   if (current !== requested)
     throw new ConflictError(
@@ -75,21 +64,89 @@ export function requireSameHarness(current: string, requested: string): void {
     );
 }
 
-/** A turn's request as its echo was stored: its text and its sender. */
-function storedRequest(sessionId: string, turnId: string) {
+/** Compare the content the echo kept, independent of the ids assigned to its parts. */
+function matchesEcho(messageId: string, input: AgentInput, kind: "turn" | "steer") {
+  const stored = getDatabase()
+    .prepare<[string], { data: string }>("SELECT data FROM parts WHERE message_id = ? ORDER BY seq")
+    .all(messageId)
+    .map(({ data }) => JSON.parse(data) as Record<string, unknown>);
+  const received = stored.some((part) => part.type === "image") ? input : withoutImageParts(input);
+  if (typeof received === "string") {
+    if (stored.some((part) => part.type !== "text")) return false;
+    const text = stored.map((part) => part.text).join("");
+    return kind === "turn" ? text.trim() === received.trim() : text === received;
+  }
+  return (
+    received.length === stored.length &&
+    received.every((part, i) => {
+      const echo = stored[i];
+      if (part.type !== echo?.type) return false;
+      if (part.type === "text") return part.text === echo.text;
+      return (
+        part.mimeType === echo.mimeType &&
+        part.data === echo.data &&
+        part.url === echo.url &&
+        (part.type !== "file" || part.filename === echo.filename)
+      );
+    })
+  );
+}
+
+/** A durable read receipt belongs to one turn and sender. A live turn knows the input it took. */
+export function retryReadSteer(
+  { sessionId, turnId, content, agentHarness }: ParsedInputOf<typeof api.steerMessage>,
+  steerId: string,
+  origin?: Origin
+) {
+  const echo = getDatabase()
+    .prepare<
+      [string, string],
+      { id: string; turn_id: string; origin: string | null }
+    >("SELECT id, turn_id, origin FROM messages WHERE session_id = ? AND steer_id = ?")
+    .get(sessionId, steerId);
+  if (!echo) return;
+  if (echo.turn_id !== turnId || echo.origin !== encodeOrigin(origin))
+    throw new DifferentTurnMessageError();
+  const input = toEngineInput(content);
+  if (agentService.liveTurnId(sessionId) === turnId)
+    return agentService.steerTurn(agentHarness, {
+      sessionId,
+      turnId,
+      steerId,
+      input,
+      origin,
+    });
+  if (!matchesEcho(echo.id, input, "steer")) throw new DifferentTurnMessageError();
+  return true;
+}
+
+/** Replay an admission without starting another turn. */
+export function previousSend(
+  input: ParsedInputOf<typeof api.sendMessage>,
+  turnId: string,
+  origin?: Origin
+) {
+  const known = admissionsOf.get(getDatabase())?.get(`${input.sessionId}\0${turnId}`);
+  if (known) {
+    if (known.content !== digest(input.content) || known.origin !== encodeOrigin(origin))
+      throw new DifferentTurnMessageError();
+    return known.done;
+  }
   const db = getDatabase();
-  if (!getTurn(db, sessionId, turnId)) return undefined;
+  if (!getTurn(db, input.sessionId, turnId)) return;
   const echo = db
-    .prepare(
-      "SELECT id, origin FROM messages WHERE session_id = ? AND turn_id = ? AND role = 'user' ORDER BY seq LIMIT 1"
+    .prepare<[string, string], { id: string; origin: string | null; kind: string }>(
+      `SELECT m.id, m.origin, w.kind FROM messages m
+       JOIN sessions s ON s.id = m.session_id JOIN workspaces w ON w.id = s.workspace_id
+       WHERE m.session_id = ? AND m.turn_id = ? AND m.role = 'user' ORDER BY m.seq LIMIT 1`
     )
-    .get(sessionId, turnId) as { id: string; origin: string | null } | undefined;
-  if (!echo) return { content: undefined, origin: undefined };
-  const parts = db
-    .prepare("SELECT data FROM parts WHERE message_id = ? AND type = 'text' ORDER BY seq")
-    .all(echo.id) as { data: string }[];
-  const content = parts.map((p) => (JSON.parse(p.data) as { text?: string }).text ?? "").join("");
-  return { content, origin: echo.origin };
+    .get(input.sessionId, turnId);
+  if (echo) {
+    const received = echo.kind === "cloud" ? input.content : toEngineInput(input.content);
+    if (echo.origin !== encodeOrigin(origin) || !matchesEcho(echo.id, received, "turn"))
+      throw new DifferentTurnMessageError();
+  }
+  return Promise.resolve({ turnId });
 }
 
 /**
@@ -106,26 +163,14 @@ export async function sendMessage(
 ): Promise<{ turnId: string }> {
   const turnId = input.turnId;
   if (!turnId) return sendMessageOnce(input, origin);
+  const previous = previousSend(input, turnId, origin);
+  if (previous) return previous;
   const key = `${input.sessionId}\0${turnId}`;
   // Its text kept as a digest: a send with images would otherwise sit in memory for minutes.
   const request = { content: digest(input.content), origin: encodeOrigin(origin) };
   const db = getDatabase();
   let admissions = admissionsOf.get(db);
   if (!admissions) admissionsOf.set(db, (admissions = new Map()));
-  const known = admissions.get(key);
-  if (known) {
-    if (known.content !== request.content || known.origin !== request.origin)
-      throw differentTurnMessage();
-    return known.done;
-  }
-  const stored = storedRequest(input.sessionId, turnId);
-  if (stored) {
-    const same =
-      stored.content === undefined ||
-      (stored.content.trim() === input.content.trim() && stored.origin === request.origin);
-    if (!same) throw differentTurnMessage();
-    return { turnId };
-  }
   const done = sendMessageOnce(input, origin);
   admissions.set(key, { ...request, done });
   // A send that failed was not admitted: a retry runs anew.

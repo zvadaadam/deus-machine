@@ -13,7 +13,9 @@
 // Initialized once at startup in server.ts via agentService.init().
 
 import type { AgentHarness } from "@shared/enums";
+import { WireRequestError } from "@zvada/agent-server/client";
 import type { HostToolSource } from "@zvada/agent-server/core";
+import { echoMessageId, WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
 import type {
   ElicitationOutcome,
   ElicitationRequestedEvent,
@@ -52,7 +54,11 @@ import { agentDeviceFor } from "../simulator-context";
 import { setupForTurn } from "../project-environment.service";
 import { handleAutomationToolRequest } from "../automations";
 import { getDatabase } from "../../lib/database";
-import { AgentServerDisconnectedError, NotFoundError } from "../../lib/errors";
+import {
+  AgentServerDisconnectedError,
+  DifferentTurnMessageError,
+  NotFoundError,
+} from "../../lib/errors";
 import { requireParam } from "../../lib/query-params";
 
 // ---- Singleton ----
@@ -110,8 +116,11 @@ export async function init(): Promise<void> {
       const end = handler.handle(envelope);
       if (!known) return;
       if (end) turnWatcher?.turnEnded(end);
-      if (event.type === "message.ended")
-        turnWatcher?.userEcho(sessionId, event.turnId, event.messageId);
+      if (event.type === "message.started" && event.role === "user" && event.steerId !== undefined)
+        turnWatcher?.userEcho(sessionId, event.turnId, event.steerId);
+      // The sending head stays until its text is published. A message end carries only ids.
+      if (event.type === "message.ended" && event.messageId === echoMessageId(event.turnId))
+        turnWatcher?.userEcho(sessionId, event.turnId);
       if (event.type === "permission.requested") void answerPermission(event);
       if (event.type === "elicitation.requested") void answerElicitation(event);
     },
@@ -220,10 +229,16 @@ function supportsImages(harness: string): boolean {
 
 export async function steerTurn(harness: string, params: TurnSteerParams) {
   if (!link) throw new AgentServerDisconnectedError();
-  return link.engine.steerTurn({
-    ...params,
-    input: supportsImages(harness) ? params.input : withoutImageParts(params.input),
-  });
+  try {
+    return await link.engine.steerTurn({
+      ...params,
+      input: supportsImages(harness) ? params.input : withoutImageParts(params.input),
+    });
+  } catch (error) {
+    if (error instanceof WireRequestError && error.code === WIRE_ERROR_CODES.turnConflict)
+      throw new DifferentTurnMessageError();
+    throw error;
+  }
 }
 
 /**
@@ -297,7 +312,7 @@ export function provideSessionTools(compose: (own: HostToolSource) => HostToolSo
 
 interface TurnWatcher {
   turnEnded(end: TurnEnd): void;
-  userEcho(sessionId: string, turnId: string, messageId: string): void;
+  userEcho(sessionId: string, turnId: string, steerId?: string): void;
   stopAsked(sessionId: string): void;
   interrupted(sessionId: string, turnId: string | undefined, gone: boolean): void;
 }

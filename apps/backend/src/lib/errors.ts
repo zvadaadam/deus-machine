@@ -41,6 +41,12 @@ export class ConflictError extends AppError {
   }
 }
 
+export class DifferentTurnMessageError extends ConflictError {
+  constructor() {
+    super("A different message was already sent as this turn. Nothing was sent.");
+  }
+}
+
 /** The chat runs a turn, or waits on an answer: the send is refused, typed so a caller can tell. */
 export class ChatBusyError extends ConflictError {
   constructor(message: string) {
