@@ -2,7 +2,12 @@ import type BetterSqlite3 from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 import os from "os";
-import { DATABASE_IN_USE, DatabaseInUseError, resolveDefaultDatabasePath } from "@shared/runtime";
+import {
+  BACKEND_SHUTDOWN_TIMEOUT_MS,
+  DATABASE_IN_USE,
+  DatabaseInUseError,
+  resolveDefaultDatabasePath,
+} from "@shared/runtime";
 import {
   ADDITIVE_COLUMNS,
   BACKFILL_SQL,
@@ -18,7 +23,10 @@ const DB_PATH = process.env.DATABASE_PATH
       platform: process.platform,
       homeDir: process.env.HOME || os.homedir(),
       xdgDataHome: process.env.XDG_DATA_HOME,
-      devRoot: process.env.DEUS_DEV_ROOT,
+      devRoot:
+        process.env.DEUS_PACKAGED === "1"
+          ? undefined
+          : path.resolve(import.meta.dirname, "../../../.."),
     });
 
 let dbInstance: BetterSqlite3.Database | null = null;
@@ -38,11 +46,10 @@ function claimDatabase(filename: string): BetterSqlite3.Database {
   // so every backend contends for the same lock even during startup and shutdown.
   const owner = openSqliteDatabase(`${filename}.owner`);
   try {
-    // A forced desktop quit can leave its backend finishing shutdown briefly.
     const timeout =
       process.env.NODE_ENV === "test" && process.env.DEUS_TEST_DB_OWNER_NO_WAIT === "1"
         ? 0
-        : 10_000;
+        : BACKEND_SHUTDOWN_TIMEOUT_MS;
     owner.pragma(`busy_timeout = ${timeout}`);
     owner.exec("BEGIN IMMEDIATE");
     return owner;

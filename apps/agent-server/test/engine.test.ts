@@ -26,7 +26,6 @@ it.each([false, true])(
     const runtimeEnv = {
       DATABASE_PATH: "/fixture/installed/deus.db",
       DEUS_PACKAGED: "1",
-      DEUS_DEV_ROOT: "/fixture/checkout",
       NODE_ENV: "production",
       PORT: "0",
       NODE_PATH: "/fixture/installed/modules",

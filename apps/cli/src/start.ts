@@ -16,8 +16,8 @@ import { createRequire } from "node:module";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
-import { mkdirSync } from "node:fs";
 import {
+  BACKEND_SHUTDOWN_TIMEOUT_MS,
   DEUS_DB_FILENAME,
   resolveDefaultDataDir,
   resolveRuntimeStagePaths,
@@ -30,7 +30,6 @@ import {
   box,
   blank,
   sleep,
-  success,
   error,
   warn,
   hint,
@@ -41,9 +40,6 @@ import { loadConfig, hasCompletedOnboarding, writeServerInfo, clearServerInfo } 
 import { runOnboarding } from "./onboarding.js";
 import { showPairCode } from "./pair.js";
 import { formatUptime } from "./lib/format.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 export interface StartOptions {
   dataDir?: string;
@@ -60,10 +56,16 @@ export async function start(options: StartOptions): Promise<void> {
 
   const config = loadConfig();
 
-  // Resolve paths to bundles
-  const paths = resolveBundlePaths();
-  if (!paths) {
-    error("Could not find Deus bundles.");
+  const cliRoot = fileURLToPath(new URL("../", import.meta.url));
+  // build:cli copies the bundle here too. Only the checkout has the CLI source.
+  const devRoot = existsSync(join(cliRoot, "src/start.ts")) ? resolve(cliRoot, "../..") : undefined;
+  const bundled = join(cliRoot, "bundles", "server.bundled.cjs");
+  const backend =
+    devRoot && !existsSync(bundled)
+      ? resolveRuntimeStagePaths(devRoot).common.backendBundle
+      : bundled;
+  if (!existsSync(backend)) {
+    error(`Could not find Deus backend: ${backend}`);
     blank();
     hint(`Run ${c.cyan("bun run build:cli")} from the monorepo root first.`);
     blank();
@@ -76,7 +78,7 @@ export async function start(options: StartOptions): Promise<void> {
     error(`SQLite (better-sqlite3) does not load under Node ${process.version}: ${sqliteFailure}`);
     blank();
     hint(
-      paths.monorepo
+      devRoot
         ? `Run ${c.cyan("bun run native:node")} from the monorepo root, then start again.`
         : `Reinstall Deus with ${c.cyan("npm install -g deus-machine")}, then start again.`
     );
@@ -85,7 +87,16 @@ export async function start(options: StartOptions): Promise<void> {
   }
 
   // Resolve database
-  const dbPath = resolveDataDir(dataDir);
+  const dbPath = resolve(
+    dataDir ??
+      resolveDefaultDataDir({
+        platform: process.platform,
+        homeDir: homedir(),
+        xdgDataHome: process.env.XDG_DATA_HOME,
+        devRoot,
+      }),
+    DEUS_DB_FILENAME
+  );
   kv("Database", c.dim(dbPath));
   blank();
 
@@ -126,8 +137,8 @@ export async function start(options: StartOptions): Promise<void> {
 
   const s1 = createSpinner("Starting backend...");
   const started = await startBackendProcess({
-    backendEntry: paths.backend,
-    backendCwd: dirname(paths.backend),
+    backendEntry: backend,
+    backendCwd: dirname(backend),
     env: {
       DATABASE_PATH: dbPath,
       PORT: "0",
@@ -200,26 +211,6 @@ export async function start(options: StartOptions): Promise<void> {
   await new Promise(() => {});
 }
 
-// ── Bundle resolution ────────────────────────────────────────────────
-
-function resolveBundlePaths(): { backend: string; monorepo: boolean } | null {
-  const cliRoot = resolve(__dirname, "..");
-
-  // Bundled mode (npm package)
-  const bundledDir = join(cliRoot, "bundles");
-  if (existsSync(join(bundledDir, "server.bundled.cjs"))) {
-    return { backend: join(bundledDir, "server.bundled.cjs"), monorepo: false };
-  }
-
-  // Dev mode (monorepo): the backend bundle `bun run build:runtime` stages.
-  const monorepoRoot = resolve(cliRoot, "../..");
-  const backend = resolveRuntimeStagePaths(monorepoRoot).common.backendBundle;
-  if (existsSync(backend)) return { backend, monorepo: true };
-
-  warn(`The staged runtime is missing in the monorepo: ${backend} does not exist.`);
-  return null;
-}
-
 // ── SQLite ───────────────────────────────────────────────────────────
 
 /** Why better-sqlite3 cannot open a database under this Node, or null if it can. */
@@ -234,21 +225,6 @@ function sqliteLoadFailure(): string | null {
     const message = cause instanceof Error ? cause.message : String(cause);
     return message.split("\n")[0];
   }
-}
-
-// ── Data directory ───────────────────────────────────────────────────
-
-function resolveDataDir(customDir?: string): string {
-  const dir =
-    customDir ??
-    resolveDefaultDataDir({
-      platform: process.platform,
-      homeDir: homedir(),
-      xdgDataHome: process.env.XDG_DATA_HOME,
-    });
-
-  mkdirSync(dir, { recursive: true });
-  return join(dir, DEUS_DB_FILENAME);
 }
 
 // ── Backend process ──────────────────────────────────────────────────
@@ -321,6 +297,6 @@ function stopBackendProcess(child: ChildProcess | null): Promise<void> {
 
     const forceTimer = setTimeout(() => {
       if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
-    }, 5_000);
+    }, BACKEND_SHUTDOWN_TIMEOUT_MS);
   });
 }

@@ -6,13 +6,14 @@ import { createInterface } from "node:readline";
 import { app, BrowserWindow } from "electron";
 import crypto from "crypto";
 import {
+  BACKEND_SHUTDOWN_TIMEOUT_MS,
   DATABASE_IN_USE,
   DatabaseInUseError,
   DEUS_DB_FILENAME,
   PACKAGED_SYSTEM_PATHS,
 } from "../../../shared/runtime";
 import { extendCliPath, getDevStagedCliDirectory } from "../../../shared/lib/cli-path";
-import { createBackendChildEnv } from "../../../shared/lib/child-env";
+import { createBackendChildEnv, clearInheritedPackagedEnv } from "../../../shared/lib/child-env";
 import { handleKeepAwakeLine, setKeepAwakeWanted } from "./keep-awake";
 import { getLaunchPath } from "./shell-env";
 import { rendererOrigin } from "./app-protocol";
@@ -136,7 +137,7 @@ function terminateBackend(): Promise<void> {
       if (child.exitCode === null && child.signalCode === null) {
         child.kill("SIGKILL");
       }
-    }, 5_000);
+    }, BACKEND_SHUTDOWN_TIMEOUT_MS);
   });
 }
 
@@ -187,11 +188,8 @@ export async function spawnBackend(hooks: BackendSpawnHooks = {}): Promise<{ por
       `deus-runtime executable is missing or not executable: ${runtime.runtimeExecutable}`
     );
   }
-  // Only a checkout's own DATABASE_PATH may override its data directory.
-  const childEnv =
-    app.isPackaged || process.env.DEUS_PACKAGED === "1"
-      ? createBackendChildEnv()
-      : { ...process.env };
+  const childEnv = app.isPackaged ? createBackendChildEnv() : { ...process.env };
+  if (!app.isPackaged) clearInheritedPackagedEnv(childEnv);
   const override = childEnv.DATABASE_PATH;
   // The dev SQLite driver trims filenames. A blank or :memory: filename has no file to recover.
   const filename = override ? override.trim() : join(app.getPath("userData"), DEUS_DB_FILENAME);

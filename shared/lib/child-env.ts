@@ -1,3 +1,6 @@
+import { homedir } from "node:os";
+import { resolveDefaultDatabasePath } from "../runtime";
+
 /** Backend settings withheld from the processes it starts. */
 export const BACKEND_CHILD_ENV_DENYLIST = [
   "BUN_OPTIONS",
@@ -5,7 +8,6 @@ export const BACKEND_CHILD_ENV_DENYLIST = [
   "DEUS_BACKEND_PORT",
   "DEUS_BUNDLED_BIN_DIR",
   "DEUS_DATA_DIR",
-  "DEUS_DEV_ROOT",
   "DEUS_NATIVE_MODULES",
   "DEUS_PACKAGED",
   "DEUS_RESOURCES_PATH",
@@ -25,4 +27,17 @@ export function createBackendChildEnv(
     delete env[key];
   }
   return { ...env, ...overrides };
+}
+
+/** Older installed versions passed their own runtime settings to agent shells. */
+export function clearInheritedPackagedEnv(env: NodeJS.ProcessEnv): void {
+  if (env.DEUS_PACKAGED !== "1") return;
+  const installed = resolveDefaultDatabasePath({
+    platform: process.platform,
+    homeDir: env.HOME || homedir(),
+    xdgDataHome: env.XDG_DATA_HOME,
+  });
+  for (const key of BACKEND_CHILD_ENV_DENYLIST) {
+    if (key !== "DATABASE_PATH" || env[key]?.trim() === installed) delete env[key];
+  }
 }

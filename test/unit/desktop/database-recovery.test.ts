@@ -14,7 +14,11 @@ import { basename, join, relative } from "node:path";
 import { PassThrough } from "node:stream";
 import { app } from "electron";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { DATABASE_IN_USE, DatabaseInUseError } from "../../../shared/runtime";
+import {
+  DATABASE_IN_USE,
+  DatabaseInUseError,
+  resolveDefaultDatabasePath,
+} from "../../../shared/runtime";
 import { PRELAUNCH_SCHEMA_MISMATCH } from "../../../shared/schema";
 import {
   databaseRecoveryMessage,
@@ -96,16 +100,30 @@ it("offers recovery only for the failed child's own whole stderr line and uses i
   );
 });
 
-it("starts dev from a legacy packaged shell with the checkout database and reports ownership contention", async () => {
-  vi.stubEnv("DEUS_PACKAGED", "1");
-  vi.stubEnv("NODE_ENV", "production");
-  const error = await failedChild("", DATABASE_IN_USE, 1);
-  const env = spawn.mock.lastCall![2].env;
-  expect(env.DATABASE_PATH).toBe(join(directory, "deus.db"));
-  expect(env.DEUS_PACKAGED).toBeUndefined();
-  expect(env.NODE_ENV).toBeUndefined();
-  expect(error).toEqual(new DatabaseInUseError(env.DATABASE_PATH));
-});
+it.each([true, false])(
+  "reports contention on the dev database from a legacy shell (installed path: %s)",
+  async (installed) => {
+    vi.stubEnv("DEUS_PACKAGED", "1");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("HOME", directory);
+    vi.stubEnv("XDG_DATA_HOME", directory);
+    if (installed)
+      vi.stubEnv(
+        "DATABASE_PATH",
+        resolveDefaultDatabasePath({
+          platform: process.platform,
+          homeDir: directory,
+          xdgDataHome: directory,
+        })
+      );
+    const error = await failedChild("", DATABASE_IN_USE, 1);
+    const env = spawn.mock.lastCall![2].env;
+    expect(env.DATABASE_PATH).toBe(installed ? join(directory, "deus.db") : database);
+    expect(env.DEUS_PACKAGED).toBeUndefined();
+    expect(env.NODE_ENV).toBeUndefined();
+    expect(error).toEqual(new DatabaseInUseError(env.DATABASE_PATH));
+  }
+);
 
 it.each(["", " "])(
   "resolves a relative database path from the child's working directory (padding %j)",

@@ -189,6 +189,7 @@ it("shows no failure when a Quit stops the backend while it is starting", async 
   const backend = pendingBackend();
   await import("../../../apps/desktop/main/index");
   await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalled());
+  expect(mocks.windows).toHaveLength(0);
 
   mocks.quit(); // stopBackend kills the starting child...
   backend.fail("Backend exited before starting (code=null, signal=SIGTERM)"); // ...so the start rejects
@@ -211,14 +212,14 @@ it("still reports a backend that fails to start on its own", async () => {
   );
 });
 
-it("asks the person to retry when the database is still owned", async () => {
+it("explains how to release the database and reopen Deus", async () => {
   const { DatabaseInUseError } = await import("@shared/runtime");
   mocks.spawn.mockRejectedValue(new DatabaseInUseError("/fixture/deus.db"));
   await import("../../../apps/desktop/main/index");
   await vi.waitFor(() =>
     expect(mocks.showMessageBox).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: "Another Deus is using this data (still closing, or the deus CLI). Try again.",
+        message: "Quit the other Deus app or stop “deus start”, then open Deus again.",
       })
     )
   );
