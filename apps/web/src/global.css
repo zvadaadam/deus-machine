@@ -118,6 +118,10 @@
   --color-text-disabled: var(--text-disabled);
 
   /* Component surface tokens — variant backgrounds that flip with theme */
+  --color-user-bubble: var(--user-bubble);
+  --color-user-bubble-top: var(--user-bubble-top);
+  --color-user-bubble-border: var(--user-bubble-border);
+  --color-agent-bubble: var(--agent-bubble);
   --color-destructive-surface: var(--destructive-surface);
   --color-destructive-tint: var(--destructive-tint);
   --color-control-surface: var(--control-surface);
@@ -684,6 +688,10 @@
   --text-disabled: oklch(0.75 0 0);
 
   /* --- Component surface tokens (light mode) --- */
+  --user-bubble: color-mix(in oklch, var(--primary) 13%, #faf7f8);
+  --user-bubble-top: color-mix(in oklch, var(--primary) 7%, #ffffff);
+  --user-bubble-border: color-mix(in oklch, var(--primary) 13%, transparent);
+  --agent-bubble: #ececea;
   --destructive-surface: var(--destructive);
   --destructive-tint: color-mix(in oklch, var(--destructive) 10%, transparent);
   --button-primary: #242424;
@@ -869,6 +877,10 @@
   --text-disabled: oklch(0.32 0 0);
 
   /* --- Component surface tokens (dark mode) --- */
+  --user-bubble: color-mix(in oklch, var(--primary) 15%, #1d1d1d);
+  --user-bubble-top: color-mix(in oklch, var(--primary) 19%, #232323);
+  --user-bubble-border: color-mix(in oklch, var(--primary) 13%, transparent);
+  --agent-bubble: #171717;
   --destructive-surface: color-mix(in oklch, var(--destructive) 60%, transparent);
   --destructive-tint: color-mix(in oklch, var(--destructive) 20%, transparent);
   --button-primary: #ffffff;

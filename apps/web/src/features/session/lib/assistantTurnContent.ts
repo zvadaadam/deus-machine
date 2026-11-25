@@ -9,7 +9,6 @@ function card(part: Part): "keep" | "card" | undefined {
   if (part.type === "image") return "keep";
   if (part.type === "file" || part.type === "subagent") return "card";
   if (part.type !== "tool") return;
-  if (part.state.status === "failed") return "card";
   const name = toolCardName(part);
   if (
     name === "BrowserScreenshot" ||
@@ -60,6 +59,10 @@ export function assistantTurnContent(parts: Parts, condensed = false): TurnBlock
   return rows;
 }
 
+export function joinAnswerText(parts: readonly TextPart[]): string {
+  return parts.map((part) => part.text.trim()).join("\n\n");
+}
+
 /** Closing words, or the last send/passage when the turn finished on work or a card. */
 export function answerParts(parts: Parts): TextPart[] {
   const closing: TextPart[] = [];
@@ -69,12 +72,22 @@ export function answerParts(parts: Parts): TextPart[] {
     if ("raw" in raw) continue;
     const send = sentText(raw);
     const part = send ?? raw;
-    if (part.type !== "text") closing.length = 0;
-    else if (part.text.trim()) {
-      closing.push(part);
-      lastText = part;
-      if (send) lastSend = send;
+    if (part.type === "reasoning") continue;
+    if (part.type !== "text") {
+      closing.length = 0;
+      continue;
     }
+    if (!part.text.trim()) continue;
+    if (send) {
+      closing.length = 0;
+      lastSend = send;
+    }
+    closing.push(part);
+    lastText = part;
+  }
+  if (lastSend && closing[0] === lastSend && closing.length > 1) {
+    const reply = closing.slice(1);
+    return joinAnswerText(reply) === lastSend.text.trim() ? [lastSend] : reply;
   }
   const fallback = lastSend ?? lastText;
   return closing.length || !fallback ? closing : [fallback];

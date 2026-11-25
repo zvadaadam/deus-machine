@@ -73,7 +73,7 @@ export const PartsRenderer = memo(function PartsRenderer({
         </div>
       )}
       <div id={id}>
-        {mounted.map((row, i) => {
+        {mounted.map((row) => {
           const kept = stays?.has(row.id);
           const closed = !!visibleIds && !kept;
           const bubble =
@@ -103,7 +103,7 @@ export const PartsRenderer = memo(function PartsRenderer({
                   <PartBlock
                     part={row}
                     bubble={bubble}
-                    isStreaming={streaming && i === rows.length - 1}
+                    isStreaming={streaming && row.id === rows.at(-1)?.id}
                   />
                 )}
               </div>
