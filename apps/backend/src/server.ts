@@ -13,6 +13,7 @@ import { notifyDevicesChanged } from "./services/remote-auth.service";
 import { reconcileRelay, disconnectFromRelay } from "./services/relay.service";
 import * as agentService from "./services/agent";
 import { destroyAllPtySessions } from "./services/pty.service";
+import { deviceHub } from "./services/device-hub";
 import { destroyAllWatchers } from "./services/fs-watcher.service";
 import {
   reconcile as reconcileSimulators,
@@ -188,7 +189,7 @@ process.on("uncaughtException", (error, origin) => {
   console.error("[FATAL] Uncaught Exception:", origin, error);
   Sentry.captureException(error);
   stopProcessGroups();
-  Sentry.close(2000).finally(() => {
+  Promise.allSettled([Sentry.close(2000), deviceHub.shutdown()]).finally(() => {
     destroyAllSimulators();
     destroyAllPtySessions();
     destroyAllWatchers();
@@ -214,7 +215,7 @@ function shutdown() {
   console.log("\nShutting down...");
   // First, so a checkout or a setup script stops while the rest shuts down.
   stopProcessGroups();
-  void agentService.shutdown().finally(() => {
+  void Promise.allSettled([agentService.shutdown(), deviceHub.shutdown()]).finally(() => {
     destroyAllSimulators();
     destroyAllPtySessions();
     destroyAllWatchers();

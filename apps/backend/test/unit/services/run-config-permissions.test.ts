@@ -15,6 +15,19 @@ it.each(LOCAL_HARNESSES)(
   }
 );
 
+it.each([
+  ["ios", "0123-4567", "--udid"],
+  ["android", "emulator-5556", "--serial"],
+] as const)("briefs the agent on the Device tab's %s selection", (platform, id, flag) => {
+  const turn = buildTurnStartParams("chat", "turn", "codex-app-server", "Look at this", {
+    ...workspace,
+    simulator: { platform, id },
+  });
+  expect(turn.config.systemPromptAppend).toContain(
+    `Device tab shows ${id}. Pass \`${flag} ${id}\``
+  );
+});
+
 describe.each(LOCAL_HARNESSES)("%s local permission policy", (harness) => {
   it.each([undefined, "native-session"])(
     "uses full access when the composer omits the mode (resume: %s)",

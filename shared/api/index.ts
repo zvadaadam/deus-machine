@@ -12,6 +12,7 @@ import { isStream, type AnyStream } from "./stream";
 import * as assistants from "./assistants";
 import * as automations from "./automations";
 import * as browser from "./browser";
+import * as deviceHub from "./device-hub";
 import * as devices from "./devices";
 import * as files from "./files";
 import * as integrations from "./integrations";
@@ -26,6 +27,7 @@ export const api = {
   ...assistants,
   ...automations,
   ...browser,
+  ...deviceHub,
   ...devices,
   ...files,
   ...integrations,

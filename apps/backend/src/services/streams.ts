@@ -52,7 +52,10 @@ const logs = new Map<string, Map<string, Log>>();
 const holding = new Map<string, Set<string>>();
 /** stream name → what a new subscriber is sent first (see `openWith`). */
 const openings = new Map<string, (scope: Record<string, unknown>) => unknown[]>();
-const follows = new Map<string, (scope: Record<string, unknown>) => () => void>();
+const follows = new Map<
+  string,
+  (scope: Record<string, unknown>, connectionId: string) => () => void
+>();
 
 /**
  * Where this process starts numbering. A number therefore never means two
@@ -162,9 +165,12 @@ export function openWith<S extends AnyStream>(
 /** A follower of a whole scope acquires a resource until it leaves or its connection closes. */
 export function onFollow<S extends AnyStream>(
   stream: S,
-  acquire: (scope: ScopeOf<S>) => () => void
+  acquire: (scope: ScopeOf<S>, connectionId: string) => () => void
 ): void {
-  follows.set(stream.name, acquire as (scope: Record<string, unknown>) => () => void);
+  follows.set(
+    stream.name,
+    acquire as (scope: Record<string, unknown>, connectionId: string) => () => void
+  );
 }
 
 /**
@@ -198,7 +204,7 @@ export function subscribe(
     stream: stream.name,
     filter,
     numbered: scope !== undefined,
-    release: acquire?.(filter),
+    release: acquire?.(filter, connectionId),
   });
   const log = scope && logs.get(stream.name)?.get(subscriptionKey(scope));
   // Where the scope stands: the number of its newest kept event.

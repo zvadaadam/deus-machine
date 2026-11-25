@@ -51,6 +51,7 @@ import {
 } from "./persistence";
 import { invalidate } from "../query-engine";
 import { openWith } from "../streams";
+import { deviceHub } from "../device-hub";
 import { agentDeviceFor } from "../simulator-context";
 import { setupForTurn } from "../project-environment.service";
 import { handleAutomationToolRequest } from "../automations";
@@ -190,7 +191,8 @@ export async function startTurn(
     agentMessages: hasAgentMessages(sessionId),
     setup: setupForTurn(sessionId),
     agentDeviceSession: device.session,
-    simulator: device.udid ? { udid: device.udid } : null,
+    simulator:
+      deviceHub.displayedDevice(device.session) ?? (device.udid ? { udid: device.udid } : null),
     // Negotiated at the handshake, not guessed from a harness list.
     supportsImages: supportsImages(agentHarness),
   });

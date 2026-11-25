@@ -3,6 +3,7 @@
 import assistants from "./assistants";
 import automations from "./automations";
 import browser from "./browser";
+import deviceHub from "./device-hub";
 import devices from "./devices";
 import files from "./files";
 import integrations from "./integrations";
@@ -18,6 +19,7 @@ export const registry = new Registry([
   ...assistants,
   ...automations,
   ...browser,
+  ...deviceHub,
   ...devices,
   ...files,
   ...integrations,

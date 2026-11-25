@@ -14,7 +14,7 @@ import type {
 import type { AgentHarness } from "@shared/enums";
 import type { ThinkingLevel, PermissionMode } from "@shared/protocol";
 import { buildSystemPromptAppend } from "./system-prompt";
-import type { Simulator, WorkspaceSetup } from "./workspace-context";
+import type { WorkspaceDevice, WorkspaceSetup } from "./workspace-context";
 
 /**
  * The composer speaks the canonical `PartInput` vocabulary: a text-only send is
@@ -84,8 +84,8 @@ export interface DeusTurnOptions {
   mcpServers?: Record<string, McpServerConfig>;
   /** Extra env for the agent process (NO_PROXY past a proxy, for the loopback gateway). */
   env?: Record<string, string>;
-  /** The device the workspace's Simulator tab shows, named to the agent. */
-  simulator?: Simulator | null;
+  /** The device this workspace is showing when the turn starts. */
+  simulator?: WorkspaceDevice | null;
   setup?: WorkspaceSetup | null;
   /** The workspace's agent-device session (`agentDeviceFor`); the chat's id without one. */
   agentDeviceSession?: string;
