@@ -316,6 +316,7 @@ export type InterruptionCause = "failure" | "cancelled";
 export type StopAsked = { by: Origin; turnId?: string; endedAt?: number };
 interface TurnWatcher {
   turnEnded(end: TurnEnd): void;
+  startCleared(sessionId: string): void;
   userEcho(sessionId: string, turnId: string, steerId?: string): void;
   stopAsked(sessionId: string, stop: StopAsked): void;
   interrupted(
@@ -333,6 +334,8 @@ export function provideTurnWatcher(watcher: TurnWatcher): void {
 export function notifyStopAsked(sessionId: string, stop: StopAsked): void {
   turnWatcher?.stopAsked(sessionId, stop);
 }
+
+export const notifyStartCleared = (sessionId: string) => turnWatcher?.startCleared(sessionId);
 
 export function notifyTurnInterrupted(
   sessionId: string,

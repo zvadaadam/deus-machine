@@ -475,7 +475,10 @@ async function sendMessageOnce(
       throw err;
     } finally {
       // A quick turn can end and start its successor before its admission reply.
-      if (localTurns.get(sessionId) === admission) localTurns.delete(sessionId);
+      if (localTurns.get(sessionId) === admission) {
+        localTurns.delete(sessionId);
+        if (currentTurnId(sessionId) !== turnId) agentService.notifyStartCleared(sessionId);
+      }
     }
   }
 

@@ -313,7 +313,8 @@ function waitingRow(q: Queue | undefined, id: string) {
   return q?.items.find((item) => item.message.turnId === id && stateOf(item) === "waiting");
 }
 
-async function drain(q: Queue) {
+async function drain(q: Queue | undefined) {
+  if (!q) return;
   const head = q.items[0];
   const canStart = !q.pause || (q.pause.reason === "resumed" && q.pause.scope === "turn");
   if (!canStart || !head || stateOf(head) !== "waiting") return;
@@ -756,6 +757,7 @@ function turnEnded({ event: { sessionId, turnId, stopReason }, status, held, lim
 
 provideTurnWatcher({
   turnEnded,
+  startCleared: (id) => void drain(queues.get(id)),
   userEcho,
   stopAsked(id, stop) {
     const q = queueToPause(id, true);
