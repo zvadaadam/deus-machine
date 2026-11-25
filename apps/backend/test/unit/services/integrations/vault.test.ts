@@ -71,9 +71,10 @@ describe("the vault", () => {
 
   it("a damaged value opens nothing", async () => {
     await initVault("seal");
-    const sealed = seal("intact");
-    const tampered = `${sealed.slice(0, -2)}${sealed.endsWith("A") ? "B" : "A"}A`;
-    expect(open(tampered)).toBeNull();
+    const [version, iv, tag, ciphertext] = seal("intact").split(".");
+    const body = Buffer.from(ciphertext, "base64url");
+    body[0] ^= 1;
+    expect(open([version, iv, tag, body.toString("base64url")].join("."))).toBeNull();
   });
 
   it("DEUS_VAULT_KEY overrides the file", async () => {
