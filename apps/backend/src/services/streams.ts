@@ -14,15 +14,10 @@
 // again, as it did when it first opened it).
 
 import { scopeMatches, type AnyStream, type EventOf, type ScopeOf } from "@shared/api/stream";
-import type {
-  QErrorFrame,
-  QEventFrame,
-  QResetFrame,
-  QSubscribedFrame,
-} from "@shared/types/query-protocol";
+import type { QEventFrame } from "@shared/types/query-protocol";
 import { subscriptionKey } from "@deus/runtime-client";
 import { ValidationError } from "../lib/errors";
-import { getConnection } from "./ws.service";
+import { sendFrame } from "./ws.service";
 
 /** Kept events remembered per scope of a resumable stream. */
 const KEPT_PER_SCOPE = 512;
@@ -69,14 +64,9 @@ let firstSeq = Date.now() * 1000;
 
 const subscriptionId = (connectionId: string, id: string) => `${connectionId}\n${id}`;
 
-function send(
-  connectionId: string,
-  frame: QEventFrame | QResetFrame | QSubscribedFrame | QErrorFrame
-): void {
-  try {
-    getConnection(connectionId)?.ws.send(JSON.stringify(frame));
-  } catch {
-    // The connection is closing; its subscriptions go with it.
+function sendEvent(connectionId: string, frame: QEventFrame): void {
+  if (sendFrame(connectionId, frame) === "too-large") {
+    sendFrame(connectionId, { type: "q:reset", id: frame.id, seq: frame.seq });
   }
 }
 
@@ -137,7 +127,7 @@ export function publish<S extends AnyStream>(
   const scopeRecord = scope as Record<string, unknown>;
   for (const sub of subscriptions.values()) {
     if (sub.stream !== stream.name || !scopeMatches(sub.filter, scopeRecord)) continue;
-    send(sub.connectionId, {
+    sendEvent(sub.connectionId, {
       type: "q:event",
       id: sub.id,
       event: stream.name,
@@ -225,7 +215,7 @@ export function subscribe(
     if (covered) {
       for (const event of log.kept) {
         if (event.seq <= after) continue;
-        send(connectionId, {
+        sendEvent(connectionId, {
           type: "q:event",
           id,
           event: stream.name,
@@ -234,12 +224,12 @@ export function subscribe(
         });
       }
     } else {
-      send(connectionId, { type: "q:reset", id, ...(scope ? { seq: position } : {}) });
+      sendFrame(connectionId, { type: "q:reset", id, ...(scope ? { seq: position } : {}) });
     }
   }
   if (opening) {
     for (const data of openings.get(stream.name)?.(opening) ?? []) {
-      send(connectionId, {
+      sendEvent(connectionId, {
         type: "q:event",
         id,
         event: stream.name,
@@ -248,7 +238,7 @@ export function subscribe(
       });
     }
   }
-  send(connectionId, { type: "q:subscribed", id, ...(scope ? { seq: position } : {}) });
+  sendFrame(connectionId, { type: "q:subscribed", id, ...(scope ? { seq: position } : {}) });
 }
 
 /**
@@ -267,7 +257,7 @@ export function resetSubscribers<S extends AnyStream>(stream: S, scope: ScopeOf<
   }
   for (const sub of subscriptions.values()) {
     if (sub.stream !== stream.name || !scopeMatches(sub.filter, scopeRecord)) continue;
-    send(sub.connectionId, {
+    sendFrame(sub.connectionId, {
       type: "q:reset",
       id: sub.id,
       ...(sub.numbered ? { seq: position } : {}),
@@ -293,7 +283,7 @@ export function refuseSubscribers<S extends AnyStream>(
   for (const sub of subscriptions.values()) {
     if (sub.stream !== stream.name || !scopeMatches(sub.filter, scope)) continue;
     unsubscribe(sub.connectionId, sub.id);
-    send(sub.connectionId, { type: "q:error", id: sub.id, code: "SUBSCRIBE_ERROR", message });
+    sendFrame(sub.connectionId, { type: "q:error", id: sub.id, code: "SUBSCRIBE_ERROR", message });
   }
 }
 

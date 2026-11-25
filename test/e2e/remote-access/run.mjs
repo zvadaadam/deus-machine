@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
 import path from "node:path";
+import Database from "better-sqlite3";
 import { QueryClient } from "@tanstack/react-query";
 import { QueryRuntimeClient } from "@deus/runtime-client/query";
 import { RuntimeError } from "@deus/runtime-client";
@@ -277,7 +278,7 @@ try {
         defaultOptions: { queries: { gcTime: Infinity, retry: false } },
       });
       const frames = [];
-      const counts = { opens: 0, authFailures: 0 };
+      const counts = { opens: 0, authFailures: 0, closes: [] };
       const runtime = new QueryRuntimeClient(
         { host: machineId, account: bearer.slice(-12), grant: name },
         {
@@ -299,6 +300,7 @@ try {
               RELAY_PROTOCOL,
               ticket,
             ]);
+            socket.addEventListener("close", ({ code }) => counts.closes.push(code));
             const send = socket.send.bind(socket);
             socket.send = (raw) => {
               const frame = JSON.parse(raw);
@@ -341,6 +343,35 @@ try {
     await until(() => title(a) === "Through the relay" && title(b) === "Through the relay");
     await until(() => a.frames.includes("ping"));
     check("Two approved devices read, subscribe, write and answer probes through the relay");
+
+    const workspace = await a.runtime.sendRequest("workspace", { workspaceId: hostDb.workspace });
+    const repos = await b.runtime.sendRequest("repos");
+    const db = new Database(hostDb.database, { fileMustExist: true });
+    const setTitle = db.prepare("UPDATE workspaces SET title = ? WHERE id = ?");
+    try {
+      // The title alone exceeds the relay's message limit.
+      setTitle.run("x".repeat(33 * 1024 * 1024), hostDb.workspace);
+      const [, rows] = await Promise.all([
+        assert.rejects(
+          a.runtime.sendRequest("workspace", { workspaceId: hostDb.workspace }),
+          (err) => err.kind === "rejected" && /answer is too large/i.test(err.message)
+        ),
+        b.runtime.sendRequest("repos"),
+      ]);
+      assert.deepEqual(rows, repos);
+    } finally {
+      setTitle.run(workspace.title, hostDb.workspace);
+      db.close();
+    }
+    assert.deepEqual(await b.runtime.sendRequest("repos"), repos);
+    assert.equal(
+      (await a.runtime.sendRequest("workspace", { workspaceId: hostDb.workspace })).title,
+      workspace.title
+    );
+    assert.deepEqual([a.counts.closes, b.counts.closes], [[], []]);
+    check(
+      "An oversized workspace read gets its own error while both viewers keep their connections"
+    );
 
     // A slow Deus Cloud (700ms each way on every ticket request) only slows dialing.
     const slowCloud = viewer("Slow Cloud", {

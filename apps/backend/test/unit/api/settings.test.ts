@@ -18,7 +18,8 @@ const remote = vi.hoisted(() => ({
   syncKeepAwake: vi.fn(),
 }));
 vi.mock("../../../src/services/relay.service", () => ({ reconcileRelay: remote.reconcileRelay }));
-vi.mock("../../../src/services/ws.service", () => ({
+vi.mock("../../../src/services/ws.service", async (original) => ({
+  ...(await original<typeof import("../../../src/services/ws.service")>()),
   disconnectDirectDevices: remote.disconnectDirectDevices,
 }));
 vi.mock("../../../src/services/keep-awake.service", () => ({

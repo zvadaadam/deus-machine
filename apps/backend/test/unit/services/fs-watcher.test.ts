@@ -25,9 +25,7 @@ vi.mock("node:fs", async (original) => ({
 }));
 vi.mock("../../../src/middleware/workspace-loader", () => ({ loadWorkspace: load }));
 vi.mock("../../../src/services/ws.service", () => ({
-  getConnection: (id: string) => ({
-    ws: { send: (raw: string) => clients.get(id)?.push(JSON.parse(raw)) },
-  }),
+  sendFrame: (id: string, frame: { type: string; data?: unknown }) => clients.get(id)?.push(frame),
 }));
 
 const platform = Object.getOwnPropertyDescriptor(process, "platform")!;

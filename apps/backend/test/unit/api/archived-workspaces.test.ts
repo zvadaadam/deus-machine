@@ -8,10 +8,11 @@ import { handleFrame, removeSubs, serveOperations } from "../../../src/services/
 import { archiveWorkspace } from "../../../src/services/workspace-archive.service";
 
 let db: Database.Database;
-const socket = vi.hoisted(() => ({ send: vi.fn() }));
+const sendFrame = vi.hoisted(() => vi.fn());
 vi.mock("../../../src/lib/database", () => ({ getDatabase: () => db }));
 vi.mock("../../../src/services/ws.service", () => ({
-  getConnection: () => ({ ws: socket, deviceId: "phone" }),
+  getConnection: () => ({ deviceId: "phone" }),
+  sendFrame,
 }));
 vi.mock("../../../src/services/agent", () => ({ answerToolRequest: vi.fn() }));
 const registry = new Registry(operations);
@@ -27,7 +28,7 @@ beforeEach(() => {
   db.exec(`INSERT INTO repositories (id,name) VALUES ('r','Example'),('other','Other');
     INSERT INTO workspaces (id,repository_id,slug,state,current_session_id) VALUES ('w','r','local','ready','chat');
     INSERT INTO sessions (id,workspace_id) VALUES ('chat','w');`);
-  socket.send.mockClear();
+  sendFrame.mockClear();
   serveOperations(registry);
 });
 afterEach(() => {
@@ -66,13 +67,13 @@ it("keeps the original archive time and actor when a stale device archives again
     .prepare("SELECT archived_at, archived_by, updated_at FROM workspaces WHERE id='w'")
     .get();
   handleFrame("phone", { type: "q:subscribe", id: "sidebar", resource: "workspaces" });
-  socket.send.mockClear();
+  sendFrame.mockClear();
   db.function("datetime", { varargs: true }, () => "2099-01-01");
   await archive();
   expect(
     db.prepare("SELECT archived_at, archived_by, updated_at FROM workspaces WHERE id='w'").get()
   ).toEqual(before);
-  expect(socket.send).not.toHaveBeenCalled();
+  expect(sendFrame).not.toHaveBeenCalled();
 });
 
 it("reads one project's archived rows newest first with parsed origins and legacy times", async () => {
@@ -118,13 +119,13 @@ it("sends the new archived count in the next sidebar snapshot, including when th
   ('one','r','one','archived','cloud'),('two','r','two','archived','worktree');`);
   handleFrame("phone", { type: "q:subscribe", id: "sidebar", resource: "workspaces" });
   const snapshot = (count: number, ids: string[]) => {
-    expect(socket.send).toHaveBeenCalledOnce();
-    const frame = JSON.parse(socket.send.mock.calls[0][0]);
+    expect(sendFrame).toHaveBeenCalledOnce();
+    const frame = sendFrame.mock.calls[0][1];
     expect(frame.type).toBe("q:snapshot");
     const repo = frame.data.find((r: { repo_id: string }) => r.repo_id === "r");
     expect(repo.archived_count).toBe(count);
     expect(repo.workspaces.map((w: { id: string }) => w.id)).toEqual(ids);
-    socket.send.mockClear();
+    sendFrame.mockClear();
   };
   snapshot(2, ["w"]);
   await archive();

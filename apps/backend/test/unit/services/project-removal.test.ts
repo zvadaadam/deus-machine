@@ -29,7 +29,7 @@ vi.mock("../../../src/services/pr-snapshot.service", () => ({
   refreshPrSnapshotForSession: vi.fn(),
 }));
 vi.mock("../../../src/services/ws.service", () => ({
-  getConnection: () => ({ ws: { send: (frame: string) => frames.push(JSON.parse(frame)) } }),
+  sendFrame: (_id: string, frame: (typeof frames)[number]) => frames.push(frame),
 }));
 
 const call = operations(handlers);
