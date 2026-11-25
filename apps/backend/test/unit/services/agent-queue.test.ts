@@ -1049,6 +1049,37 @@ describe("messages held for a local chat", () => {
     }
   );
 
+  it("refreshes only the chat with the given-up turn's message and accepts its late engine end", async () => {
+    vi.useFakeTimers();
+    const frames: { type: string; id: string }[] = [];
+    const window = addConnection(
+      { close() {}, send: (frame) => frames.push(JSON.parse(String(frame))) },
+      null
+    );
+    subscribe(window, "transcript", api.sessionEvents, { sessionId });
+    subscribe(window, "other", api.sessionEvents, { sessionId: crypto.randomUUID() });
+    await send("A");
+    await stopped("A");
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(frames.filter((frame) => frame.type === "q:reset").map((frame) => frame.id)).toEqual([
+      "transcript",
+    ]);
+    expect((await run(api.messages, { sessionId })).turns).toContainEqual(
+      expect.objectContaining({ turnId: "A", stopReason: "cancelled" })
+    );
+    emit({
+      type: "turn.ended",
+      sessionId,
+      turnId: "A",
+      stopReason: "end_turn",
+      timestamp: seq,
+      cost: 0.25,
+    });
+    expect((await run(api.messages, { sessionId })).turns).toContainEqual(
+      expect.objectContaining({ turnId: "A", stopReason: "end_turn", cost: 0.25 })
+    );
+  });
+
   it("settles a confirmed stop and restores working when the successor starts after a late end", async () => {
     vi.useFakeTimers();
     const frames: unknown[] = [];
