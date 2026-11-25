@@ -535,7 +535,7 @@ describe("stopping the current turn", () => {
     expect(await fact("A")).toMatchObject({ state: "ended", steers: { "follow-up": "read" } });
   });
 
-  it("reports a kept steer when the start is refused before any event", async () => {
+  async function refuseStartWithKeptSteer() {
     const wire = pendingStart();
     const refused = expect(send("A")).rejects.toThrow("start refused");
     await vi.waitFor(() => expect(starts()).toEqual(["A"]));
@@ -544,11 +544,19 @@ describe("stopping the current turn", () => {
     ).resolves.toEqual({ outcome: "steered" });
     wire.reject(new WireRequestError(WIRE_ERROR_CODES.internalError, "start refused"));
     await refused;
+  }
+
+  it("can retry the original send id after a refused start returns its steer", async () => {
+    await refuseStartWithKeptSteer();
+    await expect(send("A")).resolves.toEqual({ turnId: "A" });
+    expect(starts()).toEqual(["A", "A"]);
+  });
+
+  it.fails("reports a kept steer when the start is refused before any event", async () => {
+    await refuseStartWithKeptSteer();
     expect(wireTurnId()).toBeUndefined();
     expect(lastTurn(sessionId)).toBeUndefined();
-    expect((await run(api.messages, { sessionId })).turns).toMatchObject([
-      { turnId: "A", stopReason: "error", undeliveredSteers: ["follow-up"] },
-    ]);
+    expect((await run(api.messages, { sessionId })).turns).toEqual([]);
     expect(await queue()).toMatchObject({ items: [waitingRow("follow-up")] });
     expect(await fact("A")).toMatchObject({ state: "ended", steers: { "follow-up": "queued" } });
   });
