@@ -2,6 +2,7 @@ import { match } from "ts-pattern";
 import { CliStatusRow } from "../components/CliStatusRow";
 import { useAgentAuth, useAgentAuthEvents } from "@/features/settings/api/settings.queries";
 import {
+  installLabel,
   installLocalAgent,
   localSignIn,
   readLocalAgent,
@@ -21,20 +22,28 @@ interface AIToolsCheckStepProps {
   onBack: () => void;
 }
 
-/** What the row says under the agent's name. */
-function detailOf(state: LocalAgentState): string {
+function statusOf(state: LocalAgentState) {
   return match(state)
-    .with({ status: "checking" }, () => "Checking…")
-    .with({ status: "failed" }, () => "Couldn’t check account")
+    .with({ status: "checking" }, () => ({ installed: null, detail: "Checking…" }))
+    .with({ status: "failed" }, () => ({
+      installed: "unknown" as const,
+      detail: "Couldn’t check account",
+    }))
+    .with({ status: "installing" }, ({ percent }) => ({
+      installed: null,
+      detail: `Installing${percent !== undefined ? ` · ${percent}%` : "…"}`,
+    }))
     .with(
-      { status: "installing" },
-      ({ percent }) => `Installing${percent !== undefined ? ` · ${percent}%` : "…"}`
+      { status: "not-installed" },
+      { status: "first-turn" },
+      { status: "install-failed" },
+      ({ detail }) => ({ installed: false, detail })
     )
-    .with({ status: "not-installed" }, ({ error }) => error ?? "Not installed yet")
-    .with({ status: "signed-out" }, ({ login }) =>
-      login ? "Waiting for sign-in…" : "Sign in on this computer"
-    )
-    .with({ status: "signed-in" }, ({ account }) => account)
+    .with({ status: "signed-out" }, ({ login }) => ({
+      installed: true,
+      detail: login ? "Waiting for sign-in…" : "Sign in on this computer",
+    }))
+    .with({ status: "signed-in" }, ({ account }) => ({ installed: true, detail: account }))
     .exhaustive();
 }
 
@@ -45,22 +54,16 @@ export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
   function row(harness: AgentHarness) {
     const state = readLocalAgent(auth, harness);
     const signIn = localSignIn(state);
+    const install = installLabel(state);
     let action;
     if (signIn?.kind === "start") {
       action = { label: "Sign in", run: () => void signInLocalAgent(harness, signIn.auth) };
-    } else if (state.status === "not-installed") {
-      action = {
-        label: state.error ? "Try again" : "Install",
-        run: () => void installLocalAgent(harness),
-      };
+    } else if (install) {
+      action = { label: install, run: () => void installLocalAgent(harness) };
     }
     return {
       codeLoginId: signIn?.kind === "code" ? signIn.loginId : undefined,
-      installed:
-        state.status === "checking" || state.status === "installing"
-          ? null
-          : state.status !== "not-installed",
-      detail: detailOf(state),
+      ...statusOf(state),
       actionLabel: action?.label,
       onAction: action?.run,
       onRetry: () => void auth.refetch(),

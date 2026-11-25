@@ -36,6 +36,7 @@ import {
   quoted,
   refuse,
   refOf,
+  type AgentEntry,
   type Answer,
   type CancelOutcome,
   type Caller as OperatorCaller,
@@ -51,14 +52,15 @@ import {
 } from "@zvada/agent-server/operator";
 import type { Origin } from "@zvada/agent-server/protocol";
 import { withSentText } from "@shared/agent-message";
+import { agentReadiness } from "@shared/agent-readiness";
 import type { AnyOp, InputOf, OutputOf } from "@shared/api/op";
 import * as sessions from "@shared/api/sessions";
-import { agentModels } from "@shared/api/settings";
+import { agentAuth, agentModels } from "@shared/api/settings";
 import { uuidv7 } from "@shared/lib/uuid";
 import * as workspaces from "@shared/api/workspaces";
 import type { FileChange } from "@shared/types/workspace";
 import { ACTIVE_TURN_STATUSES } from "@shared/enums";
-import { HARNESSES, knownHarness } from "@shared/harnesses";
+import { HARNESSES, LOCAL_HARNESSES, knownHarness } from "@shared/harnesses";
 import { githubRepoSlug } from "@shared/git-origin";
 import {
   CATALOG_MODEL_LISTS,
@@ -890,6 +892,15 @@ export function createDeusHost(): DeusHost {
         invalidate(["session"], { sessionIds: [entry.id] });
         return { note: "The chat is put away; its workspace stays." };
       }),
+
+    async agents(): Promise<AgentEntry[]> {
+      const answer = await run(agentAuth, {});
+      if (answer.error !== undefined) throw new Error(answer.error);
+      return LOCAL_HARNESSES.map((harness) => {
+        const { state, detail } = agentReadiness(answer, harness);
+        return { harness, state, ...(detail && { detail }) };
+      });
+    },
 
     async models() {
       const lists = await run(agentModels, {}).then(

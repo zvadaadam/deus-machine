@@ -575,8 +575,10 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   host mutation re-reads what it depends on in the same synchronous step as
   its write (`mayStart`, `mayTouch`, `mayArchive`; a workspace's archive
   inside the app's archive queue). A chat's number is stored when it is
-  made (`sessions.chat`, a trigger) and never moves. A follow-up uses the chat's recorded
-  model as its composer would (`turn-settings.ts`). Without a recorded model, the host
+  made (`sessions.chat`, a trigger) and never moves. `list_models` shows each local agent's
+  readiness beside its models using the same CLI and login check as Settings → AI Providers,
+  onboarding and `deus status` (`shared/agent-readiness.ts`). A follow-up uses the chat's
+  recorded model as its composer would (`turn-settings.ts`). Without a recorded model, the host
   uses the agent's default in the engine catalog (which can differ from the composer's
   account default because a send does not wait for a model list) or refuses the
   follow-up if the catalog has none. A project only in the cloud is refused

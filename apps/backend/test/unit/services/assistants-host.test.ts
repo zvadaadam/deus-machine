@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { z } from "zod";
 import { WireRequestError } from "@zvada/agent-server/client";
-import { createOperator } from "@zvada/agent-server/operator";
+import { createOperator, Refused } from "@zvada/agent-server/operator";
 import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
 import { TELL_USER } from "@shared/agent-message";
 import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
@@ -273,6 +273,63 @@ beforeEach(() => {
   _resetOperator();
 });
 afterEach(() => state.db.close());
+
+describe("local agent readiness", () => {
+  it.each([
+    [undefined, { state: "not_installed", detail: "Not available on this computer" }],
+    ["1.5.14", { state: "unknown", detail: "installs with its first turn" }],
+  ])("reads all agents once, including a missing CLI with version %s", async (version, gemini) => {
+    const read = vi.fn(() => ({
+      clis: [
+        { harness: "gemini", state: "missing", version },
+        { harness: "codex-app-server", state: "unmanaged" },
+        { harness: "claude-code", state: "ready" },
+      ],
+      auth: [
+        { harness: "claude-code", state: "signed_in", email: "member@example.com", methods: [] },
+        { harness: "codex-app-server", state: "signed_out", methods: [] },
+      ],
+      logins: [],
+    }));
+    state.ops.agentAuth = read;
+    expect(await createDeusHost().agents!(assistantWho())).toEqual([
+      { harness: "claude-code", state: "ready" },
+      {
+        harness: "codex-app-server",
+        state: "signed_out",
+        detail: "sign in under Settings → AI Providers",
+      },
+      { harness: "gemini", ...gemini },
+    ]);
+    expect(read).toHaveBeenCalledExactlyOnceWith({});
+  });
+
+  it("throws when Settings could not read the agents", async () => {
+    state.ops.agentAuth = () => ({ auth: [], clis: [], logins: [], error: "Engine disconnected" });
+    await expect(createDeusHost().agents!(assistantWho())).rejects.toThrow("Engine disconnected");
+  });
+
+  it("lists agent readiness and the host's reason when the model list is refused", async () => {
+    state.ops.agentAuth = () => ({
+      clis: [{ harness: "gemini", state: "ready" }],
+      auth: [{ harness: "gemini", state: "signed_out", methods: [] }],
+      logins: [],
+    });
+    const host = createDeusHost();
+    vi.spyOn(host, "models").mockRejectedValue(
+      new Refused({ code: "access", detail: "Ask the owner." })
+    );
+    const list = await createOperator(host).call(
+      "list_models",
+      { agent: "gemini" },
+      assistantWho()
+    );
+    expect(list).toContain("gemini  signed out: sign in under Settings → AI Providers");
+    expect(list).toContain(
+      "refused (access): You may not do this here. Nothing was done. Ask the owner."
+    );
+  });
+});
 
 describe("chats as sessions", () => {
   it("each chat is a session numbered in its workspace; one being set up is its first, under its minted id", async () => {
@@ -909,11 +966,13 @@ describe("through MCP and as a chat's own tools", () => {
   });
 
   it("lists catalog models and uses the catalog default for starts and sends when the engine is down", async () => {
+    state.ops.agentAuth = () => ({ auth: [], clis: [], logins: [], error: "Engine disconnected" });
     state.ops.agentModels = () => {
       throw new AgentServerDisconnectedError();
     };
     const { text, isError } = await call(LOCAL_CALLER, "list_models", {});
     expect(isError).toBe(false);
+    expect(text).toContain("the agents' states could not be read.");
     for (const {
       harness,
       models: [first],

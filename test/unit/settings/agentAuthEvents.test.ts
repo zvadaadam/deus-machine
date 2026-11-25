@@ -128,7 +128,10 @@ it("checks the newly installed agent's login when Settings reopens and then offe
   const key = queryKeys.settings.agentAuth;
   const claude: HarnessAuth = { harness: "claude-code", state: "signed_in", methods: [] };
   const before: AgentAuthAnswer = {
-    clis: [{ harness: "gemini", state: "missing" }],
+    clis: [
+      { harness: "claude-code", state: "ready" },
+      { harness: "gemini", state: "missing", version: "1.5.14" },
+    ],
     auth: [
       claude,
       { harness: "gemini", state: "unknown", methods: [], error: "The CLI is not installed yet." },
@@ -159,7 +162,10 @@ it("checks the newly installed agent's login when Settings reopens and then offe
     };
     after.resolve({
       ...before,
-      clis: [{ harness: "gemini", state: "ready" }],
+      clis: [
+        { harness: "claude-code", state: "ready" },
+        { harness: "gemini", state: "ready" },
+      ],
       auth: [claude, auth],
     });
     await vi.waitFor(() =>

@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
-import { Check, X, Loader2 } from "lucide-react";
+import { Check, Loader2, Minus, X } from "lucide-react";
+import { match } from "ts-pattern";
 import { cn } from "@/shared/lib/utils";
 
 interface CliStatusRowProps {
   name: string;
   description: string;
-  installed: boolean | null; // null = loading
+  installed: boolean | "unknown" | null; // null = loading
   detail?: string;
   actionLabel?: string;
   actionUrl?: string;
@@ -41,21 +42,18 @@ export function CliStatusRow({
     <div className="bg-onboarding-foreground/5 flex items-center gap-4 rounded-xl px-4 py-3">
       <div
         className={cn(
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-          installed === null
-            ? "bg-onboarding-foreground/10"
-            : installed
-              ? "bg-success/20"
-              : "bg-onboarding-foreground/10"
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full [&>svg]:size-4",
+          installed === true
+            ? "bg-success/20 text-success"
+            : "bg-onboarding-foreground/10 text-onboarding-foreground/40"
         )}
       >
-        {installed === null ? (
-          <Loader2 className="text-onboarding-foreground/50 h-4 w-4 animate-spin" />
-        ) : installed ? (
-          <Check className="text-success h-4 w-4" />
-        ) : (
-          <X className="text-onboarding-foreground/40 h-4 w-4" />
-        )}
+        {match(installed)
+          .with(null, () => <Loader2 className="text-onboarding-foreground/50 animate-spin" />)
+          .with("unknown", () => <Minus role="img" aria-label="Status could not be read" />)
+          .with(true, () => <Check />)
+          .with(false, () => <X />)
+          .exhaustive()}
       </div>
 
       <div className="min-w-0 flex-1">

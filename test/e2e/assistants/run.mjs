@@ -586,8 +586,10 @@ try {
   const secretRead = await chatgpt.call("read_changes", { session: "voyager:1", file: ".env" });
   assert.equal(secretRead.isError, true, secretRead.text);
   assert(!secretRead.text.includes("sk_live"), "no content of an unchanged file");
-  const models = await chatgpt.call("list_models");
-  report.evidence.listModelsWithNoEngine = models;
+  const models = ok(await chatgpt.call("list_models"));
+  assert.match(models, /^claude-code \(default agent\)\n {2}- /m);
+  assert.match(models, /the agents' states could not be read\./);
+  check("list_models keeps the catalog when the engine cannot report readiness", models);
   skip(
     "list_models names the agents, their models and thinking levels, and the defaults",
     NO_ENGINE_MODELS
