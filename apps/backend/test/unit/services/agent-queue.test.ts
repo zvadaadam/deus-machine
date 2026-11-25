@@ -3439,7 +3439,7 @@ describe("operating another chat's queue", () => {
     }
   );
 
-  it("honors a person's Resume after an agent resumed a live failure", async () => {
+  it("honors a person's Resume after an agent resumes an unconfirmed replay gap with a live engine error", async () => {
     await failLiveReplay();
     emit({
       type: "error",
@@ -3461,7 +3461,7 @@ describe("operating another chat's queue", () => {
   });
 
   it.each(["end_turn", "error", "server_restarted"] as const)(
-    "drains after an agent resumes a live failure and the turn settles with %s",
+    "drains after an agent resumes an unconfirmed replay gap and the live turn settles with %s",
     async (reason) => {
       await failLiveReplay();
       expect(await resumeQueuedMessages(sessionId, fromChat)).toMatchObject({ outcome: "resumed" });
@@ -3474,7 +3474,7 @@ describe("operating another chat's queue", () => {
   );
 
   it.each(["native terminal", "unconfirmed replay cancel"] as const)(
-    "holds the row for the person after an agent resumes a live admission failure (%s)",
+    "holds the row for the person after an agent resumes an unconfirmed replay gap (%s)",
     async (cancel) => {
       await failLiveReplay();
       expect((await queue()).paused).toBe("failed");
