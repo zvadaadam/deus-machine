@@ -84,9 +84,9 @@ export interface AgentEventHandler {
    */
   beginTurn(sessionId: string, turnId: string, opts?: { force?: boolean }): boolean;
   /** Release a rejected local claim, only while this turn is still unadmitted. */
+  abortTurn(sessionId: string, turnId: string): boolean;
   /** The engine acknowledged this turn or its events reached the fold. */
   wasTurnAdmitted(sessionId: string, turnId: string): boolean;
-  abortTurn(sessionId: string, turnId: string): boolean;
   /** Record the local end. A late native terminal can still supply its actual outcome. */
   giveUpTurn(sessionId: string, turnId: string, cause?: "cancelled"): boolean;
   /**
@@ -264,6 +264,7 @@ export function createAgentEventHandler(
       state.turnId = undefined;
       return true;
     },
+
     wasTurnAdmitted(sessionId, turnId) {
       const state = sessions.get(sessionId);
       return (
@@ -271,7 +272,6 @@ export function createAgentEventHandler(
         !!state?.conversation.turns.some((turn) => turn.turnId === turnId)
       );
     },
-
 
     liveTurnId(sessionId) {
       return sessions.get(sessionId)?.turnId;
