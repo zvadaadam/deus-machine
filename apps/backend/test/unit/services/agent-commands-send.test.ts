@@ -38,7 +38,7 @@ import { sendMessage as sendStrict } from "../../../src/services/agent/turns";
 import * as cloudDriver from "../../../src/services/agent/cloud/driver";
 import { applyCloudStatus } from "../../../src/services/workspace-lifecycle";
 
-const SESSION = "sess-send";
+let SESSION: string;
 /** A session whose workspace row is gone — the worktree-deleted case. */
 const ORPHAN = "sess-orphan";
 
@@ -87,6 +87,7 @@ describeWithDb("sendMessage", () => {
     };
 
   beforeEach(() => {
+    SESSION = crypto.randomUUID();
     db = createTestDb();
     mockGetDatabase.mockReturnValue(db);
     vi.spyOn(console, "warn").mockImplementation(() => {});

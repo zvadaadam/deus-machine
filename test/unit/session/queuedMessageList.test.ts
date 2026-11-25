@@ -7,6 +7,7 @@ import type { QueuedMessages } from "@shared/api/sessions";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useEditQueuedMessage } from "@/features/session/api/session.queries";
 import { QueuedMessageList } from "@/features/session/ui/QueuedMessageList";
+import { SIDEBAR_WORKSPACE_STATE } from "@/features/workspace/api/workspace.queries";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   composerStore,
@@ -141,6 +142,19 @@ it.each([
   const pictureOnly = render({ paused: null, items: [{ ...item, text: "", images }] });
   expect(pictureOnly).toContain(`>${label}<`);
   expect(pictureOnly).not.toContain("lucide-image");
+});
+
+it("links a queued message to its sending chat and leaves the person's row unmarked", () => {
+  client.setQueryData(queryKeys.sessions.detail("sender"), { workspace_id: "w", title: "Review" });
+  client.setQueryData(queryKeys.workspaces.byRepo(SIDEBAR_WORKSPACE_STATE), [
+    { workspaces: [{ id: "w", title: "Review" }] },
+  ]);
+  const html = render({
+    paused: null,
+    items: [{ ...item, id: "review", origin: { kind: "session", sessionId: "sender" } }, item],
+  });
+  expect(html).toMatch(/Sent from<\/span>.*?<button[^>]*title="Review"[^>]*>Review<\/button>/s);
+  expect(html.match(/Sent from/g)).toHaveLength(1);
 });
 
 it.each([

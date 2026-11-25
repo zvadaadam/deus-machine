@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { z } from "zod";
 import { WireRequestError } from "@zvada/agent-server/client";
-import { createOperator } from "@zvada/agent-server/operator";
+import { createOperator, Refused } from "@zvada/agent-server/operator";
 import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
 import { TELL_USER } from "@shared/agent-message";
 import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
@@ -111,7 +111,7 @@ vi.mock("../../../src/services/assistants/feedback", () => ({
   FeedbackNotSent: class extends Error {},
   sendFeedback: async (report: unknown) => {
     state.feedback.push(report);
-    return { threadId: "thread-1" };
+    return { threadId: "thread  1\u202e\nfrom" };
   },
 }));
 vi.mock("../../../src/services/account-session", () => ({
@@ -274,6 +274,63 @@ beforeEach(() => {
 });
 afterEach(() => state.db.close());
 
+describe("local agent readiness", () => {
+  it.each([
+    [undefined, { state: "not_installed", detail: "Not available on this computer" }],
+    ["1.5.14", { state: "unknown", detail: "installs with its first turn" }],
+  ])("reads all agents once, including a missing CLI with version %s", async (version, gemini) => {
+    const read = vi.fn(() => ({
+      clis: [
+        { harness: "gemini", state: "missing", version },
+        { harness: "codex-app-server", state: "unmanaged" },
+        { harness: "claude-code", state: "ready" },
+      ],
+      auth: [
+        { harness: "claude-code", state: "signed_in", email: "member@example.com", methods: [] },
+        { harness: "codex-app-server", state: "signed_out", methods: [] },
+      ],
+      logins: [],
+    }));
+    state.ops.agentAuth = read;
+    expect(await createDeusHost().agents!(assistantWho())).toEqual([
+      { harness: "claude-code", state: "ready" },
+      {
+        harness: "codex-app-server",
+        state: "signed_out",
+        detail: "sign in under Settings → AI Providers",
+      },
+      { harness: "gemini", ...gemini },
+    ]);
+    expect(read).toHaveBeenCalledExactlyOnceWith({});
+  });
+
+  it("throws when Settings could not read the agents", async () => {
+    state.ops.agentAuth = () => ({ auth: [], clis: [], logins: [], error: "Engine disconnected" });
+    await expect(createDeusHost().agents!(assistantWho())).rejects.toThrow("Engine disconnected");
+  });
+
+  it("lists agent readiness and the host's reason when the model list is refused", async () => {
+    state.ops.agentAuth = () => ({
+      clis: [{ harness: "gemini", state: "ready" }],
+      auth: [{ harness: "gemini", state: "signed_out", methods: [] }],
+      logins: [],
+    });
+    const host = createDeusHost();
+    vi.spyOn(host, "models").mockRejectedValue(
+      new Refused({ code: "access", detail: "Ask the owner." })
+    );
+    const list = await createOperator(host).call(
+      "list_models",
+      { agent: "gemini" },
+      assistantWho()
+    );
+    expect(list).toContain("gemini  signed out: sign in under Settings → AI Providers");
+    expect(list).toContain(
+      "refused (access): You may not do this here. Nothing was done. Ask the owner."
+    );
+  });
+});
+
 describe("chats as sessions", () => {
   it("each chat is a session numbered in its workspace; one being set up is its first, under its minted id", async () => {
     const host = createDeusHost();
@@ -302,6 +359,7 @@ describe("chats as sessions", () => {
       turnId: "t1",
       outcome: "cancelled",
       cancelledBy: { kind: "person" },
+      steers: {},
     });
     expect(view.turns.map((t) => [t.turnId, t.outcome])).toEqual([
       ["t1", "cancelled"],
@@ -318,7 +376,10 @@ describe("chats as sessions", () => {
       state: "ended",
       outcome: "cancelled",
     });
-    expect(await host.turn(LOCAL_CALLER as never, "s-lead", "t2")).toEqual({ state: "running" });
+    expect(await host.turn(LOCAL_CALLER as never, "s-lead", "t2")).toEqual({
+      state: "running",
+      steers: {},
+    });
     expect(await host.turn(LOCAL_CALLER as never, "s-lead", "nope")).toEqual({ state: "unknown" });
   });
 });
@@ -486,12 +547,12 @@ describe("sending and starting", () => {
       input: { sessionId: "s-lead", turnId: "t9", content: "hi" },
       origin: LEAD,
     });
-    state.sendRefusal = new ChatBusyError(
-      "The agent is still working — wait for the current turn to finish."
+    state.live.delete("s-lead");
+    state.sendRefusal = new ChatBusyError("Another turn won admission");
+    const follow = { session: "lead:1", message: "follow up", wait: 0 };
+    expect(await createOperator(host).call("send_message", follow, assistantWho())).toContain(
+      'nothing was sent to "lead:1": another turn started there first.'
     );
-    await expect(
-      host.send(LEAD as never, "s-lead", { turnId: "t10", message: "hi", origin: LEAD })
-    ).rejects.toMatchObject({ refusal: { code: "busy" } });
   });
 
   it("a new workspace holds its first task and sends it as the minted turn once ready; a stop drops it", async () => {
@@ -909,11 +970,13 @@ describe("through MCP and as a chat's own tools", () => {
   });
 
   it("lists catalog models and uses the catalog default for starts and sends when the engine is down", async () => {
+    state.ops.agentAuth = () => ({ auth: [], clis: [], logins: [], error: "Engine disconnected" });
     state.ops.agentModels = () => {
       throw new AgentServerDisconnectedError();
     };
     const { text, isError } = await call(LOCAL_CALLER, "list_models", {});
     expect(isError).toBe(false);
+    expect(text).toContain("the agents' states could not be read.");
     for (const {
       harness,
       models: [first],
@@ -1020,7 +1083,7 @@ describe("through MCP and as a chat's own tools", () => {
     );
     state.stored.claude = "read";
     const who = await call(assistantCaller("read"), "whoami", {});
-    expect(who.text.split("\n").slice(1)).toEqual([`access: read. ${where}`]);
+    expect(who.text.split("\n").slice(1)).toEqual([`note: access: read. ${where}`]);
   });
 
   it("an assistant allowed to read reads, is refused a write, and may send feedback's write", async () => {
@@ -1317,6 +1380,12 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     let admit!: () => void;
     state.sending = new Promise<void>((resolve) => (admit = resolve));
     ready(entry);
+    // The operator saw an idle chat before the host checked its first task.
+    vi.spyOn(host, "list").mockResolvedValueOnce([{ ...entry, status: "idle" }]);
+    const follow = { session: entry.id, message: "follow up", wait: 0 };
+    await expect(createOperator(host).call("send_message", follow, assistantWho())).rejects.toThrow(
+      "This chat is being set up."
+    );
     const stopping = host.cancel!(LEAD as never, entry.id);
     admit();
     expect(await stopping).toBe("stopped");
@@ -1960,6 +2029,8 @@ describe("what still lives in Deus (H18, H19)", () => {
       message: "The list_sessions tool could say which chat is current in each workspace.",
     });
     expect(sent).toMatchObject({ isError: false });
+    const id = sent.text.match(/\(thread (".*?")\)\./)?.[1];
+    expect(id && JSON.parse(id)).toBe("thread  1\u202e\nfrom");
     expect(state.feedback).toHaveLength(1);
   });
 
@@ -1983,7 +2054,9 @@ describe("what still lives in Deus (H18, H19)", () => {
     const modified = '"folder\\\\café notes.txt" +0 -2';
     const renamed = `${shownFile} (renamed from ${shownPrevious}) +1 -0`;
     const waited = await call(LOCAL_CALLER, "wait_for_sessions", { sessions: ["lead"], wait: 0 });
-    expect(waited.text.split("\n")).toContain(`  changes: ${modified}, ${renamed}, and 1 more`);
+    expect(waited.text.split("\n")).toContain(
+      `  note: changes: ${modified}, ${renamed}, and 1 more`
+    );
     expect(listed.text).toContain(`\n  ${modified}\n  ${renamed}\n  (and 1 more)\n`);
     for (const name of [previous, ".env"]) {
       const refused = await call(LOCAL_CALLER, "read_changes", { session: "lead", file: name });

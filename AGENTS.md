@@ -216,37 +216,38 @@ last turn record is the open turn. A replay can append an older end, so otherwis
 chat's working status until that record arrives.
 
 While a local chat works, Enter on a keyboard and Send on a phone queue the message.
-Command-Enter (Ctrl-Enter outside macOS) and a waiting row's send arrow ask to steer
-the turn the window shows. If that turn is gone, unnamed or cannot take the message,
-the message goes first in the queue and starts its own turn when the chat is free
-and the queue is not paused. With a question or plan card open, a steer naming
-an older turn still goes first. Otherwise a new message appends and a waiting row stays in place.
+Command-Enter (Ctrl-Enter outside macOS) asks to steer the turn on screen. The person's
+row arrow does the same, except on a kept steer, which it moves first for its own turn.
+If the turn is gone, unnamed or cannot take the message, the fresh steer or the arrow's
+row goes first. With a question or plan open, a new message appends and a row stays in
+place unless the steer names an older turn.
 The backend holds up to 20 messages per chat in memory (`services/agent/queue.ts`).
-Each composer follows `queuedMessages` for the text and picture count in
+At most five can come from agents and assistants together, including unread steers.
+Each composer follows `queuedMessages` for the sender, text and picture count in
 `session/ui/QueuedMessageList.tsx`. Edit reads a waiting row's full content with
 `queuedMessage`, puts it in the composer, then calls `removeQueuedMessage`.
 Dragging a waiting row's grip, or using Space and the arrow keys, calls
 `moveQueuedMessage` to put it before another waiting row or last. The sending head
-stays first until its user echo is complete. If its own turn is known to be gone
-first, the head returns to the front and the queue pauses. Unread steers follow and
-return to the front in order if their turn ends unread. After publishing a normal end,
-the backend sends one row from an unpaused queue. Stop pauses the queue at once.
+stays first until its user echo is complete.
+After Stop, nothing waiting runs until Resume. A plain send to an idle chat starts at once.
+An empty Stop or failure hold clears when its turn settles. A usage limit can hold an empty queue.
+The rules above `transition` in `services/agent/queue.ts` say who may resume each hold.
 During local app setup, Stop returns the chat to idle at once, except for an agent's or
 assistant's first task, which ends in an error saying it was not delivered. The person
 keeps their draft, a queue head waits first, and an operator's send is refused
 with “Stopped before it started.” Once the start request reaches the wire, Stop
 waits for its answer (up to 30 seconds) and cancels the turn if it is still live.
-If the engine reports no active turn, the chat settles at once. A confirmed cancel
-withdraws the turn's cards at once and keeps the chat occupied for its final echoes and end.
-After 15 seconds without the end, the watchdog frees the chat and returns unread messages
-to the queue, leaving the turn's outcome to the engine. Rows paused by a stop or failure wait for Resume, which can be pressed before the turn ends.
-A local usage limit pauses even an empty queue. Resume appears only when there are rows. Pressing Continue
+If the engine reports no active turn, the chat settles at once. A confirmed cancel withdraws the cards
+and keeps the chat occupied for final echoes. If no end arrives within 15 seconds of confirmation, the watchdog
+frees the chat, records the local end and returns unread steers to the queue. A late engine end can update the outcome.
+If the cancel is unconfirmed and the turn is still live, the watchdog records a warning and leaves it running.
+Resume appears above held rows, even before the turn ends. At a usage limit, pressing Continue
 before the reported reset schedules a turn one minute after it. The person can enable this for future limits in Settings.
 Pressing Continue after the reset starts the turn at once. While Deus stays open, the first waiting message goes, or “Continue.”
 with the chat's settings. A new send, Resume, Stop, hiding the chat or archiving its workspace clears the schedule.
 A steer read mid-turn splits one reply into groups with one footer (`groupTurns` in
 `session/lib/chatTimeline.ts`). Cloud chats keep their send, including the hosted web's
-direct lane. The operator's `send` to a busy chat still answers `busy`.
+direct lane.
 
 A `fileChanges` subscription names one workspace. On macOS or on Linux with Bun, its first follower
 opens a recursive watch on the local checkout. The last one leaving, including
@@ -543,8 +544,8 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   `list_sessions`, `read_session`, `wait_for_sessions`, `list_models`,
   `start_session`, `send_message`, `answer_request`, `stop_sessions` and
   `archive`, their words, waits, rules and limits; Deus is their host
-  (`services/assistants/host.ts`) and adds `read_changes`, `add_project` and
-  `send_feedback` (a report about Deus itself to the Deus team's Hivenet board,
+  (`services/assistants/host.ts`) and adds `read_queue`, `manage_queue`, `read_changes`,
+  `add_project` and `send_feedback` (a report about Deus itself to the Deus team's Hivenet board,
   `services/assistants/feedback.ts`: the report alone,
   `consent.telemetry: false`). The registry refuses project removal as an assistant operation.
   Neither the assistant nor the chat tool list offers it.
@@ -553,14 +554,13 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   not listed); a workspace being set up is its first chat under the id minted
   with it (`first_session_id`). Who started each workspace, chat and message
   is kept (`started_by`, `messages.origin`), and the agent reading a message
-  is told when an agent or an assistant sent it. The package holds nothing
-  between calls. A message to a busy chat is sent within the call if its turn ends
-  on its own in time and the chat stays free. If a person's queued message starts
-  at that end, the waiting call finds the chat busy again and sends nothing. A refusal
-  says why. The host holds only a new workspace's first task. `start` takes it and
-  sends it as the turn the package minted once the first chat is ready. A start that took
-  longer than 30 minutes sends nothing, and the chat says so in its error; a stop
-  drops it. At its commit, in one synchronous step, the host refuses
+  is told who sent it. On a working chat, `send_message` steers the turn it saw by
+  default. If the turn ends before reading the message, it goes first in the queue.
+  A kept steer runs only as its own turn, even with `send_now`. The host finds read
+  steers in `messages.steer_id` and kept ones in `turns.outcome.undeliveredSteers`.
+  For a new workspace, `start` holds the first task until its chat is ready and sends
+  it as the turn the package minted. A stop drops it. If setup takes over 30 minutes,
+  the chat says its first task could not be delivered. At its commit, in one synchronous step, the host refuses
   (`Refused`): a start by an archived chat or into an archived workspace; a
   fourth agent-started local workspace while three are starting or running setup.
   It also refuses an archive whose members are still starting, still working
@@ -575,8 +575,10 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   host mutation re-reads what it depends on in the same synchronous step as
   its write (`mayStart`, `mayTouch`, `mayArchive`; a workspace's archive
   inside the app's archive queue). A chat's number is stored when it is
-  made (`sessions.chat`, a trigger) and never moves. A follow-up uses the chat's recorded
-  model as its composer would (`turn-settings.ts`). Without a recorded model, the host
+  made (`sessions.chat`, a trigger) and never moves. `list_models` shows each local agent's
+  readiness beside its models using the same CLI and login check as Settings → AI Providers,
+  onboarding and `deus status` (`shared/agent-readiness.ts`). A follow-up uses the chat's
+  recorded model as its composer would (`turn-settings.ts`). Without a recorded model, the host
   uses the agent's default in the engine catalog (which can differ from the composer's
   account default because a send does not wait for a model list) or refuses the
   follow-up if the catalog has none. A project only in the cloud is refused
@@ -619,9 +621,15 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   chats per starter and starts per minute are limited. The turn's
   instructions carry the package's `OPERATOR_GUIDANCE`. For this computer's `deus://workspace`
   links, give `read_session` the link's `session` value as `session`. Without it, pass the link's `id`
-  as `session` to read the workspace's current chat (`workspace-context.ts`). A message another chat
-  or an assistant sent shows "Sent from" above its bubble (`session/ui/SentFrom.tsx`), and the chip opens
-  the sending chat. List, wait and read report a chat's usage limit, its known reset time and whether it will continue.
+  as `session` to read the workspace's current chat (`workspace-context.ts`). "Sent from"
+  names the sender on a queued row and above its bubble, including a steer read mid-turn.
+  The chip opens the sending chat (`session/ui/SentFrom.tsx`). List, wait and read say what
+  waits and what holds it, including a usage limit's known reset time and whether the chat
+  will continue. An agent or assistant queuing its own waiting text gets the row's
+  position without adding a row. The person's sends skip this check.
+  `read_queue` lists another chat's rows. With `manage_queue` a sender can request Resume,
+  send or remove its own waiting row. `send_now` keeps an unread row in place and reports any hold.
+  This window and paired devices speak as the person and may change any row.
   A chat runs with full access or in plan mode, nothing
   between: Deus approves a chat's tool requests itself. A mode between the
   two must route these tools' writes to the person before it ships.

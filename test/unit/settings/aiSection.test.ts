@@ -118,12 +118,14 @@ describe("local agent status", () => {
           totalBytes: 100,
         },
         { harness: "codex-app-server", state: "missing" },
+        { harness: "gemini", state: "missing", version: "1.5.14" },
       ],
       logins: [],
     };
     const html = render();
     expect(html).toContain("Installing 0.3.288 · 45%");
-    expect(html).toContain("Not installed");
+    expect(html).toContain(">Not available on this computer<");
+    expect(html).toContain(">installs with its first turn<");
     expect(html.match(/>Install<\/button>/g)).toHaveLength(1);
     expect(html).not.toContain(">Sign in</button>");
   });

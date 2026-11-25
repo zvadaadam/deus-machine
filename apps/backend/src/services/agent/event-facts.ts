@@ -141,7 +141,11 @@ export function applySessionFacts(
       ];
     })
     .with({ type: "turn.started" }, (e): SessionFactWrite[] => {
-      if (conversation.turns.find((turn) => turn.turnId === e.turnId)?.status === "ended")
+      // A replayed start can add transcript facts after the host released this turn.
+      if (
+        (!facts.turnId && facts.acceptedTurnId === e.turnId) ||
+        conversation.turns.find((turn) => turn.turnId === e.turnId)?.status === "ended"
+      )
         return [];
       if (facts.turnId !== e.turnId) facts.limitResets = undefined;
       facts.turnId = e.turnId;
