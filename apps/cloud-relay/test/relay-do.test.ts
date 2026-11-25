@@ -16,6 +16,12 @@ let relay: any;
 let state: MockDOState;
 let storage: MockDOStorage;
 
+function expectNoStoredCredential(credential: string) {
+  expect([...storage._data.keys()].filter((key) => key.startsWith("auth_token:"))).toEqual([]);
+  // A credential written and deleted in one handler would still enter storage history.
+  expect(JSON.stringify(vi.mocked(storage.put).mock.calls)).not.toContain(credential);
+}
+
 beforeEach(async () => {
   vi.resetModules();
   const harness = await createTestDO();
@@ -41,20 +47,16 @@ describe("server tunnel registration", () => {
     expect(storage._data.get("serverName")).toBe("My Machine");
   });
 
-  it("sets tunnelRegistered to true after register", async () => {
-    await registerServer(relay, state);
-    expect(storage._data.get("tunnelRegistered")).toBe(true);
-  });
+  it("acknowledges registration before closing viewers even when scheduling the heartbeat fails", async () => {
+    const viewer = createMockWebSocket(["client", "waiting"]);
+    state._websockets.set(viewer, viewer._tags);
+    storage.setAlarm.mockRejectedValueOnce(new Error("Cannot schedule heartbeat"));
 
-  it("a replacement tunnel of the same machine registers again", async () => {
-    await registerServer(relay, state);
-
-    const tunnelWs2 = createMockWebSocket(["tunnel"]);
-    state._websockets.set(tunnelWs2, ["tunnel"]);
-
-    await relay.webSocketMessage(tunnelWs2, JSON.stringify({ type: "register" }));
-
-    expect(getLastSent(tunnelWs2)).toEqual({ type: "registered" });
+    await expect(registerServer(relay, state)).rejects.toThrow("Cannot schedule heartbeat");
+    const [host] = state.getWebSockets("tunnel");
+    expect(await storage.get("tunnelRegistered")).toBe(true);
+    expect(getSentMessages(host)).toEqual([{ type: "registered" }]);
+    expect(host.send).toHaveBeenCalledBefore(viewer.close);
   });
 });
 
@@ -69,42 +71,16 @@ describe("client auth flow", () => {
     tunnelWs = await registerServer(relay, state);
   });
 
-  it("pending client authenticate forwards client_connected to tunnel", async () => {
-    const clientId = "client-abc";
-    const clientWs = createMockWebSocket(["client", clientId]);
-    state._websockets.set(clientWs, ["client", clientId]);
-    await storage.put(`pending:${clientId}`, Date.now() + 5000);
-
-    await relay.webSocketMessage(
-      clientWs,
-      JSON.stringify({ type: "authenticate", token: "dev_tok_1" })
-    );
-
-    // Should forward to tunnel
-    const tunnelMessages = getSentMessages(tunnelWs);
-    const clientConnected = tunnelMessages.find(
-      (m: any) => m.type === "client_connected" && m.clientId === clientId
-    );
-    expect(clientConnected).toEqual({
+  it("forwards the pending viewer's credential to the host without storing it", async () => {
+    const deviceToken = "online-viewer-grant";
+    const { clientId } = await connectAndAuthClient(relay, state, { deviceToken });
+    expect(getLastSent(tunnelWs)).toEqual({
       type: "client_connected",
       clientId,
-      deviceToken: "dev_tok_1",
+      deviceToken,
       accountId: TEST_ACCOUNT,
     });
-  });
-
-  it("stores auth token for re-forwarding on reconnect", async () => {
-    const clientId = "client-abc";
-    const clientWs = createMockWebSocket(["client", clientId]);
-    state._websockets.set(clientWs, ["client", clientId]);
-    await storage.put(`pending:${clientId}`, Date.now() + 5000);
-
-    await relay.webSocketMessage(
-      clientWs,
-      JSON.stringify({ type: "authenticate", token: "dev_tok_1" })
-    );
-
-    expect(storage._data.get(`auth_token:${clientId}`)).toBe("dev_tok_1");
+    expectNoStoredCredential(deviceToken);
   });
 
   it("non-authenticate message from pending client is ignored", async () => {
@@ -133,22 +109,7 @@ describe("client auth flow", () => {
     );
 
     expect(getLastSent(clientWs)).toEqual({ type: "authenticated" });
-  });
-
-  it("auth_response allowed=true clears pending and auth_token", async () => {
-    const clientId = "client-abc";
-    const clientWs = createMockWebSocket(["client", clientId]);
-    state._websockets.set(clientWs, ["client", clientId]);
-    await storage.put(`pending:${clientId}`, Date.now() + 5000);
-    await storage.put(`auth_token:${clientId}`, "tok");
-
-    await relay.webSocketMessage(
-      tunnelWs,
-      JSON.stringify({ type: "auth_response", clientId, allowed: true })
-    );
-
-    expect(storage._data.has(`pending:${clientId}`)).toBe(false);
-    expect(storage._data.has(`auth_token:${clientId}`)).toBe(false);
+    expect(await storage.get(`pending:${clientId}`)).toBeUndefined();
   });
 
   it("auth_response allowed=false sends auth_failed and closes client", async () => {
@@ -334,24 +295,29 @@ describe("pairing flow", () => {
     });
   });
 
-  it("server pair_response success sends pair_success to pairer", async () => {
+  it("returns the pairing grant to the viewer, who can authenticate with it", async () => {
     const pairId = "pair-1";
     const pairerWs = createMockWebSocket(["pairer", pairId]);
     state._websockets.set(pairerWs, ["pairer", pairId]);
     await storage.put(`pending:pair:${pairId}`, Date.now() + 30000);
+    const deviceToken = "fresh-pairing-grant";
 
     await relay.webSocketMessage(
       tunnelWs,
-      JSON.stringify({
-        type: "pair_response",
-        pairId,
-        success: true,
-        deviceToken: "new_dev_tok",
-      })
+      JSON.stringify({ type: "pair_response", pairId, success: true, deviceToken })
     );
-
-    expect(getLastSent(pairerWs)).toEqual({ type: "pair_success", token: "new_dev_tok" });
+    expect(getLastSent(pairerWs)).toEqual({ type: "pair_success", token: deviceToken });
     expect(pairerWs.close).toHaveBeenCalledWith(1000, "Pairing complete");
+    expectNoStoredCredential(deviceToken);
+
+    const { clientId } = await connectAndAuthClient(relay, state, { deviceToken });
+    expect(getLastSent(tunnelWs)).toEqual({
+      type: "client_connected",
+      clientId,
+      deviceToken,
+      accountId: TEST_ACCOUNT,
+    });
+    expectNoStoredCredential(deviceToken);
   });
 
   it("server pair_response failure sends pair_failed to pairer", async () => {
@@ -441,6 +407,21 @@ describe("pairing flow", () => {
 // ============================================================================
 
 describe("alarm", () => {
+  it("removes one bounded batch of legacy credentials per alarm", async () => {
+    await registerServer(relay, state);
+    for (let i = 0; i < 129; i++) {
+      await storage.put(`auth_token:${i}`, "legacy-fixture");
+    }
+
+    await relay.alarm();
+    expect((await storage.list({ prefix: "auth_token:" })).size).toBe(1);
+    expect(storage.list).toHaveBeenCalledWith({ prefix: "auth_token:", limit: 128 });
+
+    await relay.alarm();
+    expect((await storage.list({ prefix: "auth_token:" })).size).toBe(0);
+    expect(await storage.get("owner")).toBe(TEST_ACCOUNT);
+  });
+
   it("retries expired authentication without declaring the token invalid", async () => {
     const clientId = "expired-client";
     const clientWs = createMockWebSocket(["client", clientId]);
@@ -580,33 +561,50 @@ describe("server disconnect and reconnection", () => {
     expect(clientWs.close).toHaveBeenCalledWith(1012, "Host reconnected; authenticate again");
   });
 
-  it("reconnection re-forwards pending clients stored auth tokens", async () => {
-    const tunnelWs1 = await registerServer(relay, state);
+  it("authenticates a viewer waiting through an outage only after it redials", async () => {
+    const deviceToken = "returning-viewer-grant";
+    const firstHost = await registerServer(relay, state);
+    state._websockets.delete(firstHost);
+    await relay.webSocketClose(firstHost, 1006, "network gone", false);
+    expectNoStoredCredential(deviceToken);
 
-    // Add a pending client with stored auth token
-    const clientId = "client-pending";
-    const clientWs = createMockWebSocket(["client", clientId]);
-    state._websockets.set(clientWs, ["client", clientId]);
-    await storage.put(`pending:${clientId}`, Date.now() + 300000);
-    await storage.put(`auth_token:${clientId}`, "saved_token");
+    const waiting = await connectAndAuthClient(relay, state, { deviceToken });
+    expect(getLastSent(waiting.clientWs)).toMatchObject({ type: "server_reconnecting" });
+    expectNoStoredCredential(deviceToken);
+    await relay.webSocketMessage(waiting.clientWs, JSON.stringify({ type: "ping", id: "waiting" }));
+    expect(getLastSent(waiting.clientWs)).toEqual({ type: "pong", id: "waiting" });
+    expectNoStoredCredential(deviceToken);
 
-    // Disconnect
-    state._websockets.delete(tunnelWs1);
-    await relay.webSocketClose(tunnelWs1, 1000, "gone", true);
-
-    // Reconnect
-    const tunnelWs2 = await registerServer(relay, state);
-
-    const tunnelMessages = getSentMessages(tunnelWs2);
-    const reForwarded = tunnelMessages.find(
-      (m: any) => m.type === "client_connected" && m.clientId === clientId
+    const host = await registerServer(relay, state);
+    expect(waiting.clientWs.close).toHaveBeenCalledWith(
+      1012,
+      "Host reconnected; authenticate again"
     );
-    expect(reForwarded).toEqual({
+    expect(getSentMessages(host)).toEqual([{ type: "registered" }]);
+    expectNoStoredCredential(deviceToken);
+    await relay.webSocketClose(
+      waiting.clientWs,
+      1012,
+      "Host reconnected; authenticate again",
+      true
+    );
+    expectNoStoredCredential(deviceToken);
+
+    const redial = await connectAndAuthClient(relay, state, { deviceToken });
+    expect(redial.clientId).not.toBe(waiting.clientId);
+    expect(getLastSent(host)).toEqual({
       type: "client_connected",
-      clientId,
-      deviceToken: "saved_token",
+      clientId: redial.clientId,
       accountId: TEST_ACCOUNT,
+      deviceToken,
     });
+    expectNoStoredCredential(deviceToken);
+    await relay.webSocketMessage(
+      host,
+      JSON.stringify({ type: "auth_response", clientId: redial.clientId, allowed: true })
+    );
+    expect(getLastSent(redial.clientWs)).toEqual({ type: "authenticated" });
+    expectNoStoredCredential(deviceToken);
   });
 
   it("reconnection clears serverDisconnectedAt", async () => {
@@ -628,19 +626,17 @@ describe("server disconnect and reconnection", () => {
 // ============================================================================
 
 describe("client disconnect", () => {
-  it("cleans up pending and auth_token from storage", async () => {
-    const tunnelWs = await registerServer(relay, state);
+  it("clears the disconnected viewer's authentication deadline", async () => {
+    await registerServer(relay, state);
 
     const clientId = "client-dc";
     const clientWs = createMockWebSocket(["client", clientId]);
     state._websockets.set(clientWs, ["client", clientId]);
     await storage.put(`pending:${clientId}`, Date.now() + 5000);
-    await storage.put(`auth_token:${clientId}`, "tok");
 
     await relay.webSocketClose(clientWs, 1000, "bye", true);
 
     expect(storage._data.has(`pending:${clientId}`)).toBe(false);
-    expect(storage._data.has(`auth_token:${clientId}`)).toBe(false);
   });
 
   it("notifies tunnel with client_disconnected", async () => {
@@ -698,29 +694,26 @@ describe("webSocketMessage dispatch", () => {
 // ============================================================================
 
 describe("client auth when server is offline", () => {
-  it("extends deadline and sends server_reconnecting when tunnel is down", async () => {
-    // Register then disconnect
-    const tunnelWs = await registerServer(relay, state);
-    state._websockets.delete(tunnelWs);
-    await relay.webSocketClose(tunnelWs, 1000, "gone", true);
+  it("tells the assistant dialer the host is away without retaining its bearer", async () => {
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now);
+    const host = await registerServer(relay, state);
+    state._websockets.delete(host);
+    await relay.webSocketClose(host, 1006, "network gone", false);
+    const bearer = "assistant.fixture.bearer";
+    const { clientId, clientWs } = await connectAndAuthClient(relay, state, {
+      deviceToken: bearer,
+    });
 
-    const clientId = "offline-client";
-    const clientWs = createMockWebSocket(["client", clientId]);
-    state._websockets.set(clientWs, ["client", clientId]);
-    await storage.put(`pending:${clientId}`, Date.now() + 5000);
-
-    await relay.webSocketMessage(
-      clientWs,
-      JSON.stringify({ type: "authenticate", token: "dev_tok" })
-    );
-
-    // Should get server_reconnecting
-    const lastMsg = getLastSent(clientWs) as any;
-    expect(lastMsg.type).toBe("server_reconnecting");
-
-    // Deadline should be extended (OFFLINE_WAIT_MS = 300000)
-    const newDeadline = storage._data.get(`pending:${clientId}`) as number;
-    expect(newDeadline).toBeGreaterThan(Date.now() + 200000);
+    expect(getSentMessages(clientWs)).toEqual([
+      {
+        type: "server_reconnecting",
+        serverDisconnectedAt: now,
+        serverName: "Test Server",
+      },
+    ]);
+    expect(await storage.get(`pending:${clientId}`)).toBe(now + 300_000);
+    expectNoStoredCredential(bearer);
   });
 });
 
@@ -866,17 +859,71 @@ describe("host replacement authorization", () => {
     expect(await storage.get("pending:replacement")).toBeDefined();
   });
 
-  it("requires reauthorization on a hot tunnel replacement too", async () => {
-    const tunnel = await registerServer(relay, state);
-    const { clientId, clientWs } = await connectAndAuthClient(relay, state);
+  it("closes viewers only when the replacement tunnel itself registers", async ({
+    onTestFinished,
+  }) => {
+    const oldHost = await registerServer(relay, state);
+    const admitted = await connectAndAuthClient(relay, state);
     await relay.webSocketMessage(
-      tunnel,
-      JSON.stringify({ type: "auth_response", clientId, allowed: true })
+      oldHost,
+      JSON.stringify({ type: "auth_response", clientId: admitted.clientId, allowed: true })
     );
-    state._websockets.delete(tunnel);
-    // Replacement occurs before the old close callback observes a disconnect.
-    await registerServer(relay, state);
-    expect(clientWs.close).toHaveBeenCalledWith(1012, "Host reconnected; authenticate again");
+
+    const host = createMockWebSocket([], null);
+    vi.stubGlobal(
+      "WebSocketPair",
+      class {
+        0 = createMockWebSocket([], null);
+        1 = host;
+      }
+    );
+    onTestFinished(() => vi.unstubAllGlobals());
+    // Node's Response cannot represent the Workers 101 upgrade.
+    vi.spyOn(relay, "upgraded").mockReturnValue(new Response(null));
+    const admission = {
+      accountId: TEST_ACCOUNT,
+      machineId: "0123456789abcdef",
+      role: "host",
+      ticketId: crypto.randomUUID(),
+      expiresAt: Date.now() + 60_000,
+    };
+    await relay.fetch(
+      new Request("https://relay.internal/tunnel", {
+        headers: { "x-deus-relay-admission": JSON.stringify(admission) },
+      })
+    );
+    expect(state.getWebSockets("tunnel")).toEqual([oldHost, host]);
+    expect(oldHost.close).toHaveBeenCalledWith(1000, "New tunnel connection");
+
+    const deviceToken = "pending-replacement-grant";
+    const pending = await connectAndAuthClient(relay, state, { deviceToken });
+    expect(getSentMessages(host)).toEqual([]);
+    await relay.webSocketMessage(
+      oldHost,
+      JSON.stringify({ type: "register", serverName: "Stale" })
+    );
+    expect(await storage.get("tunnelRegistered")).toBe(false);
+    expect(await storage.get("serverName")).toBe("Test Server");
+    expect(admitted.clientWs.close).not.toHaveBeenCalled();
+    expect(pending.clientWs.close).not.toHaveBeenCalled();
+    expectNoStoredCredential(deviceToken);
+
+    await relay.webSocketMessage(host, JSON.stringify({ type: "register" }));
+    expect(await storage.get("tunnelRegistered")).toBe(true);
+    for (const ws of [admitted.clientWs, pending.clientWs]) {
+      expect(ws.close).toHaveBeenCalledWith(1012, "Host reconnected; authenticate again");
+    }
+    // A peer can still send until it acknowledges our close.
+    await relay.webSocketMessage(
+      admitted.clientWs,
+      JSON.stringify({ type: "q:request", id: "late" })
+    );
+    await relay.webSocketMessage(
+      pending.clientWs,
+      JSON.stringify({ type: "authenticate", token: deviceToken })
+    );
+    expect(getSentMessages(host)).toEqual([{ type: "registered" }]);
+    expectNoStoredCredential(deviceToken);
   });
 });
 

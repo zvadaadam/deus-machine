@@ -15,7 +15,6 @@
 //   serverDisconnectedAt         — timestamp when server disconnected (persists until reconnect)
 //   serverName                   — server name for display to clients
 //   pending:<clientId>           — auth deadline timestamp for pending clients
-//   auth_token:<clientId>        — client's device token (stored for re-forwarding on reconnect)
 //   pending:pair:<pairId>       — deadline timestamp for one-shot pairing requests
 
 import { DurableObject } from "cloudflare:workers";
@@ -40,6 +39,8 @@ interface SocketIdentity {
   role: RelayRole;
 }
 
+/** Durable Object storage accepts at most 128 keys per delete. */
+const MAX_KEYS_PER_DELETE = 128;
 const AUTH_TIMEOUT_MS = 5_000;
 /** A consumed ticket is remembered past its expiry, so clock skew cannot reopen it. */
 const TICKET_RETENTION_MS = 60_000;
@@ -184,6 +185,8 @@ export class RelayDO extends DurableObject {
   // ---- WebSocket Handlers (Hibernation API) ----
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    // A viewer, tunnel or pairer we closed may still deliver queued frames. Ignore them.
+    if (ws.readyState !== 1) return;
     const tags = this.ctx.getTags(ws);
     const raw = typeof message === "string" ? message : new TextDecoder().decode(message);
 
@@ -217,7 +220,7 @@ export class RelayDO extends DurableObject {
     } else if (tags.includes("client")) {
       const clientId = tags.find((t) => t !== "client");
       if (!clientId) return;
-      await this.handleClientMessage(clientId, json);
+      await this.handleClientMessage(ws, clientId, json);
     }
   }
 
@@ -274,8 +277,7 @@ export class RelayDO extends DurableObject {
       }
     }
     if (expiredClientIds.length > 0) {
-      const keysToDelete = expiredClientIds.flatMap((id) => [`pending:${id}`, `auth_token:${id}`]);
-      await this.ctx.storage.delete(keysToDelete);
+      await this.deleteKeys(expiredClientIds.map((id) => `pending:${id}`));
       for (const clientId of expiredClientIds) {
         // A slow handshake says nothing about credential validity. Retry the
         // connection without sending auth_failed (which removes the pairing).
@@ -312,10 +314,17 @@ export class RelayDO extends DurableObject {
     // 1c. Forget consumed tickets once they could no longer be presented
     const consumed = await this.ctx.storage.list<number>({ prefix: "ticket:" });
     const expiredTickets = [...consumed].filter(([, expiry]) => expiry <= now).map(([key]) => key);
-    for (let i = 0; i < expiredTickets.length; i += 128) {
-      await this.ctx.storage.delete(expiredTickets.slice(i, i + 128));
-    }
+    await this.deleteKeys(expiredTickets);
     const remaining = [...consumed.values()].filter((expiry) => expiry > now);
+
+    // 1d. Delete credentials an earlier relay stored, one batch per alarm.
+    // Only the object itself can tell whether any remain, and every viewer, pairer and registered
+    // host schedules this alarm.
+    const legacyCredentials = await this.ctx.storage.list({
+      prefix: "auth_token:",
+      limit: MAX_KEYS_PER_DELETE,
+    });
+    if (legacyCredentials.size > 0) await this.ctx.storage.delete([...legacyCredentials.keys()]);
 
     // 2. Send heartbeat ping to server
     const tunnel = this.getTunnel();
@@ -395,43 +404,21 @@ export class RelayDO extends DurableObject {
     // Confirm registration to the WebSocket that sent it
     this.safeSend(ws, { type: "registered" });
 
-    // A replacement host has no virtual connection for an already-authorized
-    // viewer. Its token was deliberately discarded after the original auth.
-    // Redial and reauthorize instead of claiming the host is ready prematurely.
-    // This also handles a hot replacement without a preceding disconnect event.
+    this.closeViewersForNewHost();
+
+    // Start heartbeat
+    await this.scheduleNextAlarm();
+  }
+
+  private closeViewersForNewHost(): void {
+    // A viewer needs a fresh ticket and its own credential to reach the new host.
     for (const clientWs of this.ctx.getWebSockets("client")) {
-      const clientId = this.ctx.getTags(clientWs).find((tag) => tag !== "client");
-      if (!clientId || (await this.ctx.storage.get<number>(`pending:${clientId}`)) !== undefined)
-        continue;
-      // Block data immediately, before the socket's close callback arrives.
-      await this.ctx.storage.put(`pending:${clientId}`, Date.now() + AUTH_TIMEOUT_MS);
       try {
         clientWs.close(1012, "Host reconnected; authenticate again");
       } catch (error) {
         console.error("relay: failed to close client for reauthorization", error);
       }
     }
-
-    // Always re-forward pending clients' stored auth tokens to the new tunnel.
-    // This handles both reconnection and tunnel replacement
-    // (where serverDisconnectedAt was never set because the old tunnel's close
-    // handler saw the new tunnel already existed).
-    const pendingClients = await this.getPendingClients();
-    for (const [pendingClientId] of pendingClients) {
-      const storedAuthToken = await this.ctx.storage.get<string>(`auth_token:${pendingClientId}`);
-      const accountId = this.accountOf(this.findClientWs(pendingClientId));
-      if (storedAuthToken && accountId) {
-        this.safeSend(ws, {
-          type: "client_connected",
-          clientId: pendingClientId,
-          deviceToken: storedAuthToken,
-          accountId,
-        });
-      }
-    }
-
-    // Start heartbeat
-    await this.scheduleNextAlarm();
   }
 
   // ---- Auth Delegation ----
@@ -442,7 +429,6 @@ export class RelayDO extends DurableObject {
     reason?: string
   ): Promise<void> {
     await this.ctx.storage.delete(`pending:${clientId}`);
-    await this.ctx.storage.delete(`auth_token:${clientId}`);
 
     if (allowed) {
       this.activateClient(clientId);
@@ -472,7 +458,7 @@ export class RelayDO extends DurableObject {
 
   // ---- Client Message Handling ----
 
-  private async handleClientMessage(clientId: string, json: unknown): Promise<void> {
+  private async handleClientMessage(ws: WebSocket, clientId: string, json: unknown): Promise<void> {
     const isPending = await this.ctx.storage.get<number>(`pending:${clientId}`);
 
     // An offline host cannot answer the end-to-end probe. Keep the waiting
@@ -491,8 +477,7 @@ export class RelayDO extends DurableObject {
         !this.getTunnel() ||
         !(await this.ctx.storage.get<boolean>("tunnelRegistered"))
       ) {
-        const clientWs = this.findClientWs(clientId);
-        if (clientWs) this.safeSend(clientWs, { type: "pong", id: json.id });
+        this.safeSend(ws, { type: "pong", id: json.id });
         return;
       }
     }
@@ -502,40 +487,26 @@ export class RelayDO extends DurableObject {
       const authResult = clientAuthFrameSchema.safeParse(json);
       if (!authResult.success) return;
 
-      const { token } = authResult.data;
-      // Store the token so we can re-forward it if the server reconnects
-      await this.ctx.storage.put(`auth_token:${clientId}`, token);
-
       const tunnel = this.getTunnel();
-      const isRegistered = await this.ctx.storage.get<boolean>("tunnelRegistered");
-      const accountId = this.accountOf(this.findClientWs(clientId));
-      if (tunnel && isRegistered && accountId) {
-        this.safeSend(tunnel, {
-          type: "client_connected",
-          clientId,
-          deviceToken: token,
-          accountId,
-        });
-      } else if (tunnel) {
-        // Tunnel exists but not yet registered — replacement in progress.
-        // Leave client pending; handleRegister will re-forward the stored
-        // auth token once the new tunnel completes registration.
-        // The auth timeout alarm will reject naturally if registration never comes.
-      } else {
-        // Server tunnel is down — keep client waiting for server to return.
-        // Suspend the short auth deadline; handleRegister will re-forward the
-        // stored auth token when the server reconnects.
-        const serverDisconnectedAt = await this.ctx.storage.get<number>("serverDisconnectedAt");
-        await this.ctx.storage.put(`pending:${clientId}`, Date.now() + OFFLINE_WAIT_MS);
-        const clientWs = this.findClientWs(clientId);
-        if (clientWs) {
-          const serverName = await this.ctx.storage.get<string>("serverName");
-          this.safeSend(clientWs, {
-            type: "server_reconnecting",
-            serverDisconnectedAt: serverDisconnectedAt ?? Date.now(),
-            serverName: serverName || null,
+      if (tunnel) {
+        const accountId = this.accountOf(ws);
+        if (accountId && (await this.ctx.storage.get<boolean>("tunnelRegistered"))) {
+          this.safeSend(tunnel, {
+            type: "client_connected",
+            clientId,
+            deviceToken: authResult.data.token,
+            accountId,
           });
         }
+      } else {
+        const serverDisconnectedAt = await this.ctx.storage.get<number>("serverDisconnectedAt");
+        await this.ctx.storage.put(`pending:${clientId}`, Date.now() + OFFLINE_WAIT_MS);
+        const serverName = await this.ctx.storage.get<string>("serverName");
+        this.safeSend(ws, {
+          type: "server_reconnecting",
+          serverDisconnectedAt: serverDisconnectedAt ?? Date.now(),
+          serverName: serverName || null,
+        });
       }
       return;
     }
@@ -586,7 +557,6 @@ export class RelayDO extends DurableObject {
 
   private async handleClientDisconnect(clientId: string): Promise<void> {
     await this.ctx.storage.delete(`pending:${clientId}`);
-    await this.ctx.storage.delete(`auth_token:${clientId}`);
 
     const tunnel = this.getTunnel();
     if (tunnel) {
@@ -667,6 +637,12 @@ export class RelayDO extends DurableObject {
   }
 
   // ---- Helpers ----
+
+  private async deleteKeys(keys: string[]): Promise<void> {
+    for (let i = 0; i < keys.length; i += MAX_KEYS_PER_DELETE) {
+      await this.ctx.storage.delete(keys.slice(i, i + MAX_KEYS_PER_DELETE));
+    }
+  }
 
   /** Get pending client auth entries, filtering out pair entries that share the prefix. */
   private async getPendingClients(): Promise<Map<string, number>> {
