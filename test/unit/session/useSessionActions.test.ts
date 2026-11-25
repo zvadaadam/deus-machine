@@ -352,20 +352,28 @@ describe("prompt delivery", () => {
     {
       stage: "call",
       failure: new OpError("Agent server is disconnected"),
-      serverStatus: null,
+      serverStatus: "error",
+      notices: 0,
+    },
+    {
+      stage: "call",
+      failure: new OpError(
+        "The agent is still working — wait for the current turn to finish.",
+        409
+      ),
+      serverStatus: "working",
       notices: 0,
     },
   ] as const)(
-    "reconciles the sidebar and reports connection trouble by kind ($failure.kind)",
+    "keeps the host's $serverStatus status after a send fails with $failure.message",
     async ({ stage, failure, serverStatus, notices }) => {
       const { useSendMessage } = await import("@/features/session/api/session.queries");
       const client = state.queryClient!;
       const active = queryKeys.workspaces.byRepo("active");
       const archived = queryKeys.workspaces.byRepo("archived");
-      const initial = [{ repo_id: "r1", workspaces: [workspaceWithStatus("idle")] }];
-      client.setQueryData(active, initial);
+      client.setQueryData(active, [{ repo_id: "r1", workspaces: [workspaceWithStatus("idle")] }]);
       client.setQueryData(archived, []);
-      const updated = serverStatus && [
+      const updated = [
         {
           repo_id: "r1",
           workspaces: [workspaceWithStatus(serverStatus), { id: "another-workspace" }],
@@ -373,11 +381,11 @@ describe("prompt delivery", () => {
       ];
       state.isConnected.mockReturnValue(stage === "call");
       state[stage].mockImplementationOnce(() => {
-        if (updated) client.setQueryData(active, updated);
+        client.setQueryData(active, updated);
         throw failure;
       });
       await expect(useSendMessage().mutateAsync(prompt)).rejects.toBe(failure);
-      expect(client.getQueryData(active)).toEqual(updated ?? initial);
+      expect(client.getQueryData(active)).toEqual(updated);
       expect(client.getQueryState(active)?.isInvalidated).toBe(true);
       expect(client.getQueryState(archived)?.isInvalidated).toBe(true);
       expect(state.call).toHaveBeenCalledTimes(stage === "call" ? 1 : 0);

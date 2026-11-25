@@ -345,6 +345,7 @@ progress channel: the desktop, the web app and a phone all follow it.
   workspace, from what is on this computer, and records why
   (`init_fetch_issue`: `offline`, `auth` or `failed`). A project with no remote
   named `origin` records `no_origin` and the start line says "No origin to check".
+  `no_origin` needs Git 2.30 or newer. Older Git reports a missing origin as a failed fetch.
 - Once the checkout exists, the first chat can take its message while the project's
   setup script runs. A local turn is told the running command, log and status
   file, or a failure's quoted reason and last log lines. After a repair the

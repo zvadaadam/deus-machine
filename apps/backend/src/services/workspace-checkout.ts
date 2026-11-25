@@ -141,10 +141,10 @@ async function refreshSource(
   const cwd = ctx.repoRootPath;
   let issue: InitFetchIssue | null = null;
   try {
-    await runGit(["config", "--get", "remote.origin.url"], { cwd, signal });
+    await runGit(["remote", "get-url", "origin"], { cwd, signal });
   } catch (error) {
     signal.throwIfAborted();
-    issue = error instanceof GitError && error.code === 1 ? "no_origin" : "failed";
+    issue = error instanceof GitError && error.code === 2 ? "no_origin" : "failed";
     if (issue === "failed") {
       console.warn(
         `[WORKSPACE] Could not read origin: ${getErrorMessage(error).replace(/[\r\n]+/g, " ")}`

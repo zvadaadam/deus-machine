@@ -320,7 +320,11 @@ export function useSendMessage() {
       }
       if (optimistic) {
         dropOptimisticMessage(queryClient, sessionId, optimistic.turnId);
-        if (kind !== "unknown-outcome" && optimistic.previousStatus)
+        const directFailure =
+          kind === undefined &&
+          (!!getDirectSession(sessionId, queryClient) ||
+            isDirectSessionCached(queryClient, sessionId));
+        if ((kind === "unavailable" || directFailure) && optimistic.previousStatus)
           patchWorkspaceSessionStatus(queryClient, sessionId, optimistic.previousStatus, "working");
       }
       void queryClient.invalidateQueries({ queryKey: ["workspaces", "by-repo"] });
