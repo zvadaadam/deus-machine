@@ -9254,13 +9254,33 @@
                       "id": "qtQI5",
                       "name": "Bubble",
                       "width": 260,
-                      "fill": "#EFEFED",
+                      "fill": {
+                        "type": "gradient",
+                        "gradientType": "linear",
+                        "rotation": 0,
+                        "size": {
+                          "height": 1
+                        },
+                        "colors": [
+                          {
+                            "color": "$user-bubble",
+                            "position": 0
+                          },
+                          {
+                            "color": "$user-bubble-top",
+                            "position": 1
+                          }
+                        ]
+                      },
                       "cornerRadius": "$radius-xl",
                       "layout": "vertical",
                       "padding": [
                         8,
                         12
                       ],
+                      "stroke": "$user-bubble-border",
+                      "strokeWidth": 1,
+                      "strokeAlignment": "inner",
                       "children": [
                         {
                           "type": "text",
@@ -19893,13 +19913,33 @@
           },
           "reusable": true,
           "width": 360,
-          "fill": "#1A1A1A",
+          "fill": {
+            "type": "gradient",
+            "gradientType": "linear",
+            "rotation": 0,
+            "size": {
+              "height": 1
+            },
+            "colors": [
+              {
+                "color": "$user-bubble",
+                "position": 0
+              },
+              {
+                "color": "$user-bubble-top",
+                "position": 1
+              }
+            ]
+          },
           "cornerRadius": "$radius-xl",
           "layout": "vertical",
           "padding": [
             8,
             12
           ],
+          "stroke": "$user-bubble-border",
+          "strokeWidth": 1,
+          "strokeAlignment": "inner",
           "children": [
             {
               "type": "text",
@@ -21488,6 +21528,53 @@
           "width": 440,
           "content": "WorkspaceStartGroup · ready — under the first message of the chat the workspace started with (this client, until reload), or first when nothing is said yet. Steps fold under the line; a warning (started without the remote's latest, setup script failed) stays in view.",
           "lineHeight": 1.5,
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-2xs",
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "Ag7Bb",
+          "x": 32,
+          "y": 830,
+          "name": "DS/AgentBubble",
+          "theme": {
+            "mode": "dark"
+          },
+          "reusable": true,
+          "width": 360,
+          "fill": "$agent-bubble",
+          "cornerRadius": "$radius-xl",
+          "layout": "vertical",
+          "padding": [
+            8,
+            12
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "Ag7Bt",
+              "name": "Text",
+              "fill": "$text-primary",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Sidebar rows are single-line now, and the git lifecycle lives in the icon.",
+              "lineHeight": 1.5,
+              "fontFamily": "$font-sans",
+              "fontSize": "$text-base",
+              "fontWeight": "normal",
+              "letterSpacing": -0.14
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "Ag7Bc",
+          "x": 32,
+          "y": 896,
+          "name": "agent bubble · bg-agent-bubble",
+          "fill": "$text-disabled",
+          "content": "agent bubble (chat_view bubbles) · bg-agent-bubble, rounded-xl px-3 py-[7px] · user bubble: --user-bubble → --user-bubble-top, inset ring --user-bubble-border",
           "fontFamily": "$font-sans",
           "fontSize": "$text-2xs",
           "fontWeight": "normal"
@@ -50261,13 +50348,33 @@
                           "id": "OTJ8J",
                           "name": "Bubble",
                           "width": 340,
-                          "fill": "#EFEFED",
+                          "fill": {
+                            "type": "gradient",
+                            "gradientType": "linear",
+                            "rotation": 0,
+                            "size": {
+                              "height": 1
+                            },
+                            "colors": [
+                              {
+                                "color": "$user-bubble",
+                                "position": 0
+                              },
+                              {
+                                "color": "$user-bubble-top",
+                                "position": 1
+                              }
+                            ]
+                          },
                           "cornerRadius": "$radius-xl",
                           "layout": "vertical",
                           "padding": [
                             8,
                             12
                           ],
+                          "stroke": "$user-bubble-border",
+                          "strokeWidth": 1,
+                          "strokeAlignment": "inner",
                           "children": [
                             {
                               "type": "text",
@@ -200866,6 +200973,74 @@
     "onboarding-contrast": {
       "type": "color",
       "value": "#000000"
+    },
+    "user-bubble": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#F3E6ED",
+          "theme": {
+            "mode": "light"
+          }
+        },
+        {
+          "value": "#362E33",
+          "theme": {
+            "mode": "dark"
+          }
+        }
+      ]
+    },
+    "user-bubble-top": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#FBF5F8",
+          "theme": {
+            "mode": "light"
+          }
+        },
+        {
+          "value": "#43393E",
+          "theme": {
+            "mode": "dark"
+          }
+        }
+      ]
+    },
+    "user-bubble-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#C174A221",
+          "theme": {
+            "mode": "light"
+          }
+        },
+        {
+          "value": "#E0A2C121",
+          "theme": {
+            "mode": "dark"
+          }
+        }
+      ]
+    },
+    "agent-bubble": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#ECECEA",
+          "theme": {
+            "mode": "light"
+          }
+        },
+        {
+          "value": "#171717",
+          "theme": {
+            "mode": "dark"
+          }
+        }
+      ]
     }
   },
   "fileToken": "9e0461b3-d9a1-4dc2-8634-76689791a7ed"

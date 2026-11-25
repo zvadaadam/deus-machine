@@ -100,12 +100,45 @@ it.each<[string, Part[], RowShape, RowShape, string[]]>([
     ["answer"],
   ],
   ["a closing send", [w, s], [["work"], "send"], [["work"], "send"], ["send"]],
+  ["closing send resets prior prose", [n, s], ["note", "send"], ["send"], ["send"]],
   [
-    "closing send and text",
+    "consecutive closing sends keep only the latest send",
+    [w, send("first-send", "First"), send("second-send", "Second")],
+    [["work"], "first-send", "second-send"],
+    [["work"], "first-send", "second-send"],
+    ["second-send"],
+  ],
+  [
+    "closing send and different final text",
     [w, s, a],
     [["work"], "send", "answer"],
     [["work"], "send"],
-    ["send", "answer"],
+    ["answer"],
+  ],
+  [
+    "closing send echoed by two native paragraphs keeps only the send",
+    [w, send("echo-send", "note\n\nanswer"), n, reasoning, a],
+    [["work"], "echo-send", "note", ["think"], "answer"],
+    [["work"], "echo-send", ["note", "think", "answer"]],
+    ["echo-send"],
+  ],
+  [
+    "closing send echoed by final text keeps only the send",
+    [
+      w,
+      send("echo-send", "All done."),
+      { ...message, type: "text", id: "echo-text", text: "  All done.\n", state: "done" },
+    ],
+    [["work"], "echo-send", "echo-text"],
+    [["work"], "echo-send"],
+    ["echo-send"],
+  ],
+  [
+    "text split by reasoning keeps both passages at turn end",
+    [w, n, reasoning, a],
+    [["work"], "note", ["think"], "answer"],
+    [["work", "note", "think", "answer"]],
+    ["note", "answer"],
   ],
   [
     "a send before parallel calls",
@@ -164,10 +197,10 @@ it.each<[string, Part[], RowShape, RowShape, string[]]>([
     ["answer", "waiting-plan"],
   ],
   [
-    "a failed tool followed by an answer",
-    [failedCommand, a],
-    ["failed-command", "answer"],
-    ["failed-command"],
+    "a failed tool stays inside activity without splitting work",
+    [w, failedCommand, b, a],
+    [["work", "failed-command", "B"], "answer"],
+    [["work", "failed-command", "B", "answer"]],
     ["answer"],
   ],
   ["an answered card", [answered, a], ["answered", "answer"], ["answered"], ["answer"]],
@@ -237,7 +270,7 @@ it.each([question, waitingPlan, recording])("keeps a cancelled $id as a card bou
   expect(staysAtEnd([cancelled])).toEqual(new Set([part.id]));
 });
 
-it("recognizes media in stored chats and keeps a failed tool as a full-run card", () => {
+it("recognizes media in stored chats and keeps a dismissed plan as a card boundary", () => {
   for (const part of [
     tool("old", {
       toolName: "mcp__deus__recording_stop",
@@ -298,7 +331,7 @@ it("ends every steer-split group together and copies the kept words of each thro
   }
 });
 
-it("copies the closing sends and text and makes cards from links even in a folded send", () => {
+it("copies the last user-facing message and makes cards from links even in a folded send", () => {
   const link = send("resources", "See [the notes](notes.md) and http://localhost:5173.");
   const parts = [link, w, send("update"), a];
   const row: Message = {
@@ -309,8 +342,30 @@ it("copies the closing sends and text and makes cards from links even in a folde
     sent_at: null,
     parts,
   };
-  expect(getTurnFooterData([[row]]).copyText).toBe("update\n\nanswer");
+  expect(getTurnFooterData([[row]]).copyText).toBe("answer");
   expect(getTurnFooterData([[{ ...row, parts: [link, w] }]]).copyText).toContain("[the notes]");
+  expect(getTurnFooterData([[{ ...row, parts: [w, n, reasoning, a] }]]).copyText).toBe(
+    "note\n\nanswer"
+  );
+  expect(
+    getTurnFooterData([
+      [
+        {
+          ...row,
+          parts: [
+            w,
+            send("echo-send", "Ready."),
+            reasoning,
+            { ...message, type: "text", id: "echo-text", text: " Ready. ", state: "done" },
+          ],
+        },
+      ],
+    ]).copyText
+  ).toBe("Ready.");
+  expect(
+    getTurnFooterData([[{ ...row, parts: [send("echo", "note\n\nanswer"), n, reasoning, a] }]])
+      .copyText
+  ).toBe("note\n\nanswer");
   expect(extractChatResources({ parts, isComplete: true }).map(({ id }) => id)).toEqual([
     "file:notes.md",
     "website:http://localhost:5173/",

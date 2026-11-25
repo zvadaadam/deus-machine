@@ -11,6 +11,16 @@ this checkout; start a backend yourself for a runner (`dev:web` below) with
 
 ## Test Files
 
+### Transcript scrolling
+
+`chat-scroll.browser.mjs` bundles the transcript and styles in memory and drives
+them in Chromium with fixture messages. It covers history anchoring, disclosure
+position, and live follow without starting a backend.
+
+```sh
+NODE_ENV=test node test/e2e/chat-scroll.browser.mjs
+```
+
 ### Runtime client network and relay tests
 
 `runtime-client-network.runtime.mjs` starts the real backend and Vite app with an

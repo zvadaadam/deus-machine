@@ -22,7 +22,13 @@ const tellUser = tool(
     "Until you finish, only what you send appears to them; your final reply appears by itself, " +
     "so do not send it with this tool. Sub-agents report to their caller instead of calling it. " +
     "To message another chat, use `send_message`.",
-  { message: z.string().regex(/\S/, "Write a message for the person.") },
+  {
+    message: z
+      .string()
+      .max(100_000)
+      .regex(/\S/, "Write a message for the person.")
+      .describe("Complete Markdown message to show the person while you work."),
+  },
   async () => ({ content: [{ type: "text", text: "Message sent." }] }),
   { readOnly: true }
 );
