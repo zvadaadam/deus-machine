@@ -179,7 +179,7 @@ describe("native replay through the published engine, SQLite and desktop fold", 
       client.onEvent((event) => handler.handle(event));
       client.onEventGap((gap) => {
         gaps.push(gap);
-        handler.handleEventGap(gap);
+        void handler.handleEventGap(gap, (turnId) => client.cancelTurn(gap.sessionId, turnId));
       });
       try {
         persistSessionStatus(SESSION, "working");
@@ -242,7 +242,7 @@ describe("native replay through the published engine, SQLite and desktop fold", 
     }
   );
 
-  it("keeps Stop available on unconfirmed loss and ignores a late reply after a successor starts", () => {
+  it("keeps Stop available on unconfirmed loss and ignores a late reply after a successor starts", async () => {
     claimTurn(SESSION, "lost");
     admitTurn(SESSION, "lost");
     const gap = {
@@ -250,18 +250,22 @@ describe("native replay through the published engine, SQLite and desktop fold", 
       reason: "replay_failed" as const,
       error: new EventGapError("test loss"),
     };
-    expect(handler.handleEventGap(gap)).toBe("lost");
-    handler.settleEventGap(SESSION, "lost", false);
+    const cancel = vi.fn(async (turnId: string) => ({ outcome: "unconfirmed" as const, turnId }));
+    await handler.handleEventGap(gap, cancel);
+    expect(cancel.mock.calls[0]?.[0]).toBe("lost");
     expect(row()).toMatchObject({
       status: "working",
       error_message: expect.stringContaining("not confirmed it stopped"),
     });
     expect(claimTurn(SESSION, "unsafe")).toBe(false);
-    handler.settleEventGap(SESSION, "lost", true);
+    const reply = Promise.withResolvers<{ outcome: "no_active_turn" }>();
+    const late = handler.handleEventGap(gap, () => reply.promise);
+    await handler.handleEventGap(gap, async () => ({ outcome: "no_active_turn" }));
     expect(row()).toMatchObject({ status: "error" });
     expect(claimTurn(SESSION, "new")).toBe(true);
     persistSessionStatus(SESSION, "working");
-    handler.settleEventGap(SESSION, "lost", true);
+    reply.resolve({ outcome: "no_active_turn" });
+    await late;
     expect(holdingTurn(SESSION)?.turnId).toBe("new");
     expect(row()).toMatchObject({ status: "working", error_message: null });
     // The native cancel can finish before the old replay succeeds. Preserve
@@ -325,21 +329,30 @@ describe("native replay through the published engine, SQLite and desktop fold", 
     });
     expect(row()).toMatchObject({ status: "error", error_message: "New failure" });
     claimTurn(SESSION, "pending");
-    expect(handler.handleEventGap({ ...gap, reason: "server_restarted" })).toBeUndefined();
+    cancel.mockClear();
+    await handler.handleEventGap({ ...gap, reason: "server_restarted" }, cancel);
+    expect(cancel.mock.calls[0]?.[0]).toBeUndefined();
     expect(holdingTurn(SESSION)?.turnId).toBe("pending");
   });
 
   it.each(["server_restarted", "session_missing"] as const)(
     "settles an already-damaged turn when %s proves it gone",
-    (reason) => {
+    async (reason) => {
       claimTurn(SESSION, "lost");
       admitTurn(SESSION, "lost");
-      handler.handleEventGap({
-        sessionId: SESSION,
-        reason: "evicted",
-        error: new EventGapError("test loss"),
-      });
-      handler.handleEventGap({ sessionId: SESSION, reason, error: new EventGapError("gone") });
+      const cancel = vi.fn(() => undefined);
+      await handler.handleEventGap(
+        {
+          sessionId: SESSION,
+          reason: "evicted",
+          error: new EventGapError("test loss"),
+        },
+        cancel
+      );
+      await handler.handleEventGap(
+        { sessionId: SESSION, reason, error: new EventGapError("gone") },
+        cancel
+      );
       expect(holdingTurn(SESSION)?.turnId).toBeUndefined();
       expect(row()).toMatchObject({
         status: "error",
