@@ -1,10 +1,11 @@
-import { useMemo } from "react";
 import { match } from "ts-pattern";
 import { Wrench } from "lucide-react";
 import { BaseToolRenderer } from "../components";
+import { ToolInput, ToolInputSummary } from "../components/ToolInput";
 import { TOOL_ICON_CLS } from "../toolColors";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
+import { renderToolImage } from "./shared";
 
 type TextContentBlock = {
   type: "text";
@@ -58,48 +59,13 @@ function ContentBlockRenderer({ block }: { block: ContentBlock }) {
         {textBlock.text}
       </div>
     ))
-    .with({ type: "image" }, (imageBlock) => (
-      <img
-        src={`data:${imageBlock.source.media_type};base64,${imageBlock.source.data}`}
-        alt="Tool output"
-        className="border-border/40 max-w-full rounded-lg border shadow-sm"
-      />
-    ))
+    .with({ type: "image" }, ({ source }) =>
+      renderToolImage({ data: source.data, mediaType: source.media_type }, "Tool output")
+    )
     .exhaustive();
 }
 
-/** Bounded preview of a non-primitive input value — never serializes the
- *  whole payload (codex apply_patch inputs can be megabytes). */
-function boundedPreview(value: unknown): string {
-  if (value == null) return "";
-  if (Array.isArray(value)) return `[${value.length} item${value.length === 1 ? "" : "s"}]`;
-  if (typeof value === "object") {
-    const keys = Object.keys(value);
-    return `{${keys.slice(0, 3).join(", ")}${keys.length > 3 ? ", …" : ""}}`;
-  }
-  return String(value);
-}
-
 export function DefaultToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
-  // Prefer the first primitive input value for the summary; objects/arrays
-  // get a bounded structural preview (e.g. codex apply_patch's `changes` →
-  // "[2 items]") — never a full serialization, memoized across renders.
-  const input = toolUse.input || {};
-  const firstInputValue = useMemo(() => {
-    const firstPrimitive = Object.values(input).find(
-      (value) =>
-        typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-    );
-    const firstKey = Object.keys(input)[0];
-    const raw =
-      firstPrimitive !== undefined
-        ? String(firstPrimitive)
-        : firstKey
-          ? boundedPreview(input[firstKey])
-          : "";
-    return raw.substring(0, 40);
-  }, [input]);
-
   return (
     <BaseToolRenderer
       toolName={toolUse.name || "Unknown Tool"}
@@ -108,13 +74,7 @@ export function DefaultToolRenderer({ toolUse, toolResult, isLoading }: ToolRend
       toolResult={toolResult}
       isLoading={isLoading}
       showContentOnError
-      renderSummary={() =>
-        firstInputValue ? (
-          <span className={cn("text-muted-foreground truncate text-sm", "font-mono")}>
-            {firstInputValue}
-          </span>
-        ) : undefined
-      }
+      renderSummary={() => <ToolInputSummary input={toolUse.input} />}
       renderContent={({ toolUse: currentToolUse, toolResult: currentToolResult }) => {
         const contentBlocks = isContentBlockArray(currentToolResult?.content)
           ? currentToolResult.content
@@ -122,12 +82,7 @@ export function DefaultToolRenderer({ toolUse, toolResult, isLoading }: ToolRend
 
         return (
           <div className="space-y-3 px-2 pb-2">
-            <div>
-              <div className="text-muted-foreground mb-1 text-xs font-semibold">Input:</div>
-              <pre className="bg-muted/60 border-border/60 chat-scroll-contain max-h-[200px] overflow-x-auto overflow-y-auto rounded-lg border p-3 font-mono text-xs">
-                {JSON.stringify(currentToolUse.input, null, 2)}
-              </pre>
-            </div>
+            <ToolInput input={currentToolUse.input} />
 
             {currentToolResult && (
               <div>

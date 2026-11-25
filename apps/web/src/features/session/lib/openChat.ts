@@ -17,9 +17,28 @@ export interface OpenChatRequest {
 interface OpenChatState {
   /** The chat each workspace's tab view is asked to show, until it takes the request. */
   requested: Record<string, OpenChatRequest>;
+  transcriptFolds: Record<string, boolean | undefined>;
 }
 
-export const useOpenChatStore = create<OpenChatState>(() => ({ requested: {} }));
+export const useOpenChatStore = create<OpenChatState>(() => ({
+  requested: {},
+  transcriptFolds: {},
+}));
+
+export function useTranscriptFold(
+  sessionId: string | undefined,
+  kind: "worked" | "activity" | "thought" | "agent",
+  id: string | undefined
+) {
+  const key = JSON.stringify([sessionId, kind, id]);
+  const expanded = useOpenChatStore((state) => state.transcriptFolds[key]);
+  function toggle() {
+    useOpenChatStore.setState(({ transcriptFolds }) => ({
+      transcriptFolds: { ...transcriptFolds, [key]: !transcriptFolds[key] },
+    }));
+  }
+  return [expanded, toggle] as const;
+}
 
 let next = 0;
 const OPEN_CHAT_REQUEST_MAX_AGE_MS = 10_000;

@@ -3,6 +3,7 @@ import type { Part, UnknownPart } from "@shared/protocol-types";
 import type { TurnBlock } from "../../lib/assistantTurnContent";
 import { extractChatResources } from "../../lib/chatResources";
 import { useSession } from "../../context";
+import { useTranscriptFold } from "../../lib/openChat";
 import { ActivityButton, TurnStatsHeader } from "../TurnStatsHeader";
 import { PartBlock } from "./PartBlock";
 import { ChatResourceCards } from "./ChatResourceCards";
@@ -29,7 +30,11 @@ export const PartsRenderer = memo(function PartsRenderer({
   const { workspacePath } = useSession();
   const id = useId();
   const worked = useRef<HTMLButtonElement>(null);
-  const [open, setOpen] = useState(false);
+  const [open = false, toggle] = useTranscriptFold(
+    parts[0]?.sessionId,
+    "worked",
+    parts[0]?.messageId
+  );
   const visibleIds = bubbles && !open ? stays : null;
   const resources = useMemo(
     () =>
@@ -63,7 +68,7 @@ export const PartsRenderer = memo(function PartsRenderer({
               buttonRef={worked}
               controls={id}
               expanded={open}
-              onToggle={() => setOpen(!open)}
+              onToggle={toggle}
               label={workedLabel}
             />
           </div>
@@ -95,7 +100,7 @@ export const PartsRenderer = memo(function PartsRenderer({
                     Typing…
                   </p>
                 ) : row.type === "activity" ? (
-                  <TurnStatsHeader parts={row.parts} streaming={ended === false} />
+                  <TurnStatsHeader rowId={row.id} parts={row.parts} streaming={ended === false} />
                 ) : (
                   <PartBlock
                     part={row}

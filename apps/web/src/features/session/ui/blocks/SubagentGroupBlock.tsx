@@ -8,7 +8,7 @@
  */
 
 import { Collapse } from "@/components/ui/collapse";
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { ChevronRight, Cpu, Loader2 } from "lucide-react";
 import NumberFlow from "@number-flow/react";
 import { AnimatePresence } from "framer-motion";
@@ -19,6 +19,7 @@ import type { SubagentMetadata } from "@shared/protocol-types";
 
 import { SubagentMessageList } from "./SubagentMessageList";
 import { useSession, SessionProvider } from "../../context";
+import { useTranscriptFold } from "../../lib/openChat";
 
 interface SubagentGroupBlockProps {
   toolUse: ToolUseBlock;
@@ -49,7 +50,11 @@ export function SubagentGroupBlock({
   const isRunning = sessionStatus === "working" && !toolResult;
   const isError = toolResult?.is_error;
 
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded = false, toggle] = useTranscriptFold(
+    childMessages[0]?.session_id,
+    "agent",
+    toolUse.id
+  );
 
   // Count tool parts across child messages
   const toolCount = useMemo(() => {
@@ -66,7 +71,7 @@ export function SubagentGroupBlock({
     <div className="flex flex-col gap-0.5">
       <button
         type="button"
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={toggle}
         className={cn(
           "group flex items-center gap-2 px-2 py-1.5 text-sm",
           "w-full cursor-pointer text-left",

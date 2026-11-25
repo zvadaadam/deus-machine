@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SessionProvider } from "@/features/session/context";
 import type { ToolPart } from "@shared/protocol-types";
-import { toToolUseBlocks } from "@/features/session/ui/blocks/ToolPartBlock";
+import { ToolPartBlock, toToolUseBlocks } from "@/features/session/ui/blocks/ToolPartBlock";
 import { toolRegistry } from "@/features/session/ui/tools/ToolRegistry";
 import {
   BashToolRenderer,
@@ -208,6 +208,36 @@ describe("a tool's own card and the fields an unregistered tool carries", () => 
 });
 
 describe("a card's line counts", () => {
+  it("displays a Read image immediately without base64 text or a line count", () => {
+    const data =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC";
+    const read = part({
+      toolName: "Read",
+      kind: "read",
+      state: {
+        status: "completed",
+        input: { file_path: "pixel.png" },
+        output: "",
+        content: [
+          { type: "text", text: "[Image: source: pixel.png]" },
+          { type: "image", mimeType: "image/png", data },
+        ],
+        time: { start: 1, end: 2 },
+      },
+    });
+    const html = renderToStaticMarkup(
+      createElement(SessionProvider, {
+        sessionStatus: "idle",
+        subagentMessages: new Map(),
+        children: createElement(ToolPartBlock, { part: read }),
+      })
+    );
+    expect(html).toContain(`src="data:image/png;base64,${data}"`);
+    const text = html.replace(/<[^>]*>/g, "");
+    expect(text).not.toContain(data);
+    expect(text).not.toMatch(/\d+ lines/);
+  });
+
   it("shows +3 for a three-line write ending in a newline", () => {
     const html = renderToStaticMarkup(
       createElement(SessionProvider, {
@@ -220,6 +250,7 @@ describe("a card's line counts", () => {
             name: "Write",
             input: { file_path: "small.txt", content: "start\ncolor=blue\nend\n" },
           },
+          toolResult: { type: "tool_result", tool_use_id: "create", content: "File created" },
         }),
       })
     );

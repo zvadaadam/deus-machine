@@ -8,7 +8,7 @@
 
 import { Collapse } from "@/components/ui/collapse";
 import type { ReasoningPart } from "@shared/protocol-types";
-import { useState } from "react";
+import { useTranscriptFold } from "../../lib/openChat";
 import { Brain, ChevronRight } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
@@ -22,7 +22,7 @@ interface ThinkingBlockProps {
 }
 
 export function ThinkingBlock({ part, durationSec }: ThinkingBlockProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded = false, toggle] = useTranscriptFold(part.sessionId, "thought", part.id);
 
   const durationLabel = durationSec != null && durationSec > 0 ? `for ${durationSec}s` : undefined;
 
@@ -52,9 +52,7 @@ export function ThinkingBlock({ part, durationSec }: ThinkingBlockProps) {
       {/* Header — collapsed: Brain icon, "Thought for Xs", chevron on hover */}
       <button
         type="button"
-        onClick={() => {
-          setIsExpanded(!isExpanded);
-        }}
+        onClick={toggle}
         aria-expanded={isExpanded}
         aria-label="Toggle thinking details"
         className={cn(

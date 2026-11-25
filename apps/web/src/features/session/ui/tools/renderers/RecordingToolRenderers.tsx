@@ -157,18 +157,16 @@ export function RecordingStartToolRenderer({ toolUse, toolResult, isLoading }: T
 
 export function RecordingStopToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const result = parseResultJson(toolResult);
-  const outputPath = result?.outputPath as string | undefined;
+  const outputPath = typeof result?.outputPath === "string" ? result.outputPath : undefined;
   const thumbnailPath = result?.thumbnailPath as string | undefined;
   const duration = result?.duration as number | undefined;
   const chapters = (result?.chapters as MappedChapter[] | undefined) ?? [];
   const events = (result?.events as MappedEvent[] | undefined) ?? [];
   const eventCount = (result?.eventCount as number | undefined) ?? events.length;
 
-  const hasVideo = !!outputPath && outputPath.length > 0;
   const [modalOpen, setModalOpen] = useState(false);
 
-  // Loading / no result
-  if (isLoading || !toolResult) {
+  if (!outputPath || isLoading || toolResult?.is_error) {
     return (
       <BaseToolRenderer
         toolName="Screen Recording"
@@ -176,34 +174,13 @@ export function RecordingStopToolRenderer({ toolUse, toolResult, isLoading }: To
         toolUse={toolUse}
         toolResult={toolResult}
         isLoading={isLoading}
-      />
-    );
-  }
-
-  // Error
-  if (toolResult.is_error) {
-    return (
-      <BaseToolRenderer
-        toolName="Screen Recording"
-        icon={<Video className={cn(TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS)} />}
-        toolUse={toolUse}
-        toolResult={toolResult}
         showContentOnError
-      />
-    );
-  }
-
-  // No video
-  if (!hasVideo) {
-    return (
-      <BaseToolRenderer
-        toolName="Screen Recording"
-        icon={<Video className={cn(TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS)} />}
-        toolUse={toolUse}
-        toolResult={toolResult}
-        renderSummary={() => (
-          <span className="text-muted-foreground text-xs italic">events-only, no video</span>
-        )}
+        renderSummary={() =>
+          !isLoading &&
+          !toolResult?.is_error && (
+            <span className="text-muted-foreground text-xs italic">events-only, no video</span>
+          )
+        }
       />
     );
   }
