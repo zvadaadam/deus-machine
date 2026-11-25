@@ -207,6 +207,10 @@ describe("a first task that cannot be delivered", () => {
 
   it("keeps another turn working in app setup before it has a row", async () => {
     vi.spyOn(turns, "sendMessage").mockImplementationOnce(async ({ sessionId }) => {
+      ownership.claimTurn(sessionId, "other", {
+        controller: new AbortController(),
+        done: Promise.resolve(),
+      });
       db.prepare("UPDATE sessions SET status = 'working' WHERE id = ?").run(sessionId);
       throw new ChatBusyError("Another turn is starting.");
     });

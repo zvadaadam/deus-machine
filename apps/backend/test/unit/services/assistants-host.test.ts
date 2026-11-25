@@ -27,7 +27,6 @@ const state = vi.hoisted(() => ({
   ops: {} as Record<string, (input: Record<string, unknown>) => unknown>,
   listeners: new Set<(resources: readonly string[], ctx?: { sessionIds?: string[] }) => void>(),
   live: new Map<string, string>(),
-  firstTasks: new Set<string>(),
   pending: [] as {
     requestId: string;
     sessionId: string;
@@ -66,27 +65,13 @@ vi.mock(import("../../../src/services/agent/chat-turn"), async (original) => ({
   ...(await original()),
   holdingTurn: (id: string) => {
     const turnId = state.live.get(id);
-    if (turnId)
-      return {
-        turnId,
-        phase: "running" as const,
-        setup: state.firstTasks.has(turnId)
-          ? {
-              controller: new AbortController(),
-              done: state.sending ?? Promise.resolve(),
-              firstTask: true,
-            }
-          : undefined,
-      };
+    if (turnId) return { turnId, phase: "running" as const };
   },
   lastTurn: () => undefined,
 }));
 vi.mock("../../../src/services/agent/service", () => ({
   provideSessionTools: () => {},
-  provideTurnWatcher: vi.fn(),
   isConnected: () => false,
-  notifyStopAsked: vi.fn(),
-  notifyTurnInterrupted: vi.fn(),
 }));
 vi.mock("../../../src/services/agent/tool-relay", () => ({
   pendingFor: (sessionId: string) => state.pending.filter((r) => r.sessionId === sessionId),
@@ -98,12 +83,10 @@ vi.mock("../../../src/services/agent/tool-relay", () => ({
   isPrompt: (method: string) => method === "askUserQuestion" || method === "exitPlanMode",
 }));
 vi.mock("../../../src/services/agent/turns", () => ({
-  sendMessage: async (input: Record<string, unknown>, origin?: unknown, firstTask?: boolean) => {
+  sendMessage: async (input: Record<string, unknown>, origin?: unknown) => {
     if (state.sendRefusal) throw state.sendRefusal;
     state.live.set(input.sessionId as string, input.turnId as string);
-    if (firstTask) state.firstTasks.add(input.turnId as string);
     if (state.sending) await state.sending;
-    state.firstTasks.delete(input.turnId as string);
     state.sent.push({ input, origin });
     return { turnId: input.turnId };
   },

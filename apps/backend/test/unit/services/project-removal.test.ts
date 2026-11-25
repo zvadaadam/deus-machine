@@ -233,7 +233,7 @@ it.each([
     if (admitted) {
       claimTurn("s", "turn");
       admitTurn("s", "turn");
-    }
+    } else admitTurn("s", "turn", "start");
     const reason = {
       statusCode: 409,
       message:

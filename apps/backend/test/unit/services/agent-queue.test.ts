@@ -22,7 +22,11 @@ import {
 import * as api from "@shared/api/sessions";
 import { findConversationMessage } from "@shared/conversation-rows";
 import { SCHEMA_SQL } from "@shared/schema";
-import { holdingTurn } from "../../../src/services/agent/chat-turn";
+import {
+  releaseTurn,
+  reportInterruption,
+  holdingTurn,
+} from "../../../src/services/agent/chat-turn";
 import * as agent from "../../../src/services/agent/service";
 import * as cloud from "../../../src/services/agent/cloud/driver";
 import {
@@ -1128,8 +1132,8 @@ describe("messages held for a local chat", () => {
       paused: null,
       items: [{ id: "head", state: "sending" }],
     });
-    agent.notifyTurnInterrupted(sessionId, undefined, true);
-    agent.notifyTurnInterrupted(sessionId, "head", false);
+    reportInterruption(sessionId, undefined, true);
+    reportInterruption(sessionId, "head", false);
     expect(await queue()).toMatchObject({
       paused: "failed",
       items: [{ id: "head", state: "sending" }],
@@ -2013,7 +2017,7 @@ describe("messages held for a local chat", () => {
     end("A");
     await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "B"]));
     plan("B");
-    agent.notifyTurnInterrupted(sessionId, "A", true);
+    releaseTurn(sessionId, "A", "gone");
     settled.resolve();
     await vi.waitFor(() => expect(engine.respondElicitation).toHaveBeenCalled());
     expect(pendingFor(sessionId)).toMatchObject([{ method: "exitPlanMode" }]);
@@ -3678,7 +3682,12 @@ describe("operating another chat's queue", () => {
       if (cause === "Stop") await stopped("A");
       else {
         await task("last");
-        agent.notifyTurnInterrupted(sessionId, "A", false);
+        engine.cancelTurn.mockResolvedValueOnce({
+          outcome: "no_active_turn",
+          activeTurnId: "other",
+        });
+        gap("replay_failed");
+        await vi.waitFor(async () => expect((await queue()).paused).toBe("failed"));
         await remove("last");
       }
       const hold = cause === "Stop" ? "held: stopped by the person" : "held after an error";
@@ -3731,7 +3740,9 @@ describe("operating another chat's queue", () => {
   it("turns a failed hold into a person-only Stop on the same turn's cancelled end", async () => {
     await send("active");
     await task("later");
-    agent.notifyTurnInterrupted(sessionId, "active", false);
+    engine.cancelTurn.mockResolvedValueOnce({ outcome: "no_active_turn", activeTurnId: "other" });
+    gap("replay_failed");
+    await vi.waitFor(async () => expect((await queue()).paused).toBe("failed"));
     expect((await queue()).paused).toBe("failed");
     end("active", "cancelled");
     expect(await queue()).toMatchObject({ paused: "stopped", items: [{ id: "later" }] });

@@ -57,7 +57,7 @@ vi.mock("../../../src/services/agent/persistence", () => ({
   persistAgentSessionId: mockPersistAgentSessionId,
   persistChanges: mockPersistChanges,
   persistTurn: mockPersistTurn,
-  persistStopStatus: vi.fn(() => true),
+  persistStopStatus: vi.fn(() => ({ ok: true, value: true })),
   persistSessionError: mockPersistSessionError,
   persistSessionTitle: mockPersistSessionTitle,
   persistSessionWorking: mockPersistSessionWorking,
@@ -209,7 +209,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
   beforeEach(() => {
     forgetChatTurns();
-    delete turnNotices.interrupted;
+    delete turnNotices.queue;
     vi.clearAllMocks();
     outcomes.length = 0;
     mockPersistChanges.mockImplementation(stubPersistChanges as never);
@@ -1119,7 +1119,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
   describe("turn admission mirror", () => {
     it("notifies the open chat when its admitted turn with a user message ends locally", () => {
-      turnNotices.interrupted = vi.fn(() => ["unread"]);
+      turnNotices.queue = vi.fn(() => ["unread"]);
       claimTurn(SESSION, TURN);
       handler.handle(
         envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
