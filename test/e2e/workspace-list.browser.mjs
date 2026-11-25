@@ -136,6 +136,23 @@ const row = (page, ws) => page.locator(`[data-workspace-id="${ws.id}"]`);
 const archiveButton = (page, ws) =>
   row(page, ws).getByRole("button", { name: /Archive workspace/ });
 
+async function openWorkspaceTool(page, name) {
+  const strip = page.getByRole("tablist", { name: "Workspace tabs" });
+  await strip.waitFor();
+  const existing = strip.getByRole("tab", { name, exact: true });
+  if ((await existing.count()) > 0) {
+    await existing.click();
+    return;
+  }
+  const newTabView = page.locator('[data-slot="new-tab-view"]');
+  if (!(await newTabView.isVisible())) {
+    await page.getByRole("button", { name: "New tab", exact: true }).click();
+    await newTabView.waitFor();
+  }
+  await newTabView.getByRole("button", { name, exact: true }).click();
+  await existing.waitFor();
+}
+
 test("a linked chat leaves the saved tab unread and shows its background work", async (t) => {
   const page = await tab(t);
   const ws = await start(local, "Linked chat");
@@ -271,7 +288,7 @@ test("Changes keeps the missing checkout error until a read succeeds", async (t)
   const reason = "Could not read the changes: git failed (ENOENT).";
   await writeFile(path.join(ws.workspace_path, file), "Change to recover\n");
   await page.goto(`${baseUrl}/w/${other.id}`);
-  await page.getByRole("tab", { name: "Files", exact: true }).click();
+  await openWorkspaceTool(page, "Files");
 
   const displays = await page.evaluateHandle(
     (labels) => {
@@ -296,7 +313,7 @@ test("Changes keeps the missing checkout error until a read succeeds", async (t)
   await rename(ws.workspace_path, moved);
   try {
     await row(page, ws).click();
-    await page.getByRole("tab", { name: "Changes", exact: true }).click();
+    await openWorkspaceTool(page, "Changes");
     // The first failed read and two completed polls, regardless of per-read retries.
     const cache = await page.evaluateHandle(
       async () =>
@@ -807,7 +824,7 @@ test("a confirmed archive frees the simulator for another workspace", async (t) 
     });
   });
   const startSimulator = async () => {
-    await page.getByRole("tab", { name: "Simulator", exact: true }).click();
+    await openWorkspaceTool(page, "Simulator");
     await page.getByRole("button", { name: "Start Simulator", exact: true }).click();
     const status = page
       .getByLabel("Simulator streaming")
@@ -1079,6 +1096,13 @@ for (const mode of ["web", "desktop"]) {
         items: ["blue", "green"].map((id) => ({ id, name: id, role: "owner", ready: true })),
       });
     });
+    // Wait for the sidebar to render the organizations that the shortcuts use.
+    await page.getByRole("button", { name: /switch where workspaces run/ }).click();
+    const menu = page.getByRole("menu");
+    await menu.getByRole("menuitem", { name: /^blue, cloud\b/ }).waitFor();
+    await menu.getByRole("menuitem", { name: /^green, cloud\b/ }).waitFor();
+    await page.keyboard.press("Escape");
+    await menu.waitFor({ state: "detached" });
     await page.keyboard.press("Control+2");
     await group.getByRole("button", { name: "Archived (1)", exact: true }).waitFor();
     await group.getByRole("button", { name: "Restore on-another-computer" }).waitFor();

@@ -1,4 +1,4 @@
-import { answerParts } from "../../lib/assistantTurnContent";
+import { answerParts, joinAnswerText } from "../../lib/assistantTurnContent";
 import type { Message, SessionTurn } from "@/shared/types";
 import type { TokenUsage } from "@shared/protocol-types";
 
@@ -29,10 +29,9 @@ export function getTurnFooterData(
           }
         : undefined,
     copyText:
-      groups
-        .flatMap((group) => answerParts(group.flatMap((message) => message.parts ?? [])))
-        .map((part) => part.text.trim())
-        .join("\n\n") || null,
+      joinAnswerText(
+        groups.flatMap((group) => answerParts(group.flatMap((message) => message.parts ?? [])))
+      ) || null,
     startedAt: start,
     durationMs: start != null && end != null && end >= start ? end - start : null,
     tokens: turn?.tokens ?? null,

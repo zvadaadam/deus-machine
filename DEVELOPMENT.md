@@ -24,10 +24,12 @@ Before pushing, run `bun run check`. Its browser journeys need Chromium
 (`brew install ffmpeg` on macOS). On Linux, build the terminal binding once
 with `(cd node_modules/node-pty && bunx node-gyp rebuild)`.
 
-The dev backend opens the same database as the installed app
-(`~/Library/Application Support/com.deus.app/deus.db`), shared by every checkout. Set
-`DATABASE_PATH=/some/other/deus.db` before `bun run dev` / `bun run dev:web` to isolate a branch
-that changes the schema.
+Each checkout uses `.deus-dev/deus.db` for `bun run dev`, `bun run dev:web`,
+`bun run dev:backend`, and `bun run cli:backend`. Set `DATABASE_PATH` to use
+another file. Checkout launchers discard database overrides inherited from
+older packaged Deus agent shells. The dev desktop also keeps its profile in
+`.deus-dev/`, so a new worktree starts signed out. The installed Mac app uses
+`~/Library/Application Support/com.deus.app/deus.db`.
 
 ---
 

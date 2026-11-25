@@ -1,7 +1,7 @@
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   extendCliPath,
   getBundledCliDirectory,
@@ -9,20 +9,18 @@ import {
   resolveCliExecutable,
 } from "@shared/lib/cli-path";
 
-const originalBundledBinDir = process.env.DEUS_BUNDLED_BIN_DIR;
-const originalResourcesPathEnv = process.env.DEUS_RESOURCES_PATH;
-const originalDeusPackaged = process.env.DEUS_PACKAGED;
 const originalCwd = process.cwd();
 const originalPlatform = process.platform;
 const originalArch = process.arch;
 
+beforeEach(() => {
+  vi.stubEnv("DEUS_PACKAGED", undefined);
+  vi.stubEnv("DEUS_RESOURCES_PATH", undefined);
+  vi.stubEnv("DEUS_BUNDLED_BIN_DIR", undefined);
+});
+
 afterEach(() => {
-  if (originalBundledBinDir === undefined) delete process.env.DEUS_BUNDLED_BIN_DIR;
-  else process.env.DEUS_BUNDLED_BIN_DIR = originalBundledBinDir;
-  if (originalResourcesPathEnv === undefined) delete process.env.DEUS_RESOURCES_PATH;
-  else process.env.DEUS_RESOURCES_PATH = originalResourcesPathEnv;
-  if (originalDeusPackaged === undefined) delete process.env.DEUS_PACKAGED;
-  else process.env.DEUS_PACKAGED = originalDeusPackaged;
+  vi.unstubAllEnvs();
   process.chdir(originalCwd);
   Object.defineProperty(process, "platform", {
     configurable: true,
@@ -103,11 +101,16 @@ describe("cli path helpers", () => {
   });
 
   it("does not fall back to PATH in packaged runtime mode", () => {
+    const emptyBin = mkdtempSync(path.join(tmpdir(), "deus-cli-path-missing-"));
     process.env.DEUS_PACKAGED = "1";
-    process.env.DEUS_BUNDLED_BIN_DIR = "/Applications/Deus.app/Contents/Resources/bin";
+    process.env.DEUS_BUNDLED_BIN_DIR = emptyBin;
 
-    expect(resolveBundledCliPath("gh")).toBeNull();
-    expect(resolveCliExecutable("gh")).toBe("/Applications/Deus.app/Contents/Resources/bin/gh");
+    try {
+      expect(resolveBundledCliPath("gh")).toBeNull();
+      expect(resolveCliExecutable("gh")).toBe(path.join(emptyBin, "gh"));
+    } finally {
+      rmSync(emptyBin, { recursive: true, force: true });
+    }
   });
 
   it("uses DEUS_RESOURCES_PATH as the packaged runtime resources root", () => {

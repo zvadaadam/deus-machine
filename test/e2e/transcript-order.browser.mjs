@@ -70,6 +70,8 @@ async function run() {
     "long",
     "nested",
     "bubbles",
+    "scroll",
+    "paginate",
     "refusal",
     "claude-code",
     "codex-app-server",
@@ -81,11 +83,17 @@ async function run() {
       "INSERT INTO workspaces (id,repository_id,slug,title,state,setup_status,current_session_id) VALUES (?,'repo',?,?,'ready','completed',?)"
     ).run(workspace, name, name, session);
     const add = db.prepare(
-      "INSERT INTO sessions (id,workspace_id,agent_harness,title) VALUES (?,?,?,?)"
+      "INSERT INTO sessions (id,workspace_id,agent_harness,title,agent_messages) VALUES (?,?,?,?,?)"
     );
     // Errors belong to a side chat, without the first chat's workspace-start marker.
-    add.run(crypto.randomUUID(), workspace, "claude-code", "First chat");
-    add.run(session, workspace, name === "codex-app-server" ? name : "claude-code", "Transcript");
+    add.run(crypto.randomUUID(), workspace, "claude-code", "First chat", 0);
+    add.run(
+      session,
+      workspace,
+      name === "codex-app-server" ? name : "claude-code",
+      "Transcript",
+      name === "scroll" ? 1 : 0
+    );
     await mkdir(path.join(directory, ".deus", name), { recursive: true });
   }
 
@@ -249,6 +257,12 @@ async function run() {
                 error: "The fixture has no terminal",
               })
             );
+          } else if (
+            f.resource === "messages" &&
+            f.type === "q:request" &&
+            f.params?.sessionId === chats.paginate.session
+          ) {
+            server.send(JSON.stringify({ ...f, params: { ...f.params, limit: 16 } }));
           } else server.send(raw);
         });
         server.onMessage((raw) => route.send(raw));
@@ -594,6 +608,282 @@ async function run() {
         .waitFor();
       assert.deepEqual(await corners(), [outside, outside]);
     });
+    await check(
+      "auto-scroll resumes for in-place streaming growth after idle and stays grounded when the turn folds",
+      async () => {
+        const turn = fixture(chats.bubbles.session, "streaming-scroll");
+        await emit(...turn.start("Stream a long update."));
+        await logView.getByText("Stream a long update.", { exact: true }).waitFor();
+        // Wait past the chase loop's 10-frame (~166ms) idle self-stop.
+        await page.waitForTimeout(350);
+        for (let i = 1; i <= 16; i++) {
+          await emit(
+            turn.send(`Update ${i}: verifying smooth follow while the existing message grows.`)
+          );
+        }
+        await logView
+          .getByText("Update 16: verifying smooth follow while the existing message grows.", {
+            exact: true,
+          })
+          .waitFor();
+        await page.waitForFunction(() => {
+          const pane = globalThis.document.getElementById("chat-messages");
+          return pane && pane.scrollHeight - (pane.scrollTop + pane.clientHeight) <= 24;
+        });
+        assert.equal(
+          await page.evaluate(() =>
+            globalThis.document
+              .querySelector('button[aria-label="Scroll to bottom"]')
+              .parentElement.classList.contains("opacity-100")
+          ),
+          false,
+          "following in-place growth should not pause auto-scroll"
+        );
+        await emit(turn.text("Done streaming."), turn.end("end_turn"));
+        await logView.getByText("Done streaming.", { exact: true }).waitFor();
+        await page.waitForFunction(() => {
+          const pane = globalThis.document.getElementById("chat-messages");
+          return pane && pane.scrollHeight - (pane.scrollTop + pane.clientHeight) <= 24;
+        });
+        assert.equal(
+          await page.evaluate(() =>
+            globalThis.document
+              .querySelector('button[aria-label="Scroll to bottom"]')
+              .parentElement.classList.contains("opacity-100")
+          ),
+          false,
+          "folding a settled turn at the bottom should not pause auto-scroll"
+        );
+        // Gentle 1px upward scroll ticks after idle must still accumulate and pause follow.
+        await page.waitForTimeout(250);
+        await logView.evaluate((pane) => {
+          for (let i = 0; i < 40; i++) {
+            pane.scrollTop = Math.max(0, pane.scrollTop - 1);
+            pane.dispatchEvent(new Event("scroll"));
+          }
+        });
+        await page.waitForFunction(() =>
+          globalThis.document
+            .querySelector('button[aria-label="Scroll to bottom"]')
+            .parentElement.classList.contains("opacity-100")
+        );
+        await logView.evaluate((pane) => {
+          pane.scrollTop = pane.scrollHeight;
+        });
+        await page.waitForFunction(
+          () =>
+            !globalThis.document
+              .querySelector('button[aria-label="Scroll to bottom"]')
+              .parentElement.classList.contains("opacity-100")
+        );
+      }
+    );
+    await check(
+      "opening a settled Worked fold while following does not chase to the bottom",
+      async () => {
+        const worked = logView
+          .locator('[data-message-id="streaming-scroll-reply-1"]')
+          .getByRole("button", { name: /^Expand activity, Worked/ });
+        await worked.waitFor();
+        const before = await worked.evaluate((btn) => {
+          const pane = globalThis.document.getElementById("chat-messages");
+          return {
+            scrollTop: pane.scrollTop,
+            scrollHeight: pane.scrollHeight,
+            btnTop: btn.getBoundingClientRect().top,
+          };
+        });
+        await worked.click();
+        const collapse = logView
+          .locator('[data-message-id="streaming-scroll-reply-1"]')
+          .getByRole("button", { name: /^Collapse activity, Worked/ });
+        await collapse.waitFor();
+        await page.waitForTimeout(300);
+        const after = await collapse.evaluate((btn) => {
+          const pane = globalThis.document.getElementById("chat-messages");
+          return {
+            scrollTop: pane.scrollTop,
+            scrollHeight: pane.scrollHeight,
+            clientHeight: pane.clientHeight,
+            btnTop: btn.getBoundingClientRect().top,
+          };
+        });
+        assert.ok(
+          after.scrollHeight > before.scrollHeight + 200,
+          "expanding Worked should grow the transcript"
+        );
+        assert.ok(
+          after.scrollHeight - (after.scrollTop + after.clientHeight) > 100,
+          "opening Worked while following should not chase to the bottom"
+        );
+        assert.ok(
+          Math.abs(after.btnTop - before.btnTop) < 40,
+          `Worked button shifted by ${after.btnTop - before.btnTop}px`
+        );
+        await collapse.click();
+      }
+    );
+    await check(
+      "gentle 1px upward scroll ticks pause an active normal-motion chase on an agent_messages chat",
+      async () => {
+        const motionContext = await browser.newContext({
+          viewport: { width: 1280, height: 760 },
+          reducedMotion: "no-preference",
+        });
+        const motionPage = await motionContext.newPage();
+        motionPage.setDefaultTimeout(12_000);
+        try {
+          const live = fixture(chats.scroll.session, "active-chase");
+          await emit(...live.start("Stream updates for active chase test."));
+          await motionPage.goto(`${base}s/local/w/${chats.scroll.workspace}`, { timeout: 60_000 });
+          const motionLog = motionPage.getByRole("log");
+          await motionLog
+            .getByText("Stream updates for active chase test.", { exact: true })
+            .waitFor();
+          // Let initial mount chase settle, then push a burst of tell_user bubbles so
+          // a fresh normal-motion chase starts with large remaining distance.
+          await motionPage.waitForTimeout(350);
+          const burst = [];
+          for (let i = 1; i <= 28; i++) {
+            burst.push(
+              live.send(
+                `Milestone ${i}: detailed status line verifying smooth active chase interruption across rAF ticks.`
+              )
+            );
+          }
+          await emit(...burst);
+          await motionPage.waitForFunction(() => {
+            const pane = globalThis.document.getElementById("chat-messages");
+            return (
+              pane &&
+              pane.scrollHeight > pane.clientHeight + 700 &&
+              pane.scrollTop > 40 &&
+              pane.scrollHeight - (pane.scrollTop + pane.clientHeight) > 300
+            );
+          });
+          // Interleave 40x 1px upward scroll steps across active rAF chase frames.
+          const result = await motionPage.evaluate(
+            () =>
+              new Promise((resolve) => {
+                const pane = globalThis.document.getElementById("chat-messages");
+                const startTop = pane.scrollTop;
+                let steps = 0;
+                const step = () => {
+                  pane.scrollTop = Math.max(0, pane.scrollTop - 1);
+                  pane.dispatchEvent(new Event("scroll"));
+                  if (++steps < 40) {
+                    globalThis.requestAnimationFrame(step);
+                  } else {
+                    globalThis.setTimeout(() => {
+                      const btn = globalThis.document.querySelector(
+                        'button[aria-label="Scroll to bottom"]'
+                      );
+                      resolve({
+                        startTop,
+                        endTop: pane.scrollTop,
+                        maxTop: pane.scrollHeight - pane.clientHeight,
+                        paused: btn?.parentElement?.classList.contains("opacity-100") ?? false,
+                      });
+                    }, 120);
+                  }
+                };
+                globalThis.requestAnimationFrame(step);
+              })
+          );
+          assert.equal(
+            result.paused,
+            true,
+            `expected active chase to pause after 1px upward steps (${JSON.stringify(result)})`
+          );
+          assert.ok(
+            result.maxTop - result.endTop > 200,
+            `active chase overrode upward steps to bottom (${JSON.stringify(result)})`
+          );
+        } finally {
+          await motionContext.close();
+        }
+      }
+    );
+    await check(
+      "two-stage prepend preserves the visible anchor row across load-older and a delayed remeasure",
+      async () => {
+        for (let i = 1; i <= 18; i++) {
+          const older = fixture(chats.paginate.session, `page-${i}`);
+          await emit(
+            ...older.start(`Prompt number ${i} for history pagination.`),
+            older.text(`Answer number ${i} confirming pagination anchor stability.`),
+            older.end("end_turn")
+          );
+        }
+        await go("paginate");
+        await logView
+          .getByText("Answer number 18 confirming pagination anchor stability.", { exact: true })
+          .waitFor();
+        await logView.evaluate((pane) => {
+          pane.scrollTop = 0;
+          pane.dispatchEvent(new Event("scroll"));
+        });
+        const loadButton = logView.getByRole("button", { name: "Load earlier messages" });
+        await loadButton.waitFor();
+        await page.waitForTimeout(150);
+        const anchor = await logView.evaluate((pane) => {
+          const paneTop = pane.getBoundingClientRect().top;
+          const rows = [...pane.querySelectorAll("[data-message-id]")];
+          const first = rows.find((el) => el.getBoundingClientRect().bottom > paneTop + 4);
+          return {
+            id: first.getAttribute("data-message-id"),
+            offset: first.getBoundingClientRect().top - paneTop,
+          };
+        });
+        await loadButton.click();
+        await page.waitForFunction(
+          () => globalThis.document.querySelectorAll("#chat-messages [data-message-id]").length > 16
+        );
+        await page.waitForTimeout(200);
+        const stage1 = await logView.evaluate((pane, anchorId) => {
+          const paneTop = pane.getBoundingClientRect().top;
+          const el = pane.querySelector(`[data-message-id="${anchorId}"]`);
+          return {
+            found: !!el,
+            offset: el ? el.getBoundingClientRect().top - paneTop : null,
+            gap: pane.scrollHeight - (pane.scrollTop + pane.clientHeight),
+          };
+        }, anchor.id);
+        assert.ok(stage1.found, "anchor row should remain visible after stage-1 prepend");
+        assert.ok(stage1.gap > 200, `stage-1 prepend jumped to bottom (gap=${stage1.gap})`);
+        assert.ok(
+          Math.abs(stage1.offset - anchor.offset) < 30,
+          `stage-1 anchor drifted from ${anchor.offset} to ${stage1.offset}`
+        );
+        // Stage 2: grow a newly prepended row above the anchor to trigger ResizeObserver remeasure.
+        await logView.evaluate((pane, anchorId) => {
+          const anchorEl = pane.querySelector(`[data-message-id="${anchorId}"]`);
+          const anchorIdx = Number(anchorEl.getAttribute("data-index"));
+          const above = [...pane.querySelectorAll("[data-index]")]
+            .filter((el) => Number(el.getAttribute("data-index")) < anchorIdx)
+            .at(-1);
+          const spacer = globalThis.document.createElement("div");
+          spacer.style.height = "240px";
+          above.firstElementChild.appendChild(spacer);
+        }, anchor.id);
+        await page.waitForTimeout(250);
+        const stage2 = await logView.evaluate((pane, anchorId) => {
+          const paneTop = pane.getBoundingClientRect().top;
+          const el = pane.querySelector(`[data-message-id="${anchorId}"]`);
+          return {
+            found: !!el,
+            offset: el ? el.getBoundingClientRect().top - paneTop : null,
+            gap: pane.scrollHeight - (pane.scrollTop + pane.clientHeight),
+          };
+        }, anchor.id);
+        assert.ok(stage2.found, "anchor row should remain visible after stage-2 remeasure");
+        assert.ok(stage2.gap > 200, `stage-2 remeasure jumped to bottom (gap=${stage2.gap})`);
+        assert.ok(
+          Math.abs(stage2.offset - anchor.offset) < 30,
+          `stage-2 anchor drifted from ${anchor.offset} to ${stage2.offset}`
+        );
+      }
+    );
     for (const harness of ["codex-app-server", "claude-code"]) {
       await check(
         `a stored ${harness} plan with no prose keeps its card after reload`,

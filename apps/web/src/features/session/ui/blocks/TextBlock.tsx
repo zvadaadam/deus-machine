@@ -118,7 +118,7 @@ export function TextBlock({
         bubble
           ? cn(
               bubbleClass("assistant", bubble),
-              "bg-muted/50 overflow-x-auto [&_table]:break-normal [&_td_code]:wrap-anywhere"
+              "bg-agent-bubble overflow-x-auto [&_table]:break-normal [&_td_code]:wrap-anywhere"
             )
           : "px-2 py-1.5"
       )}

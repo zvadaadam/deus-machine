@@ -1,1 +1,1 @@
-export { TerminalPanel, Terminal } from "./ui";
+export { TerminalHost, Terminal } from "./ui";
