@@ -1,18 +1,16 @@
 import { spawnSync } from "node:child_process";
 import { EventEmitter, once } from "node:events";
 import {
-  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   realpathSync,
   rmSync,
-  symlinkSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, join, relative, resolve } from "node:path";
 import { PassThrough } from "node:stream";
 import { app } from "electron";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -130,7 +128,9 @@ it.each([true, false])(
   async (installed) => {
     vi.stubEnv("DEUS_PACKAGED", "1");
     vi.stubEnv("NODE_ENV", "production");
-    if (installed) vi.stubEnv("DATABASE_PATH", installedDatabase);
+    const override = installed ? installedDatabase : database;
+    vi.stubEnv("DATABASE_PATH", override);
+    expectWebDatabase(override, installed ? "<unset>" : database);
     const error = await failedChild("", DATABASE_IN_USE, 1);
     const env = spawn.mock.lastCall![2].env;
     expect(env.DATABASE_PATH).toBe(installed ? join(directory, "deus.db") : database);
@@ -143,45 +143,16 @@ it.each([true, false])(
 it.each(["", " "])(
   "resolves a relative database path from the child's working directory (padding %j)",
   async (padding) => {
-    await failedChild("", "", 1);
-    const path = relative(spawn.mock.lastCall![2].cwd, database);
-    vi.stubEnv("DATABASE_PATH", padding + path + padding);
+    vi.stubEnv("DATABASE_PATH", `${padding}chats.db${padding}`);
     const mismatch = await failedChild("", PRELAUNCH_SCHEMA_MISMATCH, 1);
-    const childDatabase = spawn.mock.lastCall![2].env.DATABASE_PATH;
-    expect(childDatabase).toBe(database);
-    expect(mismatch).toHaveProperty("databasePath", childDatabase);
+    const { cwd, env } = spawn.mock.lastCall![2];
+    expect(env.DATABASE_PATH).toBe(join(cwd, "chats.db"));
+    expect(mismatch).toHaveProperty("databasePath", env.DATABASE_PATH);
   }
 );
 
-it("keeps a custom file reached through a directory symlink and '..' in a legacy shell", async () => {
-  vi.stubEnv("DEUS_PACKAGED", "1");
-  const other = join(directory, "other");
-  mkdirSync(join(other, "state"), { recursive: true });
-  mkdirSync(dirname(installedDatabase), { recursive: true });
-  const link = join(dirname(installedDatabase), "link");
-  symlinkSync(join(other, "state"), link, "dir");
-  const custom = join(other, basename(installedDatabase));
-  writeFileSync(custom, "my chats");
-  writeFileSync(installedDatabase, "installed chats");
-  const configured = `${link}/../${basename(installedDatabase)}`;
-  expect(resolve(configured)).toBe(installedDatabase);
-  expectWebDatabase(configured, custom);
-  vi.stubEnv("DATABASE_PATH", configured);
-  const mismatch = await failedChild("", PRELAUNCH_SCHEMA_MISMATCH, 1);
-  if (!(mismatch instanceof OutdatedDatabaseError)) throw mismatch;
-  const childDatabase = spawn.mock.lastCall![2].env.DATABASE_PATH;
-  expect(childDatabase).toBe(custom);
-  expect(mismatch.databasePath).toBe(childDatabase);
-  const backup = datedBackupPath(mismatch.databasePath);
-  moveDatabaseAside(mismatch.databasePath, backup);
-  expect(readFileSync(backup, "utf8")).toBe("my chats");
-  expect(readFileSync(installedDatabase, "utf8")).toBe("installed chats");
-});
-
 it("drops a legacy relative override that names the installed file only from the backend cwd", async () => {
   vi.stubEnv("DEUS_PACKAGED", "1");
-  mkdirSync(dirname(installedDatabase), { recursive: true });
-  writeFileSync(installedDatabase, "installed chats");
   await failedChild("", "", 1);
   const desktopCwd = spawn.mock.lastCall![2].cwd;
   const caller = process.cwd();

@@ -1,6 +1,5 @@
-import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, parse, sep } from "node:path";
+import { resolve } from "node:path";
 import { resolveDefaultDatabasePath } from "../runtime";
 
 /** Backend settings withheld from the processes it starts. */
@@ -42,31 +41,17 @@ export function defaultDatabasePathForEnv(env: NodeJS.ProcessEnv, devRoot?: stri
   });
 }
 
-function resolveDatabaseFile(filename: string, cwd: string): string {
-  const absolute = isAbsolute(filename) ? filename : `${cwd}${sep}${filename}`;
-  let target = parse(absolute).root;
-  // Follow each existing directory before interpreting "..", even for a new database.
-  for (const part of absolute.slice(target.length).split(sep)) {
-    target = join(target, part);
-    if (existsSync(target)) target = realpathSync.native(target);
-  }
-  return target;
-}
-
 export function prepareDevBackendEnv(env: NodeJS.ProcessEnv, backendCwd: string): void {
   const override = env.DATABASE_PATH;
   const legacyShell = env.DEUS_PACKAGED === "1";
   if (legacyShell) clearBackendChildEnv(env);
   if (!override) return;
 
-  const filename = override.trim();
-  const database =
-    filename && filename !== ":memory:" ? resolveDatabaseFile(filename, backendCwd) : ":memory:";
-  if (legacyShell && database === resolveDatabaseFile(defaultDatabasePathForEnv(env), backendCwd)) {
+  const filename = override.trim() || ":memory:";
+  const database = filename === ":memory:" ? filename : resolve(backendCwd, filename);
+  if (legacyShell && database === resolve(defaultDatabasePathForEnv(env))) {
+    console.warn("Dropped inherited DATABASE_PATH because it matches the installed database path.");
     return;
-  }
-  if (database !== database.trimEnd()) {
-    throw new Error(`Cannot use "${database}" because its filename ends in whitespace.`);
   }
   env.DATABASE_PATH = database;
 }

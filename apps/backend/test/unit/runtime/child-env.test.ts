@@ -1,8 +1,7 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { clearInheritedPackagedEnv, createBackendChildEnv } from "@shared/lib/child-env";
+import { basename, dirname, join, relative } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createBackendChildEnv, prepareDevBackendEnv } from "@shared/lib/child-env";
 import { resolveDefaultDatabasePath } from "@shared/runtime";
 
 const originalEnv = { ...process.env };
@@ -12,44 +11,32 @@ afterEach(() => {
 });
 
 describe("backend child process environment", () => {
-  it("drops dotted and symlinked spellings of the installed database, and keeps a custom file", () => {
-    const home = realpathSync.native(mkdtempSync(join(tmpdir(), "deus-legacy-env-")));
-    try {
-      const installed = resolveDefaultDatabasePath({
-        platform: process.platform,
-        homeDir: home,
-        xdgDataHome: home,
-      });
-      function fromLegacyShell(path: string) {
-        const env = { HOME: home, XDG_DATA_HOME: home, DEUS_PACKAGED: "1", DATABASE_PATH: path };
-        clearInheritedPackagedEnv(env);
-        return env.DATABASE_PATH;
-      }
-      expect(fromLegacyShell(`${dirname(installed)}/./${basename(installed)}`)).toBeUndefined();
-      mkdirSync(dirname(installed), { recursive: true });
-      writeFileSync(installed, "");
-      const alias = join(home, "alias.db");
-      symlinkSync(installed, alias);
-      expect(fromLegacyShell(alias)).toBeUndefined();
-      const custom = join(home, "custom.db");
-      writeFileSync(custom, "");
-      expect(fromLegacyShell(custom)).toBe(custom);
-      const child = join(home, "custom/subdir");
-      mkdirSync(child, { recursive: true });
-      writeFileSync(join(home, "custom", basename(installed)), "");
-      const link = join(dirname(installed), "link");
-      symlinkSync(child, link);
-      const throughParent = `${link}/../${basename(installed)}`;
-      expect(fromLegacyShell(throughParent)).toBe(join(home, "custom", basename(installed)));
-      expect(fromLegacyShell(`${link}/../new.db`)).toBe(join(home, "custom", "new.db"));
+  const home = join(tmpdir(), "deus-legacy-env");
+  const backendCwd = join(home, "apps", "backend");
+  const installed = resolveDefaultDatabasePath({
+    platform: process.platform,
+    homeDir: home,
+    xdgDataHome: home,
+  });
+  const relativeInstalled = relative(backendCwd, installed);
 
-      const padded = `${installed} `;
-      writeFileSync(padded, "");
-      const paddedAlias = join(home, "padded.db");
-      symlinkSync(padded, paddedAlias);
-      expect(() => fromLegacyShell(paddedAlias)).toThrow(/filename ends in whitespace/);
-    } finally {
-      rmSync(home, { recursive: true, force: true });
+  it.each([
+    ["1", installed, undefined],
+    ["1", `${dirname(installed)}/./${basename(installed)}`, undefined],
+    ["1", relativeInstalled, undefined],
+    ["1", "custom.db", join(backendCwd, "custom.db")],
+    [undefined, relativeInstalled, installed],
+  ])("resolves DATABASE_PATH with DEUS_PACKAGED=%s and path %s", (packaged, value, expected) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const env = { HOME: home, XDG_DATA_HOME: home, DEUS_PACKAGED: packaged, DATABASE_PATH: value };
+    prepareDevBackendEnv(env, backendCwd);
+    expect(env.DATABASE_PATH).toBe(expected);
+    if (expected === undefined) {
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        expect.stringMatching(/dropped.*DATABASE_PATH.*installed/i)
+      );
+    } else {
+      expect(warn).not.toHaveBeenCalled();
     }
   });
 
