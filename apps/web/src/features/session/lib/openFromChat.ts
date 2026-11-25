@@ -13,7 +13,6 @@ import { native } from "@/platform/native";
 import { getBaseURL } from "@/shared/config/api.config";
 import { isMobileViewport } from "@/shared/hooks/use-mobile";
 import { isTabVisible, tabsFor } from "@/app/layouts/content-tabs";
-import { browserWindowActions } from "@/features/browser/store/browserWindowStore";
 import {
   cloudPreviewActions,
   useCloudPreviewStore,
@@ -131,8 +130,7 @@ export async function runChatAction(
 }
 
 function showInBrowserTab(workspaceId: string, url: string): void {
-  workspaceLayoutActions.openContentTab(workspaceId, "browser");
-  browserWindowActions.requestNewTab(workspaceId, url);
+  workspaceLayoutActions.openBrowserTab(workspaceId, url, { reveal: true });
 }
 
 export async function openFromChat(workspaceId: string, opening: ChatOpening): Promise<void> {
@@ -140,7 +138,7 @@ export async function openFromChat(workspaceId: string, opening: ChatOpening): P
     .with({ to: "browser-tab" }, ({ url }) => showInBrowserTab(workspaceId, url))
     .with({ to: "cloud-preview" }, ({ port, rest }) => {
       cloudPreviewActions.show(workspaceId, port, rest);
-      workspaceLayoutActions.openContentTab(workspaceId, "browser");
+      workspaceLayoutActions.openContentTab(workspaceId, "browser", { cloud: true });
     })
     .with({ to: "external" }, ({ url }) => native.window.openExternal(url))
     .with({ to: "file-preview" }, async ({ path }) => {

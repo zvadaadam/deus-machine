@@ -92,7 +92,7 @@ export const CLOUD_FILE_UNSHOWN = "This file is on the cloud computer and can't 
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"]);
 
 /** The port and path of an address on localhost, or null for an address on the internet. */
-function onLocalhost(url: string): { port: number; rest: string } | null {
+export function onLocalhost(url: string): { port: number; rest: string } | null {
   let parsed: URL;
   try {
     parsed = new URL(url);
