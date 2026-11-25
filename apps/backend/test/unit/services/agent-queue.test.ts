@@ -3986,11 +3986,16 @@ describe("operating another chat's queue", () => {
       expect(await run(api.session, { sessionId })).toMatchObject({
         status: started ? "working" : "error",
       });
+      const { status, error_message, error_category } = (await run(api.session, { sessionId }))!;
       if (!started) engine.startTurn.mockRejectedValueOnce(busyReply());
       await resumeInWindow();
       await new Promise<void>((resolve) => setImmediate(resolve));
       expect(starts()).toEqual(started ? ["A"] : ["A", "R"]);
-      expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
+      expect(await run(api.session, { sessionId })).toMatchObject({
+        status,
+        error_message,
+        error_category,
+      });
       expect(await queue()).toMatchObject({ paused: null, items: [waitingRow("R")] });
       if (started) {
         end("A");
