@@ -660,12 +660,8 @@ export function useCloudDirectSession(
       sessionId,
       {
         sendMessage: (prompt, turnId, options) => {
-          // Enforce deus's one-live-turn contract here, where the fold state is in
-          // reach — agnt itself QUEUES overlapping sends, so without this a
-          // double-send starts a second turn (parity with the Mac driver's
-          // `liveTurnId` guard). The fold covers ADMITTED turns; `pendingTurn`
-          // covers the echo round-trip a double-Enter fits inside. The throw
-          // rolls the optimistic bubble back.
+          // The platform queues overlapping sends. The fold holds an admitted turn, and pendingTurn
+          // covers a second Enter before its echo, as the Mac's turn record does.
           if (
             pendingTurnActive() ||
             folds.get(sessionId)?.state.turns.some((turn) => turn.status === "active")

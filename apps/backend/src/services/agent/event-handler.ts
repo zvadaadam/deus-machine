@@ -34,7 +34,7 @@ import { openWith, publish, resetSubscribers } from "../streams";
 import {
   persistChanges,
   persistSessionTitle,
-  persistSessionError,
+  persistSessionStatus,
   type TurnOutcomeWrite,
   type WriteResult,
 } from "./persistence";
@@ -44,13 +44,13 @@ import { refreshPrSnapshotForSession } from "../pr-snapshot.service";
 import { restoreCloudSnapshot } from "./cloud/snapshot";
 import {
   admitTurn,
-  endTurn,
   holdingTurn,
   lastTurn,
   releaseTurn,
   reportInterruption,
   forgetChatTurns,
   turnNotices,
+  type NativeEnd,
 } from "./chat-turn";
 import { OpenParts } from "./open-parts";
 
@@ -64,8 +64,6 @@ export interface AgentEventHandler {
     sessionId: string,
     snapshot: SessionSnapshotEvent
   ): RestoredCloudConversation | undefined;
-  /** A new send starts with fresh error and limit reports. */
-  resetTurnFacts(sessionId: string): void;
   /** Mark delivery loss synchronously, before any replay suffix is folded. */
   handleEventGap(gap: SessionEventGap): string | undefined;
   /** Settle only that damaged turn after targeted native reconciliation. */
@@ -74,9 +72,17 @@ export interface AgentEventHandler {
   handleTitle(sessionId: string, title: string): void;
 }
 
-interface SessionState extends SessionFacts {
+interface SessionState {
+  facts: SessionFacts & { forTurn?: string };
   /** The folded conversation — the source of every row this session writes. */
   conversation: ConversationState;
+}
+
+/** Only evidence of the new turn retires its predecessor's error and limit reports. */
+function reportsFor(state: SessionState, turnId?: string) {
+  if (turnId && state.facts.forTurn !== turnId)
+    state.facts = { forTurn: turnId, errorReported: false };
+  return state.facts;
 }
 
 // ---- Resource groups for invalidation ----
@@ -174,19 +180,12 @@ export function createAgentEventHandler(): AgentEventHandler {
   const stateFor = (sessionId: string): SessionState => {
     const existing = sessions.get(sessionId);
     if (existing) return existing;
-    const created: SessionState = { errorReported: false, conversation: emptyConversation() };
+    const created = { facts: { errorReported: false }, conversation: emptyConversation() };
     sessions.set(sessionId, created);
     return created;
   };
 
   return {
-    resetTurnFacts(sessionId) {
-      const state = stateFor(sessionId);
-      state.errorReported = false;
-      state.limitResets = undefined;
-      state.deliveryFailure = undefined;
-    },
-
     hydrateCloudSnapshot(sessionId, snapshot) {
       const state = stateFor(sessionId);
       const turn = holdingTurn(sessionId);
@@ -207,13 +206,12 @@ export function createAgentEventHandler(): AgentEventHandler {
       // A reply being typed when the transcript was restored is open from here on.
       typing.restored(sessionId, projectCloudSnapshot(snapshot).events);
       if (!pending) {
-        // The snapshot already wrote the end. Release its old holder quietly.
-        if (turn && turn.turnId !== current) releaseTurn(sessionId, turn.turnId);
-        if (current) {
-          if (current !== turn?.turnId) this.resetTurnFacts(sessionId);
-          admitTurn(sessionId, current, "start");
-        }
-        state.errorReported = snapshot.state.status === "error";
+        // A snapshot can stop naming the old turn without carrying its terminal.
+        if (turn && turn.turnId !== current)
+          releaseTurn(sessionId, turn.turnId, { type: "snapshot" });
+        if (current) admitTurn(sessionId, current, "start");
+        reportsFor(state, current ?? turn?.turnId).errorReported =
+          snapshot.state.status === "error";
       }
       invalidate(SESSION_RESOURCES, { sessionIds: [sessionId] });
       return result.value;
@@ -221,10 +219,11 @@ export function createAgentEventHandler(): AgentEventHandler {
 
     handleEventGap(gap) {
       const turn = holdingTurn(gap.sessionId);
+      // A pending start owns its admission. A gap can settle only a running turn.
       if (turn?.phase !== "running") return;
       const { turnId } = turn;
-      const state = stateFor(gap.sessionId);
-      state.deliveryFailure ??= {
+      const facts = reportsFor(stateFor(gap.sessionId), turnId);
+      facts.deliveryFailure ??= {
         turnId,
         message:
           "Some agent output could not be recovered. This turn's transcript is incomplete; inspect partial work before retrying.",
@@ -240,19 +239,22 @@ export function createAgentEventHandler(): AgentEventHandler {
     },
 
     settleEventGap(sessionId, turnId, confirmed, cause) {
-      const state = sessions.get(sessionId);
-      if (holdingTurn(sessionId)?.turnId !== turnId || state?.deliveryFailure?.turnId !== turnId)
+      const facts = sessions.get(sessionId)?.facts;
+      if (holdingTurn(sessionId)?.turnId !== turnId || facts?.deliveryFailure?.turnId !== turnId)
         return;
       const message =
-        state.deliveryFailure.message +
+        facts.deliveryFailure.message +
         (confirmed ? "" : " The agent has not confirmed it stopped.");
-      state.errorReported = true;
+      facts.errorReported = true;
       if (confirmed) {
-        releaseTurn(sessionId, turnId, cause ?? "gone", { message, category: "network" });
+        releaseTurn(sessionId, turnId, {
+          type: cause ?? "gone",
+          error: { message, category: "network" },
+        });
         return;
       }
       persistAndInvalidate(
-        persistSessionError(sessionId, message, "network", "working"),
+        persistSessionStatus(sessionId, "working", message, "network"),
         SESSION_RESOURCES,
         sessionId
       );
@@ -287,12 +289,12 @@ export function createAgentEventHandler(): AgentEventHandler {
       const messageId = "messageId" in stamped ? stamped.messageId : undefined;
       let holder = holdingTurn(sessionId);
       const last = lastTurn(sessionId);
+      // A replay or another cloud client can be the first we hear of this turn; an ended one stays history.
       if (!holder && !isUnknownEvent(envelope.event) && envelope.event.type === "turn.started") {
         if (
           last?.turnId !== turnId &&
           !conversation.turns.some((t) => t.turnId === turnId && t.status === "ended")
         ) {
-          this.resetTurnFacts(sessionId);
           admitTurn(sessionId, envelope.event.turnId, "start");
           holder = holdingTurn(sessionId);
         }
@@ -301,6 +303,7 @@ export function createAgentEventHandler(): AgentEventHandler {
         holder &&
         (turnId === holder.turnId || (turnId === undefined && holder.phase === "running"))
       ) {
+        reportsFor(state, holder.turnId);
         const outputAt =
           typeof stamped.timestamp === "number" &&
           envelope.event.type !== "permission.resolved" &&
@@ -312,6 +315,9 @@ export function createAgentEventHandler(): AgentEventHandler {
         admitTurn(sessionId, holder.turnId, "event", outputAt);
       }
       const owner = holder?.turnId ?? last?.turnId;
+      const deferred =
+        holder && holder.phase !== "running" && last && !last.nativeEnd && last.turnId === turnId;
+      const { facts } = state;
 
       if (isUnknownEvent(envelope.event)) {
         // Law 6: forward it verbatim. Dropping it would be a hole in the
@@ -350,12 +356,31 @@ export function createAgentEventHandler(): AgentEventHandler {
             sessionId,
             conversation,
             changes,
-            (turn) => (outcome = turnOutcomeFor(state, owner, turn)),
+            (turn) => {
+              outcome = turnOutcomeFor(facts, deferred ? last.turnId : owner, turn);
+              return deferred ? undefined : outcome;
+            },
             turnProviderCredentialSource(envelope.event)
           );
 
       const event = envelope.event;
-      const ended = event.type === "turn.ended" ? endTurn(event) : undefined;
+      let ended: NativeEnd | undefined;
+      if (event.type === "turn.ended") {
+        const { turnId } = event;
+        const cancelled = event.stopReason === "cancelled";
+        const held = holder?.turnId === turnId;
+        ended = { type: "end", turnId, cancelled, held, outcome };
+        if (
+          (held || deferred) &&
+          outcome?.status === "error" &&
+          event.error?.category === "usage_limit" &&
+          (!outcome.error || outcome.error.category === "usage_limit")
+        ) {
+          const resetsAt = Math.max(...(facts.limitResets?.values() ?? []));
+          ended.limit = resetsAt > Date.now() ? { resetsAt } : {};
+        }
+        releaseTurn(sessionId, turnId, ended);
+      }
       const stale = new Set<LiveName>();
       for (const write of writes) {
         if (!write.result.ok) {
@@ -374,7 +399,7 @@ export function createAgentEventHandler(): AgentEventHandler {
       // shared verbatim with the verification CLI. What is left below is the
       // product plumbing only this process has.
       for (const write of applySessionFacts(
-        state,
+        facts,
         envelope.event.type === "turn.started" ? holder?.turnId : owner,
         sessionId,
         envelope.event,
@@ -411,19 +436,7 @@ export function createAgentEventHandler(): AgentEventHandler {
         .otherwise(() => {});
 
       if (!NOT_PUSHED.has(envelope.event.type)) pushEnvelope(envelope);
-      if (event.type === "turn.ended" && ended) {
-        let limit;
-        if (
-          event.turnId === holder?.turnId &&
-          outcome?.status === "error" &&
-          event.error?.category === "usage_limit" &&
-          (!outcome.error || outcome.error.category === "usage_limit")
-        ) {
-          const resetsAt = Math.max(...(state.limitResets?.values() ?? []));
-          limit = resetsAt > Date.now() ? { resetsAt } : {};
-        }
-        ended(outcome?.status, limit);
-      }
+      if (ended) turnNotices.queue?.(sessionId, ended);
     },
   };
 }

@@ -1170,7 +1170,6 @@ export async function startCloudTurn(
   if (!claimTurn(deusSessionId, turnId)) {
     throw new ConflictError("The agent is still working — wait for the current turn to finish.");
   }
-  handler.resetTurnFacts(deusSessionId);
   try {
     // The turn names its selection and no credential: the platform selects the
     // signed-in user's provider account at admission.

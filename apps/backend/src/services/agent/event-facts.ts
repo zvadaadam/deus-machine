@@ -23,8 +23,7 @@ import { isGenericTurnFailure } from "@shared/lib/send-refusal";
 import { isUnknownEvent, type AnyLifecycleEvent } from "@shared/protocol-types";
 import {
   persistAgentSessionId,
-  persistSessionError,
-  persistSessionWorking,
+  persistSessionStatus,
   type TurnOutcomeWrite,
   type WriteResult,
 } from "./persistence";
@@ -64,7 +63,7 @@ function turnOutcome(turn: ConversationTurn, alreadyReported: boolean): TurnOutc
   return { status: "idle" };
 }
 
-/** Persist the owner's outcome with the error and delivery reports for this turn. */
+/** Compute the session outcome for persistChanges while advancing this turn's error and delivery reports. */
 export function turnOutcomeFor(
   facts: SessionFacts,
   owner: string | undefined,
@@ -131,7 +130,7 @@ export function applySessionFacts(
       )
         return [];
       facts.errorReported = false;
-      return [{ fact: "session-working", result: persistSessionWorking(sessionId) }];
+      return [{ fact: "session-working", result: persistSessionStatus(sessionId, "working") }];
     })
     .with({ type: "session.limits" }, (e) => {
       if (owner !== e.turnId) return [];
@@ -161,9 +160,8 @@ export function applySessionFacts(
       )
         return [];
       facts.errorReported = true;
-      return [
-        { fact: "session-error", result: persistSessionError(sessionId, e.message, e.category) },
-      ];
+      const result = persistSessionStatus(sessionId, "error", e.message, e.category);
+      return [{ fact: "session-error", result }];
     })
     .otherwise(() => []);
 }

@@ -23,17 +23,18 @@ import {
 } from "../../lib/errors";
 import { encodeOrigin, getSessionRaw, getTurn, getWorkspaceForMiddleware } from "../../db";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
-import { persistLastUserMessageAt, persistSessionWorking } from "./persistence";
+import { persistLastUserMessageAt, persistSessionStatus } from "./persistence";
 import { invalidate } from "../query-engine";
 import {
   admitTurn,
   claimTurn,
   holdingTurn,
-  lastTurn,
+  competingEnd,
   refuseTurn,
   releaseTurn,
   askStop,
   answerStop,
+  turnNotices,
 } from "./chat-turn";
 import * as agentService from "./service";
 import { toEngineInput, withoutImageParts } from "./run-config";
@@ -275,11 +276,13 @@ async function sendMessageOnce(
   // The window matches its optimistic message to the engine's echo by this id on both transports.
   const turnId = input.turnId ?? uuidv7();
   const sentAt = Date.now();
-  const last = lastTurn(sessionId);
   const start = isCloud ? undefined : Promise.withResolvers<void>();
-  const setup = start && { controller: new AbortController(), done: start.promise };
+  const prior =
+    session && ([session.status, session.error_message, session.error_category] as const);
+  const setup = start && { controller: new AbortController(), done: start.promise, prior };
+  // Nothing awaits between the holder check above and this claim, so no other send can take the chat.
   if (setup) claimTurn(sessionId, turnId, setup, sentAt);
-  const working = persistSessionWorking(sessionId);
+  const working = persistSessionStatus(sessionId, "working");
   if (!working.ok) {
     refuseTurn(sessionId, turnId);
     throw new Error(working.error);
@@ -337,8 +340,11 @@ async function sendMessageOnce(
           reason: "wake failed — try again",
         });
       }
-      if (!holdingTurn(sessionId) && lastTurn(sessionId)?.turnId !== turnId)
-        releaseTurn(sessionId, undefined, "refused", startError(err));
+      if (!holdingTurn(sessionId)) {
+        const error = startError(err);
+        persistSessionStatus(sessionId, "error", error.message, error.category);
+        invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
+      }
       throw err;
     }
   } else if (setup) {
@@ -357,17 +363,17 @@ async function sendMessageOnce(
       admitTurn(sessionId, turnId);
     } catch (err) {
       if (setup.controller.signal.aborted && err === setup.controller.signal.reason) {
-        if (err === STEER_READ) releaseTurn(sessionId, turnId, "withdrawn");
+        if (err === STEER_READ) releaseTurn(sessionId, turnId, { type: "withdrawn" });
         throw err;
       }
       if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
-        // The engine's end can reach a waiting row while this strict send still holds the chat.
-        const ended = lastTurn(sessionId);
-        if (ended && ended !== last && ended.turnId === refusalData(err, "turnActive")?.turnId)
-          refuseTurn(sessionId, turnId, "busy_after_end");
-        else refuseTurn(sessionId, turnId);
+        const winner = refusalData(err, "turnActive")?.turnId;
+        const end = competingEnd(sessionId, winner);
+        // The competing engine turn supplies its own end, including when it beat the busy answer.
+        if (refuseTurn(sessionId, turnId) && end) turnNotices.queue?.(sessionId, end);
         throw new ChatBusyError(
-          "The agent is still working — wait for the current turn to finish."
+          "The agent is still working — wait for the current turn to finish.",
+          winner
         );
       }
       refuseTurn(sessionId, turnId, startError(err));
@@ -402,7 +408,7 @@ export async function stopSession(
     const { setup } = turn;
     if (turn.phase === "preparing") {
       setup.controller.abort(new ConflictError("Stopped before it started."));
-      releaseTurn(sessionId, turn.turnId, "cancelled");
+      releaseTurn(sessionId, turn.turnId, { type: "cancelled" });
     }
     // Once on the wire, the start can still succeed. Only cancel it if it survives the answer.
     await setup.done;

@@ -206,8 +206,8 @@ export async function startTurn(
     // Negotiated at the handshake, not guessed from a harness list.
     supportsImages: supportsImages(agentHarness),
   });
-  signal?.throwIfAborted();
-  if (wireTurn(sessionId, turnId)) events?.resetTurnFacts(sessionId);
+  // Wire before the request: the engine can publish the first event in the same tick as its answer.
+  wireTurn(sessionId, turnId);
   await link.startTurn(params);
 }
 

@@ -1,35 +1,39 @@
-import type { Origin, TurnCancelResult, TurnEndedEvent } from "@zvada/agent-server/protocol";
+// Which turn holds a chat, and how far it got. The status column can show working for two
+// consecutive turns, or error before the turn ends. Release is the only exit.
+import type { Origin, TurnCancelResult } from "@zvada/agent-server/protocol";
 import { invalidate } from "../query-engine";
 import {
-  persistSessionError,
+  persistSessionStatus,
   persistStopCredit,
   persistStopStatus,
   persistTurn,
-  restoreEndedStatus,
+  terminalStatus,
+  type SessionProjection,
   type TurnOutcomeWrite,
 } from "./persistence";
 
-type NativeEnd = {
+export type NativeEnd = {
   type: "end";
   turnId: string;
-  held: boolean;
   cancelled: boolean;
-  status?: TurnOutcomeWrite["status"];
+  held: boolean;
+  outcome?: TurnOutcomeWrite;
   limit?: { resetsAt?: number };
 };
 export type TurnNotice =
   | NativeEnd
   | { type: "stop"; turnId?: string; by: Origin }
-  | { type: "interrupted"; turnId?: string; gone: boolean; cause: "failure" | "cancelled" }
-  | { type: "available" };
+  | { type: "interrupted"; turnId?: string; gone: boolean; cause: "failure" | "cancelled" };
 export const turnNotices: {
-  queue?: (id: string, notice: TurnNotice) => string[] | undefined;
+  queue?: (id: string, notice: TurnNotice) => void;
+  recover?: (id: string, turnId: string, returnHead?: boolean) => string[] | undefined;
   withdrawCards?: (id: string, turnId: string) => void;
   stored?: (id: string, turnId: string) => void;
 } = {};
 type Setup = {
   controller: AbortController;
   done: Promise<void>;
+  prior?: SessionProjection;
 };
 type Turn = {
   turnId: string;
@@ -42,21 +46,27 @@ type Turn = {
   timer?: NodeJS.Timeout;
   confirmed?: boolean;
 };
-type Last = { turnId: string; nativeEnd: boolean };
-const chats = new Map<
-  string,
-  { turn?: Turn; last?: Last; setupStop?: { turnId: string; by: Origin } }
->();
+type Last = { turnId: string; nativeEnd: false | NativeEnd };
+type Chat = {
+  turn?: Turn;
+  last?: Last;
+  setupStop?: { turnId: string; by: Origin };
+};
+const chats = new Map<string, Chat>();
 const notify = (id: string) =>
   invalidate(["workspaces", "sessions", "session"], { sessionIds: [id] });
 
 export const holdingTurn = (id: string): Readonly<Turn> | undefined => chats.get(id)?.turn;
 export const lastTurn = (id: string): Readonly<Last> | undefined => chats.get(id)?.last;
-export const setupStop = (id: string) => chats.get(id)?.setupStop;
 
-// A local turn holds its chat through its end, even after an error changes the status column.
+export const setupStop = (id: string) => chats.get(id)?.setupStop;
+export function competingEnd(id: string, winner?: string) {
+  const end = lastTurn(id)?.nativeEnd;
+  return end && end.turnId === winner ? end : undefined;
+}
+
 export function claimTurn(id: string, turnId: string, setup?: Setup, sentAt?: number): boolean {
-  const chat = chats.get(id) ?? {};
+  const chat: Chat = chats.get(id) ?? {};
   if (chat.turn) return false;
   chat.turn = { turnId, phase: setup ? "preparing" : "starting", setup, sentAt };
   chats.set(id, chat);
@@ -65,9 +75,7 @@ export function claimTurn(id: string, turnId: string, setup?: Setup, sentAt?: nu
 
 export function wireTurn(id: string, turnId: string) {
   const turn = chats.get(id)?.turn;
-  if (turn?.turnId !== turnId || turn.phase !== "preparing") return false;
-  turn.phase = "starting";
-  return true;
+  if (turn?.turnId === turnId && turn.phase === "preparing") turn.phase = "starting";
 }
 
 // An answer admits its starting holder, and only an unended turn.started may take a free chat.
@@ -85,14 +93,6 @@ export function admitTurn(
   if (outputAt !== undefined) turn.lastOutputAt = outputAt;
 }
 
-// The engine can end the turn before cancel answers. Hold the credit from the ask.
-export function askStop(id: string, by: Origin) {
-  const turn = chats.get(id)?.turn;
-  if (turn) (turn.stops ??= new Set()).add(by);
-  turnNotices.queue?.(id, { type: "stop", turnId: turn?.turnId, by });
-  return turn;
-}
-
 function credit(id: string, turn: Turn) {
   const first = turn.stops?.values().next().value;
   if (first !== turn.credited && persistStopCredit(id, turn.turnId, first).ok)
@@ -106,83 +106,83 @@ export function reportInterruption(
   cause: "failure" | "cancelled" = "failure"
 ) {
   if (gone && turnId) turnNotices.withdrawCards?.(id, turnId);
-  return turnNotices.queue?.(id, { type: "interrupted", turnId, gone, cause });
+  turnNotices.queue?.(id, { type: "interrupted", turnId, gone, cause });
 }
 
-type End = "native" | "refused" | "withdrawn" | "cancelled" | "gone";
 type ErrorInfo = NonNullable<TurnOutcomeWrite["error"]>;
+type Release =
+  | NativeEnd
+  | { type: "snapshot" | "withdrawn" }
+  | { type: "cancelled" | "gone" | "refused"; error?: ErrorInfo };
 
-export function releaseTurn(
-  id: string,
-  turnId: string | undefined,
-  end?: End,
-  detail?: ErrorInfo | "busy_after_end"
-) {
+export function releaseTurn(id: string, turnId: string, reason: Release) {
   const chat = chats.get(id);
   const turn = chat?.turn;
-  const nativeEnd = end === undefined || end === "native";
+  if (!chat) return false;
+  const { type } = reason;
   if (turn?.turnId !== turnId) {
-    if (nativeEnd && chat?.last && chat.last.turnId === turnId && !chat.last.nativeEnd)
-      chat.last = { turnId, nativeEnd: true };
+    // A late native end corrects a local end. A successor keeps working until it gives up.
+    if (type === "end" && chat.last?.turnId === turnId && !chat.last.nativeEnd) {
+      chat.last.nativeEnd = reason;
+      const setup = turn?.setup;
+      if (setup && reason.outcome) setup.prior = terminalStatus(reason.outcome, setup.prior);
+    }
     return false;
   }
-  const refused = end === "refused" || end === "withdrawn";
-  const setupStop =
-    end === "cancelled" && turn?.phase === "preparing"
-      ? turn.stops?.values().next().value
-      : undefined;
-  if (chat && turn) {
-    clearTimeout(turn.timer);
-    if (setupStop) chat.setupStop = { turnId: turn.turnId, by: setupStop };
-    else if (!refused) {
-      delete chat.setupStop;
-      chat.last = { turnId: turn.turnId, nativeEnd };
-      if (end) credit(id, turn);
-    }
-    delete chat.turn;
-    if (!chat.last && !chat.setupStop) chats.delete(id);
+  // A lost answer cannot end a turn the engine has already shown running.
+  if (type === "refused" && turn.phase === "running") {
+    delete turn.setup;
+    return false;
   }
-  if (nativeEnd) return true;
-  if (detail === "busy_after_end" && chat?.last) restoreEndedStatus(id, chat.last.turnId);
-  if (end === "refused" && typeof detail !== "object" && !turn?.stops?.size) {
-    if (detail === "busy_after_end") {
-      turnNotices.queue?.(id, { type: "available" });
-      notify(id);
-    }
-    return true;
+  clearTimeout(turn.timer);
+  delete chat.turn;
+  const refused = type === "refused" || type === "withdrawn";
+  const by =
+    type === "cancelled" && turn.phase === "preparing" && turn.stops?.values().next().value;
+  // A Stop in app setup ends in memory only. The engine's last turn still owns its late end.
+  if (by) chat.setupStop = { turnId, by };
+  else if (!refused) {
+    delete chat.setupStop;
+    chat.last = { turnId, nativeEnd: type === "end" && reason };
+    if (type !== "snapshot") credit(id, turn);
   }
-  if (typeof detail === "object") persistSessionError(id, detail.message, detail.category);
-  else if (end !== "refused") persistStopStatus(id);
-  const cause = end === "cancelled" ? "cancelled" : undefined;
-  const kept =
-    turnId && end !== "withdrawn" ? reportInterruption(id, turnId, true, cause) : undefined;
-  if (turnId && !setupStop && !refused) {
-    const saved = persistTurn(id, {
-      turnId,
-      endedAt: Date.now(),
-      stopReason: cause ?? "error",
-      undeliveredSteers: kept,
-    });
-    notify(id);
-    if (saved.ok) turnNotices.stored?.(id, turnId);
-  } else notify(id);
+  if (!chat.last && !chat.setupStop) chats.delete(id);
+  if (type === "end" || type === "snapshot") return true;
+  const error = "error" in reason && reason.error;
+  const prior = turn.setup?.prior;
+  // An unsent claim without a failure of its own leaves the chat as if it had never been made.
+  if (error) persistSessionStatus(id, "error", error.message, error.category);
+  else if (prior && (refused || by)) persistSessionStatus(id, ...prior);
+  else if (!refused) persistStopStatus(id);
+  if (type !== "withdrawn") {
+    const interrupted = !refused || !!error || !!turn.stops?.size;
+    const kept = turnNotices.recover?.(id, turnId, interrupted);
+    const cause = type === "cancelled" ? "cancelled" : undefined;
+    if (!by && (!refused || kept?.length)) {
+      const saved = persistTurn(id, {
+        turnId,
+        endedAt: Date.now(),
+        stopReason: cause ?? "error",
+        undeliveredSteers: kept,
+      });
+      if (saved.ok) turnNotices.stored?.(id, turnId);
+    }
+    if (interrupted || kept?.length) reportInterruption(id, turnId, true, cause);
+  }
+  notify(id);
   return true;
 }
 
-/** Free the chat before invalidation. Its next row can start after the window receives this end. */
-export function endTurn({ sessionId, turnId, stopReason }: TurnEndedEvent) {
-  const held = releaseTurn(sessionId, turnId, "native");
-  const cancelled = stopReason === "cancelled";
-  return (status: NativeEnd["status"], limit?: NativeEnd["limit"]) =>
-    turnNotices.queue?.(sessionId, { type: "end", turnId, cancelled, held, status, limit });
+export function refuseTurn(id: string, turnId: string, error?: ErrorInfo) {
+  return releaseTurn(id, turnId, { type: "refused", error });
 }
 
-export function refuseTurn(id: string, turnId: string, detail?: ErrorInfo | "busy_after_end") {
+// The engine can end the turn before cancel answers. Hold the credit from the ask.
+export function askStop(id: string, by: Origin) {
   const turn = chats.get(id)?.turn;
-  if (turn?.turnId !== turnId) return false;
-  if (turn.phase !== "running") return releaseTurn(id, turnId, "refused", detail);
-  delete turn.setup;
-  return false;
+  if (turn) (turn.stops ??= new Set()).add(by);
+  turnNotices.queue?.(id, { type: "stop", turnId: turn?.turnId, by });
+  return turn;
 }
 
 export function answerStop(
@@ -207,7 +207,7 @@ export function answerStop(
       if (saved.ok && saved.value) notify(id);
     }
   } else if (result?.outcome === "no_active_turn") {
-    releaseTurn(id, live.turnId, "gone");
+    releaseTurn(id, live.turnId, { type: "gone" });
   } else if (!live.timer || (!live.confirmed && !unconfirmed)) {
     // Confirmation starts the 15 seconds for final echoes. Later Stops cannot postpone it.
     clearTimeout(live.timer);
@@ -218,7 +218,7 @@ export function answerStop(
       if (owner && owner !== live) return;
       try {
         if (live.confirmed) {
-          if (owner) releaseTurn(id, live.turnId, "cancelled");
+          if (owner) releaseTurn(id, live.turnId, { type: "cancelled" });
         } else {
           const warning = persistStopStatus(id, owner ? null : "error");
           if (!warning.ok || !warning.value) return;

@@ -15,7 +15,7 @@ import { invalidate, onInvalidate } from "../query-engine";
 import { getSetting } from "../settings.service";
 import { toEngineInput } from "./run-config";
 import { steerTurn } from "./service";
-import { holdingTurn, lastTurn, turnNotices, type TurnNotice } from "./chat-turn";
+import { holdingTurn, competingEnd, turnNotices, type TurnNotice } from "./chat-turn";
 import { continuedSettings } from "./turn-settings";
 import {
   previousSend,
@@ -61,6 +61,7 @@ interface Queue {
   sessionId: string;
   items: Item[];
   pause: Pause;
+  busyOn?: string;
 }
 
 function hold(q: Queue) {
@@ -76,7 +77,7 @@ type PauseEvent =
 
 /**
  * A Stop replaces any limit and holds waiting rows, including on an idle chat. It follows the
- * live turn, or the pending start if none is live. An empty Stop or failure clears when that turn ends,
+ * turn that holds the chat. An empty Stop or failure clears when that turn ends,
  * its start is refused (including busy), or Deus gives it up. With no turn, an empty hold clears at once.
  * The person's Stop takes priority. The turn itself credits the first Stop that took effect.
  * A cancellation from a card, harness or replay keeps its turn's stopper or a standing
@@ -88,7 +89,7 @@ type PauseEvent =
  * after a reported reset. A limit can hold an empty queue. A plain send can still start an idle chat.
  * Resume covers its own turn's end and failure. Its usage limit still applies. A resumed Stop
  * or the person's Resume also covers that turn's cancellation. An agent resuming a live failure
- * waits for it to settle. The person's later Resume takes effect immediately.
+ * waits for it to settle. The person's later Resume opens the queue; the row waits for its turn.
  */
 function transition(
   q: Queue,
@@ -158,7 +159,7 @@ function transition(
     q.pause = { reason: "limit", turnId: event.turnId, limit: { ...limited, continues } };
   } else if (
     event.type === "interrupted" ||
-    (event.type === "end" && (event.status === "error" || event.missingEcho))
+    (event.type === "end" && (event.outcome?.status === "error" || event.missingEcho))
   ) {
     q.pause = { reason: "failed", turnId };
   } else if (prior?.reason === "resumed") q.pause = null;
@@ -299,8 +300,14 @@ function waitingRow(q: Queue | undefined, id: string) {
   return q?.items.find((item) => item.message.turnId === id && stateOf(item) === "waiting");
 }
 
+function waitForWinner(q: Queue, { competingTurnId }: ChatBusyError) {
+  if (competingEnd(q.sessionId, competingTurnId)) return true;
+  q.busyOn = competingTurnId;
+  return false;
+}
+
 async function drain(q: Queue | undefined) {
-  if (!q) return;
+  if (!q || q.busyOn) return;
   const head = q.items[0];
   const canStart = !q.pause || (q.pause.reason === "resumed" && q.pause.scope === "turn");
   if (!canStart || !head || stateOf(head) !== "waiting") return;
@@ -310,7 +317,6 @@ async function drain(q: Queue | undefined) {
     return;
   }
   if (holdingTurn(q.sessionId)) return;
-  const last = lastTurn(q.sessionId);
   const previous = head.attempt;
   let turnId = head.message.turnId;
   if (previous) turnId = previous.state === "busy" ? previous.turnId : uuidv7();
@@ -332,7 +338,7 @@ async function drain(q: Queue | undefined) {
         : undefined
     );
     // The competing turn may already have ended while this attempt held the head.
-    if (state === "busy" && lastTurn(q.sessionId) !== last) void drain(q);
+    if (error instanceof ChatBusyError && waitForWinner(q, error)) void drain(q);
   }
 }
 
@@ -390,11 +396,11 @@ export async function sendOrQueue(input: Input) {
   const message = { ...input, turnId: input.turnId ?? uuidv7() };
   const queued = { turnId: message.turnId, queued: true as const };
   if (alreadyQueued(message)) return queued;
-  const last = lastTurn(sessionId);
   const queue = queues.get(sessionId);
   const behind = queue && !hold(queue) && queue.items.some((item) => stateOf(item) === "waiting");
   const admission =
     behind || holdingTurn(sessionId) ? previousSend(message, message.turnId) : sendMessage(message);
+  let start = !behind;
   if (admission) {
     try {
       return await admission;
@@ -403,9 +409,10 @@ export async function sendOrQueue(input: Input) {
       chat = localChat(sessionId);
       if (!chat) throw error;
       if (alreadyQueued(message)) return queued;
+      start = waitForWinner(queueFor(sessionId), error);
     }
   }
-  append(message, undefined, chat, !behind && (!admission || lastTurn(sessionId) !== last));
+  append(message, undefined, chat, start);
   return queued;
 }
 
@@ -698,7 +705,9 @@ function recoverAttempt(q: Queue, turnId: string, state: "busy" | "returned" = "
   return true;
 }
 
-function recoverSteers(q: Queue, turnId: string) {
+turnNotices.recover = (id, turnId, returnHead) => {
+  const q = queues.get(id);
+  if (!q) return;
   // A read echo lost in a replay gap can come back as a held row.
   const kept: string[] = [];
   const front: Item[] = [];
@@ -713,15 +722,12 @@ function recoverSteers(q: Queue, turnId: string) {
     if (steer.unread === "front") front.push(item);
   }
   if (front.length) putFirst(q, front);
+  if (returnHead) recoverAttempt(q, turnId);
   return kept;
-}
+};
 
 /** A live turn can still echo. Once it is gone, return its unread steers to the queue. */
 turnNotices.queue = (id, event) => {
-  if (event.type === "available") {
-    void drain(queues.get(id));
-    return;
-  }
   const keepEmpty =
     event.type === "stop" || (event.type === "end" ? !!event.limit : event.cause === "cancelled");
   const q = queues.get(id) ?? (keepEmpty && localChat(id) ? queueFor(id) : undefined);
@@ -732,9 +738,10 @@ turnNotices.queue = (id, event) => {
   }
   const gone = event.type === "end" || event.gone;
   const turnId = gone ? event.turnId : undefined;
-  const kept = turnId !== undefined ? recoverSteers(q, turnId) : undefined;
+  const winner = turnId !== undefined && q.busyOn === turnId;
+  if (winner) delete q.busyOn;
+  if (turnId !== undefined) turnNotices.recover?.(id, turnId);
   const missingEcho = turnId !== undefined && recoverAttempt(q, turnId);
   changed(q, event.type === "end" ? { ...event, missingEcho } : event);
-  if (event.type === "end" ? event.status : gone) void drain(q);
-  return kept;
+  if (winner || (event.type === "end" ? event.outcome?.status : gone)) void drain(q);
 };
