@@ -231,7 +231,7 @@ function endedOf(
   };
 }
 
-/** A first task the host holds for a workspace being set up; `sending` once it is handed to the engine. */
+/** A first task the host holds while its workspace is being set up. */
 interface Held {
   caller: Who;
   workspaceId: string;
@@ -240,7 +240,6 @@ interface Held {
   unwatch: () => void;
   /** When it was held: one held past SETUP_LIMIT_MS is not sent. */
   since: number;
-  sending?: Promise<void>;
 }
 
 /** A turn's facts, as its row has them. */
@@ -666,7 +665,7 @@ export function createDeusHost(): DeusHost {
 
   /**
    * Hold the first task until its chat is ready. A failed, archived or over-age
-   * start drops it. During engine admission a stop waits and uses the minted id.
+   * start drops it. Stop aborts app setup at once and waits for a start already on the wire.
    */
   function hold(sessionId: string, held: Omit<Held, "unwatch" | "since">) {
     const stop = onInvalidate((resources) => {
@@ -675,7 +674,7 @@ export function createDeusHost(): DeusHost {
     const entry: Held = { ...held, since: Date.now(), unwatch: stop };
     firsts.set(sessionId, entry);
     function look() {
-      if (firsts.get(sessionId) !== entry || entry.sending) return;
+      if (firsts.get(sessionId) !== entry) return;
       const w = getDatabase()
         .prepare("SELECT state, current_session_id FROM workspaces WHERE id = ?")
         .get(held.workspaceId) as { state: string; current_session_id: string | null } | undefined;
@@ -687,7 +686,7 @@ export function createDeusHost(): DeusHost {
           return;
         }
         entry.unwatch();
-        entry.sending = sendFirst(held.caller, sessionId, held.input, held.settings)
+        void sendFirst(held.caller, sessionId, held.input, held.settings)
           .catch(() => {})
           .finally(() => {
             firsts.delete(sessionId);

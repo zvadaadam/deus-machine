@@ -542,28 +542,22 @@ describe("stopping the current turn", () => {
     }
   );
 
-  it.each(["archive", "hide", "delete"] as const)(
-    "keeps only the last pre-wire end and forgets it on %s",
-    async (action) => {
-      let previous: string | undefined;
-      for (const id of ["A", "B", "C"]) {
-        holdAppSetup();
-        const aborted = expect(send(id)).rejects.toThrow("Stopped before it started");
-        if (previous) expect(await fact(previous)).toEqual({ state: "unknown" });
-        await stop();
-        await aborted;
-        expect(await fact(id)).toMatchObject({ state: "ended", cancelledBy: fromPerson });
-        previous = id;
-      }
-      expect(await fact("A")).toEqual({ state: "unknown" });
-      expect(await fact("B")).toEqual({ state: "unknown" });
-      if (action === "archive") db.exec("UPDATE workspaces SET state = 'archived'");
-      else if (action === "hide") db.exec("UPDATE sessions SET is_hidden = 1");
-      else db.exec("DELETE FROM sessions");
-      invalidate(["workspaces", "sessions"]);
-      expect(await fact("C")).toEqual({ state: "unknown" });
+  it("keeps only the last pre-wire end until the next admission", async () => {
+    let previous: string | undefined;
+    for (const id of ["A", "B", "C"]) {
+      holdAppSetup();
+      const aborted = expect(send(id)).rejects.toThrow("Stopped before it started");
+      if (previous) expect(await fact(previous)).toEqual({ state: "unknown" });
+      await stop();
+      await aborted;
+      expect(await fact(id)).toMatchObject({ state: "ended", cancelledBy: fromPerson });
+      previous = id;
     }
-  );
+    expect(await fact("A")).toEqual({ state: "unknown" });
+    expect(await fact("B")).toEqual({ state: "unknown" });
+    await send("D");
+    expect(await fact("C")).toEqual({ state: "unknown" });
+  });
 
   it("an older setup abort settling after a new admission leaves the new send working", async () => {
     await send("previous");

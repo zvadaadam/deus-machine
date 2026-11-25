@@ -29,7 +29,6 @@ import {
   requireSameHarness,
   retryReadSteer,
   sendMessage,
-  stoppedBeforeStart,
   withdrawSteerRetry,
 } from "./turns";
 
@@ -89,8 +88,8 @@ type PauseEvent =
 
 /**
  * A Stop replaces any limit and holds waiting rows, including on an idle chat. It follows the
- * pending start or live turn. An empty Stop or failure clears when that turn ends, its start
- * is refused (including busy), or Deus gives it up. With no turn, an empty hold clears at once.
+ * live turn, or the pending start if none is live. An empty Stop or failure clears when that turn ends,
+ * its start is refused (including busy), or Deus gives it up. With no turn, an empty hold clears at once.
  * The person's Stop takes priority. The turn itself credits the first Stop that took effect.
  * A cancellation from a card, harness or replay keeps its turn's stopper or a standing
  * person-only hold. Otherwise it replaces any earlier failure or agent Stop with a person-only hold.
@@ -735,7 +734,6 @@ function interrupted(
   gone: boolean,
   cause: InterruptionCause
 ) {
-  if (turnId && stoppedBeforeStart(sessionId)?.turnId === turnId) cause = "cancelled";
   const q = queueToPause(sessionId, cause === "cancelled");
   if (!q) return;
   const kept = gone && turnId !== undefined ? recoverSteers(q, turnId) : undefined;

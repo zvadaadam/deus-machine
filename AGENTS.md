@@ -235,8 +235,8 @@ The rules above `transition` in `services/agent/queue.ts` say who may resume eac
 During local app setup, Stop returns the chat to idle at once, except for an agent's or
 assistant's first task, which ends in an error saying it was not delivered. The person
 keeps their draft, a queue head waits first, and an operator's send is refused
-with “Stopped before it started.” The operator can read who stopped that send
-until the chat's next admission or archive. Its end stays out of the transcript.
+with “Stopped before it started.” `turn()` reports that send cancelled, and by whom,
+until the chat's next admission or a restart. The transcript does not show it.
 Once the start request reaches the wire, Stop
 waits for its answer (up to 30 seconds) and cancels the turn if it is still live.
 If the start reply is lost after the turn's events arrive, the chat keeps working
@@ -578,8 +578,8 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   read leaves it out, the current chat moves to the newest visible one, it
   takes no message and stops counting against its starter). A chat the person
   started is closed by the person; archive its workspace instead.
-  A workspace archive records the caller, including a calling chat's name. A stop is of one turn, and records who
-  stopped it (`turns.cancelled_by`, the first stop that takes effect). Each
+  A workspace archive records the caller, including a calling chat's name. The first Stop that takes effect
+  records who stopped the turn, in memory only during app setup and in `turns.cancelled_by` once on the wire. Each
   host mutation re-reads what it depends on in the same synchronous step as
   its write (`mayStart`, `mayTouch`, `mayArchive`; a workspace's archive
   inside the app's archive queue). A chat's number is stored when it is
