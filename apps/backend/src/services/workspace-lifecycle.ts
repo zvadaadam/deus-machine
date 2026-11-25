@@ -245,9 +245,9 @@ export function deleteFailedWorkspace(workspaceId: string): void {
   invalidate(["workspaces", "sessions"]);
 }
 
-type LiveTurnId = (sessionId: string) => string | undefined;
+type HoldingTurn = (sessionId: string) => { turnId: string } | undefined;
 
-export function repoRemoval(repoId: string, liveTurnId: LiveTurnId) {
+export function repoRemoval(repoId: string, holdingTurn: HoldingTurn) {
   const db = getDatabase();
   const row = db
     .prepare<
@@ -285,7 +285,7 @@ export function repoRemoval(repoId: string, liveTurnId: LiveTurnId) {
         WHERE w.repository_id = ?`
     )
     .all(repoId);
-  if (chats.some(({ id, status }) => ACTIVE_TURN_STATUSES.includes(status) || liveTurnId(id))) {
+  if (chats.some(({ id, status }) => ACTIVE_TURN_STATUSES.includes(status) || holdingTurn(id))) {
     throw new ConflictError(
       "A chat in an archived workspace is still working. Restore the workspace and stop it, or wait for it to finish."
     );
@@ -312,11 +312,11 @@ function unlinkAndDeleteProject(repoId: string): void {
 export function removeRepo(
   repoId: string,
   confirmed: RepoRemovalConfirmation,
-  liveTurnId: LiveTurnId
+  holdingTurn: HoldingTurn
 ): void {
   const removedChats = getDatabase()
     .transaction(() => {
-      const { confirmation, chats } = repoRemoval(repoId, liveTurnId);
+      const { confirmation, chats } = repoRemoval(repoId, holdingTurn);
       if (!isDeepStrictEqual(confirmed, confirmation)) {
         throw new ConflictError(
           "This project changed. Review what will be removed and confirm again."

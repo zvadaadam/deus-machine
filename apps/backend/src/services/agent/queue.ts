@@ -1,7 +1,6 @@
 import { agentOrigin, inputToText, type Origin } from "@zvada/agent-server/protocol";
 import type * as api from "@shared/api/sessions";
 import type { OutputOf, ParsedInputOf } from "@shared/api/op";
-import { ACTIVE_TURN_STATUSES } from "@shared/enums";
 import { knownHarness } from "@shared/harnesses";
 import { uuidv7 } from "@shared/lib/uuid";
 import { encodeOrigin, getTurnsForMessages, sameOrigin, type SessionRow } from "../../db";
@@ -16,16 +15,10 @@ import { invalidate, onInvalidate } from "../query-engine";
 import { getSetting } from "../settings.service";
 import { toEngineInput } from "./run-config";
 import type { TurnEnd } from "./event-handler";
-import {
-  liveTurnId,
-  provideTurnWatcher,
-  steerTurn,
-  type InterruptionCause,
-  type StopAsked,
-} from "./service";
+import { provideTurnWatcher, steerTurn, type InterruptionCause, type StopAsked } from "./service";
+import { holdingTurn, lastTurn } from "./chat-turn";
 import { continuedSettings } from "./turn-settings";
 import {
-  hasPendingStart,
   previousSend,
   requireSameHarness,
   retryReadSteer,
@@ -237,7 +230,7 @@ function queueFor(sessionId: string): Queue {
         const held = queues.get(id);
         if (
           held?.pause?.reason === "limit" &&
-          (liveTurnId(id) || localChat(id)?.error_category !== "usage_limit")
+          (holdingTurn(id) || localChat(id)?.error_category !== "usage_limit")
         ) {
           changed(held, { type: "clear_limit" });
         }
@@ -256,10 +249,9 @@ function queueFor(sessionId: string): Queue {
   return q;
 }
 
-function checkQueueHarness(chat: LocalChat, harness: Input["agentHarness"]) {
+function checkQueueHarness(id: string, chat: LocalChat, harness: Input["agentHarness"]) {
   // The first turn binds the harness before its user echo increments the message count.
-  if (chat.message_count > 0 || ACTIVE_TURN_STATUSES.includes(chat.status))
-    requireSameHarness(chat.agent_harness, harness);
+  if (chat.message_count > 0 || holdingTurn(id)) requireSameHarness(chat.agent_harness, harness);
 }
 
 function newQueueItem(
@@ -324,7 +316,8 @@ async function drain(q: Queue | undefined) {
     notify([q.sessionId]);
     return;
   }
-  if (ACTIVE_TURN_STATUSES.includes(chat.status) || hasPendingStart(q.sessionId)) return;
+  if (holdingTurn(q.sessionId)) return;
+  const last = lastTurn(q.sessionId);
   const previous = head.attempt;
   let turnId = head.message.turnId;
   if (previous) turnId = previous.state === "busy" ? previous.turnId : uuidv7();
@@ -336,7 +329,7 @@ async function drain(q: Queue | undefined) {
     await admission;
     return { item: head, turnId };
   } catch (error) {
-    if (liveTurnId(q.sessionId) === turnId) return;
+    if (holdingTurn(q.sessionId)?.turnId === turnId) return;
     const state = error instanceof ChatBusyError ? "busy" : "returned";
     if (queues.get(q.sessionId) !== q || !recoverAttempt(q, turnId, state)) return;
     changed(
@@ -346,7 +339,7 @@ async function drain(q: Queue | undefined) {
         : undefined
     );
     // The competing turn may already have ended while this attempt held the head.
-    if (state === "busy") void drain(q);
+    if (state === "busy" && lastTurn(q.sessionId) !== last) void drain(q);
   }
 }
 
@@ -365,8 +358,8 @@ function positionOf(sessionId: string, turnId: string) {
   return (queues.get(sessionId)?.items.findIndex((row) => row.message.turnId === turnId) ?? -1) + 1;
 }
 
-function append(message: Message, origin: Origin | undefined, chat: LocalChat) {
-  checkQueueHarness(chat, message.agentHarness);
+function append(message: Message, origin: Origin | undefined, chat: LocalChat, start = true) {
+  checkQueueHarness(message.sessionId, chat, message.agentHarness);
   const q = queueFor(message.sessionId);
   const sender = agentOrigin(origin);
   // Once the matching row has run, retrying a lost answer can queue it again.
@@ -382,7 +375,7 @@ function append(message: Message, origin: Origin | undefined, chat: LocalChat) {
   q.items.push(newQueueItem(q, message, origin, "queued"));
   const position = q.items.length;
   changed(q);
-  if (!ACTIVE_TURN_STATUSES.includes(chat.status)) void drain(q);
+  if (start) void drain(q);
   return position;
 }
 
@@ -404,7 +397,8 @@ export async function sendOrQueue(input: Input) {
   const message = { ...input, turnId: input.turnId ?? uuidv7() };
   const queued = { turnId: message.turnId, queued: true as const };
   if (alreadyQueued(message)) return queued;
-  const admission = ACTIVE_TURN_STATUSES.includes(chat.status)
+  const last = lastTurn(sessionId);
+  const admission = holdingTurn(sessionId)
     ? previousSend(message, message.turnId)
     : sendMessage(message);
   if (admission) {
@@ -417,7 +411,7 @@ export async function sendOrQueue(input: Input) {
       if (alreadyQueued(message)) return queued;
     }
   }
-  append(message, undefined, chat);
+  append(message, undefined, chat, !admission || lastTurn(sessionId) !== last);
   return queued;
 }
 
@@ -426,16 +420,18 @@ type SteerResult = OutputOf<typeof api.steerMessage>;
 function canSteer(q: Queue, chat: LocalChat, turnId: string | undefined): turnId is string {
   // A hold covers waiting rows. A fresh steer can enter a different running turn.
   const pause = q.pause;
+  const turn = holdingTurn(q.sessionId);
   return (
     turnId !== undefined &&
-    turnId === liveTurnId(q.sessionId) &&
+    turnId === turn?.turnId &&
+    turn.phase !== "preparing" &&
     chat.status === "working" &&
     !(pause?.reason === "stopped" && pause.turnId === turnId)
   );
 }
 
 function waitingOnCard(chat: LocalChat, sessionId: string, turnId?: string) {
-  if (turnId !== undefined && turnId !== liveTurnId(sessionId)) return;
+  if (turnId !== undefined && turnId !== holdingTurn(sessionId)?.turnId) return;
   if (chat.status === "needs_response") return "question";
   if (chat.status === "needs_plan_response") return "plan";
 }
@@ -533,7 +529,7 @@ export async function steerMessage(
     await sendMessage(steerId === undefined ? input : message, origin);
     return { outcome: "sent" };
   }
-  checkQueueHarness(chat, input.agentHarness);
+  checkQueueHarness(sessionId, chat, input.agentHarness);
   const q = queueFor(sessionId);
   const item = newQueueItem(q, message, origin, "standalone");
   item.target = turnId;
@@ -653,7 +649,7 @@ async function continueLimited(q: Queue, turnId: string) {
   changed(q, { type: "clear_limit" });
   const id = q.sessionId;
   const chat = localChat(id);
-  if (chat?.status !== "error" || chat.error_category !== "usage_limit" || liveTurnId(id)) return;
+  if (chat?.status !== "error" || chat.error_category !== "usage_limit" || holdingTurn(id)) return;
   const db = getDatabase();
   const recent = db
     .prepare<[string], { turn_id: string }>(
@@ -757,7 +753,6 @@ function turnEnded({ event: { sessionId, turnId, stopReason }, status, held, lim
 
 provideTurnWatcher({
   turnEnded,
-  startCleared: (id) => void drain(queues.get(id)),
   userEcho,
   stopAsked(id, stop) {
     const q = queueToPause(id, true);

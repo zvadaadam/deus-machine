@@ -35,6 +35,7 @@ import {
 } from "@shared/agent-asks";
 import { isUnknownEvent } from "@shared/protocol-types";
 import { hasAgentMessages } from "./agent-messages";
+import { holdingTurn, wireTurn, forgetChatTurns } from "./chat-turn";
 import { AgentLink } from "./client";
 import { LocalAgents } from "./local-agents";
 import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
@@ -162,6 +163,7 @@ export async function shutdown(): Promise<void> {
   link = null;
   events = null;
   await closing?.close();
+  forgetChatTurns();
 }
 
 // ---- Public API ----
@@ -176,10 +178,11 @@ export async function startTurn(
   turnId: string,
   agentHarness: AgentHarness,
   prompt: string,
-  options: Omit<DeusTurnOptions, "agentMessages"> & { signal?: AbortSignal; onWire?(): void }
+  options: Omit<DeusTurnOptions, "agentMessages"> & { signal?: AbortSignal }
 ): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
-  const { signal, onWire, ...run } = options;
+  const { signal, ...run } = options;
+  signal?.throwIfAborted();
   const stopped = Promise.withResolvers<never>();
   const onAbort = () => stopped.reject(signal?.reason);
   signal?.addEventListener("abort", onAbort);
@@ -202,23 +205,9 @@ export async function startTurn(
     // Negotiated at the handshake, not guessed from a harness list.
     supportsImages: supportsImages(agentHarness),
   });
-  // Mirror the admission BEFORE the quick-ack round-trip: the server can push
-  // the first envelopes in the same tick the ack line is processed, and the
-  // handler must already know which turn is live then. beginTurn is a no-op
-  // when the session is locally busy (the server will reject with turnActive)
-  // — the live turn's state must not be clobbered by a doomed registration.
-  const registered = events?.beginTurn(sessionId, turnId) ?? false;
-  onWire?.();
-  try {
-    await link.startTurn(params);
-  } catch (err) {
-    if (registered) events?.abortTurn(sessionId, turnId);
-    throw err;
-  }
-  // Server accepted a turn our local state thought was concurrent — the local
-  // view was stale (e.g. backend restart); register for real now.
-  if (!registered) events?.beginTurn(sessionId, turnId, { force: true });
-  events?.confirmTurn(sessionId, turnId);
+  signal?.throwIfAborted();
+  if (wireTurn(sessionId, turnId)) events?.resetTurnFacts(sessionId);
+  await link.startTurn(params);
 }
 
 function supportsImages(harness: string): boolean {
@@ -302,10 +291,6 @@ export function isConnected(): boolean {
   return link?.isConnected() ?? false;
 }
 
-export function lastOutputAt(sessionId: string) {
-  return events?.lastOutputAt(sessionId);
-}
-
 /** A chat's tools beside the Deus tools: the operator's, registered by services/assistants. */
 let sessionTools: ((own: HostToolSource) => HostToolSource) | undefined;
 export function provideSessionTools(compose: (own: HostToolSource) => HostToolSource): void {
@@ -316,7 +301,6 @@ export type InterruptionCause = "failure" | "cancelled";
 export type StopAsked = { by: Origin; turnId?: string; endedAt?: number };
 interface TurnWatcher {
   turnEnded(end: TurnEnd): void;
-  startCleared(sessionId: string): void;
   userEcho(sessionId: string, turnId: string, steerId?: string): void;
   stopAsked(sessionId: string, stop: StopAsked): void;
   interrupted(
@@ -335,8 +319,6 @@ export function notifyStopAsked(sessionId: string, stop: StopAsked): void {
   turnWatcher?.stopAsked(sessionId, stop);
 }
 
-export const notifyStartCleared = (sessionId: string) => turnWatcher?.startCleared(sessionId);
-
 export function notifyTurnInterrupted(
   sessionId: string,
   turnId: string | undefined,
@@ -345,21 +327,6 @@ export function notifyTurnInterrupted(
 ) {
   if (gone && turnId) cancelSessionRelays(sessionId, "turn interrupted", turnId);
   return turnWatcher?.interrupted(sessionId, turnId, gone, cause);
-}
-
-/**
- * The turn the event handler believes is running for a session, if any.
- *
- * `undefined` means BOTH "no turn is live" and "there is no handler to ask"
- * (never initialized, or shut down) — callers must treat it as absence of
- * evidence, not as evidence of absence.
- */
-export function liveTurnId(sessionId: string): string | undefined {
-  return events?.liveTurnId(sessionId);
-}
-
-export function wasTurnAdmitted(sessionId: string, turnId: string) {
-  return events?.wasTurnAdmitted(sessionId, turnId) ?? false;
 }
 
 export function giveUpTurn(sessionId: string, turnId: string, cause?: "cancelled") {
@@ -380,7 +347,7 @@ async function answerPermission(event: PermissionRequestedEvent): Promise<void> 
 }
 
 async function askPlan(event: PermissionRequestedEvent): Promise<PermissionOutcome> {
-  if (event.turnId !== liveTurnId(event.sessionId)) return { outcome: "cancelled" };
+  if (event.turnId !== holdingTurn(event.sessionId)?.turnId) return { outcome: "cancelled" };
   try {
     const answer = (await handleToolRequest("exitPlanMode", {
       sessionId: event.sessionId,
@@ -409,7 +376,7 @@ async function answerElicitation(event: ElicitationRequestedEvent): Promise<void
 }
 
 async function askQuestions(event: ElicitationRequestedEvent): Promise<ElicitationOutcome> {
-  if (event.turnId !== liveTurnId(event.sessionId)) return { action: "cancel" };
+  if (event.turnId !== holdingTurn(event.sessionId)?.turnId) return { action: "cancel" };
   const questions = event.mode === "question" ? askableQuestions(event.questions) : [];
   if (questions.length === 0) return { action: "decline" };
   try {
@@ -448,7 +415,7 @@ async function handleToolRequest(
   if (method === "agentDevice") return agentDeviceFor(requireParam(params, "sessionId", method));
 
   const sessionId = requireParam(params, "sessionId", method);
-  const turnId = liveTurnId(sessionId);
+  const turnId = holdingTurn(sessionId)?.turnId;
   const requestId = crypto.randomUUID();
   const isUserFacing = isPrompt(method);
   const sessionResources = ["workspaces", "sessions", "session"] as const;
@@ -474,7 +441,7 @@ async function handleToolRequest(
       timeoutMs: isUserFacing ? 24 * 60 * 60 * 1000 : 120_000,
     });
   } finally {
-    if (isUserFacing && turnId !== undefined && liveTurnId(sessionId) === turnId) {
+    if (isUserFacing && turnId !== undefined && holdingTurn(sessionId)?.turnId === turnId) {
       const result = persistSessionBackToWorking(sessionId);
       if (result.ok) invalidate([...sessionResources], { sessionIds: [sessionId] });
     }

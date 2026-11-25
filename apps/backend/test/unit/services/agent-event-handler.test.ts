@@ -116,6 +116,13 @@ function invalidated(): string[] {
 // Import after mocks
 // ============================================================================
 
+import {
+  admitTurn,
+  claimTurn,
+  forgetChatTurns,
+  holdingTurn,
+  refuseTurn,
+} from "../../../src/services/agent/chat-turn";
 import { createAgentEventHandler } from "../../../src/services/agent/event-handler";
 import { cloudSaveFailures, sessionEvents } from "@shared/api/sessions";
 import { published } from "../../helpers";
@@ -198,6 +205,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
   let handler: ReturnType<typeof createAgentEventHandler>;
 
   beforeEach(() => {
+    forgetChatTurns();
     vi.clearAllMocks();
     outcomes.length = 0;
     mockPersistChanges.mockImplementation(stubPersistChanges as never);
@@ -1078,11 +1086,11 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
     it("adopts another client's turn on a free chat", () => {
       restore({ currentTurnId: "browser-turn" });
-      expect(handler.liveTurnId(SESSION)).toBe("browser-turn");
+      expect(holdingTurn(SESSION)?.turnId).toBe("browser-turn");
     });
 
     it("releases the turn the snapshot replaced and leaves the successor's status alone on replay", () => {
-      handler.beginTurn(SESSION, TURN);
+      claimTurn(SESSION, TURN);
       handler.handle(
         envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
       );
@@ -1090,17 +1098,17 @@ describe("agent event handler (canonical lifecycle stream)", () => {
         currentTurnId: "browser-turn",
         turns: [{ turnId: TURN, startedAt: T, endedAt: T + 1, stopReason: "end_turn" }],
       });
-      expect(handler.liveTurnId(SESSION)).toBe("browser-turn");
+      expect(holdingTurn(SESSION)?.turnId).toBe("browser-turn");
       expect(mockPersistTurn).not.toHaveBeenCalled();
       handler.handle(envelope(turnEnded({ stopReason: "cancelled", timestamp: T + 2 })));
       expect(lastOutcome()).toBeUndefined();
-      expect(handler.liveTurnId(SESSION)).toBe("browser-turn");
+      expect(holdingTurn(SESSION)?.turnId).toBe("browser-turn");
     });
 
     it("keeps our pending send when the snapshot has not seen it yet", () => {
-      handler.beginTurn(SESSION, TURN);
+      claimTurn(SESSION, TURN);
       restore({ currentTurnId: null });
-      expect(handler.liveTurnId(SESSION)).toBe(TURN);
+      expect(holdingTurn(SESSION)?.turnId).toBe(TURN);
       expect(mockRestoreCloudSnapshot).toHaveBeenCalledWith(SESSION, expect.anything(), true);
     });
   });
@@ -1109,7 +1117,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
     it("notifies the open chat when its admitted turn with a user message ends locally", () => {
       const interrupted = vi.fn(() => ["unread"]);
       const handler = createAgentEventHandler(interrupted);
-      handler.beginTurn(SESSION, TURN);
+      claimTurn(SESSION, TURN);
       handler.handle(
         envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
       );
@@ -1130,7 +1138,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
     });
 
     it("adopts a cloud turn started by another client after our turn ends", () => {
-      handler.beginTurn(SESSION, TURN);
+      claimTurn(SESSION, TURN);
       handler.handle(
         envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
       );
@@ -1146,7 +1154,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
           timestamp: T + 1,
         })
       );
-      expect(handler.liveTurnId(SESSION)).toBe("browser-turn");
+      expect(holdingTurn(SESSION)?.turnId).toBe("browser-turn");
       // Another client's turn: the chat is working from its first event.
       expect(mockPersistSessionWorking).toHaveBeenCalledExactlyOnceWith(SESSION);
       handler.handle(
@@ -1165,12 +1173,12 @@ describe("agent event handler (canonical lifecycle stream)", () => {
     });
 
     it("records a native ACK that returns after an instant terminal", () => {
-      handler.beginTurn(SESSION, TURN);
+      claimTurn(SESSION, TURN);
       handler.handle(
         envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
       );
       handler.handle(envelope(turnEnded()));
-      handler.confirmTurn(SESSION, TURN);
+      admitTurn(SESSION, TURN);
 
       handler.handle(
         envelope({
@@ -1181,32 +1189,27 @@ describe("agent event handler (canonical lifecycle stream)", () => {
         })
       );
       handler.handle(envelope(turnEnded({ turnId: "historical", stopReason: "error" })));
-      expect(handler.liveTurnId(SESSION)).toBeUndefined();
+      expect(holdingTurn(SESSION)?.turnId).toBeUndefined();
       expect(lastOutcome("historical")).toBeUndefined();
-      expect(handler.beginTurn(SESSION, "next")).toBe(true);
+      expect(claimTurn(SESSION, "next")).toBe(true);
     });
 
     it("refuses a second turn while one is live, and frees it at turn.ended", () => {
-      expect(handler.beginTurn(SESSION, TURN)).toBe(true);
-      expect(handler.beginTurn(SESSION, "turn-2")).toBe(false);
+      expect(claimTurn(SESSION, TURN)).toBe(true);
+      expect(claimTurn(SESSION, "turn-2")).toBe(false);
 
       handler.handle(envelope(turnEnded()));
 
-      expect(handler.beginTurn(SESSION, "turn-2")).toBe(true);
-    });
-
-    it("force-registers when the server accepted a turn we thought was busy", () => {
-      handler.beginTurn(SESSION, TURN);
-      expect(handler.beginTurn(SESSION, "turn-2", { force: true })).toBe(true);
+      expect(claimTurn(SESSION, "turn-2")).toBe(true);
     });
 
     it("rolls back only its own rejected admission", () => {
-      handler.beginTurn(SESSION, TURN);
-      handler.abortTurn(SESSION, "someone-else");
-      expect(handler.beginTurn(SESSION, "turn-2")).toBe(false);
+      claimTurn(SESSION, TURN);
+      refuseTurn(SESSION, "someone-else");
+      expect(claimTurn(SESSION, "turn-2")).toBe(false);
 
-      handler.abortTurn(SESSION, TURN);
-      expect(handler.beginTurn(SESSION, "turn-2")).toBe(true);
+      refuseTurn(SESSION, TURN);
+      expect(claimTurn(SESSION, "turn-2")).toBe(true);
     });
   });
 
@@ -1376,7 +1379,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
       // A fresh entry means the old one is gone: beginTurn only refuses when a
       // live turn is still registered.
-      expect(handler.beginTurn(SESSION, "turn-3")).toBe(true);
+      expect(claimTurn(SESSION, "turn-3")).toBe(true);
     });
   });
 

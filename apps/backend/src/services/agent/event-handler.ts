@@ -8,13 +8,7 @@ import { findConversationMessage, turnProviderCredentialSource } from "@shared/c
 // event that crosses the wire is the event the frontend folds, with the SAME
 // reducer, projecting onto the TanStack cache instead of SQLite.
 //
-// What is NOT change-driven is the small set of facts that are deus's rather
-// than the conversation's: which turn is admitted, whether an error was already
-// reported for it, and the session STATUS that results. The fold has no opinion
-// about any of those, so they live in `event-facts.ts` — with the log line —
-// where `apps/backend/cli.ts` drives the same dispatch instead of a copy of it.
-// What is left here is the plumbing only the server has: invalidation, the WS
-// push, the PR snapshot and the session map.
+// The handler and the verification CLI share the session-column writes in event-facts.ts.
 //
 // Ordering matters: persist first, then invalidate, then push.
 
@@ -53,6 +47,7 @@ import { pushCloudSessionTitle } from "./cloud/driver";
 import { applySessionFacts, describeEvent, turnOutcomeFor, type SessionFacts } from "./event-facts";
 import { refreshPrSnapshotForSession } from "../pr-snapshot.service";
 import { restoreCloudSnapshot } from "./cloud/snapshot";
+import { admitTurn, holdingTurn, lastTurn, releaseTurn, forgetChatTurns } from "./chat-turn";
 import { OpenParts } from "./open-parts";
 
 // ---- Types ----
@@ -72,33 +67,10 @@ export interface AgentEventHandler {
     sessionId: string,
     snapshot: SessionSnapshotEvent
   ): RestoredCloudConversation | undefined;
-  /**
-   * Mirror a turn admission before its quick-ack round-trip, so the handler
-   * knows which turn is live when the first envelopes arrive in the same tick
-   * as the ack. Returns false — touching nothing — when the session already
-   * has a live turn: a concurrent send is about to be rejected with
-   * `turnActive`, and clobbering the running turn's state would lose its error
-   * dedupe. Callers re-register with `force` if the server accepts anyway
-   * (stale local state, e.g. after a backend restart).
-   */
-  beginTurn(sessionId: string, turnId: string, opts?: { force?: boolean }): boolean;
-  /** Release a rejected local claim, only while this turn is still unadmitted. */
-  abortTurn(sessionId: string, turnId: string): boolean;
-  /** The engine acknowledged this turn or its events reached the fold. */
-  wasTurnAdmitted(sessionId: string, turnId: string): boolean;
+  /** A new send starts with fresh error and limit reports. */
+  resetTurnFacts(sessionId: string): void;
   /** Record the local end. A late native terminal can still supply its actual outcome. */
   giveUpTurn(sessionId: string, turnId: string, cause?: "cancelled"): boolean;
-  /**
-   * The turn this handler currently believes is running, if any — set at
-   * admission (or at `turn.started` on the replay path) and cleared at its
-   * `turn.ended`. Read by anything that has to tell one turn from the next,
-   * which a session STATUS cannot do: two consecutive turns are both "working".
-   */
-  liveTurnId(sessionId: string): string | undefined;
-  /** The live turn's last event time, excluding the user's echo. */
-  lastOutputAt(sessionId: string): number | undefined;
-  /** Records the quick ACK, including turns with no first event yet. */
-  confirmTurn(sessionId: string, turnId: string): void;
   /** Mark delivery loss synchronously, before any replay suffix is folded. */
   handleEventGap(gap: SessionEventGap): string | undefined;
   /** Settle only that damaged turn after targeted native reconciliation. */
@@ -108,7 +80,6 @@ export interface AgentEventHandler {
 }
 
 interface SessionState extends SessionFacts {
-  lastOutputAt?: number;
   /** The folded conversation — the source of every row this session writes. */
   conversation: ConversationState;
 }
@@ -212,18 +183,21 @@ export function createAgentEventHandler(
   };
 
   return {
-    lastOutputAt(sessionId) {
-      const state = sessions.get(sessionId);
-      return state?.turnId ? state.lastOutputAt : undefined;
+    resetTurnFacts(sessionId) {
+      const state = stateFor(sessionId);
+      state.errorReported = false;
+      state.limitResets = undefined;
+      state.deliveryFailure = undefined;
     },
 
     hydrateCloudSnapshot(sessionId, snapshot) {
       const state = stateFor(sessionId);
+      const turn = holdingTurn(sessionId);
+      const current = snapshot.state.currentTurnId;
       const pending =
-        state.turnId !== undefined &&
-        !state.conversation.turns.some((turn) => turn.turnId === state.turnId) &&
-        snapshot.state.currentTurnId !== state.turnId &&
-        !snapshot.state.turns?.some((turn) => turn.turnId === state.turnId);
+        turn?.phase === "starting" &&
+        current !== turn.turnId &&
+        !snapshot.state.turns?.some((t) => t.turnId === turn.turnId);
       const result = restoreCloudSnapshot(sessionId, snapshot, pending);
       if (!result.ok) {
         console.warn(
@@ -236,51 +210,20 @@ export function createAgentEventHandler(
       // A reply being typed when the transcript was restored is open from here on.
       typing.restored(sessionId, projectCloudSnapshot(snapshot).events);
       if (!pending) {
-        state.turnId = snapshot.state.currentTurnId ?? undefined;
+        if (turn && turn.turnId !== current) releaseTurn(sessionId, turn.turnId, "native");
+        if (current) {
+          if (current !== turn?.turnId) this.resetTurnFacts(sessionId);
+          admitTurn(sessionId, current, "start");
+        }
         state.errorReported = snapshot.state.status === "error";
       }
       invalidate(SESSION_RESOURCES, { sessionIds: [sessionId] });
       return result.value;
     },
 
-    beginTurn(sessionId, turnId, opts = {}) {
-      const existing = sessions.get(sessionId);
-      if (existing?.turnId !== undefined && !opts.force) return false;
-      sessions.set(sessionId, {
-        turnId,
-        acceptedTurnId: existing?.acceptedTurnId,
-        errorReported: false,
-        // The transcript outlives the turn: a new send continues the session's
-        // conversation, it does not start a second one.
-        conversation: existing?.conversation ?? emptyConversation(),
-      });
-      return true;
-    },
-
-    abortTurn(sessionId, turnId) {
-      const state = sessions.get(sessionId);
-      if (state?.turnId !== turnId || this.wasTurnAdmitted(sessionId, turnId)) return false;
-      state.turnId = undefined;
-      return true;
-    },
-
-    wasTurnAdmitted(sessionId, turnId) {
-      const state = sessions.get(sessionId);
-      return (
-        state?.acceptedTurnId === turnId ||
-        !!state?.conversation.turns.some((turn) => turn.turnId === turnId)
-      );
-    },
-
-    liveTurnId(sessionId) {
-      return sessions.get(sessionId)?.turnId;
-    },
-
     giveUpTurn(sessionId, turnId, cause) {
-      const state = sessions.get(sessionId);
-      if (state?.turnId !== turnId) return false;
-      state.acceptedTurnId = turnId;
-      state.turnId = undefined;
+      if (!releaseTurn(sessionId, turnId, "local")) return false;
+      const state = stateFor(sessionId);
       const kept = onInterrupted?.(sessionId, turnId, true, cause);
       const saved = persistTurn(sessionId, {
         turnId,
@@ -304,24 +247,11 @@ export function createAgentEventHandler(
       return true;
     },
 
-    confirmTurn(sessionId, turnId) {
-      const state = sessions.get(sessionId);
-      if (!state) return;
-      // An instant native turn can finish before its quick ACK returns.
-      if (
-        state.turnId === turnId ||
-        (!state.turnId && state.conversation.turns.at(-1)?.turnId === turnId)
-      )
-        state.acceptedTurnId = turnId;
-    },
-
     handleEventGap(gap) {
-      const state = sessions.get(gap.sessionId);
-      if (!state?.turnId) return;
-      // A new send waiting for the reconnect handshake is not an old native
-      // turn. Its quick ACK or rejection still owns that admission.
-      if (!this.wasTurnAdmitted(gap.sessionId, state.turnId)) return;
-      const turnId = state.turnId;
+      const turn = holdingTurn(gap.sessionId);
+      if (turn?.phase !== "running") return;
+      const { turnId } = turn;
+      const state = stateFor(gap.sessionId);
       state.deliveryFailure ??= {
         turnId,
         message:
@@ -339,7 +269,8 @@ export function createAgentEventHandler(
 
     settleEventGap(sessionId, turnId, confirmed, cause) {
       const state = sessions.get(sessionId);
-      if (state?.turnId !== turnId || state.deliveryFailure?.turnId !== turnId) return;
+      if (holdingTurn(sessionId)?.turnId !== turnId || state?.deliveryFailure?.turnId !== turnId)
+        return;
       const message =
         state.deliveryFailure.message +
         (confirmed ? "" : " The agent has not confirmed it stopped.");
@@ -379,20 +310,36 @@ export function createAgentEventHandler(
       const stamped = isUnknownEvent(envelope.event) ? envelope.event.raw : envelope.event;
       const turnId = "turnId" in stamped ? stamped.turnId : undefined;
       const messageId = "messageId" in stamped ? stamped.messageId : undefined;
-      // On replay, turn.started can be the first the host hears of the live turn.
-      const live = state.turnId
-        ? turnId === undefined || turnId === state.turnId
-        : envelope.event.type === "turn.started";
-      if (
-        live &&
-        envelope.event.type !== "permission.resolved" &&
-        envelope.event.type !== "elicitation.resolved" &&
-        typeof stamped.timestamp === "number" &&
-        (typeof messageId !== "string" ||
-          findConversationMessage(conversation, messageId)?.role !== "user")
-      ) {
-        state.lastOutputAt = stamped.timestamp;
+      let holder = holdingTurn(sessionId);
+      const last = lastTurn(sessionId);
+      if (!holder && !isUnknownEvent(envelope.event) && envelope.event.type === "turn.started") {
+        // A historical start may arrive for the first time after a more recent turn ended.
+        const lastEnd = last && conversation.turns.find((t) => t.turnId === last.turnId)?.endedAt;
+        if (
+          last?.turnId !== turnId &&
+          (lastEnd === undefined || lastEnd <= envelope.event.timestamp) &&
+          !conversation.turns.some((t) => t.turnId === turnId && t.status === "ended")
+        ) {
+          this.resetTurnFacts(sessionId);
+          admitTurn(sessionId, envelope.event.turnId, "start");
+          holder = holdingTurn(sessionId);
+        }
       }
+      if (
+        holder &&
+        (turnId === holder.turnId || (turnId === undefined && holder.phase === "running"))
+      ) {
+        const outputAt =
+          typeof stamped.timestamp === "number" &&
+          envelope.event.type !== "permission.resolved" &&
+          envelope.event.type !== "elicitation.resolved" &&
+          (typeof messageId !== "string" ||
+            findConversationMessage(conversation, messageId)?.role !== "user")
+            ? stamped.timestamp
+            : undefined;
+        admitTurn(sessionId, holder.turnId, "event", outputAt);
+      }
+      const owner = holder?.turnId ?? last?.turnId;
 
       if (isUnknownEvent(envelope.event)) {
         // Law 6: forward it verbatim. Dropping it would be a hole in the
@@ -424,7 +371,6 @@ export function createAgentEventHandler(
       // hot path (measured: 200 deltas → 200 writes, ~169 KB for a 1.7 KB
       // message), for durability the protocol explicitly does not promise.
       const isDelta = envelope.event.type === "message.part.delta";
-      const liveTurnId = state.turnId;
       let outcome: TurnOutcomeWrite | undefined;
       const writes = isDelta
         ? []
@@ -432,10 +378,12 @@ export function createAgentEventHandler(
             sessionId,
             conversation,
             changes,
-            (turn) => (outcome = turnOutcomeFor(state, turn)),
+            (turn) => (outcome = turnOutcomeFor(state, owner, turn)),
             turnProviderCredentialSource(envelope.event)
           );
 
+      if (envelope.event.type === "turn.ended")
+        releaseTurn(sessionId, envelope.event.turnId, "native");
       const stale = new Set<LiveName>();
       for (const write of writes) {
         if (!write.result.ok) {
@@ -453,7 +401,13 @@ export function createAgentEventHandler(
       // The session columns and the per-turn flags are `applySessionFacts`'s,
       // shared verbatim with the verification CLI. What is left below is the
       // product plumbing only this process has.
-      for (const write of applySessionFacts(state, sessionId, envelope.event, conversation)) {
+      for (const write of applySessionFacts(
+        state,
+        envelope.event.type === "turn.started" ? holder?.turnId : owner,
+        sessionId,
+        envelope.event,
+        conversation
+      )) {
         persistAndInvalidate(write.result, SESSION_RESOURCES, sessionId);
       }
 
@@ -463,6 +417,7 @@ export function createAgentEventHandler(
           // This is the event that exists for exactly that; without it the map
           // only grows, and now each entry costs a conversation.
           sessions.delete(sessionId);
+          forgetChatTurns(sessionId);
         })
         .with({ type: "turn.ended" }, (ended) => {
           // The agent may have created, updated or pushed a PR during the turn.
@@ -486,7 +441,11 @@ export function createAgentEventHandler(
       if (!NOT_PUSHED.has(envelope.event.type)) pushEnvelope(envelope);
       const event = envelope.event;
       if (event.type === "turn.ended") {
-        const end: TurnEnd = { event, status: outcome?.status, held: event.turnId === liveTurnId };
+        const end: TurnEnd = {
+          event,
+          status: outcome?.status,
+          held: event.turnId === holder?.turnId,
+        };
         if (
           end.held &&
           end.status === "error" &&
