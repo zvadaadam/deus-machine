@@ -23,11 +23,7 @@ import {
 } from "../../lib/errors";
 import { encodeOrigin, getSessionRaw, getTurn, getWorkspaceForMiddleware } from "../../db";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
-import {
-  persistLastUserMessageAt,
-  persistSessionError,
-  persistSessionWorking,
-} from "./persistence";
+import { persistLastUserMessageAt, persistSessionWorking } from "./persistence";
 import { invalidate } from "../query-engine";
 import {
   admitTurn,
@@ -36,7 +32,8 @@ import {
   lastTurn,
   refuseTurn,
   releaseTurn,
-  stopStartingTurn,
+  askStop,
+  answerStop,
 } from "./chat-turn";
 import * as agentService from "./service";
 import { toEngineInput, withoutImageParts } from "./run-config";
@@ -252,7 +249,8 @@ async function sendMessageOnce(
     throw new ValidationError(`${HARNESSES[agentHarness].label} does not offer plan mode.`);
   }
 
-  // The first send binds the harness before its user echo increments the message count.
+  // Until the first user echo, message_count is still zero. Check the holder before binding
+  // the harness so a second send cannot switch it underneath the first turn.
   if (session && session.message_count === 0 && session.agent_harness !== agentHarness) {
     const result = db
       .prepare(
@@ -342,7 +340,7 @@ async function sendMessageOnce(
         });
       }
       if (!holdingTurn(sessionId) && lastTurn(sessionId)?.turnId !== turnId)
-        handleAgentError(sessionId, turnId, err);
+        releaseTurn(sessionId, undefined, "refused", startError(err));
       throw err;
     }
   } else if (setup) {
@@ -361,27 +359,26 @@ async function sendMessageOnce(
       admitTurn(sessionId, turnId);
     } catch (err) {
       if (setup.controller.signal.aborted && err === setup.controller.signal.reason) {
-        if (err === STEER_READ && refuseTurn(sessionId, turnId)) settleStopped(sessionId);
+        if (err === STEER_READ) releaseTurn(sessionId, turnId, "withdrawn");
         throw err;
       }
-      const stopped = holdingTurn(sessionId)?.setup?.stoppedBy;
-      const refused = refuseTurn(sessionId, turnId);
       if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
-        if (refused && stopped) agentService.notifyTurnInterrupted(sessionId, turnId, true);
+        const refused = refuseTurn(sessionId, turnId);
         // The engine's end can reach a waiting row while this strict send still holds the chat.
         if (refused && lastTurn(sessionId) !== last) agentService.notifyStartCleared(sessionId);
         throw new ChatBusyError(
           "The agent is still working — wait for the current turn to finish."
         );
       }
-      if (refused) handleAgentError(sessionId, turnId, err);
+      refuseTurn(sessionId, turnId, startError(err));
       throw err;
     } finally {
       start.resolve();
     }
   }
 
-  // Only an admitted send dates the workspace's last prompt.
+  // The sidebar and checkout cleanup use this date as proof the workspace took a prompt.
+  // A refusal must leave it available for a first send.
   if (persistLastUserMessageAt(sessionId, new Date(sentAt).toISOString()).ok)
     invalidate(["workspaces", "sessions"], { sessionIds: [sessionId] });
 
@@ -390,18 +387,6 @@ async function sendMessageOnce(
 
 // ---- stopSession ----
 
-/** Per database and turn, the stop that took effect (its origin, JSON), for a moment: it keeps the credit. */
-const effectiveStops = new WeakMap<object, Map<string, string>>();
-
-const CANCEL_GRACE_MS = 15_000;
-
-/**
- * Stop the session's active turn.
- *
- * A native cancel can be confirmed before its last echo and turn.ended arrive.
- * Keep the chat occupied until that end. If delivery stalls, the watchdog settles
- * a confirmed stop and warns about an unconfirmed one.
- */
 export async function stopSession(
   { sessionId }: ParsedInputOf<typeof api.stopSession>,
   /** Who stops it, kept on the turn so a reader can say who did. */
@@ -411,151 +396,42 @@ export async function stopSession(
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new NotFoundError("Session not found");
 
-  const turn = stopStartingTurn(sessionId, by);
-  const targetTurnId = turn?.turnId;
+  // Two concurrent Stops from the same caller still have separate answers.
+  by = { ...by };
+  const turn = askStop(sessionId, by);
+  const turnId = turn?.turnId;
   agentService.notifyStopAsked(sessionId, {
     by,
-    turnId: targetTurnId,
-    endedAt: targetTurnId ? getTurn(db, sessionId, targetTurnId)?.endedAt : undefined,
+    turnId,
+    endedAt: turnId ? getTurn(db, sessionId, turnId)?.endedAt : undefined,
   });
   if (turn?.setup) {
     const { setup } = turn;
     if (turn.phase === "preparing") {
-      releaseTurn(sessionId, turn.turnId, "local", by);
       setup.controller.abort(new ConflictError("Stopped before it started."));
-      settleStopped(sessionId, turn.turnId);
+      releaseTurn(sessionId, turn.turnId, "cancelled");
     }
     await setup.done;
-    if (holdingTurn(sessionId)?.turnId !== targetTurnId) return { unconfirmed: false };
+    if (holdingTurn(sessionId) !== turn) {
+      answerStop(sessionId, turn, by, undefined);
+      return { unconfirmed: false };
+    }
   }
-  const mine = JSON.stringify(by);
-  const key = `${sessionId}\0${targetTurnId}`;
-  // Claimed before the stop is sent, so a reader seeing the cancel can say who:
-  // the first claim holds while it is pending.
-  if (targetTurnId) {
-    db.prepare(
-      `INSERT INTO turns (session_id, turn_id, cancelled_by) VALUES (?, ?, ?)
-       ON CONFLICT(session_id, turn_id) DO UPDATE SET cancelled_by = COALESCE(turns.cancelled_by, excluded.cancelled_by)`
-    ).run(sessionId, targetTurnId, mine);
-  }
-  const credit = (who: string | null) =>
-    targetTurnId &&
-    db
-      .prepare("UPDATE turns SET cancelled_by = ? WHERE session_id = ? AND turn_id = ?")
-      .run(who, sessionId, targetTurnId);
   let result: Awaited<ReturnType<typeof agentService.stopSession>> | undefined;
-  const cloud = isCloudSession(sessionId);
   try {
-    if (cloud) result = await cancelCloudTurn(sessionId, targetTurnId);
+    if (isCloudSession(sessionId)) result = await cancelCloudTurn(sessionId, turnId);
     else if (agentService.isConnected())
-      result = await agentService.stopSession({ sessionId, turnId: targetTurnId });
+      result = await agentService.stopSession({ sessionId, turnId });
   } catch (err) {
     console.error("[CommandHandler] Could not stop the turn:", err);
   }
-
-  // The credit is the stop that took effect: the first that did keeps it; one that
-  // definitely did not (no answer, nothing running) gives up its claim.
-  const tookEffect = result?.outcome === "cancelled" || result?.outcome === "unconfirmed";
-  if (targetTurnId) {
-    let stops = effectiveStops.get(db);
-    if (!stops) effectiveStops.set(db, (stops = new Map()));
-    const winner = stops.get(key);
-    if (tookEffect && !winner) {
-      stops.set(key, mine);
-      setTimeout(() => stops.delete(key), 60_000).unref?.();
-      credit(mine);
-    } else if (!tookEffect) {
-      const held = (
-        db
-          .prepare("SELECT cancelled_by FROM turns WHERE session_id = ? AND turn_id = ?")
-          .get(sessionId, targetTurnId) as { cancelled_by: string | null } | undefined
-      )?.cancelled_by;
-      if (held === mine) credit(winner ?? null);
-    }
-  }
-
-  // The requested turn may have ended and a successor started during the RPC.
-  const live = holdingTurn(sessionId)?.turnId;
-  if (
-    (live !== undefined && live !== targetTurnId) ||
-    (result?.outcome === "no_active_turn" && result.activeTurnId !== undefined)
-  )
-    return { unconfirmed: false };
-
-  const unconfirmed = !result || result.outcome === "unconfirmed";
-  if (unconfirmed || (!cloud && live && result?.outcome === "cancelled")) {
-    scheduleCancelWatchdog(sessionId, targetTurnId, !unconfirmed);
-  } else {
-    settleStopped(sessionId, cloud ? undefined : live);
-  }
-  return { unconfirmed };
+  return answerStop(sessionId, turn, by, result);
 }
 
-function settleStopped(sessionId: string, goneTurnId?: string, cause?: "cancelled"): void {
-  const starting = holdingTurn(sessionId);
-  if (!starting || starting.turnId === goneTurnId) {
-    getDatabase()
-      .prepare(
-        `UPDATE sessions SET status = 'idle', updated_at = datetime('now')
-         WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
-      )
-      .run(sessionId, ...ACTIVE_TURN_STATUSES);
-  }
-  if (goneTurnId && !agentService.giveUpTurn(sessionId, goneTurnId, cause))
-    agentService.notifyTurnInterrupted(sessionId, goneTurnId, true);
-  invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
-}
-
-function scheduleCancelWatchdog(
-  sessionId: string,
-  cancelledTurnId: string | undefined,
-  confirmed: boolean
-): void {
-  const timer = setTimeout(() => {
-    try {
-      const live = holdingTurn(sessionId)?.turnId;
-      if (live !== undefined && live !== cancelledTurnId) return;
-      if (confirmed) {
-        if (live) settleStopped(sessionId, live, "cancelled");
-        return;
-      }
-
-      const db = getDatabase();
-      // Keep a live turn's working/question/plan status and add the warning.
-      // Missing native ownership marks an active session as error; a turn
-      // that already settled is excluded by the status guard.
-      const result = db
-        .prepare(
-          `UPDATE sessions
-             SET status = COALESCE(?, status),
-                 error_message = COALESCE(error_message, 'The agent never confirmed the stop request.'),
-                 error_category = COALESCE(error_category, 'internal'),
-                 updated_at = datetime('now')
-           WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
-        )
-        .run(live === undefined ? "error" : null, sessionId, ...ACTIVE_TURN_STATUSES);
-      if (result.changes > 0) {
-        agentService.notifyTurnInterrupted(sessionId, cancelledTurnId, live === undefined);
-        console.warn(`[CommandHandler] unconfirmed cancel never settled: session=${sessionId}`);
-        invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
-      }
-    } catch (err) {
-      console.error("[CommandHandler] cancel watchdog failed:", err);
-    }
-  }, CANCEL_GRACE_MS);
-  // A pending watchdog must never hold the process open at shutdown.
-  timer.unref?.();
-}
-
-// ---- Helpers ----
-
-function handleAgentError(sessionId: string, turnId: string, err: unknown): void {
+function startError(err: unknown) {
   const message =
     err instanceof WireRequestError
       ? err.message || "Agent rejected the message"
       : `Agent server communication failed: ${err instanceof Error ? err.message : String(err)}`;
-  console.error(`[CommandHandler] Failed to start turn: session=${sessionId} ${message}`);
-  persistSessionError(sessionId, message, "internal");
-  agentService.notifyTurnInterrupted(sessionId, turnId, true);
-  invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
+  return { message, category: "internal" };
 }

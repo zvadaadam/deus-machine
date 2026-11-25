@@ -1,9 +1,26 @@
-import type { Origin } from "@zvada/agent-server/protocol";
+import type { Origin, TurnCancelResult } from "@zvada/agent-server/protocol";
+import { invalidate } from "../query-engine";
+import {
+  persistSessionError,
+  persistStopCredit,
+  persistStopStatus,
+  persistTurn,
+  type TurnOutcomeWrite,
+} from "./persistence";
 
+type Interrupted = (
+  id: string,
+  turnId: string | undefined,
+  gone: boolean,
+  cause?: "cancelled"
+) => string[] | undefined;
+export const turnNotices: {
+  interrupted?: Interrupted;
+  stored?: (id: string, turnId: string) => void;
+} = {};
 type Setup = {
   controller: AbortController;
   done: Promise<void>;
-  stoppedBy?: Origin;
   firstTask?: boolean;
 };
 type Turn = {
@@ -12,9 +29,15 @@ type Turn = {
   sentAt?: number;
   lastOutputAt?: number;
   setup?: Setup;
+  stops?: Set<Origin>;
+  credited?: Origin;
+  timer?: NodeJS.Timeout;
+  confirmed?: boolean;
 };
 type Last = { turnId: string; nativeEnd: boolean; setupStop?: Origin };
 const chats = new Map<string, { turn?: Turn; last?: Last }>();
+const notify = (id: string) =>
+  invalidate(["workspaces", "sessions", "session"], { sessionIds: [id] });
 
 export const holdingTurn = (id: string): Readonly<Turn> | undefined => chats.get(id)?.turn;
 export const lastTurn = (id: string): Readonly<Last> | undefined => chats.get(id)?.last;
@@ -50,39 +73,121 @@ export function admitTurn(
   if (outputAt !== undefined) turn.lastOutputAt = outputAt;
 }
 
-export function stopStartingTurn(id: string, by: Origin) {
+export function askStop(id: string, by: Origin) {
   const turn = chats.get(id)?.turn;
-  if (turn?.setup) turn.setup.stoppedBy ??= by;
+  if (turn) (turn.stops ??= new Set()).add(by);
   return turn;
 }
 
-export function releaseTurn(
-  id: string,
-  turnId: string,
-  end: "native" | "local" | "refused",
-  by?: Origin
-) {
+function credit(id: string, turn: Turn) {
+  const first = turn.stops?.values().next().value;
+  if (first !== turn.credited) {
+    persistStopCredit(id, turn.turnId, first);
+    turn.credited = first;
+  }
+}
+
+type End = "native" | "refused" | "withdrawn" | "cancelled" | "gone";
+type ErrorInfo = NonNullable<TurnOutcomeWrite["error"]>;
+
+export function releaseTurn(id: string, turnId: string | undefined, end?: End, error?: ErrorInfo) {
   const chat = chats.get(id);
-  if (chat?.turn?.turnId !== turnId) {
-    if (end === "native" && chat?.last?.turnId === turnId && !chat.last.nativeEnd)
+  const turn = chat?.turn;
+  const nativeEnd = end === undefined || end === "native";
+  if (turn?.turnId !== turnId) {
+    if (nativeEnd && chat?.last && chat.last.turnId === turnId && !chat.last.nativeEnd)
       chat.last = { turnId, nativeEnd: true };
     return false;
   }
-  if (end !== "refused") chat.last = { turnId, nativeEnd: end === "native", setupStop: by };
-  delete chat.turn;
-  if (!chat.last) chats.delete(id);
+  const refused = end === "refused" || end === "withdrawn";
+  const setupStop =
+    end === "cancelled" && turn?.phase === "preparing"
+      ? turn.stops?.values().next().value
+      : undefined;
+  if (chat && turn) {
+    clearTimeout(turn.timer);
+    if (!refused) {
+      chat.last = { turnId: turn.turnId, nativeEnd, setupStop };
+      if (end && !setupStop) credit(id, turn);
+    }
+    delete chat.turn;
+    if (!chat.last) chats.delete(id);
+  }
+  if (nativeEnd) return true;
+  if (error) persistSessionError(id, error.message, error.category);
+  else if (end !== "refused") persistStopStatus(id);
+  if (end === "refused" && !error && !turn?.stops?.size) return true;
+  const cause = end === "cancelled" ? "cancelled" : undefined;
+  const kept = end === "withdrawn" ? undefined : turnNotices.interrupted?.(id, turnId, true, cause);
+  if (turnId && !setupStop && !refused) {
+    const saved = persistTurn(id, {
+      turnId,
+      endedAt: Date.now(),
+      stopReason: cause ?? "error",
+      undeliveredSteers: kept,
+    });
+    if (saved.ok) turnNotices.stored?.(id, turnId);
+  }
+  notify(id);
   return true;
 }
 
-export function refuseTurn(id: string, turnId: string) {
+export function refuseTurn(id: string, turnId: string, error?: ErrorInfo) {
   const turn = chats.get(id)?.turn;
   if (turn?.turnId !== turnId) return false;
-  if (turn.phase !== "running") return releaseTurn(id, turnId, "refused");
+  if (turn.phase !== "running") return releaseTurn(id, turnId, "refused", error);
   delete turn.setup;
   return false;
 }
 
+export function answerStop(
+  id: string,
+  turn: Turn | undefined,
+  by: Origin,
+  result: TurnCancelResult | undefined
+) {
+  if (turn) {
+    if (!result || result.outcome === "no_active_turn") {
+      turn.stops?.delete(by);
+      if (turn.credited) credit(id, turn);
+    } else credit(id, turn);
+  }
+  const live = holdingTurn(id);
+  if ((live && live !== turn) || (result?.outcome === "no_active_turn" && result.activeTurnId))
+    return { unconfirmed: false };
+  const unconfirmed = !result || result.outcome === "unconfirmed";
+  if (!live) {
+    if (!unconfirmed && persistStopStatus(id)) notify(id);
+  } else if (result?.outcome === "no_active_turn") {
+    releaseTurn(id, live.turnId, "gone");
+  } else if (!live.timer || (!live.confirmed && !unconfirmed)) {
+    // Confirmation starts the 15 seconds for final echoes. Later Stops cannot postpone it.
+    clearTimeout(live.timer);
+    live.confirmed = !unconfirmed;
+    live.timer = setTimeout(() => {
+      live.timer = undefined;
+      const owner = holdingTurn(id);
+      if (owner && owner !== live) return;
+      try {
+        if (live.confirmed) {
+          if (owner) releaseTurn(id, live.turnId, "cancelled");
+        } else if (persistStopStatus(id, owner ? null : "error")) {
+          turnNotices.interrupted?.(id, live.turnId, !owner);
+          notify(id);
+        }
+      } catch (error) {
+        console.error("[Agent] Stop deadline failed:", error);
+      }
+    }, 15_000);
+    live.timer.unref?.();
+  }
+  return { unconfirmed };
+}
+
 export function forgetChatTurns(id?: string) {
-  if (id === undefined) chats.clear();
-  else chats.delete(id);
+  // A lost handler still owes its pending Stop a warning and its steers back at the deadline.
+  if (id === undefined) {
+    chats.clear();
+    delete turnNotices.stored;
+  } else chats.delete(id);
 }

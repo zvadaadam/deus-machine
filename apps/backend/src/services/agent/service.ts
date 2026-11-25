@@ -35,7 +35,7 @@ import {
 } from "@shared/agent-asks";
 import { isUnknownEvent } from "@shared/protocol-types";
 import { hasAgentMessages } from "./agent-messages";
-import { holdingTurn, wireTurn, forgetChatTurns } from "./chat-turn";
+import { holdingTurn, wireTurn, forgetChatTurns, turnNotices } from "./chat-turn";
 import { AgentLink } from "./client";
 import { LocalAgents } from "./local-agents";
 import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
@@ -88,7 +88,8 @@ export async function init(): Promise<void> {
     console.log(`[AgentService] Settled ${settled.value.length} chat(s) a restart interrupted`);
     invalidate(["workspaces", "sessions", "session"], { sessionIds: settled.value });
   }
-  const handler = createAgentEventHandler(notifyTurnInterrupted);
+  turnNotices.interrupted = notifyTurnInterrupted;
+  const handler = createAgentEventHandler();
   events = handler;
   // A client that starts following a chat while its agent waits on a question
   // or a plan (a window opened late, a phone) is shown it at once; one that
@@ -330,10 +331,6 @@ export function notifyTurnInterrupted(
 ) {
   if (gone && turnId) cancelSessionRelays(sessionId, "turn interrupted", turnId);
   return turnWatcher?.interrupted(sessionId, turnId, gone, cause);
-}
-
-export function giveUpTurn(sessionId: string, turnId: string, cause?: "cancelled") {
-  return events?.giveUpTurn(sessionId, turnId, cause);
 }
 
 /**

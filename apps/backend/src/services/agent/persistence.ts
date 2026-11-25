@@ -26,6 +26,7 @@ import type {
   ConversationMessage,
   ConversationState,
   ConversationTurn,
+  Origin,
   Part,
   UnknownPart,
 } from "@zvada/agent-server/protocol";
@@ -225,6 +226,32 @@ export interface TurnOutcomeWrite {
   status: "idle" | "error";
   /** Set when status is "error". */
   error?: { message: string; category: string };
+}
+
+export function persistStopCredit(id: string, turnId: string, by?: Origin) {
+  try {
+    getDatabase()
+      .prepare(
+        `INSERT INTO turns (session_id, turn_id, cancelled_by) VALUES (?, ?, ?)
+       ON CONFLICT(session_id, turn_id) DO UPDATE SET cancelled_by = excluded.cancelled_by`
+      )
+      .run(id, turnId, by ? JSON.stringify(by) : null);
+  } catch (error) {
+    failed("Stop credit", error);
+  }
+}
+
+/** A lost link can leave a row active. A warning on a live turn keeps its card available. */
+export function persistStopStatus(id: string, status: "idle" | "error" | null = "idle") {
+  const warning = status === "idle" ? null : "The agent never confirmed the stop request.";
+  const { changes } = getDatabase()
+    .prepare(
+      `UPDATE sessions SET status = COALESCE(?, status), error_message = COALESCE(error_message, ?),
+       error_category = COALESCE(error_category, ?), updated_at = datetime('now')
+     WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
+    )
+    .run(status, warning, warning && "internal", id, ...ACTIVE_TURN_STATUSES);
+  return changes > 0;
 }
 
 /** Persist a turn and its optional session status atomically, even without messages. */

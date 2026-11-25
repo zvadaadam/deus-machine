@@ -37,7 +37,6 @@ import { invalidate } from "../query-engine";
 import { openWith, publish, resetSubscribers } from "../streams";
 import {
   persistChanges,
-  persistTurn,
   persistSessionTitle,
   persistSessionError,
   type TurnOutcomeWrite,
@@ -47,7 +46,14 @@ import { pushCloudSessionTitle } from "./cloud/driver";
 import { applySessionFacts, describeEvent, turnOutcomeFor, type SessionFacts } from "./event-facts";
 import { refreshPrSnapshotForSession } from "../pr-snapshot.service";
 import { restoreCloudSnapshot } from "./cloud/snapshot";
-import { admitTurn, holdingTurn, lastTurn, releaseTurn, forgetChatTurns } from "./chat-turn";
+import {
+  admitTurn,
+  holdingTurn,
+  lastTurn,
+  releaseTurn,
+  forgetChatTurns,
+  turnNotices,
+} from "./chat-turn";
 import { OpenParts } from "./open-parts";
 
 // ---- Types ----
@@ -69,8 +75,6 @@ export interface AgentEventHandler {
   ): RestoredCloudConversation | undefined;
   /** A new send starts with fresh error and limit reports. */
   resetTurnFacts(sessionId: string): void;
-  /** Record the local end. A late native terminal can still supply its actual outcome. */
-  giveUpTurn(sessionId: string, turnId: string, cause?: "cancelled"): boolean;
   /** Mark delivery loss synchronously, before any replay suffix is folded. */
   handleEventGap(gap: SessionEventGap): string | undefined;
   /** Settle only that damaged turn after targeted native reconciliation. */
@@ -158,14 +162,7 @@ function pushEnvelope(envelope: DecodedWireEventEnvelope): void {
 // ---- Factory ----
 
 /** Create the agent event handler: persistence + WS push per lifecycle event. */
-export function createAgentEventHandler(
-  onInterrupted?: (
-    sessionId: string,
-    turnId: string,
-    gone: boolean,
-    cause?: "cancelled"
-  ) => string[] | undefined
-): AgentEventHandler {
+export function createAgentEventHandler(): AgentEventHandler {
   const sessions = new Map<string, SessionState>();
   // A client that starts following a chat, or returns to it, first gets the
   // reply still being typed as it stands (see ./open-parts).
@@ -173,6 +170,15 @@ export function createAgentEventHandler(
   openWith(sessionEvents, ({ sessionId }) =>
     typing.of(sessionId, sessions.get(sessionId)?.conversation)
   );
+
+  turnNotices.stored = (sessionId, turnId) => {
+    const conversation = sessions.get(sessionId)?.conversation;
+    // A message anchors the local footer. Reopen streaming parts after the window rereads it.
+    if (!conversation?.timeline.some((e) => e.kind === "message" && e.turnId === turnId)) return;
+    resetSubscribers(sessionEvents, { sessionId });
+    for (const part of typing.of(sessionId, conversation))
+      publish(sessionEvents, { sessionId }, part, { keep: false });
+  };
 
   const stateFor = (sessionId: string): SessionState => {
     const existing = sessions.get(sessionId);
@@ -210,7 +216,8 @@ export function createAgentEventHandler(
       // A reply being typed when the transcript was restored is open from here on.
       typing.restored(sessionId, projectCloudSnapshot(snapshot).events);
       if (!pending) {
-        if (turn && turn.turnId !== current) releaseTurn(sessionId, turn.turnId, "native");
+        // The snapshot already wrote the end. Release its old holder quietly.
+        if (turn && turn.turnId !== current) releaseTurn(sessionId, turn.turnId);
         if (current) {
           if (current !== turn?.turnId) this.resetTurnFacts(sessionId);
           admitTurn(sessionId, current, "start");
@@ -219,32 +226,6 @@ export function createAgentEventHandler(
       }
       invalidate(SESSION_RESOURCES, { sessionIds: [sessionId] });
       return result.value;
-    },
-
-    giveUpTurn(sessionId, turnId, cause) {
-      if (!releaseTurn(sessionId, turnId, "local")) return false;
-      const state = stateFor(sessionId);
-      const kept = onInterrupted?.(sessionId, turnId, true, cause);
-      const saved = persistTurn(sessionId, {
-        turnId,
-        endedAt: Date.now(),
-        stopReason: cause ?? "error",
-        undeliveredSteers: kept,
-      });
-      if (saved.ok) {
-        invalidate(SESSION_RESOURCES, { sessionIds: [sessionId] });
-        // A stored message anchors the footer. A late engine end can still correct it.
-        if (
-          state.conversation.timeline.some(
-            (entry) => entry.kind === "message" && entry.turnId === turnId
-          )
-        ) {
-          resetSubscribers(sessionEvents, { sessionId });
-          for (const opening of typing.of(sessionId, state.conversation))
-            publish(sessionEvents, { sessionId }, opening, { keep: false });
-        }
-      }
-      return true;
     },
 
     handleEventGap(gap) {
@@ -275,13 +256,16 @@ export function createAgentEventHandler(
         state.deliveryFailure.message +
         (confirmed ? "" : " The agent has not confirmed it stopped.");
       state.errorReported = true;
+      if (confirmed) {
+        releaseTurn(sessionId, turnId, cause ?? "gone", { message, category: "network" });
+        return;
+      }
       persistAndInvalidate(
-        persistSessionError(sessionId, message, "network", confirmed ? "error" : "working"),
+        persistSessionError(sessionId, message, "network", "working"),
         SESSION_RESOURCES,
         sessionId
       );
-      if (confirmed) this.giveUpTurn(sessionId, turnId, cause);
-      else onInterrupted?.(sessionId, turnId, false, cause);
+      turnNotices.interrupted?.(sessionId, turnId, false, cause);
     },
 
     handleTitle(sessionId, title) {
