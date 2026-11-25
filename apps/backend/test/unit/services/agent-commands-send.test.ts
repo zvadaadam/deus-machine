@@ -33,6 +33,12 @@ import * as api from "@shared/api/sessions";
 import type { InputOf } from "@shared/api/op";
 import { operations } from "../../helpers";
 import sessionHandlers from "../../../src/api/sessions";
+import {
+  admitTurn,
+  claimTurn,
+  forgetChatTurns,
+  wireTurn,
+} from "../../../src/services/agent/chat-turn";
 import * as agentService from "../../../src/services/agent/service";
 import { sendMessage as sendStrict } from "../../../src/services/agent/turns";
 import * as cloudDriver from "../../../src/services/agent/cloud/driver";
@@ -87,6 +93,7 @@ describeWithDb("sendMessage", () => {
     };
 
   beforeEach(() => {
+    forgetChatTurns();
     SESSION = crypto.randomUUID();
     db = createTestDb();
     mockGetDatabase.mockReturnValue(db);
@@ -178,12 +185,11 @@ describeWithDb("sendMessage", () => {
       .mockResolvedValueOnce(undefined as never);
     const first = send(SESSION, "turn-7");
     // The handler has registered this turn, but the engine has not accepted it.
-    vi.spyOn(agentService, "liveTurnId").mockReturnValue("turn-7");
+    wireTurn(SESSION, "turn-7");
     const cancel = vi
       .spyOn(agentService, "stopSession")
       .mockResolvedValue({ outcome: "no_active_turn" });
     const stopping = run(api.stopSession, { sessionId: SESSION });
-    vi.mocked(agentService.liveTurnId).mockReturnValue(undefined);
     refuse(new WireRequestError(WIRE_ERROR_CODES.shuttingDown, "server is shutting down"));
     await expect(first).rejects.toThrow();
     await expect(stopping).resolves.toEqual({ unconfirmed: false });
@@ -201,6 +207,7 @@ describeWithDb("sendMessage", () => {
   });
 
   it("keeps the typed busy refusal for strict callers", async () => {
+    claimTurn(SESSION, "active");
     db.prepare("UPDATE sessions SET status = 'working' WHERE id = ?").run(SESSION);
     await expect(
       sendStrict({
@@ -586,6 +593,8 @@ describeWithDb("sendMessage", () => {
     vi.spyOn(agentService, "isConnected").mockReturnValue(true);
     vi.spyOn(agentService, "startTurn").mockResolvedValue(undefined as never);
 
+    claimTurn(SESSION, "active");
+    admitTurn(SESSION, "active");
     for (const status of ["working", "needs_plan_response", "needs_response"]) {
       db.prepare(`UPDATE sessions SET status = ? WHERE id = ?`).run(status, SESSION);
       await expect(send(SESSION)).resolves.toEqual({ turnId: "turn-1", queued: true });

@@ -22,6 +22,7 @@ import {
 import * as api from "@shared/api/sessions";
 import { findConversationMessage } from "@shared/conversation-rows";
 import { SCHEMA_SQL } from "@shared/schema";
+import { holdingTurn } from "../../../src/services/agent/chat-turn";
 import * as agent from "../../../src/services/agent/service";
 import * as cloud from "../../../src/services/agent/cloud/driver";
 import {
@@ -48,7 +49,7 @@ import * as workspaceInit from "../../../src/services/workspace-init.service";
 import { answerMcp, withSessionTools } from "../../../src/services/assistants/operator";
 import * as access from "../../../src/services/assistants/access";
 import * as settings from "../../../src/services/settings.service";
-import { answer, clearAll, pendingFor } from "../../../src/services/agent/tool-relay";
+import * as toolRelay from "../../../src/services/agent/tool-relay";
 import { resolveTurnApps } from "../../../src/services/integrations";
 import { assistantCaller, operations } from "../../helpers";
 
@@ -71,6 +72,7 @@ vi.mock("../../../src/services/pr-snapshot.service", () => ({
   refreshPrSnapshotForSession: () => {},
 }));
 
+const { answer, clearAll, pendingFor } = toolRelay;
 const run = operations(sessionHandlers);
 let db: Database.Database;
 let sessionId: string;
@@ -123,10 +125,13 @@ const queue = () => run(api.queuedMessages, { sessionId });
 const starts = () => engine.startTurn.mock.calls.map(([p]) => p.turnId);
 const lastSteerId = () => engine.steerTurn.mock.lastCall![0].steerId!;
 const ids = async () => (await queue()).items.map((item) => item.id);
-const steer = (label: string) =>
-  run(api.steerMessage, { ...message(label), turnId: agent.liveTurnId(sessionId) });
+const wireTurnId = () => {
+  const turn = holdingTurn(sessionId);
+  return turn?.phase === "preparing" ? undefined : turn?.turnId;
+};
+const steer = (label: string) => run(api.steerMessage, { ...message(label), turnId: wireTurnId() });
 const steerRow = (id: string) =>
-  run(api.steerQueuedMessage, { sessionId, id, turnId: agent.liveTurnId(sessionId) });
+  run(api.steerQueuedMessage, { sessionId, id, turnId: wireTurnId() });
 const move = (id: string, before: string | null) =>
   run(api.moveQueuedMessage, { sessionId, id, before });
 const read = (id: string) => run(api.queuedMessage, { sessionId, id });
@@ -889,13 +894,13 @@ describe("messages held for a local chat", () => {
     async (source) => {
       await sendInOrder("A", "B", "tail");
       if (source === "row") await send("follow-up");
-      const turnId = agent.liveTurnId(sessionId);
+      const turnId = wireTurnId();
       const request =
         source === "row"
           ? () => run(api.steerQueuedMessage, { sessionId, id: "follow-up", turnId })
           : () => run(api.steerMessage, { ...message("follow-up"), turnId });
       end("A");
-      await vi.waitFor(() => expect(agent.liveTurnId(sessionId)).toBe("B"));
+      await vi.waitFor(() => expect(wireTurnId()).toBe("B"));
       await expect(request()).resolves.toEqual({ outcome: "queued" });
       expect(engine.steerTurn).not.toHaveBeenCalled();
       expect((await queue()).items).toMatchObject([
@@ -926,7 +931,7 @@ describe("messages held for a local chat", () => {
     async (_, showCard) => {
       await sendInOrder("A", "B", "waiting", "row");
       end("A");
-      await vi.waitFor(() => expect(agent.liveTurnId(sessionId)).toBe("B"));
+      await vi.waitFor(() => expect(wireTurnId()).toBe("B"));
       showCard("B");
       const [card] = pendingFor(sessionId);
       await run(api.steerQueuedMessage, { sessionId, id: "row", turnId: "A" });
@@ -950,9 +955,9 @@ describe("messages held for a local chat", () => {
     expect(await ids()).toEqual(["C", "A", "B"]);
     expect(starts()).toEqual(["working"]);
     end("working");
-    await vi.waitFor(() => expect(agent.liveTurnId(sessionId)).toBe("C"));
+    await vi.waitFor(() => expect(wireTurnId()).toBe("C"));
     end("C");
-    await vi.waitFor(() => expect(agent.liveTurnId(sessionId)).toBe("A"));
+    await vi.waitFor(() => expect(wireTurnId()).toBe("A"));
     end("A");
     await vi.waitFor(() => expect(starts()).toEqual(["working", "C", "A", "B"]));
   });
@@ -970,7 +975,7 @@ describe("messages held for a local chat", () => {
     for (const id of ["head", "steer", "tail"]) await send(id);
     engine.startTurn.mockResolvedValueOnce(undefined); // The head has not echoed yet.
     end("first");
-    await vi.waitFor(() => expect(agent.liveTurnId(sessionId)).toBe("head"));
+    await vi.waitFor(() => expect(wireTurnId()).toBe("head"));
     await steerRow("steer");
     const before = await queue();
     for (const id of ["gone", "head", "steer"]) {
@@ -1073,7 +1078,7 @@ describe("messages held for a local chat", () => {
     await vi.waitFor(() => expect(starts()).toEqual(["first", "a", "b"]));
     ack.resolve();
     expect(await ids()).toEqual([]);
-    expect(agent.liveTurnId(sessionId)).toBe("b");
+    expect(wireTurnId()).toBe("b");
   });
 
   it.each(["before", "after"] as const)(
@@ -1267,7 +1272,7 @@ describe("messages held for a local chat", () => {
     engine.cancelTurn.mockResolvedValueOnce({ outcome: "no_active_turn" });
     await expect(stop()).resolves.toEqual({ unconfirmed: false });
     expect(engine.cancelTurn.mock.calls).toEqual([[sessionId, "head"]]);
-    expect(agent.liveTurnId(sessionId)).toBeUndefined();
+    expect(wireTurnId()).toBeUndefined();
     expect(pendingFor(sessionId)).toEqual([]);
     expect(await run(api.session, { sessionId })).toMatchObject({ status: "idle" });
     expect(await queue()).toMatchObject({
@@ -1333,10 +1338,10 @@ describe("messages held for a local chat", () => {
         gap("replay_failed");
         await vi.advanceTimersByTimeAsync(0);
       }
-      expect(agent.liveTurnId(sessionId)).toBeUndefined();
+      expect(wireTurnId()).toBeUndefined();
       engine.startTurn.mockRejectedValueOnce(busyReply("A"));
       await expect(send("B")).resolves.toEqual({ turnId: "B", queued: true });
-      expect(agent.liveTurnId(sessionId)).toBeUndefined();
+      expect(wireTurnId()).toBeUndefined();
       expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
       const status = vi.fn(() =>
         db.prepare("SELECT status FROM sessions WHERE id = ?").pluck().get(sessionId)
@@ -1418,7 +1423,7 @@ describe("messages held for a local chat", () => {
     await sendInOrder("first", "A", "tail");
     engine.startTurn.mockResolvedValueOnce(undefined);
     end("first");
-    await vi.waitFor(() => expect(agent.liveTurnId(sessionId)).toBe("A"));
+    await vi.waitFor(() => expect(wireTurnId()).toBe("A"));
     await steer("unread");
     question("A");
     await expect(stopped("A")).resolves.toEqual({ unconfirmed: false });
@@ -1433,7 +1438,7 @@ describe("messages held for a local chat", () => {
     expect(frames).not.toContainEqual(
       expect.objectContaining({ type: "q:reset", id: "transcript" })
     );
-    expect(agent.liveTurnId(sessionId)).toBeUndefined();
+    expect(wireTurnId()).toBeUndefined();
     expect(pendingFor(sessionId)).toEqual([]);
     expect(await run(api.session, { sessionId })).toMatchObject({
       status: "idle",
@@ -1464,7 +1469,7 @@ describe("messages held for a local chat", () => {
     release();
     await resume;
     expect(starts()).toHaveLength(3);
-    expect(agent.liveTurnId(sessionId)).toBe(starts()[2]);
+    expect(wireTurnId()).toBe(starts()[2]);
     expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
   });
 
@@ -1503,7 +1508,7 @@ describe("messages held for a local chat", () => {
 
     const releaseApps = holdAppSetup();
     const resuming = resumeInWindow();
-    expect(agent.liveTurnId(sessionId)).toBeUndefined();
+    expect(wireTurnId()).toBeUndefined();
     cancel.resolve({ outcome: "no_active_turn" });
     await stopping;
     expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
@@ -1532,7 +1537,7 @@ describe("messages held for a local chat", () => {
             });
       await vi.waitFor(() => expect(resolveTurnApps).toHaveBeenCalled());
       expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
-      expect(agent.liveTurnId(sessionId)).toBeUndefined();
+      expect(wireTurnId()).toBeUndefined();
       const reason = "Stopped before it started.";
       const changes: string[] = [];
       const unwatch = onInvalidate((resources) => changes.push(...resources));
@@ -1560,7 +1565,7 @@ describe("messages held for a local chat", () => {
       releaseApps();
       await new Promise<void>((resolve) => setImmediate(resolve));
       expect(starts()).toEqual(["next"]);
-      expect(agent.liveTurnId(sessionId)).toBe("next");
+      expect(wireTurnId()).toBe("next");
       expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
     }
   );
@@ -1572,7 +1577,7 @@ describe("messages held for a local chat", () => {
       await sendInOrder("first", "head", "next");
       releaseApps = holdAppSetup();
       end("first");
-      expect(agent.liveTurnId(sessionId)).toBeUndefined();
+      expect(wireTurnId()).toBeUndefined();
     });
 
     it("returns the head first and pauses without waiting for its apps", async () => {
@@ -1610,7 +1615,7 @@ describe("messages held for a local chat", () => {
       echo("head");
       admit();
       await expect(stopping).resolves.toEqual({ unconfirmed: false });
-      expect(agent.liveTurnId(sessionId)).toBeUndefined();
+      expect(wireTurnId()).toBeUndefined();
       expect(engine.cancelTurn.mock.calls).toEqual([[sessionId, "head"]]);
       expect(starts()).toEqual(["first", "head"]);
       expect(await queue()).toMatchObject({ paused: "stopped", items: [{ id: "next" }] });
@@ -1620,13 +1625,13 @@ describe("messages held for a local chat", () => {
       const wire = pendingStart();
       releaseApps();
       await vi.waitFor(() => expect(starts()).toEqual(["first", "head"]));
-      expect(agent.liveTurnId(sessionId)).toBe("head");
+      expect(wireTurnId()).toBe("head");
       const stopping = stop();
       wire.reject(
         new WireRequestError(WIRE_ERROR_CODES.internalError, "request timed out: turn/start")
       );
       await expect(stopping).resolves.toEqual({ unconfirmed: false });
-      expect(agent.liveTurnId(sessionId)).toBeUndefined();
+      expect(wireTurnId()).toBeUndefined();
       expect(engine.cancelTurn).not.toHaveBeenCalled();
       expect(await run(api.session, { sessionId })).toMatchObject({
         status: "error",
@@ -1642,7 +1647,7 @@ describe("messages held for a local chat", () => {
       const admit = holdAdmission();
       engine.cancelTurn.mockResolvedValueOnce({ outcome: "no_active_turn" });
       releaseApps();
-      await vi.waitFor(() => expect(agent.liveTurnId(sessionId)).toBe("head"));
+      await vi.waitFor(() => expect(wireTurnId()).toBe("head"));
       const stopping = stop();
       expect((await queue()).items[0]).toMatchObject({ id: "head", state: "sending" });
       echo("head");
@@ -1650,7 +1655,7 @@ describe("messages held for a local chat", () => {
       expect(await ids()).toEqual(["next"]);
       const releaseManual = holdAppSetup();
       const manual = send("manual");
-      expect(agent.liveTurnId(sessionId)).toBeUndefined();
+      expect(wireTurnId()).toBeUndefined();
       expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
       admit();
       await expect(stopping).resolves.toEqual({ unconfirmed: false });
@@ -1658,7 +1663,7 @@ describe("messages held for a local chat", () => {
       expect(engine.cancelTurn).not.toHaveBeenCalled();
       releaseManual();
       await manual;
-      expect(agent.liveTurnId(sessionId)).toBe("manual");
+      expect(wireTurnId()).toBe("manual");
       expect(await queue()).toMatchObject({ paused: "stopped", items: [{ id: "next" }] });
     });
   });
@@ -1722,7 +1727,7 @@ describe("messages held for a local chat", () => {
       const releaseApps = holdAppSetup();
       engine.startTurn.mockResolvedValue(undefined);
       const firstResume = resumeInWindow();
-      expect(agent.liveTurnId(sessionId)).toBeUndefined();
+      expect(wireTurnId()).toBeUndefined();
       await vi.advanceTimersByTimeAsync(15_000);
       expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
       expect((await queue()).paused).toBeNull();
@@ -1762,7 +1767,7 @@ describe("messages held for a local chat", () => {
       const releaseApps = holdAppSetup();
       engine.startTurn.mockResolvedValueOnce(undefined);
       end("A");
-      expect(agent.liveTurnId(sessionId)).toBeUndefined();
+      expect(wireTurnId()).toBeUndefined();
       wire.reject(new Error("A lost its admission reply"));
       await expect(predecessor).rejects.toThrow("A lost its admission reply");
       const duringSetup = await queue();
@@ -1792,7 +1797,7 @@ describe("messages held for a local chat", () => {
       end("first", "cancelled");
       const admit = holdAdmission();
       const resuming = resumeInWindow();
-      await vi.waitFor(() => expect(agent.liveTurnId(sessionId)).toBe("head"));
+      await vi.waitFor(() => expect(wireTurnId()).toBe("head"));
       if (when === "after") {
         admit();
         await resuming;
@@ -1811,7 +1816,7 @@ describe("messages held for a local chat", () => {
       expect(starts()).toEqual(["first", "head"]);
       expect(await queue()).toMatchObject(recovered);
       // The engine can replay the terminal after the gap gave up live ownership.
-      expect(agent.liveTurnId(sessionId)).toBeUndefined();
+      expect(wireTurnId()).toBeUndefined();
       end("head", "cancelled");
       expect(await queue()).toMatchObject({ ...recovered, paused: "stopped" });
       expect(await queue()).not.toHaveProperty("stoppedBy");
@@ -2005,7 +2010,7 @@ describe("messages held for a local chat", () => {
         gap("server_restarted");
       } else {
         await stopped("first");
-        expect(agent.liveTurnId(sessionId)).toBe("first");
+        expect(wireTurnId()).toBe("first");
       }
       expect(pendingFor(sessionId)).toEqual([]);
       expect(answer(card!.requestId, { result: {} })).toBe(false);
@@ -2043,7 +2048,13 @@ describe("messages held for a local chat", () => {
 
   it("settling a superseded turn's question leaves the new turn's plan waiting", async () => {
     await send("A");
+    const settled = Promise.withResolvers<void>();
+    const relay = toolRelay.relay;
+    const questionRelay = vi
+      .spyOn(toolRelay, "relay")
+      .mockImplementationOnce((request) => relay(request).finally(() => settled.promise));
     question("A");
+    questionRelay.mockRestore();
     await outliveStop("A");
     engine.startTurn.mockRejectedValueOnce(busyReply("A"));
     await send("B");
@@ -2051,6 +2062,7 @@ describe("messages held for a local chat", () => {
     await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "B"]));
     plan("B");
     agent.notifyTurnInterrupted(sessionId, "A", true);
+    settled.resolve();
     await vi.waitFor(() => expect(engine.respondElicitation).toHaveBeenCalled());
     expect(pendingFor(sessionId)).toMatchObject([{ method: "exitPlanMode" }]);
     expect(await run(api.session, { sessionId })).toMatchObject({ status: "needs_plan_response" });
@@ -2258,7 +2270,7 @@ describe("messages held for a local chat", () => {
       emit({ type: "turn.started", sessionId, turnId, timestamp: seq });
     });
     end("first");
-    await vi.waitFor(() => expect(agent.liveTurnId(sessionId)).toBe("head"));
+    await vi.waitFor(() => expect(wireTurnId()).toBe("head"));
     await steer("unread");
     const waiting = Array.from({ length: 18 }, (_, i) => `waiting-${i}`);
     for (const id of waiting) await send(id);
@@ -3290,7 +3302,7 @@ describe("operating another chat's queue", () => {
     await task("head");
     engine.startTurn.mockResolvedValueOnce(undefined);
     end("active");
-    await vi.waitFor(() => expect(agent.liveTurnId(sessionId)).toBe("head"));
+    await vi.waitFor(() => expect(wireTurnId()).toBe("head"));
     expect(await queueTool("read_queue")).toContain('1. sending · from you · "Message head"');
     echo("head", undefined, "Message head", fromChat);
     expect(await queueTool("read_queue")).toContain("The queue is empty.");
@@ -3571,7 +3583,7 @@ describe("operating another chat's queue", () => {
     const releaseApps = holdAppSetup();
     const aborted = expect(send("A")).rejects.toThrow("Stopped before it started");
     await vi.waitFor(() => expect(resolveTurnApps).toHaveBeenCalled());
-    expect(agent.liveTurnId(sessionId)).toBeUndefined();
+    expect(wireTurnId()).toBeUndefined();
     const stopping = stop();
     const queued = send("R");
     await Promise.all([
@@ -3596,7 +3608,7 @@ describe("operating another chat's queue", () => {
     async (waiting) => {
       const admit = holdAdmission();
       const first = send("A");
-      await vi.waitFor(() => expect(agent.liveTurnId(sessionId)).toBe("A"));
+      await vi.waitFor(() => expect(wireTurnId()).toBe("A"));
       if (waiting) await task("later");
       end("A", waiting ? "error" : "end_turn");
       const stopping = stop();
@@ -3788,7 +3800,7 @@ describe("operating another chat's queue", () => {
     "keeps a lost start reply's queue until the live turn ends or the failure is resumed (turn.started: %s)",
     async (started) => {
       await loseStartReply(started);
-      expect(agent.liveTurnId(sessionId)).toBe(started ? "A" : undefined);
+      expect(wireTurnId()).toBe(started ? "A" : undefined);
       expect(await queue()).toMatchObject({ paused: started ? null : "failed" });
       expect(await run(api.session, { sessionId })).toMatchObject({
         status: started ? "working" : "error",
@@ -3858,7 +3870,7 @@ describe("operating another chat's queue", () => {
     async (cancel) => {
       await failLiveReplay();
       expect((await queue()).paused).toBe("failed");
-      expect(agent.liveTurnId(sessionId)).toBe("A");
+      expect(wireTurnId()).toBe("A");
       const releaseApps = holdAppSetup();
       const resumed = resumeQueuedMessages(sessionId, fromChat);
       if (cancel === "unconfirmed replay cancel") {
@@ -3919,7 +3931,7 @@ describe("operating another chat's queue", () => {
       gap("replay_failed");
       await vi.waitFor(async () => expect((await queue()).paused).toBe("stopped"));
       expect(await queueTool("resume")).toMatch(/refused \(person_only\)/);
-      expect(agent.liveTurnId(sessionId)).toBe(outcome === "unconfirmed" ? "active" : undefined);
+      expect(wireTurnId()).toBe(outcome === "unconfirmed" ? "active" : undefined);
       end("active", "cancelled");
       expect(await queue()).toMatchObject({ paused: "stopped", items: [{ id: "later" }] });
       expect(await queue()).not.toHaveProperty("stoppedBy");
@@ -3934,7 +3946,7 @@ describe("operating another chat's queue", () => {
     engine.cancelTurn.mockResolvedValueOnce({ outcome: "no_active_turn" });
     gap("replay_failed");
     await vi.waitFor(async () => expect((await queue()).paused).toBe("failed"));
-    expect(agent.liveTurnId(sessionId)).toBeUndefined();
+    expect(wireTurnId()).toBeUndefined();
     expect(await queueTool("resume")).toContain('Started turn "later"');
     expect(starts()).toEqual(["active", "later"]);
   });
@@ -3952,7 +3964,7 @@ describe("operating another chat's queue", () => {
       await vi.waitFor(async () =>
         expect(await run(api.session, { sessionId })).toMatchObject({ error_category: "network" })
       );
-      expect(agent.liveTurnId(sessionId)).toBe("B");
+      expect(wireTurnId()).toBe("B");
       expect(await steer("aimed at B")).toEqual({ outcome: "queued" });
       expect(engine.steerTurn).not.toHaveBeenCalled();
       expect(await queueTool("resume")).toMatch(/refused \(person_only\)/);
@@ -4030,7 +4042,7 @@ describe("operating another chat's queue", () => {
         end("A");
       }
       await vi.waitFor(async () => expect((await queue()).paused).toBe("failed"));
-      expect(agent.liveTurnId(sessionId)).toBeUndefined();
+      expect(wireTurnId()).toBeUndefined();
       expect(await remove("later")).toEqual({ removed: true });
       expect(await queue()).toEqual({ paused: null, items: [] });
       await send("B");
@@ -4100,14 +4112,14 @@ describe("continuing a chat after a usage limit", () => {
     emit({
       type: "session.limits",
       sessionId,
-      turnId: agent.liveTurnId(sessionId)!,
+      turnId: wireTurnId()!,
       windows,
       status,
       timestamp: seq,
     });
   }
   function fail(category = "usage_limit", message = "Provider refused this turn") {
-    const turnId = agent.liveTurnId(sessionId)!;
+    const turnId = wireTurnId()!;
     const { harness, model, thinkingLevel, permissionMode } =
       engine.startTurn.mock.lastCall![0].config;
     const error = { category, message };
