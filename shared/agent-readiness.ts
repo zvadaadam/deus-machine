@@ -1,4 +1,6 @@
 import type { AgentAuthAnswer, HarnessAuth } from "./agent-auth";
+import type { AgentHarness } from "./enums";
+import { HARNESSES } from "./harnesses";
 
 type AgentReadiness =
   | { state: "ready"; auth: HarnessAuth; detail?: never }
@@ -47,4 +49,11 @@ export function agentReadiness(
     return { state: "signed_out", auth, detail: "sign in under Settings → AI Providers" };
   }
   return { state: "unknown", status: "failed", detail: auth?.error || "Status unavailable" };
+}
+
+export function signedOutStart(answer: AgentAuthAnswer, harness: AgentHarness): string | undefined {
+  if (answer.error !== undefined) return;
+  const agent = agentReadiness(answer, harness);
+  if (agent.state === "signed_out")
+    return `start_session: ${HARNESSES[harness].label} is signed out on this computer. Ask the person to ${agent.detail}. Nothing was started. Use list_models to see which agents are ready.`;
 }

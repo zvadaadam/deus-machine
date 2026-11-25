@@ -29,6 +29,7 @@
 // caller can change what the package's preflight read. A session's own calls
 // act as this computer.
 
+import { setTimeout as delay } from "node:timers/promises";
 import {
   OperatorError,
   Refused,
@@ -53,7 +54,7 @@ import {
 } from "@zvada/agent-server/operator";
 import type { Origin } from "@zvada/agent-server/protocol";
 import { withSentText } from "@shared/agent-message";
-import { agentReadiness } from "@shared/agent-readiness";
+import { agentReadiness, signedOutStart } from "@shared/agent-readiness";
 import type { AnyOp, InputOf, OutputOf } from "@shared/api/op";
 import * as sessions from "@shared/api/sessions";
 import { agentAuth, agentModels } from "@shared/api/settings";
@@ -924,6 +925,15 @@ export function createDeusHost(): DeusHost {
             "invalid_input",
             `start_session: agent: ${JSON.stringify(input.harness)} does not run here; the agents are ${AGENT_NAMES}. Nothing was started.`
           );
+        // A cold CLI check can take seconds. Only a known sign-out refuses a start.
+        const refusal = await Promise.race([
+          run(agentAuth, {}).then(
+            (answer) => signedOutStart(answer, harness),
+            () => undefined
+          ),
+          delay(300, undefined, { ref: false }),
+        ]);
+        if (refusal) throw new OperatorError("unsupported", refusal);
         const settings = await startSettings(harness, input);
         if (input.workspace) {
           const workspaceId = input.workspace.id;
