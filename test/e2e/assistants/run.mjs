@@ -12,12 +12,12 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import path from "node:path";
 import Database from "better-sqlite3";
-import { importJWK, SignJWT } from "jose";
 import { WebSocket } from "ws";
 import { RELAY_PROTOCOL } from "../../../shared/types/relay.ts";
-import { createStack, freePort, until } from "../remote-access/stack.mjs";
-import { assistantFromUrl, connectWithToken, localWindow, rawCall, rawMcp } from "./clients.mjs";
-import { startIssuer } from "./issuer.mjs";
+import { createLab } from "../remote-access/lab.mjs";
+import { until } from "../remote-access/stack.mjs";
+import { connectBackend } from "../lib/operations.mjs";
+import { connectWithToken, rawCall, rawMcp } from "./clients.mjs";
 
 const agnt = process.env.AGNT_WORKSPACE;
 assert(agnt, "Set AGNT_WORKSPACE to the linked AGNT worktree (Deus Cloud runs from it)");
@@ -299,80 +299,18 @@ function seedConversations(database, stackWorkspace) {
   };
 }
 
-const stack = createStack({ root, agnt, directory });
-const issuer = await startIssuer();
-const windows = [];
+const lab = createLab({ root, agnt, directory });
+let mac;
 try {
-  // ---- Stack ----
-  const pg = await stack.postgres();
-  pg.sql(
-    `INSERT INTO accounts (id, name, email, created_at) VALUES
-       ('user_alice', 'Alice', 'alice@example.com', now()::text),
-       ('user_bob', 'Bob', 'bob@example.com', now()::text)`
-  );
-  const { signingKey, jwks } = await stack.keys();
-  const jwtSecret = crypto.randomUUID();
-  const [cloudPort, relayPort] = [await freePort(), await freePort()];
-  const relay = await stack.relay({
-    port: relayPort,
-    jwks,
-    persist: path.join(directory, "relay"),
+  let seeded;
+  await lab.up(({ database, workspace }) => {
+    seeded = seedConversations(database, workspace);
   });
-
-  const cloud = await stack.cloud({
-    port: cloudPort,
-    databaseUrl: pg.url,
-    jwtSecret,
-    signingKey,
-    persist: path.join(directory, "cloud-state"),
-    vars: {
-      ASSISTANT_ISSUER: issuer.url,
-      RELAY_URL: relay.ws,
-      // No origins configured: a web page is refused all the same.
-    },
-  });
-  const sessions = {
-    aliceDesktop: await stack.session(jwtSecret, "user_alice", "deus-machine-desktop"),
-    aliceWeb: await stack.session(jwtSecret, "user_alice", "deus-web"),
-  };
-
-  const hostDb = await stack.hostDatabase("Studio Mac", "Seeded workspace");
-  const seeded = seedConversations(hostDb.database, hostDb.workspace);
-  const spawnToken = crypto.randomUUID();
-  const startHost = () =>
-    stack.host({
-      name: "Studio Mac",
-      ...hostDb,
-      relayUrl: relay.ws,
-      authToken: spawnToken,
-      // The fixture projects lie under the host's home wherever this journey is run.
-      env: { DEUS_ASSISTANT_ISSUER: issuer.url, HOME: directory },
-    });
-  let host = await startHost();
-  const signIn = () =>
-    host.api("/settings/cloud/credentials", {
-      method: "POST",
-      headers: { authorization: `Bearer ${spawnToken}` },
-      body: { deusCloudUrl: cloud.base, deusCloudSessionToken: sessions.aliceDesktop },
-    });
-  const connected = async () => {
-    let status;
-    await until(
-      async () => (status = await host.api("/relay/status")).state === "connected",
-      30_000,
-      "the computer's tunnel"
-    );
-    return status.serverId;
-  };
-  await signIn();
-  const machineId = await connected();
-  const openWindow = async () => {
-    const opened = await localWindow(host.url);
-    windows.push(opened);
-    return opened;
-  };
-  let mac = await openWindow();
-  const listed = () => mac.request("assistants");
+  const { cloud, relay, issuer, sessions, hostDb } = lab;
+  await lab.signIn();
+  const { serverId: machineId } = await lab.connectedAs();
+  mac = await connectBackend(lab.host.url);
+  const listed = () => mac.read("assistants");
   const withDb = (work) => {
     const db = new Database(hostDb.database, { readonly: true });
     try {
@@ -399,7 +337,7 @@ try {
   };
 
   // ---- 1. The address and the connector's refusals before any sign-in ----
-  const { assistantUrl } = await mac.request("relayStatus");
+  const { assistantUrl } = await mac.read("relayStatus");
   const url = `${cloud.base}/mcp/${machineId}`;
   assert.equal(assistantUrl, url);
   const metadataUrl = `${cloud.base}/.well-known/oauth-protected-resource/mcp/${machineId}`;
@@ -428,11 +366,10 @@ try {
   );
 
   // ---- 2. From the URL alone ----
-  issuer.signInAs("user_alice", "org_e2e");
-  const chatgpt = await assistantFromUrl(assistantUrl, {
-    name: "ChatGPT",
-    redirect: "https://chatgpt.com/connector_platform_oauth_redirect",
-  });
+  const chatgpt = await lab.addAssistant(
+    "ChatGPT",
+    "https://chatgpt.com/connector_platform_oauth_redirect"
+  );
   const flow = chatgpt.trace.join("\n");
   for (const step of [
     new RegExp(`POST ${url} 401`),
@@ -531,13 +468,10 @@ try {
   // ---- 4. The label ----
   // Deus Cloud's label route asks WorkOS (a fixed URL), and this stack has no
   // WorkOS key: it says so, and the computer keeps its documented fallback.
-  const label = await fetch(`${cloud.base}/me/assistants/${chatgpt.clientId}`, {
-    headers: { authorization: `Bearer ${sessions.aliceDesktop}` },
-  });
+  const labelRoute = `/me/assistants/${chatgpt.clientId}`;
+  const label = await lab.cloudApi(sessions.aliceDesktop, labelRoute);
   assert.equal(label.status, 503);
-  const labelFromWeb = await fetch(`${cloud.base}/me/assistants/${chatgpt.clientId}`, {
-    headers: { authorization: `Bearer ${sessions.aliceWeb}` },
-  });
+  const labelFromWeb = await lab.cloudApi(sessions.aliceWeb, labelRoute);
   assert.equal(labelFromWeb.status, 403);
   await new Promise((resolve) => setTimeout(resolve, 500));
   assistants = await listed();
@@ -545,11 +479,11 @@ try {
   assert.equal(assistants[0].host, null);
   check(
     "The label: Deus Cloud's lookup calls WorkOS at a fixed URL, so it cannot be pointed at a stub; without a WorkOS key it answers 503 (403 to a web session), and the computer shows the documented fallback: name = client id, host = null",
-    { listed: assistants[0], cloudLookup: await label.json() }
+    { listed: assistants[0], cloudLookup: label.data }
   );
 
   // ---- 5. Read only ----
-  await mac.mutate("setAssistantAccess", { clientId: chatgpt.clientId, access: "read" });
+  await mac.write("setAssistantAccess", { clientId: chatgpt.clientId, access: "read" });
   const who = ok(await chatgpt.call("whoami"));
   assert.equal(
     who,
@@ -713,7 +647,7 @@ try {
   const heldStarted = Date.now();
   const held = chatgpt.call("wait_for_sessions", { sessions: ["forge:1"], wait: 60 });
   await new Promise((resolve) => setTimeout(resolve, 2_000));
-  await mac.mutate("setAssistantAccess", { clientId: chatgpt.clientId, access: "operate" });
+  await mac.write("setAssistantAccess", { clientId: chatgpt.clientId, access: "operate" });
   const heldAnswer = await held;
   const heldMs = Date.now() - heldStarted;
   assert(heldMs < 20_000, `the held call ended in ${heldMs}ms`);
@@ -821,7 +755,7 @@ try {
   );
 
   // ---- 6b. A cloud workspace is not an assistant's ----
-  const windowSees = (await mac.request("workspaces"))
+  const windowSees = (await mac.read("workspaces"))
     .flatMap((g) => g.workspaces)
     .find((w) => w.id === seeded.nimbus.workspaceId);
   assert.equal(windowSees?.kind, "cloud", "the computer's own window lists the cloud workspace");
@@ -1189,10 +1123,7 @@ try {
   });
 
   // ---- 8. A second assistant on the same account ----
-  const claude = await assistantFromUrl(assistantUrl, {
-    name: "Claude",
-    redirect: "https://claude.ai/api/mcp/auth_callback",
-  });
+  const claude = await lab.addAssistant("Claude", "https://claude.ai/api/mcp/auth_callback");
   assert.notEqual(claude.clientId, chatgpt.clientId);
   const second = await claude.call("list_sessions");
   assert.equal(second.text, refusedAccess(NOT_ALLOWED_YET));
@@ -1274,25 +1205,10 @@ try {
 
   // Defense in depth: as if Deus Cloud erred and carried Bob's (or a misaddressed)
   // token to Alice's computer, with a valid client ticket for Alice's account.
-  const ticketKey = await importJWK(JSON.parse(signingKey), "ES256");
-  const aliceTicket = () =>
-    new SignJWT({ mid: machineId, role: "client" })
-      .setProtectedHeader({
-        alg: "ES256",
-        typ: "deus-relay-ticket+jwt",
-        kid: JSON.parse(signingKey).kid,
-      })
-      .setIssuer("deus-cloud")
-      .setAudience("deus-relay")
-      .setSubject("user_alice")
-      .setJti(crypto.randomUUID())
-      .setIssuedAt()
-      .setExpirationTime("1m")
-      .sign(ticketKey);
   const presentToComputer = async (token) => {
     const ws = new WebSocket(`${relay.ws}/api/servers/${machineId}/connect`, [
       RELAY_PROTOCOL,
-      await aliceTicket(),
+      await lab.clientTicket(sessions.aliceWeb, machineId),
     ]);
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("no answer from the computer")), 15_000);
@@ -1334,7 +1250,7 @@ try {
   );
 
   // ---- 10. The computer offline, then back ----
-  await stack.stop(host);
+  await lab.stop("host");
   const offlineStarted = Date.now();
   // Deus Cloud cannot ask the computer, so it answers the call itself, as a
   // tool result marked as an error: the words are what the model reads.
@@ -1409,16 +1325,12 @@ try {
 
   // A computer on the account that has never been reached: nothing remembered,
   // so initialize is refused as before.
-  const spareResponse = await fetch(`${cloud.base}/me/machines`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${sessions.aliceDesktop}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ name: "Spare Mac", secret: "s".repeat(43) }),
+  const spareResponse = await lab.cloudApi(sessions.aliceDesktop, "/me/machines", {
+    name: "Spare Mac",
+    secret: "s".repeat(43),
   });
-  assert.equal(spareResponse.status, 201, await spareResponse.clone().text());
-  const spare = (await spareResponse.json()).machine;
+  assert.equal(spareResponse.status, 201);
+  const spare = spareResponse.data.machine;
   const spareUrl = `${cloud.base}/mcp/${spare.id}`;
   const spareToken = await issuer.mint({
     sub: "user_alice",
@@ -1443,10 +1355,10 @@ try {
     "A computer on the account that was never reached has nothing remembered: initialize and tools/list are refused in words naming it (the relay refuses a computer that never hosted), and the SDK's connect fails with them",
     { initialize: spareInitialize.json, sdkError: spareSdk.error }
   );
-  host = await startHost();
-  await signIn();
-  assert.equal(await connected(), machineId);
-  mac = await openWindow();
+  await lab.startHost();
+  await lab.signIn();
+  assert.equal((await lab.connectedAs()).serverId, machineId);
+  mac = await connectBackend(lab.host.url);
   const back = ok(await chatgpt.call("list_sessions"));
   assert.match(back, /voyager:1/);
   assert.equal((await listed()).find((a) => a.clientId === chatgpt.clientId).access, "operate");
@@ -1459,7 +1371,7 @@ try {
   );
 
   // ---- 11. Deny, allow again, remove ----
-  await mac.mutate("setAssistantAccess", { clientId: chatgpt.clientId, access: "denied" });
+  await mac.write("setAssistantAccess", { clientId: chatgpt.clientId, access: "denied" });
   const denied = await chatgpt.call("list_sessions");
   assert.equal(denied.isError, true);
   // Refused at admission, before any MCP: Deus Cloud answers with a tool result marked as an error.
@@ -1471,14 +1383,14 @@ try {
   assert.equal(deniedAgain.text, denied.text);
   assistants = await listed();
   assert.equal(assistants.find((a) => a.clientId === chatgpt.clientId).access, "denied");
-  await mac.mutate("setAssistantAccess", { clientId: chatgpt.clientId, access: "operate" });
+  await mac.write("setAssistantAccess", { clientId: chatgpt.clientId, access: "operate" });
   ok(await chatgpt.call("list_sessions"));
   check(
     "Deny: the next calls are refused at admission with the denied sentence and the assistant stays listed as denied; allowed again, it works",
     { denied: denied.text, listed: assistants.find((a) => a.clientId === chatgpt.clientId) }
   );
 
-  await mac.mutate("removeAssistant", { clientId: chatgpt.clientId });
+  await mac.write("removeAssistant", { clientId: chatgpt.clientId });
   assert(!(await listed()).some((a) => a.clientId === chatgpt.clientId), "removed from the list");
   const removed = await chatgpt.call("list_sessions");
   assert.equal(removed.text, refusedAccess(NOT_ALLOWED_YET));
@@ -1490,10 +1402,10 @@ try {
   );
 
   // ---- 12. A computer with projects and no session ----
-  await mac.mutate("setAssistantAccess", { clientId: chatgpt.clientId, access: "operate" });
-  for (const w of (await mac.request("workspaces")).flatMap((g) => g.workspaces)) {
+  await mac.write("setAssistantAccess", { clientId: chatgpt.clientId, access: "operate" });
+  for (const w of (await mac.read("workspaces")).flatMap((g) => g.workspaces)) {
     if (w.kind !== "cloud" && w.state !== "archived")
-      await mac.mutate("archiveWorkspace", { workspaceId: w.id });
+      await mac.write("archiveWorkspace", { workspaceId: w.id });
   }
   const empty = ok(await chatgpt.call("list_sessions"));
   assert.match(empty, /^0 session\(s\)\n/);
@@ -1511,12 +1423,14 @@ try {
   // ---- 13. The computer removed from the account ----
   // Its record goes, and with it what Deus Cloud remembered: offline or not, the
   // address now answers that the computer is not on the account.
-  const removedMachine = await fetch(`${cloud.base}/me/machines/${machineId}`, {
-    method: "DELETE",
-    headers: { authorization: `Bearer ${sessions.aliceDesktop}` },
-  });
+  const removedMachine = await lab.cloudApi(
+    sessions.aliceDesktop,
+    `/me/machines/${machineId}`,
+    undefined,
+    "DELETE"
+  );
   assert.equal(removedMachine.status, 200);
-  await stack.stop(host);
+  await lab.stop("host");
   const forgotten = await rawMcp(url, { token: chatgpt.token, body: initializeBody(11) });
   assert.equal(forgotten.json?.id, 11);
   assert.equal(forgotten.json?.result, undefined, "no remembered answer");
@@ -1531,14 +1445,12 @@ try {
     { initialize: forgotten.json, tools: forgottenTools.json }
   );
 
-  await Promise.all([chatgpt.close(), claude.close()]);
   report.issuerRequests = issuer.requests;
 } catch (error) {
   report.error = error.stack;
   throw error;
 } finally {
-  windows.forEach((w) => w.close());
+  mac?.close();
   await writeFile(path.join(output, "results.json"), JSON.stringify(report, null, 2));
-  await stack.close();
-  await issuer.close();
+  await lab.close();
 }
