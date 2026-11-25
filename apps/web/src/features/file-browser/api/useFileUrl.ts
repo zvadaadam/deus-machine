@@ -32,7 +32,7 @@ export function useFileUrl(...file: FileLocation | [kind: "recording", path: und
       if (retry.current.reloaded) setFailedUrl(url);
       return;
     }
-    const failedUrl = element.src;
+    const src = element.src;
     const attempt: Recovery = {
       element,
       time: "currentTime" in element ? element.currentTime : 0,
@@ -44,9 +44,9 @@ export function useFileUrl(...file: FileLocation | [kind: "recording", path: und
     if (answer.error || !element.isConnected || retry.current !== attempt) return;
     attempt.reloaded = true;
     // React sets a changed src. The Mac can also renew the same address.
-    if (answer.data === failedUrl && element.src === failedUrl) {
+    if (answer.data === src && element.src === src) {
       if ("load" in element) element.load();
-      else element.src = failedUrl;
+      else element.src = src;
     }
   }
 

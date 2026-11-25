@@ -9,6 +9,7 @@ import { RuntimeClient, RuntimeError } from "@/platform/ws/runtime-client";
 import { Socket } from "../../../packages/runtime-client/test/socket";
 import * as endpoints from "@/shared/config/backend.config";
 import * as fileUrls from "@/features/file-browser/api/useFileUrl";
+import { SessionProvider } from "@/features/session/context";
 import { RecordingStopToolRenderer } from "@/features/session/ui/tools/renderers/RecordingToolRenderers";
 const { useFileUrl } = fileUrls;
 
@@ -181,13 +182,18 @@ function renderRecording(open: boolean) {
     createElement(
       QueryClientProvider,
       { client: cache },
-      createElement(RecordingStopToolRenderer, {
-        toolUse: { type: "tool_use", id: "record", name: "recording_stop", input: {} },
-        toolResult: {
-          type: "tool_result",
-          tool_use_id: "record",
-          content: JSON.stringify({ outputPath: path, thumbnailPath: "/tmp/thumb.png" }),
-        },
+      createElement(SessionProvider, {
+        sessionId: "s1",
+        sessionStatus: "idle",
+        subagentMessages: new Map(),
+        children: createElement(RecordingStopToolRenderer, {
+          toolUse: { type: "tool_use", id: "record", name: "recording_stop", input: {} },
+          toolResult: {
+            type: "tool_result",
+            tool_use_id: "record",
+            content: JSON.stringify({ outputPath: path, thumbnailPath: "/tmp/thumb.png" }),
+          },
+        }),
       })
     )
   );
