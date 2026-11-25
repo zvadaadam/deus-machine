@@ -148,6 +148,13 @@ function stopped(turnId: string, by?: Origin) {
   engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId });
   return by ? stopSession({ sessionId }, by) : stop();
 }
+async function outliveStop(turnId: string) {
+  vi.useFakeTimers();
+  await stopped(turnId);
+  await vi.advanceTimersByTimeAsync(15_000);
+  vi.useRealTimers();
+}
+
 async function queueTool(
   action: "read_queue" | "send_now" | "remove" | "resume",
   id?: string,
@@ -2037,8 +2044,11 @@ describe("messages held for a local chat", () => {
   it("settling a superseded turn's question leaves the new turn's plan waiting", async () => {
     await send("A");
     question("A");
-    // A native admission replaces the handler's stale claim on A before A's end arrives.
-    await agent.startTurn(sessionId, "B", "codex-app-server", "new turn", { cwd: "/tmp/repo" });
+    await outliveStop("A");
+    engine.startTurn.mockRejectedValueOnce(busyReply("A"));
+    await send("B");
+    end("A");
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "B"]));
     plan("B");
     agent.notifyTurnInterrupted(sessionId, "A", true);
     await vi.waitFor(() => expect(engine.respondElicitation).toHaveBeenCalled());
@@ -2281,13 +2291,12 @@ describe("messages held for a local chat", () => {
   it.each(["before", "after"] as const)(
     "queues two callers of a losing admission once when the winner ends %s the busy reply",
     async (when) => {
+      await send("winner");
+      await outliveStop("winner");
       const admission = pendingStart();
       const receipts = Promise.all([send("loser"), send("loser")]);
-      await vi.waitFor(() => expect(starts()).toEqual(["loser"]));
+      await vi.waitFor(() => expect(starts()).toEqual(["winner", "loser"]));
       expect(await ids()).toEqual([]);
-      await agent.startTurn(sessionId, "winner", "codex-app-server", "winning turn", {
-        cwd: "/tmp/repo",
-      });
       if (when === "before") end("winner");
       admission.reject(busyReply("winner"));
       expect(await receipts).toEqual([
@@ -2298,7 +2307,7 @@ describe("messages held for a local chat", () => {
         expect(await ids()).toEqual(["loser"]);
         end("winner");
       }
-      await vi.waitFor(() => expect(starts()).toEqual(["loser", "winner", "loser"]));
+      await vi.waitFor(() => expect(starts()).toEqual(["winner", "loser", "loser"]));
       expect(await ids()).toEqual([]);
     }
   );
@@ -2317,10 +2326,12 @@ describe("messages held for a local chat", () => {
     "puts a %s queued start back at the head",
     async (failure) => {
       await sendInOrder("first", "a", "b");
+      if (failure === "busy") await outliveStop("first");
       engine.startTurn.mockRejectedValueOnce(
-        failure === "failed" ? new Error("engine unavailable") : busyReply()
+        failure === "failed" ? new Error("engine unavailable") : busyReply("first")
       );
-      end("first");
+      if (failure === "busy") await resumeInWindow();
+      else end("first");
       await vi.waitFor(async () =>
         expect(await queue()).toMatchObject({
           paused: failure === "failed" ? "failed" : null,
@@ -2334,11 +2345,8 @@ describe("messages held for a local chat", () => {
         expect(retry.turnId).not.toBe("a");
         expect(retry.input).toBe("Message a");
       } else {
-        await agent.startTurn(sessionId, "other", "codex-app-server", "winning turn", {
-          cwd: "/tmp/repo",
-        });
-        end("other");
-        await vi.waitFor(() => expect(starts()).toEqual(["first", "a", "other", "a"]));
+        end("first");
+        await vi.waitFor(() => expect(starts()).toEqual(["first", "a", "a"]));
       }
       expect(await ids()).toEqual(["b"]);
     }
@@ -2346,18 +2354,14 @@ describe("messages held for a local chat", () => {
 
   it("retries the head when the competing turn ended before the busy admission reply", async () => {
     await sendInOrder("first", "next");
+    await outliveStop("first");
     const reply = pendingStart();
-    end("first");
+    const resuming = resumeInWindow();
     await vi.waitFor(() => expect(starts()).toEqual(["first", "next"]));
-    // Its native admission wins while our local claim is still pending.
-    engine.startTurn.mockResolvedValueOnce(undefined);
-    await agent.startTurn(sessionId, "winner", "codex-app-server", "winning turn", {
-      cwd: "/tmp/repo",
-    });
-    emit({ type: "turn.started", sessionId, turnId: "winner", timestamp: seq });
-    end("winner");
-    reply.reject(busyReply());
-    await vi.waitFor(() => expect(starts()).toEqual(["first", "next", "winner", "next"]));
+    end("first");
+    reply.reject(busyReply("first"));
+    await resuming;
+    await vi.waitFor(() => expect(starts()).toEqual(["first", "next", "next"]));
     expect(await ids()).toEqual([]);
   });
 
