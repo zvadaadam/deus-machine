@@ -819,6 +819,23 @@ describe("stopping the current turn", () => {
     expect(await view()).toMatchObject({ status: "working", running: starts()[0] });
   });
 
+  it("keeps an unnamed first-task Stop aimed at that task when a successor is already running", async () => {
+    const { entry, release } = await startHeldFirstTask();
+    const ack = pendingStart();
+    release();
+    await vi.waitFor(() => expect(starts()).toEqual(["first-task"]));
+    emit({ type: "turn.started", sessionId, turnId: "first-task", timestamp: seq });
+    end("first-task");
+    try {
+      await send("successor");
+      expect(await host.cancel!(windowCaller, entry.id)).toBe("not_running");
+      expect(engine.cancelTurn).not.toHaveBeenCalled();
+      expect(await view()).toMatchObject({ running: "successor" });
+    } finally {
+      ack.resolve();
+    }
+  });
+
   it("queues the default operator steer first during a first task's app setup and honors Stop", async () => {
     const { release } = await startHeldFirstTask();
     await send("tail");
@@ -847,6 +864,18 @@ describe("stopping the current turn", () => {
 });
 
 describe("messages held for a local chat", () => {
+  it("starts a fresh steer on a free chat with a stale card and steers its holder with a stale idle status", async () => {
+    db.prepare("UPDATE sessions SET status = 'needs_response' WHERE id = ?").run(sessionId);
+    const next = await steerMessage(message("first"), fromChat, "first");
+    expect(next).toEqual({ outcome: "sent" });
+    db.prepare("UPDATE sessions SET status = 'idle' WHERE id = ?").run(sessionId);
+    await expect(
+      steerMessage({ ...message("follow-up"), turnId: "first" }, fromChat, "follow-up")
+    ).resolves.toEqual({ outcome: "steered" });
+    expect(starts()).toEqual(["first"]);
+    expect(lastSteerId()).toBe("follow-up");
+  });
+
   it.each(["composer", "row"] as const)(
     "holds a late %s steer for its own turn when the displayed turn has ended",
     async (source) => {

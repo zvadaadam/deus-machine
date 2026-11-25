@@ -419,13 +419,14 @@ function canSteer(q: Queue, chat: LocalChat, turnId: string | undefined): turnId
     turnId !== undefined &&
     turnId === turn?.turnId &&
     turn.phase !== "preparing" &&
-    chat.status === "working" &&
+    chat.status !== "error" &&
     !(pause?.reason === "stopped" && pause.turnId === turnId)
   );
 }
 
 function waitingOnCard(chat: LocalChat, sessionId: string, turnId?: string) {
-  if (turnId !== undefined && turnId !== holdingTurn(sessionId)?.turnId) return;
+  const owner = holdingTurn(sessionId);
+  if (!owner || (turnId !== undefined && turnId !== owner.turnId)) return;
   if (chat.status === "needs_response") return "question";
   if (chat.status === "needs_plan_response") return "plan";
 }
