@@ -1,4 +1,4 @@
-/* global window, document, innerWidth, getComputedStyle */
+/* global window, document, innerWidth, requestAnimationFrame */
 // Real layout, chat, tool panels and store; only backend/native boundaries are fixtures.
 // Run: bun test/e2e/workspace-layout.browser.mjs
 import assert from "node:assert/strict";
@@ -21,6 +21,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider } from "@/components/ui/sidebar";
+import { ThemeProvider } from "@/app/providers/ThemeProvider";
 import { MainContent } from "@/app/layouts/MainContent";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { workspaceLayoutActions, useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
@@ -41,12 +42,12 @@ function App() {
  const chatRef = useRef(null);
  window.selectWorkspace = id => setCurrent({...workspace,id});
  window.setCloudStage = state => setCurrent({...workspace,kind:"cloud",state,init_stage:state === "initializing" ? "resuming" : null,cloud_status: state === "ready" ? "running" : "paused"});
- return <QueryClientProvider client={client}><TooltipProvider><SidebarProvider>
+ return <ThemeProvider><QueryClientProvider client={client}><TooltipProvider><SidebarProvider>
    <aside data-fixture-sidebar className="bg-bg-base h-screen w-64 shrink-0 p-4">Deus</aside>
    <MainContent selectedWorkspace={current as any} prState={{type:"create_pr"}} workspaceChatPanelRef={chatRef}
      repos={[]} repoGroups={[]} onCreateWorkspace={()=>{}} onOpenProject={()=>{}} onCloneRepository={()=>{}} onStartNewProject={()=>{}} onStartWorkspace={()=>{}} onWorkspaceClick={()=>{}} />
    <div hidden data-custom-icons><Check className="stroke-[2.5]" /><ConnectionIllustration /></div>
- </SidebarProvider></TooltipProvider></QueryClientProvider>;
+ </SidebarProvider></TooltipProvider></QueryClientProvider></ThemeProvider>;
 }
 createRoot(document.getElementById("root")!).render(<App />);
 `
@@ -135,15 +136,38 @@ const server = await createServer({
           if (resource === "workspaceFiles")
             return filesOnline
               ? json({
-                  files: [{ name: "README.md", path: "README.md", type: "file" }],
-                  totalFiles: 1,
-                  totalSize: 25,
+                  files: [
+                    { name: "README.md", path: "README.md", type: "file" },
+                    {
+                      name: "src",
+                      path: "src",
+                      type: "directory",
+                      children: [{ name: "App.tsx", path: "src/App.tsx", type: "file" }],
+                    },
+                  ],
+                  totalFiles: 2,
+                  totalSize: 120,
                 })
               : json({}, 503);
+          if (resource === "fileContent")
+            return json({ content: "# Deus Machine\n\nWelcome to browser-style tabs.\n" });
           if (resource === "simulatorCapabilities") return json({ available: true });
           if (resource === "diffFiles") return json({ files: [] });
           if (resource === "localServers")
-            return json({ servers: [], isLoading: false, refreshedAt: null });
+            return json({
+              servers: [
+                {
+                  url: "http://localhost:1420",
+                  host: "localhost",
+                  port: 1420,
+                  title: "Deus Web",
+                  status: "running",
+                  previewImageDataUrl: null,
+                },
+              ],
+              isLoading: false,
+              refreshedAt: Date.now(),
+            });
           if (req.url.includes("environment")) return json({ tasks: [] });
           if (resource === "ghStatus") return json({ isInstalled: true, isAuthenticated: true });
           if (req.url.includes("cloud")) return json({});
@@ -180,39 +204,79 @@ try {
     }, mode);
   };
   const click = (name) => page.getByRole("button", { name, exact: true }).click();
-  const tabs = page.getByRole("tablist", { name: "Content panel" });
+  const tabs = page.getByRole("tablist", { name: "Workspace tabs" });
   const createPR = page.getByRole("button", { name: "Create PR", exact: true });
   const tab = (name) => tabs.getByRole("tab", { name, exact: true }).click();
+  const addNewTab = () => page.getByRole("button", { name: "New tab", exact: true }).click();
+  const openFromNewTab = async (label) => {
+    const newTabView = page.locator('[data-slot="new-tab-view"]');
+    if (!(await newTabView.isVisible())) {
+      await addNewTab();
+      await newTabView.waitFor();
+    }
+    await newTabView.getByRole("button", { name: label, exact: true }).click();
+  };
   const composer = page.locator('[data-slot="workspace-chat-pane"] textarea');
   await composer.fill("Keep this draft while I inspect the workspace.");
   await page.evaluate(() => {
     window.originalComposer = document.querySelector('[data-slot="workspace-chat-pane"] textarea');
     window.originalContent = document.querySelector('[data-slot="workspace-content-pane"]');
   });
-  await tabs.getByRole("tab", { name: "Simulator", exact: true }).waitFor();
+  // Fresh workspace opens on a clean New Tab with omnibox + tool cards + running servers.
+  await tabs.getByRole("tab", { name: "New tab", exact: true }).waitFor();
+  await page
+    .locator('[data-slot="new-tab-view"]')
+    .getByRole("button", { name: "Simulator", exact: true })
+    .waitFor();
   assert.ok(await createPR.isVisible(), "the header shows the available PR action");
   assert.deepEqual(
     await tabs.getByRole("tab").evaluateAll((es) => es.map((e) => e.getAttribute("aria-label"))),
-    ["Changes", "Files", "Terminal", "Browser", "Simulator", "Agent"]
+    ["New tab"]
   );
-  assert.equal(await page.getByRole("button", { name: "More content tabs" }).count(), 0);
-  const iconWeights = await page
-    .locator('[data-slot="workspace-tool-header"] .lucide')
-    .evaluateAll((es) => es.map((e) => getComputedStyle(e).strokeWidth));
-  assert(iconWeights.length > 7 && iconWeights.every((w) => w === "1.5px"));
-  assert.equal(
-    await page
-      .locator("[data-custom-icons] .lucide")
-      .evaluate((e) => getComputedStyle(e).strokeWidth),
-    "2.5px"
-  );
-  assert.equal(
-    await page
-      .locator('[data-custom-icons] svg:not(.lucide) [stroke-width="2.5"]')
-      .first()
-      .evaluate((e) => getComputedStyle(e).strokeWidth),
-    "2.5px"
-  );
+  await page.screenshot({ path: path.join(artifacts, "new-tab-light.png") });
+  await page.evaluate(async () => {
+    document.documentElement.classList.add("dark");
+    await new Promise(requestAnimationFrame);
+    await Promise.allSettled(document.getAnimations().map((a) => a.finished));
+  });
+  await page.screenshot({ path: path.join(artifacts, "new-tab-dark.png") });
+  await page.evaluate(async () => {
+    document.documentElement.classList.remove("dark");
+    await new Promise(requestAnimationFrame);
+    await Promise.allSettled(document.getAnimations().map((a) => a.finished));
+  });
+
+  // Omnibox combobox semantics + file search opens a dedicated file tab with rendered content.
+  const omnibox = page.getByRole("combobox", { name: "Search files or enter a URL" });
+  assert.equal(await omnibox.getAttribute("aria-expanded"), "false");
+  await omnibox.fill("README");
+  assert.equal(await omnibox.getAttribute("aria-expanded"), "true");
+  await page.getByRole("option").filter({ hasText: "README.md" }).click();
+  const readmeTab = tabs.getByRole("tab", { name: "README.md", exact: true });
+  await readmeTab.waitFor();
+  await page.getByText("Welcome to browser-style tabs.").waitFor();
+  // Active tab aria-controls pairs with the visible tabpanel.
+  const activeTabId = await readmeTab.getAttribute("id");
+  const controlledPanelId = await readmeTab.getAttribute("aria-controls");
+  const tabPanel = page.locator(`[role="tabpanel"][id="${controlledPanelId}"]`);
+  assert.equal(await tabPanel.getAttribute("aria-labelledby"), activeTabId);
+
+  // Open a second tab and verify 2-tab drag-and-drop reorder works symmetrically.
+  await openFromNewTab("Changes");
+  const changesTab = tabs.getByRole("tab", { name: "Changes", exact: true });
+  await changesTab.waitFor();
+  const tabLabels = () =>
+    tabs.getByRole("tab").evaluateAll((es) => es.map((e) => e.getAttribute("aria-label")));
+  assert.deepEqual(await tabLabels(), ["README.md", "Changes"]);
+  const readmeBox = await readmeTab.boundingBox();
+  const changesBox = await changesTab.boundingBox();
+  await page.mouse.move(changesBox.x + changesBox.width / 2, changesBox.y + changesBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(readmeBox.x + readmeBox.width * 0.25, readmeBox.y + readmeBox.height / 2, {
+    steps: 10,
+  });
+  await page.mouse.up();
+  assert.deepEqual(await tabLabels(), ["Changes", "README.md"]);
   await page.screenshot({ path: path.join(artifacts, "split.png") });
   // Resize once; hide/show and focus/restore must preserve the chosen ratio.
   const separator = page.locator('[data-workspace-view] > [data-slot="resizable-handle"]');
@@ -268,14 +332,26 @@ try {
         window.originalContent === document.querySelector('[data-slot="workspace-content-pane"]')
     )
   );
-  // Every tool hosts the same action, including its empty/loading/error body.
+  // Every tool can be opened from New Tab and supports expand/restore from the unified tab bar.
   for (const name of ["Files", "Terminal", "Browser", "Simulator", "Agent"]) {
-    await tab(name);
+    await openFromNewTab(name);
     await click("Expand workspace");
     await view("content");
     await click("Restore split");
     await view("split");
   }
+  await page.evaluate(async () => {
+    document.documentElement.classList.add("dark");
+    await new Promise(requestAnimationFrame);
+    await Promise.allSettled(document.getAnimations().map((a) => a.finished));
+  });
+  await page.screenshot({ path: path.join(artifacts, "multi-tabs-dark.png") });
+  await page.evaluate(async () => {
+    document.documentElement.classList.remove("dark");
+    await new Promise(requestAnimationFrame);
+    await Promise.allSettled(document.getAnimations().map((a) => a.finished));
+  });
+
   await tab("Files");
   await page.getByRole("treeitem", { name: "README.md", exact: true }).waitFor();
   filesOnline = false;
@@ -294,6 +370,47 @@ try {
   await view("chat");
   await click("Files");
   await view("split");
+  // Launcher isolation across workspaces, Delete-key close + focus restore, and rapid same-pixel close.
+  await page.evaluate(() => window.selectWorkspace("rapid"));
+  const rapidOmnibox = page.getByRole("combobox", { name: "Search files or enter a URL" });
+  await rapidOmnibox.fill("should-not-leak");
+  await page.evaluate(() => window.selectWorkspace("second"));
+  assert.equal(
+    await page.getByRole("combobox", { name: "Search files or enter a URL" }).inputValue(),
+    "",
+    "launcher omnibox input must not leak across workspaces"
+  );
+  await page.evaluate(() => window.selectWorkspace("rapid"));
+  for (const name of ["Changes", "Files", "Agent", "Terminal"]) {
+    await openFromNewTab(name);
+  }
+  assert.deepEqual(await tabLabels(), ["Changes", "Files", "Agent", "Terminal 1"]);
+  // Delete key closes the focused tab and restores focus to a surviving tab.
+  const agentTab = tabs.getByRole("tab", { name: "Agent", exact: true });
+  await agentTab.focus();
+  await page.keyboard.press("Delete");
+  assert.deepEqual(await tabLabels(), ["Changes", "Files", "Terminal 1"]);
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.getAttribute("role")),
+    "tab",
+    "Delete close restores focus to a surviving tab"
+  );
+  // Rapid close-clicking at the exact same pixel closes uniform-width tabs consecutively.
+  const firstTab = tabs.getByRole("tab", { name: "Changes", exact: true });
+  await firstTab.hover();
+  const closeBox = await page
+    .getByRole("button", { name: "Close Changes", exact: true })
+    .boundingBox();
+  const cx = closeBox.x + closeBox.width / 2;
+  const cy = closeBox.y + closeBox.height / 2;
+  await page.mouse.click(cx, cy);
+  assert.deepEqual(await tabLabels(), ["Files", "Terminal 1"]);
+  await page.mouse.click(cx, cy);
+  assert.deepEqual(await tabLabels(), ["Terminal 1"]);
+  await page.mouse.click(cx, cy);
+  assert.deepEqual(await tabLabels(), ["New tab"]);
+  await page.evaluate(() => window.selectWorkspace("first"));
+
   // Per-workspace views are independent; returning must not overwrite a saved mode.
   await click("Expand workspace");
   await view("content");
@@ -313,7 +430,7 @@ try {
   await view("split");
   await page.keyboard.press("Control+Backslash");
   await view("content");
-  // View preferences survive reload; split widths and live terminal ids do not.
+  // View preferences survive reload; split widths and live terminal tabs do not.
   await page.reload();
   await view("content");
   const saved = await page.evaluate(() =>
@@ -321,14 +438,18 @@ try {
   );
   assert.equal(saved.state.layouts.first.panelMode, "content");
   assert.equal(saved.state.layouts.second.panelMode, "split");
-  assert.deepEqual(saved.state.layouts.first.terminalTabs, []);
+  assert.equal(
+    saved.state.layouts.first.workspaceTabs.some((t) => t.kind === "terminal"),
+    false,
+    "live terminal tabs are never persisted"
+  );
   assert(!("chatPanelCollapsed" in saved.state.layouts.first));
   await page.keyboard.press("Control+Backslash");
   await view("split");
   // A gated cloud computer still exposes Restore; no VM is provisioned by a layout action.
   await page.evaluate(() => window.setCloudStage("initializing"));
   for (const name of ["Changes", "Files", "Terminal", "Browser", "Simulator"]) {
-    await tab(name);
+    await openFromNewTab(name);
     await page
       .getByText("Setting up your computer…", { exact: true })
       .filter({ visible: true })
