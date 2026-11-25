@@ -228,17 +228,14 @@ export interface TurnOutcomeWrite {
   error?: { message: string; category: string };
 }
 
-export function persistStopCredit(id: string, turnId: string, by?: Origin): WriteResult<void> {
+// A Stop never creates a turn row. Its answer can only correct one the engine or release wrote.
+export function persistStopCredit(id: string, turnId: string, by?: Origin) {
   try {
     getDatabase()
-      .prepare(
-        `INSERT INTO turns (session_id, turn_id, cancelled_by) VALUES (?, ?, ?)
-       ON CONFLICT(session_id, turn_id) DO UPDATE SET cancelled_by = excluded.cancelled_by`
-      )
-      .run(id, turnId, by ? JSON.stringify(by) : null);
-    return { ok: true, value: undefined };
+      .prepare("UPDATE turns SET cancelled_by = ? WHERE session_id = ? AND turn_id = ?")
+      .run(by ? JSON.stringify(by) : null, id, turnId);
   } catch (error) {
-    return failed("Stop credit", error);
+    failed("Stop credit", error);
   }
 }
 
@@ -265,18 +262,19 @@ export function persistStopStatus(
 /** Persist a turn and its optional session status atomically, even without messages. */
 export function persistTurn(
   sessionId: string,
-  turn: Parameters<typeof turnRecord>[0],
+  turn: Parameters<typeof turnRecord>[0] & { cancelledBy?: Origin },
   outcome?: TurnOutcomeWrite,
   providerCredentialSource?: TurnProviderCredentialSource
 ): WriteResult<void> {
   const db = getDatabase();
   try {
     db.transaction(() => {
-      saveTurn(
-        db,
-        sessionId,
-        turnRecord(turn, providerCredentialSource, getTurn(db, sessionId, turn.turnId))
+      const record = turnRecord(
+        turn,
+        providerCredentialSource,
+        getTurn(db, sessionId, turn.turnId)
       );
+      saveTurn(db, sessionId, record, turn.cancelledBy);
 
       if (outcome) writeStatus(sessionId, terminalStatus(outcome));
     })();
@@ -581,7 +579,8 @@ export function persistChanges(
   state: ConversationState,
   changes: ConversationChange[],
   outcomeFor: (turn: ConversationTurn) => TurnOutcomeWrite | undefined,
-  providerCredentialSource?: TurnProviderCredentialSource
+  providerCredentialSource?: TurnProviderCredentialSource,
+  cancelledBy?: Origin
 ): ChangeWrite[] {
   const writes: ChangeWrite[] = [];
   for (const change of changes) {
@@ -609,7 +608,7 @@ export function persistChanges(
           change,
           result: persistTurn(
             sessionId,
-            turn,
+            { ...turn, cancelledBy },
             turn.status === "ended" ? outcomeFor(turn) : undefined,
             providerCredentialSource
           ),

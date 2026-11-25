@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import type { Origin } from "@zvada/agent-server/protocol";
 import type { SessionTurn } from "@shared/types/session";
 
 interface TurnRow {
@@ -61,17 +62,23 @@ export function getTurnsForMessages(
 }
 
 /** Replaces one already-merged record; accounting is never summed on write. */
-export function saveTurn(db: Database.Database, sessionId: string, turn: SessionTurn): void {
+export function saveTurn(
+  db: Database.Database,
+  sessionId: string,
+  turn: SessionTurn,
+  cancelledBy?: Origin
+): void {
   const json = (value: unknown) => (value === undefined ? null : JSON.stringify(value));
   db.prepare(
     `
     INSERT INTO turns (session_id, turn_id, started_at, ended_at, execution,
-      provider_credential_source, outcome, tokens, cost)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      provider_credential_source, outcome, tokens, cost, cancelled_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(session_id, turn_id) DO UPDATE SET
       started_at = excluded.started_at, ended_at = excluded.ended_at,
       execution = excluded.execution, provider_credential_source = excluded.provider_credential_source,
-      outcome = excluded.outcome, tokens = excluded.tokens, cost = excluded.cost
+      outcome = excluded.outcome, tokens = excluded.tokens, cost = excluded.cost,
+      cancelled_by = COALESCE(excluded.cancelled_by, turns.cancelled_by)
   `
   ).run(
     sessionId,
@@ -91,6 +98,7 @@ export function saveTurn(db: Database.Database, sessionId: string, turn: Session
           }
     ),
     json(turn.tokens),
-    turn.cost ?? null
+    turn.cost ?? null,
+    json(cancelledBy)
   );
 }

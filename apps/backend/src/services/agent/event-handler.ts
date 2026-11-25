@@ -45,6 +45,7 @@ import { restoreCloudSnapshot } from "./cloud/snapshot";
 import {
   admitTurn,
   holdingTurn,
+  firstStop,
   lastTurn,
   releaseTurn,
   reportInterruption,
@@ -348,7 +349,8 @@ export function createAgentEventHandler(): AgentEventHandler {
       // delta reports would be one full-JSON row write PER TOKEN on the WS
       // hot path (measured: 200 deltas → 200 writes, ~169 KB for a 1.7 KB
       // message), for durability the protocol explicitly does not promise.
-      const isDelta = envelope.event.type === "message.part.delta";
+      const event = envelope.event;
+      const isDelta = event.type === "message.part.delta";
       let outcome: TurnOutcomeWrite | undefined;
       const writes = isDelta
         ? []
@@ -360,10 +362,12 @@ export function createAgentEventHandler(): AgentEventHandler {
               outcome = turnOutcomeFor(facts, deferred ? last.turnId : owner, turn);
               return deferred ? undefined : outcome;
             },
-            turnProviderCredentialSource(envelope.event)
+            turnProviderCredentialSource(event),
+            event.type === "turn.ended" && event.turnId === holder?.turnId
+              ? firstStop(holder)
+              : undefined
           );
 
-      const event = envelope.event;
       let ended: NativeEnd | undefined;
       if (event.type === "turn.ended") {
         const { turnId } = event;

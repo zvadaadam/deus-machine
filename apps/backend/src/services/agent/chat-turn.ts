@@ -42,7 +42,6 @@ type Turn = {
   lastOutputAt?: number;
   setup?: Setup;
   stops?: Set<Origin>;
-  credited?: Origin;
 };
 type Last = { turnId: string; nativeEnd: false | NativeEnd };
 type Chat = {
@@ -96,11 +95,7 @@ export function admitTurn(
   if (outputAt !== undefined) turn.lastOutputAt = outputAt;
 }
 
-function credit(id: string, turn: Turn) {
-  const first = turn.stops?.values().next().value;
-  if (first !== turn.credited && persistStopCredit(id, turn.turnId, first).ok)
-    turn.credited = first;
-}
+export const firstStop = (turn?: Readonly<Turn>) => turn?.stops?.values().next().value;
 
 export function reportInterruption(
   id: string,
@@ -141,14 +136,12 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
   delete chat.timer;
   delete chat.turn;
   const refused = type === "refused" || type === "withdrawn";
-  const by =
-    type === "cancelled" && turn.phase === "preparing" && turn.stops?.values().next().value;
+  const by = type === "cancelled" && turn.phase === "preparing" && firstStop(turn);
   // A Stop in app setup ends in memory only. The engine's last turn still owns its late end.
   if (by) chat.setupStop = { turnId, by };
   else if (!refused) {
     delete chat.setupStop;
     chat.last = { turnId, nativeEnd: type === "end" && reason };
-    if (type !== "snapshot") credit(id, turn);
   }
   if (!chat.last && !chat.setupStop && !chat.pendingStops) chats.delete(id);
   if (type === "end" || type === "snapshot") return true;
@@ -167,6 +160,7 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
         turnId,
         endedAt: Date.now(),
         stopReason: cause ?? "error",
+        cancelledBy: firstStop(turn),
         undeliveredSteers: kept,
       });
       if (saved.ok) turnNotices.stored?.(id, turnId);
@@ -198,7 +192,7 @@ export function askStop(id: string, origin: Origin) {
     if (turn) {
       // A Stop with no effect passes its credit to the next.
       if (!result || result.outcome === "no_active_turn") turn.stops?.delete(by);
-      credit(id, turn);
+      persistStopCredit(id, turn.turnId, firstStop(turn));
     }
     // The requested turn can end and a successor start during the RPC.
     if (chats.get(id) !== chat || (result?.outcome === "no_active_turn" && result.activeTurnId))
