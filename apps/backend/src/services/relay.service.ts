@@ -38,6 +38,7 @@ import {
 import { DEFAULT_RELAY_URL } from "../lib/network";
 import {
   addConnection,
+  FrameTooLarge,
   removeConnection,
   getConnection,
   setProtocolHandlers,
@@ -475,13 +476,22 @@ function handlePairRequest(
 
 // ---- Helpers ----
 
+// https://developers.cloudflare.com/durable-objects/platform/limits/ — the Mac-to-relay
+// envelope limit is 33,554,432 bytes in our measurements. Leave 4 KiB of headroom.
+const MAX_RELAY_FRAME_BYTES = 32 * 1024 * 1024 - 4096;
+
 function sendToRelay(frame: ServerFrame): void {
-  if (tunnelWs?.readyState === WebSocket.OPEN) {
-    try {
-      tunnelWs.send(JSON.stringify(frame));
-    } catch {
-      // Will be handled by close/error handlers
-    }
+  if (tunnelWs?.readyState !== WebSocket.OPEN) return;
+  const encoded = Buffer.from(JSON.stringify(frame));
+  if (encoded.length > MAX_RELAY_FRAME_BYTES) {
+    console.warn(`[Relay] Dropped ${frame.type} (${encoded.length} bytes)`);
+    if (frame.type === "data") throw new FrameTooLarge(encoded.length);
+    return;
+  }
+  try {
+    tunnelWs.send(encoded, { binary: false });
+  } catch {
+    // Will be handled by close/error handlers
   }
 }
 

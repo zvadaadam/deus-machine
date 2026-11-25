@@ -65,8 +65,14 @@ vi.mock("ws", () => ({
     on(event: string, handler: Handler) {
       this.handlers.set(event, handler);
     }
-    send(data: string) {
-      this.frames.push(JSON.parse(data));
+    send(data: string | Buffer, options?: { binary: boolean }) {
+      // A Buffer without binary:false becomes a binary WebSocket message.
+      if (Buffer.isBuffer(data) && options?.binary !== false) throw new Error("Expected text");
+      if (Buffer.byteLength(data) > 32 * 1024 * 1024) {
+        this.close(1009, "Message too big");
+        return;
+      }
+      this.frames.push(JSON.parse(String(data)));
     }
   },
 }));
@@ -125,6 +131,7 @@ import {
   closeAll,
   getConnection,
   handleProtocolMessage,
+  sendFrame,
 } from "../../../src/services/ws.service";
 import { MachineRemovedError } from "../../../src/services/remote-machine.service";
 import { AssistantRefusedError } from "../../../src/services/assistants/token";
@@ -136,6 +143,13 @@ const frames = () => tunnel().frames as ServerFrame[];
 
 function receive(frame: RelayFrame, socket = tunnel()): void {
   socket.handlers.get("message")!(JSON.stringify(frame));
+}
+
+/** The connection the relay client's frames reach, as the query engine sees it. */
+function connectionOf(clientId: string) {
+  receive({ type: "data", clientId, payload: JSON.stringify({ type: "q:request", id: "r" }) });
+  const [connectionId] = transport.query.mock.calls.at(-1) as [string];
+  return getConnection(connectionId);
 }
 
 async function openTunnel(): Promise<void> {
@@ -352,6 +366,51 @@ describe("account-bound device grants", () => {
     expect(frames().at(-1)).toEqual({ type: "auth_response", clientId: "c1", allowed: true });
   });
 
+  it("admits an escaped text envelope at the byte limit and refuses one more byte", () => {
+    const clientId = "phone";
+    receive({ type: "client_connected", clientId, deviceToken: "t", accountId: "user_a" });
+    const { ws } = connectionOf(clientId)!;
+
+    const limit = 32 * 1024 * 1024 - 4096;
+    const envelopeBytes = (payload: string) =>
+      Buffer.byteLength(JSON.stringify({ type: "data", clientId, payload }));
+    const escaped = '"\\雪'.repeat(1024 * 1024);
+    const atLimit = escaped + "a".repeat(limit - envelopeBytes(escaped));
+    expect(ws.send(atLimit)).toBeUndefined();
+    const accepted = frames().at(-1);
+    expect(accepted?.type).toBe("data");
+    expect(accepted?.type === "data" && accepted.payload === atLimit).toBe(true);
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(() => ws.send(atLimit + "a")).toThrow(`Frame is too large (${limit + 1} bytes)`);
+      expect(warn).toHaveBeenCalledExactlyOnceWith(`[Relay] Dropped data (${limit + 1} bytes)`);
+    } finally {
+      warn.mockRestore();
+    }
+    expect(frames().at(-1) === accepted).toBe(true);
+    expect(tunnel().close).not.toHaveBeenCalled();
+  });
+
+  it("keeps both viewers connected when a workspace title exceeds the tunnel limit", () => {
+    for (const clientId of ["phone", "tablet"]) {
+      receive({ type: "client_connected", clientId, deviceToken: "t", accountId: "user_a" });
+    }
+    const phone = connectionOf("phone")!;
+    const tablet = connectionOf("tablet")!;
+    const title = "x".repeat(33 * 1024 * 1024);
+    const result = sendFrame(phone.id, { type: "q:response", id: "workspace", data: { title } });
+    expect(tunnel().close).not.toHaveBeenCalled();
+    expect(result).toBe("too-large");
+    const reply = { type: "q:response", id: "repos", data: [] } as const;
+    expect(sendFrame(tablet.id, reply)).toBe("sent");
+    expect(frames().at(-1)).toEqual({
+      type: "data",
+      clientId: "tablet",
+      payload: JSON.stringify(reply),
+    });
+  });
+
   it.each([
     ["paired before account binding", null, "user_a"],
     ["paired under another account", "user_b", "user_a"],
@@ -401,12 +460,6 @@ describe("assistants through the relay", () => {
   const JWT = "header.payload.signature";
   const connect = (clientId = "a1", accountId = "user_a") =>
     receive({ type: "client_connected", clientId, deviceToken: JWT, accountId });
-  /** The connection the relay client's frames reach, as the query engine sees it. */
-  function connectionOf(clientId: string) {
-    receive({ type: "data", clientId, payload: JSON.stringify({ type: "q:request", id: "r" }) });
-    const [connectionId] = transport.query.mock.calls.at(-1) as [string];
-    return getConnection(connectionId);
-  }
 
   it("verifies the token for this computer and account, then admits an assistant, not a device", async () => {
     transport.admitAssistant.mockResolvedValue({

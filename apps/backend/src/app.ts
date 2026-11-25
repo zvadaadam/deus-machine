@@ -6,7 +6,12 @@ import { loopbackOriginGate } from "./middleware/loopback-origin-gate";
 import { remoteGateMiddleware } from "./middleware/remote-gate";
 import { authMiddleware } from "./middleware/remote-auth";
 import { validateDirectDeviceToken } from "./services/remote-auth.service";
-import { addConnection, removeConnection, handleProtocolMessage } from "./services/ws.service";
+import {
+  addConnection,
+  removeConnection,
+  handleProtocolMessage,
+  sendFrame,
+} from "./services/ws.service";
 import { serveOperations } from "./services/query-engine";
 import { registry } from "./api";
 import { getRelayStatus } from "./services/relay.service";
@@ -69,7 +74,7 @@ export function createApp() {
           if (isLocal) {
             // Desktop/localhost connections skip token auth
             connectionId = addConnection(ws, null);
-            ws.send(JSON.stringify({ type: "connected", connectionId }));
+            sendFrame(connectionId, { type: "connected", connectionId });
           }
           // Remote clients stay unauthenticated until initialize message
         },
@@ -89,7 +94,7 @@ export function createApp() {
               const device = validateDirectDeviceToken(msg.token);
               if (device) {
                 connectionId = addConnection(ws, device.id);
-                ws.send(JSON.stringify({ type: "connected", connectionId }));
+                sendFrame(connectionId, { type: "connected", connectionId });
               } else {
                 ws.send(JSON.stringify({ type: "error", message: "Invalid token" }));
                 ws.close(4001, "Invalid token");
