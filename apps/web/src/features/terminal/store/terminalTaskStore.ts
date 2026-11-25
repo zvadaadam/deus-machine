@@ -1,45 +1,37 @@
 /**
  * Terminal Task Store
  *
- * Tiny Zustand store for queuing task commands that should open in a new terminal tab.
- * MainContent queues a task here, TerminalPanel consumes it and opens a new tab.
+ * Ephemeral in-memory map of one-shot initial commands for terminal tabs
+ * (e.g. project environment tasks like "Run app" or "Build").
+ * Keyed by terminal tab ID — never persisted to localStorage.
+ *
+ * Commands are consumed atomically at PTY dispatch time so:
+ * - A pre-dispatch `ptySpawn` failure retry still runs the command once.
+ * - Unmounting/remounting (e.g. returning from Home) never re-runs a dispatched command.
  */
 
-import { create } from "zustand";
+const initialCommands = new Map<string, string>();
 
-interface PendingTask {
-  title: string;
-  command: string;
+/** Register a one-shot initial command for a newly created terminal tab. */
+export function setTerminalInitialCommand(tabId: string, command: string): void {
+  initialCommands.set(tabId, command);
 }
 
-interface TerminalTaskStore {
-  /** One pending task PER workspace. A task runs in its own workspace's
-   *  terminal, so keying by workspace (a) stops a hidden/frozen panel from
-   *  running it in the wrong repo and (b) lets a task queued for an inactive
-   *  workspace (e.g. an asleep cloud computer whose panel isn't mounted) wait
-   *  for that workspace without another workspace's task clobbering it. */
-  pendingTasks: Record<string, PendingTask>;
+/** Peek the pending initial command without consuming it. */
+export function getTerminalInitialCommand(tabId: string): string | undefined {
+  return initialCommands.get(tabId);
 }
 
-export const useTerminalTaskStore = create<TerminalTaskStore>(() => ({
-  pendingTasks: {},
-}));
-
-/** Queue a task command to be opened in a new terminal tab for `workspaceId` */
-export function queueTerminalTask(workspaceId: string, title: string, command: string) {
-  useTerminalTaskStore.setState((s) => ({
-    pendingTasks: { ...s.pendingTasks, [workspaceId]: { title, command } },
-  }));
+/** Atomically read and remove the initial command at dispatch time. */
+export function consumeTerminalInitialCommand(tabId: string): string | undefined {
+  const command = initialCommands.get(tabId);
+  if (command !== undefined) {
+    initialCommands.delete(tabId);
+  }
+  return command;
 }
 
-/** Consume the pending task for `workspaceId` (called by that workspace's
- *  TerminalPanel after creating the tab). */
-export function consumeTerminalTask(workspaceId: string): PendingTask | null {
-  const task = useTerminalTaskStore.getState().pendingTasks[workspaceId];
-  if (!task) return null;
-  useTerminalTaskStore.setState((s) => {
-    const { [workspaceId]: _drop, ...rest } = s.pendingTasks;
-    return { pendingTasks: rest };
-  });
-  return task;
+/** Remove any stored initial command when a terminal tab is closed. */
+export function clearTerminalInitialCommand(tabId: string): void {
+  initialCommands.delete(tabId);
 }

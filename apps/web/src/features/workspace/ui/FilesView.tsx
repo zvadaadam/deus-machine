@@ -64,7 +64,13 @@ export function FilesView({ workspace, isWatched = false, toolbarAction }: Files
     <ResizablePanelGroup direction="horizontal" className="min-h-0 flex-1">
       <ResizablePanel defaultSize={75} minSize={30}>
         {selectedFilePath ? (
-          <FileViewer workspaceId={workspace.id} filePath={selectedFilePath.replace(/^\/+/, "")} />
+          <FileViewer
+            workspaceId={workspace.id}
+            filePath={selectedFilePath.replace(/^\/+/, "")}
+            onOpenInNewTab={() =>
+              workspaceLayoutActions.openFileTab(workspace.id, selectedFilePath)
+            }
+          />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3">
             <div className="bg-bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
