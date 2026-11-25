@@ -559,8 +559,8 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   A kept steer runs only as its own turn, even with `send_now`. The host finds read
   steers in `messages.steer_id` and kept ones in `turns.outcome.undeliveredSteers`.
   For a new workspace, `start` holds the first task until its chat is ready and sends
-  it as the turn the package minted. A stop drops it. If setup takes over 30 minutes,
-  the chat says its first task could not be delivered. At its commit, in one synchronous step, the host refuses
+  it as the turn the package minted. A stop drops it. If setup takes over 30 minutes
+  or the first send fails, the chat says so unless another turn took it. At its commit, in one synchronous step, the host refuses
   (`Refused`): a start by an archived chat or into an archived workspace; a
   fourth agent-started local workspace while three are starting or running setup.
   It also refuses an archive whose members are still starting, still working

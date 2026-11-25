@@ -625,18 +625,21 @@ export function createDeusHost(): DeusHost {
       );
     } catch (error) {
       const said = appRefusal(error);
-      undelivered(sessionId, said instanceof OperatorError ? refusalSentence(said) : "");
+      const why = said instanceof OperatorError ? refusalSentence(said) : "";
+      undelivered(sessionId, input.turnId, why);
       throw said;
     }
   }
 
-  /** The chat's first task was not delivered: its error says so, and why. */
-  function undelivered(sessionId: string, why: string) {
+  /** A competing turn owns the chat even before its first message or while still in app setup. */
+  function undelivered(sessionId: string, turnId: string, why: string) {
     getDatabase()
       .prepare(
-        "UPDATE sessions SET status = 'error', error_message = ? WHERE id = ? AND message_count = 0"
+        `UPDATE sessions SET status = 'error', error_message = ? WHERE id = ? AND message_count = 0
+         AND status NOT IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})
+         AND NOT EXISTS (SELECT 1 FROM turns WHERE session_id = sessions.id AND turn_id != ?)`
       )
-      .run(`${NOT_DELIVERED}${why ? ` ${why}` : ""}`, sessionId);
+      .run(`${NOT_DELIVERED}${why ? ` ${why}` : ""}`, sessionId, ...ACTIVE_TURN_STATUSES, turnId);
     invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
   }
 
@@ -664,7 +667,7 @@ export function createDeusHost(): DeusHost {
       else if (w.state === "ready" && w.current_session_id === sessionId) {
         if (Date.now() - entry.since > SETUP_LIMIT_MS) {
           drop(sessionId);
-          undelivered(sessionId, "Setup took longer than 30 minutes.");
+          undelivered(sessionId, held.input.turnId, "Setup took longer than 30 minutes.");
           return;
         }
         entry.unwatch();
