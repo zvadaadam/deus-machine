@@ -1521,13 +1521,15 @@ describe("messages held for a local chat", () => {
         error_message,
         error_category,
       });
-      const status = vi.fn(() =>
-        db.prepare("SELECT status FROM sessions WHERE id = ?").pluck().get(sessionId)
+      const published = vi.fn(() =>
+        db
+          .prepare("SELECT status, error_message, error_category FROM sessions WHERE id = ?")
+          .get(sessionId)
       );
-      const unwatch = onInvalidate(status);
+      const unwatch = onInvalidate(published);
       end("A", "cancelled");
       unwatch();
-      expect(status).toHaveReturnedWith("idle");
+      expect(published).toHaveReturnedWith({ status: prior, error_message, error_category });
       await vi.advanceTimersByTimeAsync(0);
       expect(starts()).toEqual(["A", "B", "B"]);
       expect((await queue()).paused).toBeNull();
