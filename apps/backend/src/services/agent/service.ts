@@ -176,10 +176,10 @@ export async function startTurn(
   turnId: string,
   agentHarness: AgentHarness,
   prompt: string,
-  options: Omit<DeusTurnOptions, "agentMessages"> & { signal?: AbortSignal }
+  options: Omit<DeusTurnOptions, "agentMessages"> & { signal?: AbortSignal; onWire?(): void }
 ): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
-  const { signal } = options;
+  const { signal, onWire, ...run } = options;
   const stopped = Promise.withResolvers<never>();
   const onAbort = () => stopped.reject(signal?.reason);
   signal?.addEventListener("abort", onAbort);
@@ -193,7 +193,7 @@ export async function startTurn(
   }
   const device = agentDeviceFor(sessionId);
   const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, {
-    ...options,
+    ...run,
     ...apps,
     agentMessages: hasAgentMessages(sessionId),
     setup: setupForTurn(sessionId),
@@ -208,6 +208,7 @@ export async function startTurn(
   // when the session is locally busy (the server will reject with turnActive)
   // — the live turn's state must not be clobbered by a doomed registration.
   const registered = events?.beginTurn(sessionId, turnId) ?? false;
+  onWire?.();
   try {
     await link.startTurn(params);
   } catch (err) {
@@ -301,6 +302,10 @@ export function isConnected(): boolean {
   return link?.isConnected() ?? false;
 }
 
+export function lastOutputAt(sessionId: string) {
+  return events?.lastOutputAt(sessionId);
+}
+
 /** A chat's tools beside the Deus tools: the operator's, registered by services/assistants. */
 let sessionTools: ((own: HostToolSource) => HostToolSource) | undefined;
 export function provideSessionTools(compose: (own: HostToolSource) => HostToolSource): void {
@@ -311,6 +316,7 @@ export type InterruptionCause = "failure" | "cancelled";
 export type StopAsked = { by: Origin; turnId?: string; endedAt?: number };
 interface TurnWatcher {
   turnEnded(end: TurnEnd): void;
+  startCleared(sessionId: string): void;
   userEcho(sessionId: string, turnId: string, steerId?: string): void;
   stopAsked(sessionId: string, stop: StopAsked): void;
   interrupted(
@@ -328,6 +334,8 @@ export function provideTurnWatcher(watcher: TurnWatcher): void {
 export function notifyStopAsked(sessionId: string, stop: StopAsked): void {
   turnWatcher?.stopAsked(sessionId, stop);
 }
+
+export const notifyStartCleared = (sessionId: string) => turnWatcher?.startCleared(sessionId);
 
 export function notifyTurnInterrupted(
   sessionId: string,
@@ -348,6 +356,10 @@ export function notifyTurnInterrupted(
  */
 export function liveTurnId(sessionId: string): string | undefined {
   return events?.liveTurnId(sessionId);
+}
+
+export function wasTurnAdmitted(sessionId: string, turnId: string) {
+  return events?.wasTurnAdmitted(sessionId, turnId) ?? false;
 }
 
 export function giveUpTurn(sessionId: string, turnId: string, cause?: "cancelled") {

@@ -62,7 +62,9 @@ vi.mock("../../../src/services/query-engine", () => ({
 vi.mock("../../../src/services/server-name", () => ({ getServerName: () => "Proof Mac" }));
 vi.mock("@sentry/node", () => ({ captureException: vi.fn() }));
 vi.mock("../../../src/services/agent/service", () => ({
+  lastOutputAt: () => undefined,
   liveTurnId: (sessionId: string) => state.live.get(sessionId),
+  wasTurnAdmitted: () => false,
   provideSessionTools: () => {},
   provideTurnWatcher: vi.fn(),
   isConnected: () => false,
@@ -79,11 +81,14 @@ vi.mock("../../../src/services/agent/tool-relay", () => ({
   isPrompt: (method: string) => method === "askUserQuestion" || method === "exitPlanMode",
 }));
 vi.mock("../../../src/services/agent/turns", () => ({
+  admittingAt: () => undefined,
+  currentTurnId: (sessionId: string) => state.live.get(sessionId),
+  stoppedBeforeStart: () => undefined,
   sendMessage: async (input: Record<string, unknown>, origin?: unknown) => {
     if (state.sendRefusal) throw state.sendRefusal;
+    state.live.set(input.sessionId as string, input.turnId as string);
     if (state.sending) await state.sending;
     state.sent.push({ input, origin });
-    state.live.set(input.sessionId as string, input.turnId as string);
     return { turnId: input.turnId };
   },
   stopSession: async ({ sessionId }: { sessionId: string }, by: unknown) => {
@@ -1264,7 +1269,7 @@ describe("each commit re-reads what it depends on, with no await before its writ
         .get();
       expect(archived).toEqual({
         state: "archived",
-        archived_by: JSON.stringify(by),
+        archived_by: JSON.stringify(kind === "chat" ? { ...by, name: "lead:1" } : by),
         archived_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2} /),
       });
     }
@@ -1359,7 +1364,7 @@ describe("each commit re-reads what it depends on, with no await before its writ
 });
 
 describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12, H15, H17)", () => {
-  it("dates equally old prompts by the latest assistant message; parts within a message have no clock", async () => {
+  it("dates equally old prompts by their last turn end when the chats are idle", async () => {
     const host = createDeusHost();
     const promptTime = new Date(Date.now() - 12 * 60_000).toISOString();
     const insert = state.db.prepare(
@@ -1367,7 +1372,7 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     );
     insert.run("silent", 2, promptTime, promptTime);
     insert.run("busy", 3, promptTime, promptTime);
-    message("busy", "answer", "assistant", "A recent reply.");
+    endTurn("busy", "answer", "end_turn");
     const entries = await host.list(LEAD as never, {});
     const ageOf = (id: string) => entries.find((e) => e.id === id)!.lastActivityAt!;
     expect(ageOf("silent")).toBe(Date.parse(promptTime));
@@ -1382,10 +1387,14 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     ready(entry);
     // The operator saw an idle chat before the host checked its first task.
     vi.spyOn(host, "list").mockResolvedValueOnce([{ ...entry, status: "idle" }]);
-    const follow = { session: entry.id, message: "follow up", wait: 0 };
-    await expect(createOperator(host).call("send_message", follow, assistantWho())).rejects.toThrow(
-      "This chat is being set up."
+    vi.spyOn(host, "view").mockResolvedValueOnce({ status: "idle", turns: [], waiting: [] });
+    state.sendRefusal = new ChatBusyError(
+      "The agent is starting another turn — wait for it to begin."
     );
+    const follow = { session: entry.id, message: "follow up", wait: 0 };
+    await expect(
+      createOperator(host).call("send_message", follow, assistantWho())
+    ).resolves.toContain("another turn started there first.");
     const stopping = host.cancel!(LEAD as never, entry.id);
     admit();
     expect(await stopping).toBe("stopped");
@@ -1952,9 +1961,10 @@ describe("the acceptance pass (F5, F7, F8, F9, F10)", () => {
       )
       .run();
     state.db.prepare("UPDATE sessions SET title = 'OLD-B2' WHERE id = 's-second'").run();
-    state.db.prepare("DROP TRIGGER update_sessions_updated_at").run();
     state.db
-      .prepare("UPDATE sessions SET updated_at = '2020-01-01 00:00:00' WHERE id = 's-lead'")
+      .prepare(
+        "UPDATE sessions SET last_user_message_at = '2020-01-01 00:00:00' WHERE id = 's-lead'"
+      )
       .run();
     const first = (await host.list(LOCAL_CALLER as never, {})).find((e) => e.id === "s-lead")!;
     expect(first.title).toBeUndefined();

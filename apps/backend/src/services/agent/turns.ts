@@ -52,10 +52,57 @@ const admissionsOf = new WeakMap<object, Map<string, Admission>>();
 const ADMISSION_KEPT_MS = 10 * 60_000;
 
 /** Stop interrupts app setup. Once turn/start is on the wire, Stop waits for its answer. */
-const admitting = new Map<
-  string,
-  { turnId: string; preparing: AbortController; done: Promise<void> }
->();
+type Starting = {
+  turnId: string;
+  sentAt: number;
+  preparing?: AbortController;
+  done: Promise<void>;
+  stoppedBy?: Origin;
+};
+type SetupEnd = { turnId: string; outcome: "cancelled"; cancelledBy: Origin };
+const localTurns = new Map<string, Starting | SetupEnd>();
+
+function startingTurn(sessionId: string) {
+  const entry = localTurns.get(sessionId);
+  if (!entry || !("done" in entry)) return;
+  if (
+    agentService.liveTurnId(sessionId) === entry.turnId ||
+    !agentService.wasTurnAdmitted(sessionId, entry.turnId)
+  )
+    return entry;
+}
+
+/** Once app setup has been aborted, the next send can already take its place. */
+export function hasPendingStart(sessionId: string) {
+  const start = startingTurn(sessionId);
+  return !!start && !start.preparing?.signal.aborted;
+}
+
+export function currentTurnId(sessionId: string) {
+  return agentService.liveTurnId(sessionId) ?? startingTurn(sessionId)?.turnId;
+}
+
+export function admittingAt(sessionId: string) {
+  const admission = startingTurn(sessionId);
+  if (admission && admission.turnId === currentTurnId(sessionId)) return admission.sentAt;
+}
+
+export function stoppedBeforeStart(sessionId: string) {
+  const entry = localTurns.get(sessionId);
+  return entry && "cancelledBy" in entry ? entry : undefined;
+}
+
+const STEER_READ = new ConflictError("The agent already read this message.");
+
+export async function withdrawSteerRetry(sessionId: string, turnId: string) {
+  const admission = startingTurn(sessionId);
+  if (admission?.turnId !== turnId) return false;
+  admission.preparing?.abort(STEER_READ);
+  return admission.done.then(
+    () => false,
+    (error) => error === STEER_READ
+  );
+}
 
 export function requireSameHarness(current: string, requested: string): void {
   if (current !== requested)
@@ -208,6 +255,8 @@ async function sendMessageOnce(
   // approval and questions park the RUNNING turn while the overlay waits.
   // The wire guard covers the same race during admission.
   if (session?.is_hidden) throw new ConflictError("That chat is archived; it takes no messages.");
+  if (hasPendingStart(sessionId))
+    throw new ChatBusyError("The agent is starting another turn — wait for it to begin.");
   if (session && ACTIVE_TURN_STATUSES.includes(session.status)) {
     throw new ChatBusyError(
       session.status === "working"
@@ -381,22 +430,39 @@ async function sendMessageOnce(
     const done = agentService.startTurn(sessionId, turnId, agentHarness, content, {
       cwd,
       signal: preparing.signal,
+      onWire: () => {
+        admission.preparing = undefined;
+      },
       model,
       thinkingLevel: readThinkingLevel(input.thinkingLevel),
       permissionMode,
       resume: existingAgentSessionId || undefined,
       ...(origin ? { origin } : {}),
     });
-    admitting.set(sessionId, { turnId, preparing, done });
+    const admission: Starting = { turnId, sentAt: Date.parse(sentAt), preparing, done };
+    localTurns.set(sessionId, admission);
     try {
       await done;
     } catch (err) {
-      if (err === preparing.signal.reason) {
-        settleStopped(sessionId, turnId);
+      if (preparing.signal.aborted && err === preparing.signal.reason) {
+        if (currentTurnId(sessionId) !== turnId) {
+          if (admission.stoppedBy) agentService.notifyTurnInterrupted(sessionId, turnId, true);
+        } else if (admission.stoppedBy) {
+          // A turn stopped before the wire ends in memory; it was never in the transcript.
+          localTurns.set(sessionId, {
+            turnId,
+            outcome: "cancelled",
+            cancelledBy: admission.stoppedBy,
+          });
+          settleStopped(sessionId, turnId);
+        } else {
+          localTurns.delete(sessionId);
+          settleStopped(sessionId);
+        }
         throw err;
       }
       if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
-        if (preparing.signal.aborted) agentService.notifyTurnInterrupted(sessionId, turnId, true);
+        if (admission.stoppedBy) agentService.notifyTurnInterrupted(sessionId, turnId, true);
         // Another turn won admission. Keep it working and return the typed refusal.
         console.warn(
           `[CommandHandler] sendMessage rejected, turn already active: session=${sessionId}`
@@ -405,15 +471,14 @@ async function sendMessageOnce(
           "The agent is still working — wait for the current turn to finish."
         );
       }
-      // Every other rejection — harness unavailable, shutting down, invalid
-      // params, a transport that died mid-request — means no turn was admitted,
-      // so the session must not be left sitting on "working".
-      if (err instanceof WireRequestError) handleAgentRejection(sessionId, turnId, err.message);
-      else handleAgentError(sessionId, turnId, err);
+      handleAgentError(sessionId, turnId, err);
       throw err;
     } finally {
       // A quick turn can end and start its successor before its admission reply.
-      if (admitting.get(sessionId)?.done === done) admitting.delete(sessionId);
+      if (localTurns.get(sessionId) === admission) {
+        localTurns.delete(sessionId);
+        if (currentTurnId(sessionId) !== turnId) agentService.notifyStartCleared(sessionId);
+      }
     }
   }
 
@@ -456,21 +521,19 @@ export async function stopSession(
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new NotFoundError("Session not found");
 
-  const admission = admitting.get(sessionId);
-  const targetTurnId = admission?.turnId ?? agentService.liveTurnId(sessionId);
+  const targetTurnId = currentTurnId(sessionId);
+  const admission = startingTurn(sessionId);
   agentService.notifyStopAsked(sessionId, {
     by,
     turnId: targetTurnId,
-    endedAt: admission && getTurn(db, sessionId, admission.turnId)?.endedAt,
+    endedAt: targetTurnId ? getTurn(db, sessionId, targetTurnId)?.endedAt : undefined,
   });
-  if (admission) {
-    admission.preparing.abort(new ConflictError("Stopped before it started."));
-    try {
-      await admission.done;
-    } catch {
-      return { unconfirmed: false };
-    }
-    if (agentService.liveTurnId(sessionId) !== targetTurnId) return { unconfirmed: false };
+  if (admission && admission.turnId === targetTurnId) {
+    admission.stoppedBy ??= by;
+    admission.preparing?.abort(new ConflictError("Stopped before it started."));
+    // A lost reply can leave the named turn running.
+    await admission.done.catch(() => {});
+    if (currentTurnId(sessionId) !== targetTurnId) return { unconfirmed: false };
   }
   const mine = JSON.stringify(by);
   const key = `${sessionId}\0${targetTurnId}`;
@@ -519,7 +582,7 @@ export async function stopSession(
   }
 
   // The requested turn may have ended and a successor started during the RPC.
-  const live = admitting.get(sessionId)?.turnId ?? agentService.liveTurnId(sessionId);
+  const live = currentTurnId(sessionId);
   if (
     (live !== undefined && live !== targetTurnId) ||
     (result?.outcome === "no_active_turn" && result.activeTurnId !== undefined)
@@ -536,12 +599,15 @@ export async function stopSession(
 }
 
 function settleStopped(sessionId: string, goneTurnId?: string, cause?: "cancelled"): void {
-  getDatabase()
-    .prepare(
-      `UPDATE sessions SET status = 'idle', updated_at = datetime('now')
-       WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
-    )
-    .run(sessionId, ...ACTIVE_TURN_STATUSES);
+  const starting = startingTurn(sessionId);
+  if (!starting || starting.turnId === goneTurnId) {
+    getDatabase()
+      .prepare(
+        `UPDATE sessions SET status = 'idle', updated_at = datetime('now')
+         WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
+      )
+      .run(sessionId, ...ACTIVE_TURN_STATUSES);
+  }
   if (goneTurnId && !agentService.giveUpTurn(sessionId, goneTurnId, cause))
     agentService.notifyTurnInterrupted(sessionId, goneTurnId, true);
   invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
@@ -556,11 +622,10 @@ function scheduleCancelWatchdog(
     try {
       // A successor may still be preparing its apps. Without either owner the
       // status guard below distinguishes a settled chat from one left active.
-      const held = agentService.liveTurnId(sessionId);
-      const live = admitting.get(sessionId)?.turnId ?? held;
+      const live = currentTurnId(sessionId);
       if (live !== undefined && live !== cancelledTurnId) return;
       if (confirmed) {
-        if (held && held === cancelledTurnId) settleStopped(sessionId, held, "cancelled");
+        if (live) settleStopped(sessionId, live, "cancelled");
         return;
       }
 
@@ -593,20 +658,21 @@ function scheduleCancelWatchdog(
 
 // ---- Helpers ----
 
-function handleAgentRejection(sessionId: string, turnId: string, reason?: string): void {
-  const msg = reason || "Agent rejected the message";
-  console.error(`[CommandHandler] Agent rejected sendMessage for session=${sessionId}: ${msg}`);
-  persistSessionError(sessionId, msg, "internal");
-  const gone = agentService.liveTurnId(sessionId) !== turnId;
-  agentService.notifyTurnInterrupted(sessionId, turnId, gone);
-  invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
-}
-
 function handleAgentError(sessionId: string, turnId: string, err: unknown): void {
-  const errorMsg = err instanceof Error ? err.message : String(err);
-  console.error("[CommandHandler] Failed to forward to agent-server:", errorMsg);
-  persistSessionError(sessionId, `Agent server communication failed: ${errorMsg}`, "internal");
-  const gone = agentService.liveTurnId(sessionId) !== turnId;
-  agentService.notifyTurnInterrupted(sessionId, turnId, gone);
+  // Events can confirm admission even when its reply is lost.
+  if (
+    agentService.wasTurnAdmitted(sessionId, turnId) ||
+    agentService.liveTurnId(sessionId) === turnId
+  )
+    return;
+  const message =
+    err instanceof WireRequestError
+      ? err.message || "Agent rejected the message"
+      : `Agent server communication failed: ${err instanceof Error ? err.message : String(err)}`;
+  console.error(`[CommandHandler] Failed to start turn: session=${sessionId} ${message}`);
+  const current = currentTurnId(sessionId);
+  if (current === undefined || current === turnId)
+    persistSessionError(sessionId, message, "internal");
+  agentService.notifyTurnInterrupted(sessionId, turnId, true);
   invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
 }

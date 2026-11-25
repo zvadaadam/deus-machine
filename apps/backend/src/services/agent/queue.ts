@@ -24,7 +24,14 @@ import {
   type StopAsked,
 } from "./service";
 import { continuedSettings } from "./turn-settings";
-import { previousSend, requireSameHarness, retryReadSteer, sendMessage } from "./turns";
+import {
+  hasPendingStart,
+  previousSend,
+  requireSameHarness,
+  retryReadSteer,
+  sendMessage,
+  withdrawSteerRetry,
+} from "./turns";
 
 type Input = ParsedInputOf<typeof api.sendMessage>;
 type Message = Input & { turnId: string };
@@ -82,8 +89,8 @@ type PauseEvent =
 
 /**
  * A Stop replaces any limit and holds waiting rows, including on an idle chat. It follows the
- * pending start or live turn. An empty Stop or failure clears when that turn ends, its start
- * is refused (including busy), or Deus gives it up. With no turn, an empty hold clears at once.
+ * live turn, or the pending start if none is live. An empty Stop or failure clears when that turn ends,
+ * its start is refused (including busy), or Deus gives it up. With no turn, an empty hold clears at once.
  * The person's Stop takes priority. The turn itself credits the first Stop that took effect.
  * A cancellation from a card, harness or replay keeps its turn's stopper or a standing
  * person-only hold. Otherwise it replaces any earlier failure or agent Stop with a person-only hold.
@@ -306,7 +313,8 @@ function waitingRow(q: Queue | undefined, id: string) {
   return q?.items.find((item) => item.message.turnId === id && stateOf(item) === "waiting");
 }
 
-async function drain(q: Queue) {
+async function drain(q: Queue | undefined) {
+  if (!q) return;
   const head = q.items[0];
   const canStart = !q.pause || (q.pause.reason === "resumed" && q.pause.scope === "turn");
   if (!canStart || !head || stateOf(head) !== "waiting") return;
@@ -316,7 +324,7 @@ async function drain(q: Queue) {
     notify([q.sessionId]);
     return;
   }
-  if (ACTIVE_TURN_STATUSES.includes(chat.status)) return;
+  if (ACTIVE_TURN_STATUSES.includes(chat.status) || hasPendingStart(q.sessionId)) return;
   const previous = head.attempt;
   let turnId = head.message.turnId;
   if (previous) turnId = previous.state === "busy" ? previous.turnId : uuidv7();
@@ -682,6 +690,11 @@ function userEcho(sessionId: string, turnId: string, steerId?: string) {
   if (index < 0) return;
   const [item] = q.items.splice(index, 1);
   if (steerId !== undefined && item?.steer) settleSteer(item.steer, "read");
+  if (steerId !== undefined && item?.attempt?.state === "sending") {
+    void withdrawSteerRetry(sessionId, item.attempt.turnId).then((withdrawn) => {
+      if (withdrawn) void drain(q);
+    });
+  }
   changed(q);
 }
 
@@ -744,6 +757,7 @@ function turnEnded({ event: { sessionId, turnId, stopReason }, status, held, lim
 
 provideTurnWatcher({
   turnEnded,
+  startCleared: (id) => void drain(queues.get(id)),
   userEcho,
   stopAsked(id, stop) {
     const q = queueToPause(id, true);

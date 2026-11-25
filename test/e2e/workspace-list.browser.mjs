@@ -1079,6 +1079,13 @@ for (const mode of ["web", "desktop"]) {
         items: ["blue", "green"].map((id) => ({ id, name: id, role: "owner", ready: true })),
       });
     });
+    // Wait for the sidebar to render the organizations that the shortcuts use.
+    await page.getByRole("button", { name: /switch where workspaces run/ }).click();
+    const menu = page.getByRole("menu");
+    await menu.getByRole("menuitem", { name: /^blue, cloud\b/ }).waitFor();
+    await menu.getByRole("menuitem", { name: /^green, cloud\b/ }).waitFor();
+    await page.keyboard.press("Escape");
+    await menu.waitFor({ state: "detached" });
     await page.keyboard.press("Control+2");
     await group.getByRole("button", { name: "Archived (1)", exact: true }).waitFor();
     await group.getByRole("button", { name: "Restore on-another-computer" }).waitFor();
