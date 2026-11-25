@@ -51,6 +51,7 @@ import { handleFrame as handleQueryFrame, removeSubs as removeQuerySubs } from "
 // ---- Tunnel State ----
 
 let tunnelWs: WebSocket | null = null;
+let registeredTunnel: WebSocket | null = null;
 /** The account the current tunnel serves; a different signed-in account replaces it. */
 let hostAccount: string | null = null;
 let machineId: string | null = null;
@@ -145,7 +146,7 @@ function assistantUrlOf(enabled: boolean): string | null {
 /** What Settings shows about the tunnel (`relayStatus`, and `GET /api/relay/status`). */
 export function getRelayStatus(): RelayStatus {
   const enabled = getSetting("remote_access_enabled") === true;
-  const connected = tunnelWs?.readyState === WebSocket.OPEN;
+  const connected = tunnelWs?.readyState === WebSocket.OPEN && tunnelWs === registeredTunnel;
   const session = enabled && !hostAccount ? currentAccountSession() : null;
   const removed = session !== null && isMachineRemoved(session.accountId);
   const state: RelayState = !enabled
@@ -365,6 +366,7 @@ async function admitAssistantClient(
 function handleRelayFrame(frame: RelayFrame): void {
   match(frame)
     .with({ type: "registered" }, () => {
+      registeredTunnel = tunnelWs;
       console.log("[Relay] Registered with relay successfully");
     })
     .with({ type: "client_connected" }, (f) => {
