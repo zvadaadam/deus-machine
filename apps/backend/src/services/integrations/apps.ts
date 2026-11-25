@@ -33,6 +33,7 @@ import {
   updateConnection,
   upsertInstallation,
 } from "./store";
+import { initVault } from "./vault";
 
 // ---------------------------------------------------------------------------
 // Install / remove
@@ -164,6 +165,7 @@ export async function connectApp(input: ConnectAppInput): Promise<ConnectAppResu
     credential = { values: vars };
   }
 
+  await initVault();
   const connection = createConnection({
     appId: app.id,
     kind: "secret",

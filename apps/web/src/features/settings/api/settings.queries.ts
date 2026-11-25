@@ -97,7 +97,10 @@ export function useAgentAuthEvents(): void {
         answer ? withProgress(answer, progress) : answer
       );
       if (progress.phase === "ready") readLoginAndModels();
-      if (progress.phase === "failed") void readAgain(queryKeys.settings.agentAuth);
+      if (progress.phase === "failed") {
+        toast.error(progress.error?.trim() || "The install failed.");
+        void readAgain(queryKeys.settings.agentAuth);
+      }
     },
     readLoginAndModels
   );

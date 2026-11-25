@@ -46,7 +46,7 @@ import { ZodError } from "zod";
 import { getErrorMessage } from "@shared/lib/errors";
 import { markNeedsReauth } from "../events";
 import { readCredential, updateConnection, writeCredential } from "../store";
-import { vaultProblem } from "../vault";
+import { initVault, vaultProblem } from "../vault";
 import type { RegisteredClient } from "./clients";
 
 export interface OAuthCredential {
@@ -285,6 +285,7 @@ async function startSignIn(input: SignInStart): Promise<string> {
   }
   // Keep the registered client: the callback exchanges the code as it. Tokens
   // the connection already holds stay until the new sign-in lands.
+  await initVault();
   const progress = provider.progress();
   if (!progress || !writeCredential(input.connectionId, progress)) {
     throw new Error("The connection was removed before its sign-in began");

@@ -9,7 +9,7 @@ const watchers = new Map<string, ReturnType<typeof startWatch>>();
 function ignored(filename: string | null): boolean {
   if (!filename || filename === ".deus/environment.json") return false;
   // Ignore descendants only. The leaf can be a regular file or an editor's hidden temporary file.
-  return /(^|\/)(?:\.[^/]+|node_modules|target|dist|build)\//.test(filename);
+  return /(^|\/)(?:\.git|\.deus|node_modules|target|dist|build)\//.test(filename);
 }
 
 export function canWatchWorkspace(): boolean {

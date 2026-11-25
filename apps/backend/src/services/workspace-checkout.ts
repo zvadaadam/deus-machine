@@ -139,7 +139,13 @@ async function refreshSource(
 ): Promise<{ base: string; issue: InitFetchIssue | null }> {
   const cwd = ctx.repoRootPath;
   let issue: InitFetchIssue | null = null;
-  if (await succeeds(runGit(["remote", "get-url", "origin"], { cwd, signal }))) {
+  try {
+    await runGit(["remote", "get-url", "origin"], { cwd, signal });
+  } catch (error) {
+    signal.throwIfAborted();
+    issue = error instanceof GitError && error.code === 2 ? "no_origin" : "failed";
+  }
+  if (!issue) {
     try {
       // Into origin's ref by name: a clone that tracks only some branches (a
       // `--single-branch` or shallow one) would not update it otherwise.
@@ -156,8 +162,6 @@ async function refreshSource(
         `[WORKSPACE] Could not fetch origin/${ctx.sourceBranch} (${issue ?? "not on origin"}): ${err instanceof Error ? err.message : err}`
       );
     }
-  } else {
-    issue = "no_origin";
   }
   const onOrigin = await succeeds(
     runGit(["show-ref", "--verify", "--quiet", `refs/remotes/origin/${ctx.sourceBranch}`], {

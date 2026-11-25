@@ -9,6 +9,7 @@
 
 import { LoginError, type AgentServerClient, type LoginHandle } from "@zvada/agent-server/client";
 import {
+  classifyError,
   signedInBy,
   type AuthLogin,
   type HarnessAuth,
@@ -18,6 +19,7 @@ import type { AgentAuthAnswer, AgentSignInAnswer } from "@shared/agent-auth";
 import type { AgentHarness } from "@shared/enums";
 import { LOCAL_HARNESSES } from "@shared/harnesses";
 import { agentAuthChanges, agentCliProgress } from "@shared/api/settings";
+import { getErrorMessage } from "@shared/lib/errors";
 import { ValidationError } from "../../lib/errors";
 import { publish } from "../streams";
 
@@ -72,7 +74,18 @@ export class LocalAgents {
   /** Start this agent's install. The engine reports progress on `agentCliProgress`. */
   prepareCli(harness: AgentHarness): void {
     this.client.prepareClis([harness]).catch((error: unknown) => {
-      console.warn("[LocalAgents] CLI install failed:", error);
+      publish(
+        agentCliProgress,
+        {},
+        {
+          harness,
+          phase: "failed",
+          version: "",
+          receivedBytes: 0,
+          error: getErrorMessage(error),
+          category: classifyError(error),
+        }
+      );
     });
   }
 

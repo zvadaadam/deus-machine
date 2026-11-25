@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { toast } from "sonner";
 import { expect, it, vi } from "vitest";
 import { api } from "@shared/api";
 import type { AgentAuthAnswer, HarnessAuth } from "@shared/agent-auth";
@@ -12,6 +13,7 @@ import { useStream } from "@/shared/hooks/useStream";
 
 vi.mock("@/shared/config/webDirectMode", () => ({ isCloudDirectWebMode: vi.fn() }));
 vi.mock("@/shared/hooks/useStream", () => ({ useStream: vi.fn() }));
+vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
 const models = [...queryKeys.settings.agentModels, "workspace"];
 function observe(direct = false) {
@@ -58,6 +60,24 @@ it("reads workspace models again when installation or sign-in finishes", async (
   client.setQueryData(models, { lists: [] });
   auth![2]({ harness: "gemini" });
   await vi.waitFor(() => expect(client.getQueryState(models)?.isInvalidated).toBe(true));
+});
+
+it("toasts the engine's reason when the first install progress is a failure", () => {
+  const client = observe();
+  const key = queryKeys.settings.agentAuth;
+  client.setQueryData<AgentAuthAnswer>(key, {
+    clis: [{ harness: "gemini", state: "missing" }],
+    auth: [],
+    logins: [],
+  });
+  const error = "The engine refused the install";
+  const [cli] = vi.mocked(useStream).mock.calls;
+  cli![2]({ harness: "gemini", phase: "failed", version: "", receivedBytes: 0, error });
+  expect(toast.error).toHaveBeenCalledExactlyOnceWith(error);
+  expect(client.getQueryData<AgentAuthAnswer>(key)?.clis[0]).toMatchObject({
+    state: "failed",
+    error,
+  });
 });
 
 it("discards a cold model read when sign-in finishes, including in a workspace whose picker closed", async () => {

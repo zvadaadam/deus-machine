@@ -158,11 +158,10 @@ describe("the fileChanges subscription", () => {
     expect(back.map((f) => f.type)).toEqual(["q:event"]);
   });
 
-  it("ignores private and generated subtrees, but hears recipes, hidden leaves and nameless events", () => {
+  it("ignores git, worktrees and generated subtrees, but hears edits under project dot-folders", () => {
     const frames = open("a");
     for (const name of [
       ".git/index.lock",
-      "src/.cache/a",
       "build/output",
       "foo/node_modules/pkg",
       "target/log",
@@ -174,6 +173,9 @@ describe("the fileChanges subscription", () => {
     vi.advanceTimersByTime(500);
     expect(frames).toHaveLength(0);
     for (const name of [
+      ".github/workflows/ci.yml",
+      ".vscode/settings.json",
+      "src/.cache/a",
       ".deus",
       ".deus/environment.json",
       ".gitignore",
@@ -184,13 +186,13 @@ describe("the fileChanges subscription", () => {
       changed(name);
       vi.advanceTimersByTime(500);
     }
-    expect(frames.map((f) => f.data)).toEqual(Array(6).fill(null));
+    expect(frames.map((f) => f.data)).toEqual(Array(9).fill(null));
     for (let i = 0; i < 20; i++) {
       changed(".DS_Store");
       vi.advanceTimersByTime(10);
     }
     vi.advanceTimersByTime(499);
-    expect(frames).toHaveLength(7);
+    expect(frames).toHaveLength(10);
   });
 
   it.each(["dist", "literal\\node_modules\\source"])(

@@ -231,4 +231,25 @@ describe("LocalAgents", () => {
     expect(client.authStatus).not.toHaveBeenCalled();
     expect(client.login).toHaveBeenCalledWith("claude-code", "console", { apiKey: "sk-test" });
   });
+
+  it("publishes the reason when the engine refuses an install before progress", async () => {
+    const { logins, client } = engine(signedOut);
+    const reason = "harness not available: gemini";
+    client.prepareClis.mockRejectedValueOnce(new Error(reason));
+    logins.prepareCli("gemini");
+    await Promise.resolve();
+    expect(published(mockPublish, agentCliProgress)).toEqual([
+      {
+        scope: {},
+        event: {
+          harness: "gemini",
+          phase: "failed",
+          version: "",
+          receivedBytes: 0,
+          error: reason,
+          category: "internal",
+        },
+      },
+    ]);
+  });
 });

@@ -55,8 +55,9 @@ describe("the vault", () => {
     const sealed = seal("gone");
     fs.rmSync(keyFile());
     __resetVaultKeyForTests();
-    await initVault();
+    await initVault("read");
     expect(open(sealed)).toBeNull();
+    expect(fs.existsSync(keyFile())).toBe(false);
     expect(open("v1.not.a.real-value")).toBeNull();
     expect(open(null)).toBeNull();
   });
@@ -75,6 +76,7 @@ describe("the vault", () => {
     expect(fs.existsSync(keyFile())).toBe(false);
     __resetVaultKeyForTests();
     process.env.DEUS_VAULT_KEY = "cd".repeat(32);
+    await initVault("read");
     expect(open(sealed)).toBeNull();
   });
 });

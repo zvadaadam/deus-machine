@@ -104,7 +104,7 @@ function keychainCreate(hex: string): Promise<boolean> {
 
 /**
  * Why nothing can be sealed or opened right now: the Keychain is still being
- * asked for the key at startup, or it holds the key and is not answering.
+ * asked for the key, or it is not answering.
  */
 let blocked: "starting" | "locked" | null = null;
 
@@ -115,29 +115,23 @@ export function vaultProblem(): string | null {
   return null;
 }
 
-/**
- * Find or create the key, off the event loop's critical path: called once at
- * startup, so sealing and opening never wait on the Keychain. A key is
- * created only where there provably is none: a Keychain that does not answer
- * leaves the vault unavailable for this run rather than minting a second key
- * over sign-ins sealed under the first. Safe to call again.
- */
-export async function initVault(): Promise<void> {
+let initializing: Promise<void> | null = null;
+
+/** Startup looks up the key for existing credentials. Only a connect may create it. */
+export async function initVault(mode: "read" | "seal" = "seal"): Promise<void> {
+  // A connect can arrive while startup is looking for a key that was lost.
+  if (initializing) await initializing;
+  if (cachedKey || blocked === "locked") return;
+  return (initializing ??= loadKey(mode).finally(() => {
+    initializing = null;
+  }));
+}
+
+async function loadKey(mode: "read" | "seal"): Promise<void> {
+  cachedKey = fromHex(process.env.DEUS_VAULT_KEY) ?? readKeyFile();
   if (cachedKey) return;
-  blocked = null;
-  const fromEnv = fromHex(process.env.DEUS_VAULT_KEY);
-  if (fromEnv) {
-    cachedKey = fromEnv;
-    return;
-  }
-  // A key file already in use wins: credentials are sealed under it.
-  const existing = readKeyFile();
-  if (existing) {
-    cachedKey = existing;
-    return;
-  }
   if (!usesKeychain()) {
-    cachedKey ??= createKeyFile();
+    if (mode === "seal") cachedKey = createKeyFile();
     return;
   }
   // Until the Keychain answers, a request that needs the key is refused: a
@@ -146,6 +140,10 @@ export async function initVault(): Promise<void> {
   blocked = "starting";
   let answer = await keychainRead();
   if (answer.status === "missing") {
+    if (mode === "read") {
+      blocked = null;
+      return;
+    }
     // Created without overwrite, then read back: another Deus process may have won.
     await keychainCreate(crypto.randomBytes(32).toString("hex"));
     answer = await keychainRead();
@@ -159,32 +157,24 @@ export async function initVault(): Promise<void> {
   console.warn("[Integrations] The Keychain did not answer; app sign-ins are unavailable for now");
 }
 
-function vaultKey(): Buffer {
-  if (cachedKey) return cachedKey;
-  const problem = vaultProblem();
-  if (problem) throw new Error(problem);
-  // Before `initVault` has run (a test, a script): the environment, else the file.
-  cachedKey = fromHex(process.env.DEUS_VAULT_KEY) ?? readKeyFile() ?? createKeyFile();
-  return cachedKey;
-}
-
 /** Seal a JSON value: `v1.<iv>.<tag>.<ciphertext>`, base64url parts. */
 export function seal(value: unknown): string {
+  if (!cachedKey) throw new Error(vaultProblem() ?? "The vault key is missing");
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", vaultKey(), iv);
+  const cipher = crypto.createCipheriv("aes-256-gcm", cachedKey, iv);
   const body = Buffer.concat([cipher.update(JSON.stringify(value), "utf8"), cipher.final()]);
   return [VERSION, iv, cipher.getAuthTag(), body].map(encodePart).join(".");
 }
 
 /** Open a sealed value; null when it was sealed under another key or is damaged. */
 export function open<T>(sealed: string | null | undefined): T | null {
-  if (!sealed) return null;
+  if (!sealed || !cachedKey) return null;
   const [version, iv, tag, body] = sealed.split(".");
   if (version !== VERSION || !iv || !tag || body === undefined) return null;
   try {
     const decipher = crypto.createDecipheriv(
       "aes-256-gcm",
-      vaultKey(),
+      cachedKey,
       Buffer.from(iv, "base64url")
     );
     decipher.setAuthTag(Buffer.from(tag, "base64url"));

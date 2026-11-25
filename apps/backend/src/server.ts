@@ -3,6 +3,7 @@ import { serve } from "@hono/node-server";
 import { createApp } from "./app";
 import { initDatabase, closeDatabase, DB_PATH } from "./lib/database";
 import { stopProcessGroups } from "@shared/lib/process-groups";
+import { beforeBreadcrumb } from "@shared/lib/sentry-breadcrumb";
 import {
   closeAll as closeAllWsConnections,
   onDeviceConnectionsChange,
@@ -37,6 +38,7 @@ Sentry.init({
   dsn: "https://7d01f9d51458e372a7e6f48649842653@o4510970844020736.ingest.us.sentry.io/4510971283898368",
   environment: process.env.NODE_ENV === "production" ? "production" : "development",
   sendDefaultPii: false,
+  beforeBreadcrumb,
   initialScope: { tags: { process: "backend" } },
 });
 

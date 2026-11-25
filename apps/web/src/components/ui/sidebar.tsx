@@ -159,20 +159,20 @@ function SidebarProvider({
 
 function Sidebar({
   side = "left",
-  variant = "sidebar",
+  variant = "inset",
   collapsible = "offcanvas",
   className,
   children,
   ...props
 }: React.ComponentProps<"div"> & {
   side?: "left" | "right";
-  variant?: "sidebar" | "floating" | "inset";
-  collapsible?: "offcanvas" | "icon" | "none";
+  variant?: "inset";
+  collapsible?: "offcanvas";
 }) {
   const { isMobile, state, open, hoverOpen, setHoverOpen, openMobile, setOpenMobile } =
     useSidebar();
   const hoverTimeoutRef = React.useRef<number | null>(null);
-  const enableHoverReveal = !isMobile && collapsible === "offcanvas" && !open;
+  const enableHoverReveal = !isMobile && !open;
 
   const clearHoverTimeout = React.useCallback(() => {
     if (hoverTimeoutRef.current !== null) {
@@ -203,22 +203,6 @@ function Sidebar({
     clearHoverTimeout();
     if (hoverOpen) setHoverOpen(false);
   }, [open, hoverOpen, clearHoverTimeout, setHoverOpen]);
-
-  if (collapsible === "none") {
-    return (
-      <div
-        data-slot="sidebar"
-        data-sidebar="sidebar"
-        className={cn(
-          "bg-sidebar text-sidebar-foreground flex h-full w-(--sidebar-width) flex-col",
-          className
-        )}
-        {...props}
-      >
-        {children}
-      </div>
-    );
-  }
 
   if (isMobile) {
     return (
@@ -288,7 +272,7 @@ function Sidebar({
       <div
         data-slot="sidebar-container"
         className={cn(
-          "fixed inset-y-0 z-10 hidden w-(--sidebar-width) md:flex",
+          "fixed inset-y-0 z-10 hidden w-(--sidebar-width) p-2 md:flex",
           // Collapsed positioning (off-screen)
           side === "left"
             ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
@@ -303,10 +287,6 @@ function Sidebar({
                 ? "translate-x-[var(--sidebar-width)]"
                 : "-translate-x-[var(--sidebar-width)]"
             ),
-          // Adjust the padding for floating and inset variants.
-          variant === "floating" || variant === "inset"
-            ? "p-2"
-            : "group-data-[side=left]:border-r group-data-[side=right]:border-l",
           className
         )}
         onPointerEnter={openHover}
@@ -320,10 +300,7 @@ function Sidebar({
         <div
           data-sidebar="sidebar"
           data-slot="sidebar-inner"
-          className={cn(
-            "bg-sidebar flex h-full w-full flex-col",
-            "group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:rounded-xl group-data-[variant=floating]:border group-data-[variant=floating]:shadow-sm"
-          )}
+          className="bg-sidebar flex h-full w-full flex-col"
         >
           {children}
         </div>
