@@ -288,11 +288,8 @@ export function createAgentEventHandler(): AgentEventHandler {
       let holder = holdingTurn(sessionId);
       const last = lastTurn(sessionId);
       if (!holder && !isUnknownEvent(envelope.event) && envelope.event.type === "turn.started") {
-        // A historical start may arrive for the first time after a more recent turn ended.
-        const lastEnd = last && conversation.turns.find((t) => t.turnId === last.turnId)?.endedAt;
         if (
           last?.turnId !== turnId &&
-          (lastEnd === undefined || lastEnd <= envelope.event.timestamp) &&
           !conversation.turns.some((t) => t.turnId === turnId && t.status === "ended")
         ) {
           this.resetTurnFacts(sessionId);
