@@ -39,7 +39,6 @@ import {
 import type { LiveName } from "@shared/api";
 import { cloudSaveFailures, sessionEvents } from "@shared/api/sessions";
 import { cloudSaveFailure } from "@shared/cloud-autosave";
-import { getDatabase } from "../../lib/database";
 import { invalidate } from "../query-engine";
 import { openWith, publish, resetSubscribers } from "../streams";
 import {
@@ -292,10 +291,15 @@ export function createAgentEventHandler(
       if (saved.ok) {
         invalidate(SESSION_RESOURCES, { sessionIds: [sessionId] });
         // A stored message anchors the footer. A late engine end can still correct it.
-        const message = getDatabase()
-          .prepare("SELECT 1 FROM messages WHERE session_id = ? AND turn_id = ? LIMIT 1")
-          .get(sessionId, turnId);
-        if (message) resetSubscribers(sessionEvents, { sessionId });
+        if (
+          state.conversation.timeline.some(
+            (entry) => entry.kind === "message" && entry.turnId === turnId
+          )
+        ) {
+          resetSubscribers(sessionEvents, { sessionId });
+          for (const opening of typing.of(sessionId, state.conversation))
+            publish(sessionEvents, { sessionId }, opening, { keep: false });
+        }
       }
       return true;
     },

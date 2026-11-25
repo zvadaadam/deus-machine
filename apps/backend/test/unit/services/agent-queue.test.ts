@@ -5,7 +5,9 @@ import { createOperator } from "@zvada/agent-server/operator";
 import {
   createSteerEchoParts,
   createUserEchoParts,
+  emptyConversation,
   echoMessageId,
+  reduceConversationWithChanges,
   steerMessageId,
   WIRE_ERROR_CODES,
   type TurnCancelResult,
@@ -18,6 +20,7 @@ import {
   type TurnSteerResult,
 } from "@zvada/agent-server/protocol";
 import * as api from "@shared/api/sessions";
+import { findConversationMessage } from "@shared/conversation-rows";
 import { SCHEMA_SQL } from "@shared/schema";
 import * as agent from "../../../src/services/agent/service";
 import * as cloud from "../../../src/services/agent/cloud/driver";
@@ -1216,9 +1219,9 @@ describe("messages held for a local chat", () => {
     }
   );
 
-  it("refreshes only the chat with the given-up turn's message and accepts its late engine end", async () => {
+  it("refreshes only the given-up chat, keeps its streaming sentence, and accepts its late engine end", async () => {
     vi.useFakeTimers();
-    const frames: { type: string; id: string }[] = [];
+    const frames: { type: string; id: string; data?: api.SessionEvent }[] = [];
     const window = addConnection(
       { close() {}, send: (frame) => frames.push(JSON.parse(String(frame))) },
       null
@@ -1226,11 +1229,33 @@ describe("messages held for a local chat", () => {
     subscribe(window, "transcript", api.sessionEvents, { sessionId });
     subscribe(window, "other", api.sessionEvents, { sessionId: crypto.randomUUID() });
     await send("A");
+    reply("A", "The fix", "streaming");
+    emit({
+      type: "message.part.delta",
+      sessionId,
+      turnId: "A",
+      messageId: "reply-A",
+      outputIndex: 1,
+      partIndex: 0,
+      partId: "part-A",
+      delta: { type: "text", text: " is ready." },
+      timestamp: seq,
+    });
     await stopped("A");
     await vi.advanceTimersByTimeAsync(15_000);
     expect(frames.filter((frame) => frame.type === "q:reset").map((frame) => frame.id)).toEqual([
       "transcript",
     ]);
+    const page = await run(api.messages, { sessionId });
+    const row = page.messages.find((message) => message.id === "reply-A")!;
+    const reset = frames.findIndex((frame) => frame.type === "q:reset");
+    let fold = emptyConversation();
+    for (const frame of frames.slice(reset + 1)) {
+      if (frame.id === "transcript" && frame.data?.type === "event")
+        fold = reduceConversationWithChanges(fold, frame.data.envelope.event).state;
+    }
+    const parts = findConversationMessage(fold, row.id)?.parts ?? row.parts;
+    expect(parts).toMatchObject([{ type: "text", text: "The fix is ready." }]);
     expect((await run(api.messages, { sessionId })).turns).toContainEqual(
       expect.objectContaining({ turnId: "A", stopReason: "cancelled" })
     );

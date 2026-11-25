@@ -27,7 +27,6 @@ const {
   mockPersistAgentSessionId,
   mockPersistChanges,
   mockPersistTurn,
-  mockFindTurnMessage,
   mockPersistSessionError,
   mockPersistSessionTitle,
   mockPersistSessionWorking,
@@ -43,7 +42,6 @@ const {
   mockPersistAgentSessionId: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
   mockPersistChanges: vi.fn<(...args: any[]) => any>(),
   mockPersistTurn: vi.fn(() => ({ ok: true })),
-  mockFindTurnMessage: vi.fn(),
   mockPersistSessionError: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
   mockPersistSessionTitle: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
   mockPersistSessionWorking: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
@@ -65,9 +63,6 @@ vi.mock("../../../src/services/agent/persistence", () => ({
 }));
 
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
-vi.mock("../../../src/lib/database", () => ({
-  getDatabase: () => ({ prepare: () => ({ get: mockFindTurnMessage }) }),
-}));
 vi.mock("../../../src/services/streams", () => ({
   publish: mockPublish,
   resetSubscribers: mockResetSubscribers,
@@ -1079,7 +1074,6 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       );
       handler.handle(envelope(messageStarted({ role: "user", outputIndex: 0 })));
       handler.handle(envelope(partEvent));
-      mockFindTurnMessage.mockReturnValueOnce({ found: 1 });
       mockPublish.mockClear();
       handler.giveUpTurn(SESSION, TURN, "cancelled");
       expect(mockPersistTurn).toHaveBeenCalledWith(SESSION, {
