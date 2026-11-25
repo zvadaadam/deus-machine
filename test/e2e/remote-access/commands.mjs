@@ -1,6 +1,7 @@
 // The command socket carries argv, so the daemon validates the same input as the CLI.
 import { parseArgs } from "node:util";
 import { setTimeout as sleep } from "node:timers/promises";
+import { decodeJwt } from "jose";
 
 export const help = `deus-remote-lab — drive a disposable Deus stack on loopback
 Set AGNT_WORKSPACE to a local AGNT checkout with its worker dependencies installed.
@@ -9,6 +10,7 @@ Run bun run deus-remote-lab <command> [--timeout <seconds>].
   up                                      Start and sign in the fixture Mac
   status                                  Show processes, addresses, logs and idle timeout
   down                                    Stop the lab and its stack
+  client-session                          Get Alice's fixture web session for an outside client
   host code                               Get a one-use pairing code
   host devices                            List approvals with their names and IDs
   host revoke <name-or-id>                Revoke one approval
@@ -96,6 +98,13 @@ export async function runCommand(lab, { command, args, since, duration }, signal
   }
   const [name, op, raw] = args;
   switch (command) {
+    case "client-session": {
+      arity(0);
+      const sessionToken = lab.sessions.aliceWeb;
+      const { sub: accountId, exp } = decodeJwt(sessionToken);
+      const expiresAt = new Date(exp * 1000).toISOString().replace(".000Z", "Z");
+      return { accountId, sessionToken, expiresAt };
+    }
     case "host code":
       arity(0);
       return { code: await lab.code() };
