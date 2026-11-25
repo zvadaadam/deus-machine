@@ -68,12 +68,31 @@ export function answerParts(parts: Parts): TextPart[] {
     if ("raw" in raw) continue;
     const send = sentText(raw);
     const part = send ?? raw;
-    if (part.type !== "text") closing.length = 0;
-    else if (part.text.trim()) {
-      closing.push(part);
-      lastText = part;
-      if (send) lastSend = send;
+    if (part.type === "reasoning") continue;
+    if (part.type !== "text") {
+      closing.length = 0;
+      continue;
     }
+    if (!part.text.trim()) continue;
+    if (send) {
+      closing.length = 0;
+      closing.push(send);
+      lastSend = send;
+    } else {
+      closing.push(part);
+    }
+    lastText = part;
+  }
+  if (
+    closing.length > 1 &&
+    closing[0] === lastSend &&
+    closing
+      .slice(1)
+      .map((part) => part.text)
+      .join("")
+      .trim() === lastSend.text.trim()
+  ) {
+    return [lastSend];
   }
   const fallback = lastSend ?? lastText;
   return closing.length || !fallback ? closing : [fallback];

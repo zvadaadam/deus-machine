@@ -100,12 +100,38 @@ it.each<[string, Part[], RowShape, RowShape, string[]]>([
     ["answer"],
   ],
   ["a closing send", [w, s], [["work"], "send"], [["work"], "send"], ["send"]],
+  ["closing send resets prior prose", [n, s], ["note", "send"], ["send"], ["send"]],
   [
-    "closing send and text",
+    "consecutive closing sends keep only the latest send",
+    [w, send("first-send", "First"), send("second-send", "Second")],
+    [["work"], "first-send", "second-send"],
+    [["work"], "first-send", "second-send"],
+    ["second-send"],
+  ],
+  [
+    "closing send and different final text",
     [w, s, a],
     [["work"], "send", "answer"],
     [["work"], "send"],
     ["send", "answer"],
+  ],
+  [
+    "closing send echoed by final text keeps only the send",
+    [
+      w,
+      send("echo-send", "All done."),
+      { ...message, type: "text", id: "echo-text", text: "  All done.\n", state: "done" },
+    ],
+    [["work"], "echo-send", "echo-text"],
+    [["work"], "echo-send"],
+    ["echo-send"],
+  ],
+  [
+    "text split by reasoning keeps both passages at turn end",
+    [w, n, reasoning, a],
+    [["work"], "note", ["think"], "answer"],
+    [["work", "note", "think", "answer"]],
+    ["note", "answer"],
   ],
   [
     "a send before parallel calls",
@@ -311,6 +337,24 @@ it("copies the closing sends and text and makes cards from links even in a folde
   };
   expect(getTurnFooterData([[row]]).copyText).toBe("update\n\nanswer");
   expect(getTurnFooterData([[{ ...row, parts: [link, w] }]]).copyText).toContain("[the notes]");
+  expect(getTurnFooterData([[{ ...row, parts: [w, n, reasoning, a] }]]).copyText).toBe(
+    "note\n\nanswer"
+  );
+  expect(
+    getTurnFooterData([
+      [
+        {
+          ...row,
+          parts: [
+            w,
+            send("echo-send", "Ready."),
+            reasoning,
+            { ...message, type: "text", id: "echo-text", text: " Ready. ", state: "done" },
+          ],
+        },
+      ],
+    ]).copyText
+  ).toBe("Ready.");
   expect(extractChatResources({ parts, isComplete: true }).map(({ id }) => id)).toEqual([
     "file:notes.md",
     "website:http://localhost:5173/",

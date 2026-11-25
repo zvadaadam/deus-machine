@@ -62,7 +62,10 @@ export const MessageItem = memo(function MessageItem({
             onClick={handleCopy}
             active={copied}
             showLabel={false}
-            className="bg-user-bubble-top/85 rounded-md backdrop-blur-sm"
+            className={cn(
+              "bg-user-bubble-top/85 rounded-md backdrop-blur-sm",
+              !copied && "text-secondary-foreground"
+            )}
           />
         </div>
 
@@ -108,7 +111,7 @@ export const MessageItem = memo(function MessageItem({
           <button
             type="button"
             onClick={() => setIsExpanded(!isExpanded)}
-            className="text-muted-foreground hover:text-foreground mt-2 flex items-center gap-1 text-xs font-normal transition-colors"
+            className="text-secondary-foreground hover:text-foreground mt-2 flex items-center gap-1 text-xs font-normal transition-colors"
             aria-expanded={isExpanded}
             aria-controls={`message-content-${message.id}`}
           >
