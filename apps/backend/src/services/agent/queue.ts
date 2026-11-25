@@ -25,6 +25,7 @@ import {
 } from "./service";
 import { continuedSettings } from "./turn-settings";
 import {
+  hasPendingStart,
   previousSend,
   requireSameHarness,
   retryReadSteer,
@@ -322,7 +323,7 @@ async function drain(q: Queue) {
     notify([q.sessionId]);
     return;
   }
-  if (ACTIVE_TURN_STATUSES.includes(chat.status)) return;
+  if (ACTIVE_TURN_STATUSES.includes(chat.status) || hasPendingStart(q.sessionId)) return;
   const previous = head.attempt;
   let turnId = head.message.turnId;
   if (previous) turnId = previous.state === "busy" ? previous.turnId : uuidv7();

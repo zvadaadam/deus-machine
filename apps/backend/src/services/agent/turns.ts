@@ -55,7 +55,7 @@ const ADMISSION_KEPT_MS = 10 * 60_000;
 type Starting = {
   turnId: string;
   sentAt: number;
-  preparing: AbortController;
+  preparing?: AbortController;
   done: Promise<void>;
   stoppedBy?: Origin;
 };
@@ -70,6 +70,12 @@ function startingTurn(sessionId: string) {
     !agentService.wasTurnAdmitted(sessionId, entry.turnId)
   )
     return entry;
+}
+
+/** Once app setup has been aborted, the next send can already take its place. */
+export function hasPendingStart(sessionId: string) {
+  const start = startingTurn(sessionId);
+  return !!start && !start.preparing?.signal.aborted;
 }
 
 export function currentTurnId(sessionId: string) {
@@ -91,7 +97,7 @@ const STEER_READ = new ConflictError("The agent already read this message.");
 export async function withdrawSteerRetry(sessionId: string, turnId: string) {
   const admission = startingTurn(sessionId);
   if (admission?.turnId !== turnId) return false;
-  admission.preparing.abort(STEER_READ);
+  admission.preparing?.abort(STEER_READ);
   return admission.done.then(
     () => false,
     (error) => error === STEER_READ
@@ -249,6 +255,8 @@ async function sendMessageOnce(
   // approval and questions park the RUNNING turn while the overlay waits.
   // The wire guard covers the same race during admission.
   if (session?.is_hidden) throw new ConflictError("That chat is archived; it takes no messages.");
+  if (hasPendingStart(sessionId))
+    throw new ChatBusyError("The agent is starting another turn — wait for it to begin.");
   if (session && ACTIVE_TURN_STATUSES.includes(session.status)) {
     throw new ChatBusyError(
       session.status === "working"
@@ -422,6 +430,9 @@ async function sendMessageOnce(
     const done = agentService.startTurn(sessionId, turnId, agentHarness, content, {
       cwd,
       signal: preparing.signal,
+      onWire: () => {
+        admission.preparing = undefined;
+      },
       model,
       thinkingLevel: readThinkingLevel(input.thinkingLevel),
       permissionMode,
@@ -516,7 +527,7 @@ export async function stopSession(
   });
   if (admission && admission.turnId === targetTurnId) {
     admission.stoppedBy ??= by;
-    admission.preparing.abort(new ConflictError("Stopped before it started."));
+    admission.preparing?.abort(new ConflictError("Stopped before it started."));
     // A lost reply can leave the named turn running.
     await admission.done.catch(() => {});
     if (currentTurnId(sessionId) !== targetTurnId) return { unconfirmed: false };

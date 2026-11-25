@@ -176,10 +176,10 @@ export async function startTurn(
   turnId: string,
   agentHarness: AgentHarness,
   prompt: string,
-  options: Omit<DeusTurnOptions, "agentMessages"> & { signal?: AbortSignal }
+  options: Omit<DeusTurnOptions, "agentMessages"> & { signal?: AbortSignal; onWire?(): void }
 ): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
-  const { signal } = options;
+  const { signal, onWire, ...run } = options;
   const stopped = Promise.withResolvers<never>();
   const onAbort = () => stopped.reject(signal?.reason);
   signal?.addEventListener("abort", onAbort);
@@ -193,7 +193,7 @@ export async function startTurn(
   }
   const device = agentDeviceFor(sessionId);
   const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, {
-    ...options,
+    ...run,
     ...apps,
     agentMessages: hasAgentMessages(sessionId),
     setup: setupForTurn(sessionId),
@@ -208,6 +208,7 @@ export async function startTurn(
   // when the session is locally busy (the server will reject with turnActive)
   // — the live turn's state must not be clobbered by a doomed registration.
   const registered = events?.beginTurn(sessionId, turnId) ?? false;
+  onWire?.();
   try {
     await link.startTurn(params);
   } catch (err) {

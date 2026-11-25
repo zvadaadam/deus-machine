@@ -28,7 +28,7 @@ import {
   steerMessage,
   steerQueuedMessage,
 } from "../../../src/services/agent/queue";
-import { stopSession } from "../../../src/services/agent/turns";
+import { sendMessage, stopSession } from "../../../src/services/agent/turns";
 import type { AgentLinkOptions } from "../../../src/services/agent/client";
 import sessionHandlers from "../../../src/api/sessions";
 import { handle, LOCAL_CALLER, Registry } from "../../../src/api/registry";
@@ -572,6 +572,55 @@ describe("stopping the current turn", () => {
     return { release, starting };
   }
 
+  it("O6: a third strict send cannot replace B in setup after A ends", async () => {
+    const { release, starting } = await startBWhileALives();
+    end("A");
+    expect(await run(api.session, { sessionId })).toMatchObject({ status: "idle" });
+    const third = await sendMessage({ ...message("C"), turnId: "C" }).catch(
+      (error: unknown) => error
+    );
+    const refusal = await host
+      .send(chatCaller, sessionId, {
+        turnId: "D",
+        message: "Fourth",
+        origin: fromChat,
+      })
+      .catch((error: unknown) => error);
+    const reading = await view();
+    release();
+    await starting;
+    expect(third).toMatchObject({
+      name: "ChatBusyError",
+      message: "The agent is starting another turn — wait for it to begin.",
+    });
+    expect(refusal).toMatchObject({ refusal: { code: "busy" } });
+    expect(reading.running).toBe("B");
+    expect(starts()).toEqual(["A", "B"]);
+  });
+
+  it("O6: a Stop awaiting B's wire reply still refuses another strict send", async () => {
+    const { release, starting } = await startBWhileALives();
+    const wire = pendingStart();
+    release();
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "B"]));
+    end("A");
+    engine.cancelTurn.mockImplementationOnce(async () => {
+      end("B", "cancelled");
+      return { outcome: "cancelled", turnId: "B" };
+    });
+    const stopping = stop();
+    try {
+      await expect(sendMessage({ ...message("C"), turnId: "C" })).rejects.toThrow(
+        "The agent is starting another turn — wait for it to begin."
+      );
+    } finally {
+      wire.resolve();
+      await Promise.all([starting, stopping]);
+    }
+    expect(engine.cancelTurn.mock.calls).toEqual([[sessionId, "B"]]);
+    expect(starts()).toEqual(["A", "B"]);
+  });
+
   it("O6: giving up A leaves B working in setup and its waiting row held", async () => {
     vi.useFakeTimers();
     const { release, starting } = await startBWhileALives();
@@ -592,6 +641,30 @@ describe("stopping the current turn", () => {
       items: [waitingRow("later")],
     });
     expect(starts()).toEqual(["A", "B"]);
+  });
+
+  it("O6: the default steer waits first while B is starting after A ends", async () => {
+    const { release, starting } = await startBWhileALives();
+    await send("tail");
+    end("A");
+    const result = await operator.call(
+      "send_message",
+      { session: sessionId, message: "First for B", wait: 0 },
+      chatCaller
+    );
+    const waiting = await queue();
+    release();
+    await starting;
+    expect(result).toContain('turn "B" did not take it; the product queued it as its own turn.');
+    expect(waiting).toMatchObject({
+      paused: null,
+      items: [{ text: "First for B", state: "waiting" }, waitingRow("tail")],
+    });
+    expect(engine.steerTurn).not.toHaveBeenCalled();
+    end("B");
+    await vi.waitFor(() => expect(engine.startTurn.mock.lastCall![0].input).toBe("First for B"));
+    end(starts().at(-1)!);
+    await vi.waitFor(() => expect(starts().at(-1)).toBe("tail"));
   });
 
   it("keeps only the last pre-wire end until the next admission", async () => {
