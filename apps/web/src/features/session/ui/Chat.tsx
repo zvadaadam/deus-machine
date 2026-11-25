@@ -343,17 +343,16 @@ export function Chat({
     if (anchorIndex < 0) return;
 
     prependAnchorRef.current = anchor;
-    // Call getMeasurements() rather than reading measurementsCache directly so
-    // any initial mount measurements from this commit are already reflected.
-    const measurements = virtualizer.getMeasurements();
-    const measurement = measurements[anchorIndex];
+    // Call getTotalSize() first so TanStack refreshes measurementsCache with
+    // any initial mount measurements from this commit.
+    const totalSize = virtualizer.getTotalSize();
+    const measurement = virtualizer.measurementsCache[anchorIndex];
     if (measurement) {
-      if (list.current) list.current.style.height = `${virtualizer.getTotalSize()}px`;
+      if (list.current) list.current.style.height = `${totalSize}px`;
       const listOffset = list.current?.offsetTop ?? 0;
       const nextScrollTop = Math.max(0, listOffset + measurement.start - anchor.offsetFromTop);
       el.scrollTop = nextScrollTop;
       virtualizer.scrollOffset = nextScrollTop;
-      virtualizer.scrollAdjustments = 0;
       syncScrollPosition(nextScrollTop, { pauseIfAway: true });
     }
   }, [timeline.length, firstKey, lastKey, virtualizer, recordVisibleAnchor, syncScrollPosition]);
