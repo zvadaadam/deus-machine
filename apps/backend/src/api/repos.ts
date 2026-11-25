@@ -34,7 +34,7 @@ import { parseGitHubRepo, runGh } from "../services/gh.service";
 import { githubInstallUrl } from "@shared/lib/github";
 import { readProjectFile, writeProjectFile } from "../services/project-environment.service";
 import { invalidate } from "../services/query-engine";
-import { liveTurnId } from "../services/agent/service";
+import { holdingTurn } from "../services/agent/chat-turn";
 import { removeRepo, repoRemoval } from "../services/workspace-lifecycle";
 import { listRecentProjects } from "../services/recent-projects.service";
 import { publish } from "../services/streams";
@@ -558,7 +558,7 @@ export default [
 
   handle(api.addRepo, ({ root_path }) => addRepository(root_path)),
   handle(api.repoRemoval, async ({ repoId }) => {
-    const { confirmation } = repoRemoval(repoId, liveTurnId);
+    const { confirmation } = repoRemoval(repoId, holdingTurn);
     const folderExists =
       !!confirmation.rootPath &&
       (await fs.promises.stat(confirmation.rootPath).then(
@@ -567,7 +567,7 @@ export default [
       ));
     return { ...confirmation, folderExists };
   }),
-  handle(api.removeRepo, ({ repoId, confirmed }) => removeRepo(repoId, confirmed, liveTurnId)),
+  handle(api.removeRepo, ({ repoId, confirmed }) => removeRepo(repoId, confirmed, holdingTurn)),
   handle(api.addCloudRepo, ({ repository, organizationId }) =>
     addCloudRepository(repository, organizationId)
   ),

@@ -7,6 +7,12 @@
 // what reaches the (mocked) event handler and what is published, on which
 // stream and to which workspace's or chat's clients (the mocked stream hub).
 
+import { claimTurn, holdingTurn, refuseTurn } from "../../../src/services/agent/chat-turn";
+vi.mock("../../../src/services/agent/chat-turn", () => ({
+  claimTurn: vi.fn(() => true),
+  refuseTurn: vi.fn(() => true),
+  holdingTurn: vi.fn(),
+}));
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SCHEMA_SQL } from "@shared/schema";
@@ -202,15 +208,7 @@ function makeHandler() {
   return {
     handle: vi.fn(),
     hydrateCloudSnapshot: vi.fn(),
-    beginTurn: vi.fn(() => true),
-    abortTurn: vi.fn(() => true),
-    wasTurnAdmitted: vi.fn(() => false),
-    giveUpTurn: vi.fn(),
-    confirmTurn: vi.fn(),
     handleEventGap: vi.fn(),
-    settleEventGap: vi.fn(),
-    liveTurnId: vi.fn(() => undefined as string | undefined),
-    lastOutputAt: vi.fn(),
     handleTitle: vi.fn(),
   };
 }
@@ -262,6 +260,7 @@ beforeEach(async () => {
   capturedOnFrame = null;
   capturedOnDown = null;
   socketOpen = true;
+  vi.mocked(holdingTurn).mockReset();
   handler = makeHandler();
   initCloudDriver(handler);
   await ensureCloudSession("deus-session-1");
@@ -350,7 +349,7 @@ describe("cloud driver frame → fold contract", () => {
       messageId: "turn-refused",
     });
 
-    expect(handler.abortTurn).toHaveBeenCalledWith("deus-session-1", "turn-refused");
+    expect(refuseTurn).toHaveBeenCalledWith("deus-session-1", "turn-refused");
     expect(handler.handle.mock.calls[0][0].event).toMatchObject({
       type: "error",
       category: "_provider_account",
@@ -376,7 +375,7 @@ describe("cloud driver frame → fold contract", () => {
   });
 
   it("preserves the failed turn and recoverability from session.error", () => {
-    handler.liveTurnId.mockReturnValue("turn-current");
+    vi.mocked(holdingTurn).mockReturnValue({ turnId: "turn-current", phase: "running" });
     capturedOnFrame!(
       SessionErrorEventSchema.parse({
         type: "session.error",
@@ -394,7 +393,7 @@ describe("cloud driver frame → fold contract", () => {
   });
 
   it("does not apply an old turn's session.error to the current turn", () => {
-    handler.liveTurnId.mockReturnValue("turn-current");
+    vi.mocked(holdingTurn).mockReturnValue({ turnId: "turn-current", phase: "running" });
     capturedOnFrame!(
       SessionErrorEventSchema.parse({
         type: "session.error",
@@ -409,12 +408,12 @@ describe("cloud driver frame → fold contract", () => {
   it.each(["error", "cancelled"])(
     "preserves a fatal session.error delivered after a %s terminal",
     (stopReason) => {
-      handler.liveTurnId.mockReturnValue("turn-current");
+      vi.mocked(holdingTurn).mockReturnValue({ turnId: "turn-current", phase: "running" });
       capturedOnFrame!({ type: "turn.started", turnId: "turn-current" });
       capturedOnFrame!({ type: "turn.ended", turnId: "turn-current", stopReason });
       // The real handler releases ownership at turn.ended. AGNT sends the
       // session.error afterward, including deferred auth errors on cancel.
-      handler.liveTurnId.mockReturnValue(undefined);
+      vi.mocked(holdingTurn).mockReturnValue(undefined);
       handler.handle.mockClear();
       capturedOnFrame!(
         SessionErrorEventSchema.parse({
@@ -455,7 +454,7 @@ describe("cloud driver frame → fold contract", () => {
   });
 
   it("synthesizes the missed turn.ended from a snapshot's turns[] outcome", () => {
-    handler.liveTurnId.mockReturnValue("turn-x");
+    vi.mocked(holdingTurn).mockReturnValue({ turnId: "turn-x", phase: "running" });
     capturedOnFrame!({
       type: "session.snapshot",
       state: {
@@ -510,7 +509,7 @@ describe("cloud driver frame → fold contract", () => {
     // a stopped sandbox, and recovery announces itself within seconds.
     vi.useFakeTimers();
     try {
-      handler.liveTurnId.mockReturnValue("turn-x");
+      vi.mocked(holdingTurn).mockReturnValue({ turnId: "turn-x", phase: "running" });
       capturedOnFrame!({
         type: "workspace.state",
         data: { status: "stopped", reason: "sidecar_disconnected (code=1006)" },
@@ -543,7 +542,7 @@ describe("cloud driver frame → fold contract", () => {
     // sandbox.
     vi.useFakeTimers();
     try {
-      handler.liveTurnId.mockReturnValue("turn-x");
+      vi.mocked(holdingTurn).mockReturnValue({ turnId: "turn-x", phase: "running" });
       capturedOnFrame!({ type: "workspace.state", data: { status: "stopped" } });
       capturedOnFrame!({ type: "workspace.state", data: { status: "provisioning" } });
       vi.advanceTimersByTime(60_000);
@@ -555,7 +554,7 @@ describe("cloud driver frame → fold contract", () => {
   });
 
   it("leaves settled sessions alone when the sandbox stops (no live turn)", () => {
-    handler.liveTurnId.mockReturnValue(undefined);
+    vi.mocked(holdingTurn).mockReturnValue(undefined);
     capturedOnFrame!({ type: "workspace.state", data: { status: "stopped" } });
     expect(handler.handle).not.toHaveBeenCalled();
   });
@@ -563,7 +562,7 @@ describe("cloud driver frame → fold contract", () => {
   it("keeps a live turn during Workspace-owned recovery, without changing the source frame", () => {
     vi.useFakeTimers();
     try {
-      handler.liveTurnId.mockReturnValue("turn-x");
+      vi.mocked(holdingTurn).mockReturnValue({ turnId: "turn-x", phase: "running" });
       capturedOnFrame!({ type: "workspace.state", data: { status: "stopped" } });
       const data = Object.freeze({
         status: "error",
@@ -580,7 +579,7 @@ describe("cloud driver frame → fold contract", () => {
   });
 
   it("ignores a snapshot while our live turn is still current server-side", () => {
-    handler.liveTurnId.mockReturnValue("turn-x");
+    vi.mocked(holdingTurn).mockReturnValue({ turnId: "turn-x", phase: "running" });
     capturedOnFrame!({ type: "session.snapshot", state: { currentTurnId: "turn-x", turns: [] } });
     expect(handler.handle).not.toHaveBeenCalled();
   });
@@ -877,7 +876,7 @@ describe("cloud driver frame → fold contract", () => {
   it("asks the live turn's question after a snapshot ends the stale one, without cancelling it", () => {
     mockRelay.mockImplementationOnce(() => new Promise(() => {}));
     // This backend still thinks turn A runs; A ended in the gap and B asked.
-    handler.liveTurnId.mockReturnValue("turn-a");
+    vi.mocked(holdingTurn).mockReturnValue({ turnId: "turn-a", phase: "running" });
     capturedOnFrame!({
       type: "session.snapshot",
       state: {
@@ -1608,7 +1607,7 @@ describe("cloud driver turn API", () => {
   it("sends message.send with the deus turnId as both turn id and idempotency key", async () => {
     await startCloudTurn("deus-session-1", "turn-42", "hello", SELECTION);
 
-    expect(handler.beginTurn).toHaveBeenCalledWith("deus-session-1", "turn-42");
+    expect(claimTurn).toHaveBeenCalledWith("deus-session-1", "turn-42");
     const frame = mockSend.mock.calls.at(-1)![0];
     expect(frame).toMatchObject({
       type: "message.send",
@@ -1646,13 +1645,13 @@ describe("cloud driver turn API", () => {
     const starting = startCloudTurn("deus-session-1", "turn-slow", "hello", SELECTION);
     await new Promise((next) => setTimeout(next, 10));
     // Still resolving: no turn is live, so a Stop has nothing to cancel and sends nothing.
-    expect(handler.beginTurn).not.toHaveBeenCalled();
+    expect(claimTurn).not.toHaveBeenCalled();
     expect(await cancelCloudTurn("deus-session-1")).toEqual({ outcome: "no_active_turn" });
     expect(mockSend).not.toHaveBeenCalled();
 
     release();
     await starting;
-    expect(handler.beginTurn).toHaveBeenCalledWith("deus-session-1", "turn-slow");
+    expect(claimTurn).toHaveBeenCalledWith("deus-session-1", "turn-slow");
     expect(mockSend.mock.calls.at(-1)![0]).toMatchObject({
       type: "message.send",
       turnId: "turn-slow",
@@ -1661,7 +1660,7 @@ describe("cloud driver turn API", () => {
   });
 
   it("rejects a send while a turn is live (agnt would queue, deus's contract is one turn)", async () => {
-    handler.liveTurnId.mockReturnValue("busy-turn");
+    vi.mocked(holdingTurn).mockReturnValue({ turnId: "busy-turn", phase: "running" });
     await expect(startCloudTurn("deus-session-1", "turn-43", "hi", SELECTION)).rejects.toThrow(
       /still working/
     );

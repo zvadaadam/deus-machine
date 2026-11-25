@@ -38,9 +38,7 @@ vi.mock("../../../src/services/query-engine", () => ({
 vi.mock("../../../src/services/server-name", () => ({ getServerName: () => "Proof Mac" }));
 vi.mock("@sentry/node", () => ({ captureException: state.report }));
 vi.mock("../../../src/services/agent/service", () => ({
-  liveTurnId: () => undefined,
   provideSessionTools: () => {},
-  provideTurnWatcher: vi.fn(),
 }));
 vi.mock("../../../src/services/settings.service", () => ({ getSetting: () => undefined }));
 vi.mock("../../../src/services/streams", () => ({ publish: vi.fn() }));

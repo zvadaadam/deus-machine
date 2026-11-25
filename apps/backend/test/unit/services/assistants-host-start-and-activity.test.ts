@@ -11,6 +11,7 @@ import { handle, LOCAL_CALLER, Registry } from "../../../src/api/registry";
 import { ChatBusyError } from "../../../src/lib/errors";
 import type { AgentLinkOptions } from "../../../src/services/agent/client";
 import type { LocalAgents } from "../../../src/services/agent/local-agents";
+import * as ownership from "../../../src/services/agent/chat-turn";
 import * as agent from "../../../src/services/agent/service";
 import * as turns from "../../../src/services/agent/turns";
 import { createDeusHost } from "../../../src/services/assistants/host";
@@ -206,6 +207,10 @@ describe("a first task that cannot be delivered", () => {
 
   it("keeps another turn working in app setup before it has a row", async () => {
     vi.spyOn(turns, "sendMessage").mockImplementationOnce(async ({ sessionId }) => {
+      ownership.claimTurn(sessionId, "other", {
+        controller: new AbortController(),
+        done: Promise.resolve(),
+      });
       db.prepare("UPDATE sessions SET status = 'working' WHERE id = ?").run(sessionId);
       throw new ChatBusyError("Another turn is starting.");
     });
@@ -317,8 +322,8 @@ describe("a chat's last activity", () => {
         state: { status: "in_progress", input: {}, time: { start: timestamp } },
       },
     });
-    expect(agent.liveTurnId("silent")).toBe("quiet");
-    expect(agent.lastOutputAt("silent")).toBeUndefined();
+    expect(ownership.holdingTurn("silent")?.turnId).toBe("quiet");
+    expect(ownership.holdingTurn("silent")?.lastOutputAt).toBeUndefined();
     const list = await createOperator(host).call("list_sessions", {}, caller);
     expect(list).toMatch(/working[^\n]*"silent"[^\n]*12m ago/);
     expect(list).toMatch(/working[^\n]*"busy"[^\n]*5s ago/);
@@ -420,7 +425,7 @@ describe("a chat's last activity", () => {
       vi.setSystemTime(now + 10_000);
       expect.soft(await activity("changing")).toBe(now);
       // A different turn can still be live while this send is in setup.
-      vi.spyOn(agent, "liveTurnId").mockReturnValue("other");
+      vi.spyOn(ownership, "holdingTurn").mockReturnValue({ turnId: "other", phase: "running" });
       expect(await activity("changing")).toBe(now - 30_000);
     } finally {
       apps.resolve();

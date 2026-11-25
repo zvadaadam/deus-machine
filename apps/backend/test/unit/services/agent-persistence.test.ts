@@ -49,11 +49,10 @@ import {
   persistCompaction,
   persistMessage,
   persistPart,
-  persistSessionError,
+  persistSessionStatus,
   persistSessionTitle,
   persistSessionUsage,
   persistLastUserMessageAt,
-  persistSessionWorking,
   persistTurn,
   settleInterruptedSessions,
   type TurnOutcomeWrite,
@@ -545,7 +544,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     });
 
     it("clears a stale error when the next turn ends cleanly", () => {
-      persistSessionError(SESSION, "boom", "internal");
+      persistSessionStatus(SESSION, "error", "boom", "internal");
       writeTurnEnded(ended(), { status: "idle" });
 
       expect(
@@ -610,11 +609,11 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     });
   });
 
-  describe("persistSessionWorking", () => {
+  describe("persisting a working session", () => {
     it("flips to working and clears the previous failure", () => {
-      persistSessionError(SESSION, "old failure", "network");
+      persistSessionStatus(SESSION, "error", "old failure", "network");
 
-      persistSessionWorking(SESSION);
+      persistSessionStatus(SESSION, "working");
 
       expect(
         db
@@ -628,7 +627,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     });
 
     it("leaves last_user_message_at alone — the flip runs before admission", () => {
-      persistSessionWorking(SESSION);
+      persistSessionStatus(SESSION, "working");
 
       expect(
         db.prepare(`SELECT last_user_message_at FROM sessions WHERE id = ?`).get(SESSION)
@@ -744,7 +743,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     it("returns ok:false instead of throwing when the database is gone", () => {
       db.close();
 
-      expect(persistSessionError(SESSION, "x", "internal").ok).toBe(false);
+      expect(persistSessionStatus(SESSION, "error", "x", "internal").ok).toBe(false);
       expect(writeTurnEnded(ended(), { status: "idle" }).ok).toBe(false);
       expect(
         writeCompaction({

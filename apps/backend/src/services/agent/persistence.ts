@@ -26,6 +26,7 @@ import type {
   ConversationMessage,
   ConversationState,
   ConversationTurn,
+  Origin,
   Part,
   UnknownPart,
 } from "@zvada/agent-server/protocol";
@@ -33,7 +34,7 @@ import { getTurn, saveTurn } from "../../db/turns";
 import { isUnknownPart } from "@shared/protocol-types";
 import { getDatabase } from "../../lib/database";
 import { getErrorMessage } from "@shared/lib/errors";
-import { ACTIVE_TURN_STATUSES } from "@shared/enums";
+import { ACTIVE_TURN_STATUSES, type SessionStatus } from "@shared/enums";
 import {
   findConversationCompaction,
   findConversationMessage,
@@ -227,43 +228,49 @@ export interface TurnOutcomeWrite {
   error?: { message: string; category: string };
 }
 
+// A Stop never creates a turn row. Its answer can only correct one the engine or release wrote.
+export function persistStopCredit(id: string, turnId: string, by?: Origin) {
+  try {
+    getDatabase()
+      .prepare("UPDATE turns SET cancelled_by = ? WHERE session_id = ? AND turn_id = ?")
+      .run(by ? JSON.stringify(by) : null, id, turnId);
+  } catch (error) {
+    failed("Stop credit", error);
+  }
+}
+
+/** A lost link can leave a row active. A warning on a live turn keeps its card available. */
+export function persistStopStatus(id: string, status: "idle" | "error" | null = "idle") {
+  try {
+    const warning = status === "idle" ? null : "The agent never confirmed the stop request.";
+    const { changes } = getDatabase()
+      .prepare(
+        `UPDATE sessions SET status = COALESCE(?, status), error_message = COALESCE(error_message, ?),
+       error_category = COALESCE(error_category, ?), updated_at = datetime('now')
+     WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
+      )
+      .run(status, warning, warning && "internal", id, ...ACTIVE_TURN_STATUSES);
+    return changes > 0;
+  } catch (error) {
+    failed("Stop status", error);
+    return false;
+  }
+}
+
 /** Persist a turn and its optional session status atomically, even without messages. */
 export function persistTurn(
   sessionId: string,
-  turn: Parameters<typeof turnRecord>[0],
+  turn: Parameters<typeof turnRecord>[0] & { cancelledBy?: Origin },
   outcome?: TurnOutcomeWrite,
   providerCredentialSource?: TurnProviderCredentialSource
 ): WriteResult<void> {
   const db = getDatabase();
   try {
     db.transaction(() => {
-      saveTurn(
-        db,
-        sessionId,
-        turnRecord(turn, providerCredentialSource, getTurn(db, sessionId, turn.turnId))
-      );
-
-      // Snapshot hydration restores accounting without changing a live turn's
-      // status. Only live dispatch supplies a session outcome.
-      if (!outcome) return;
-      if (outcome.status === "error") {
-        // No ErrorInfo means a standalone `error` event already wrote the
-        // specific message — COALESCE keeps it instead of replacing it with
-        // the terminal event's vaguer wording.
-        db.prepare(
-          `UPDATE sessions
-             SET status = 'error',
-                 error_message = COALESCE(?, error_message, 'Agent turn failed'),
-                 error_category = COALESCE(?, error_category, 'internal'),
-                 updated_at = datetime('now')
-           WHERE id = ?`
-        ).run(outcome.error?.message ?? null, outcome.error?.category ?? null, sessionId);
-      } else {
-        db.prepare(
-          `UPDATE sessions SET status = 'idle', error_message = NULL, error_category = NULL, updated_at = datetime('now')
-           WHERE id = ?`
-        ).run(sessionId);
-      }
+      const prior = getTurn(db, sessionId, turn.turnId);
+      const record = turnRecord(turn, providerCredentialSource, prior);
+      saveTurn(db, sessionId, { ...record, cancelledBy: turn.cancelledBy });
+      if (outcome) writeStatus(sessionId, terminalStatus(outcome));
     })();
     return { ok: true, value: undefined };
   } catch (error) {
@@ -275,42 +282,44 @@ export function persistTurn(
 // Session state
 // ============================================================================
 
-/**
- * Optimistic "the agent is working" flip, written by the send command before
- * the wire ack. The engine has no event for it (a turn is admitted, not
- * "started" by the product) — deus owns this transition.
- *
- * The STATUS only. `last_user_message_at` used to ride along here, and could
- * not: this runs before admission, and every rejection path already flips the
- * status back (or to "error"), while nothing rolls a timestamp back. See
- * `persistLastUserMessageAt`.
- */
-export function persistSessionWorking(sessionId: string): WriteResult<void> {
-  const db = getDatabase();
+export type SessionProjection = readonly [
+  SessionStatus,
+  message?: string | null,
+  category?: string | null,
+];
+
+export function terminalStatus(
+  { status, error }: TurnOutcomeWrite,
+  prior?: SessionProjection
+): SessionProjection {
+  if (prior && status === "error" && !error)
+    return [status, prior[1] ?? "Agent turn failed", prior[2] ?? "internal"];
+  return [status, error?.message, error?.category];
+}
+
+// A terminal without ErrorInfo keeps the standalone error the engine already reported.
+function writeStatus(id: string, [status, message, category]: SessionProjection) {
+  const reported = status === "error" && message === undefined && category === undefined;
+  getDatabase()
+    .prepare(
+      `UPDATE sessions SET status = @status,
+       error_message = CASE WHEN @reported THEN COALESCE(error_message, 'Agent turn failed') ELSE @message END,
+       error_category = CASE WHEN @reported THEN COALESCE(error_category, 'internal') ELSE @category END,
+       updated_at = datetime('now') WHERE id = @id`
+    )
+    .run({ id, status, message, category, reported: Number(reported) });
+}
+
+export function persistSessionStatus(id: string, ...state: SessionProjection): WriteResult<void> {
   try {
-    db.prepare(
-      `UPDATE sessions
-         SET status = 'working', error_message = NULL, error_category = NULL,
-             updated_at = datetime('now')
-       WHERE id = ?`
-    ).run(sessionId);
+    writeStatus(id, state);
     return { ok: true, value: undefined };
   } catch (error) {
-    return failed("session working", error);
+    return failed("session status", error);
   }
 }
 
-/**
- * Stamp a send's timestamp — called only once the engine has ADMITTED the turn.
- *
- * The column is not decoration. The sidebar orders by it, `isFirstSession`
- * reads a null as "this workspace has never been prompted", and workspace init
- * skips its `git checkout -- .` cleanup while it is set (a prompt sent during
- * dependency install must not have the agent's edits wiped). A rejected send —
- * agent-server disconnected, no resolvable cwd, a `turn/start` the wire refused
- * — therefore left all three asserting a turn that never ran, with nothing to
- * undo it: the workspace never got its clean, forever.
- */
+/** Only an admitted send orders the sidebar and protects a prompted checkout from cleanup. */
 export function persistLastUserMessageAt(sessionId: string, sentAt: string): WriteResult<void> {
   const db = getDatabase();
   try {
@@ -447,25 +456,6 @@ export function settleInterruptedSessions(): WriteResult<string[]> {
   }
 }
 
-/** Persist an error; keep the session working when native execution is still unconfirmed. */
-export function persistSessionError(
-  sessionId: string,
-  message: string,
-  category: string,
-  status: "error" | "working" = "error"
-): WriteResult<void> {
-  const db = getDatabase();
-  try {
-    db.prepare(
-      `UPDATE sessions SET status = ?, error_message = ?, error_category = ?, updated_at = datetime('now')
-       WHERE id = ?`
-    ).run(status, message, category, sessionId);
-    return { ok: true, value: undefined };
-  } catch (error) {
-    return failed("session error", error);
-  }
-}
-
 // ============================================================================
 // Metadata
 // ============================================================================
@@ -583,7 +573,8 @@ export function persistChanges(
   state: ConversationState,
   changes: ConversationChange[],
   outcomeFor: (turn: ConversationTurn) => TurnOutcomeWrite | undefined,
-  providerCredentialSource?: TurnProviderCredentialSource
+  providerCredentialSource?: TurnProviderCredentialSource,
+  cancelledBy?: Origin
 ): ChangeWrite[] {
   const writes: ChangeWrite[] = [];
   for (const change of changes) {
@@ -611,7 +602,7 @@ export function persistChanges(
           change,
           result: persistTurn(
             sessionId,
-            turn,
+            { ...turn, cancelledBy },
             turn.status === "ended" ? outcomeFor(turn) : undefined,
             providerCredentialSource
           ),

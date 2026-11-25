@@ -49,7 +49,10 @@ export class DifferentTurnMessageError extends ConflictError {
 
 /** The chat runs a turn, or waits on an answer: the send is refused, typed so a caller can tell. */
 export class ChatBusyError extends ConflictError {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly competingTurnId?: string
+  ) {
     super(message);
     this.name = "ChatBusyError";
   }

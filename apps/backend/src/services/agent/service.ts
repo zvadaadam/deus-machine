@@ -2,7 +2,7 @@
 // Composition root for agent-server communication.
 //
 // Wires AgentLink to the event handler for persistence and WS push, and relays
-// the live turn's questions and plans. These modules have no circular imports.
+// the live turn's questions and plans.
 //
 //   queue → turns → service (this file)
 //                     ├── client         (AgentLink: the in-process engine)
@@ -19,7 +19,6 @@ import { echoMessageId, WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
 import type {
   ElicitationOutcome,
   ElicitationRequestedEvent,
-  Origin,
   PermissionOutcome,
   PermissionRequestedEvent,
   TurnCancelResult,
@@ -35,10 +34,11 @@ import {
 } from "@shared/agent-asks";
 import { isUnknownEvent } from "@shared/protocol-types";
 import { hasAgentMessages } from "./agent-messages";
+import { holdingTurn, wireTurn, forgetChatTurns, turnNotices } from "./chat-turn";
 import { AgentLink } from "./client";
 import { LocalAgents } from "./local-agents";
 import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
-import { createAgentEventHandler, type AgentEventHandler, type TurnEnd } from "./event-handler";
+import { createAgentEventHandler, type AgentEventHandler } from "./event-handler";
 import { buildTurnStartParams, withoutImageParts, type DeusTurnOptions } from "./run-config";
 import { toolRequests } from "@shared/api/sessions";
 import { cancelSessionRelays, isPrompt, pendingFor, relay } from "./tool-relay";
@@ -87,7 +87,8 @@ export async function init(): Promise<void> {
     console.log(`[AgentService] Settled ${settled.value.length} chat(s) a restart interrupted`);
     invalidate(["workspaces", "sessions", "session"], { sessionIds: settled.value });
   }
-  const handler = createAgentEventHandler(notifyTurnInterrupted);
+  turnNotices.withdrawCards = (id, turnId) => cancelSessionRelays(id, "turn interrupted", turnId);
+  const handler = createAgentEventHandler();
   events = handler;
   // A client that starts following a chat while its agent waits on a question
   // or a plan (a window opened late, a phone) is shown it at once; one that
@@ -106,6 +107,8 @@ export async function init(): Promise<void> {
   // Cloud sessions feed the SAME handler — one fold, one persistence path,
   // two transports.
   initCloudDriver(handler);
+  // The queue sends through this service. Connect its echo reader once both modules are ready.
+  const { userEcho } = await import("./queue");
 
   link = await AgentLink.open({
     onEnvelope: (envelope) => {
@@ -114,31 +117,18 @@ export async function init(): Promise<void> {
       // Withdraw this turn's cards before publishing its end and admitting its successor.
       if (known && event.type === "turn.ended")
         cancelSessionRelays(sessionId, "turn ended", event.turnId);
-      const end = handler.handle(envelope);
+      handler.handle(envelope);
       if (!known) return;
-      if (end) turnWatcher?.turnEnded(end);
       if (event.type === "message.started" && event.role === "user" && event.steerId !== undefined)
-        turnWatcher?.userEcho(sessionId, event.turnId, event.steerId);
+        userEcho(sessionId, event.turnId, event.steerId);
       // The sending head stays until its text is published. A message end carries only ids.
       if (event.type === "message.ended" && event.messageId === echoMessageId(event.turnId))
-        turnWatcher?.userEcho(sessionId, event.turnId);
+        userEcho(sessionId, event.turnId);
       if (event.type === "permission.requested") void answerPermission(event);
       if (event.type === "elicitation.requested") void answerElicitation(event);
     },
-    onEventGap: (gap) => {
-      const turnId = handler.handleEventGap(gap);
-      if (!turnId || gap.reason !== "replay_failed") return;
-      // Replay exhaustion can hide the native terminal entirely. One
-      // targeted cancel reconciles it; a late reply cannot settle a successor.
-      void (async () => {
-        const result = await link?.cancelTurn(gap.sessionId, turnId).catch((error: unknown) => {
-          console.warn("[AgentService] Replay recovery cancel failed:", error);
-        });
-        const absent = result?.outcome === "no_active_turn";
-        const gone = result?.outcome === "cancelled" || (absent && !result.activeTurnId);
-        handler.settleEventGap(gap.sessionId, turnId, gone, absent ? undefined : "cancelled");
-      })();
-    },
+    onEventGap: (gap) =>
+      void handler.handleEventGap(gap, (turnId) => link?.cancelTurn(gap.sessionId, turnId)),
     onToolRequest: (method, params) => handleToolRequest(method, params),
     // Every chat here can operate the others (LLP 0019), through the engine's delivery.
     sessionTools: (own) => sessionTools?.(own) ?? own,
@@ -162,6 +152,7 @@ export async function shutdown(): Promise<void> {
   link = null;
   events = null;
   await closing?.close();
+  forgetChatTurns();
 }
 
 // ---- Public API ----
@@ -176,10 +167,11 @@ export async function startTurn(
   turnId: string,
   agentHarness: AgentHarness,
   prompt: string,
-  options: Omit<DeusTurnOptions, "agentMessages"> & { signal?: AbortSignal; onWire?(): void }
+  options: Omit<DeusTurnOptions, "agentMessages"> & { signal?: AbortSignal }
 ): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
-  const { signal, onWire, ...run } = options;
+  const { signal, ...run } = options;
+  signal?.throwIfAborted();
   const stopped = Promise.withResolvers<never>();
   const onAbort = () => stopped.reject(signal?.reason);
   signal?.addEventListener("abort", onAbort);
@@ -202,23 +194,9 @@ export async function startTurn(
     // Negotiated at the handshake, not guessed from a harness list.
     supportsImages: supportsImages(agentHarness),
   });
-  // Mirror the admission BEFORE the quick-ack round-trip: the server can push
-  // the first envelopes in the same tick the ack line is processed, and the
-  // handler must already know which turn is live then. beginTurn is a no-op
-  // when the session is locally busy (the server will reject with turnActive)
-  // — the live turn's state must not be clobbered by a doomed registration.
-  const registered = events?.beginTurn(sessionId, turnId) ?? false;
-  onWire?.();
-  try {
-    await link.startTurn(params);
-  } catch (err) {
-    if (registered) events?.abortTurn(sessionId, turnId);
-    throw err;
-  }
-  // Server accepted a turn our local state thought was concurrent — the local
-  // view was stale (e.g. backend restart); register for real now.
-  if (!registered) events?.beginTurn(sessionId, turnId, { force: true });
-  events?.confirmTurn(sessionId, turnId);
+  // Wire before the request: the engine can publish the first event in the same tick as its answer.
+  wireTurn(sessionId, turnId);
+  await link.startTurn(params);
 }
 
 function supportsImages(harness: string): boolean {
@@ -302,68 +280,10 @@ export function isConnected(): boolean {
   return link?.isConnected() ?? false;
 }
 
-export function lastOutputAt(sessionId: string) {
-  return events?.lastOutputAt(sessionId);
-}
-
 /** A chat's tools beside the Deus tools: the operator's, registered by services/assistants. */
 let sessionTools: ((own: HostToolSource) => HostToolSource) | undefined;
 export function provideSessionTools(compose: (own: HostToolSource) => HostToolSource): void {
   sessionTools = compose;
-}
-
-export type InterruptionCause = "failure" | "cancelled";
-export type StopAsked = { by: Origin; turnId?: string; endedAt?: number };
-interface TurnWatcher {
-  turnEnded(end: TurnEnd): void;
-  startCleared(sessionId: string): void;
-  userEcho(sessionId: string, turnId: string, steerId?: string): void;
-  stopAsked(sessionId: string, stop: StopAsked): void;
-  interrupted(
-    sessionId: string,
-    turnId: string | undefined,
-    gone: boolean,
-    cause: InterruptionCause
-  ): string[] | undefined;
-}
-let turnWatcher: TurnWatcher | undefined;
-export function provideTurnWatcher(watcher: TurnWatcher): void {
-  turnWatcher = watcher;
-}
-
-export function notifyStopAsked(sessionId: string, stop: StopAsked): void {
-  turnWatcher?.stopAsked(sessionId, stop);
-}
-
-export const notifyStartCleared = (sessionId: string) => turnWatcher?.startCleared(sessionId);
-
-export function notifyTurnInterrupted(
-  sessionId: string,
-  turnId: string | undefined,
-  gone: boolean,
-  cause: InterruptionCause = "failure"
-) {
-  if (gone && turnId) cancelSessionRelays(sessionId, "turn interrupted", turnId);
-  return turnWatcher?.interrupted(sessionId, turnId, gone, cause);
-}
-
-/**
- * The turn the event handler believes is running for a session, if any.
- *
- * `undefined` means BOTH "no turn is live" and "there is no handler to ask"
- * (never initialized, or shut down) — callers must treat it as absence of
- * evidence, not as evidence of absence.
- */
-export function liveTurnId(sessionId: string): string | undefined {
-  return events?.liveTurnId(sessionId);
-}
-
-export function wasTurnAdmitted(sessionId: string, turnId: string) {
-  return events?.wasTurnAdmitted(sessionId, turnId) ?? false;
-}
-
-export function giveUpTurn(sessionId: string, turnId: string, cause?: "cancelled") {
-  return events?.giveUpTurn(sessionId, turnId, cause);
 }
 
 /**
@@ -380,7 +300,7 @@ async function answerPermission(event: PermissionRequestedEvent): Promise<void> 
 }
 
 async function askPlan(event: PermissionRequestedEvent): Promise<PermissionOutcome> {
-  if (event.turnId !== liveTurnId(event.sessionId)) return { outcome: "cancelled" };
+  if (event.turnId !== holdingTurn(event.sessionId)?.turnId) return { outcome: "cancelled" };
   try {
     const answer = (await handleToolRequest("exitPlanMode", {
       sessionId: event.sessionId,
@@ -409,7 +329,7 @@ async function answerElicitation(event: ElicitationRequestedEvent): Promise<void
 }
 
 async function askQuestions(event: ElicitationRequestedEvent): Promise<ElicitationOutcome> {
-  if (event.turnId !== liveTurnId(event.sessionId)) return { action: "cancel" };
+  if (event.turnId !== holdingTurn(event.sessionId)?.turnId) return { action: "cancel" };
   const questions = event.mode === "question" ? askableQuestions(event.questions) : [];
   if (questions.length === 0) return { action: "decline" };
   try {
@@ -448,7 +368,7 @@ async function handleToolRequest(
   if (method === "agentDevice") return agentDeviceFor(requireParam(params, "sessionId", method));
 
   const sessionId = requireParam(params, "sessionId", method);
-  const turnId = liveTurnId(sessionId);
+  const turnId = holdingTurn(sessionId)?.turnId;
   const requestId = crypto.randomUUID();
   const isUserFacing = isPrompt(method);
   const sessionResources = ["workspaces", "sessions", "session"] as const;
@@ -474,7 +394,7 @@ async function handleToolRequest(
       timeoutMs: isUserFacing ? 24 * 60 * 60 * 1000 : 120_000,
     });
   } finally {
-    if (isUserFacing && turnId !== undefined && liveTurnId(sessionId) === turnId) {
+    if (isUserFacing && turnId !== undefined && holdingTurn(sessionId)?.turnId === turnId) {
       const result = persistSessionBackToWorking(sessionId);
       if (result.ok) invalidate([...sessionResources], { sessionIds: [sessionId] });
     }

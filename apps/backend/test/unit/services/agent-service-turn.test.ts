@@ -1,19 +1,4 @@
-/**
- * Turn admission at the service layer — the local mirror and its rollback.
- *
- * `startTurn` registers the turn LOCALLY before the wire answers, on purpose:
- * the server may push the first envelopes in the same tick it acks, so the
- * event handler has to already know which turn is live. That optimism needs an
- * undo. When the wire REFUSES admission, the mirror is describing a turn that
- * will never run, and the session would sit holding a phantom turn id that the
- * next envelope folds into. `abortTurn` is what keeps the local view honest.
- *
- * The rollback is also load-bearing one layer up: sendMessage now awaits
- * admission and rethrows the refusal so the write's answer says
- * it was refused. A rollback that did not happen here would leave the
- * backend believing a turn is live for a send the frontend has already rolled
- * back — see agent-commands-send.test.ts for that half.
- */
+// Local turn setup and admission through the in-process engine link.
 
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,6 +10,8 @@ import repoHandlers from "../../../src/api/repos";
 import sessionHandlers from "../../../src/api/sessions";
 import { Registry } from "../../../src/api/registry";
 import workspaceHandlers from "../../../src/api/workspaces";
+import * as ownership from "../../../src/services/agent/chat-turn";
+import { sendMessage } from "../../../src/services/agent/turns";
 import * as agentEvents from "../../../src/services/agent/event-handler";
 import * as integrations from "../../../src/services/integrations";
 import type { TurnApps } from "../../../src/services/integrations/runtime";
@@ -118,16 +105,23 @@ describe("agentService.startTurn", () => {
   });
 
   it("rolls the local turn back when the wire refuses admission", async () => {
-    const begin = vi.spyOn(events, "beginTurn");
-    const abort = vi.spyOn(events, "abortTurn");
+    const begin = vi.spyOn(ownership, "wireTurn");
+    const abort = vi.spyOn(ownership, "refuseTurn");
+    const start = vi.spyOn(agentService, "startTurn");
     vi.spyOn(settings, "getSetting").mockImplementation((key) => key === "agent_messages");
     mockLinkStartTurn.mockRejectedValue(
       new WireRequestError(WIRE_ERROR_CODES.turnActive, "already has an active turn")
     );
 
-    // Rethrown, not swallowed — this is the rejection sendMessage turns into
-    // an `accepted: false` ack.
-    await expect(start()).rejects.toBeInstanceOf(WireRequestError);
+    const sending = sendMessage({
+      sessionId: SESSION,
+      turnId: TURN,
+      model: "opus",
+      agentHarness: "claude-code",
+      content: "hello",
+    });
+    await expect(sending).rejects.toMatchObject({ name: "ChatBusyError" });
+    await expect(start.mock.results[0]?.value).rejects.toBeInstanceOf(WireRequestError);
 
     expect(begin).toHaveBeenCalledWith(SESSION, TURN);
     expect(abort).toHaveBeenCalledWith(SESSION, TURN);
@@ -139,9 +133,17 @@ describe("agentService.startTurn", () => {
   it("keeps the local turn when admission succeeds", async () => {
     mockLinkStartTurn.mockResolvedValue({ sessionId: SESSION, turnId: TURN });
 
-    await expect(start()).resolves.toBeUndefined();
+    const start = vi.spyOn(agentService, "startTurn");
+    await sendMessage({
+      sessionId: SESSION,
+      turnId: TURN,
+      model: "opus",
+      agentHarness: "claude-code",
+      content: "hello",
+    });
+    await expect(start.mock.results[0]?.value).resolves.toBeUndefined();
 
-    expect(agentService.liveTurnId(SESSION)).toBe(TURN);
+    expect(ownership.holdingTurn(SESSION)?.turnId).toBe(TURN);
   });
 
   it("pushes the recorded message tool to both reads before publishing the turn's first event", async () => {
@@ -227,12 +229,9 @@ describe("agentService.startTurn", () => {
     }
   );
 
-  it("does NOT roll back a turn it never registered", async () => {
-    // beginTurn said no: the session already holds a live turn locally. The
-    // refusal that follows belongs to OUR doomed send, so rolling back here
-    // would clear the OTHER turn's id and orphan its envelopes.
-    events.beginTurn(SESSION, "earlier-turn");
-    const abort = vi.spyOn(events, "abortTurn");
+  it("passes the wire's busy refusal through the service while another turn holds the chat", async () => {
+    ownership.claimTurn(SESSION, "earlier-turn");
+    const abort = vi.spyOn(ownership, "refuseTurn");
     mockLinkStartTurn.mockRejectedValue(
       new WireRequestError(WIRE_ERROR_CODES.turnActive, "already has an active turn")
     );
@@ -240,7 +239,7 @@ describe("agentService.startTurn", () => {
     await expect(start()).rejects.toBeInstanceOf(WireRequestError);
 
     expect(abort).not.toHaveBeenCalled();
-    expect(agentService.liveTurnId(SESSION)).toBe("earlier-turn");
+    expect(ownership.holdingTurn(SESSION)?.turnId).toBe("earlier-turn");
   });
 
   it("keeps a Codex turn's images: the app-server takes them", async () => {

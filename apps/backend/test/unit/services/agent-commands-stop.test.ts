@@ -29,11 +29,16 @@ const { mockGetDatabase, mockInvalidate } = vi.hoisted(() => ({
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
 
+import { admitTurn, forgetChatTurns, releaseTurn } from "../../../src/services/agent/chat-turn";
 import { stopSession } from "../../../src/services/agent/turns";
 import * as agentService from "../../../src/services/agent/service";
 import * as cloudDriver from "../../../src/services/agent/cloud/driver";
 
 const SESSION = "sess-stop";
+
+function endFirst() {
+  releaseTurn(SESSION, "turn-1", { type: "end", turnId: "turn-1", held: true, cancelled: true });
+}
 
 function createTestDb(): Database.Database {
   const db = new Database(":memory:");
@@ -46,6 +51,9 @@ function createTestDb(): Database.Database {
   db.prepare(
     `INSERT INTO sessions (id, workspace_id, agent_harness, status) VALUES (?, 'w1', 'claude-code', 'working')`
   ).run(SESSION);
+  db.prepare("INSERT INTO turns (session_id, turn_id, started_at) VALUES (?, 'turn-1', 1)").run(
+    SESSION
+  );
   return db;
 }
 
@@ -60,13 +68,14 @@ describeWithDb("stopSession", () => {
     db = createTestDb();
     mockGetDatabase.mockReturnValue(db);
     vi.spyOn(agentService, "isConnected").mockReturnValue(true);
-    vi.spyOn(agentService, "liveTurnId").mockReturnValue("turn-1");
+    admitTurn(SESSION, "turn-1", "start");
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.useFakeTimers();
   });
 
   afterEach(() => {
+    forgetChatTurns();
     vi.useRealTimers();
     db.close();
     vi.restoreAllMocks();
@@ -102,9 +111,60 @@ describeWithDb("stopSession", () => {
     expect(JSON.parse(row.cancelled_by)).toEqual({ kind: "session", sessionId: "second" });
   });
 
+  it("withdraws a pending stopper's credit when its no-effect answer follows the end", async () => {
+    const first = Promise.withResolvers<{ outcome: "no_active_turn" }>();
+    vi.spyOn(agentService, "stopSession")
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce({ outcome: "cancelled", turnId: "turn-1" });
+    const early = stopSession({ sessionId: SESSION }, { kind: "session", sessionId: "lead" });
+    await stopSession({ sessionId: SESSION });
+    endFirst();
+    const credit = () =>
+      db
+        .prepare<
+          [string],
+          { cancelled_by: string }
+        >("SELECT cancelled_by FROM turns WHERE turn_id = ?")
+        .get("turn-1")?.cancelled_by;
+    expect(credit()).toBe(JSON.stringify({ kind: "session", sessionId: "lead" }));
+    admitTurn(SESSION, "turn-2", "start");
+    first.resolve({ outcome: "no_active_turn" });
+    await early;
+    expect(credit()).toBe(JSON.stringify({ kind: "person" }));
+    expect(status()).toBe("working");
+  });
+
+  it("gives a confirmed Stop one deadline even when the person asks again", async () => {
+    vi.spyOn(agentService, "stopSession").mockResolvedValue({
+      outcome: "cancelled",
+      turnId: "turn-1",
+    });
+    await stopSession({ sessionId: SESSION });
+    await vi.advanceTimersByTimeAsync(5_000);
+    await stopSession({ sessionId: SESSION });
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(status()).toBe("idle");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("starts the grace period at confirmation and disarms it on the native end", async () => {
+    vi.spyOn(agentService, "stopSession")
+      .mockResolvedValueOnce({ outcome: "unconfirmed", turnId: "turn-1" })
+      .mockResolvedValueOnce({ outcome: "cancelled", turnId: "turn-1" });
+    await stopSession({ sessionId: SESSION });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await stopSession({ sessionId: SESSION });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(status()).toBe("working");
+    expect(vi.getTimerCount()).toBe(1);
+    endFirst();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("goes idle when the confirmed turn has already ended", async () => {
     vi.spyOn(agentService, "stopSession").mockImplementation(async () => {
-      vi.mocked(agentService.liveTurnId).mockReturnValue(undefined);
+      endFirst();
       return { outcome: "cancelled", turnId: "turn-1" };
     });
 
@@ -114,7 +174,7 @@ describeWithDb("stopSession", () => {
   });
 
   it("goes idle when there was no active turn to cancel", async () => {
-    vi.mocked(agentService.liveTurnId).mockReturnValue(undefined);
+    endFirst();
     vi.spyOn(agentService, "stopSession").mockResolvedValue({ outcome: "no_active_turn" });
 
     await stopSession({ sessionId: SESSION });
@@ -209,12 +269,12 @@ describeWithDb("stopSession", () => {
         outcome: "unconfirmed",
         turnId: "turn-1",
       });
-      const liveTurn = vi.spyOn(agentService, "liveTurnId").mockReturnValue("turn-1");
 
       await stopSession({ sessionId: SESSION });
 
       // turn-1 ends, turn-2 is admitted, and the session is working again.
-      liveTurn.mockReturnValue("turn-2");
+      endFirst();
+      admitTurn(SESSION, "turn-2", "start");
       db.prepare(`UPDATE sessions SET status = ? WHERE id = ?`).run(successorStatus, SESSION);
 
       await vi.advanceTimersByTimeAsync(20_000);
@@ -229,7 +289,7 @@ describeWithDb("stopSession", () => {
       outcome: "unconfirmed",
       turnId: "turn-1",
     });
-    vi.spyOn(agentService, "liveTurnId").mockReturnValue("turn-1");
+    admitTurn(SESSION, "turn-1", "start");
 
     await stopSession({ sessionId: SESSION });
     await vi.advanceTimersByTimeAsync(20_000);
@@ -238,21 +298,84 @@ describeWithDb("stopSession", () => {
   });
 
   it("the watchdog still fires when the handler is GONE (link dropped)", async () => {
-    // `liveTurnId` returns undefined for "no live turn" AND for "no handler to
-    // ask". The second is exactly when a session gets stranded on 'working'
-    // with no agent behind it, so absence of evidence must not suppress the
-    // fallback — only a positively DIFFERENT live turn does.
+    // Losing the handler can leave the stored session working with no agent behind it.
     vi.spyOn(agentService, "stopSession").mockResolvedValue({
       outcome: "unconfirmed",
       turnId: "turn-1",
     });
-    const liveTurn = vi.spyOn(agentService, "liveTurnId").mockReturnValue("turn-1");
 
     await stopSession({ sessionId: SESSION });
-    liveTurn.mockReturnValue(undefined);
+    forgetChatTurns(SESSION);
     await vi.advanceTimersByTimeAsync(20_000);
 
     expect(status()).toBe("error");
+  });
+
+  it("warns 15 seconds after a failed Stop when the confirmed Stop lost its handler", async () => {
+    vi.spyOn(agentService, "stopSession")
+      .mockResolvedValueOnce({ outcome: "cancelled", turnId: "turn-1" })
+      .mockRejectedValueOnce(new Error("link dropped"));
+    await stopSession({ sessionId: SESSION });
+    await vi.advanceTimersByTimeAsync(5_000);
+    forgetChatTurns(SESSION);
+    await expect(stopSession({ sessionId: SESSION })).resolves.toEqual({ unconfirmed: true });
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(status()).toBe("working");
+    await vi.advanceTimersByTimeAsync(1);
+    expect(
+      db.prepare("SELECT status, error_message FROM sessions WHERE id = ?").get(SESSION)
+    ).toEqual({ status: "error", error_message: "The agent never confirmed the stop request." });
+  });
+
+  it.each(["no_active_turn", "unconfirmed"] as const)(
+    "drops the idle chat entry once a holderless %s Stop settles",
+    async (outcome) => {
+      forgetChatTurns(SESSION);
+      vi.spyOn(agentService, "stopSession").mockResolvedValue(
+        outcome === "unconfirmed" ? { outcome, turnId: "turn-1" } : { outcome }
+      );
+      const writes = vi.spyOn(Map.prototype, "set");
+      const stopping = stopSession({ sessionId: SESSION });
+      const holding = writes.mock.contexts.filter((_, i) => writes.mock.calls[i]?.[0] === SESSION);
+      writes.mockRestore();
+      await stopping;
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(holding.some((map) => map instanceof Map && map.has(SESSION))).toBe(false);
+    }
+  );
+
+  it("warns on an active row when the handler is lost before Stop is asked", async () => {
+    forgetChatTurns(SESSION);
+    vi.spyOn(agentService, "stopSession").mockRejectedValue(new Error("link dropped"));
+    await expect(stopSession({ sessionId: SESSION })).resolves.toEqual({ unconfirmed: true });
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(
+      db.prepare("SELECT status, error_message FROM sessions WHERE id = ?").get(SESSION)
+    ).toEqual({
+      status: "error",
+      error_message: "The agent never confirmed the stop request.",
+    });
+  });
+
+  it("keeps a holderless Stop's deadline when the handler is lost before its reply", async () => {
+    forgetChatTurns(SESSION);
+    vi.spyOn(agentService, "stopSession").mockImplementation(async () => {
+      forgetChatTurns(SESSION);
+      throw new Error("link dropped");
+    });
+    await expect(stopSession({ sessionId: SESSION })).resolves.toEqual({ unconfirmed: true });
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(status()).toBe("error");
+  });
+
+  it("disarms a detached Stop deadline on full teardown", async () => {
+    vi.spyOn(agentService, "stopSession").mockRejectedValue(new Error("link dropped"));
+    await stopSession({ sessionId: SESSION });
+    forgetChatTurns(SESSION);
+    await agentService.shutdown();
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(status()).toBe("working");
   });
 
   it("keeps a failed wire call unconfirmed until its target turn settles", async () => {
@@ -285,7 +408,8 @@ describeWithDb("stopSession", () => {
     "does not let a delayed %s reply change a successor turn",
     async (outcome) => {
       vi.spyOn(agentService, "stopSession").mockImplementation(async () => {
-        vi.mocked(agentService.liveTurnId).mockReturnValue("turn-2");
+        endFirst();
+        admitTurn(SESSION, "turn-2", "start");
         return { outcome, turnId: "turn-1" };
       });
       await stopSession({ sessionId: SESSION });
@@ -300,13 +424,28 @@ describeWithDb("stopSession", () => {
     }
   );
 
+  it("disarms a lost handler's deadline when a successor claims the chat", async () => {
+    vi.spyOn(agentService, "stopSession").mockResolvedValue({
+      outcome: "unconfirmed",
+      turnId: "turn-1",
+    });
+    await stopSession({ sessionId: SESSION });
+    expect(vi.getTimerCount()).toBe(1);
+    forgetChatTurns(SESSION);
+    admitTurn(SESSION, "turn-2", "start");
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(status()).toBe("working");
+    expect(mockInvalidate).not.toHaveBeenCalled();
+  });
+
   it("captures the watchdog's target before an unconfirmed reply", async () => {
     vi.spyOn(agentService, "stopSession").mockImplementation(async () => {
-      vi.mocked(agentService.liveTurnId).mockReturnValue(undefined);
+      endFirst();
       return { outcome: "unconfirmed", turnId: "turn-1" };
     });
     await stopSession({ sessionId: SESSION });
-    vi.mocked(agentService.liveTurnId).mockReturnValue("turn-1");
+    expect(vi.getTimerCount()).toBe(1);
+    admitTurn(SESSION, "turn-1", "start");
     await vi.advanceTimersByTimeAsync(20_000);
     expect(status()).toBe("working");
   });

@@ -11,6 +11,7 @@ import { CLOUD_PROJECT_REMOVAL_REASON } from "@shared/types/repository";
 import handlers from "../../../src/api/repos";
 import { getAllRepositories } from "../../../src/db";
 import { groupWorkspacesByRepo } from "../../../src/lib/workspace-grouping";
+import { admitTurn, claimTurn, forgetChatTurns } from "../../../src/services/agent/chat-turn";
 import { createAgentEventHandler } from "../../../src/services/agent/event-handler";
 import { _reset, dropConnection, subscribe } from "../../../src/services/streams";
 import { deleteEmptyUnnamedProjects } from "../../../src/services/workspace-lifecycle";
@@ -22,9 +23,6 @@ let events: ReturnType<typeof createAgentEventHandler>;
 const frames: { type: string; id: string; seq: number }[] = [];
 vi.mock("../../../src/lib/database", () => ({ getDatabase: () => db }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate }));
-vi.mock("../../../src/services/agent/service", () => ({
-  liveTurnId: (id: string) => events.liveTurnId(id),
-}));
 vi.mock("../../../src/services/pr-snapshot.service", () => ({
   refreshPrSnapshotForSession: vi.fn(),
 }));
@@ -49,6 +47,7 @@ beforeEach(() => {
   invalidate.mockClear();
   frames.length = 0;
   _reset();
+  forgetChatTurns();
   events = createAgentEventHandler();
   db = new Database(":memory:");
   db.pragma("foreign_keys = ON");
@@ -232,9 +231,9 @@ it.each([
     const confirmed = await preview("r");
     db.prepare("UPDATE sessions SET status = ? WHERE id = 's'").run(status);
     if (admitted) {
-      events.beginTurn("s", "turn");
-      events.confirmTurn("s", "turn");
-    }
+      claimTurn("s", "turn");
+      admitTurn("s", "turn");
+    } else admitTurn("s", "turn", "start");
     const reason = {
       statusCode: 409,
       message:
@@ -245,7 +244,7 @@ it.each([
     expect(db.prepare("SELECT id FROM sessions WHERE id = 's'").get()).toEqual({ id: "s" });
     expect(invalidate).not.toHaveBeenCalled();
 
-    events.beginTurn("other", "unrelated");
+    claimTurn("other", "unrelated");
     finishTurn("s");
     expect(await preview("r")).toEqual(confirmed);
     await remove("r", confirmed);

@@ -61,15 +61,17 @@ vi.mock("../../../src/services/query-engine", () => ({
 }));
 vi.mock("../../../src/services/server-name", () => ({ getServerName: () => "Proof Mac" }));
 vi.mock("@sentry/node", () => ({ captureException: vi.fn() }));
+vi.mock(import("../../../src/services/agent/chat-turn"), async (original) => ({
+  ...(await original()),
+  holdingTurn: (id: string) => {
+    const turnId = state.live.get(id);
+    if (turnId) return { turnId, phase: "running" as const };
+  },
+  setupStop: () => undefined,
+}));
 vi.mock("../../../src/services/agent/service", () => ({
-  lastOutputAt: () => undefined,
-  liveTurnId: (sessionId: string) => state.live.get(sessionId),
-  wasTurnAdmitted: () => false,
   provideSessionTools: () => {},
-  provideTurnWatcher: vi.fn(),
   isConnected: () => false,
-  notifyStopAsked: vi.fn(),
-  notifyTurnInterrupted: vi.fn(),
 }));
 vi.mock("../../../src/services/agent/tool-relay", () => ({
   pendingFor: (sessionId: string) => state.pending.filter((r) => r.sessionId === sessionId),
@@ -81,9 +83,6 @@ vi.mock("../../../src/services/agent/tool-relay", () => ({
   isPrompt: (method: string) => method === "askUserQuestion" || method === "exitPlanMode",
 }));
 vi.mock("../../../src/services/agent/turns", () => ({
-  admittingAt: () => undefined,
-  currentTurnId: (sessionId: string) => state.live.get(sessionId),
-  stoppedBeforeStart: () => undefined,
   sendMessage: async (input: Record<string, unknown>, origin?: unknown) => {
     if (state.sendRefusal) throw state.sendRefusal;
     state.live.set(input.sessionId as string, input.turnId as string);

@@ -31,6 +31,7 @@ import {
   cardQuestions,
   unansweredRequests,
 } from "@shared/agent-asks";
+import { claimTurn, holdingTurn, refuseTurn } from "../chat-turn";
 import { isLiveOnlyEvent, type DecodedWireEventEnvelope } from "@shared/protocol-types";
 import type { CloudTurnSelection } from "@shared/cloud-models";
 import { isGenericTurnFailure, readSendRefusal } from "@shared/lib/send-refusal";
@@ -310,7 +311,7 @@ function pushCloudError(
 const TURN_KILL_GRACE_MS = 20_000;
 
 function scheduleTurnKill(session: CloudSession, status: string, detail?: string): void {
-  const armedFor = handler?.liveTurnId(session.deusSessionId);
+  const armedFor = holdingTurn(session.deusSessionId)?.turnId;
   if (!armedFor) return;
   if (session.pendingTurnKill) return;
   session.pendingTurnKill = setTimeout(() => {
@@ -318,7 +319,7 @@ function scheduleTurnKill(session: CloudSession, status: string, detail?: string
     // Fire only against the turn this was armed for: turn A may have settled
     // during the grace window and turn B started — killing B off A's stale
     // stopped-state would cancel a healthy fresh turn.
-    if (handler?.liveTurnId(session.deusSessionId) !== armedFor) return;
+    if (holdingTurn(session.deusSessionId)?.turnId !== armedFor) return;
     failLiveTurn(session, status, detail);
   }, TURN_KILL_GRACE_MS);
 }
@@ -330,7 +331,7 @@ function clearTurnKill(session: CloudSession): void {
 }
 
 function failLiveTurn(session: CloudSession, status: string, detail?: string): void {
-  const live = handler?.liveTurnId(session.deusSessionId);
+  const live = holdingTurn(session.deusSessionId)?.turnId;
   if (!live) return;
   // Drop the SERVER-side turn before inviting a resend. agnt keeps the
   // execute queued on the session DO (reachable while the VM is down), so
@@ -571,7 +572,7 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       const { error, turnId, recoverable } = parsed.data;
       // AGNT sends session.error after turn.ended, when ownership is already
       // released. Only a different live turn proves this error is stale.
-      const live = handler.liveTurnId(session.deusSessionId);
+      const live = holdingTurn(session.deusSessionId)?.turnId;
       if (turnId !== undefined && live !== undefined && turnId !== live) return;
       // Engine errors carry their canonical category in code. The platform's
       // generic failure wrapper is the only one the fold should deduplicate.
@@ -599,8 +600,7 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       const rejectedTurnId = frame.code === "MESSAGE_SEND_FAILED" ? frame.messageId : undefined;
       if (
         frame.code === "MESSAGE_SEND_FAILED" &&
-        (typeof rejectedTurnId !== "string" ||
-          !handler.abortTurn(session.deusSessionId, rejectedTurnId))
+        (typeof rejectedTurnId !== "string" || !refuseTurn(session.deusSessionId, rejectedTurnId))
       )
         return;
       pushCloudError(
@@ -692,7 +692,7 @@ function flushOutbox(session: CloudSession): void {
 /** A metadata-only snapshot can still settle a known live turn: the one this
  *  backend thinks is running ended while its socket was down. */
 function settleTurnFromSnapshot(session: CloudSession, state: Record<string, unknown>): void {
-  const live = handler?.liveTurnId(session.deusSessionId);
+  const live = holdingTurn(session.deusSessionId)?.turnId;
   if (!live || state.currentTurnId === live) return;
   const turns = Array.isArray(state.turns) ? (state.turns as Record<string, unknown>[]) : [];
   const outcome = turns.find((t) => t.turnId === live);
@@ -1154,7 +1154,7 @@ export async function startCloudTurn(
   // agnt QUEUES overlapping sends instead of rejecting them; deus's contract
   // is one live turn per session, so enforce it here (parity with the wire's
   // turnActive rejection on the local path).
-  if (handler.liveTurnId(deusSessionId)) {
+  if (holdingTurn(deusSessionId)) {
     throw new ConflictError("The agent is still working — wait for the current turn to finish.");
   }
 
@@ -1167,7 +1167,7 @@ export async function startCloudTurn(
   // registered, like the wake above: from there to the send nothing waits,
   // so a Stop can never be sent ahead of the turn it stops.
   const extensions = await resolveCloudTurnExtensions();
-  if (!handler.beginTurn(deusSessionId, turnId)) {
+  if (!claimTurn(deusSessionId, turnId)) {
     throw new ConflictError("The agent is still working — wait for the current turn to finish.");
   }
   try {
@@ -1187,7 +1187,7 @@ export async function startCloudTurn(
       },
     });
   } catch (err) {
-    handler.abortTurn(deusSessionId, turnId);
+    refuseTurn(deusSessionId, turnId);
     throw err;
   }
 }
@@ -1196,7 +1196,7 @@ export async function cancelCloudTurn(
   deusSessionId: string,
   turnId?: string
 ): Promise<TurnCancelResult> {
-  const live = turnId ?? handler?.liveTurnId(deusSessionId);
+  const live = turnId ?? holdingTurn(deusSessionId)?.turnId;
   if (!live) return { outcome: "no_active_turn" };
   const session = await ensureCloudSession(deusSessionId);
   session.socket.send({ type: "agent.cancel", turnId: live });

@@ -56,6 +56,11 @@ vi.mock("../../../apps/backend/src/services/agent/cloud/session-socket", () => (
   },
 }));
 
+import {
+  claimTurn,
+  forgetChatTurns,
+  holdingTurn,
+} from "../../../apps/backend/src/services/agent/chat-turn";
 import { createAgentEventHandler } from "../../../apps/backend/src/services/agent/event-handler";
 import { _reset, subscribe } from "../../../apps/backend/src/services/streams";
 import {
@@ -65,7 +70,7 @@ import {
   startCloudTurn,
 } from "../../../apps/backend/src/services/agent/cloud/driver";
 import {
-  persistSessionWorking,
+  persistSessionStatus,
   persistLastUserMessageAt,
 } from "../../../apps/backend/src/services/agent/persistence";
 import { getTurn, getTurnsForMessages } from "../../../apps/backend/src/db/turns";
@@ -144,6 +149,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
     await ensureCloudSession(SESSION);
   }
   beforeEach(async () => {
+    forgetChatTurns();
     vi.clearAllMocks();
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -370,7 +376,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
       has_older: false,
       has_newer: false,
     });
-    persistSessionWorking(SESSION);
+    persistSessionStatus(SESSION, "working");
     await startCloudTurn(SESSION, "rejected", "Hello", SELECTION);
     onFrame({
       type: "error",
@@ -379,7 +385,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
       message: "Provider account unavailable",
     });
 
-    expect(handler.liveTurnId(SESSION)).toBeUndefined();
+    expect(holdingTurn(SESSION)?.turnId).toBeUndefined();
     expect(sessionRow()).toMatchObject({
       status: "error",
       error_message: expect.stringContaining("Provider account unavailable"),
@@ -388,7 +394,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
     expect(page().messages).toEqual([]);
     onFrame(snapshot([]));
     await expect(startCloudTurn(SESSION, "retry", "Hello", SELECTION)).resolves.toBeUndefined();
-    expect(handler.liveTurnId(SESSION)).toBe("retry");
+    expect(holdingTurn(SESSION)?.turnId).toBe("retry");
   });
 
   it.each(["turn.started", "snapshot"])(
@@ -398,7 +404,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
       const messageId = send.mock.calls.at(-1)![0].messageId;
       const prompt = message("echo-accepted", 0, "accepted", "user");
       if (admission === "turn.started") {
-        persistSessionWorking(SESSION);
+        persistSessionStatus(SESSION, "working");
         onFrame({ type: "turn.started", turnId: "accepted", sessionId: PROVIDER, timestamp: T });
         onFrame({
           type: "message.started",
@@ -413,7 +419,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
         onFrame(snapshot([prompt], { status: "running", currentTurnId: "accepted" }));
       }
       onFrame({ type: "error", code: "MESSAGE_SEND_FAILED", messageId, message: "Late refusal" });
-      expect(handler.liveTurnId(SESSION)).toBe("accepted");
+      expect(holdingTurn(SESSION)?.turnId).toBe("accepted");
       expect(sessionRow()).toMatchObject({ status: "working", error_message: null });
       expect(page().messages.map((row) => row.id)).toEqual(["echo-accepted"]);
     }
@@ -424,14 +430,14 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
     const firstMessageId = send.mock.calls.at(-1)![0].messageId;
     onFrame(snapshot([], { turns: [ended("first")] }));
     await startCloudTurn(SESSION, "second", "Second", SELECTION);
-    persistSessionWorking(SESSION);
+    persistSessionStatus(SESSION, "working");
     onFrame({
       type: "error",
       code: "MESSAGE_SEND_FAILED",
       messageId: firstMessageId,
       message: "Late refusal",
     });
-    expect(handler.liveTurnId(SESSION)).toBe("second");
+    expect(holdingTurn(SESSION)?.turnId).toBe("second");
     expect(sessionRow()).toMatchObject({ status: "working", error_message: null });
   });
 
@@ -528,7 +534,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
       state: "streaming",
     } as SnapshotMessage["parts"][number];
     onFrame(snapshot([active], { currentTurnId: "turn-1" }));
-    expect(handler.liveTurnId(SESSION)).toBe("turn-1");
+    expect(holdingTurn(SESSION)?.turnId).toBe("turn-1");
     expect(sessionRow()).toMatchObject({ status: "working" });
     onFrame({
       type: "message.part.delta",
@@ -569,12 +575,12 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
       has_older: false,
       has_newer: false,
     });
-    handler.beginTurn(SESSION, "pending");
-    persistSessionWorking(SESSION);
+    claimTurn(SESSION, "pending");
+    persistSessionStatus(SESSION, "working");
     const sentAt = new Date(T + 60_000).toISOString();
     persistLastUserMessageAt(SESSION, sentAt);
     onFrame(snapshot([message("old", 0, "turn-1", "user")], { turns: [ended("turn-1")] }));
-    expect(handler.liveTurnId(SESSION)).toBe("pending");
+    expect(holdingTurn(SESSION)?.turnId).toBe("pending");
     expect(page().messages.at(-1)).toMatchObject({ id: "echo-pending", role: "user" });
     expect(sessionRow()).toMatchObject({
       status: "working",
@@ -584,10 +590,10 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
   });
 
   it("releases an unobserved admission when the snapshot proves that turn ended", () => {
-    handler.beginTurn(SESSION, "turn-1");
-    persistSessionWorking(SESSION);
+    claimTurn(SESSION, "turn-1");
+    persistSessionStatus(SESSION, "working");
     onFrame(snapshot([message("old", 0)], { turns: [ended("turn-1")] }));
-    expect(handler.liveTurnId(SESSION)).toBeUndefined();
+    expect(holdingTurn(SESSION)?.turnId).toBeUndefined();
     expect(sessionRow()).toMatchObject({ status: "idle" });
   });
 
@@ -603,7 +609,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
         ],
       })
     );
-    expect(handler.liveTurnId(SESSION)).toBe("turn-2");
+    expect(holdingTurn(SESSION)?.turnId).toBe("turn-2");
     expect(sessionRow()).toMatchObject({ status: "working", error_message: null });
     expect(refreshPr).not.toHaveBeenCalled();
   });
@@ -612,7 +618,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
     onFrame(snapshot([message("original", 0)]));
     const before = rows();
     received.mockClear();
-    handler.beginTurn(SESSION, "turn-1");
+    claimTurn(SESSION, "turn-1");
     onFrame({ type: "turn.started", sessionId: PROVIDER, turnId: "turn-1", timestamp: T });
     db.exec(
       "CREATE TRIGGER fail_restore BEFORE INSERT ON parts WHEN NEW.id = 'part-rejected' BEGIN SELECT RAISE(ABORT, 'restore write failed'); END;"
@@ -624,7 +630,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
     expect(sessionRow()).toMatchObject({ message_count: 1 });
     expect(hydrated()).toHaveLength(0);
     expect(page().messages.map((row) => row.id)).toEqual(["original"]);
-    expect(handler.liveTurnId(SESSION)).toBe("turn-1");
+    expect(holdingTurn(SESSION)?.turnId).toBe("turn-1");
     expect(refreshPr).not.toHaveBeenCalled();
   });
 

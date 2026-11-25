@@ -38,7 +38,8 @@ import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
 import type { Caller } from "../../api/registry";
 import { sameOrigin } from "../../db";
 import { removeQueuedMessage, resumeQueuedMessages, steerQueuedMessage } from "../agent/queue";
-import { liveTurnId, provideSessionTools } from "../agent/service";
+import { holdingTurn } from "../agent/chat-turn";
+import { provideSessionTools } from "../agent/service";
 import { getServerName } from "../server-name";
 import { currentHost } from "./access";
 import { addProjectTool } from "./add-project";
@@ -152,7 +153,7 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
           removeQueuedMessage(sessionId, message);
           return `Removed. ${queueView(caller, sessionId).note ?? "Nothing waits"}.`;
         }
-        const turnId = liveTurnId(sessionId);
+        const turnId = holdingTurn(sessionId)?.turnId;
         const outcome = await steerQueuedMessage(sessionId, message, turnId, "in_place");
         if (outcome === "own_turn")
           return `It waits for its own turn in its place.${hold ? ` The queue is ${hold}.` : ""}`;

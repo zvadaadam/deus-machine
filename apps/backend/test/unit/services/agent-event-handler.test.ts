@@ -57,9 +57,12 @@ vi.mock("../../../src/services/agent/persistence", () => ({
   persistAgentSessionId: mockPersistAgentSessionId,
   persistChanges: mockPersistChanges,
   persistTurn: mockPersistTurn,
-  persistSessionError: mockPersistSessionError,
+  persistStopStatus: vi.fn(() => ({ ok: true, value: true })),
+  persistSessionStatus: (id: string, status: string, message?: string, category?: string) =>
+    status === "working" && message === undefined
+      ? mockPersistSessionWorking(id)
+      : mockPersistSessionError(id, message, category, ...(status === "working" ? [status] : [])),
   persistSessionTitle: mockPersistSessionTitle,
-  persistSessionWorking: mockPersistSessionWorking,
 }));
 
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
@@ -116,6 +119,16 @@ function invalidated(): string[] {
 // Import after mocks
 // ============================================================================
 
+import {
+  admitTurn,
+  claimTurn,
+  forgetChatTurns,
+  lastTurn,
+  holdingTurn,
+  refuseTurn,
+  releaseTurn,
+  turnNotices,
+} from "../../../src/services/agent/chat-turn";
 import { createAgentEventHandler } from "../../../src/services/agent/event-handler";
 import { cloudSaveFailures, sessionEvents } from "@shared/api/sessions";
 import { published } from "../../helpers";
@@ -198,9 +211,22 @@ describe("agent event handler (canonical lifecycle stream)", () => {
   let handler: ReturnType<typeof createAgentEventHandler>;
 
   beforeEach(() => {
+    forgetChatTurns();
+    delete turnNotices.recover;
+    delete turnNotices.queue;
     vi.clearAllMocks();
     outcomes.length = 0;
     mockPersistChanges.mockImplementation(stubPersistChanges as never);
+    mockRestoreCloudSnapshot.mockImplementation(
+      (sessionId: string, snapshot: SessionSnapshotEvent) => {
+        const { events, messageIds } = projectCloudSnapshot(snapshot);
+        const conversation = events.reduce(
+          (state, event) => reduceConversationWithChanges(state, { ...event, sessionId }).state,
+          emptyConversation()
+        );
+        return { ok: true, value: { conversation, messageIds, providerCredentialSources: {} } };
+      }
+    );
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
     handler = createAgentEventHandler();
@@ -677,19 +703,6 @@ describe("agent event handler (canonical lifecycle stream)", () => {
           },
         ],
       });
-      mockRestoreCloudSnapshot.mockImplementation(
-        (sessionId: string, restored: SessionSnapshotEvent) => ({
-          ok: true,
-          value: {
-            conversation: projectCloudSnapshot(restored).events.reduce(
-              (state, event) => reduceConversationWithChanges(state, { ...event, sessionId }).state,
-              emptyConversation()
-            ),
-            messageIds: ["msg-1"],
-            providerCredentialSources: {},
-          },
-        })
-      );
       handler.hydrateCloudSnapshot(SESSION, snapshot);
       handler.handle(
         envelope({
@@ -1064,18 +1077,79 @@ describe("agent event handler (canonical lifecycle stream)", () => {
   // Turn admission mirror
   // ==========================================================================
 
+  describe("cloud snapshots", () => {
+    function restore(state: Partial<SessionSnapshotEvent["state"]>) {
+      const snapshot = SessionSnapshotEventSchema.parse({
+        type: "session.snapshot",
+        state: {
+          sessionId: SESSION,
+          organizationId: "org",
+          workspaceId: "w",
+          status: "ready",
+          ...state,
+        },
+      });
+      handler.hydrateCloudSnapshot(SESSION, snapshot);
+    }
+
+    it("adopts another client's turn on a free chat", () => {
+      restore({ currentTurnId: "browser-turn" });
+      expect(holdingTurn(SESSION)?.turnId).toBe("browser-turn");
+    });
+
+    it("releases the turn the snapshot replaced and leaves the successor's status alone on replay", () => {
+      claimTurn(SESSION, TURN);
+      handler.handle(
+        envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
+      );
+      restore({
+        currentTurnId: "browser-turn",
+        turns: [{ turnId: TURN, startedAt: T, endedAt: T + 1, stopReason: "end_turn" }],
+      });
+      expect(holdingTurn(SESSION)?.turnId).toBe("browser-turn");
+      expect(mockPersistTurn).not.toHaveBeenCalled();
+      handler.handle(envelope(turnEnded({ stopReason: "cancelled", timestamp: T + 2 })));
+      expect(lastOutcome()).toBeUndefined();
+      expect(holdingTurn(SESSION)?.turnId).toBe("browser-turn");
+    });
+
+    it("admits a platform start after a snapshot terminal stamped by a faster desktop clock", () => {
+      restore({ currentTurnId: TURN });
+      // The driver synthesizes this envelope from a metadata-only terminal on reconnect.
+      handler.handle(envelope(turnEnded({ timestamp: T + 60_000 })));
+      mockPersistSessionWorking.mockClear();
+      handler.handle(
+        envelope({ type: "turn.started", sessionId: SESSION, turnId: "next", timestamp: T })
+      );
+      expect(holdingTurn(SESSION)?.turnId).toBe("next");
+      expect(mockPersistSessionWorking).toHaveBeenCalledExactlyOnceWith(SESSION);
+    });
+
+    it("leaves a quiet snapshot release open to a later native end", () => {
+      restore({ currentTurnId: TURN });
+      restore({ currentTurnId: null });
+      expect(lastTurn(SESSION)).toMatchObject({ turnId: TURN, nativeEnd: false });
+    });
+
+    it("keeps our pending send when the snapshot has not seen it yet", () => {
+      claimTurn(SESSION, TURN);
+      restore({ currentTurnId: null });
+      expect(holdingTurn(SESSION)?.turnId).toBe(TURN);
+      expect(mockRestoreCloudSnapshot).toHaveBeenCalledWith(SESSION, expect.anything(), true);
+    });
+  });
+
   describe("turn admission mirror", () => {
     it("notifies the open chat when its admitted turn with a user message ends locally", () => {
-      const interrupted = vi.fn(() => ["unread"]);
-      const handler = createAgentEventHandler(interrupted);
-      handler.beginTurn(SESSION, TURN);
+      turnNotices.recover = () => ["unread"];
+      claimTurn(SESSION, TURN);
       handler.handle(
         envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
       );
       handler.handle(envelope(messageStarted({ role: "user", outputIndex: 0 })));
       handler.handle(envelope(partEvent));
       mockPublish.mockClear();
-      handler.giveUpTurn(SESSION, TURN, "cancelled");
+      releaseTurn(SESSION, TURN, { type: "cancelled" });
       expect(mockPersistTurn).toHaveBeenCalledWith(SESSION, {
         turnId: TURN,
         stopReason: "cancelled",
@@ -1089,7 +1163,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
     });
 
     it("adopts a cloud turn started by another client after our turn ends", () => {
-      handler.beginTurn(SESSION, TURN);
+      claimTurn(SESSION, TURN);
       handler.handle(
         envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
       );
@@ -1105,7 +1179,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
           timestamp: T + 1,
         })
       );
-      expect(handler.liveTurnId(SESSION)).toBe("browser-turn");
+      expect(holdingTurn(SESSION)?.turnId).toBe("browser-turn");
       // Another client's turn: the chat is working from its first event.
       expect(mockPersistSessionWorking).toHaveBeenCalledExactlyOnceWith(SESSION);
       handler.handle(
@@ -1123,14 +1197,26 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       });
     });
 
-    it("records a native ACK that returns after an instant terminal", () => {
-      handler.beginTurn(SESSION, TURN);
-      handler.handle(
-        envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
-      );
-      handler.handle(envelope(turnEnded()));
-      handler.confirmTurn(SESSION, TURN);
+    it.each([false, true])(
+      "a late ACK leaves the chat free after its turn ends (a second turn ended: %s)",
+      (secondEnded) => {
+        claimTurn(SESSION, TURN);
+        handler.handle(envelope(turnEnded()));
+        if (secondEnded) {
+          claimTurn(SESSION, "second");
+          handler.handle(envelope(turnEnded({ turnId: "second" })));
+        }
+        admitTurn(SESSION, TURN);
+        expect(holdingTurn(SESSION)).toBeUndefined();
+        expect(lastTurn(SESSION)?.turnId).toBe(secondEnded ? "second" : TURN);
+      }
+    );
 
+    it("keeps a replayed start and end in the history after a later turn has ended", () => {
+      handler.handle(envelope(turnEnded({ turnId: "historical", timestamp: T - 1 })));
+      claimTurn(SESSION, TURN);
+      handler.handle(envelope(turnEnded()));
+      outcomes.length = 0;
       handler.handle(
         envelope({
           type: "turn.started",
@@ -1140,32 +1226,27 @@ describe("agent event handler (canonical lifecycle stream)", () => {
         })
       );
       handler.handle(envelope(turnEnded({ turnId: "historical", stopReason: "error" })));
-      expect(handler.liveTurnId(SESSION)).toBeUndefined();
+      expect(holdingTurn(SESSION)?.turnId).toBeUndefined();
       expect(lastOutcome("historical")).toBeUndefined();
-      expect(handler.beginTurn(SESSION, "next")).toBe(true);
+      expect(claimTurn(SESSION, "next")).toBe(true);
     });
 
     it("refuses a second turn while one is live, and frees it at turn.ended", () => {
-      expect(handler.beginTurn(SESSION, TURN)).toBe(true);
-      expect(handler.beginTurn(SESSION, "turn-2")).toBe(false);
+      expect(claimTurn(SESSION, TURN)).toBe(true);
+      expect(claimTurn(SESSION, "turn-2")).toBe(false);
 
       handler.handle(envelope(turnEnded()));
 
-      expect(handler.beginTurn(SESSION, "turn-2")).toBe(true);
-    });
-
-    it("force-registers when the server accepted a turn we thought was busy", () => {
-      handler.beginTurn(SESSION, TURN);
-      expect(handler.beginTurn(SESSION, "turn-2", { force: true })).toBe(true);
+      expect(claimTurn(SESSION, "turn-2")).toBe(true);
     });
 
     it("rolls back only its own rejected admission", () => {
-      handler.beginTurn(SESSION, TURN);
-      handler.abortTurn(SESSION, "someone-else");
-      expect(handler.beginTurn(SESSION, "turn-2")).toBe(false);
+      claimTurn(SESSION, TURN);
+      refuseTurn(SESSION, "someone-else");
+      expect(claimTurn(SESSION, "turn-2")).toBe(false);
 
-      handler.abortTurn(SESSION, TURN);
-      expect(handler.beginTurn(SESSION, "turn-2")).toBe(true);
+      refuseTurn(SESSION, TURN);
+      expect(claimTurn(SESSION, "turn-2")).toBe(true);
     });
   });
 
@@ -1335,7 +1416,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
       // A fresh entry means the old one is gone: beginTurn only refuses when a
       // live turn is still registered.
-      expect(handler.beginTurn(SESSION, "turn-3")).toBe(true);
+      expect(claimTurn(SESSION, "turn-3")).toBe(true);
     });
   });
 

@@ -292,6 +292,7 @@ async function main() {
   // `reduceConversationWithChanges` → `persistChanges` → `applySessionFacts`
   // path the event handler runs, described by the same `describeEvent`. What
   // is left below is colouring and the harness's own "am I done yet".
+  const turnId = uuidv7();
   let turnDone = false;
   const facts: SessionFacts = { errorReported: false };
   let conversation = emptyConversation();
@@ -326,9 +327,9 @@ async function main() {
     const writes = isDelta
       ? []
       : persistChanges(sessionId, folded.state, folded.changes, (turn) =>
-          turnOutcomeFor(facts, turn)
+          turnOutcomeFor(facts, turnId, turn)
         );
-    const factWrites = applySessionFacts(facts, sessionId, event, conversation);
+    const factWrites = applySessionFacts(facts, turnId, sessionId, event, conversation);
 
     // The harness stops when the turn is over, or when an error ended it.
     // `isUnknownEvent` first: `UnknownEvent.type` is an open string, so
@@ -375,7 +376,6 @@ async function main() {
   banner("Sending Turn");
   console.log(`  ${c.dim}${opts.prompt}${c.reset}\n`);
 
-  const turnId = uuidv7();
   const params = buildTurnStartParams(sessionId, turnId, opts.agent as AgentHarness, opts.prompt, {
     cwd: opts.cwd,
     agentMessages: hasAgentMessages(sessionId),

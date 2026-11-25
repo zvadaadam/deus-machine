@@ -62,7 +62,6 @@ import { uuidv7 } from "@shared/lib/uuid";
 import * as workspaces from "@shared/api/workspaces";
 import type { FileChange } from "@shared/types/workspace";
 import type { SessionTurn } from "@shared/types/session";
-import { ACTIVE_TURN_STATUSES } from "@shared/enums";
 import { HARNESSES, LOCAL_HARNESSES, knownHarness } from "@shared/harnesses";
 import { githubRepoSlug } from "@shared/git-origin";
 import {
@@ -92,17 +91,12 @@ import {
   DifferentTurnMessageError,
 } from "../../lib/errors";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
-import { getLocalAgents, lastOutputAt } from "../agent/service";
+import { holdingTurn, setupStop } from "../agent/chat-turn";
+import { getLocalAgents } from "../agent/service";
 import { QueueLimitError, queuedMessages, enqueueMessage, steerMessage } from "../agent/queue";
 import { answer as answerToolRequest, pendingFor } from "../agent/tool-relay";
 import { continuedSettings, startSettings, type TurnSettings } from "../agent/turn-settings";
-import {
-  admittingAt,
-  currentTurnId,
-  sendMessage,
-  stoppedBeforeStart,
-  stopSession,
-} from "../agent/turns";
+import { sendMessage, stopSession } from "../agent/turns";
 import { invalidate, onInvalidate, runAsThisComputer as run } from "../query-engine";
 import { getServerName } from "../server-name";
 import { assertMayWrite, refusalFor, storedAccess } from "./access";
@@ -233,6 +227,7 @@ function endedOf(
 
 /** A first task the host holds while its workspace is being set up. */
 interface Held {
+  claimed: boolean;
   caller: Who;
   workspaceId: string;
   input: StartInput;
@@ -436,8 +431,11 @@ export function createDeusHost(): DeusHost {
   function lastEnded(ids: readonly string[], includeReceipts = false) {
     const found = getDatabase()
       .prepare(
-        `SELECT session_id, turn_id, outcome, cancelled_by, MAX(ended_at) AS ended_at FROM turns
-         WHERE ended_at IS NOT NULL AND session_id IN (SELECT value FROM json_each(?)) GROUP BY session_id`
+        `SELECT * FROM (
+           SELECT session_id, turn_id, ended_at, outcome, cancelled_by,
+             ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY ended_at DESC, end_seq DESC) AS n
+           FROM turns WHERE ended_at IS NOT NULL AND session_id IN (SELECT value FROM json_each(?))
+         ) WHERE n = 1`
       )
       .all(JSON.stringify(ids)) as {
       session_id: string;
@@ -461,16 +459,15 @@ export function createDeusHost(): DeusHost {
     );
   }
 
-  function statusOf(row: Row, ended?: TurnEnded): SessionStatus {
+  function statusOf(row: Row, stopped: boolean): SessionStatus {
     const id = row.session_id;
     if (row.state === "archived" || row.is_hidden) return "archived";
     if (!id) return row.state === "error" ? "error" : "setting_up";
-    const current = currentTurnId(id);
-    if (firsts.has(id) && !current) return "setting_up";
+    if (firsts.get(id)?.claimed === false) return "setting_up";
     if (pendingFor(id).some((request) => waitingOf(request))) return "needs_input";
-    if (ACTIVE_TURN_STATUSES.includes(row.s_status ?? "") || current) return "working";
+    if (holdingTurn(id)) return "working";
     if (row.s_status === "error") return "error";
-    return stoppedBeforeStart(id) || ended?.outcome === "cancelled" ? "stopped" : "idle";
+    return stopped ? "stopped" : "idle";
   }
 
   /** The entries the rows make: each workspace's chats by their number, its first before its row exists. */
@@ -485,14 +482,17 @@ export function createDeusHost(): DeusHost {
       const chat = row.chat ?? (counted.get(row.workspace_id) ?? 0) + 1;
       counted.set(row.workspace_id, chat);
       const last = ended.get(id);
-      const status = statusOf(row, last?.turn);
+      const stoppedInSetup = setupStop(id);
+      const status = statusOf(row, !!stoppedInSetup || last?.turn.outcome === "cancelled");
+      const cancelledBy = stoppedInSetup?.by ?? last?.turn.cancelledBy;
       if (status === "error" && row.error_category === "usage_limit") limited.add(id);
       // The workspace's title and time stand in only for a first chat with no row yet.
       const title = row.session_id ? row.s_title : row.ws_title;
       const sent = epochMs(row.session_id ? row.last_user_message_at : row.ws_updated_at);
+      const turn = holdingTurn(id);
       const activity =
         status === "working"
-          ? (lastOutputAt(id) ?? admittingAt(id) ?? sent)
+          ? (turn?.lastOutputAt ?? turn?.sentAt ?? sent)
           : Math.max(sent ?? 0, last?.at ?? 0);
       const root = computeWorkspacePath({ root_path: row.root_path, slug: row.slug });
       // Why: a failed start, or a first task that could not be delivered (no messages yet).
@@ -509,6 +509,7 @@ export function createDeusHost(): DeusHost {
           chat,
           current: row.current_session_id ? row.current_session_id === id : chat === 1,
           status,
+          ...(status === "stopped" && cancelledBy ? { cancelledBy } : {}),
           startedBy: readOrigin(row.s_started_by ?? (row.session_id ? null : row.ws_started_by)),
           harness: knownHarness(row.agent_harness),
           ...(title ? { title } : {}),
@@ -620,6 +621,8 @@ export function createDeusHost(): DeusHost {
     input: StartInput,
     settings: TurnSettings
   ) {
+    const first = firsts.get(sessionId);
+    if (first) first.claimed = true;
     try {
       mayTouch(caller, sessionId);
       if (input.title) {
@@ -643,18 +646,20 @@ export function createDeusHost(): DeusHost {
       const why = said instanceof OperatorError ? refusalSentence(said) : "";
       undelivered(sessionId, input.turnId, why);
       throw said;
+    } finally {
+      if (first && firsts.get(sessionId) === first) drop(sessionId);
     }
   }
 
   /** A competing turn owns the chat even before its first message or while still in app setup. */
   function undelivered(sessionId: string, turnId: string, why: string) {
+    if (holdingTurn(sessionId)) return;
     getDatabase()
       .prepare(
         `UPDATE sessions SET status = 'error', error_message = ? WHERE id = ? AND message_count = 0
-         AND status NOT IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})
          AND NOT EXISTS (SELECT 1 FROM turns WHERE session_id = sessions.id AND turn_id != ?)`
       )
-      .run(`${NOT_DELIVERED}${why ? ` ${why}` : ""}`, sessionId, ...ACTIVE_TURN_STATUSES, turnId);
+      .run(`${NOT_DELIVERED}${why ? ` ${why}` : ""}`, sessionId, turnId);
     invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
   }
 
@@ -667,14 +672,14 @@ export function createDeusHost(): DeusHost {
    * Hold the first task until its chat is ready. A failed, archived or over-age
    * start drops it. Stop aborts app setup at once and waits for a start already on the wire.
    */
-  function hold(sessionId: string, held: Omit<Held, "unwatch" | "since">) {
+  function hold(sessionId: string, held: Omit<Held, "unwatch" | "since" | "claimed">) {
     const stop = onInvalidate((resources) => {
       if (resources.includes("workspaces")) look();
     });
-    const entry: Held = { ...held, since: Date.now(), unwatch: stop };
+    const entry: Held = { ...held, claimed: false, since: Date.now(), unwatch: stop };
     firsts.set(sessionId, entry);
     function look() {
-      if (firsts.get(sessionId) !== entry) return;
+      if (entry.claimed || firsts.get(sessionId) !== entry) return;
       const w = getDatabase()
         .prepare("SELECT state, current_session_id FROM workspaces WHERE id = ?")
         .get(held.workspaceId) as { state: string; current_session_id: string | null } | undefined;
@@ -685,14 +690,7 @@ export function createDeusHost(): DeusHost {
           undelivered(sessionId, held.input.turnId, "Setup took longer than 30 minutes.");
           return;
         }
-        entry.unwatch();
-        void sendFirst(held.caller, sessionId, held.input, held.settings)
-          .catch(() => {})
-          .finally(() => {
-            firsts.delete(sessionId);
-            // Told after the hold is gone, so a wait that reads again sees the outcome.
-            invalidate(["sessions"], { sessionIds: [sessionId] });
-          });
+        void sendFirst(held.caller, sessionId, held.input, held.settings).catch(() => {});
         invalidate(["sessions"], { sessionIds: [sessionId] });
       }
     }
@@ -701,11 +699,11 @@ export function createDeusHost(): DeusHost {
 
   /** The chat's turn ended or not, read again at each change, for a stop to confirm. */
   async function ended(sessionId: string, turnId: string): Promise<boolean> {
-    if (currentTurnId(sessionId) !== turnId) return true;
+    if (holdingTurn(sessionId)?.turnId !== turnId) return true;
     return new Promise<boolean>((resolve) => {
       const timer = setTimeout(() => finish(false), STOP_WAIT_MS);
       const stop = onInvalidate(() => {
-        if (currentTurnId(sessionId) !== turnId) finish(true);
+        if (holdingTurn(sessionId)?.turnId !== turnId) finish(true);
       });
       function finish(done: boolean) {
         clearTimeout(timer);
@@ -717,7 +715,7 @@ export function createDeusHost(): DeusHost {
 
   /** Stop this turn, by whoever asks, and confirm its end. */
   async function stopTurn(caller: Who, sessionId: string, turnId: string): Promise<CancelOutcome> {
-    if (currentTurnId(sessionId) !== turnId) return "not_running";
+    if (holdingTurn(sessionId)?.turnId !== turnId) return "not_running";
     mayTouch(caller, sessionId);
     const { unconfirmed } = await stopSession({ sessionId }, namedOrigin(caller, everything));
     if (unconfirmed) return "unconfirmed";
@@ -758,7 +756,7 @@ export function createDeusHost(): DeusHost {
           "unsupported",
           `send_message: this chat's agent ${JSON.stringify(session.agent_harness)} does not run here. Nothing was sent.`
         );
-      if (firsts.has(sessionId) && !currentTurnId(sessionId))
+      if (firsts.get(sessionId)?.claimed === false)
         throw new Refused({ code: "busy", detail: "This chat is being set up." });
       const { turns } = await run(sessions.messages, { sessionId, limit: 50 });
       const settings = continuedSettings(harness, turns);
@@ -817,8 +815,13 @@ export function createDeusHost(): DeusHost {
             cancelled_by: null,
           })),
       ];
-      const running = currentTurnId(sessionId);
-      const stopped = stoppedBeforeStart(sessionId);
+      const running = holdingTurn(sessionId)?.turnId;
+      const prior = setupStop(sessionId);
+      const stopped = prior && {
+        turnId: prior.turnId,
+        cancelledBy: prior.by,
+        outcome: "cancelled" as const,
+      };
       const last = stopped
         ? { ...stopped, steers: {} }
         : lastEnded([sessionId], true).get(sessionId)?.turn;
@@ -877,11 +880,11 @@ export function createDeusHost(): DeusHost {
     },
 
     async turn(_caller, sessionId, turnId): Promise<TurnFact> {
-      if (currentTurnId(sessionId) === turnId)
+      if (holdingTurn(sessionId)?.turnId === turnId)
         return { state: "running", steers: steerReceipts(sessionId, turnId) };
-      const stopped = stoppedBeforeStart(sessionId);
-      if (stopped?.turnId === turnId)
-        return { state: "ended", outcome: stopped.outcome, cancelledBy: stopped.cancelledBy };
+      const last = setupStop(sessionId);
+      if (last?.turnId === turnId)
+        return { state: "ended", outcome: "cancelled", cancelledBy: last.by };
       const row = getDatabase()
         .prepare(
           "SELECT ended_at, outcome, cancelled_by FROM turns WHERE session_id = ? AND turn_id = ?"
@@ -977,9 +980,10 @@ export function createDeusHost(): DeusHost {
     cancel: (caller, sessionId, turnId): Promise<CancelOutcome> =>
       refusing(async () => {
         if (turnId) return stopTurn(caller, sessionId, turnId);
-        const held = firsts.get(sessionId);
-        if (!held) return "not_running";
-        if (currentTurnId(sessionId)) return stopTurn(caller, sessionId, held.input.turnId);
+        // A Stop which saw setup may arrive just after the first task claimed the chat.
+        const first = firsts.get(sessionId);
+        if (!first) return "not_running";
+        if (first.claimed) return stopTurn(caller, sessionId, first.input.turnId);
         assertMayWrite(appCaller(caller));
         drop(sessionId);
         return "first_task_dropped";
