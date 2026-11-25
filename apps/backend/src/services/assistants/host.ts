@@ -794,8 +794,8 @@ export function createDeusHost(): DeusHost {
       if (!getSessionRaw(db, sessionId))
         return { status: entry.status, note: entry.note, turns: [], waiting: [] };
       // The cursor is where the read ended: the last message of a turn that has ended (a
-      // turn still running is read again, whole, next time), and the last turn end it saw.
-      const after = options.after === undefined ? undefined : /^(\d+)\.(\d+)$/.exec(options.after);
+      // running turn is read again whole), the last stored end and any setup stop's turn id.
+      const after = options.after?.match(/^(\d+)\.(\d+)(?:\.(.+))?$/s);
       if (options.after !== undefined && !after)
         throw new OperatorError("stale_cursor", "That cursor is not this host's.");
       const rows = after
@@ -841,6 +841,9 @@ export function createDeusHost(): DeusHost {
             })),
         };
       });
+      const stoppedId = stopped?.turnId;
+      if (stopped && after?.[3] !== stoppedId && !turns.some((t) => t.turnId === stoppedId))
+        turns.push({ ...stopped, messages: [] });
       const read = rows.at(-1)?.seq ?? (after ? Number(after[1]) : 0);
       // Not past the first message of a turn that has not ended: its messages still change.
       const open = (
@@ -863,7 +866,7 @@ export function createDeusHost(): DeusHost {
         note: entry.note,
         turns,
         waiting: pendingFor(sessionId).flatMap((request) => waitingOf(request) ?? []),
-        cursor: `${seq}.${endMark ?? 0}` as never,
+        cursor: `${seq}.${endMark ?? 0}${stoppedId ? `.${stoppedId}` : ""}` as never,
         ...(running ? { running } : {}),
         ...(last ? { lastEnded: last } : {}),
         // A read with a cursor continues from it: what precedes the page was read already.

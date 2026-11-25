@@ -384,6 +384,36 @@ describe("stopping the current turn", () => {
     expect(engine.cancelTurn).not.toHaveBeenCalled();
   });
 
+  it("read_session names the chat that stopped setup after the previous turn and advances the cursor", async () => {
+    db.exec("INSERT INTO sessions (id, workspace_id) VALUES ('lead', 'w'), ('reader', 'w')");
+    const reader = { ...chatCaller, sessionId: "reader" };
+    const read = (after?: string) =>
+      operator.call("read_session", { session: sessionId, after }, reader);
+    const cursor = (text: string) => JSON.parse(text.match(/^cursor: (.+)$/m)![1]!) as string;
+    await send("previous");
+    reply("previous", "Fixed the test.");
+    end("previous");
+    const before = cursor(await read());
+
+    const release = holdAppSetup();
+    const starting = expect(send("A")).rejects.toThrow("Stopped before it started.");
+    await stopFromChat();
+    release();
+    await starting;
+
+    const credit = '— turn cancelled by "checkout:2"';
+    expect(await read()).toContain(`— turn done\n${credit}`);
+    expect(await operator.call("read_session", { session: sessionId }, chatCaller)).toContain(
+      "— turn cancelled by you"
+    );
+    const next = await read(before);
+    expect(next).toContain(credit);
+    expect(next).not.toContain("— turn done");
+    const after = await read(cursor(next));
+    expect(after).toContain("(status: stopped)");
+    expect(after).not.toContain("— turn cancelled");
+  });
+
   it("a wait wakes stopped and reads the credited setup end after an earlier reply", async () => {
     await send("previous");
     reply("previous", "Fixed the test.");
@@ -410,7 +440,10 @@ describe("stopping the current turn", () => {
     expect(await view()).toMatchObject({
       status: "stopped",
       lastEnded: { turnId: "A", outcome: "cancelled", cancelledBy: fromPerson },
-      turns: [{ turnId: "previous", messages: [{ parts: [{ text: "Fixed the test." }] }] }],
+      turns: [
+        { turnId: "previous", messages: [{ parts: [{ text: "Fixed the test." }] }] },
+        { turnId: "A", outcome: "cancelled", cancelledBy: fromPerson, messages: [] },
+      ],
     });
     expect(await waiting).toContain("status: stopped");
   });
