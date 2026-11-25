@@ -1,4 +1,3 @@
-import { createMiddleware } from "hono/factory";
 import path from "path";
 import { getDatabase } from "../lib/database";
 import { NotFoundError } from "../lib/errors";
@@ -37,11 +36,3 @@ export function loadWorkspace(id: string): {
   }
   return { workspace, workspacePath: computeWorkspacePath(workspace) };
 }
-
-/** HTTP form of `loadWorkspace`: sets `workspace` and `workspacePath` from the `:id` param. */
-export const withWorkspace = createMiddleware(async (c, next) => {
-  const { workspace, workspacePath } = loadWorkspace(c.req.param("id")!);
-  c.set("workspace", workspace);
-  c.set("workspacePath", workspacePath);
-  await next();
-});

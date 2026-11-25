@@ -6,6 +6,7 @@
 // only for both. A direct (local network) pairing has neither and works only
 // directly; a relay grant is never accepted on the direct path.
 
+import { fileHandles } from "./relay-file-handles";
 import { randomBytes, randomInt, createHash } from "crypto";
 import { getDatabase } from "../lib/database";
 import { invalidate } from "./query-engine";
@@ -530,6 +531,7 @@ export function listDevices(): (Omit<PairedDevice, "token_hash"> & { connected: 
 export function revokeDevice(id: string): boolean {
   const db = getDatabase();
   const result = db.prepare("DELETE FROM paired_devices WHERE id = ?").run(id);
+  fileHandles.revoke(id);
   closeDeviceConnections(id);
   if (result.changes > 0) notifyDevicesChanged();
   return result.changes > 0;

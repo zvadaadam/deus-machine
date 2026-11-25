@@ -135,7 +135,7 @@ export function getWorkspaceById(
   return row && withWorkspaceChats(db, [row])[0];
 }
 
-/** Used by withWorkspace middleware — lighter query without session JOIN. */
+/** Load the workspace and its repository without joining the current chat. */
 export function getWorkspaceForMiddleware(
   db: Database.Database,
   id: string

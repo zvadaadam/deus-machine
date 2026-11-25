@@ -379,14 +379,6 @@ export function isBrowserPreviewPath(path: string): boolean {
   return extension != null && BROWSER_PREVIEW_EXTENSIONS.has(extension);
 }
 
-export function createWorkspacePreviewUrl(
-  baseUrl: string,
-  workspaceId: string,
-  relativePath: string
-): string {
-  return `${baseUrl}/workspaces/${encodeURIComponent(workspaceId)}/file-preview?path=${encodeURIComponent(relativePath)}`;
-}
-
 function basename(path: string): string {
   return path.split("/").filter(Boolean).pop() ?? path;
 }

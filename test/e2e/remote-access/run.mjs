@@ -637,6 +637,7 @@ try {
     directory,
     output,
     check,
+    hostDb,
     relayUrl: relay.ws,
     cloudUrl: cloud.base,
     machineId: machineA,

@@ -16,6 +16,8 @@ import { WebSocket } from "ws";
 import { match } from "ts-pattern";
 import type { RelayState, RelayStatus } from "@shared/types/devices";
 import { RELAY_PROTOCOL, type ServerFrame, type RelayFrame } from "@shared/types/relay";
+import { fileHandles } from "./relay-file-handles";
+import { RelayFileStreams } from "./relay-file-streams";
 import { getSetting } from "./settings.service";
 import { getServerName } from "./server-name";
 import {
@@ -51,6 +53,7 @@ import { handleFrame as handleQueryFrame, removeSubs as removeQuerySubs } from "
 // ---- Tunnel State ----
 
 let tunnelWs: WebSocket | null = null;
+let fileStreams: RelayFileStreams | null = null;
 /** The account the current tunnel serves; a different signed-in account replaces it. */
 let hostAccount: string | null = null;
 let machineId: string | null = null;
@@ -115,6 +118,9 @@ export function reconcileRelay({ restart = false }: { restart?: boolean } = {}):
 }
 
 export function disconnectFromRelay(): void {
+  fileHandles.clear();
+  fileStreams?.disconnect();
+  fileStreams = null;
   hostAccount = null;
   machineId = null;
   lastError = null;
@@ -222,6 +228,13 @@ async function openTunnel(): Promise<void> {
     return;
   }
   tunnelWs = socket;
+  fileStreams = new RelayFileStreams(
+    (frame) => sendToRelay(frame, socket),
+    (chunk) =>
+      new Promise<void>((resolve, reject) => {
+        socket.send(chunk, { binary: true }, (error) => (error ? reject(error) : resolve()));
+      })
+  );
   // A replaced or abandoned socket's late events must not touch its successor.
   const current = () => tunnelWs === socket;
 
@@ -229,7 +242,7 @@ async function openTunnel(): Promise<void> {
     if (!current()) return;
     console.log("[Relay] Tunnel connected, registering...");
     lastError = null;
-    sendToRelay({ type: "register", serverName: getServerName() });
+    sendToRelay({ type: "register", serverName: getServerName(), routeKey: fileHandles.routeKey });
     // Start backoff over only once the tunnel has held: a tunnel that keeps
     // being replaced (two Deus apps hosting one machine) must not redial hot.
     if (stableTimer) clearTimeout(stableTimer);
@@ -260,6 +273,8 @@ async function openTunnel(): Promise<void> {
   socket.on("close", (code, reason) => {
     if (!current()) return;
     console.log(`[Relay] Tunnel closed: ${code} ${reason}`);
+    fileStreams?.disconnect();
+    fileStreams = null;
     tunnelWs = null;
     dropClients();
     if (String(reason) === DISPLACED) {
@@ -364,6 +379,9 @@ async function admitAssistantClient(
 
 function handleRelayFrame(frame: RelayFrame): void {
   match(frame)
+    .with({ type: "file_open" }, { type: "file_credit" }, { type: "file_cancel" }, (f) =>
+      fileStreams?.receive(f)
+    )
     .with({ type: "registered" }, () => {
       console.log("[Relay] Registered with relay successfully");
     })
@@ -480,8 +498,8 @@ function handlePairRequest(
 // envelope limit is 33,554,432 bytes in our measurements. Leave 4 KiB of headroom.
 const MAX_RELAY_FRAME_BYTES = 32 * 1024 * 1024 - 4096;
 
-function sendToRelay(frame: ServerFrame): void {
-  if (tunnelWs?.readyState !== WebSocket.OPEN) return;
+function sendToRelay(frame: ServerFrame, socket = tunnelWs): void {
+  if (socket?.readyState !== WebSocket.OPEN) return;
   const encoded = Buffer.from(JSON.stringify(frame));
   if (encoded.length > MAX_RELAY_FRAME_BYTES) {
     console.warn(`[Relay] Dropped ${frame.type} (${encoded.length} bytes)`);
@@ -489,7 +507,7 @@ function sendToRelay(frame: ServerFrame): void {
     return;
   }
   try {
-    tunnelWs.send(encoded, { binary: false });
+    socket.send(encoded, { binary: false });
   } catch {
     // Will be handled by close/error handlers
   }

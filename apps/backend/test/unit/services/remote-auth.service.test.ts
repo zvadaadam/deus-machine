@@ -1,5 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { createHash } from "crypto";
+import { fileHandles } from "../../../src/services/relay-file-handles";
+import { statSync } from "node:fs";
 
 const mockStmt = {
   all: vi.fn<(...args: any[]) => any>(() => []),
@@ -208,9 +210,16 @@ describe("listDevices", () => {
 });
 
 describe("revokeDevice", () => {
-  it("returns true when device was deleted", () => {
+  it("revokes the device and its file links together", () => {
+    const link = fileHandles.issue("dev1", {
+      source: { kind: "recording", path: "/tmp/movie.mp4" },
+      realPath: "/tmp/movie.mp4",
+      type: "video/mp4",
+      stat: statSync(import.meta.filename),
+    });
     mockStmt.run.mockReturnValue({ changes: 1 });
     expect(revokeDevice("dev1")).toBe(true);
+    expect(fileHandles.lookup(link)).toBeUndefined();
   });
 
   it("returns false when no device found", () => {

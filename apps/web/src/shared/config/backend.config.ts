@@ -5,7 +5,7 @@
  * - Electron: localhost WS + HTTP via IPC-resolved port
  * - Web-dev: localhost WS + HTTP via VITE_BACKEND_PORT
  * - Web-standalone: same-origin proxy (CLI server / self-hosted)
- * - Web-production (relay): WS through relay.deusmachine.ai, HTTP tunneled over WS
+ * - Web-production (relay): WS through relay.deusmachine.ai, media at the URLs returned by the Mac
  *
  * Local endpoints use the current cached backend port so a restart can move
  * the connection to a new port. A runtime can bind its deployment mode and host.
@@ -59,7 +59,6 @@ export const RELAY_BASE_URL =
  * - Electron/web-dev: ws://localhost:{port}/ws + http://localhost:{port}/api
  * - Web-standalone: same-origin proxy (ws://{host}/ws + http://{host}/api)
  * - Web-production: wss://relay.deusmachine.ai/api/servers/{serverId}/connect
- *   (HTTP goes through WS bridge, so apiBase is unused in relay mode)
  */
 export async function resolveBackendEndpoints(
   serverId?: string,
@@ -75,8 +74,6 @@ export async function resolveBackendEndpoints(
     const encodedId = encodeURIComponent(id);
     return {
       wsUrl: `${RELAY_BASE_URL}/api/servers/${encodedId}/connect`,
-      // In relay mode, HTTP is tunneled over WS — apiBase is a placeholder
-      // that should never be used directly (client.ts intercepts requests).
       apiBase: `${RELAY_BASE_URL}/api/servers/${encodedId}`,
     };
   }

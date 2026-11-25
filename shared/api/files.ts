@@ -7,6 +7,16 @@ import { stream } from "./stream";
 
 const workspaceId = z.object({ workspaceId: z.string().min(1) });
 
+/** An origin-relative /api path for direct callers, or an absolute URL for a paired relay device. */
+export const fileUrl = read({
+  name: "fileUrl",
+  input: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("recording"), path: z.string().min(1) }),
+    workspaceId.extend({ kind: z.literal("preview"), path: z.string().min(1) }),
+  ]),
+  output: out<{ url: string }>(),
+});
+
 /** The workspace's files as a tree, ignored files left out. */
 export const workspaceFiles = read({
   name: "workspaceFiles",

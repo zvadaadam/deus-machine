@@ -10,7 +10,9 @@ import { call, getRuntimeClient } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 import type { Settings } from "@shared/types/settings";
 import { native } from "@/platform/native";
-import { getBaseURL } from "@/shared/config/api.config";
+import { capabilities } from "@/platform/capabilities";
+import { readFileUrl } from "@/features/file-browser/api/fileUrl";
+import { getErrorMessage } from "@shared/lib/errors";
 import { isMobileViewport } from "@/shared/hooks/use-mobile";
 import { isTabVisible, tabsFor } from "@/app/layouts/content-tabs";
 import { browserWindowActions } from "@/features/browser/store/browserWindowStore";
@@ -26,7 +28,7 @@ import {
   type ChatOpening,
   type ChatPlace,
 } from "@/features/workspace/lib/reach";
-import { createWorkspacePreviewUrl, type ChatResource, type ResourceAction } from "./chatResources";
+import type { ChatResource, ResourceAction } from "./chatResources";
 
 /** The opening a resource card's action stands for. */
 export function openingOf(action: ResourceAction, place: ChatPlace): ChatOpening {
@@ -144,13 +146,14 @@ export async function openFromChat(workspaceId: string, opening: ChatOpening): P
     })
     .with({ to: "external" }, ({ url }) => native.window.openExternal(url))
     .with({ to: "file-preview" }, async ({ path }) => {
+      const tab = capabilities.nativeBrowser ? null : native.window.openExternalPending();
       try {
-        showInBrowserTab(
-          workspaceId,
-          createWorkspacePreviewUrl(await getBaseURL(), workspaceId, path)
-        );
+        const url = await readFileUrl(["preview", path, workspaceId]);
+        if (tab) await tab.open(url);
+        else showInBrowserTab(workspaceId, url);
       } catch (error) {
-        console.warn("[chat] Failed to open file preview:", error);
+        tab?.cancel();
+        toast.error(getErrorMessage(error));
       }
     })
     .with({ to: "files" }, ({ path, target }) =>

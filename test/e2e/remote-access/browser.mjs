@@ -7,6 +7,7 @@ import { createWriteStream } from "node:fs";
 import path from "node:path";
 import { createServer } from "vite";
 import { chromium } from "playwright";
+import { testRelayedFiles } from "./files.mjs";
 import { until } from "./stack.mjs";
 
 const CLIENT = "/src/platform/ws/query-protocol-client.ts";
@@ -16,6 +17,7 @@ export async function testBrowser({
   directory,
   output,
   check,
+  hostDb,
   relayUrl,
   cloudUrl,
   machineId,
@@ -293,6 +295,7 @@ export async function testBrowser({
       // dialog closes, and opening it again shows a new code.
       const shownCode = mac.locator("p.font-mono.text-2xl");
       const spent = (await shownCode.innerText()).trim();
+      const previousIds = new Set((await hostApi("/remote-auth/devices")).devices.map((d) => d.id));
       const pairer = await (await phone(sessions.aliceWeb)).open();
       await pairer.goto(`${base}s/${machineId}`);
       const field = pairer.getByPlaceholder("WORD WORD");
@@ -315,6 +318,22 @@ export async function testBrowser({
       );
       await mac.close();
       check("After a device pairs, it shows as connected and Add device shows a new code");
+
+      const newDevices = (await hostApi("/remote-auth/devices")).devices.filter(
+        (device) => !previousIds.has(device.id)
+      );
+      assert.equal(newDevices.length, 1);
+      await testRelayedFiles({
+        root,
+        hostDb,
+        page: pairer,
+        workspaceUrl: `${base}s/${machineId}/w/${hostDb.workspace}`,
+        relayUrl,
+        revoke: () => hostWrite("revokeDevice", { deviceId: newDevices[0].id }),
+      });
+      check(
+        "A paired phone recovers a recording thumbnail and player after their handles stop working, plays and seeks, reads an exact middle range and decodes a preview. HTML is refused and revocation makes its renewed URL return 404"
+      );
     } finally {
       await desktopUi.close();
     }

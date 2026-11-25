@@ -418,26 +418,13 @@ describe("file reads through the object", () => {
     await message({ type: "file_end", streamId: next.id });
     expect(new Uint8Array(await (await next.result).arrayBuffer())).toEqual(Uint8Array.of(42));
     const gone = start();
+    host.readyState = 2; // workerd reports CLOSING on webSocketError.
     await relay.webSocketError(socket(host), new Error("disconnected"));
     await denied(gone.result);
     const count = opens().length;
     const afterError = fetchFile();
     expect(opens()).toHaveLength(count);
     await denied(afterError);
-  });
-
-  it("marks the host offline and tells viewers even if file teardown throws", async () => {
-    const { clientWs } = await connectAndAuthClient(relay, state);
-    vi.spyOn(host, "serializeAttachment").mockImplementationOnce(() => {
-      throw new Error("socket unavailable");
-    });
-    await relay.webSocketError(socket(host), new Error("failed"));
-    expect(await state.storage.get("tunnelRegistered")).toBe(false);
-    expect(clientWs._sentMessages).toContainEqual(
-      expect.objectContaining({ type: "server_reconnecting" })
-    );
-    expect(host.readyState).not.toBe(1);
-    await denied(fetchFile());
   });
 
   it("queues 32 after eight opens, removes cancelled waiters and promotes in FIFO order", async () => {

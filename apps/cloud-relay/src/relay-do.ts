@@ -287,14 +287,8 @@ export class RelayDO extends DurableObject {
     const tags = this.ctx.getTags(ws);
 
     if (tags.includes("tunnel")) {
-      try {
-        this.setFileRouteKey(ws);
-      } catch {
-        // If the attachment still holds its key, retire the socket before another file request.
-        ws.close(1011, "File route unavailable");
-      } finally {
-        await this.handleServerDisconnect(ws);
-      }
+      await this.handleServerDisconnect(ws);
+      this.files.disconnect(ws);
     } else if (tags.includes("pairer")) {
       const pairId = tags.find((t) => t !== "pairer");
       if (pairId) {
@@ -459,8 +453,7 @@ export class RelayDO extends DurableObject {
 
   private setFileRouteKey(ws: WebSocket, routeKey?: string): void {
     // A tunnel serves files only under its registered key, and changing or dropping it ends its reads.
-    const identity =
-      ws.readyState === 1 ? (ws.deserializeAttachment() as SocketIdentity | null) : null;
+    const identity = ws.deserializeAttachment() as SocketIdentity | null;
     if (identity && identity.routeKey === routeKey) return;
     this.files.disconnect(ws);
     if (identity) ws.serializeAttachment({ ...identity, routeKey } satisfies SocketIdentity);

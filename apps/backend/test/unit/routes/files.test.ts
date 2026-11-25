@@ -2,21 +2,18 @@ import { vi, describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
 import { Readable } from "stream";
 import { errorHandler } from "../../../src/middleware/error-handler";
+import { NotFoundError } from "../../../src/lib/errors";
 
 // The preview route, the one workspace file read a browser makes by URL. The
 // tree, text and search operations are tested in ../api/files.test.ts.
 
-const { mockWithWorkspace } = vi.hoisted(() => ({
-  mockWithWorkspace: vi.fn((c: any, next: any) => {
-    c.set("workspace", { id: "ws-123", root_path: "/repos/myrepo", slug: "test-ws" });
-    c.set("workspacePath", "/repos/myrepo/.deus/test-ws");
-    return next();
-  }),
+const { loadWorkspace } = vi.hoisted(() => ({
+  loadWorkspace: vi.fn(() => ({
+    workspace: { kind: "local" },
+    workspacePath: "/repos/myrepo/.deus/test-ws",
+  })),
 }));
-
-vi.mock("../../../src/middleware/workspace-loader", () => ({
-  withWorkspace: mockWithWorkspace,
-}));
+vi.mock("../../../src/middleware/workspace-loader", () => ({ loadWorkspace }));
 
 vi.mock("../../../src/lib/database", () => ({
   getDatabase: vi.fn(),
@@ -29,7 +26,7 @@ vi.mock("../../../src/db", () => ({
 const { mockExistsSync, mockRealpathSync, mockStatSync, mockCreateReadStream } = vi.hoisted(() => ({
   mockExistsSync: vi.fn(() => true),
   mockRealpathSync: vi.fn((p: string) => p),
-  mockStatSync: vi.fn(() => ({ isFile: () => true, size: 7 })),
+  mockStatSync: vi.fn(() => ({ isFile: (): boolean => true, size: 7 })),
   mockCreateReadStream: vi.fn(),
 }));
 
@@ -66,6 +63,28 @@ beforeEach(() => {
 });
 
 describe("GET /workspaces/:id/file-preview", () => {
+  it("reports a missing workspace before asking for a preview path", async () => {
+    loadWorkspace.mockImplementationOnce(() => {
+      throw new NotFoundError("Workspace not found");
+    });
+    const missing = await app.request("/workspaces/absent/file-preview");
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toEqual({ error: "Workspace not found" });
+    const found = await app.request("/workspaces/ws-123/file-preview");
+    expect(found.status).toBe(400);
+    expect(await found.json()).toEqual({ error: "path parameter is required" });
+  });
+
+  it("checks a preview directory before its extension, and a recording extension before its stat", async () => {
+    mockStatSync.mockReturnValue({ isFile: () => false, size: 0 });
+    const directory = await app.request("/workspaces/ws-123/file-preview?path=assets");
+    expect(directory.status).toBe(400);
+    expect(await directory.json()).toEqual({ error: "Not a file" });
+    const recording = await app.request("/files/stream?path=/tmp/unknown");
+    expect(recording.status).toBe(400);
+    expect(await recording.json()).toEqual({ error: "unsupported file type" });
+  });
+
   it("streams browser-previewable workspace files", async () => {
     const res = await app.request("/workspaces/ws-123/file-preview?path=assets/icon.png");
     expect(res.status).toBe(200);
@@ -87,11 +106,7 @@ describe("GET /workspaces/:id/file-preview", () => {
   });
 
   it("refuses a cloud workspace in words instead of reading the backend's own folder", async () => {
-    mockWithWorkspace.mockImplementationOnce((c: any, next: any) => {
-      c.set("workspace", { id: "ws-cloud", kind: "cloud", root_path: null, slug: "cloud-ws" });
-      c.set("workspacePath", "");
-      return next();
-    });
+    loadWorkspace.mockReturnValueOnce({ workspace: { kind: "cloud" }, workspacePath: "" });
     const res = await app.request("/workspaces/ws-cloud/file-preview?path=index.html");
     expect(res.status).toBe(400);
     expect(JSON.stringify(await res.json())).toContain("not on this computer");
@@ -103,5 +118,35 @@ describe("GET /workspaces/:id/file-preview", () => {
     const res = await app.request("/workspaces/ws-123/file-preview?path=README.md");
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect(mockCreateReadStream).not.toHaveBeenCalled();
+  });
+});
+
+describe("file containment and recording ranges", () => {
+  it("refuses a preview symlink whose target leaves the workspace", async () => {
+    mockRealpathSync.mockImplementation((p) =>
+      p.endsWith("/alias.png") ? "/other/private.png" : p
+    );
+    const res = await app.request("/workspaces/ws-123/file-preview?path=alias.png");
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid file path" });
+    expect(mockCreateReadStream).not.toHaveBeenCalled();
+  });
+
+  it("refuses a recording outside the temp roots and unsupported files inside them", async () => {
+    expect((await app.request("/files/stream?path=/independent-root/movie.mp4")).status).toBe(403);
+    expect((await app.request("/files/stream?path=/tmp/page.html")).status).toBe(400);
+    expect(mockCreateReadStream).not.toHaveBeenCalled();
+  });
+
+  it("answers a recording range with exactly its span and preserves the existing 416", async () => {
+    const url = "/files/stream?path=/tmp/movie.mp4";
+    const partial = await app.request(url, { headers: { range: "bytes=2-4" } });
+    expect(partial.status).toBe(206);
+    expect(partial.headers.get("content-range")).toBe("bytes 2-4/7");
+    expect(partial.headers.get("content-length")).toBe("3");
+    expect(mockCreateReadStream).toHaveBeenCalledWith("/tmp/movie.mp4", { start: 2, end: 4 });
+    const outside = await app.request(url, { headers: { range: "bytes=7-" } });
+    expect(outside.status).toBe(416);
+    expect(outside.headers.get("content-range")).toBe("bytes */7");
   });
 });

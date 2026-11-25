@@ -147,9 +147,10 @@ export function createStack({ root, agnt, directory }) {
     };
   }
 
-  async function worker({ name, config, port, persist, wrangler, cwd, env = {} }) {
-    const file = path.join(directory, `${name}.wrangler.json`);
-    await writeFile(file, JSON.stringify(config, null, 2));
+  async function worker({ name, config, port, persist, wrangler, cwd, env = {}, args = [] }) {
+    const file =
+      typeof config === "string" ? config : path.join(directory, `${name}.wrangler.json`);
+    if (typeof config !== "string") await writeFile(file, JSON.stringify(config, null, 2));
     const owned = run(
       process.execPath,
       [
@@ -166,6 +167,7 @@ export function createStack({ root, agnt, directory }) {
         persist,
         "--log-level",
         "warn",
+        ...args,
       ],
       name,
       { cwd, env: { WRANGLER_SEND_METRICS: "false", ...env } }
@@ -222,20 +224,20 @@ export function createStack({ root, agnt, directory }) {
   }
 
   async function relay({ port, jwks, persist }) {
+    // Select the fixture environment explicitly so a checkout's .dev.vars cannot enter this stack.
+    const envFile = path.join(directory, `relay-${port}.env`);
+    await writeFile(envFile, `ENVIRONMENT=e2e\nRELAY_TICKET_JWKS=${jwks}\n`);
     const owned = await worker({
       name: `relay-${port}`,
       port,
       persist,
       wrangler: path.join(root, "apps/cloud-relay/node_modules/wrangler/bin/wrangler.js"),
-      config: {
-        name: "deus-relay-e2e",
-        main: path.join(root, "apps/cloud-relay/src/index.ts"),
-        compatibility_date: "2025-01-01",
-        compatibility_flags: ["nodejs_compat"],
-        vars: { ENVIRONMENT: "e2e", RELAY_TICKET_JWKS: jwks },
-        durable_objects: { bindings: [{ name: "RELAY", class_name: "RelayDO" }] },
-        migrations: [{ tag: "v1", new_sqlite_classes: ["RelayDO"] }],
+      config: path.join(root, "apps/cloud-relay/wrangler.toml"),
+      env: {
+        CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "true",
+        CLOUDFLARE_INCLUDE_PROCESS_ENV: "false",
       },
+      args: ["--name", "deus-relay-e2e", "--env-file", envFile],
     });
     return { ...owned, ws: `ws://127.0.0.1:${port}` };
   }

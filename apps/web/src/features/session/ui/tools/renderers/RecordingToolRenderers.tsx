@@ -13,7 +13,7 @@ import { createPortal } from "react-dom";
 import { BaseToolRenderer } from "../components";
 import { TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS } from "../toolColors";
 import { cn } from "@/shared/lib/utils";
-import { getBaseURL } from "@/shared/config/api.config";
+import { useFileUrl } from "@/features/file-browser/api/useFileUrl";
 import type { ToolRendererProps } from "../../chat-types";
 
 // ---------------------------------------------------------------------------
@@ -67,23 +67,6 @@ function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${mins}m ${secs.toFixed(0)}s`;
-}
-
-function useStreamUrl(filePath: string | undefined): string | null {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    if (!filePath) return;
-    let cancelled = false;
-    getBaseURL()
-      .then((base) => {
-        if (!cancelled) setUrl(`${base}/files/stream?path=${encodeURIComponent(filePath)}`);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [filePath]);
-  return url;
 }
 
 const EVENT_LABELS: Record<string, string> = {
@@ -263,7 +246,7 @@ function RecordingCard({
   eventCount: number;
   onClick: () => void;
 }) {
-  const thumbUrl = useStreamUrl(thumbnailPath);
+  const thumbnail = useFileUrl("recording", thumbnailPath);
 
   return (
     <button
@@ -281,9 +264,12 @@ function RecordingCard({
       {/* Thumbnail container — 16:9 */}
       <div className="relative" style={{ width: "100%", paddingBottom: "56.25%" }}>
         {/* Thumbnail image */}
-        {thumbUrl ? (
+        {thumbnail.url && !thumbnail.failed ? (
           <img
-            src={thumbUrl}
+            key={thumbnailPath}
+            src={thumbnail.url}
+            onError={(e) => void thumbnail.onError(e.currentTarget)}
+            onLoad={(e) => thumbnail.onProgress(e.currentTarget)}
             alt="Recording thumbnail"
             className="absolute inset-0 h-full w-full object-cover transition-transform motion-safe:group-hover:scale-[1.02]"
           />
@@ -352,8 +338,8 @@ function VideoModal({
   eventCount: number;
   onClose: () => void;
 }) {
-  const videoUrl = useStreamUrl(outputPath);
-  const thumbUrl = useStreamUrl(thumbnailPath);
+  const video = useFileUrl("recording", outputPath);
+  const thumbnail = useFileUrl("recording", thumbnailPath);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -361,13 +347,6 @@ function VideoModal({
   const totalDuration = duration ?? 0;
   const hasChapters = chapters.length > 0;
   const meaningfulEvents = events.filter((e) => e.type !== "idle" && e.type !== "screenshot");
-
-  // Auto-play
-  useEffect(() => {
-    if (videoRef.current && videoUrl) {
-      videoRef.current.play().catch(() => {});
-    }
-  }, [videoUrl]);
 
   // Escape to close
   useEffect(() => {
@@ -428,40 +407,55 @@ function VideoModal({
               style={{ aspectRatio: "16 / 9" }}
               onClick={handlePlayPause}
             >
-              {videoUrl && (
+              {video.url && !video.failed && (
                 <video
+                  key={outputPath}
                   ref={videoRef}
-                  src={videoUrl}
-                  poster={thumbUrl ?? undefined}
+                  src={video.url}
+                  onError={(e) => void video.onError(e.currentTarget)}
+                  onLoadedMetadata={(e) => video.onLoadedMetadata(e.currentTarget)}
+                  poster={thumbnail.failed ? undefined : thumbnail.url}
                   className="absolute inset-0 h-full w-full object-contain"
                   onEnded={() => setPlaying(false)}
                   onPause={() => setPlaying(false)}
-                  onPlay={() => setPlaying(true)}
-                  onTimeUpdate={() => {
-                    if (videoRef.current) setCurrentTime(videoRef.current.currentTime);
+                  onPlay={(e) => {
+                    video.onProgress(e.currentTarget);
+                    setPlaying(true);
+                  }}
+                  onTimeUpdate={(e) => {
+                    video.onProgress(e.currentTarget);
+                    setCurrentTime(e.currentTarget.currentTime);
                   }}
                   preload="auto"
                 />
               )}
 
-              {/* Play/Pause overlay */}
-              <div
-                className={cn(
-                  "absolute inset-0 flex items-center justify-center transition-opacity",
-                  playing ? "opacity-0 hover:opacity-100" : "opacity-100"
-                )}
-              >
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
-                  {playing ? (
-                    <Pause className="h-6 w-6 fill-white text-white" />
-                  ) : (
-                    <Play className="ml-1 h-6 w-6 fill-white text-white" />
+              {video.failed ? (
+                <p
+                  className="absolute inset-0 grid place-items-center px-4 text-center text-sm text-white"
+                  role="alert"
+                >
+                  This recording can&#39;t be played right now.
+                </p>
+              ) : (
+                <div
+                  className={cn(
+                    "absolute inset-0 flex items-center justify-center transition-opacity",
+                    playing ? "opacity-0 hover:opacity-100" : "opacity-100"
                   )}
+                >
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                    {playing ? (
+                      <Pause className="h-6 w-6 fill-white text-white" />
+                    ) : (
+                      <Play className="ml-1 h-6 w-6 fill-white text-white" />
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Time */}
-              {totalDuration > 0 && (
+              {totalDuration > 0 && !video.failed && (
                 <div className="absolute right-3 bottom-3 rounded bg-black/70 px-2 py-1 text-xs font-medium text-white">
                   {formatTime(currentTime)} / {formatTime(totalDuration)}
                 </div>
@@ -469,7 +463,7 @@ function VideoModal({
             </div>
 
             {/* Progress bar */}
-            {totalDuration > 0 && (
+            {totalDuration > 0 && !video.failed && (
               <ProgressBar
                 duration={totalDuration}
                 currentTime={currentTime}
