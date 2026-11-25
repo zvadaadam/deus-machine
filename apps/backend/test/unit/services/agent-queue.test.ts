@@ -652,29 +652,23 @@ describe("stopping the current turn", () => {
     return { release, starting };
   }
 
-  it("O6: a third strict send cannot replace B in setup after A ends", async () => {
-    const { release, starting } = await startBWhileALives();
-    end("A");
-    expect(await run(api.session, { sessionId })).toMatchObject({ status: "idle" });
-    const third = await sendMessage({ ...message("C"), turnId: "C" }).catch(
-      (error: unknown) => error
-    );
-    const refusal = await host
-      .send(chatCaller, sessionId, {
+  it("refuses strict sends until the turn that reported a fatal error ends", async () => {
+    await send("A");
+    fatalError("A");
+    await expect(sendMessage({ ...message("C"), turnId: "C" })).rejects.toMatchObject({
+      name: "ChatBusyError",
+      message: "The agent is still working — wait for the current turn to finish.",
+    });
+    await expect(
+      host.send(chatCaller, sessionId, {
         turnId: "D",
         message: "Fourth",
         origin: fromChat,
       })
-      .catch((error: unknown) => error);
-    const reading = await view();
-    release();
-    await starting;
-    expect(third).toMatchObject({
-      name: "ChatBusyError",
-      message: "The agent is starting another turn — wait for it to begin.",
-    });
-    expect(refusal).toMatchObject({ refusal: { code: "busy" } });
-    expect(reading.running).toBe("B");
+    ).rejects.toMatchObject({ refusal: { code: "busy" } });
+    expect((await view()).running).toBe("A");
+    end("A", "error");
+    await send("B");
     expect(starts()).toEqual(["A", "B"]);
   });
 
