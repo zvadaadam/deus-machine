@@ -53,8 +53,10 @@ export function useWorkspaceTabsState(workspaceId: string | null) {
     if (workspaceId) workspaceLayoutActions.addNewTab(workspaceId);
   }, [workspaceId]);
   const closeTab = useCallback(
-    (tabId: string) => {
-      if (workspaceId) workspaceLayoutActions.closeWorkspaceTab(workspaceId, tabId);
+    (tabId: string, nextActiveTabId?: string) => {
+      if (workspaceId) {
+        workspaceLayoutActions.closeWorkspaceTab(workspaceId, tabId, { nextActiveTabId });
+      }
     },
     [workspaceId]
   );

@@ -175,11 +175,25 @@ export function WorkspaceContentPane({
     [selectTab, view, onModeChange]
   );
 
+  // Pick the visible successor once so both active selection and keyboard focus restoration
+  // land on the exact same tab even when hidden/gated tabs sit between visible tabs.
+  const handleCloseTab = useCallback(
+    (tabId: string) => {
+      const visibleIdx = visibleWorkspaceTabs.findIndex((t) => t.id === tabId);
+      const nextVisibleId =
+        visibleIdx !== -1
+          ? (visibleWorkspaceTabs[visibleIdx + 1]?.id ?? visibleWorkspaceTabs[visibleIdx - 1]?.id)
+          : undefined;
+      closeTab(tabId, nextVisibleId);
+    },
+    [visibleWorkspaceTabs, closeTab]
+  );
+
   const handleShortcutCloseTab = useCallback(
     (tabId: string) => {
-      (closeWithFocusRef.current ?? closeTab)(tabId);
+      (closeWithFocusRef.current ?? handleCloseTab)(tabId);
     },
-    [closeTab]
+    [handleCloseTab]
   );
 
   useWorkspaceTabShortcuts({
@@ -205,7 +219,7 @@ export function WorkspaceContentPane({
           workspaceId={workspaceId}
           fileChangesCount={fileChangesCount}
           onTabSelect={selectTab}
-          onTabClose={closeTab}
+          onTabClose={handleCloseTab}
           onTabAdd={addNewTab}
           onTabReorder={reorderTabs}
           closeWithFocusRef={closeWithFocusRef}

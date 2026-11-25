@@ -79,7 +79,11 @@ export function addNewTabState(state: TabListState): TabMutationResult {
   };
 }
 
-export function closeTabState(state: TabListState, tabId: string): CloseTabResult {
+export function closeTabState(
+  state: TabListState,
+  tabId: string,
+  nextActiveTabId?: string
+): CloseTabResult {
   const idx = state.tabs.findIndex((t) => t.id === tabId);
   if (idx === -1) {
     return { ...state, closedTab: null };
@@ -97,10 +101,13 @@ export function closeTabState(state: TabListState, tabId: string): CloseTabResul
     };
   }
 
-  const activeTabId =
-    state.activeTabId === tabId
-      ? remaining[Math.min(idx, remaining.length - 1)].id
-      : state.activeTabId;
+  let activeTabId = state.activeTabId;
+  if (state.activeTabId === tabId) {
+    activeTabId =
+      nextActiveTabId && remaining.some((t) => t.id === nextActiveTabId)
+        ? nextActiveTabId
+        : remaining[Math.min(idx, remaining.length - 1)].id;
+  }
 
   return {
     tabs: remaining,

@@ -359,8 +359,6 @@ let pendingWrite: {
   value: StorageValue<PersistedWorkspaceLayoutSlice>;
 } | null = null;
 let pendingWriteTimer: ReturnType<typeof setTimeout> | null = null;
-/** Storage keys holding a newer schema version (> 12) that this build must never overwrite. */
-const protectedFutureVersionKeys = new Set<string>();
 
 function getNativeStorage(): Storage | null {
   try {
@@ -368,6 +366,44 @@ function getNativeStorage(): Storage | null {
   } catch {
     return null;
   }
+}
+
+function cancelPendingWrite(name: string): void {
+  if (pendingWrite?.name !== name) return;
+  pendingWrite = null;
+  if (pendingWriteTimer !== null) {
+    clearTimeout(pendingWriteTimer);
+    pendingWriteTimer = null;
+  }
+}
+
+/**
+ * Re-read the live stored version from native storage before every read/write/remove
+ * so an already-open v12 page never overwrites newer (> 12) bytes written by another
+ * same-origin page, and immediately cancels any queued save when a newer version appears.
+ */
+function hasNewerStoredVersion(name: string): boolean {
+  let raw: string | null = null;
+  try {
+    raw = getNativeStorage()?.getItem(name) ?? null;
+  } catch {
+    return false;
+  }
+  if (!raw) return false;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      isRecord(parsed) &&
+      typeof parsed.version === "number" &&
+      parsed.version > WORKSPACE_LAYOUT_STORAGE_VERSION
+    ) {
+      cancelPendingWrite(name);
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
 }
 
 function stripEphemeralLayouts(
@@ -407,7 +443,7 @@ function writeStorageValueNow(
   name: string,
   value: StorageValue<PersistedWorkspaceLayoutSlice>
 ): void {
-  if (protectedFutureVersionKeys.has(name)) return;
+  if (hasNewerStoredVersion(name)) return;
   try {
     const storage = getNativeStorage();
     if (!storage) return;
@@ -439,9 +475,22 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
   window.addEventListener("pagehide", flushWorkspaceLayoutStorage);
   window.addEventListener("beforeunload", flushWorkspaceLayoutStorage);
 }
+if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushWorkspaceLayoutStorage();
+  });
+}
 
 const coalescedPersistStorage: PersistStorage<PersistedWorkspaceLayoutSlice> = {
   getItem: (name) => {
+    // Always check native storage first so a newer version written by another same-origin
+    // page cancels any queued v12 save and is never masked by `pendingWrite`.
+    if (hasNewerStoredVersion(name)) {
+      return {
+        version: WORKSPACE_LAYOUT_STORAGE_VERSION,
+        state: { layouts: {} },
+      };
+    }
     if (pendingWrite?.name === name) {
       return {
         version: pendingWrite.value.version ?? WORKSPACE_LAYOUT_STORAGE_VERSION,
@@ -454,42 +503,17 @@ const coalescedPersistStorage: PersistStorage<PersistedWorkspaceLayoutSlice> = {
     } catch {
       return null;
     }
-    if (!raw) {
-      protectedFutureVersionKeys.delete(name);
-      return null;
-    }
+    if (!raw) return null;
 
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
     } catch {
-      protectedFutureVersionKeys.delete(name);
       return null;
     }
-    if (!isRecord(parsed)) {
-      protectedFutureVersionKeys.delete(name);
-      return null;
-    }
+    if (!isRecord(parsed)) return null;
 
     const storedVersion = typeof parsed.version === "number" ? parsed.version : 0;
-    if (storedVersion > WORKSPACE_LAYOUT_STORAGE_VERSION) {
-      // Preserve newer schema bytes untouched on disk; run with clean in-memory defaults.
-      protectedFutureVersionKeys.add(name);
-      if (pendingWrite?.name === name) {
-        pendingWrite = null;
-        if (pendingWriteTimer !== null) {
-          clearTimeout(pendingWriteTimer);
-          pendingWriteTimer = null;
-        }
-      }
-      return {
-        version: WORKSPACE_LAYOUT_STORAGE_VERSION,
-        state: { layouts: {} },
-      };
-    }
-
-    protectedFutureVersionKeys.delete(name);
-
     if (storedVersion === WORKSPACE_LAYOUT_STORAGE_VERSION) {
       return {
         version: WORKSPACE_LAYOUT_STORAGE_VERSION,
@@ -504,7 +528,6 @@ const coalescedPersistStorage: PersistStorage<PersistedWorkspaceLayoutSlice> = {
     };
   },
   setItem: (name, value) => {
-    if (protectedFutureVersionKeys.has(name)) return;
     // In headless/test environments without window, write synchronously.
     if (typeof window === "undefined") {
       writeStorageValueNow(name, value);
@@ -515,14 +538,8 @@ const coalescedPersistStorage: PersistStorage<PersistedWorkspaceLayoutSlice> = {
     pendingWriteTimer = setTimeout(flushWorkspaceLayoutStorage, PERSIST_COALESCE_MS);
   },
   removeItem: (name) => {
-    if (pendingWrite?.name === name) {
-      pendingWrite = null;
-      if (pendingWriteTimer !== null) {
-        clearTimeout(pendingWriteTimer);
-        pendingWriteTimer = null;
-      }
-    }
-    if (protectedFutureVersionKeys.has(name)) return;
+    cancelPendingWrite(name);
+    if (hasNewerStoredVersion(name)) return;
     try {
       getNativeStorage()?.removeItem(name);
     } catch {
@@ -725,10 +742,14 @@ export const workspaceLayoutActions = {
   },
 
   /** Close a tab, tearing down native resources (webview / initial command). */
-  closeWorkspaceTab: (workspaceId: string, tabId: string) => {
+  closeWorkspaceTab: (
+    workspaceId: string,
+    tabId: string,
+    options?: { nextActiveTabId?: string }
+  ) => {
     const store = useWorkspaceLayoutStore.getState();
     const layout = store.getLayout(workspaceId);
-    const next = closeTabState(currentTabState(layout), tabId);
+    const next = closeTabState(currentTabState(layout), tabId, options?.nextActiveTabId);
     if (!next.closedTab) return;
     disposeTabResources(next.closedTab);
     store.setLayout(workspaceId, {

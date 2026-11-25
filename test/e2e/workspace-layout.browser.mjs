@@ -415,9 +415,59 @@ try {
     "tab",
     "workspace Ctrl+W restores focus to a surviving tab"
   );
-  // Re-add Terminal 1 so we have 3 tabs for rapid same-pixel close.
-  await openFromNewTab("Terminal");
-  assert.deepEqual(await tabLabels(), ["Changes", "Files", "Terminal 2"]);
+  // Closing a tab adjacent to a hidden tab selects AND focuses the same visible successor.
+  await openFromNewTab("Browser");
+  await openFromNewTab("Agent");
+  await page.evaluate(() => {
+    window.client.setQueryData(["settings"], {
+      experimental_browser: false,
+      experimental_simulator: true,
+    });
+  });
+  await page.waitForFunction(() => {
+    const labels = [
+      ...document.querySelectorAll('[role="tablist"][aria-label="Workspace tabs"] [role="tab"]'),
+    ]
+      .filter((e) => !e.closest("[inert]"))
+      .map((e) => e.getAttribute("aria-label"));
+    return (
+      labels.length === 3 &&
+      labels[0] === "Changes" &&
+      labels[1] === "Files" &&
+      labels[2] === "Agent"
+    );
+  });
+  // Full strip is [Changes, Files, hidden Browser, Agent]; closing Files via Ctrl+W must
+  // select, display, AND focus Agent (not Changes).
+  await tabs.getByRole("tab", { name: "Files", exact: true }).click();
+  await tabs.getByRole("tab", { name: "Files", exact: true }).focus();
+  await page.keyboard.press("Control+w");
+  assert.deepEqual(await tabLabels(), ["Changes", "Agent"]);
+  const agentAfterClose = tabs.getByRole("tab", { name: "Agent", exact: true });
+  assert.equal(
+    await agentAfterClose.getAttribute("aria-selected"),
+    "true",
+    "Ctrl+W with a hidden neighbor selects the visible successor Agent"
+  );
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.getAttribute("aria-label")),
+    "Agent",
+    "Ctrl+W with a hidden neighbor focuses the same visible successor Agent"
+  );
+  const agentPanelId = await agentAfterClose.getAttribute("aria-controls");
+  assert.equal(
+    await page.locator(`[role="tabpanel"][id="${agentPanelId}"]`).getAttribute("aria-labelledby"),
+    await agentAfterClose.getAttribute("id"),
+    "displayed tabpanel matches the selected and focused successor Agent"
+  );
+  await page.evaluate(() => {
+    window.client.setQueryData(["settings"], {
+      experimental_browser: true,
+      experimental_simulator: true,
+    });
+  });
+  await tabs.getByRole("tab", { name: "Browser", exact: true }).waitFor();
+  assert.deepEqual(await tabLabels(), ["Changes", "Browser", "Agent"]);
   // Rapid close-clicking at the exact same pixel closes uniform-width tabs consecutively.
   const firstTab = tabs.getByRole("tab", { name: "Changes", exact: true });
   await firstTab.hover();
@@ -427,9 +477,9 @@ try {
   const cx = closeBox.x + closeBox.width / 2;
   const cy = closeBox.y + closeBox.height / 2;
   await page.mouse.click(cx, cy);
-  assert.deepEqual(await tabLabels(), ["Files", "Terminal 2"]);
+  assert.deepEqual(await tabLabels(), ["Browser", "Agent"]);
   await page.mouse.click(cx, cy);
-  assert.deepEqual(await tabLabels(), ["Terminal 2"]);
+  assert.deepEqual(await tabLabels(), ["Agent"]);
   await page.mouse.click(cx, cy);
   assert.deepEqual(await tabLabels(), ["New tab"]);
   await page.evaluate(() => window.selectWorkspace("first"));

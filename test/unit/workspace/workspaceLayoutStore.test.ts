@@ -511,4 +511,76 @@ describe("workspaceLayoutStore", () => {
       vi.useRealTimers();
     }
   });
+
+  it("does not flush a queued v12 save or removeItem over v13 bytes written by another same-origin page", async () => {
+    vi.useFakeTimers();
+    const storage = createMemoryStorage();
+    vi.stubGlobal("localStorage", storage);
+    vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+
+    try {
+      // Page A hydrates on v12 and queues a debounced save.
+      storage.setItem(
+        "workspace-layout-store",
+        JSON.stringify({
+          version: 12,
+          state: {
+            layouts: {
+              "ws-a": {
+                workspaceTabs: [{ id: "c-1", kind: "changes" }],
+                activeWorkspaceTabId: "c-1",
+              },
+            },
+          },
+        })
+      );
+      await useWorkspaceLayoutStore.persist.rehydrate();
+      workspaceLayoutActions.openToolTab("ws-a", "files");
+
+      // Before Page A's 250ms debounce fires, Page B (v13) writes to the same storage key.
+      const v13FromPageB = JSON.stringify({
+        version: 13,
+        state: {
+          layouts: {
+            "ws-b": { workspaceTabs: [{ id: "next-1", kind: "future" }] },
+          },
+        },
+      });
+      storage.setItem("workspace-layout-store", v13FromPageB);
+
+      // Page A's timer fires, explicit flush runs, and clearStorage runs: v13 bytes must stay intact.
+      vi.advanceTimersByTime(300);
+      flushWorkspaceLayoutStorage();
+      useWorkspaceLayoutStore.persist.clearStorage();
+      expect(storage.getItem("workspace-layout-store")).toBe(v13FromPageB);
+
+      // Rehydrating must also see Page B's v13 bytes (not Page A's cancelled pending write).
+      await useWorkspaceLayoutStore.persist.rehydrate();
+      expect(useWorkspaceLayoutStore.getState().layouts).toEqual({});
+      expect(storage.getItem("workspace-layout-store")).toBe(v13FromPageB);
+    } finally {
+      flushWorkspaceLayoutStorage();
+      vi.useRealTimers();
+    }
+  });
+
+  it("selects the visible successor when closing an active tab adjacent to a hidden tab", () => {
+    const changesId = workspaceLayoutActions.openToolTab("ws-hidden-close", "changes");
+    const filesId = workspaceLayoutActions.openToolTab("ws-hidden-close", "files");
+    const browserId = workspaceLayoutActions.openBrowserTab(
+      "ws-hidden-close",
+      "http://localhost:1420"
+    );
+    const agentId = workspaceLayoutActions.openToolTab("ws-hidden-close", "config");
+
+    workspaceLayoutActions.selectWorkspaceTab("ws-hidden-close", filesId);
+    // Simulate Browser hidden from visible strip [Changes, Files, Agent]: closing Files selects Agent.
+    workspaceLayoutActions.closeWorkspaceTab("ws-hidden-close", filesId, {
+      nextActiveTabId: agentId,
+    });
+
+    const layout = workspaceLayoutActions.getLayout("ws-hidden-close");
+    expect(layout.workspaceTabs.map((t) => t.id)).toEqual([changesId, browserId, agentId]);
+    expect(layout.activeWorkspaceTabId).toBe(agentId);
+  });
 });
