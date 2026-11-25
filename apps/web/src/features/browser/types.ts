@@ -31,16 +31,6 @@ export const MOBILE_PREVIEW_WIDTH = 390;
 export const MOBILE_PREVIEW_HEIGHT = 852;
 export const MOBILE_PREVIEW_DPR = 3;
 
-/** Lightweight tab state persisted in the workspace layout store.
- *  Only what's needed to restore a tab — webviews are destroyed/recreated. */
-export interface PersistedBrowserTab {
-  id: string;
-  url: string; // last loaded URL
-  title: string; // display title
-  /** Tab is in mobile preview mode (narrow centered frame + mobile CDP). */
-  isMobileView?: boolean;
-}
-
 export interface BrowserTabState {
   id: string;
   /** Display title: auto-derived from URL domain, overridden by webview title events */
@@ -188,32 +178,5 @@ export function createBrowserTab(workspaceId?: string | null): BrowserTabState {
     devtoolsOpen: false,
     consoleLogs: [],
     isMobileView: false,
-  };
-}
-
-/** Hydrate a PersistedBrowserTab into a full BrowserTabState with
- *  ephemeral defaults (loading, history, consoleLogs, etc.). Blank URLs
- *  from legacy persistence are scrubbed here so they never re-surface in
- *  the URL bar or history on reload. */
-export function hydratePersistedTab(persisted: PersistedBrowserTab): BrowserTabState {
-  const storedUrl = isBlankUrl(persisted.url) ? "" : persisted.url;
-  return {
-    id: persisted.id,
-    title:
-      persisted.title && !isBlankUrl(persisted.title)
-        ? persisted.title
-        : deriveTitleFromUrl(storedUrl),
-    url: storedUrl,
-    currentUrl: storedUrl,
-    history: storedUrl ? [storedUrl] : [],
-    historyIndex: storedUrl ? 0 : -1,
-    loading: false,
-    error: null,
-    injected: false,
-    injectionFailed: false,
-    selectorActive: false,
-    devtoolsOpen: false,
-    consoleLogs: [],
-    isMobileView: persisted.isMobileView ?? false,
   };
 }

@@ -57,7 +57,8 @@ import {
 import * as lifecycle from "../../../src/services/workspace-lifecycle";
 import { setupFile } from "../../../src/services/setup-status";
 import { buildWorkspaceContext } from "../../../src/services/agent/workspace-context";
-import { GitError, runGit } from "../../../src/lib/git-process";
+import { GitError, runGit } from "@shared/lib/git-process";
+import { holdOpenPipe } from "../../fixtures/held-pipe";
 import { CELESTIAL_NAMES } from "../../../src/services/workspace.service";
 
 let scratch: string;
@@ -77,6 +78,12 @@ const row = (id: string) =>
 const workspacePath = (slug: string) => path.join(root, ".deus", slug);
 const branches = () => git("branch", "--format=%(refname:short)").split("\n");
 const setupStatus = (id: string) => fs.readFileSync(setupFile(id, "status"), "utf8");
+
+function waitingGit() {
+  const fifo = path.join(scratch, "hold");
+  holdOpenPipe(fifo);
+  return ["-c", `alias.wait=!cat "${fifo}" & echo $! >&2; wait`, "wait"];
+}
 
 function setupScript(command: string) {
   fs.mkdirSync(path.join(root, ".deus"), { recursive: true });
@@ -173,7 +180,7 @@ describe("starting a workspace", () => {
         current_session_id: session,
       });
       db().prepare("INSERT INTO sessions (id, workspace_id) VALUES ('sibling', 'w')").run();
-      writeProjectFile(cwd, { version: 1, local: { setup: "echo repaired" } });
+      await writeProjectFile(cwd, { version: 1, local: { setup: "echo repaired" } });
       for (const id of [session, "sibling"]) {
         const running = brief(id);
         expect(running).toContain("  | touch started;");
@@ -314,9 +321,50 @@ describe("starting a workspace", () => {
 
   it("records that origin was absent when upstream is the only remote", async () => {
     git("remote", "add", "upstream", root);
+    const error = vi.spyOn(console, "error");
+    const warn = vi.spyOn(console, "warn");
     await initializeWorkspace(add("w", "vega"));
     expect(row("w").init_fetch_issue).toBe("no_origin");
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
   });
+
+  it("fetches the latest commit from an origin defined only in .git/remotes/origin", async () => {
+    const origin = path.join(scratch, "origin");
+    gitIn(scratch, "clone", "-q", root, origin);
+    gitIn(origin, "config", "user.name", "Test User");
+    gitIn(origin, "config", "user.email", "test@example.test");
+    const latest = commit(origin, "tracked.txt", "second");
+    git("update-ref", "refs/remotes/origin/main", "main");
+    const remotes = path.join(root, ".git", "remotes");
+    fs.mkdirSync(remotes, { recursive: true });
+    fs.writeFileSync(path.join(remotes, "origin"), `URL: ${origin}\n`);
+
+    await initializeWorkspace(add("w", "vega"));
+
+    expect(row("w")).toMatchObject({ state: "ready", init_fetch_issue: null });
+    expect(gitIn(workspacePath("vega"), "rev-parse", "HEAD")).toBe(latest);
+  });
+
+  it.each([
+    [1, "could not read config"],
+    [128, "fatal: No such remote 'origin'"],
+  ] as const)(
+    "still starts and warns when git cannot read the remote (exit %i)",
+    async (code, stderr) => {
+      const warn = vi.spyOn(console, "warn");
+      const args = ["remote", "get-url", "origin"];
+      const git = vi
+        .spyOn(await import("@shared/lib/git-process"), "runGit")
+        .mockRejectedValueOnce(new GitError(args, { code, stderr }));
+      await initializeWorkspace(add("w", "vega"));
+      expect(git).toHaveBeenNthCalledWith(1, args, expect.anything());
+      expect(row("w")).toMatchObject({ state: "ready", init_fetch_issue: "failed" });
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        `[WORKSPACE] Could not read origin: git remote get-url origin ${stderr}`
+      );
+    }
+  );
 
   it("takes another name instead of reusing or removing one that is taken on disk", async () => {
     // Left from a reset database: a folder with someone's work, and a branch.
@@ -400,42 +448,47 @@ describe("a start that fails", () => {
     expect(locale.trim()).toBe("C");
   });
 
-  it("stops a command that runs too long, with everything it started", async () => {
-    const started = Date.now();
-    const pidFile = path.join(scratch, "pid");
-    const failure = await runGit(
-      ["-c", `alias.wait=!sh -c 'sleep 30 & echo $! > "${pidFile}"; wait'`, "wait"],
-      { cwd: root, timeoutMs: 300 }
-    ).catch((error: unknown) => error);
-
+  it("stops a command that runs too long, with everything it started", async ({
+    onTestFinished,
+  }) => {
+    let grandchild = 0;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const failure = await runGit(waitingGit(), {
+      cwd: root,
+      timeoutMs: 1,
+      onStderr: (pid) => {
+        grandchild = Number(pid);
+        vi.runAllTimers();
+      },
+    }).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(GitError);
     expect((failure as GitError).timedOut).toBe(true);
-    expect(Date.now() - started).toBeLessThan(5000);
     // The grandchild is gone too: a checkout does not keep writing after its command is stopped.
-    const grandchild = Number(fs.readFileSync(pidFile, "utf8"));
+    expect(grandchild).toBeGreaterThan(0);
     await vi.waitFor(() => expect(() => process.kill(grandchild, 0)).toThrow());
   });
 
   it("stops what is still running when the backend stops, and starts nothing after", async () => {
     // A module of its own: once stopped it stays stopped, as the backend does.
     vi.resetModules();
-    const git = await import("../../../src/lib/git-process");
-    const groups = await import("../../../src/lib/process-groups");
-    const pidFile = path.join(scratch, "pid");
-    const running = git
-      .runGit(["-c", `alias.wait=!sh -c 'sleep 30 & echo $! > "${pidFile}"; wait'`, "wait"], {
+    const git = await import("@shared/lib/git-process");
+    const groups = await import("@shared/lib/process-groups");
+    let grandchild = 0;
+    const failure = await git
+      .runGit(waitingGit(), {
         cwd: root,
-        timeoutMs: 60_000,
+        onStderr: (pid) => {
+          grandchild = Number(pid);
+          groups.stopProcessGroups();
+        },
       })
       .catch((error: unknown) => error);
-    await vi.waitFor(() => expect(fs.existsSync(pidFile)).toBe(true));
-    const grandchild = Number(fs.readFileSync(pidFile, "utf8"));
-    const stopped = Date.now();
-
-    groups.stopProcessGroups();
-
-    expect(await running).toBeInstanceOf(git.GitError);
-    expect(Date.now() - stopped).toBeLessThan(5000);
+    expect(failure).toBeInstanceOf(git.GitError);
+    expect(failure).toMatchObject({ timedOut: false });
+    expect(grandchild).toBeGreaterThan(0);
     await vi.waitFor(() => expect(() => process.kill(grandchild, 0)).toThrow());
     // What a start asks for next is refused without running: no new writer.
     const later = path.join(scratch, "later");
@@ -451,7 +504,7 @@ describe("a start Deus closed in the middle of", () => {
     setupScript("touch started; sleep 30");
     // Modules of their own: once stopped they stay stopped, as the backend does.
     vi.resetModules();
-    const groups = await import("../../../src/lib/process-groups");
+    const groups = await import("@shared/lib/process-groups");
     const init = await import("../../../src/services/workspace-checkout");
     await init.initializeWorkspace(add("w", "vega"));
     await vi.waitFor(() =>
@@ -560,7 +613,7 @@ describe("workspaces a previous process was still starting", () => {
       add("w", "vega", { init_stage: "worktree" });
       git("worktree", "add", "-q", "-b", "test-user/vega", workspacePath("vega"), "main");
       vi.resetModules();
-      const groups = await import("../../../src/lib/process-groups");
+      const groups = await import("@shared/lib/process-groups");
       const init = await import("../../../src/services/workspace-init.service");
       vi.spyOn(fs.promises, "rm").mockImplementationOnce(async () => {
         groups.stopProcessGroups();
@@ -686,7 +739,7 @@ it("seeds a ready integration CLI workspace once, without publishing", () => {
 
 describe("why origin's latest was not fetched", () => {
   const said = (stderr: string, timedOut = false) =>
-    fetchIssue(new GitError(["fetch", "origin", "main"], stderr, timedOut));
+    fetchIssue(new GitError(["fetch", "origin", "main"], { stderr, timedOut }));
 
   it("tells offline from sign-in from the rest", () => {
     expect(said("fatal: unable to access 'x': Could not resolve host: github.com")).toBe("offline");
@@ -860,7 +913,7 @@ exec "$REAL_GIT" "$@"
   it("recovers the durable session stage if first-chat cleanup is interrupted", async () => {
     // Stop only this checkout's process groups. Recovery uses the next backend's live groups.
     vi.resetModules();
-    const groups = await import("../../../src/lib/process-groups");
+    const groups = await import("@shared/lib/process-groups");
     const checkout = await import("../../../src/services/workspace-checkout");
     const ctx = add("w", "vega");
     refuseChatInsert();

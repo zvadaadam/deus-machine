@@ -1,4 +1,5 @@
-import { toolCardName } from "@shared/mcp-servers";
+import { TELL_USER } from "@shared/agent-message";
+import { DEUS_TOOLS_SERVER, toolCardName } from "@shared/mcp-servers";
 import type { Part } from "@shared/protocol-types";
 
 const FILE_MODIFYING_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
@@ -23,20 +24,23 @@ export function activityLabel(parts: readonly Part[], streaming: boolean): strin
     }
   }
 
-  let label = toolCount ? "Activity" : "Reasoning";
+  let label = toolCount || parts.some((part) => part.type === "text") ? "Activity" : "Reasoning";
   if (streaming) {
     const active = parts.findLast(
       (part) =>
-        (part.type === "reasoning" && part.state === "streaming") ||
+        ((part.type === "reasoning" || part.type === "text") && part.state === "streaming") ||
         (part.type === "tool" &&
           (part.state.status === "pending" || part.state.status === "in_progress"))
     );
     if (active?.type === "tool")
       label =
-        active.title ||
-        (active.state.status === "in_progress" && active.state.title) ||
-        toolCardName(active);
+        active.mcp?.server === DEUS_TOOLS_SERVER && active.mcp?.tool === TELL_USER
+          ? "Typing…"
+          : active.title ||
+            (active.state.status === "in_progress" && active.state.title) ||
+            toolCardName(active);
     else if (active?.type === "reasoning") label = "Thinking";
+    else if (active?.type === "text") label = "Typing…";
   }
   return [
     label,

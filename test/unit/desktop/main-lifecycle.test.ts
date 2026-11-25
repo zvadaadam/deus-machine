@@ -1,13 +1,19 @@
 import { EventEmitter } from "node:events";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { workspaceLink } from "@shared/workspace-link";
 
 const mocks = vi.hoisted(() => ({
   events: new Map<string, (...args: unknown[]) => void>(),
-  windows: [] as Array<{
-    handlers: Map<string, () => void>;
-    destroyed: boolean;
-    focus: ReturnType<typeof import("vitest").vi.fn>;
-  }>,
+  windows: [] as MockWindow[],
+  packaged: true,
+  getAppPath: vi.fn(),
+  hidden: false,
+  focusApp: vi.fn(),
+  ready: vi.fn(),
+  setAsDefaultProtocolClient: vi.fn(),
   spawn: vi.fn(),
   stop: vi.fn(),
   showMessageBox: vi.fn(),
@@ -21,42 +27,54 @@ const mocks = vi.hoisted(() => ({
   handle: vi.fn(),
 }));
 
+class MockWindow {
+  handlers = new Map<string, () => void>();
+  destroyed = false;
+  minimized = false;
+  visible = false;
+  webContents = {
+    on: vi.fn(),
+    setWindowOpenHandler: vi.fn(),
+    send: vi.fn(),
+    mainFrame: { parent: null, url: "app://deus/" },
+  };
+  constructor() {
+    mocks.windows.push(this);
+  }
+  on = (event: string, handler: () => void) => this.handlers.set(event, handler);
+  loadFile = vi.fn();
+  loadURL = vi.fn();
+  isDestroyed = () => this.destroyed;
+  // A destroyed BrowserWindow throws on use, as Electron's does.
+  private live() {
+    if (this.destroyed) throw new TypeError("Object has been destroyed");
+  }
+  isMinimized = () => (this.live(), this.minimized);
+  isVisible = () => (this.live(), this.visible);
+  restore = vi.fn(() => this.live());
+  show = vi.fn(() => this.live());
+  focus = vi.fn(() => this.live());
+}
+
 vi.mock("electron", () => ({
   app: {
-    isPackaged: true,
+    isHidden: () => mocks.hidden,
+    focus: mocks.focusApp,
+    get isPackaged() {
+      return mocks.packaged;
+    },
+    getAppPath: mocks.getAppPath,
+    setAsDefaultProtocolClient: mocks.setAsDefaultProtocolClient,
     setPath: vi.fn(),
     requestSingleInstanceLock: () => true,
     commandLine: { appendSwitch: mocks.appendSwitch },
-    whenReady: () => Promise.resolve(),
+    whenReady: mocks.ready,
     on: (event: string, handler: (...args: unknown[]) => void) => mocks.events.set(event, handler),
     quit: mocks.quit,
     enableSandbox: mocks.enableSandbox,
   },
   autoUpdater: new EventEmitter(),
-  BrowserWindow: class {
-    handlers = new Map<string, () => void>();
-    destroyed = false;
-    webContents = {
-      on: vi.fn(),
-      setWindowOpenHandler: vi.fn(),
-      send: vi.fn(),
-      mainFrame: { parent: null, url: "app://deus/" },
-    };
-    constructor() {
-      mocks.windows.push(this);
-    }
-    on = (event: string, handler: () => void) => this.handlers.set(event, handler);
-    loadFile = vi.fn();
-    loadURL = vi.fn();
-    isDestroyed = () => this.destroyed;
-    // A destroyed BrowserWindow throws on use, as Electron's does.
-    private live() {
-      if (this.destroyed) throw new TypeError("Object has been destroyed");
-    }
-    isMinimized = () => (this.live(), false);
-    restore = () => this.live();
-    focus = vi.fn(() => this.live());
-  },
+  BrowserWindow: MockWindow,
   dialog: { showMessageBox: mocks.showMessageBox },
   ipcMain: { handle: mocks.handle, on: vi.fn() },
   session: {
@@ -123,6 +141,9 @@ beforeEach(async () => {
   vi.stubEnv("DEUS_USER_DATA_DIR", "/fixture/deus-user-data");
   vi.stubEnv("DEUS_BACKEND_PORT", "");
   mocks.events.clear();
+  mocks.ready.mockResolvedValue(undefined);
+  mocks.packaged = true;
+  mocks.hidden = false;
   mocks.windows.length = 0;
   mocks.showMessageBox.mockResolvedValue({ response: 1 });
   mocks.stop.mockResolvedValue(undefined);
@@ -147,10 +168,28 @@ function pendingBackend() {
   return { fail: (message: string) => reject(new Error(message)) };
 }
 
+it("creates and uses the checkout data directory on a first dev launch", async () => {
+  const checkout = mkdtempSync(join(tmpdir(), "deus-desktop-data-"));
+  vi.stubEnv("DEUS_USER_DATA_DIR", undefined);
+  mocks.packaged = false;
+  mocks.getAppPath.mockReturnValue(checkout);
+  mocks.spawn.mockResolvedValue({ port: 1421 });
+  try {
+    const { app } = await import("electron");
+    await import("../../../apps/desktop/main/index");
+    const dataDir = join(checkout, ".deus-dev");
+    expect(existsSync(dataDir)).toBe(true);
+    expect(app.setPath).toHaveBeenCalledWith("userData", dataDir);
+  } finally {
+    rmSync(checkout, { recursive: true, force: true });
+  }
+});
+
 it("shows no failure when a Quit stops the backend while it is starting", async () => {
   const backend = pendingBackend();
   await import("../../../apps/desktop/main/index");
   await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalled());
+  expect(mocks.windows).toHaveLength(0);
 
   mocks.quit(); // stopBackend kills the starting child...
   backend.fail("Backend exited before starting (code=null, signal=SIGTERM)"); // ...so the start rejects
@@ -173,19 +212,181 @@ it("still reports a backend that fails to start on its own", async () => {
   );
 });
 
+it("explains how to release the database and reopen Deus", async () => {
+  const { DatabaseInUseError } = await import("@shared/runtime");
+  mocks.spawn.mockRejectedValue(new DatabaseInUseError("/fixture/deus.db"));
+  await import("../../../apps/desktop/main/index");
+  await vi.waitFor(() =>
+    expect(mocks.showMessageBox).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Quit the other Deus app or stop “deus start”, then open Deus again.",
+      })
+    )
+  );
+});
+
 it("forgets a closed window, so a second launch does not act on it", async () => {
   mocks.spawn.mockResolvedValue({ port: 12345 });
   await import("../../../apps/desktop/main/index");
   await vi.waitFor(() => expect(mocks.windows).toHaveLength(1));
   const win = mocks.windows[0];
+  win.visible = true;
 
   mocks.events.get("second-instance")!({}, []);
   expect(win.focus).toHaveBeenCalledOnce();
+  expect(win.webContents.send).not.toHaveBeenCalled();
 
   win.destroyed = true;
   win.handlers.get("closed")!();
   expect(() => mocks.events.get("second-instance")!({}, [])).not.toThrow();
   expect(win.focus).toHaveBeenCalledOnce();
+});
+
+it("activates the macOS app when a second launch restores its minimized window", async () => {
+  mocks.spawn.mockResolvedValue({ port: 12345 });
+  await import("../../../apps/desktop/main/index");
+  await vi.waitFor(() => expect(mocks.windows).toHaveLength(1));
+  const win = mocks.windows[0];
+  win.minimized = true;
+
+  const platform = process.platform;
+  try {
+    Object.defineProperty(process, "platform", { value: "darwin" });
+    mocks.events.get("second-instance")!({}, []);
+  } finally {
+    Object.defineProperty(process, "platform", { value: platform });
+  }
+  expect(win.restore).toHaveBeenCalledOnce();
+  expect(mocks.focusApp).toHaveBeenCalledWith({ steal: true });
+  expect(win.focus).toHaveBeenCalledOnce();
+  expect(win.show).not.toHaveBeenCalled();
+});
+
+const workspaceId = "019adc01-16d0-7654-abcd-aabbccddeeff";
+const sessionId = "019aDC01-16d1-4aBc-C321-001122334455";
+const chat = { workspaceId, sessionId };
+
+function openUrl(text: string) {
+  const preventDefault = vi.fn();
+  mocks.events.get("open-url")!({ preventDefault }, text);
+  expect(preventDefault).toHaveBeenCalledOnce();
+}
+
+function takeLink(sender = mocks.windows[0].webContents, senderFrame = sender.mainFrame) {
+  const [, handle] = mocks.handle.mock.calls.find(([name]) => name === "take_workspace_link")!;
+  return handle({ sender, senderFrame });
+}
+
+it("keeps the startup window hidden when a link arrives before its first show", async () => {
+  mocks.spawn.mockResolvedValue({ port: 12345 });
+  await import("../../../apps/desktop/main/index");
+  await vi.waitFor(() => expect(mocks.windows).toHaveLength(1));
+  const win = mocks.windows[0];
+  mocks.hidden = true;
+  openUrl(workspaceLink(chat));
+  expect(mocks.focusApp).toHaveBeenCalledTimes(process.platform === "darwin" ? 1 : 0);
+  expect(win.show).not.toHaveBeenCalled();
+  expect(win.focus).not.toHaveBeenCalled();
+  expect(takeLink()).toEqual(chat);
+});
+
+it("keeps the macOS launch link until the window's own page asks for it", async () => {
+  const ready = Promise.withResolvers<void>();
+  mocks.ready.mockReturnValue(ready.promise);
+  mocks.spawn.mockResolvedValue({ port: 12345 });
+  await import("../../../apps/desktop/main/index");
+  openUrl(workspaceLink(chat));
+  expect(mocks.spawn).not.toHaveBeenCalled();
+  expect(mocks.windows).toHaveLength(0);
+  ready.resolve();
+  await vi.waitFor(() => expect(mocks.windows).toHaveLength(1));
+
+  const { webContents } = mocks.windows[0];
+  expect(() => takeLink({ ...webContents })).toThrow(/only the app's window/);
+  expect(() => takeLink(webContents, { parent: null, url: "https://example.com" })).toThrow();
+  expect(takeLink()).toEqual(chat);
+  expect(takeLink()).toBeNull();
+});
+
+it("brings the window forward and offers the latest valid link without broadcasting its ids", async () => {
+  mocks.spawn.mockResolvedValue({ port: 12345 });
+  await import("../../../apps/desktop/main/index");
+  await vi.waitFor(() => expect(mocks.windows).toHaveLength(1));
+  const win = mocks.windows[0];
+  win.minimized = true;
+
+  openUrl("deus://anything");
+  expect(mocks.focusApp).not.toHaveBeenCalled();
+  expect(win.restore).not.toHaveBeenCalled();
+  expect(win.focus).not.toHaveBeenCalled();
+  expect(win.webContents.send).not.toHaveBeenCalled();
+
+  openUrl(workspaceLink({ workspaceId }));
+  openUrl(workspaceLink(chat));
+  openUrl(workspaceLink(chat) + "&extra=1");
+  expect(mocks.focusApp).toHaveBeenCalledTimes(process.platform === "darwin" ? 2 : 0);
+  expect(win.restore).toHaveBeenCalledTimes(2);
+  expect(win.show).not.toHaveBeenCalled();
+  expect(win.focus).toHaveBeenCalledTimes(2);
+  expect(win.webContents.send.mock.calls).toEqual([
+    ["workspace-link:available"],
+    ["workspace-link:available"],
+  ]);
+  expect(takeLink()).toEqual(chat);
+  openUrl("deus://workspace?file=/tmp");
+  expect(takeLink()).toBeNull();
+  expect(mocks.openExternal).not.toHaveBeenCalled();
+});
+
+it("takes only a complete link argument on a Linux launch or second instance", async () => {
+  mocks.spawn.mockResolvedValue({ port: 12345 });
+  const address = workspaceLink(chat);
+  const argv = process.argv;
+  try {
+    process.argv = ["deus", address, "--other"];
+    await import("../../../apps/desktop/main/index");
+  } finally {
+    process.argv = argv;
+  }
+  await vi.waitFor(() => expect(mocks.windows).toHaveLength(1));
+  expect(takeLink()).toEqual(chat);
+  const win = mocks.windows[0];
+  win.visible = true;
+  for (const refused of [
+    "deus://anything",
+    address.replace("deus:", "DEUS:"),
+    "deus://[",
+    "  " + address,
+  ]) {
+    mocks.events.get("second-instance")!({}, ["deus", refused, "--other"]);
+  }
+  expect(mocks.focusApp).not.toHaveBeenCalled();
+  expect(win.focus).not.toHaveBeenCalled();
+  expect(win.webContents.send).not.toHaveBeenCalled();
+  expect(takeLink()).toBeNull();
+
+  mocks.events.get("second-instance")!({}, ["deus", "--link=" + address]);
+  expect(win.focus).toHaveBeenCalledOnce();
+  expect(win.webContents.send).not.toHaveBeenCalled();
+  expect(takeLink()).toBeNull();
+  mocks.events.get("second-instance")!({}, [
+    "deus",
+    address,
+    workspaceLink({ workspaceId }),
+    "deus://anything",
+    "--other",
+  ]);
+  expect(win.focus).toHaveBeenCalledTimes(2);
+  expect(win.webContents.send.mock.calls).toEqual([["workspace-link:available"]]);
+  expect(takeLink()).toEqual({ workspaceId });
+});
+
+it("does not claim the installed app's scheme in development", async () => {
+  mocks.packaged = false;
+  mocks.spawn.mockResolvedValue({ port: 12345 });
+  await import("../../../apps/desktop/main/index");
+  await vi.waitFor(() => expect(mocks.windows).toHaveLength(1));
+  expect(mocks.setAsDefaultProtocolClient).not.toHaveBeenCalled();
 });
 
 it("tells the tray when a backend starts and when it exits", async () => {
@@ -204,11 +405,7 @@ it("loads the packaged window from app://deus and opens no debugging port", asyn
   mocks.spawn.mockResolvedValue({ port: 12345 });
   await import("../../../apps/desktop/main/index");
   await vi.waitFor(() => expect(mocks.windows).toHaveLength(1));
-  const win = mocks.windows[0] as unknown as {
-    loadURL: ReturnType<typeof vi.fn>;
-    loadFile: ReturnType<typeof vi.fn>;
-    webContents: { on: ReturnType<typeof vi.fn> };
-  };
+  const win = mocks.windows[0];
 
   // Registered before ready, as Electron requires, with an origin and fetch.
   expect(mocks.registerSchemes).toHaveBeenCalledWith([
@@ -240,6 +437,17 @@ it("loads the packaged window from app://deus and opens no debugging port", asyn
   ).toBe(false);
   expect(navigate("https://example.com/")).toBe(false);
   expect(mocks.openExternal).toHaveBeenCalledWith("https://example.com/");
+  expect(navigate(workspaceLink(chat))).toBe(false);
+
+  const didAttach = win.webContents.on.mock.calls.find(
+    ([event]) => event === "did-attach-webview"
+  )![1];
+  const guestContents = { id: 2, setWindowOpenHandler: vi.fn() };
+  didAttach({}, guestContents);
+  const [openPopup] = guestContents.setWindowOpenHandler.mock.calls[0];
+  expect(openPopup({ url: workspaceLink(chat) })).toEqual({ action: "deny" });
+  expect(win.webContents.send).not.toHaveBeenCalled();
+  expect(mocks.openExternal).toHaveBeenCalledTimes(1);
 
   // A guest joins the Browser tab's session, whatever partition the page names:
   // that session is the one whose permissions are limited.
@@ -261,8 +469,7 @@ it("sandboxes every renderer and answers IPC from the window's own page only", a
   const listener = vi.fn(() => "answer");
   ipcMain.handle("fixture:channel", listener);
   const wrapped = mocks.handle.mock.calls.find(([channel]) => channel === "fixture:channel")![1];
-  const contents = (mocks.windows[0] as unknown as { webContents: { mainFrame: object } })
-    .webContents;
+  const contents = mocks.windows[0].webContents;
   const call = (sender: object, senderFrame: object | null) => () =>
     wrapped({ sender, senderFrame }, "argument");
 

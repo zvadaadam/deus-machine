@@ -2,12 +2,16 @@ import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getDevStagedCliDirectory } from "../../shared/lib/cli-path";
+import { prepareDevBackendEnv } from "../../shared/lib/child-env";
+import { BACKEND_SHUTDOWN_TIMEOUT_MS } from "../../shared/runtime";
 import { LOOPBACK_WEB_ORIGINS, WEB_ORIGINS_ENV } from "../../shared/web-origins";
 
 const runtimeDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(runtimeDir, "../..");
+const backendCwd = path.join(projectRoot, "apps", "backend");
 let stopping = false;
 const nodeExecutable = process.env.NODE_EXECUTABLE || "node";
+prepareDevBackendEnv(process.env, backendCwd);
 
 function log(message: string): void {
   console.log(`[dev] ${message}`);
@@ -53,8 +57,8 @@ async function main(): Promise<void> {
 
 function startBackend(): Promise<{ process: ChildProcess; port: number } | null> {
   return new Promise((resolve) => {
-    const child = spawn(nodeExecutable, [path.join(projectRoot, "apps", "backend", "server.cjs")], {
-      cwd: path.join(projectRoot, "apps", "backend"),
+    const child = spawn(nodeExecutable, [path.join(backendCwd, "server.cjs")], {
+      cwd: backendCwd,
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
@@ -112,7 +116,7 @@ function stopBackend(child: ChildProcess): Promise<void> {
     child.kill("SIGTERM");
     setTimeout(() => {
       if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
-    }, 5_000);
+    }, BACKEND_SHUTDOWN_TIMEOUT_MS);
   });
 }
 

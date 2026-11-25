@@ -20,6 +20,7 @@ import type {
   WorkspaceState,
   WorkspaceStatus,
 } from "@shared/enums";
+import type { WorkspaceChat } from "@shared/types/workspace";
 import type { ErrorCategory } from "@shared/protocol-types";
 
 // ─── repositories ────────────────────────────────────────────
@@ -35,9 +36,9 @@ export interface RepositoryRow {
   updated_at: string;
 }
 
-/** The `repos` operation: repositories with workspace counts from LEFT JOIN aggregate. */
+/** Project groups count workspaces across every place, including those outside the sidebar filter. */
 export interface RepositoryWithCountsRow extends RepositoryRow {
-  ready_count: number;
+  cloud_count: number;
   archived_count: number;
   total_count: number;
 }
@@ -73,11 +74,7 @@ export interface WorkspaceRow {
   updated_at: string;
 }
 
-/**
- * Workspace joined with repo + active session.
- * Used by GET /workspaces, GET /workspaces/:id, GET /workspaces/by-repo,
- * and the withWorkspace middleware.
- */
+/** Workspace with its repository and, when the query joins it, its active chat. */
 export interface WorkspaceWithDetailsRow {
   // From workspaces table
   id: string;
@@ -122,10 +119,10 @@ export interface WorkspaceWithDetailsRow {
   /** Repository remote when the query includes it (e.g. setup and its retry). */
   git_origin_url?: string | null;
 
+  /** The list, detail and delta reads include the workspace's visible chats. */
+  chats?: WorkspaceChat[];
   // From sessions JOIN (null when no active session)
   session_status: SessionStatus | null;
-  session_error_category: string | null;
-  session_error_message: string | null;
   latest_message_sent_at: string | null;
   /** The first chat's id, minted with the workspace, and that chat's own status and when it was last spoken to. */
   first_session_id?: string | null;
@@ -140,6 +137,7 @@ export interface SessionRow {
   workspace_id: string;
   agent_harness: string;
   agent_session_id: string | null;
+  agent_messages: boolean;
   /** agnt session id for cloud-workspace sessions (null for local). */
   provider_session_id: string | null;
   title: string | null;

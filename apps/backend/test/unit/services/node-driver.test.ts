@@ -1,69 +1,66 @@
 import { describe, it, expect, vi } from "vitest";
-
-// Local lane → git.service; Remote lane → the cloud session socket. Mock both so
-// the test exercises the driver's extraction/mapping, not the real transports.
-vi.mock("../../../src/services/git.service", () => ({
-  resolveParentBranch: vi.fn(async () => "main"),
-  getDiffStats: vi.fn(async () => ({ additions: 3, deletions: 1 })),
-  getDiffFiles: vi.fn(async () => [{ file: "a.ts", additions: 3, deletions: 1 }]),
-  resolveWorkspaceRelativePath: vi.fn((_ws: string, f: string) => f),
-  getFileDiff: vi.fn(async () => "@@ local diff @@"),
-  extractDiffInfo: vi.fn(() => ({ isNew: false, isDeleted: false, oldPath: "", newPath: "" })),
-  getMergeBase: vi.fn(async () => "base-sha"),
-  getGitFileContent: vi.fn(async () => "old-bytes"),
-}));
+import * as git from "../../../src/services/git.service";
+import { getCloudDiffSummary, hasLiveCloudSession } from "../../../src/services/agent/cloud/driver";
+import { resolveNode } from "../../../src/services/node/driver";
 
 vi.mock("../../../src/services/agent/cloud/driver", () => ({
   getCloudDiffSummary: vi.fn(async () => ({
-    files: [{ type: "M", path: "x.ts", additions: 2, deletions: 5 }],
+    files: [{ type: "MODIFY", path: "x.ts", additions: 2, deletions: 5 }],
   })),
-  getCloudDiffFile: vi.fn(async () => ({ path: "x.ts", diff: "@@ cloud diff @@" })),
+  getCloudDiffFile: vi.fn(async () => ({ diff: "@@ cloud diff @@" })),
   requestCloudFs: vi.fn(async () => ({ content: "cloud-bytes" })),
   hasLiveCloudSession: vi.fn(() => true),
 }));
 
-import { resolveNode } from "../../../src/services/node/driver";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const asWs = (o: Record<string, unknown>) => o as any;
-const local = asWs({
+const local = {
   id: "ws1",
   kind: "worktree",
   git_target_branch: null,
   git_default_branch: "main",
-});
-const cloud = asWs({ id: "ws2", kind: "cloud", current_session_id: "sess_1" });
-const cloudAsleep = asWs({ id: "ws3", kind: "cloud", current_session_id: null });
+  current_session_id: null,
+  init_stage: null,
+} as const;
+const cloud = { ...local, id: "ws2", kind: "cloud", current_session_id: "sess_1" } as const;
 
-describe("NodeDriver — diff dispatch", () => {
-  it("local workspace → git lane", async () => {
-    const d = resolveNode(local, "/tmp/ws1");
-    expect(await d.diffStats()).toEqual({ additions: 3, deletions: 1 });
-    expect(await d.diffFiles()).toEqual({ files: [{ file: "a.ts", additions: 3, deletions: 1 }] });
-    const outcome = await d.diffFile("a.ts");
-    expect(outcome).toMatchObject({ ok: true, file: "a.ts", diff: "@@ local diff @@" });
+describe("NodeDriver", () => {
+  it("passes unexpected read errors to the reporter unchanged", async () => {
+    const error = new TypeError("invalid projection");
+    vi.spyOn(git, "resolveParentBranch").mockResolvedValue("main");
+    vi.spyOn(git, "getDiffFiles").mockRejectedValue(error);
+    await expect(resolveNode(local, "/tmp/ws1").diffFiles()).rejects.toBe(error);
   });
 
-  it("cloud workspace → session socket, summary mapped to the route shape", async () => {
-    const d = resolveNode(cloud, "");
-    // stats reduce over the summary; files map path→file
-    expect(await d.diffStats()).toEqual({ additions: 2, deletions: 5 });
-    expect(await d.diffFiles()).toEqual({ files: [{ file: "x.ts", additions: 2, deletions: 5 }] });
-    const outcome = await d.diffFile("x.ts");
-    expect(outcome).toEqual({
-      ok: true,
-      file: "x.ts",
-      diff: "@@ cloud diff @@",
-      old_content: null,
-      new_content: "cloud-bytes",
+  it.each(["../ws1-backup/file.ts", ".", "/tmp/ws1/file.ts"])(
+    "asks for a workspace-relative file when the diff read receives %s",
+    async (file) => {
+      await expect(resolveNode(local, "/tmp/ws1").diffFile(file)).rejects.toThrow(
+        /file path relative to the workspace/i
+      );
+    }
+  );
+
+  it.each([
+    ["CREATE", "added"],
+    ["MODIFY", "modified"],
+    ["DELETE", "deleted"],
+    ["RENAME", "renamed"],
+    ["unknown", "modified"],
+  ])("maps cloud status %s on the changed-files list", async (type, status) => {
+    const entry = { type, path: "x.ts", oldPath: "old.ts", additions: 2, deletions: 5 };
+    const change = { file: "x.ts", status, ...(type === "RENAME" && { previous_path: "old.ts" }) };
+    vi.mocked(getCloudDiffSummary).mockResolvedValue({ files: [entry] });
+    const driver = resolveNode(cloud, "");
+    expect(await driver.diffStats()).toEqual({ additions: 2, deletions: 5 });
+    expect(await driver.diffFiles()).toEqual({
+      files: [{ ...change, additions: 2, deletions: 5 }],
     });
   });
 
-  it("asleep cloud sandbox (no session) → empty shapes, never an error", async () => {
-    const d = resolveNode(cloudAsleep, "");
-    expect(await d.diffStats()).toEqual({ additions: 0, deletions: 0 });
-    expect(await d.diffFiles()).toEqual({ files: [] });
-    expect(await d.diffFile("x.ts")).toEqual({
+  it("returns an empty diff while a cloud workspace has no session", async () => {
+    const driver = resolveNode({ ...cloud, current_session_id: null }, "");
+    expect(await driver.diffStats()).toEqual({ additions: 0, deletions: 0 });
+    expect(await driver.diffFiles()).toEqual({ files: [] });
+    expect(await driver.diffFile("x.ts")).toEqual({
       ok: true,
       file: "x.ts",
       diff: "",
@@ -72,33 +69,18 @@ describe("NodeDriver — diff dispatch", () => {
     });
   });
 
-  it("row numbers never connect to a computer with no open channel, or one asleep", async () => {
-    const { getCloudDiffSummary, hasLiveCloudSession } =
-      await import("../../../src/services/agent/cloud/driver");
-    const summary = getCloudDiffSummary as ReturnType<typeof vi.fn>;
-    const live = hasLiveCloudSession as ReturnType<typeof vi.fn>;
-    summary.mockClear();
-
-    live.mockReturnValueOnce(false);
+  it("row numbers never connect to a computer with no open channel or one asleep", async () => {
+    vi.mocked(getCloudDiffSummary).mockClear();
+    vi.mocked(hasLiveCloudSession).mockReturnValueOnce(false);
     expect(await resolveNode(cloud, "").diffStats()).toEqual({ additions: 0, deletions: 0 });
     for (const init_stage of ["paused", "stopped", "resuming", "error"]) {
-      const sleeping = asWs({ ...cloud, init_stage });
-      expect(await resolveNode(sleeping, "").diffStats()).toEqual({ additions: 0, deletions: 0 });
+      expect(await resolveNode({ ...cloud, init_stage }, "").diffStats()).toEqual({
+        additions: 0,
+        deletions: 0,
+      });
     }
-    expect(summary).not.toHaveBeenCalled();
-
-    // The Changes panel's list still asks: it is shown only for an awake computer.
-    live.mockReturnValueOnce(false);
-    expect(await resolveNode(cloud, "").diffFiles()).toEqual({
-      files: [{ file: "x.ts", additions: 2, deletions: 5 }],
-    });
-  });
-
-  it("local invalid path → ValidationError (unchanged from the route)", async () => {
-    const { resolveWorkspaceRelativePath } = await import("../../../src/services/git.service");
-    (resolveWorkspaceRelativePath as ReturnType<typeof vi.fn>).mockReturnValueOnce(null);
-    await expect(resolveNode(local, "/tmp/ws1").diffFile("../escape")).rejects.toThrow(
-      "Invalid file path"
-    );
+    expect(getCloudDiffSummary).not.toHaveBeenCalled();
+    await resolveNode(cloud, "").diffFiles();
+    expect(getCloudDiffSummary).toHaveBeenCalledOnce();
   });
 });

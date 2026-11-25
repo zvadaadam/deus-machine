@@ -4,6 +4,11 @@
  * row away from git and the filesystem. Runs against a real SQLite database
  * built from the fresh schema.
  */
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import * as gitProcess from "@shared/lib/git-process";
 import Database from "better-sqlite3";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import { SCHEMA_SQL } from "@shared/schema";
@@ -12,20 +17,6 @@ import { operations } from "../../helpers";
 
 const m = vi.hoisted(() => ({
   db: null as unknown as Database.Database,
-  execFile: vi.fn(),
-  execFileSync: vi.fn(),
-  spawn: vi.fn(),
-  fs: {
-    realpathSync: vi.fn((p: string) => p),
-    accessSync: vi.fn(),
-    statSync: vi.fn(() => ({ isDirectory: () => true })),
-    existsSync: vi.fn(() => false),
-    mkdirSync: vi.fn(),
-    writeFileSync: vi.fn(),
-    rmSync: vi.fn(),
-    constants: { R_OK: 4, X_OK: 1 },
-  },
-  remoteUrl: vi.fn((): string | null => null),
   defaultBranch: vi.fn(),
   branches: vi.fn(),
   accessibleRepos: vi.fn(),
@@ -39,17 +30,6 @@ const m = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../src/lib/database", () => ({ getDatabase: () => m.db }));
-vi.mock("child_process", () => ({
-  execFile: m.execFile,
-  execFileSync: (cmd: string, args: string[], opts?: { cwd?: string }) => {
-    m.execFileSync(cmd, args, opts);
-    if (cmd === "git" && args.includes("--show-toplevel")) return `${opts?.cwd}\n`;
-    return Buffer.from("");
-  },
-  spawn: m.spawn,
-}));
-vi.mock("fs", () => ({ default: m.fs, ...m.fs }));
-vi.mock("../../../src/lib/git-remotes", () => ({ getGitRemoteUrlSync: m.remoteUrl }));
 vi.mock("../../../src/services/git.service", () => ({
   detectDefaultBranch: m.detectDefaultBranch,
 }));
@@ -100,20 +80,24 @@ function insert(id: string, root: string | null, origin: string | null, branch =
     .run(id, id, root, branch, origin);
 }
 
-/** Every git or filesystem call made so far. */
-function gitAndFsCalls() {
-  return [
-    ...m.execFile.mock.calls,
-    ...m.execFileSync.mock.calls,
-    ...m.spawn.mock.calls,
-    ...m.remoteUrl.mock.calls,
-    ...m.readProjectFile.mock.calls,
-    ...m.writeProjectFile.mock.calls,
-    ...m.fs.realpathSync.mock.calls,
-    ...m.fs.existsSync.mock.calls,
-    ...m.fs.writeFileSync.mock.calls,
-    ...m.fs.mkdirSync.mock.calls,
-  ];
+let scratch: string;
+const fsMethods = ["realpathSync", "existsSync", "writeFileSync", "mkdirSync"] as const;
+function expectNoLocalReadsOrWrites() {
+  for (const op of [
+    gitProcess.runGit,
+    m.detectDefaultBranch,
+    m.readProjectFile,
+    m.writeProjectFile,
+    ...fsMethods.map((name) => fs[name]),
+  ])
+    expect(op).not.toHaveBeenCalled();
+}
+
+function folder(name: string, origin: string) {
+  const root = path.join(scratch, name);
+  execFileSync("git", ["init", "-q", "-b", "develop", root]);
+  execFileSync("git", ["-C", root, "remote", "add", "origin", origin]);
+  return root;
 }
 
 beforeEach(() => {
@@ -123,11 +107,19 @@ beforeEach(() => {
   m.db.pragma("foreign_keys = ON");
   m.db.exec(SCHEMA_SQL);
   m.defaultOrg.mockReturnValue("org-default");
-  m.remoteUrl.mockReturnValue(null);
+  scratch = fs.realpathSync(fs.mkdtempSync(path.join(tmpdir(), "deus-cloud-repos-")));
+  vi.stubEnv("GIT_CONFIG_GLOBAL", path.join(scratch, "no-global-config"));
+  vi.stubEnv("GIT_CONFIG_NOSYSTEM", "1");
+  vi.spyOn(gitProcess, "runGit");
+  for (const name of fsMethods) vi.spyOn(fs, name);
   m.detectDefaultBranch.mockResolvedValue("develop");
 });
 
-afterEach(() => m.db.close());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  m.db.close();
+  fs.rmSync(scratch, { recursive: true, force: true });
+});
 
 describe("project rows", () => {
   it.each([
@@ -171,8 +163,8 @@ describe("addCloudRepo", () => {
       git_origin_url: "https://github.com/acme/rocket",
     });
     expect(m.defaultBranch).toHaveBeenCalledWith("acme/rocket", "org-2");
-    expect(m.invalidate).toHaveBeenCalledWith(["workspaces"]);
-    expect(gitAndFsCalls()).toEqual([]);
+    expect(m.invalidate).toHaveBeenCalledWith(["workspaces", "repos"]);
+    expectNoLocalReadsOrWrites();
   });
 
   it("asks GitHub with the default organization when none is named", async () => {
@@ -249,24 +241,24 @@ describe("addCloudRepo", () => {
 describe("addRepo with a folder for a project that has none", () => {
   it("gives the folder to that project instead of adding a second", async () => {
     insert("cloudy", null, "https://github.com/acme/rocket");
-    m.remoteUrl.mockReturnValue("git@github.com:acme/rocket.git");
+    const root = folder("rocket", "git@github.com:acme/rocket.git");
 
-    const repo = await run(api.addRepo, { root_path: "/Users/me/rocket" });
+    const repo = await run(api.addRepo, { root_path: root });
 
     expect(repo).toMatchObject({
       id: "cloudy",
-      root_path: "/Users/me/rocket",
+      root_path: root,
       git_default_branch: "develop",
     });
     expect(rows()).toHaveLength(1);
-    expect(m.invalidate).toHaveBeenCalledWith(["workspaces"]);
+    expect(m.invalidate).toHaveBeenCalledWith(["workspaces", "repos"]);
   });
 
   it("keeps two folders of one repository as two projects", async () => {
     insert("first", "/Users/me/rocket", "https://github.com/acme/rocket");
-    m.remoteUrl.mockReturnValue("https://github.com/acme/rocket.git");
+    const root = folder("rocket-2", "https://github.com/acme/rocket.git");
 
-    const repo = await run(api.addRepo, { root_path: "/Users/me/rocket-2" });
+    const repo = await run(api.addRepo, { root_path: root });
 
     expect(repo.id).not.toBe("first");
     expect(rows()).toHaveLength(2);
@@ -274,9 +266,9 @@ describe("addRepo with a folder for a project that has none", () => {
 
   it("adds a folder of another repository as a new project", async () => {
     insert("cloudy", null, "https://github.com/acme/rocket");
-    m.remoteUrl.mockReturnValue("https://github.com/acme/other.git");
+    const root = folder("other", "https://github.com/acme/other.git");
 
-    const repo = await run(api.addRepo, { root_path: "/Users/me/other" });
+    const repo = await run(api.addRepo, { root_path: root });
 
     expect(repo.id).not.toBe("cloudy");
     expect(rows()).toHaveLength(2);
@@ -293,7 +285,7 @@ describe("repoBranches for a project with no folder", () => {
 
     expect(answer).toEqual({ branches: [{ name: "main" }, { name: "feat" }, { name: "fix" }] });
     expect(m.branches).toHaveBeenCalledWith("acme/rocket", "org-2");
-    expect(gitAndFsCalls()).toEqual([]);
+    expectNoLocalReadsOrWrites();
   });
 
   it("corrects the project's default branch when GitHub names another", async () => {
@@ -304,7 +296,7 @@ describe("repoBranches for a project with no folder", () => {
 
     expect(m.branches).toHaveBeenCalledWith("acme/rocket", "org-default");
     expect((rows()[0] as { git_default_branch: string }).git_default_branch).toBe("trunk");
-    expect(m.invalidate).toHaveBeenCalledWith(["workspaces"]);
+    expect(m.invalidate).toHaveBeenCalledWith(["workspaces", "repos"]);
   });
 
   it("leaves the project alone when GitHub will not answer", async () => {
@@ -317,20 +309,27 @@ describe("repoBranches for a project with no folder", () => {
   });
 
   it("still reads local git for a project with a folder", async () => {
-    insert("local", "/Users/me/rocket", "https://github.com/acme/rocket");
-    m.execFile.mockImplementation((_cmd, _args, _opts, cb) =>
-      cb(null, { stdout: "main\nfeat\n", stderr: "" })
-    );
+    const root = folder("rocket", "https://github.com/acme/rocket");
+    insert("local", root, "https://github.com/acme/rocket");
+    execFileSync("git", [
+      "-C",
+      root,
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.test",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "--allow-empty",
+      "-qm",
+      "first",
+    ]);
+    execFileSync("git", ["-C", root, "update-ref", "refs/remotes/origin/feat", "HEAD"]);
 
-    const answer = await run(api.repoBranches, { repoId: "local" });
-
-    expect(answer).toEqual({
-      branches: [
-        { name: "main", is_remote: true },
-        { name: "feat", is_remote: true },
-      ],
+    expect(await run(api.repoBranches, { repoId: "local" })).toEqual({
+      branches: [{ name: "feat", is_remote: true }],
     });
-    expect(m.execFile.mock.calls[0][2]).toMatchObject({ cwd: "/Users/me/rocket" });
     expect(m.branches).not.toHaveBeenCalled();
   });
 });
@@ -349,7 +348,7 @@ describe("a project with no folder never reaches git or the filesystem", () => {
         project: { version: 1, setup: "bun install" },
       })
     ).rejects.toMatchObject({ statusCode: 409 });
-    expect(gitAndFsCalls()).toEqual([]);
+    expectNoLocalReadsOrWrites();
   });
 
   it("asks GitHub for its pull requests by its address, from no folder", async () => {
@@ -359,7 +358,7 @@ describe("a project with no folder never reaches git or the filesystem", () => {
       expect.arrayContaining(["--repo", "acme/rocket"]),
       expect.objectContaining({ cwd: undefined })
     );
-    expect(gitAndFsCalls()).toEqual([]);
+    expectNoLocalReadsOrWrites();
   });
 });
 

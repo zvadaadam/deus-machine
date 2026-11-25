@@ -5,15 +5,19 @@
  * - recording_stop → prominent video card in chat, click opens modal player
  */
 
-import { tempo } from "@/shared/lib/tempo";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Video, Play, Pause, X, Film } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
-import { createPortal } from "react-dom";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { BaseToolRenderer } from "../components";
 import { TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS } from "../toolColors";
 import { cn } from "@/shared/lib/utils";
-import { getBaseURL } from "@/shared/config/api.config";
+import { useFileUrl } from "@/features/file-browser/api/useFileUrl";
 import type { ToolRendererProps } from "../../chat-types";
 
 // ---------------------------------------------------------------------------
@@ -67,23 +71,6 @@ function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${mins}m ${secs.toFixed(0)}s`;
-}
-
-function useStreamUrl(filePath: string | undefined): string | null {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    if (!filePath) return;
-    let cancelled = false;
-    getBaseURL()
-      .then((base) => {
-        if (!cancelled) setUrl(`${base}/files/stream?path=${encodeURIComponent(filePath)}`);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [filePath]);
-  return url;
 }
 
 const EVENT_LABELS: Record<string, string> = {
@@ -157,18 +144,14 @@ export function RecordingStartToolRenderer({ toolUse, toolResult, isLoading }: T
 
 export function RecordingStopToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const result = parseResultJson(toolResult);
-  const outputPath = result?.outputPath as string | undefined;
+  const outputPath = typeof result?.outputPath === "string" ? result.outputPath : undefined;
   const thumbnailPath = result?.thumbnailPath as string | undefined;
   const duration = result?.duration as number | undefined;
   const chapters = (result?.chapters as MappedChapter[] | undefined) ?? [];
   const events = (result?.events as MappedEvent[] | undefined) ?? [];
   const eventCount = (result?.eventCount as number | undefined) ?? events.length;
 
-  const hasVideo = !!outputPath && outputPath.length > 0;
-  const [modalOpen, setModalOpen] = useState(false);
-
-  // Loading / no result
-  if (isLoading || !toolResult) {
+  if (!outputPath || isLoading || toolResult?.is_error) {
     return (
       <BaseToolRenderer
         toolName="Screen Recording"
@@ -176,34 +159,12 @@ export function RecordingStopToolRenderer({ toolUse, toolResult, isLoading }: To
         toolUse={toolUse}
         toolResult={toolResult}
         isLoading={isLoading}
-      />
-    );
-  }
-
-  // Error
-  if (toolResult.is_error) {
-    return (
-      <BaseToolRenderer
-        toolName="Screen Recording"
-        icon={<Video className={cn(TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS)} />}
-        toolUse={toolUse}
-        toolResult={toolResult}
-        showContentOnError
-      />
-    );
-  }
-
-  // No video
-  if (!hasVideo) {
-    return (
-      <BaseToolRenderer
-        toolName="Screen Recording"
-        icon={<Video className={cn(TOOL_ICON_CLS, TOOL_ICON_MUTED_CLS)} />}
-        toolUse={toolUse}
-        toolResult={toolResult}
-        renderSummary={() => (
-          <span className="text-muted-foreground text-xs italic">events-only, no video</span>
-        )}
+        renderSummary={() =>
+          !isLoading &&
+          !toolResult?.is_error && (
+            <span className="text-muted-foreground text-xs italic">events-only, no video</span>
+          )
+        }
       />
     );
   }
@@ -224,26 +185,25 @@ export function RecordingStopToolRenderer({ toolUse, toolResult, isLoading }: To
         ) : null
       }
     >
-      <RecordingCard
-        thumbnailPath={thumbnailPath}
-        duration={duration}
-        eventCount={eventCount}
-        onClick={() => setModalOpen(true)}
-      />
-
-      <AnimatePresence>
-        {modalOpen && (
-          <VideoModal
+      <Dialog>
+        <RecordingCard thumbnailPath={thumbnailPath} duration={duration} eventCount={eventCount} />
+        <DialogContent
+          showCloseButton={false}
+          aria-describedby={undefined}
+          overlayClassName="bg-black/80 backdrop-blur-sm"
+          className="border-border/40 flex max-h-[85vh] w-[90vw] flex-col gap-0 overflow-hidden rounded-xl p-0 shadow-2xl sm:max-w-5xl"
+        >
+          <DialogTitle className="sr-only">Recording player</DialogTitle>
+          <RecordingPlayer
             outputPath={outputPath}
             thumbnailPath={thumbnailPath}
             duration={duration}
             chapters={chapters}
             events={events}
             eventCount={eventCount}
-            onClose={() => setModalOpen(false)}
           />
-        )}
-      </AnimatePresence>
+        </DialogContent>
+      </Dialog>
     </BaseToolRenderer>
   );
 }
@@ -256,34 +216,33 @@ function RecordingCard({
   thumbnailPath,
   duration,
   eventCount,
-  onClick,
 }: {
   thumbnailPath?: string;
   duration?: number;
   eventCount: number;
-  onClick: () => void;
 }) {
-  const thumbUrl = useStreamUrl(thumbnailPath);
+  const thumbnail = useFileUrl("recording", thumbnailPath);
 
   return (
-    <button
+    <DialogTrigger
       type="button"
       className={cn(
-        "border-border/40 group relative overflow-hidden rounded-xl border text-left",
+        "border-border/40 group relative w-full overflow-hidden rounded-xl border text-left",
         "bg-background",
         "cursor-pointer transition-[border-color,box-shadow]",
         "hover:border-border/60 hover:shadow-lg"
       )}
-      style={{ width: "100%", minWidth: "400px" }}
-      onClick={onClick}
       aria-label="Open recording player"
     >
       {/* Thumbnail container — 16:9 */}
       <div className="relative" style={{ width: "100%", paddingBottom: "56.25%" }}>
         {/* Thumbnail image */}
-        {thumbUrl ? (
+        {thumbnail.url && !thumbnail.failed ? (
           <img
-            src={thumbUrl}
+            key={thumbnailPath}
+            src={thumbnail.url}
+            onError={(e) => void thumbnail.onError(e.currentTarget)}
+            onLoad={(e) => thumbnail.onProgress(e.currentTarget)}
             alt="Recording thumbnail"
             className="absolute inset-0 h-full w-full object-cover transition-transform motion-safe:group-hover:scale-[1.02]"
           />
@@ -327,22 +286,21 @@ function RecordingCard({
           )}
         </div>
       </div>
-    </button>
+    </DialogTrigger>
   );
 }
 
 // ---------------------------------------------------------------------------
-// VideoModal — overlay player with metadata sidebar
+// Recording player and timeline
 // ---------------------------------------------------------------------------
 
-function VideoModal({
+function RecordingPlayer({
   outputPath,
   thumbnailPath,
   duration,
   chapters,
   events,
   eventCount,
-  onClose,
 }: {
   outputPath: string;
   thumbnailPath?: string;
@@ -350,10 +308,9 @@ function VideoModal({
   chapters: MappedChapter[];
   events: MappedEvent[];
   eventCount: number;
-  onClose: () => void;
 }) {
-  const videoUrl = useStreamUrl(outputPath);
-  const thumbUrl = useStreamUrl(thumbnailPath);
+  const video = useFileUrl("recording", outputPath);
+  const thumbnail = useFileUrl("recording", thumbnailPath);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -361,22 +318,6 @@ function VideoModal({
   const totalDuration = duration ?? 0;
   const hasChapters = chapters.length > 0;
   const meaningfulEvents = events.filter((e) => e.type !== "idle" && e.type !== "screenshot");
-
-  // Auto-play
-  useEffect(() => {
-    if (videoRef.current && videoUrl) {
-      videoRef.current.play().catch(() => {});
-    }
-  }, [videoUrl]);
-
-  // Escape to close
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
 
   const seekTo = useCallback(
     (time: number) => {
@@ -393,58 +334,54 @@ function VideoModal({
     else videoRef.current.play().catch(() => {});
   }, [playing]);
 
-  return createPortal(
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0, transition: tempo.slow.exit }}
-      transition={tempo.slow}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ scale: 0.92, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.92, opacity: 0, transition: tempo.slow.exit }}
-        transition={tempo.slow}
-        className="bg-background border-border/40 relative flex max-h-[85vh] w-[90vw] max-w-5xl flex-col overflow-hidden rounded-xl border shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
+  return (
+    <>
+      <DialogClose
+        className="control-interaction absolute top-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white/80 backdrop-blur-sm hover:bg-black/60 hover:text-white"
+        aria-label="Close player"
       >
-        {/* Close button */}
-        <button
-          type="button"
-          onClick={onClose}
-          className="control-interaction absolute top-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white/80 backdrop-blur-sm hover:bg-black/60 hover:text-white"
-          aria-label="Close player"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <X className="h-4 w-4" />
+      </DialogClose>
 
-        <div className="flex min-h-0 flex-1">
-          {/* Video panel */}
-          <div className="flex min-w-0 flex-1 flex-col">
-            <div
-              className="relative w-full cursor-pointer bg-black"
-              style={{ aspectRatio: "16 / 9" }}
-              onClick={handlePlayPause}
-            >
-              {videoUrl && (
-                <video
-                  ref={videoRef}
-                  src={videoUrl}
-                  poster={thumbUrl ?? undefined}
-                  className="absolute inset-0 h-full w-full object-contain"
-                  onEnded={() => setPlaying(false)}
-                  onPause={() => setPlaying(false)}
-                  onPlay={() => setPlaying(true)}
-                  onTimeUpdate={() => {
-                    if (videoRef.current) setCurrentTime(videoRef.current.currentTime);
-                  }}
-                  preload="auto"
-                />
-              )}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-visible">
+        {/* Video panel */}
+        <div className="flex min-w-0 shrink-0 flex-col md:flex-1">
+          <div
+            className="relative w-full cursor-pointer bg-black"
+            style={{ aspectRatio: "16 / 9" }}
+            onClick={handlePlayPause}
+          >
+            {video.url && !video.failed && (
+              <video
+                key={outputPath}
+                ref={videoRef}
+                src={video.url}
+                onError={(e) => void video.onError(e.currentTarget)}
+                onLoadedMetadata={(e) => video.onLoadedMetadata(e.currentTarget)}
+                poster={thumbnail.failed ? undefined : thumbnail.url}
+                className="absolute inset-0 h-full w-full object-contain"
+                onEnded={() => setPlaying(false)}
+                onPause={() => setPlaying(false)}
+                onPlay={(e) => {
+                  video.onProgress(e.currentTarget);
+                  setPlaying(true);
+                }}
+                onTimeUpdate={(e) => {
+                  video.onProgress(e.currentTarget);
+                  setCurrentTime(e.currentTarget.currentTime);
+                }}
+                preload="auto"
+              />
+            )}
 
-              {/* Play/Pause overlay */}
+            {video.failed ? (
+              <p
+                className="absolute inset-0 grid place-items-center px-4 text-center text-sm text-white"
+                role="alert"
+              >
+                This recording can&#39;t be played right now.
+              </p>
+            ) : (
               <div
                 className={cn(
                   "absolute inset-0 flex items-center justify-center transition-opacity",
@@ -459,92 +396,90 @@ function VideoModal({
                   )}
                 </div>
               </div>
+            )}
 
-              {/* Time */}
-              {totalDuration > 0 && (
-                <div className="absolute right-3 bottom-3 rounded bg-black/70 px-2 py-1 text-xs font-medium text-white">
-                  {formatTime(currentTime)} / {formatTime(totalDuration)}
-                </div>
-              )}
-            </div>
-
-            {/* Progress bar */}
-            {totalDuration > 0 && (
-              <ProgressBar
-                duration={totalDuration}
-                currentTime={currentTime}
-                chapters={chapters}
-                onSeek={seekTo}
-              />
+            {/* Time */}
+            {totalDuration > 0 && !video.failed && (
+              <div className="absolute right-3 bottom-3 rounded bg-black/70 px-2 py-1 text-xs font-medium text-white">
+                {formatTime(currentTime)} / {formatTime(totalDuration)}
+              </div>
             )}
           </div>
 
-          {/* Metadata sidebar */}
-          {(meaningfulEvents.length > 0 || hasChapters) && (
-            <div className="border-border/40 flex w-64 flex-shrink-0 flex-col border-l">
-              <div className="text-muted-foreground px-3 pt-3 pb-2 text-[11px] font-semibold tracking-wider uppercase">
-                Timeline
-              </div>
-              <div className="chat-scroll-contain flex-1 overflow-y-auto">
-                {hasChapters
-                  ? chapters.map((ch, i) => {
-                      const chapterEvents = meaningfulEvents.filter((e) => {
-                        const nextChapter = chapters[i + 1];
-                        return e.time >= ch.time && (!nextChapter || e.time < nextChapter.time);
-                      });
-                      return (
-                        <div key={i} className="border-border/20 border-b last:border-b-0">
-                          <button
-                            type="button"
-                            className="text-foreground hover:bg-muted/40 flex w-full items-baseline gap-2 px-3 py-2 text-left text-xs font-medium transition-colors"
-                            onClick={() => seekTo(ch.time)}
-                          >
-                            <span className="text-muted-foreground flex-shrink-0 font-mono text-[10px]">
-                              {formatTime(ch.time)}
-                            </span>
-                            <span className="truncate">{ch.title}</span>
-                          </button>
-                          {chapterEvents.map((evt, j) => (
-                            <button
-                              key={j}
-                              type="button"
-                              className="text-muted-foreground hover:bg-muted/30 hover:text-foreground flex w-full items-baseline gap-2 px-3 py-1 pl-6 text-left text-[11px] transition-colors"
-                              onClick={() => seekTo(evt.time)}
-                            >
-                              <span className="flex-shrink-0 font-mono text-[10px]">
-                                {formatTime(evt.time)}
-                              </span>
-                              <span className="truncate">{eventLabel(evt)}</span>
-                            </button>
-                          ))}
-                        </div>
-                      );
-                    })
-                  : meaningfulEvents.map((evt, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        className="text-muted-foreground hover:bg-muted/30 hover:text-foreground flex w-full items-baseline gap-2 px-3 py-1.5 text-left text-[11px] transition-colors"
-                        onClick={() => seekTo(evt.time)}
-                      >
-                        <span className="flex-shrink-0 font-mono text-[10px]">
-                          {formatTime(evt.time)}
-                        </span>
-                        <span className="truncate">{eventLabel(evt)}</span>
-                      </button>
-                    ))}
-              </div>
-              <div className="border-border/40 text-muted-foreground flex items-center gap-2 border-t px-3 py-2 text-[11px]">
-                {eventCount > 0 && <span>{eventCount} events</span>}
-                {eventCount > 0 && hasChapters && <span>·</span>}
-                {hasChapters && <span>{chapters.length} chapters</span>}
-              </div>
-            </div>
+          {/* Progress bar */}
+          {totalDuration > 0 && !video.failed && (
+            <ProgressBar
+              duration={totalDuration}
+              currentTime={currentTime}
+              chapters={chapters}
+              onSeek={seekTo}
+            />
           )}
         </div>
-      </motion.div>
-    </motion.div>,
-    document.body
+
+        {(meaningfulEvents.length > 0 || hasChapters) && (
+          <div className="border-border/40 flex shrink-0 flex-col border-t md:w-64 md:border-t-0 md:border-l">
+            <div className="text-muted-foreground px-3 pt-3 pb-2 text-[11px] font-semibold tracking-wider uppercase">
+              Timeline
+            </div>
+            <div className="chat-scroll-contain flex-1 overflow-y-auto">
+              {hasChapters
+                ? chapters.map((ch, i) => {
+                    const chapterEvents = meaningfulEvents.filter((e) => {
+                      const nextChapter = chapters[i + 1];
+                      return e.time >= ch.time && (!nextChapter || e.time < nextChapter.time);
+                    });
+                    return (
+                      <div key={i} className="border-border/20 border-b last:border-b-0">
+                        <button
+                          type="button"
+                          className="text-foreground hover:bg-muted/40 flex w-full items-baseline gap-2 px-3 py-2 text-left text-xs font-medium transition-colors"
+                          onClick={() => seekTo(ch.time)}
+                        >
+                          <span className="text-muted-foreground flex-shrink-0 font-mono text-[10px]">
+                            {formatTime(ch.time)}
+                          </span>
+                          <span className="truncate">{ch.title}</span>
+                        </button>
+                        {chapterEvents.map((evt, j) => (
+                          <button
+                            key={j}
+                            type="button"
+                            className="text-muted-foreground hover:bg-muted/30 hover:text-foreground flex w-full items-baseline gap-2 px-3 py-1 pl-6 text-left text-[11px] transition-colors"
+                            onClick={() => seekTo(evt.time)}
+                          >
+                            <span className="flex-shrink-0 font-mono text-[10px]">
+                              {formatTime(evt.time)}
+                            </span>
+                            <span className="truncate">{eventLabel(evt)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })
+                : meaningfulEvents.map((evt, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      className="text-muted-foreground hover:bg-muted/30 hover:text-foreground flex w-full items-baseline gap-2 px-3 py-1.5 text-left text-[11px] transition-colors"
+                      onClick={() => seekTo(evt.time)}
+                    >
+                      <span className="flex-shrink-0 font-mono text-[10px]">
+                        {formatTime(evt.time)}
+                      </span>
+                      <span className="truncate">{eventLabel(evt)}</span>
+                    </button>
+                  ))}
+            </div>
+            <div className="border-border/40 text-muted-foreground flex items-center gap-2 border-t px-3 py-2 text-[11px]">
+              {eventCount > 0 && <span>{eventCount} events</span>}
+              {eventCount > 0 && hasChapters && <span>·</span>}
+              {hasChapters && <span>{chapters.length} chapters</span>}
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 

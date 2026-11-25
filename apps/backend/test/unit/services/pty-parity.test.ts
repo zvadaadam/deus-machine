@@ -42,8 +42,7 @@ async function until(seen: () => boolean): Promise<void> {
 
 describe(`terminal parity (${engine})`, () => {
   it("prints a command's output and reports its exit code", async () => {
-    // A shell that lives on after printing, as the app's do: openTerminal says
-    // why not a bare /bin/echo on Bun.
+    // The workspace shell stays open after writing to the terminal.
     const echo = open("/bin/sh", ["-c", "echo parity-echo; sleep 0.1"]);
     expect(await echo.exited).toBe(0);
     await until(() => echo.output().includes("parity-echo"));

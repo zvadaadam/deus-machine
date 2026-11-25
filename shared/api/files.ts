@@ -2,10 +2,20 @@
 
 import { z } from "zod";
 import type { FileMatch, FileTreeResponse } from "../types/files";
-import { out, read, write } from "./op";
+import { out, read } from "./op";
 import { stream } from "./stream";
 
 const workspaceId = z.object({ workspaceId: z.string().min(1) });
+
+/** An origin-relative /api path for direct callers, or an absolute URL for a paired relay device. */
+export const fileUrl = read({
+  name: "fileUrl",
+  input: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("recording"), path: z.string().min(1) }),
+    workspaceId.extend({ kind: z.literal("preview"), path: z.string().min(1) }),
+  ]),
+  output: out<{ url: string }>(),
+});
 
 /** The workspace's files as a tree, ignored files left out. */
 export const workspaceFiles = read({
@@ -35,13 +45,6 @@ export const fileSearch = read({
     limit: z.number().int().positive().default(15),
   }),
   output: out<FileMatch[]>(),
-});
-
-/** Forget the listed tree, so the next read lists the workspace again. */
-export const invalidateFileCache = write({
-  name: "invalidateFileCache",
-  input: workspaceId,
-  output: out<void>(),
 });
 
 /** A local checkout changed. Its followers read the files and diffs again. */

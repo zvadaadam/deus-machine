@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // vi.hoisted ensures mockFrontendAPI is available when the vi.mock factory runs (local mock variable name kept for brevity)
 const { mockFrontendAPI } = vi.hoisted(() => ({
   mockFrontendAPI: {
+    hasAgentMessages: vi.fn(() => false),
     requestGetDiff: vi.fn(),
     requestDiffComment: vi.fn(),
     requestGetTerminalOutput: vi.fn(),
@@ -14,6 +15,7 @@ vi.mock("../host-link", () => ({
 }));
 
 import type { HostToolSource } from "@zvada/agent-server/core";
+import { TELL_USER } from "@shared/agent-message";
 import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
 import { deusTools } from "../agents/deus-tools";
 
@@ -50,11 +52,30 @@ describe("deusTools", () => {
   it("is one source the engine gives every harness, its arguments described in JSON Schema", async () => {
     expect(server.name).toBe(DEUS_TOOLS_SERVER);
     const diff = server.tools.find((tool) => tool.name === "GetWorkspaceDiff")!;
+    expect(diff.description).toContain("path relative to the workspace, such as `src/index.ts`");
     expect(diff.inputSchema).toMatchObject({
       type: "object",
-      properties: { file: { type: "string" }, stat: { type: "boolean" } },
+      properties: {
+        file: {
+          type: "string",
+          description: expect.stringMatching(/relative to the workspace.*`src\/index\.ts`/),
+        },
+        stat: { type: "boolean" },
+      },
     });
     expect(diff.inputSchema).not.toHaveProperty("$schema");
+    const diffComment = server.tools.find((tool) => tool.name === "DiffComment")!;
+    expect(diffComment.inputSchema).toMatchObject({
+      properties: {
+        comments: {
+          items: {
+            properties: {
+              file: { type: "string", description: expect.stringContaining("Workspace-relative") },
+            },
+          },
+        },
+      },
+    });
     // A call's arguments are checked before the tool runs.
     await expect(
       getRegisteredTools(server).GetWorkspaceDiff.handler({ stat: "yes" })
@@ -66,6 +87,7 @@ describe("deusTools", () => {
     const tools = getRegisteredTools(server);
     const toolNames = Object.keys(tools);
     expect(toolNames).toHaveLength(28);
+    expect(toolNames).not.toContain(TELL_USER);
     // Workspace tools (questions are Claude's own AskUserQuestion, through the engine)
     expect(toolNames).not.toContain("AskUserQuestion");
     expect(toolNames).toContain("GetWorkspaceDiff");
@@ -98,15 +120,50 @@ describe("deusTools", () => {
     expect(toolNames).toContain("recording_hold");
   });
 
+  it("adds just the read-only message tool and checks its Markdown before confirming the send", async () => {
+    mockFrontendAPI.hasAgentMessages.mockReturnValueOnce(true);
+    const enabled = deusTools(SESSION_ID);
+    expect(enabled.tools.map((t) => t.name)).toEqual([
+      ...server.tools.map((t) => t.name),
+      TELL_USER,
+    ]);
+    expect(enabled.tools.find((t) => t.name === TELL_USER)).toMatchObject({
+      description: expect.stringContaining(
+        "Sub-agents report to their caller instead of calling it."
+      ),
+      annotations: { readOnly: true },
+      inputSchema: {
+        required: ["message"],
+        properties: {
+          message: {
+            type: "string",
+            pattern: "\\S",
+            maxLength: 100_000,
+            description: expect.stringContaining("Markdown"),
+          },
+        },
+      },
+    });
+    const caller = { ...CALLER, permissionMode: "plan" as const };
+    const signal = new AbortController().signal;
+    await expect(
+      enabled.call(TELL_USER, { message: "**Tests passed.**" }, caller, signal)
+    ).resolves.toEqual({
+      content: [{ type: "text", text: "Message sent." }],
+    });
+    await expect(enabled.call(TELL_USER, { message: "\n  " }, caller, signal)).rejects.toThrow();
+    await expect(server.call(TELL_USER, { message: "Update" }, caller, signal)).rejects.toThrow(
+      "No Deus tool"
+    );
+  });
+
   // ==========================================================================
   // GetWorkspaceDiff
   // ==========================================================================
 
   describe("GetWorkspaceDiff", () => {
-    it("returns diff content from EventBroadcaster", async () => {
-      mockFrontendAPI.requestGetDiff.mockResolvedValue({
-        diff: "--- a/file.ts\n+++ b/file.ts\n@@ -1 +1 @@\n-old\n+new",
-      });
+    it("lists changed paths when called without a file or stat", async () => {
+      mockFrontendAPI.requestGetDiff.mockResolvedValue({ diff: "file.ts\nother.ts" });
 
       const tool = getRegisteredTools(server)["GetWorkspaceDiff"];
       const result = await tool.handler({});
@@ -116,20 +173,8 @@ describe("deusTools", () => {
         file: undefined,
         stat: undefined,
       });
-      expect(result.content[0].text).toContain("--- a/file.ts");
-    });
-
-    it("passes file parameter for single-file diff", async () => {
-      mockFrontendAPI.requestGetDiff.mockResolvedValue({ diff: "file diff" });
-
-      const tool = getRegisteredTools(server)["GetWorkspaceDiff"];
-      await tool.handler({ file: "/path/to/file.ts" });
-
-      expect(mockFrontendAPI.requestGetDiff).toHaveBeenCalledWith({
-        sessionId: SESSION_ID,
-        file: "/path/to/file.ts",
-        stat: undefined,
-      });
+      expect(tool.description).toContain("lists the changed paths");
+      expect(result.content[0].text).toBe("file.ts\nother.ts");
     });
 
     it("passes stat parameter for stat output", async () => {

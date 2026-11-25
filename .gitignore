@@ -60,6 +60,7 @@ yarn-error.log*
 *.db-wal
 deus.db
 database/
+/.deus-dev/
 
 # Logs
 logs/
@@ -80,8 +81,15 @@ apps/web/public/device-chrome/
 
 # AI tools — session logs, transcripts, agent memory
 .entire/
-.agents/
-.claude/
+# Deus's own deus-* skills are checked in.
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/deus-*/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/deus-*
 .context/
 .megagoal/
 .prompts/

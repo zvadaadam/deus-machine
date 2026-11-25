@@ -36,7 +36,6 @@ import {
   changesFilterLabel,
   type ChangesFilter,
 } from "../lib/changesFilter";
-import { fileChangePath } from "../lib/workspace.utils";
 import { cloudGateStage } from "../lib/cloudPresence";
 import { CloudSandboxGate } from "./CloudSandboxGate";
 import type { Workspace } from "@/shared/types";
@@ -68,31 +67,21 @@ export function ChangesView({
   const diffViewerRef = useRef<ChangesDiffViewerRef>(null);
   const [changesFilter, setChangesFilter] = useState<ChangesFilter>("all-changes");
 
-  const isReady = workspace.state === "ready";
-
   // A provisioning/paused/stopped cloud computer has no sidecar to serve the
   // diff. Compute the gate stage up front so the change poller stays off a down
   // computer, and gate the whole view to the setting-up/wake screen instead of
   // a misleading "No changes yet".
   const gateStage = cloudGateStage(workspace);
-  const canServe = gateStage === null;
 
   // Fetch file change data
-  const { data: fileChangesData, error } = useFileChanges(
-    isReady && canServe ? workspace.id : null,
-    workspace.session_status,
-    isWatched,
-    workspace.state
-  );
+  const { data: fileChangesData, error } = useFileChanges(gateStage ? null : workspace, isWatched);
   const fileChanges = useMemo(() => fileChangesData?.files ?? [], [fileChangesData]);
 
   const filteredFileChanges = fileChanges; // TODO: apply filter when backend supports it
 
   useEffect(() => {
     if (!navigationRequest) return;
-    const targetExists = filteredFileChanges.some(
-      (fileChange) => fileChangePath(fileChange) === navigationRequest.path
-    );
+    const targetExists = filteredFileChanges.some(({ file }) => file === navigationRequest.path);
     if (!targetExists) return;
     diffViewerRef.current?.scrollToFile(navigationRequest.path);
     workspaceLayoutActions.setPendingFileNavigation(workspace.id, null);

@@ -228,6 +228,11 @@ function parkedInitStage(workspaceStatus: string): string | null {
     : null;
 }
 
+/** Discovery still reports a session waiting on a direct question as running. */
+function sessionStatus(s: AgntSession, owner: QueryClient): SessionStatus {
+  return hasParkedDirectQuestion(s.id, owner) ? "needs_response" : mapSessionStatus(s.status);
+}
+
 /**
  * Each cloud session presents as its own sidebar item — 1:1 session↔item, keyed
  * by the agnt session id (which is also the provider session id the direct lane
@@ -235,6 +240,7 @@ function parkedInitStage(workspaceStatus: string): string | null {
  * nulled/empty: a cloud sandbox has no local checkout.
  */
 function toWorkspace(s: AgntSession, owner: QueryClient): Workspace {
+  const status = sessionStatus(s, owner);
   return {
     id: s.id,
     repository_id: repoLabel(s.repo),
@@ -254,13 +260,8 @@ function toWorkspace(s: AgntSession, owner: QueryClient): Workspace {
     state: mapWorkspaceState(s.workspace_status),
     status: "in-progress",
     current_session_id: s.id,
-    // A session blocked on a question is "running" to agnt; the renderer
-    // holding the question knows better (see directQuestionState).
-    session_status: hasParkedDirectQuestion(s.id, owner)
-      ? "needs_response"
-      : mapSessionStatus(s.status),
-    session_error_category: null,
-    session_error_message: null,
+    chats: [{ id: s.id, status, error_category: null, last_user_message_at: s.updated_at }],
+    session_status: status,
     latest_message_sent_at: s.updated_at,
     updated_at: s.updated_at,
     repo_name: repoLabel(s.repo),
@@ -300,10 +301,11 @@ export function toSession(s: AgntSession, owner: QueryClient = queryClient): Ses
     id: s.id,
     workspace_id: s.workspace_id,
     agent_harness: mapHarness(s.harness),
+    agent_messages: false,
     provider_session_id: s.id,
     workspace_kind: "cloud",
     title: s.title,
-    status: hasParkedDirectQuestion(s.id, owner) ? "needs_response" : mapSessionStatus(s.status),
+    status: sessionStatus(s, owner),
     // Discovery carries no count, but the chat tabs hydrate ONCE from this row
     // and label `message_count === 0` "New chat" — a title is only ever minted
     // after the first turn, so it's an honest has-started proxy. The real count

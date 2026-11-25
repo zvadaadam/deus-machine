@@ -1159,6 +1159,50 @@ describe("invalidation sharing and filtered deltas", () => {
     }
   });
 
+  it("sends every visible sibling on one row when multiple chats change", async () => {
+    const v = viewer();
+    const sibling = "background-chat";
+    testDb.prepare("UPDATE sessions SET error_category = NULL WHERE id = ?").run(SESS_ID);
+    testDb
+      .prepare(
+        `INSERT INTO sessions (id, workspace_id, status, last_user_message_at)
+      VALUES (?, ?, 'working', '2026-11-24T05:00:00Z')`
+      )
+      .run(sibling, WS_ID);
+    try {
+      const chats = [
+        {
+          id: sibling,
+          status: "working",
+          error_category: null,
+          last_user_message_at: "2026-11-24T05:00:00Z",
+        },
+        { id: SESS_ID, status: "idle", error_category: null, last_user_message_at: null },
+      ];
+      expect(await runAsThisComputer(api.workspace, { workspaceId: WS_ID })).toMatchObject({
+        chats,
+      });
+      v.subscribe("siblings", "workspaces");
+      expect(v.frames.at(-1)?.data?.flatMap((group) => group.workspaces)).toContainEqual(
+        expect.objectContaining({ id: WS_ID, chats })
+      );
+      invalidate(["workspaces"], { sessionIds: [SESS_ID, sibling] });
+      expect(v.frames.at(-1)).toMatchObject({
+        type: "q:delta",
+        upserted: [{ id: WS_ID, current_session_id: SESS_ID, session_status: "idle", chats }],
+      });
+
+      testDb.prepare("UPDATE sessions SET is_hidden = 1 WHERE id = ?").run(sibling);
+      invalidate(["workspaces"], { sessionIds: [sibling] });
+      const hidden = v.frames.at(-1);
+      const rows = hidden?.upserted ?? hidden?.data?.flatMap((group) => group.workspaces);
+      expect(rows).toContainEqual(expect.objectContaining({ id: WS_ID, chats: [chats[1]] }));
+    } finally {
+      v.close();
+      testDb.prepare("DELETE FROM sessions WHERE id = ?").run(sibling);
+    }
+  });
+
   it("falls back to a full snapshot when a removed session cannot locate its workspace", () => {
     const v = viewer();
     try {

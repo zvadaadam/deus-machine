@@ -32,12 +32,18 @@ import { useResizeHandle } from "@/features/workspace";
 import { useRepos } from "@/features/repository/api";
 import { SidebarProvider, useSidebar } from "@/components/ui";
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
-import { useWorkspaceStore, workspaceLayoutActions } from "@/features/workspace/store";
+import { useWorkspaceStore } from "@/features/workspace/store";
+import { openWorkspace, showWorkspace } from "@/features/workspace/lib/openWorkspace";
 import { openNewWorkspace } from "@/features/workspace/lib/newWorkspace";
 import { derivePRActionState } from "@/features/workspace/lib/prState";
 import { hasCheckout } from "@/features/workspace/lib/startState";
 import { pendingFirstMessages } from "@/features/workspace/store/workspaceStartStore";
-import { useAgentAuthEvents } from "@/features/settings/api/settings.queries";
+import { chatView, type ChatView } from "@/features/settings/lib/chatView";
+import {
+  useAgentAuthEvents,
+  useSettings,
+  useUpdateSettings,
+} from "@/features/settings/api/settings.queries";
 import { useFirstMessageDelivery } from "@/features/session/hooks/useFirstMessageDelivery";
 import { simulatorStoreActions } from "@/features/simulator/store";
 import { useSidebarStore } from "@/features/sidebar/store";
@@ -46,17 +52,20 @@ import { offersNewFromBranch } from "@/features/sidebar/lib/location";
 import { openableFolder } from "@/features/workspace/lib/reach";
 import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
 import { wokeUp, type OpenCloudWorkspace } from "@/features/workspace/lib/diffStats";
-import { uiActions, useUIStore } from "@/shared/stores/uiStore";
+import { useUIStore } from "@/shared/stores/uiStore";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
 import { tempo } from "@/shared/lib/tempo";
-import type { Workspace } from "@/shared/types";
-import { unreadActions } from "@/features/session/store/unreadStore";
 import { native } from "@/platform";
 import { capabilities } from "@/platform/capabilities";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { getLastOpenInAppId } from "@/shared/hooks/useLastOpenInApp";
 import { track } from "@/platform/analytics";
 import { CommandPalette } from "@/features/command-palette";
+import {
+  copyWorkspaceLink,
+  currentChatLink,
+  useHasWorkspaceChat,
+} from "@/features/workspace/lib/workspaceAddress";
 import { AutomationsPage, useAutomations } from "@/features/automations";
 import { CustomizePage } from "@/features/customize";
 import { setupEnvironmentPrompt } from "@/features/session/lib/sessionPrompts";
@@ -205,7 +214,7 @@ export function MainLayout() {
   const prStatusQuery = usePRStatus(prWorkspaceId, {
     ghInstalled: ghStatusQuery.data?.isInstalled,
     ghAuthenticated: ghStatusQuery.data?.isAuthenticated,
-    sessionStatus: selectedWorkspace?.session_status ?? undefined,
+    workspace: selectedWorkspace,
   });
 
   // --- Extracted hooks ---
@@ -255,7 +264,7 @@ export function MainLayout() {
         );
         // Store pending message — will be sent when workspace gets a session
         pendingFirstMessages.set(workspace.id, { message, model, thinkingLevel });
-        selectWorkspace(workspace.id);
+        showWorkspace(workspace.id);
         expandRepo(workspace.repository_id);
         return true;
       } catch (error) {
@@ -264,7 +273,7 @@ export function MainLayout() {
         return false;
       }
     },
-    [welcomeCreateMutation, selectWorkspace, expandRepo]
+    [welcomeCreateMutation, expandRepo]
   );
 
   // Settings uses the same creation/send path as the home composer.
@@ -364,33 +373,13 @@ export function MainLayout() {
     }
   }
 
-  const handleWorkspaceClick = useCallback(
-    (workspace: Workspace) => {
-      // The Automations view overlays MainContent — a workspace click while
-      // it is open must land ON the workspace, not silently under the view.
-      // Same for the Customize view.
-      uiActions.closeAutomations();
-      uiActions.closeCustomize();
-      selectWorkspace(workspace.id);
-      expandRepo(workspace.repository_id);
-      // Only mark the active tab's session as read — other tabs keep their
-      // unread dots until the user actually switches to them.
-      const layout = workspaceLayoutActions.getLayout(workspace.id);
-      const activeSessionId = layout.activeChatTabSessionId || workspace.current_session_id;
-      if (activeSessionId) {
-        unreadActions.markRead(activeSessionId);
-      }
-    },
-    [selectWorkspace, expandRepo]
-  );
-
   // Where this window's workspaces run: this computer, or the cloud (by organization).
   // The sidebar lists that place; the rest of the app reads the full list.
   const places = useWindowPlace({
     repoGroups,
     selectedWorkspaceId,
     selectedWorkspace,
-    openWorkspace: handleWorkspaceClick,
+    openWorkspace,
     selectWorkspace,
   });
   const { place: windowPlace } = places;
@@ -417,6 +406,22 @@ export function MainLayout() {
     onSwitchPlace: places.chooseIndex,
   });
 
+  const { data: settings } = useSettings();
+  const { mutate: updateSettings } = useUpdateSettings();
+  function showChatView(view: ChatView) {
+    updateSettings(
+      { chat_view: view },
+      { onError: (error) => toast.error(getErrorMessage(error)) }
+    );
+  }
+
+  const hasChat = useHasWorkspaceChat(selectedWorkspace?.id);
+  function copyLink(target: "workspace" | "chat") {
+    if (!selectedWorkspace) return;
+    const workspaceId = selectedWorkspace.id;
+    return copyWorkspaceLink(target === "chat" ? currentChatLink(workspaceId) : { workspaceId });
+  }
+
   return (
     <SidebarProvider
       className="h-full"
@@ -438,7 +443,7 @@ export function MainLayout() {
           places={places}
           selectedWorkspaceId={selectedWorkspace?.id || null}
           diffStatsMap={bulkDiffStatsQuery.data}
-          onWorkspaceClick={handleWorkspaceClick}
+          onWorkspaceClick={openWorkspace}
           onNewWorkspace={handleNewWorkspace}
           newWorkspaceActive={!selectedWorkspace && !automationsOpen && !customizeOpen}
           onNewWorkspaceFromGitHub={setGithubPickerRepoId}
@@ -476,7 +481,7 @@ export function MainLayout() {
               ? () => archiveWorkspace(selectedWorkspace.id)
               : undefined
           }
-          prState={derivePRActionState(prStatusQuery, ghIdentity)}
+          prState={derivePRActionState(prStatusQuery, ghIdentity, selectedWorkspace)}
           onOpenProject={repoActions.handleOpenProject}
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
           onStartNewProject={() => repoActions.setShowStartNewModal(true)}
@@ -487,7 +492,7 @@ export function MainLayout() {
           repoGroupsLoading={workspacesQuery.isLoading}
           repoGroupsError={workspacesQuery.isError ? getErrorMessage(workspacesQuery.error) : null}
           onStartWorkspace={handleStartWorkspace}
-          onWorkspaceClick={handleWorkspaceClick}
+          onWorkspaceClick={openWorkspace}
         />
       )}
 
@@ -532,12 +537,17 @@ export function MainLayout() {
       {/* Command Palette (Cmd+K) */}
       <CommandPalette
         hiddenCommands={[
+          `chat-view-${chatView(settings)}`,
           ...hiddenAddProjectCommands(windowPlace.location, folderPicker),
           ...(canOpenInApp ? [] : ["open-in-app"]),
+          ...(selectedWorkspace ? [] : ["copy-workspace-link"]),
+          ...(hasChat ? [] : ["copy-chat-link"]),
           // A workspace from a pull request or branch is local: not from the cloud.
           ...(windowPlace.location === "local" ? [] : ["new-workspace-from"]),
         ]}
         actionOverrides={{
+          "chat-view-bubbles": () => showChatView("bubbles"),
+          "chat-view-full": () => showChatView("full"),
           "add-from-github": () => handleAddFromGitHub(),
           "open-project": repoActions.handleOpenProject,
           "clone-repository": () => repoActions.setShowCloneModal(true),
@@ -556,6 +566,8 @@ export function MainLayout() {
             else setGithubPickerRepoId(repoId);
           },
           "open-in-app": openInLastApp,
+          "copy-workspace-link": () => void copyLink("workspace"),
+          "copy-chat-link": () => void copyLink("chat"),
         }}
       />
     </SidebarProvider>

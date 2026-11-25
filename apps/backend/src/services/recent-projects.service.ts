@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { runGit } from "@shared/lib/git-process";
 import {
   closeSync,
   existsSync,
@@ -113,35 +113,28 @@ export function isIgnoredRecentProjectPath(fsPath: string, options: ReaderOption
   return IGNORED_PATH_SEGMENTS.some((segment) => fsPath.includes(segment));
 }
 
-function resolveGitProjectRoot(fsPath: string): string | null {
-  try {
-    const rootPath = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd: fsPath,
-      encoding: "utf8",
-      timeout: GIT_ROOT_TIMEOUT_MS,
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-
-    return rootPath || null;
-  } catch {
-    return null;
-  }
-}
-
-function pushProject(
+async function pushProject(
   projects: RecentProject[],
   seenPaths: Set<string>,
   project: RecentProject,
   options: ReaderOptions = {}
-): void {
+): Promise<void> {
   if (!hasProjectCapacity(projects, options)) return;
   if (seenPaths.has(project.path)) return;
   if (isIgnoredRecentProjectPath(project.path, options)) return;
   if (!existsSync(project.path)) return;
   if (!consumeGitProbeBudget(options)) return;
 
-  const projectRoot = resolveGitProjectRoot(project.path);
-  if (!projectRoot) return;
+  let projectRoot: string;
+  try {
+    const output = await runGit(["rev-parse", "--show-toplevel"], {
+      cwd: project.path,
+      timeoutMs: GIT_ROOT_TIMEOUT_MS,
+    });
+    projectRoot = output.replace(/\r?\n$/, "");
+  } catch {
+    return;
+  }
   if (seenPaths.has(projectRoot)) return;
   if (isIgnoredRecentProjectPath(projectRoot, options)) return;
   if (!existsSync(projectRoot)) return;
@@ -154,20 +147,24 @@ function pushProject(
   });
 }
 
-function readVscdbProjects(
+async function readVscdbProjects(
   dbPath: string,
   source: "cursor" | "vscode",
   options: ReaderOptions
-): RecentProject[] {
+): Promise<RecentProject[]> {
   if (!existsSync(dbPath)) return [];
   if (!hasGitProbeBudgetRemaining(options)) return [];
 
-  let db: ReturnType<typeof openSqliteDatabase> | undefined;
   try {
-    db = openSqliteDatabase(dbPath, { readonly: true });
-    const row = db
-      .prepare("SELECT value FROM ItemTable WHERE key = 'history.recentlyOpenedPathsList'")
-      .get() as { value: string } | undefined;
+    const db = openSqliteDatabase(dbPath, { readonly: true });
+    let row: { value: string } | undefined;
+    try {
+      row = db
+        .prepare("SELECT value FROM ItemTable WHERE key = 'history.recentlyOpenedPathsList'")
+        .get() as typeof row;
+    } finally {
+      db.close();
+    }
 
     if (!row?.value) return [];
 
@@ -186,7 +183,7 @@ function readVscdbProjects(
       if (folderUri && folderUri.startsWith("file://")) {
         const fsPath = parseFileUriPath(folderUri);
         if (fsPath) {
-          pushProject(
+          await pushProject(
             projects,
             seenPaths,
             { path: fsPath, name: basename(fsPath), source },
@@ -202,7 +199,7 @@ function readVscdbProjects(
       if (!workspaceConfigPath) continue;
 
       const workspaceRoot = dirname(workspaceConfigPath);
-      pushProject(
+      await pushProject(
         projects,
         seenPaths,
         { path: workspaceRoot, name: basename(workspaceRoot), source },
@@ -213,8 +210,6 @@ function readVscdbProjects(
     return projects;
   } catch {
     return [];
-  } finally {
-    db?.close();
   }
 }
 
@@ -319,7 +314,10 @@ function resolveClaudeProject(
   return null;
 }
 
-export function readClaudeProjects(dir: string, options: ReaderOptions = {}): RecentProject[] {
+export async function readClaudeProjects(
+  dir: string,
+  options: ReaderOptions = {}
+): Promise<RecentProject[]> {
   if (!existsSync(dir)) return [];
   if (!hasGitProbeBudgetRemaining(options)) return [];
 
@@ -341,7 +339,7 @@ export function readClaudeProjects(dir: string, options: ReaderOptions = {}): Re
         break;
       }
 
-      pushProject(
+      await pushProject(
         projects,
         seenPaths,
         { path: project.path, name: basename(project.path), source: "claude" },
@@ -380,7 +378,9 @@ export function interleaveRecentProjects(
   return merged;
 }
 
-export function listRecentProjects(options: ListRecentProjectsOptions = {}): RecentProject[] {
+export async function listRecentProjects(
+  options: ListRecentProjectsOptions = {}
+): Promise<RecentProject[]> {
   const homeDir = options.homeDir ?? homedir();
   const limit = options.limit ?? RECENT_PROJECT_LIMIT;
   const readerOptions = {
@@ -392,15 +392,15 @@ export function listRecentProjects(options: ListRecentProjectsOptions = {}): Rec
 
   const cursorProjects =
     options.readers?.cursor?.() ??
-    readVscdbProjects(getEditorStateDbPath("Cursor", homeDir), "cursor", readerOptions);
+    (await readVscdbProjects(getEditorStateDbPath("Cursor", homeDir), "cursor", readerOptions));
 
   const vscodeProjects =
     options.readers?.vscode?.() ??
-    readVscdbProjects(getEditorStateDbPath("Code", homeDir), "vscode", readerOptions);
+    (await readVscdbProjects(getEditorStateDbPath("Code", homeDir), "vscode", readerOptions));
 
   const claudeProjects =
     options.readers?.claude?.() ??
-    readClaudeProjects(join(homeDir, ".claude/projects"), readerOptions);
+    (await readClaudeProjects(join(homeDir, ".claude/projects"), readerOptions));
 
   return interleaveRecentProjects([cursorProjects, vscodeProjects, claudeProjects], limit);
 }

@@ -3,6 +3,8 @@
 
 import * as path from "path";
 import { OPERATOR_GUIDANCE, quote } from "@zvada/agent-server/operator";
+import { TELL_USER } from "@shared/agent-message";
+import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
 
 /**
  * Derives the project (repo) name from a worktree path.
@@ -49,6 +51,17 @@ const AGENT_DEVICE =
   "and end with `agent-device close` (`close --shutdown` if you booted it) so another workspace can use the device. " +
   "`agent-device help <topic>` has more (`dogfood` for exploratory QA, `debugging`, `react-native`).\n";
 
+export const AGENT_MESSAGES = `
+# Messages to the person
+
+Until you finish, the person sees only what you send with the \`${TELL_USER}\` tool of the \`${DEUS_TOOLS_SERVER}\` server (call it by the name your tool list gives it). Text you write between tool calls is not shown to them while you work.
+
+- On a job of more than a few steps, send one message before you start, saying what you will do, and one at each result they can use or finding that changes the plan.
+- When they ask to hear a finding before you act on it, send it before you act.
+- Put related results in one message. Send no progress notes ("now running the tests"), and nothing for a short answer.
+- Your final reply is the closing message: write it once, as your normal reply, and do not send it with the tool as well.
+`;
+
 /**
  * Builds concise workspace context for any agent.
  * Includes project name, worktree path, and orchestrator info.
@@ -74,6 +87,8 @@ export function buildWorkspaceContext(
       : "") +
     // The session tools every chat here has (services/assistants: withSessionTools).
     `${OPERATOR_GUIDANCE}\n` +
+    "For this computer's workspaces, read a `deus://workspace?id=<workspace id>&session=<chat id>` link with `read_session`. Pass its `session` value as `session`.\n" +
+    "Without `session`, pass the link's `id` value as `session` to read the workspace's current chat.\n" +
     `You can render live HTML+CSS previews inline in chat using the \`html-preview\` code fence — it renders in an isolated Shadow DOM instead of showing code. Use this naturally whenever showing is clearer than describing (design options, component variations, layout ideas).`
   );
 }

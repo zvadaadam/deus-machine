@@ -10,12 +10,55 @@ import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 
 const { mockCheckpoint } = vi.hoisted(() => ({ mockCheckpoint: vi.fn(async () => {}) }));
 vi.mock("../agents/core/checkpoint", () => ({ createCheckpoint: mockCheckpoint }));
+vi.mock("../agents/environment/shell-env", () => ({ getShellEnvironment: vi.fn(() => ({})) }));
 
 import { beforeCancel, beginTurnStart, startEngine, stopEngine } from "../index";
+import { getRegistry } from "../agents/core/engine";
+import { getShellEnvironment } from "../agents/environment";
 import { HostRpc, notifyTitle } from "../host-link";
 import { trackedSessions } from "../session-tracker";
 
 const T = 1_700_000_000_000;
+
+it.each([false, true])(
+  "filters a native harness launch (login shell settings: %s)",
+  async (set) => {
+    const runtimeEnv = {
+      DATABASE_PATH: "/fixture/installed/deus.db",
+      DEUS_PACKAGED: "1",
+      NODE_ENV: "production",
+      PORT: "0",
+      NODE_PATH: "/fixture/installed/modules",
+      BUN_OPTIONS: "--no-env-file",
+    };
+    const shellEnv: Record<string, string> = set
+      ? {
+          NODE_ENV: "development",
+          PORT: "4321",
+          NODE_PATH: "/fixture/modules",
+          BUN_OPTIONS: "--smol",
+        }
+      : {};
+    vi.mocked(getShellEnvironment).mockReturnValueOnce({
+      ...shellEnv,
+      DATABASE_PATH: "/fixture/shell/deus.db",
+    });
+    const keys = [...Object.keys(runtimeEnv), "WORKSPACE_SETTING"];
+    const native = getRegistry().processes.spawn({
+      command: process.execPath,
+      args: [
+        "-e",
+        `console.log(JSON.stringify(Object.fromEntries(${JSON.stringify(keys)}.map(key => [key, process.env[key]]))))`,
+      ],
+      env: { ...process.env, ...runtimeEnv, WORKSPACE_SETTING: "kept" },
+      harness: "codex-app-server",
+    });
+    let stdout = "";
+    native.child.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+    expect((await native.exited).code).toBe(0);
+    expect(JSON.parse(stdout)).toEqual({ ...shellEnv, WORKSPACE_SETTING: "kept" });
+  }
+);
 
 /** Scripted engine: a turn replays a fixed event sequence, or hangs. */
 function fakeRuntime(hang = false) {

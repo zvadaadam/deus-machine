@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { spawn, execFileSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { finished } from "node:stream/promises";
 import { parseEnv, stripVTControlCharacters } from "node:util";
 import {
@@ -15,7 +15,8 @@ import { getWorkspace } from "@deus-hq/sdk";
 import type { ProjectEnvironmentResponse } from "@shared/types/project-environment";
 import { getDatabase } from "../lib/database";
 import { ValidationError } from "../lib/errors";
-import { processGroupsStopped, trackProcessGroup } from "../lib/process-groups";
+import { processGroupsStopped, trackProcessGroup } from "@shared/lib/process-groups";
+import { runGit } from "@shared/lib/git-process";
 import { cloudAccount, cloudOrg, requireCloudOrg } from "./agent/cloud/config";
 import { getCloudEnvironmentInfo } from "./cloud-environment.service";
 import { createBackendChildEnv } from "@shared/lib/child-env";
@@ -53,27 +54,30 @@ export function readProjectFile(directory: string): ProjectEnvironment | null {
   }
 }
 
-export function writeProjectFile(directory: string, project: ProjectEnvironment): void {
+const updatingIgnore = new Map<string, Promise<void>>();
+
+export async function writeProjectFile(
+  directory: string,
+  project: ProjectEnvironment
+): Promise<void> {
   const file = environmentFile(directory);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(project, null, 2) + "\n");
-  // Older projects ignore all of .deus. Keep workspace data ignored while making
-  // this explicit Save to repository action publishable through normal Git.
-  let ignored = false;
-  try {
-    execFileSync("git", ["check-ignore", "-q", PROJECT_ENVIRONMENT_PATH], {
-      cwd: directory,
-      stdio: "ignore",
-    });
-    ignored = true;
-  } catch {
-    /* Not ignored, or not a Git repository. */
-  }
-  if (ignored)
-    fs.appendFileSync(
-      path.join(directory, ".gitignore"),
-      "\n!/.deus/\n/.deus/*\n!/.deus/environment.json\n"
-    );
+  // Saves to a project that ignores .deus share one check and one .gitignore edit.
+  const pending = updatingIgnore.get(file);
+  if (pending) return pending;
+  const update = runGit(["check-ignore", "-q", PROJECT_ENVIRONMENT_PATH], { cwd: directory })
+    .then(
+      () =>
+        fs.appendFileSync(
+          path.join(directory, ".gitignore"),
+          `\n!/.deus/\n/.deus/*\n!/${PROJECT_ENVIRONMENT_PATH}\n`
+        ),
+      () => {} // The recipe isn't ignored, or git couldn't inspect this folder.
+    )
+    .finally(() => updatingIgnore.delete(file));
+  updatingIgnore.set(file, update);
+  return update;
 }
 
 export function projectEnvironmentResponse(
@@ -273,7 +277,7 @@ export async function runSetupCommand(
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    // Its own group: the backend stops it when it stops (lib/process-groups).
+    // The backend stops the setup script's whole group when it quits (shared/lib/process-groups).
     const untrack = trackProcessGroup(child.pid);
     child.stdout.pipe(log, { end: false });
     child.stderr.pipe(log, { end: false });

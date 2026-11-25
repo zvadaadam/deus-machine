@@ -3,7 +3,7 @@
  *
  * Pierre owns rendering, virtualization, keyboard nav, VS Code icons, and
  * git-status badges. We flatten our hierarchical FileTreeNode[] into the
- * string[] shape Pierre wants, push additions/deletions/committed markers
+ * string[] shape Pierre wants, show line counts and rename origins
  * via renderRowDecoration, and forward reveal + selection intents through
  * the imperative model methods.
  */
@@ -13,6 +13,7 @@ import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react";
 import type { FileTreeRowDecorationRenderer, GitStatusEntry } from "@pierre/trees";
 import "@pierre/trees/web-components";
 
+import { renameOriginLabel } from "@/features/workspace/lib/workspace.utils";
 import type { FileTreeNode } from "../../types";
 import { fileTreeThemeStyles } from "../../lib/fileTreeTheme";
 
@@ -20,71 +21,43 @@ interface FileTreeProps {
   nodes: FileTreeNode[];
   selectedPath?: string | null;
   onFileClick?: (path: string) => void;
-  /** When true directories start expanded; when false they start collapsed. */
-  defaultExpanded?: boolean;
   revealPath?: string | null;
   revealRequestId?: string | null;
   onRevealConsumed?: (requestId: string) => void;
 }
 
-// Files keep their raw path; directories get a trailing slash so Pierre
-// infers kind from the string without us shipping extra metadata.
-function flattenToPaths(nodes: FileTreeNode[]): string[] {
-  const out: string[] = [];
-  const visit = (list: FileTreeNode[]) => {
-    for (const node of list) {
-      out.push(node.type === "directory" ? `${node.path}/` : node.path);
-      if (node.children?.length) visit(node.children);
-    }
-  };
-  visit(nodes);
-  return out;
-}
+function flattenTree(nodes: FileTreeNode[]) {
+  const paths: string[] = [];
+  const fileLookup = new Map<string, FileTreeNode>();
+  const gitStatus: GitStatusEntry[] = [];
 
-function buildFileLookup(nodes: FileTreeNode[]): Map<string, FileTreeNode> {
-  const map = new Map<string, FileTreeNode>();
-  const visit = (list: FileTreeNode[]) => {
+  function visit(list: FileTreeNode[]) {
     for (const node of list) {
-      if (node.type === "file") map.set(node.path, node);
-      if (node.children?.length) visit(node.children);
-    }
-  };
-  visit(nodes);
-  return map;
-}
-
-// The badge is the diff's verdict (change_status); the file scan carries no status.
-function buildGitStatus(nodes: FileTreeNode[]): GitStatusEntry[] {
-  const entries: GitStatusEntry[] = [];
-  const visit = (list: FileTreeNode[]) => {
-    for (const node of list) {
-      if (node.type === "file") {
-        if (node.change_status) entries.push({ path: node.path, status: node.change_status });
+      if (node.type === "directory") {
+        // Pierre recognizes directories by their trailing slash.
+        paths.push(`${node.path}/`);
+        if (node.children) visit(node.children);
+      } else {
+        paths.push(node.path);
+        fileLookup.set(node.path, node);
+        if (node.change_status) gitStatus.push({ path: node.path, status: node.change_status });
       }
-      if (node.children?.length) visit(node.children);
     }
-  };
+  }
+
   visit(nodes);
-  return entries;
+  return { paths, gitStatus, fileLookup };
 }
 
 export function FileTree({
   nodes,
   selectedPath,
   onFileClick,
-  defaultExpanded,
   revealPath,
   revealRequestId,
   onRevealConsumed,
 }: FileTreeProps) {
-  const { paths, gitStatus, fileLookup } = useMemo(
-    () => ({
-      paths: flattenToPaths(nodes),
-      gitStatus: buildGitStatus(nodes),
-      fileLookup: buildFileLookup(nodes),
-    }),
-    [nodes]
-  );
+  const { paths, gitStatus, fileLookup } = useMemo(() => flattenTree(nodes), [nodes]);
 
   // Refs keep the latest callback/data reachable from Pierre's stable closures
   // (onSelectionChange + renderRowDecoration are captured once at construction).
@@ -121,20 +94,16 @@ export function FileTree({
       ({ row }) => {
         if (row.kind === "directory") return null;
 
-        // File decoration — +N/−N line counts plus uncommitted marker.
         const node = fileLookupRef.current.get(row.path);
         if (!node) return null;
-        const parts: string[] = [];
+        const origin = node.previous_path && renameOriginLabel(node.previous_path);
+        const parts: string[] = origin ? [origin] : [];
         if (node.additions) parts.push(`+${node.additions}`);
         if (node.deletions) parts.push(`-${node.deletions}`);
-        if (node.committed === false) parts.push("●");
         if (parts.length === 0) return null;
         return {
           text: parts.join(" "),
-          title:
-            node.additions || node.deletions
-              ? `+${node.additions ?? 0} additions, -${node.deletions ?? 0} deletions`
-              : "Uncommitted",
+          title: origin ?? `+${node.additions ?? 0} additions, -${node.deletions ?? 0} deletions`,
         };
       },
     []
@@ -142,7 +111,7 @@ export function FileTree({
 
   const { model } = useFileTree({
     paths,
-    initialExpansion: defaultExpanded ? "open" : "closed",
+    initialExpansion: "closed",
     flattenEmptyDirectories: true,
     // Monochrome icons — Pierre inherits `currentColor` from the host row
     // foreground when `colored` is off, so the whole tree reads as a single

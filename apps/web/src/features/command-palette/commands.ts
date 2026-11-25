@@ -3,6 +3,8 @@ import {
   Plus,
   FolderOpen,
   FolderGit2,
+  Link2,
+  MessagesSquare,
   GitBranch,
   GitPullRequest,
   Settings,
@@ -10,6 +12,7 @@ import {
   ClockFading,
   Blocks,
 } from "lucide-react";
+import { CHAT_VIEWS } from "@/features/settings/lib/chatView";
 import { uiActions } from "@/shared/stores/uiStore";
 import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 import { openNewWorkspace } from "@/features/workspace/lib/newWorkspace";
@@ -85,6 +88,20 @@ export const staticCommands: CommandDefinition[] = [
     when: () => capabilities.openInExternalApp,
     action: () => {},
   },
+  {
+    id: "copy-workspace-link",
+    label: "Copy workspace link",
+    icon: Link2,
+    group: "workspace",
+    action: () => {},
+  },
+  {
+    id: "copy-chat-link",
+    label: "Copy chat link",
+    icon: Link2,
+    group: "workspace",
+    action: () => {},
+  },
 
   // --- Project ---
   {
@@ -153,6 +170,17 @@ export const staticCommands: CommandDefinition[] = [
     action: () => uiActions.openCustomize(),
   },
 
+  ...CHAT_VIEWS.map(
+    ({ value, label }): CommandDefinition => ({
+      id: `chat-view-${value}`,
+      label: `Show ${label.toLowerCase()}`,
+      group: "settings",
+      icon: MessagesSquare,
+      keywords: ["chat", "view", "show", label],
+      when: macBackendAvailable,
+      action: () => {},
+    })
+  ),
   ...settingsNavigation.map(
     (section): CommandDefinition => ({
       id: `settings-${section.id}`,

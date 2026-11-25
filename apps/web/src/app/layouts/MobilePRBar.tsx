@@ -18,6 +18,7 @@ import {
   Loader2,
   ChevronDown,
   ExternalLink,
+  AlertTriangle,
 } from "lucide-react";
 import { match } from "ts-pattern";
 import {
@@ -30,7 +31,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/shared/lib/utils";
 import { BranchSelector } from "@/features/workspace/ui/BranchSelector";
-import type { PRActionState } from "@/features/workspace/lib/prState";
+import { mergeLabel, type PRActionState } from "@/features/workspace/lib/prState";
 import {
   RESOLVE_CONFLICTS,
   fixCIPrompt,
@@ -83,13 +84,18 @@ export function MobilePRHeaderAction({
       >
         <GitPullRequestCreate className="h-3 w-3" />
         <span>Create PR</span>
+        {state.warning && (
+          <AlertTriangle className="h-3 w-3" role="img" aria-label={state.warning} />
+        )}
       </button>
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent side="bottom" className="rounded-t-xl">
           <SheetHeader>
             <SheetTitle>Create Pull Request</SheetTitle>
-            <SheetDescription>Select target branch and create a PR.</SheetDescription>
+            <SheetDescription>
+              {state.warning ?? "Select target branch and create a PR."}
+            </SheetDescription>
           </SheetHeader>
 
           <div className="flex flex-col gap-4 px-4 pb-4">
@@ -166,11 +172,15 @@ export function MobilePRStatusBar({
     .with(
       { type: "checking" },
       { type: "gh_unavailable" },
-      { type: "error" },
       { type: "create_pr" },
       { type: "no_remote" },
       () => null
     )
+    .with({ type: "linked" }, (s) => (
+      <StatusBar prNumber={s.prNumber} prUrl={s.prUrl}>
+        <span className="text-text-muted text-xs">{s.warning}</span>
+      </StatusBar>
+    ))
     .with({ type: "ci_pending" }, (s) => (
       <StatusBar prNumber={s.prNumber} prUrl={s.prUrl}>
         <span className="text-warning flex items-center gap-1 text-xs">
@@ -228,7 +238,7 @@ export function MobilePRStatusBar({
           Ready
         </span>
         <BarAction
-          label="Merge"
+          label={mergeLabel(s.baseBranch)}
           variant="success"
           onClick={() => {
             if (workspaceId) {

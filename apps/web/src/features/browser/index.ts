@@ -1,1 +1,1 @@
-export { BrowserPanel } from "./ui";
+export { BrowserHost } from "./ui";

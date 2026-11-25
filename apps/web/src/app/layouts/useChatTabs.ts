@@ -7,13 +7,24 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { isTextFieldFocused } from "@/shared/lib/keyboard";
 import { toast } from "sonner";
+import { shallow } from "zustand/shallow";
+import { hashKey, useQueryClient } from "@tanstack/react-query";
+import { api } from "@shared/api";
+import { DEFAULT_AGENT_HARNESS } from "@shared/models";
+import { queryKeys } from "@/shared/api/queryKeys";
+import { runtimeForQueryClient } from "@/platform/ws/runtime-client";
 import { getErrorMessage } from "@shared/lib/errors";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useCreateSession, useWorkspaceSessions } from "@/features/session/api/session.queries";
 import { getAgentHarnessForModel, type AgentHarness } from "@/shared/agents";
-import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
+import {
+  useWorkspaceLayoutStore,
+  workspaceLayoutActions,
+} from "@/features/workspace/store/workspaceLayoutStore";
 import type { Session } from "@/features/session/types";
+import { unreadActions } from "@/features/session/store/unreadStore";
 import type { ChatTab, ClosedSessionTab, SessionChatTab } from "@/features/session/ui/tabs";
 import { getChatTabSessionId, isSessionChatTab } from "@/features/session/ui/tabs";
 import {
@@ -26,9 +37,11 @@ import {
   reconcileLive,
   sessionToTab,
 } from "./chatTabsSync";
-import { openChatDone, useOpenChatStore } from "@/features/session/lib/openChat";
-
-const MAX_CLOSED_TABS = 20;
+import {
+  currentOpenChatRequest,
+  openChatDone,
+  useOpenChatStore,
+} from "@/features/session/lib/openChat";
 
 function createClosedTabId(sessionId: string): string {
   return `${sessionId}-${Date.now()}-${crypto.randomUUID()}`;
@@ -36,7 +49,7 @@ function createClosedTabId(sessionId: string): string {
 
 function createPlaceholderSessionTab(
   sessionId: string,
-  agentHarness: AgentHarness = "claude-code",
+  agentHarness: AgentHarness = DEFAULT_AGENT_HARNESS,
   initialModel?: string
 ): SessionChatTab {
   return {
@@ -68,9 +81,6 @@ interface UseChatTabsOptions {
   workspaceId: string;
   activeSessionId: string | null | undefined;
 }
-
-/** An open-chat request older than this is dropped: a click's answer, not a later surprise. */
-const OPEN_CHAT_REQUEST_MAX_AGE_MS = 10_000;
 
 export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions) {
   // Fetch all sessions for this workspace (for hydrating tab metadata)
@@ -124,7 +134,6 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     // Only act when transitioning from null/undefined → real session ID
     if (prev || !activeSessionId) return;
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time patch when workspace init completes
     setMainTabs((tabs) => {
       const defaultIdx = tabs.findIndex((t) => t.id === "tab-default");
       if (defaultIdx === -1) return tabs;
@@ -144,7 +153,8 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
 
   // --- Hydrate tabs with real session data when sessions load ---
 
-  const hydrated = useRef(false);
+  // A chat request must wait for the hydrated tabs and their active tab to commit together.
+  const [hydrated, setHydrated] = useState(false);
   /** The closed tabs as of this render, for the live reconcile's tabs update. */
   const closedNow = useRef(closedTabs);
   useEffect(() => {
@@ -154,7 +164,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
   const seen = useRef(new Set<string>());
   useEffect(() => {
     if (!workspaceSessions) return;
-    if (hydrated.current) {
+    if (hydrated) {
       // Functional updates over the state as it is, so they compose with any other
       // update in the same render (the first chat replacing the placeholder).
       const before = seen.current;
@@ -177,7 +187,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       });
       return;
     }
-    hydrated.current = true;
+    setHydrated(true);
     seen.current = new Set(workspaceSessions.map((s) => s.id));
     const known = workspaceLayoutActions.getLayout(workspaceId).knownChatSessionIds;
 
@@ -233,15 +243,16 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
 
       return hydratedTabs;
     });
-  }, [workspaceSessions, sessionMap, activeSessionId, workspaceId]);
+  }, [workspaceSessions, sessionMap, activeSessionId, workspaceId, hydrated]);
 
   // --- A request to show one chat (openChat), taken when mounted or already mounted ---
 
   const requested = useOpenChatStore((state) => state.requested[workspaceId]);
+  const activeTab = mainTabs.find((tab) => tab.id === activeMainTabId);
+  const activeTabSessionId = getChatTabSessionId(activeTab);
   useEffect(() => {
-    if (!requested || !hydrated.current || !workspaceSessions) return;
-    // Taken late, it would move the person's focus after they have gone on to something else.
-    if (Date.now() - requested.at > OPEN_CHAT_REQUEST_MAX_AGE_MS) {
+    if (!requested || !hydrated || !workspaceSessions) return;
+    if (currentOpenChatRequest(workspaceId) !== requested) {
       openChatDone(workspaceId, requested.id);
       return;
     }
@@ -252,9 +263,13 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       if (sessionsReadAt > requested.at) openChatDone(workspaceId, requested.id);
       return;
     }
-    if (!openChatDone(workspaceId, requested.id)) return;
     const target = requested.sessionId;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- consume a navigation request
+    // The address follows published tabs. Acknowledge only after React committed the target.
+    if (activeTabSessionId === target) {
+      openChatDone(workspaceId, requested.id);
+      return;
+    }
+
     setMainTabs((tabs) =>
       tabs.some((t) => isSessionChatTab(t) && t.sessionId === target)
         ? tabs
@@ -262,31 +277,48 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     );
     setClosedTabs((closed) => closed.filter((c) => c.sessionId !== target));
     setActiveMainTabId(`tab-${target}`);
-  }, [requested, sessionMap, workspaceSessions, sessionsReadAt, workspaceId]);
+  }, [
+    requested,
+    sessionMap,
+    workspaceSessions,
+    sessionsReadAt,
+    workspaceId,
+    hydrated,
+    activeTabSessionId,
+  ]);
 
-  // --- Persist tab state to localStorage on every change ---
-  // Debounced to avoid writing on every intermediate state update.
-
-  const persistTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const shownSessionId = activeTabSessionId ?? activeSessionId ?? null;
+  const openIds = useMemo(
+    () => mainTabs.filter(isSessionChatTab).map((tab) => tab.sessionId),
+    [mainTabs]
+  );
+  const runtime = runtimeForQueryClient(useQueryClient());
+  const detailKey = hashKey(openIds);
   useEffect(() => {
-    clearTimeout(persistTimeoutRef.current);
-    persistTimeoutRef.current = setTimeout(() => {
-      const chatSessionIds = mainTabs.filter(isSessionChatTab).map((tab) => tab.sessionId);
+    if (!runtime) return;
+    const releases = openIds.map((sessionId) =>
+      runtime.retainQuery(api.session.name, { sessionId }, queryKeys.sessions.detail(sessionId))
+    );
+    return () => releases.forEach((release) => release());
+    // A tab's label can change while its session stays open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runtime, detailKey]);
 
-      const activeTab = mainTabs.find((t) => t.id === activeMainTabId);
-      const activeSessionIdForPersist = getChatTabSessionId(activeTab);
-
-      workspaceLayoutActions.setChatTabState(
-        workspaceId,
-        chatSessionIds,
-        activeSessionIdForPersist,
-        // What this view knew, so chats that arrive while it is away open as tabs next time.
-        hydrated.current ? [...seen.current] : undefined
-      );
-    }, 100);
-
-    return () => clearTimeout(persistTimeoutRef.current);
-  }, [mainTabs, activeMainTabId, workspaceId]);
+  useEffect(() => {
+    // A route's layout effect can request a chat after this render, before this effect runs.
+    if (!hydrated || currentOpenChatRequest(workspaceId)) return;
+    if (shownSessionId) unreadActions.markRead(shownSessionId);
+    const knownIds = [...seen.current];
+    const saved = useWorkspaceLayoutStore.getState().layouts[workspaceId];
+    // React can replay a restore with a new tab array while the address change is pending.
+    if (
+      saved?.activeChatTabSessionId === shownSessionId &&
+      shallow(saved.chatTabSessionIds, openIds) &&
+      shallow(saved.knownChatSessionIds, knownIds)
+    )
+      return;
+    workspaceLayoutActions.setChatTabState(workspaceId, openIds, shownSessionId, knownIds);
+  }, [openIds, shownSessionId, workspaceId, requested, hydrated]);
 
   // --- Tab handlers ---
 
@@ -322,23 +354,21 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
           initialModel: closingTab.initialModel,
           closedAt: Date.now(),
         };
-        setClosedTabs((prevClosed) =>
-          [
-            entry,
-            ...prevClosed.filter(
-              (closedTab) =>
-                closedTab.sessionId !== closingTab.sessionId &&
-                !openSessionIds.has(closedTab.sessionId)
-            ),
-          ].slice(0, MAX_CLOSED_TABS)
-        );
+        setClosedTabs((prev) => [
+          entry,
+          ...prev.filter(
+            (closedTab) =>
+              closedTab.sessionId !== closingTab.sessionId &&
+              !openSessionIds.has(closedTab.sessionId)
+          ),
+        ]);
       }
 
       if (tabId === activeMainTabId && newTabs.length > 0) {
         const targetIndex = currentIndex > 0 ? currentIndex - 1 : 0;
         setActiveMainTabId(newTabs[targetIndex].id);
-        setFocusActiveTabKey((prevKey) => prevKey + 1);
       }
+      setFocusActiveTabKey((prevKey) => prevKey + 1);
     },
     [activeMainTabId, mainTabs]
   );
@@ -355,7 +385,9 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       }
       try {
         const newSession = await createSessionMutation.mutateAsync(workspaceId);
-        const agentHarness = initialModel ? getAgentHarnessForModel(initialModel) : "claude-code";
+        const agentHarness = initialModel
+          ? getAgentHarnessForModel(initialModel)
+          : DEFAULT_AGENT_HARNESS;
         const newTab = createPlaceholderSessionTab(newSession.id, agentHarness, initialModel);
         // The live list may have added it already: one tab, with the person's choice.
         setMainTabs((prevTabs) =>
@@ -453,25 +485,22 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
 
   // --- Derived state ---
 
-  const activeTab = mainTabs.find((t) => t.id === activeMainTabId);
   const openSessionIds = useMemo(() => getOpenSessionIds(mainTabs), [mainTabs]);
-  const restorableClosedTabs = useMemo(
-    () => closedTabs.filter((closedTab) => !openSessionIds.has(closedTab.sessionId)),
-    [closedTabs, openSessionIds]
-  );
+  const restorableClosedTabs = useMemo(() => {
+    const sessions = workspaceSessions ?? [];
+    const sequences = computeSequences(sessions);
+    const order = new Map(closedTabs.map((tab, index) => [tab.sessionId, index]));
+    return sessions
+      .filter((session) => !openSessionIds.has(session.id))
+      .sort((a, b) => (order.get(a.id) ?? order.size) - (order.get(b.id) ?? order.size))
+      .map((session) => {
+        const closed = closedTabs[order.get(session.id) ?? closedTabs.length];
+        if (closed && (closed.hasStarted || session.message_count === 0)) return closed;
+        return { ...sessionToTab(session, sequences.get(session.id) ?? 1), closedAt: 0 };
+      });
+  }, [workspaceSessions, openSessionIds, closedTabs]);
 
   // --- Keyboard shortcuts ---
-
-  function isTextFieldFocused(): boolean {
-    const activeElement = document.activeElement as HTMLElement | null;
-    return (
-      !!activeElement &&
-      (activeElement.tagName === "INPUT" ||
-        activeElement.tagName === "TEXTAREA" ||
-        activeElement.isContentEditable ||
-        activeElement.getAttribute("role") === "textbox")
-    );
-  }
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -500,6 +529,8 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       if (isModKey && !e.shiftKey && key === "w") {
         if (mainTabs.length <= 1 || !activeMainTabId) return;
         if (isTextFieldFocused()) return;
+        // Do not close a chat tab while focus is inside the workspace tabs/content pane.
+        if (document.activeElement?.closest('[data-slot="workspace-content-pane"]')) return;
         e.preventDefault();
         handleTabClose(activeMainTabId);
       }
@@ -519,6 +550,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     tabs: mainTabs,
     activeTabId: activeMainTabId,
     activeTab,
+    shownSessionId,
     closedTabs: restorableClosedTabs,
     focusActiveTabKey,
     handleTabChange,

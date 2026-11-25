@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { MessageInput } from "./MessageInput";
 import { useSessionActions } from "../hooks";
 import { useSessionWithMessages } from "../api/session.queries";
+import { openConversationTurn } from "../lib/conversationView";
 import { useProjectEnvironment } from "@/features/workspace/api/workspace.queries";
 import { useDefaultThinkingLevel } from "@/features/settings/api";
 import { type AgentHarness, getThinkingForSession } from "@/shared/agents";
@@ -92,6 +93,10 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     const { session, messages, turns, error, retry, sessionStatus } =
       useSessionWithMessages(sessionId);
     const workspaceKind = parentKind ?? session?.workspace_kind;
+    const steerTurnId =
+      workspaceKind === "worktree" && sessionStatus === "working"
+        ? openConversationTurn(messages.at(-1)?.turn_id, true, turns)?.turnId
+        : undefined;
     const environment = useProjectEnvironment(workspaceId);
     const environmentUnconfigured =
       environment.isSuccess && environment.data.source === "unconfigured";
@@ -119,6 +124,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
 
     const { sendMessage, stopSession, compactConversation, createPR, sending } = useSessionActions({
       sessionId,
+      steerTurnId,
       model: needsHistory ? undefined : selection.model,
       workspaceId: workspaceId ?? undefined,
       workspaceKind,
@@ -175,13 +181,14 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
         defaultThinking={defaultThinking}
         sending={sending}
         sessionStatus={sessionStatus}
+        steerTurnId={steerTurnId}
         workspaceKind={workspaceKind}
         contextTokenCount={session?.context_token_count ?? 0}
         contextUsedPercent={session?.context_used_percent ?? 0}
         hasMessages={messages.length > 0}
         environmentUnconfigured={environmentUnconfigured}
         showCompactButton={showCompactButton}
-        onSend={(content) => sendMessage(content)}
+        onSend={sendMessage}
         onCompact={compactConversation}
         onStop={stopSession}
         onOpenNewTab={onOpenNewTab}

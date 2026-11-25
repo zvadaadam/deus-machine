@@ -31,9 +31,9 @@ const { database, received } = vi.hoisted(() => ({
   received: vi.fn(),
 }));
 vi.mock("../../../apps/backend/src/lib/database", () => ({ getDatabase: database }));
-// The streams are real; only the socket they send on is replaced.
+// Feed the desktop observer the serialized frames from the real stream publisher.
 vi.mock("../../../apps/backend/src/services/ws.service", () => ({
-  getConnection: () => ({ ws: { send: received } }),
+  sendFrame: (_connectionId: string, frame: object) => received(JSON.stringify(frame)),
 }));
 vi.mock("../../../apps/backend/src/services/query-engine", () => ({ invalidate: vi.fn() }));
 vi.mock("../../../apps/backend/src/services/pr-snapshot.service", () => ({
@@ -42,9 +42,15 @@ vi.mock("../../../apps/backend/src/services/pr-snapshot.service", () => ({
 vi.mock("../../../apps/backend/src/services/agent/cloud/driver", () => ({
   pushCloudSessionTitle: vi.fn(),
 }));
+import {
+  admitTurn,
+  claimTurn,
+  forgetChatTurns,
+  holdingTurn,
+} from "../../../apps/backend/src/services/agent/chat-turn";
 import { createAgentEventHandler } from "../../../apps/backend/src/services/agent/event-handler";
 import { _reset, subscribe } from "../../../apps/backend/src/services/streams";
-import { persistSessionWorking } from "../../../apps/backend/src/services/agent/persistence";
+import { persistSessionStatus } from "../../../apps/backend/src/services/agent/persistence";
 
 const SESSION = "native-recovery";
 function gate() {
@@ -77,6 +83,7 @@ describe("native replay through the published engine, SQLite and desktop fold", 
   let handler: ReturnType<typeof createAgentEventHandler>;
   let ui: AgentStreamContext;
   beforeEach(() => {
+    forgetChatTurns();
     vi.clearAllMocks();
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -172,18 +179,18 @@ describe("native replay through the published engine, SQLite and desktop fold", 
       client.onEvent((event) => handler.handle(event));
       client.onEventGap((gap) => {
         gaps.push(gap);
-        handler.handleEventGap(gap);
+        void handler.handleEventGap(gap, (turnId) => client.cancelTurn(gap.sessionId, turnId));
       });
       try {
-        persistSessionWorking(SESSION);
-        handler.beginTurn(SESSION, "turn-1");
+        persistSessionStatus(SESSION, "working");
+        claimTurn(SESSION, "turn-1");
         await client.startTurn({
           sessionId: SESSION,
           turnId: "turn-1",
           input: "test",
           config: { harness: "claude-code", cwd: "/tmp" },
         });
-        handler.confirmTurn(SESSION, "turn-1");
+        admitTurn(SESSION, "turn-1");
         await vi.waitFor(() =>
           expect(JSON.stringify(ui.queryClient.getQueryData(messagesKey(SESSION)))).toContain(
             "visible"
@@ -194,9 +201,9 @@ describe("native replay through the published engine, SQLite and desktop fold", 
         await vi.waitFor(() =>
           expect(native.some(({ event }) => event.type === "turn.ended")).toBe(true)
         );
-        expect(handler.liveTurnId(SESSION)).toBe("turn-1");
+        expect(holdingTurn(SESSION)?.turnId).toBe("turn-1");
         reconnect.release();
-        await vi.waitFor(() => expect(handler.liveTurnId(SESSION)).toBeUndefined());
+        await vi.waitFor(() => expect(holdingTurn(SESSION)?.turnId).toBeUndefined());
         expect(row()).toMatchObject({
           status: bufferSize === 2 ? "error" : "idle",
           agent_session_id: "native-original",
@@ -216,15 +223,15 @@ describe("native replay through the published engine, SQLite and desktop fold", 
             "offline"
           );
         // Delivery damage belongs to one turn, not the whole session.
-        handler.beginTurn(SESSION, "next");
-        persistSessionWorking(SESSION);
+        claimTurn(SESSION, "next");
+        persistSessionStatus(SESSION, "working");
         await client.startTurn({
           sessionId: SESSION,
           turnId: "next",
           input: "next",
           config: { harness: "claude-code", cwd: "/tmp" },
         });
-        await vi.waitFor(() => expect(handler.liveTurnId(SESSION)).toBeUndefined());
+        await vi.waitFor(() => expect(holdingTurn(SESSION)?.turnId).toBeUndefined());
         expect(row()).toMatchObject({ status: "idle", error_message: null });
       } finally {
         finish.release();
@@ -235,31 +242,35 @@ describe("native replay through the published engine, SQLite and desktop fold", 
     }
   );
 
-  it("keeps Stop available on unconfirmed loss and ignores a late reply after a successor starts", () => {
-    handler.beginTurn(SESSION, "lost");
-    handler.confirmTurn(SESSION, "lost");
+  it("keeps Stop available on unconfirmed loss and ignores a late reply after a successor starts", async () => {
+    claimTurn(SESSION, "lost");
+    admitTurn(SESSION, "lost");
     const gap = {
       sessionId: SESSION,
       reason: "replay_failed" as const,
       error: new EventGapError("test loss"),
     };
-    expect(handler.handleEventGap(gap)).toBe("lost");
-    handler.settleEventGap(SESSION, "lost", false);
+    const cancel = vi.fn(async (turnId: string) => ({ outcome: "unconfirmed" as const, turnId }));
+    await handler.handleEventGap(gap, cancel);
+    expect(cancel.mock.calls[0]?.[0]).toBe("lost");
     expect(row()).toMatchObject({
       status: "working",
       error_message: expect.stringContaining("not confirmed it stopped"),
     });
-    expect(handler.beginTurn(SESSION, "unsafe")).toBe(false);
-    handler.settleEventGap(SESSION, "lost", true);
+    expect(claimTurn(SESSION, "unsafe")).toBe(false);
+    const reply = Promise.withResolvers<{ outcome: "no_active_turn" }>();
+    const late = handler.handleEventGap(gap, () => reply.promise);
+    await handler.handleEventGap(gap, async () => ({ outcome: "no_active_turn" }));
     expect(row()).toMatchObject({ status: "error" });
-    expect(handler.beginTurn(SESSION, "new")).toBe(true);
-    persistSessionWorking(SESSION);
-    handler.settleEventGap(SESSION, "lost", true);
-    expect(handler.liveTurnId(SESSION)).toBe("new");
+    expect(claimTurn(SESSION, "new")).toBe(true);
+    persistSessionStatus(SESSION, "working");
+    reply.resolve({ outcome: "no_active_turn" });
+    await late;
+    expect(holdingTurn(SESSION)?.turnId).toBe("new");
     expect(row()).toMatchObject({ status: "working", error_message: null });
     // The native cancel can finish before the old replay succeeds. Preserve
     // that historical transcript without lending it the new turn's status.
-    handler.confirmTurn(SESSION, "new");
+    admitTurn(SESSION, "new");
     handler.handle({
       sessionId: SESSION,
       seq: 1,
@@ -290,7 +301,7 @@ describe("native replay through the published engine, SQLite and desktop fold", 
         cost: 0.2,
       },
     });
-    expect(handler.liveTurnId(SESSION)).toBe("new");
+    expect(holdingTurn(SESSION)?.turnId).toBe("new");
     expect(row()).toMatchObject({ status: "working", error_message: null });
     handler.handle({
       sessionId: SESSION,
@@ -317,28 +328,37 @@ describe("native replay through the published engine, SQLite and desktop fold", 
       },
     });
     expect(row()).toMatchObject({ status: "error", error_message: "New failure" });
-    handler.beginTurn(SESSION, "pending");
-    expect(handler.handleEventGap({ ...gap, reason: "server_restarted" })).toBeUndefined();
-    expect(handler.liveTurnId(SESSION)).toBe("pending");
+    claimTurn(SESSION, "pending");
+    cancel.mockClear();
+    await handler.handleEventGap({ ...gap, reason: "server_restarted" }, cancel);
+    expect(cancel.mock.calls[0]?.[0]).toBeUndefined();
+    expect(holdingTurn(SESSION)?.turnId).toBe("pending");
   });
 
   it.each(["server_restarted", "session_missing"] as const)(
     "settles an already-damaged turn when %s proves it gone",
-    (reason) => {
-      handler.beginTurn(SESSION, "lost");
-      handler.confirmTurn(SESSION, "lost");
-      handler.handleEventGap({
-        sessionId: SESSION,
-        reason: "evicted",
-        error: new EventGapError("test loss"),
-      });
-      handler.handleEventGap({ sessionId: SESSION, reason, error: new EventGapError("gone") });
-      expect(handler.liveTurnId(SESSION)).toBeUndefined();
+    async (reason) => {
+      claimTurn(SESSION, "lost");
+      admitTurn(SESSION, "lost");
+      const cancel = vi.fn(() => undefined);
+      await handler.handleEventGap(
+        {
+          sessionId: SESSION,
+          reason: "evicted",
+          error: new EventGapError("test loss"),
+        },
+        cancel
+      );
+      await handler.handleEventGap(
+        { sessionId: SESSION, reason, error: new EventGapError("gone") },
+        cancel
+      );
+      expect(holdingTurn(SESSION)?.turnId).toBeUndefined();
       expect(row()).toMatchObject({
         status: "error",
         error_message: expect.stringContaining("transcript is incomplete"),
       });
-      expect(handler.beginTurn(SESSION, "retry")).toBe(true);
+      expect(claimTurn(SESSION, "retry")).toBe(true);
     }
   );
 });

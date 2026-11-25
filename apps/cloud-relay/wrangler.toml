@@ -2,11 +2,16 @@ name = "deus-relay"
 account_id = "e247e098b7e2f5bee57ae8cf303b97df"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
-compatibility_flags = ["nodejs_compat"]
+compatibility_flags = ["nodejs_compat", "enable_request_signal"]
 
 routes = [
   { pattern = "relay.deusmachine.ai", custom_domain = true }
 ]
+
+[observability.logs]
+# Retained invocation records would contain the route key and handle in each file request URL.
+enabled = false
+invocation_logs = false
 
 [vars]
 ENVIRONMENT = "production"
@@ -28,3 +33,14 @@ new_sqlite_classes = ["RelayDO"]
 
 [dev]
 port = 8787
+
+[env.staging]
+name = "deus-relay-staging"
+routes = []
+workers_dev = true
+
+[env.staging.durable_objects]
+bindings = [{ name = "RELAY", class_name = "RelayDO" }]
+
+[env.staging.vars]
+ENVIRONMENT = "staging"

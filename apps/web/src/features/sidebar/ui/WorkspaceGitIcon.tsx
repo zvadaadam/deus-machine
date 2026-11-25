@@ -54,6 +54,7 @@ export function deriveGitLifecycle(workspace: Workspace): GitLifecycle {
 interface WorkspaceGitIconProps {
   workspace: Workspace;
   displayStatus: DisplayStatus;
+  working: boolean;
   size?: number;
 }
 
@@ -67,9 +68,10 @@ interface WorkspaceGitIconProps {
 export const WorkspaceGitIcon = React.memo(function WorkspaceGitIcon({
   workspace,
   displayStatus,
+  working,
   size = 14,
 }: WorkspaceGitIconProps) {
-  if (workspace.state === "initializing" || displayStatus === "working") {
+  if (working) {
     return <CircularPixelGrid variant="working" size={size} resolution={8} />;
   }
 

@@ -99,8 +99,6 @@ export class RuntimeClient<Resource extends string = string> {
     if (this.socket && this.state === "offline") {
       return Promise.reject(new RuntimeError("unavailable", "Host unavailable through relay"));
     }
-    clearTimeout(this.retryTimer);
-    this.retryTimer = undefined;
     let resolve!: () => void;
     let reject!: (error: Error) => void;
     const promise = new Promise<void>((yes, no) => {
@@ -114,6 +112,7 @@ export class RuntimeClient<Resource extends string = string> {
   };
 
   private async open(): Promise<void> {
+    this.cancelRetry();
     const generation = ++this.generation;
     this.transition("connecting");
     this.handshakeTimer = setTimeout(() => {
@@ -184,6 +183,8 @@ export class RuntimeClient<Resource extends string = string> {
       })
       .with("server_reconnecting", () => {
         clearTimeout(this.handshakeTimer);
+        // The relay is reachable even while its host is away.
+        this.retryAttempt = 0;
         this.lost("Host unavailable through relay");
         this.connection?.reject(new RuntimeError("unavailable", "Host unavailable through relay"));
         this.connection = undefined;
@@ -522,10 +523,19 @@ export class RuntimeClient<Resource extends string = string> {
     });
   };
 
+  /** Bring a waiting retry or heartbeat forward when the network or viewer returns. */
+  wake = (): void => {
+    if (this.retryTimer !== undefined) {
+      this.retryAttempt = 0;
+      void this.open();
+    } else if (this.isConnected()) {
+      this.probe();
+    }
+  };
+
   forceReconnect = (): void => {
     if (this.ended() || this.requestInterceptor) return;
-    clearTimeout(this.retryTimer);
-    this.retryTimer = undefined;
+    this.cancelRetry();
     this.retryAttempt = 0;
     this.closeSocket();
     this.lost("Runtime connection replaced");
@@ -534,10 +544,11 @@ export class RuntimeClient<Resource extends string = string> {
 
   private interrupted(reason: string): void {
     this.closeSocket();
-    this.lost(reason);
     this.connection?.reject(new RuntimeError("unavailable", reason));
     this.connection = undefined;
     this.scheduleReconnect();
+    // An offline listener can start the next handshake immediately.
+    this.lost(reason);
   }
   private lost(reason: string): void {
     for (const sub of this.subscriptions.values()) sub.fresh = false;
@@ -551,12 +562,13 @@ export class RuntimeClient<Resource extends string = string> {
     if (this.retryTimer || this.ended()) return;
     const delay = Math.min((this.ports.retryMs ?? 500) * 2 ** this.retryAttempt++, 8000);
     this.retryTimer = setTimeout(
-      () => {
-        this.retryTimer = undefined;
-        void this.open();
-      },
+      () => void this.open(),
       delay * (0.8 + (this.ports.random ?? Math.random)() * 0.4)
     );
+  }
+  private cancelRetry(): void {
+    clearTimeout(this.retryTimer);
+    this.retryTimer = undefined;
   }
   private sendSubscription(sub: Subscription): void {
     sub.fresh = false;
@@ -597,8 +609,7 @@ export class RuntimeClient<Resource extends string = string> {
   private closeSocket(): void {
     ++this.generation;
     clearTimeout(this.handshakeTimer);
-    clearTimeout(this.heartbeatTimer);
-    this.heartbeatId = undefined;
+    this.stopHeartbeat();
     const socket = this.socket;
     this.socket = null;
     try {
@@ -607,21 +618,28 @@ export class RuntimeClient<Resource extends string = string> {
       /* Already closed. */
     }
   }
-  private scheduleHeartbeat(): void {
+  private stopHeartbeat(): void {
     clearTimeout(this.heartbeatTimer);
+    this.heartbeatTimer = undefined;
     this.heartbeatId = undefined;
+  }
+  private scheduleHeartbeat(): void {
+    this.stopHeartbeat();
     const interval = this.ports.heartbeatIntervalMs ?? 30_000;
     if (interval <= 0 || !this.socket || this.ended()) return;
-    this.heartbeatTimer = setTimeout(() => {
-      this.heartbeatId = `ping_${++this.sequence}`;
-      this.heartbeatTimer = setTimeout(
-        () => this.interrupted("Runtime heartbeat timed out"),
-        this.ports.heartbeatTimeoutMs ?? 10_000
-      );
-      if (!this.write({ type: "ping", id: this.heartbeatId }, true)) {
-        this.interrupted("Runtime heartbeat could not be sent");
-      }
-    }, interval);
+    this.heartbeatTimer = setTimeout(() => this.probe(), interval);
+  }
+  private probe(): void {
+    if (this.heartbeatTimer === undefined || this.heartbeatId) return;
+    clearTimeout(this.heartbeatTimer);
+    this.heartbeatId = `ping_${++this.sequence}`;
+    this.heartbeatTimer = setTimeout(
+      () => this.interrupted("Runtime heartbeat timed out"),
+      this.ports.heartbeatTimeoutMs ?? 10_000
+    );
+    if (!this.write({ type: "ping", id: this.heartbeatId }, true)) {
+      this.interrupted("Runtime heartbeat could not be sent");
+    }
   }
   private transition(state: RuntimeState): void {
     this.state = state;
@@ -650,8 +668,7 @@ export class RuntimeClient<Resource extends string = string> {
   }
   private end(state: "disposed" | "revoked"): void {
     if (this.ended()) return;
-    clearTimeout(this.retryTimer);
-    this.retryTimer = undefined;
+    this.cancelRetry();
     this.closeSocket();
     this.state = state;
     this.lost(`Runtime access is ${state}`);

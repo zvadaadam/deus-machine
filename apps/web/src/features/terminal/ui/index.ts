@@ -1,2 +1,2 @@
-export { TerminalPanel } from "./TerminalPanel";
+export { TerminalHost } from "./TerminalHost";
 export { Terminal } from "./Terminal";

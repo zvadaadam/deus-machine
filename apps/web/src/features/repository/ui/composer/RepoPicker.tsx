@@ -22,6 +22,7 @@ import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 import { addProjectActions, type AddProjectAction } from "../../lib/addProject";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { cn } from "@/shared/lib/utils";
+import { abbreviatePath } from "@/shared/lib/formatters";
 import type { Repository } from "../../types";
 
 interface RepoPickerProps {
@@ -34,12 +35,6 @@ interface RepoPickerProps {
   onCloneRepository?: () => void;
   onStartNewProject?: () => void;
   onAddFromGitHub?: () => void;
-}
-
-function abbreviatePath(path: string): string {
-  const home = path.match(/^\/Users\/[^/]+/)?.[0];
-  if (home) return path.replace(home, "~");
-  return path;
 }
 
 /** Where a project lives: its folder, or `owner/name` for one not on this computer. */

@@ -1,3 +1,4 @@
+import { getEventListeners } from "node:events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cloudIdentity } from "@shared/api/workspaces";
 
@@ -70,6 +71,7 @@ beforeEach(async () => {
     "window",
     Object.assign(new EventTarget(), { location: { hostname: "localhost" } })
   );
+  vi.stubGlobal("document", Object.assign(new EventTarget(), { visibilityState: "hidden" }));
   vi.stubGlobal("localStorage", storage());
   vi.stubGlobal("sessionStorage", storage());
   vi.stubGlobal("WebSocket", Socket);
@@ -104,6 +106,36 @@ async function online(client = api.getRuntimeClient()) {
 }
 
 describe("selected runtime and device grants", () => {
+  it("wakes on network return and visibility, and removes both listeners with their runtime", async () => {
+    const listeners = () => [
+      ...getEventListeners(window, "online"),
+      ...getEventListeners(document, "visibilitychange"),
+    ];
+    auth.storeToken("token-A", "Phone", "A");
+    auth.storeToken("token-B", "Tablet", "B");
+    const a = api.selectRuntime("A");
+    const socket = await online(a);
+    expect(api.selectRuntime("A")).toBe(a);
+    const pings = () => socket.sent.filter((frame) => frame.type === "ping");
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(pings()).toHaveLength(0);
+    window.dispatchEvent(new Event("online"));
+    expect(pings()).toHaveLength(1);
+    socket.message({ type: "pong", id: pings()[0].id });
+    Object.assign(document, { visibilityState: "visible" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(pings()).toHaveLength(2);
+
+    const original = listeners();
+    expect(original).toHaveLength(2);
+    const b = api.selectRuntime("B");
+    const replacement = listeners();
+    expect(replacement).toHaveLength(2);
+    for (const listener of original) expect(replacement).not.toContain(listener);
+    b.dispose();
+    expect(listeners()).toEqual([]);
+  });
+
   it("scopes relay grants to the account and keeps them through sign-out", () => {
     auth.storeToken("token-A", "Phone", "A");
     auth.storeToken("token-B", "Tablet", "B");

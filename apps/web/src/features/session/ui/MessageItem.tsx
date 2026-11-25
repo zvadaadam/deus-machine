@@ -1,16 +1,9 @@
-/**
- * Message Item
- *
- * Renders a single message in the chat:
- * - Assistant messages: rendered via PartsRenderer (Parts model)
- * - User messages: iMessage-style bubble with text + images
- */
-
 import { tempo } from "@/shared/lib/tempo";
 import type { Message } from "@/shared/types";
 import { readUserMessageContent } from "../lib/userMessageContent";
-import { PartsRenderer } from "./blocks";
+import { useTranscriptFold } from "../lib/openChat";
 import { TextBlock } from "./blocks/TextBlock";
+import { bubbleClass, type BubbleJoins } from "./bubble";
 import { SentFrom } from "./SentFrom";
 
 import { cn } from "@/shared/lib/utils";
@@ -22,37 +15,18 @@ import { m, useReducedMotion } from "framer-motion";
 
 const COLLAPSE_MAX_HEIGHT = 144;
 
-interface MessageItemProps {
+interface MessageItemProps extends BubbleJoins {
   message: Message;
-  isLastInTurn?: boolean;
-  isStreamingTurn?: boolean;
 }
 
-/** Assistant message — renders via PartsRenderer. */
-const AssistantMessage = memo(function AssistantMessage({
+/** The person's message, including attachments and its joins with adjacent user bubbles. */
+export const MessageItem = memo(function MessageItem({
   message,
-  isLastInTurn = false,
-  isStreamingTurn = false,
+  previous,
+  next,
 }: MessageItemProps) {
-  if (!message.parts || message.parts.length === 0) return null;
-
-  return (
-    <div
-      className={cn(
-        "relative",
-        "mr-auto w-full max-w-full",
-        "flex min-w-0 flex-col gap-1 overflow-x-hidden"
-      )}
-    >
-      <PartsRenderer parts={message.parts} isStreamingTurn={isStreamingTurn && isLastInTurn} />
-    </div>
-  );
-});
-
-/** User message — iMessage-style bubble. */
-const UserMessage = memo(function UserMessage({ message }: { message: Message }) {
   const { copy, copied } = useCopyToClipboard();
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, toggle] = useTranscriptFold("message", message.id);
   const [shouldCollapse, setShouldCollapse] = useState(false);
   const reduced = useReducedMotion();
   const contentRef = useRef<HTMLDivElement>(null);
@@ -78,11 +52,8 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
       {message.origin && <SentFrom origin={message.origin} />}
       <div
         className={cn(
-          "max-w-[85%]",
-          "bg-accent hover:bg-accent/80 ml-auto w-fit backdrop-blur-sm transition-colors",
-          "relative rounded-xl",
-          "px-3 py-2",
-          "min-w-0"
+          bubbleClass("user", { previous, next }),
+          "user-bubble bg-user-bubble from-user-bubble to-user-bubble-top ring-user-bubble-border relative ml-auto min-w-0 bg-linear-to-t ring-1 ring-inset"
         )}
       >
         <div className="pointer-events-none absolute top-1.5 right-1.5 z-10 opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
@@ -92,7 +63,10 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
             onClick={handleCopy}
             active={copied}
             showLabel={false}
-            className="bg-accent/80 rounded-md backdrop-blur-sm"
+            className={cn(
+              "bg-user-bubble-top/85 rounded-md backdrop-blur-sm",
+              !copied && "text-secondary-foreground"
+            )}
           />
         </div>
 
@@ -129,7 +103,7 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
             ))}
 
             {shouldCollapse && !isExpanded && (
-              <div className="from-accent via-accent/60 pointer-events-none absolute right-0 bottom-0 left-0 h-12 bg-gradient-to-t to-transparent" />
+              <div className="from-user-bubble via-user-bubble/60 pointer-events-none absolute right-0 bottom-0 left-0 h-12 bg-gradient-to-t to-transparent" />
             )}
           </m.div>
         )}
@@ -137,8 +111,8 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
         {shouldCollapse && (
           <button
             type="button"
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="text-muted-foreground hover:text-foreground mt-2 flex items-center gap-1 text-xs font-normal transition-colors"
+            onClick={toggle}
+            className="text-secondary-foreground hover:text-foreground mt-2 flex items-center gap-1 text-xs font-normal transition-colors"
             aria-expanded={isExpanded}
             aria-controls={`message-content-${message.id}`}
           >
@@ -158,12 +132,4 @@ const UserMessage = memo(function UserMessage({ message }: { message: Message })
       </div>
     </div>
   );
-});
-
-/** Route to AssistantMessage or UserMessage based on role. */
-export const MessageItem = memo(function MessageItem(props: MessageItemProps) {
-  if (props.message.role === "assistant") {
-    return <AssistantMessage {...props} />;
-  }
-  return <UserMessage message={props.message} />;
 });

@@ -1,8 +1,10 @@
 // agent-server/agents/deus-tools/workspace.ts
 // Workspace-aware tools: diff, comments, terminal output.
 
+import path from "node:path";
 import { z } from "zod";
 import { HostRpc } from "../../host-link";
+import { trackedSessions } from "../../session-tracker";
 import { type DeusTool, tool } from "./tool";
 
 /**
@@ -16,27 +18,23 @@ export function createWorkspaceTools(sessionId: string): DeusTool[] {
     // ====================================================================
     tool(
       "GetWorkspaceDiff",
-      `You can use this tool to see what the user is currently working on, or when the user refers to the "workspace diff", "PR diff", or "all changes". This compares all changes on the current branch (including uncommitted changes) against the merge base.
-It's the same diff the user will see in the Deus UI, and the same diff that will be used in any PRs.
-With stat: true, returns git diff --stat style output showing per-file statistics. With file: 'path/to/file', returns the full unified diff for that specific file. With no parameters, returns the full unified diff for all changes.`,
+      "Use this to see what the user is working on, or when they refer to the workspace diff, PR diff or all changes — by default it lists the changed paths since the merge base, including uncommitted changes. To get one file's unified diff, pass its path relative to the workspace, such as `src/index.ts`.",
       {
         file: z
           .string()
           .optional()
-          .describe("Absolute path to the file to show the unified diff for"),
-        stat: z
-          .boolean()
-          .optional()
-          .describe("If true, return git diff --stat style output with per-file statistics"),
+          .describe(
+            "Path relative to the workspace for one file's unified diff, such as `src/index.ts`."
+          ),
+        stat: z.boolean().optional().describe("If true, return per-file additions and deletions."),
       },
       async (args) => {
         console.log(`[deusMCPServer] getDiff invoked for session ${sessionId}`);
 
-        const response = await HostRpc.requestGetDiff({
-          sessionId,
-          file: args.file,
-          stat: args.stat,
-        });
+        const cwd = trackedSessions.get(sessionId)?.cwd;
+        let file = args.file;
+        if (file && cwd && path.isAbsolute(file)) file = path.relative(cwd, file) || ".";
+        const response = await HostRpc.requestGetDiff({ sessionId, file, stat: args.stat });
 
         if (response.error) {
           return {
@@ -59,7 +57,7 @@ With stat: true, returns git diff --stat style output showing per-file statistic
       {
         comments: z.array(
           z.object({
-            file: z.string().describe("The file path to comment on"),
+            file: z.string().describe("Workspace-relative path of the file to comment on."),
             lineNumber: z.number().describe("The line number to comment on"),
             body: z.string().describe("The comment body/content"),
           })

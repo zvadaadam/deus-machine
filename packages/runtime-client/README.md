@@ -50,6 +50,10 @@ remains visible but stale; pending writes have an unknown outcome. Configure
 interval to `0` for a legacy host without probe support. Ship the backend's probe
 handler with the new client.
 
+Call `wake()` when the network returns or the viewer becomes visible. A waiting
+retry dials immediately and resets its backoff. A connected client brings its
+next heartbeat forward and lets an outstanding probe or write finish.
+
 ### Streams
 
 ```ts

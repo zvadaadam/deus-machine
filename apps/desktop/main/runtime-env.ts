@@ -1,5 +1,5 @@
 import { delimiter, join } from "path";
-import { BACKEND_CHILD_ENV_DENYLIST } from "../../../shared/lib/child-env";
+import { clearBackendChildEnv } from "../../../shared/lib/child-env";
 import { PACKAGED_SYSTEM_PATHS } from "../../../shared/runtime";
 
 export function configurePackagedMainRuntimeEnv(options: {
@@ -11,9 +11,7 @@ export function configurePackagedMainRuntimeEnv(options: {
   if (!options.isPackaged) return;
 
   const env = options.env ?? process.env;
-  for (const key of BACKEND_CHILD_ENV_DENYLIST) {
-    delete env[key];
-  }
+  clearBackendChildEnv(env);
   env.DEUS_PACKAGED = "1";
 
   if (!options.resourcesPath) return;

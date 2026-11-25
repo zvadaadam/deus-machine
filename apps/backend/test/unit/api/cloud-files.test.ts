@@ -54,18 +54,6 @@ describe("cloud file operations", () => {
     expect(mockRequestCloudFs).not.toHaveBeenCalled();
   });
 
-  it("invalidateFileCache clears the cloud tree cache so mentions don't go stale", async () => {
-    cloudWorkspace.current_session_id = "sess-invalidate";
-    mockRequestCloudFs.mockResolvedValue({ tree: [{ name: "a.ts", path: "a.ts", type: "file" }] });
-    // warm the search cache
-    await search("a");
-    await run(api.invalidateFileCache, workspace);
-    mockRequestCloudFs.mockClear();
-    // a fresh search must re-list (cache was cleared), not serve the stale set
-    await search("a");
-    expect(mockRequestCloudFs).toHaveBeenCalledTimes(1);
-  });
-
   it("tree maps FsNode → local shape and carries the truncation flag", async () => {
     mockRequestCloudFs.mockResolvedValue({
       tree: [

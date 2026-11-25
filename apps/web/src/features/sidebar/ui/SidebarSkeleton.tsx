@@ -15,14 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
  */
 export function SidebarSkeleton() {
   return (
-    <Sidebar
-      variant="inset"
-      collapsible="offcanvas"
-      className="p-0"
-      role="status"
-      aria-busy="true"
-      aria-label="Loading sidebar"
-    >
+    <Sidebar className="p-0" role="status" aria-busy="true" aria-label="Loading sidebar">
       {/* Header Skeleton - matches SidebarHeader structure */}
       <SidebarHeader className="flex-row items-center justify-between py-2.5">
         <div className="flex min-w-0 flex-1 items-center gap-2">

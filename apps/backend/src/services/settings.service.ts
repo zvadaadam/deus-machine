@@ -3,9 +3,9 @@ import path from "path";
 import { DB_PATH } from "../lib/database";
 import { PreferencesFile } from "../lib/schemas";
 
-// Co-locate with deus.db in the Electron app data directory.
-// Derived from DB_PATH so tests that set DATABASE_PATH get sandboxing for free.
-const PREFS_PATH = path.join(path.dirname(DB_PATH), "preferences.json");
+function preferencesPath(): string {
+  return path.join(path.dirname(DB_PATH), "preferences.json");
+}
 
 // Read from disk once; every write below clears it. Callers get their own copy.
 let cached: Record<string, any> | null = null;
@@ -16,12 +16,13 @@ function readPreferences(): Record<string, any> {
 }
 
 function loadPreferences(): Record<string, any> {
-  if (!fs.existsSync(PREFS_PATH)) {
+  const file = preferencesPath();
+  if (!fs.existsSync(file)) {
     return {};
   }
 
   try {
-    const raw = JSON.parse(fs.readFileSync(PREFS_PATH, "utf8"));
+    const raw = JSON.parse(fs.readFileSync(file, "utf8"));
     const parsed = PreferencesFile.safeParse(raw);
     if (!parsed.success) {
       console.error("[settings] Invalid preferences.json, returning raw:", parsed.error.issues);
@@ -35,15 +36,16 @@ function loadPreferences(): Record<string, any> {
 }
 
 function writePreferences(settings: Record<string, any>): void {
-  const dir = path.dirname(PREFS_PATH);
+  const file = preferencesPath();
+  const dir = path.dirname(file);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
   // Atomic write: write to temp file, then rename
-  const tmpPath = PREFS_PATH + ".tmp";
+  const tmpPath = file + ".tmp";
   fs.writeFileSync(tmpPath, JSON.stringify(settings, null, 2));
-  fs.renameSync(tmpPath, PREFS_PATH);
+  fs.renameSync(tmpPath, file);
   cached = null;
 }
 
@@ -74,5 +76,3 @@ export function saveSetting(key: string, value: any): void {
   obj[key] = value;
   writePreferences(obj);
 }
-
-export { PREFS_PATH };

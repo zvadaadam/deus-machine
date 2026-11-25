@@ -136,6 +136,163 @@ const row = (page, ws) => page.locator(`[data-workspace-id="${ws.id}"]`);
 const archiveButton = (page, ws) =>
   row(page, ws).getByRole("button", { name: /Archive workspace/ });
 
+async function openWorkspaceTool(page, name) {
+  const strip = page.getByRole("tablist", { name: "Workspace tabs" });
+  await strip.waitFor();
+  const existing = strip.getByRole("tab", { name, exact: true });
+  if ((await existing.count()) > 0) {
+    await existing.click();
+    return;
+  }
+  const newTabView = page.locator('[data-slot="new-tab-view"]');
+  if (!(await newTabView.isVisible())) {
+    await page.getByRole("button", { name: "New tab", exact: true }).click();
+    await newTabView.waitFor();
+  }
+  await newTabView.getByRole("button", { name, exact: true }).click();
+  await existing.waitFor();
+}
+
+test("a linked chat leaves the saved tab unread and shows its background work", async (t) => {
+  const page = await tab(t);
+  const ws = await start(local, "Linked chat");
+  const saved = ws.current_session_id;
+  const { id: linked } = await backend.write("createSession", { workspaceId: ws.id });
+  await page.goto(baseUrl);
+  await page.getByRole("button", { name: "Toggle local workspaces", exact: true }).waitFor();
+  await page.evaluate(
+    async ({ workspace, saved, linked }) => {
+      const { workspaceLayoutActions } = await import(
+        `${window.location.origin}/src/features/workspace/store/workspaceLayoutStore.ts`
+      );
+      const { unreadActions } = await import(
+        `${window.location.origin}/src/features/session/store/unreadStore.ts`
+      );
+      workspaceLayoutActions.setChatTabState(workspace, [saved, linked], saved);
+      unreadActions.markUnread(saved);
+      unreadActions.markUnread(linked);
+    },
+    { workspace: ws.id, saved, linked }
+  );
+  await page.goto(`${baseUrl}/w/${ws.id}?session=${linked}`);
+  const tabs = page.getByRole("tablist", { name: "Session tabs" });
+  await tabs.getByRole("tab").nth(1).and(page.locator('[aria-selected="true"]')).waitFor();
+  const unread = await page.evaluate(
+    () => JSON.parse(localStorage.getItem("unread-sessions-store")).state.unreadSessionIds
+  );
+  assert.deepEqual(unread, { [saved]: true });
+
+  const setStatus = db.prepare("UPDATE sessions SET status = ? WHERE id = ?");
+  setStatus.run("working", saved);
+  t.after(() => setStatus.run("idle", saved));
+  await backend.write("updateWorkspaceTitle", {
+    workspaceId: ws.id,
+    title: "Background chat working",
+  });
+  await tabs.getByRole("tab").first().locator("..").locator("canvas").waitFor();
+  assert.equal(await tabs.getByRole("tab").nth(1).locator("..").locator("canvas").count(), 0);
+
+  await page.goto(baseUrl);
+  await page.getByLabel("Message to start a new workspace").waitFor();
+  const waitForAdditions = (count) =>
+    page.waitForFunction(
+      async ({ key, count }) => {
+        const { queryClient } = await import(
+          `${window.location.origin}/src/shared/api/queryClient.ts`
+        );
+        return queryClient.getQueryData(key)?.additions === count;
+      },
+      { key: queryKeys.workspaces.diffStats(ws.id), count },
+      { timeout: 15_000 }
+    );
+  await waitForAdditions(0);
+  await writeFile(path.join(ws.workspace_path, "release.txt"), "Ready for review\n");
+  await waitForAdditions(1);
+});
+
+test("a question blocks tab shortcuts while visible, keeps its draft on reconnect and closes on withdrawal", async (t) => {
+  const page = await tab(t);
+  const ws = await start(local, "Answer a question");
+  const sessionId = ws.current_session_id;
+  let connection, push, answer;
+  let subscriptions = 0;
+  await page.routeWebSocket(/\/ws$/, (route) => {
+    const host = route.connectToServer();
+    route.onMessage((raw) => {
+      const frame = JSON.parse(String(raw));
+      if (frame.type === "q:subscribe" && frame.resource === "toolRequests") {
+        connection = route;
+        subscriptions++;
+        push = (data) =>
+          route.send(
+            JSON.stringify({ type: "q:event", id: frame.id, event: frame.resource, data })
+          );
+      } else if (frame.type === "q:tool_response") answer = frame.result;
+      else host.send(raw);
+    });
+  });
+  async function reconnect() {
+    const before = subscriptions;
+    await connection.close({ code: 1012, reason: "reconnect" });
+    await until(() => subscriptions > before, 15_000, "the card stream to reopen");
+  }
+  const question = (requestId) => ({
+    type: "request",
+    request: {
+      requestId,
+      sessionId,
+      method: "askUserQuestion",
+      timeoutMs: 60_000,
+      params: {
+        sessionId,
+        questions: [
+          { question: "Which branch?", options: ["Main", "Release"] },
+          { question: "What should the note say?", options: [] },
+        ],
+      },
+    },
+  });
+  await page.goto(`${baseUrl}/w/${ws.id}`);
+  await page.locator('[data-slot="workspace-chat-pane"] textarea').waitFor();
+  await openWorkspaceTool(page, "Files");
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  const filesTab = page.getByRole("tab", { name: "Files", exact: true });
+  await until(() => !!push, 15_000, "the card stream");
+  push(question("keep"));
+  await page.getByRole("button", { name: "Release", exact: true }).click();
+  const note = page
+    .getByRole("dialog", { name: "Agent question" })
+    .filter({ hasText: "What should the note say?" });
+  await note.getByRole("button", { name: "Type a custom answer" }).click();
+  const input = note.getByRole("textbox", { name: "Custom answer" });
+  await input.fill("Ship after review");
+  await input.press("Meta+Digit1");
+  assert.equal(
+    await filesTab.getAttribute("aria-selected"),
+    "false",
+    "the open question owns input"
+  );
+  await page.getByRole("button", { name: "Expand workspace", exact: true }).click();
+  await page.keyboard.press("Meta+Digit1");
+  await page.getByRole("tab", { name: "Files", exact: true, selected: true }).waitFor();
+  await page.getByRole("button", { name: "Restore split", exact: true }).click();
+  await reconnect();
+  assert.equal(await input.count(), 1, "the answer field stays mounted until the host replies");
+  assert.equal(await input.inputValue(), "Ship after review");
+  push({ type: "pending", requestIds: ["keep"] });
+  push(question("keep"));
+  await input.press("Enter");
+  await until(() => !!answer, 5000, "the completed answer");
+  assert.deepEqual(answer, { answers: ["Release", "Ship after review"] });
+
+  push(question("withdraw"));
+  const first = page.getByRole("button", { name: "Release", exact: true });
+  await first.click();
+  await reconnect();
+  push({ type: "pending", requestIds: [] });
+  await page.getByText("What should the note say?", { exact: true }).waitFor({ state: "detached" });
+});
+
 test("Changes keeps the missing checkout error until a read succeeds", async (t) => {
   const page = await tab(t);
   const other = await start(local, "Files");
@@ -144,7 +301,7 @@ test("Changes keeps the missing checkout error until a read succeeds", async (t)
   const reason = "Could not read the changes: git failed (ENOENT).";
   await writeFile(path.join(ws.workspace_path, file), "Change to recover\n");
   await page.goto(`${baseUrl}/w/${other.id}`);
-  await page.getByRole("tab", { name: "Files", exact: true }).click();
+  await openWorkspaceTool(page, "Files");
 
   const displays = await page.evaluateHandle(
     (labels) => {
@@ -169,7 +326,7 @@ test("Changes keeps the missing checkout error until a read succeeds", async (t)
   await rename(ws.workspace_path, moved);
   try {
     await row(page, ws).click();
-    await page.getByRole("tab", { name: "Changes", exact: true }).click();
+    await openWorkspaceTool(page, "Changes");
     // The first failed read and two completed polls, regardless of per-read retries.
     const cache = await page.evaluateHandle(
       async () =>
@@ -680,7 +837,7 @@ test("a confirmed archive frees the simulator for another workspace", async (t) 
     });
   });
   const startSimulator = async () => {
-    await page.getByRole("tab", { name: "Simulator", exact: true }).click();
+    await openWorkspaceTool(page, "Simulator");
     await page.getByRole("button", { name: "Start Simulator", exact: true }).click();
     const status = page
       .getByLabel("Simulator streaming")
@@ -914,14 +1071,14 @@ for (const mode of ["web", "desktop"]) {
       exact: true,
     });
     await toggle.waitFor();
-    const group = toggle.locator("xpath=ancestor::div[@aria-roledescription='sortable'][1]");
+    const group = toggle.locator("xpath=ancestor::div[@data-slot='collapsible'][1]");
     const disclosure = group.getByRole("button", { name: "Archived", exact: true });
     await disclosure.waitFor({ timeout: 3000 });
     assert.equal(await page.locator("html.electron").count(), mode === "desktop" ? 1 : 0);
     assert.equal(reads.archives.length, 0);
     const unknownProject = page
       .getByRole("button", { name: "Toggle local workspaces", exact: true })
-      .locator("xpath=ancestor::div[@aria-roledescription='sortable'][1]");
+      .locator("xpath=ancestor::div[@data-slot='collapsible'][1]");
     assert.equal(
       await unknownProject.getByRole("button", { name: "Archived", exact: true }).count(),
       0
@@ -952,6 +1109,13 @@ for (const mode of ["web", "desktop"]) {
         items: ["blue", "green"].map((id) => ({ id, name: id, role: "owner", ready: true })),
       });
     });
+    // Wait for the sidebar to render the organizations that the shortcuts use.
+    await page.getByRole("button", { name: /switch where workspaces run/ }).click();
+    const menu = page.getByRole("menu");
+    await menu.getByRole("menuitem", { name: /^blue, cloud\b/ }).waitFor();
+    await menu.getByRole("menuitem", { name: /^green, cloud\b/ }).waitFor();
+    await page.keyboard.press("Escape");
+    await menu.waitFor({ state: "detached" });
     await page.keyboard.press("Control+2");
     await group.getByRole("button", { name: "Archived (1)", exact: true }).waitFor();
     await group.getByRole("button", { name: "Restore on-another-computer" }).waitFor();

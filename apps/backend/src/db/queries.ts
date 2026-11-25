@@ -5,7 +5,7 @@
  * Route handlers call these functions instead of inline SQL.
  */
 import type Database from "better-sqlite3";
-import type { ArchivedWorkspace } from "@shared/types/workspace";
+import type { ArchivedWorkspace, WorkspaceChat } from "@shared/types/workspace";
 import {
   ReportedOriginSchema,
   decodePart,
@@ -43,6 +43,19 @@ function readWorkspaceRow(row: WorkspaceResult): WorkspaceWithDetailsRow {
   return { ...row, start_recoverable: Boolean(row.start_recoverable) };
 }
 
+function withWorkspaceChats(db: Database.Database, rows: WorkspaceResult[]) {
+  if (!rows.length) return [];
+  const byWorkspace = new Map<string, WorkspaceChat[]>(rows.map(({ id }) => [id, []]));
+  const chats = db
+    .prepare<[string], WorkspaceChat & { workspace_id: string }>(
+      `SELECT workspace_id, id, status, error_category, last_user_message_at FROM sessions
+     WHERE is_hidden = 0 AND workspace_id IN (SELECT value FROM json_each(?)) ORDER BY id`
+    )
+    .all(JSON.stringify([...byWorkspace.keys()]));
+  for (const { workspace_id, ...chat } of chats) byWorkspace.get(workspace_id)!.push(chat);
+  return rows.map((row) => ({ ...readWorkspaceRow(row), chats: byWorkspace.get(row.id)! }));
+}
+
 /**
  * Canonical workspace + repo + session column list and JOIN.
  * Single source of truth — reused by list, get-by-id, and by-repo queries
@@ -59,8 +72,6 @@ const WORKSPACE_ROW_COLUMNS = `
     w.updated_at,
     r.name as repo_name, r.root_path, r.git_default_branch, r.git_origin_url,
     s.status as session_status,
-    s.error_category as session_error_category,
-    s.error_message as session_error_message,
     s.last_user_message_at as latest_message_sent_at,
     w.first_session_id,
     fs.status as first_session_status,
@@ -89,12 +100,8 @@ export function getWorkspacesByRepo(
     stateFilter = `WHERE w.state IN (${states.map(() => "?").join(",")})`;
     stateParams = states;
   }
-  return db
-    .prepare<string[], WorkspaceResult>(
-      `${GROUPED_WORKSPACE_SELECT} ${stateFilter} ORDER BY r.sort_order, r.name, w.updated_at DESC`
-    )
-    .all(...stateParams)
-    .map(readWorkspaceRow);
+  const sql = `${GROUPED_WORKSPACE_SELECT} ${stateFilter} ORDER BY r.sort_order, r.name, w.updated_at DESC`;
+  return withWorkspaceChats(db, db.prepare<string[], WorkspaceResult>(sql).all(...stateParams));
 }
 
 export function getArchivedWorkspaces(
@@ -125,10 +132,10 @@ export function getWorkspaceById(
        WHERE w.id = ?`
     )
     .get(id);
-  return row && readWorkspaceRow(row);
+  return row && withWorkspaceChats(db, [row])[0];
 }
 
-/** Used by withWorkspace middleware — lighter query without session JOIN. */
+/** Load the workspace and its repository without joining the current chat. */
 export function getWorkspaceForMiddleware(
   db: Database.Database,
   id: string
@@ -151,30 +158,23 @@ export function getWorkspaceRaw(db: Database.Database, id: string): WorkspaceRow
   return db.prepare("SELECT * FROM workspaces WHERE id = ?").get(id) as WorkspaceRow | undefined;
 }
 
-/**
- * Look up workspaces by their current session IDs.
- * Used by the query engine for delta pushes — when a session status changes,
- * we only need the affected workspace(s) instead of re-querying everything.
- */
-export function getWorkspacesBySessionIds(
-  db: Database.Database,
-  sessionIds: string[]
-): WorkspaceWithDetailsRow[] {
-  if (sessionIds.length === 0) return [];
-  const placeholders = sessionIds.map(() => "?").join(",");
-  return db
-    .prepare<string[], WorkspaceResult>(
-      `${GROUPED_WORKSPACE_SELECT} WHERE w.current_session_id IN (${placeholders})`
+/** The workspaces that own the changed chats, including a chat that was just put away. */
+export function getWorkspacesBySessionIds(db: Database.Database, sessionIds: string[]) {
+  const rows = db
+    .prepare<[string], WorkspaceResult>(
+      `${GROUPED_WORKSPACE_SELECT} WHERE w.id IN (
+       SELECT workspace_id FROM sessions WHERE id IN (SELECT value FROM json_each(?))
+     )`
     )
-    .all(...sessionIds)
-    .map(readWorkspaceRow);
+    .all(JSON.stringify(sessionIds));
+  return withWorkspaceChats(db, rows);
 }
 
 // ─── Session Queries ─────────────────────────────────────────
 
-/** Coerce SQLite INTEGER booleans (0/1) to JS booleans so every reader gets the same shape. */
+/** Read SQLite flags as booleans. A chat whose agent hasn't asked about messages reads false. */
 function coerceSessionBooleans<T extends SessionRow>(row: T): T {
-  return { ...row, is_hidden: Boolean(row.is_hidden) };
+  return { ...row, is_hidden: Boolean(row.is_hidden), agent_messages: Boolean(row.agent_messages) };
 }
 
 /**
@@ -350,6 +350,12 @@ function readOrigin(stored: string | null): ReportedOrigin | null {
   }
 }
 
+export function sameOrigin(a: Origin | undefined, b: Origin) {
+  if (a?.kind === "session") return b.kind === "session" && a.sessionId === b.sessionId;
+  if (a?.kind === "assistant") return b.kind === "assistant" && a.id === b.id;
+  return b.kind === "person";
+}
+
 export function encodeOrigin(origin?: Origin | null): string | null {
   return origin && origin.kind !== "person" ? JSON.stringify(origin) : null;
 }
@@ -394,12 +400,18 @@ export function getCompactions(db: Database.Database, sessionId: string): Compac
 
 // ─── Repository Queries ─────────────────────────────────────
 
+export function getRepositoryRows(db: Database.Database): RepositoryRow[] {
+  return db
+    .prepare<[], RepositoryRow>("SELECT * FROM repositories ORDER BY sort_order, name")
+    .all();
+}
+
 export function getAllRepositories(db: Database.Database): RepositoryWithCountsRow[] {
   return db
     .prepare(
       `
     SELECT r.*,
-           COUNT(CASE WHEN w.state = 'ready' THEN 1 END) as ready_count,
+           COUNT(CASE WHEN w.kind = 'cloud' THEN 1 END) as cloud_count,
            COUNT(CASE WHEN w.state = 'archived' THEN 1 END) as archived_count,
            COUNT(w.id) as total_count
     FROM repositories r

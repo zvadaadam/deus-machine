@@ -24,6 +24,7 @@ import { SCHEMA_SQL } from "@shared/schema";
 
 const { mockGetDatabase } = vi.hoisted(() => ({ mockGetDatabase: vi.fn() }));
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
+vi.mock("../../../src/services/settings.service", () => ({ getSetting: () => null }));
 
 import * as api from "@shared/api/sessions";
 import { operations } from "../../helpers";
@@ -196,9 +197,13 @@ describeWithDb("createSession", () => {
     expect(chats("w-cloud")).toBe(0);
   });
 
-  it("opens one in a cloud workspace whose first chat exists while its computer is provisioned", async () => {
+  it("reports agent messages off for a cloud chat opened during provisioning", async () => {
     workspace("w-cloud", "cloud", "initializing", "first-chat");
-    await run(api.createSession, { workspaceId: "w-cloud" });
-    expect(chats("w-cloud")).toBe(2);
+    const created = await run(api.createSession, { workspaceId: "w-cloud" });
+    const listed = await run(api.sessions, { workspaceId: "w-cloud" });
+    const detail = await run(api.session, { sessionId: created.id });
+    expect(created.agent_messages).toBe(false);
+    expect(listed.map((chat) => chat.agent_messages)).toEqual([false, false]);
+    expect(detail?.agent_messages).toBe(false);
   });
 });

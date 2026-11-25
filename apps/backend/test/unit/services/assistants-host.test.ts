@@ -5,14 +5,22 @@
 // reached through MCP (`agentMcp`) and as a chat's own.
 
 import Database from "better-sqlite3";
+import { captureException } from "@sentry/node";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { z } from "zod";
 import { WireRequestError } from "@zvada/agent-server/client";
-import { createOperator } from "@zvada/agent-server/operator";
+import { createOperator, Refused } from "@zvada/agent-server/operator";
 import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
+import { TELL_USER } from "@shared/agent-message";
+import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
+import type { ToolPart } from "@shared/protocol-types";
 import { CATALOG_MODEL_LISTS, defaultModelId } from "@shared/models";
 import type { Op } from "@shared/api/op";
 import { SCHEMA_SQL } from "@shared/schema";
+import { deusTools } from "../../../../agent-server/agents/deus-tools";
+import { setHost } from "../../../../agent-server/host-link";
 
 const state = vi.hoisted(() => ({
   db: null as unknown as import("better-sqlite3").Database,
@@ -53,8 +61,15 @@ vi.mock("../../../src/services/query-engine", () => ({
 }));
 vi.mock("../../../src/services/server-name", () => ({ getServerName: () => "Proof Mac" }));
 vi.mock("@sentry/node", () => ({ captureException: vi.fn() }));
+vi.mock(import("../../../src/services/agent/chat-turn"), async (original) => ({
+  ...(await original()),
+  holdingTurn: (id: string) => {
+    const turnId = state.live.get(id);
+    if (turnId) return { turnId, phase: "running" as const };
+  },
+  setupStop: () => undefined,
+}));
 vi.mock("../../../src/services/agent/service", () => ({
-  liveTurnId: (sessionId: string) => state.live.get(sessionId),
   provideSessionTools: () => {},
   isConnected: () => false,
 }));
@@ -70,9 +85,9 @@ vi.mock("../../../src/services/agent/tool-relay", () => ({
 vi.mock("../../../src/services/agent/turns", () => ({
   sendMessage: async (input: Record<string, unknown>, origin?: unknown) => {
     if (state.sendRefusal) throw state.sendRefusal;
+    state.live.set(input.sessionId as string, input.turnId as string);
     if (state.sending) await state.sending;
     state.sent.push({ input, origin });
-    state.live.set(input.sessionId as string, input.turnId as string);
     return { turnId: input.turnId };
   },
   stopSession: async ({ sessionId }: { sessionId: string }, by: unknown) => {
@@ -100,7 +115,7 @@ vi.mock("../../../src/services/assistants/feedback", () => ({
   FeedbackNotSent: class extends Error {},
   sendFeedback: async (report: unknown) => {
     state.feedback.push(report);
-    return { threadId: "thread-1" };
+    return { threadId: "thread  1\u202e\nfrom" };
   },
 }));
 vi.mock("../../../src/services/account-session", () => ({
@@ -127,6 +142,8 @@ import {
   ConflictError,
 } from "../../../src/lib/errors";
 import { persistSessionTitle } from "../../../src/services/agent/persistence";
+import { hasAgentMessages } from "../../../src/services/agent/agent-messages";
+import { buildTurnStartParams } from "../../../src/services/agent/run-config";
 import { deleteFailedWorkspace } from "../../../src/services/workspace-lifecycle";
 import { createDeusHost } from "../../../src/services/assistants/host";
 import { getSetting } from "../../../src/services/settings.service";
@@ -186,6 +203,7 @@ function endTurn(sessionId: string, turnId: string, stopReason: string, by?: unk
 
 function message(sessionId: string, turnId: string, role: string, text: string, origin?: unknown) {
   const id = `m-${Math.random()}`;
+  const part = { id: `p-${id}`, messageId: id, sessionId, type: "text", text };
   state.db
     .prepare("INSERT INTO messages (id, session_id, role, turn_id, origin) VALUES (?, ?, ?, ?, ?)")
     .run(id, sessionId, role, turnId, origin ? JSON.stringify(origin) : null);
@@ -193,7 +211,8 @@ function message(sessionId: string, turnId: string, role: string, text: string, 
     .prepare(
       "INSERT INTO parts (id, message_id, session_id, type, data) VALUES (?, ?, ?, 'text', ?)"
     )
-    .run(`p-${id}`, id, sessionId, JSON.stringify({ id: `p-${id}`, type: "text", text }));
+    .run(part.id, id, sessionId, JSON.stringify(part));
+  return id;
 }
 
 /** Checkout finished and the workspace is ready with its first chat. */
@@ -259,6 +278,63 @@ beforeEach(() => {
 });
 afterEach(() => state.db.close());
 
+describe("local agent readiness", () => {
+  it.each([
+    [undefined, { state: "not_installed", detail: "Not available on this computer" }],
+    ["1.5.14", { state: "unknown", detail: "installs with its first turn" }],
+  ])("reads all agents once, including a missing CLI with version %s", async (version, gemini) => {
+    const read = vi.fn(() => ({
+      clis: [
+        { harness: "gemini", state: "missing", version },
+        { harness: "codex-app-server", state: "unmanaged" },
+        { harness: "claude-code", state: "ready" },
+      ],
+      auth: [
+        { harness: "claude-code", state: "signed_in", email: "member@example.com", methods: [] },
+        { harness: "codex-app-server", state: "signed_out", methods: [] },
+      ],
+      logins: [],
+    }));
+    state.ops.agentAuth = read;
+    expect(await createDeusHost().agents!(assistantWho())).toEqual([
+      { harness: "claude-code", state: "ready" },
+      {
+        harness: "codex-app-server",
+        state: "signed_out",
+        detail: "sign in under Settings → AI Providers",
+      },
+      { harness: "gemini", ...gemini },
+    ]);
+    expect(read).toHaveBeenCalledExactlyOnceWith({});
+  });
+
+  it("throws when Settings could not read the agents", async () => {
+    state.ops.agentAuth = () => ({ auth: [], clis: [], logins: [], error: "Engine disconnected" });
+    await expect(createDeusHost().agents!(assistantWho())).rejects.toThrow("Engine disconnected");
+  });
+
+  it("lists agent readiness and the host's reason when the model list is refused", async () => {
+    state.ops.agentAuth = () => ({
+      clis: [{ harness: "gemini", state: "ready" }],
+      auth: [{ harness: "gemini", state: "signed_out", methods: [] }],
+      logins: [],
+    });
+    const host = createDeusHost();
+    vi.spyOn(host, "models").mockRejectedValue(
+      new Refused({ code: "access", detail: "Ask the owner." })
+    );
+    const list = await createOperator(host).call(
+      "list_models",
+      { agent: "gemini" },
+      assistantWho()
+    );
+    expect(list).toContain("gemini  signed out: sign in under Settings → AI Providers");
+    expect(list).toContain(
+      "refused (access): You may not do this here. Nothing was done. Ask the owner."
+    );
+  });
+});
+
 describe("chats as sessions", () => {
   it("each chat is a session numbered in its workspace; one being set up is its first, under its minted id", async () => {
     const host = createDeusHost();
@@ -287,6 +363,7 @@ describe("chats as sessions", () => {
       turnId: "t1",
       outcome: "cancelled",
       cancelledBy: { kind: "person" },
+      steers: {},
     });
     expect(view.turns.map((t) => [t.turnId, t.outcome])).toEqual([
       ["t1", "cancelled"],
@@ -303,7 +380,10 @@ describe("chats as sessions", () => {
       state: "ended",
       outcome: "cancelled",
     });
-    expect(await host.turn(LOCAL_CALLER as never, "s-lead", "t2")).toEqual({ state: "running" });
+    expect(await host.turn(LOCAL_CALLER as never, "s-lead", "t2")).toEqual({
+      state: "running",
+      steers: {},
+    });
     expect(await host.turn(LOCAL_CALLER as never, "s-lead", "nope")).toEqual({ state: "unknown" });
   });
 });
@@ -471,12 +551,12 @@ describe("sending and starting", () => {
       input: { sessionId: "s-lead", turnId: "t9", content: "hi" },
       origin: LEAD,
     });
-    state.sendRefusal = new ChatBusyError(
-      "The agent is still working — wait for the current turn to finish."
+    state.live.delete("s-lead");
+    state.sendRefusal = new ChatBusyError("Another turn won admission");
+    const follow = { session: "lead:1", message: "follow up", wait: 0 };
+    expect(await createOperator(host).call("send_message", follow, assistantWho())).toContain(
+      'nothing was sent to "lead:1": another turn started there first.'
     );
-    await expect(
-      host.send(LEAD as never, "s-lead", { turnId: "t10", message: "hi", origin: LEAD })
-    ).rejects.toMatchObject({ refusal: { code: "busy" } });
   });
 
   it("a new workspace holds its first task and sends it as the minted turn once ready; a stop drops it", async () => {
@@ -733,6 +813,124 @@ describe("through MCP and as a chat's own tools", () => {
     return { text: reply.result.content[0].text as string, isError: reply.result.isError === true };
   };
 
+  it("shows the home-relative folder when a workspace fails to start and keeps the stored error", async () => {
+    const folder = join(homedir(), "Developer", "shop");
+    const error = `The project folder is missing: ${folder}.`;
+    const caller = assistantCaller();
+    const starting = call(caller, "start_session", {
+      project: "demo-shop",
+      message: "go",
+      wait: 5,
+    });
+    const row = state.db
+      .prepare("SELECT error_message FROM workspaces WHERE slug = 'new1'")
+      .pluck();
+    await vi.waitFor(() => expect(row.get()).toBeNull());
+    state.db
+      .prepare("UPDATE workspaces SET state = 'error', error_message = ? WHERE slug = 'new1'")
+      .run(error);
+    changed();
+    const start = await starting;
+    const status = await call(caller, "wait_for_sessions", { sessions: ["new1:1"], wait: 1 });
+    const refusal = await call(caller, "send_message", { session: "new1:1", message: "go" });
+    expect(start.isError).toBe(false);
+    expect(status.isError).toBe(false);
+    expect(refusal.isError).toBe(true);
+    for (const { text } of [start, status, refusal]) {
+      expect(text).toContain(`The project folder is missing: ${join("~", "Developer", "shop")}.`);
+      expect(text).not.toContain(homedir());
+    }
+    expect(row.get()).toBe(error);
+  });
+
+  it.each(["assistant", "chat"] as const)(
+    "no assistant or chat tool removes a project (%s tool list)",
+    async (caller) => {
+      const tools: readonly { name: string }[] =
+        caller === "chat"
+          ? withSessionTools(deusTools("s-lead")).tools
+          : (await mcp({ jsonrpc: "2.0", id: 1, method: "tools/list" }, assistantCaller("operate")))
+              .result.tools;
+      expect(tools.map((tool) => tool.name).filter((name) => /project|repo/i.test(name))).toEqual([
+        "add_project",
+      ]);
+    }
+  );
+
+  it("keeps each chat's instructions and tool list on the same setting after a change", async () => {
+    for (const id of ["before", "after", "later"]) insertChat(id, "w-lead");
+    let preference: boolean | null = false;
+    const tools = (id: string) => withSessionTools(deusTools(id)).tools.map((t) => t.name);
+    const instructions = (id: string) =>
+      buildTurnStartParams(id, "turn", "gemini", "Check the build", {
+        cwd: "/workspace",
+        agentMessages: hasAgentMessages(id),
+      }).config.systemPromptAppend;
+    setHost({ hasAgentMessages, request: vi.fn(), title: vi.fn() });
+    try {
+      await vi.mocked(getSetting).withImplementation(
+        (key) => key === "agent_messages" && preference,
+        async () => {
+          expect(tools("before")).not.toContain(TELL_USER);
+          preference = null;
+          const before = instructions("before");
+          const after = instructions("after");
+          expect(before).not.toContain(TELL_USER);
+          expect(after).toContain(`${before}\n\n# Messages to the person\n`);
+          expect(after).toContain(
+            `\`${TELL_USER}\` tool of the \`${DEUS_TOOLS_SERVER}\` server (call it by the name your tool list gives it)`
+          );
+          preference = false;
+          expect(tools("after")).toContain(TELL_USER);
+          expect(instructions("after")).toContain(TELL_USER);
+          expect(tools("later")).not.toContain(TELL_USER);
+          expect(instructions("later")).not.toContain(TELL_USER);
+        }
+      );
+      const outside = await mcp({ jsonrpc: "2.0", id: 1, method: "tools/list" }, assistantCaller());
+      expect(outside.result.tools.map((t: { name: string }) => t.name)).not.toContain(TELL_USER);
+    } finally {
+      setHost(null);
+    }
+  });
+
+  it("reads a completed send as the agent's words in a transcript and a settled outcome", async () => {
+    const sessionId = "s-lead";
+    const messageId = message(sessionId, "turn", "assistant", "Build finished.");
+    const send: ToolPart = {
+      id: "send",
+      type: "tool",
+      sessionId,
+      messageId,
+      toolCallId: "call",
+      toolName: `${DEUS_TOOLS_SERVER}.${TELL_USER}`,
+      mcp: { server: DEUS_TOOLS_SERVER, tool: TELL_USER },
+      state: {
+        status: "completed",
+        input: { arguments: { message: "Tests passed." } },
+        output: "Message sent.",
+        time: { start: 1, end: 2 },
+      },
+    };
+    state.db
+      .prepare(
+        "INSERT INTO parts (id, message_id, session_id, seq, type, data) VALUES (?, ?, ?, 1, 'tool', ?)"
+      )
+      .run(send.id, messageId, sessionId, JSON.stringify(send));
+    endTurn(sessionId, "turn", "end_turn");
+
+    const caller = assistantCaller();
+    const read = await call(caller, "read_session", { session: "lead" });
+    const waited = await call(caller, "wait_for_sessions", { sessions: ["lead"], wait: 0 });
+    expect(read.text).toContain("[agent]");
+    expect(waited.text).toContain("agent said:");
+    for (const { text, isError } of [read, waited]) {
+      expect(isError).toBe(false);
+      expect(text).toMatch(/\| Build finished\.\n +\| \n +\| Tests passed\./);
+      expect(text).not.toContain(TELL_USER);
+    }
+  });
+
   it("says when a diff cannot be read, including in a settled turn's outcome", async () => {
     const why = "Could not read the changes: git returned no merge base.";
     state.ops.diffFiles = () => {
@@ -776,11 +974,13 @@ describe("through MCP and as a chat's own tools", () => {
   });
 
   it("lists catalog models and uses the catalog default for starts and sends when the engine is down", async () => {
+    state.ops.agentAuth = () => ({ auth: [], clis: [], logins: [], error: "Engine disconnected" });
     state.ops.agentModels = () => {
       throw new AgentServerDisconnectedError();
     };
     const { text, isError } = await call(LOCAL_CALLER, "list_models", {});
     expect(isError).toBe(false);
+    expect(text).toContain("the agents' states could not be read.");
     for (const {
       harness,
       models: [first],
@@ -855,19 +1055,25 @@ describe("through MCP and as a chat's own tools", () => {
     }
   );
 
-  it("retains the unknown outcome of unclassified wire errors", async () => {
-    const args = { session: "lead:1", message: "go", wait: 1 };
-    state.sendRefusal = new WireRequestError(
-      WIRE_ERROR_CODES.harnessNotAvailable,
-      "private runtime details"
-    );
-    expect((await call(LOCAL_CALLER, "send_message", args)).text).toContain("not confirmed");
-    state.sendRefusal = new WireRequestError(
-      WIRE_ERROR_CODES.internalError,
-      "request timed out: turn/start"
-    );
-    expect((await call(LOCAL_CALLER, "send_message", args)).text).toContain("not confirmed");
-  });
+  it.each([
+    [WIRE_ERROR_CODES.harnessNotAvailable, "private runtime details"],
+    [WIRE_ERROR_CODES.internalError, "request timed out: turn/start"],
+  ] as const)(
+    "reports wire error %s once and leaves the send unconfirmed",
+    async (code, details) => {
+      const report = vi.mocked(captureException).mockClear();
+      state.sendRefusal = new WireRequestError(code, details);
+      const { text } = await call(LOCAL_CALLER, "send_message", {
+        session: "lead:1",
+        message: "go",
+        wait: 1,
+      });
+      expect(text).toContain("not confirmed");
+      expect(report).toHaveBeenCalledExactlyOnceWith(state.sendRefusal, {
+        tags: { operatorTool: "send_message" },
+      });
+    }
+  );
 
   it("an outside caller is told which computer it reaches: in the instructions and in whoami", async () => {
     const where =
@@ -881,7 +1087,7 @@ describe("through MCP and as a chat's own tools", () => {
     );
     state.stored.claude = "read";
     const who = await call(assistantCaller("read"), "whoami", {});
-    expect(who.text.split("\n").slice(1)).toEqual([`access: read. ${where}`]);
+    expect(who.text.split("\n").slice(1)).toEqual([`note: access: read. ${where}`]);
   });
 
   it("an assistant allowed to read reads, is refused a write, and may send feedback's write", async () => {
@@ -1062,7 +1268,7 @@ describe("each commit re-reads what it depends on, with no await before its writ
         .get();
       expect(archived).toEqual({
         state: "archived",
-        archived_by: JSON.stringify(by),
+        archived_by: JSON.stringify(kind === "chat" ? { ...by, name: "lead:1" } : by),
         archived_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2} /),
       });
     }
@@ -1157,7 +1363,7 @@ describe("each commit re-reads what it depends on, with no await before its writ
 });
 
 describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12, H15, H17)", () => {
-  it("dates equally old prompts by the latest assistant message; parts within a message have no clock", async () => {
+  it("dates equally old prompts by their last turn end when the chats are idle", async () => {
     const host = createDeusHost();
     const promptTime = new Date(Date.now() - 12 * 60_000).toISOString();
     const insert = state.db.prepare(
@@ -1165,7 +1371,7 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     );
     insert.run("silent", 2, promptTime, promptTime);
     insert.run("busy", 3, promptTime, promptTime);
-    message("busy", "answer", "assistant", "A recent reply.");
+    endTurn("busy", "answer", "end_turn");
     const entries = await host.list(LEAD as never, {});
     const ageOf = (id: string) => entries.find((e) => e.id === id)!.lastActivityAt!;
     expect(ageOf("silent")).toBe(Date.parse(promptTime));
@@ -1178,6 +1384,16 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     let admit!: () => void;
     state.sending = new Promise<void>((resolve) => (admit = resolve));
     ready(entry);
+    // The operator saw an idle chat before the host checked its first task.
+    vi.spyOn(host, "list").mockResolvedValueOnce([{ ...entry, status: "idle" }]);
+    vi.spyOn(host, "view").mockResolvedValueOnce({ status: "idle", turns: [], waiting: [] });
+    state.sendRefusal = new ChatBusyError(
+      "The agent is starting another turn — wait for it to begin."
+    );
+    const follow = { session: entry.id, message: "follow up", wait: 0 };
+    await expect(
+      createOperator(host).call("send_message", follow, assistantWho())
+    ).resolves.toContain("another turn started there first.");
     const stopping = host.cancel!(LEAD as never, entry.id);
     admit();
     expect(await stopping).toBe("stopped");
@@ -1744,9 +1960,10 @@ describe("the acceptance pass (F5, F7, F8, F9, F10)", () => {
       )
       .run();
     state.db.prepare("UPDATE sessions SET title = 'OLD-B2' WHERE id = 's-second'").run();
-    state.db.prepare("DROP TRIGGER update_sessions_updated_at").run();
     state.db
-      .prepare("UPDATE sessions SET updated_at = '2020-01-01 00:00:00' WHERE id = 's-lead'")
+      .prepare(
+        "UPDATE sessions SET last_user_message_at = '2020-01-01 00:00:00' WHERE id = 's-lead'"
+      )
       .run();
     const first = (await host.list(LOCAL_CALLER as never, {})).find((e) => e.id === "s-lead")!;
     expect(first.title).toBeUndefined();
@@ -1821,19 +2038,50 @@ describe("what still lives in Deus (H18, H19)", () => {
       message: "The list_sessions tool could say which chat is current in each workspace.",
     });
     expect(sent).toMatchObject({ isError: false });
+    const id = sent.text.match(/\(thread (".*?")\)\./)?.[1];
+    expect(id && JSON.parse(id)).toBe("thread  1\u202e\nfrom");
     expect(state.feedback).toHaveLength(1);
   });
 
-  it("read_changes shows only a changed file: an unchanged one (a secret git ignores) is refused", async () => {
+  it("lists a rename in outcomes and read_changes, which opens its destination", async () => {
+    const file = "folder/café\nnotes.txt";
+    const previous = 'folder/old\n"name".txt';
+    const shownFile = '"folder/café notes.txt"';
+    const shownPrevious = '"folder/old \\"name\\".txt"';
+    let additions = 1;
     state.ops.diffFiles = () => ({
-      files: [{ file: "src/a.ts", additions: 1, deletions: 0 }],
-      total_count: 1,
+      files: [
+        { file: file.replace("/", "\\"), status: "modified", additions: 0, deletions: 2 },
+        { file, previous_path: previous, status: "renamed", additions, deletions: 0 },
+      ],
+      truncated: true,
+      total_count: 3,
     });
-    state.ops.diffFile = () => ({ diff: "+x" });
-    const refused = await call(LOCAL_CALLER, "read_changes", { session: "lead", file: ".env" });
-    expect(refused.isError).toBe(true);
-    expect(refused.text).toContain("is not one of");
-    const shown = await call(LOCAL_CALLER, "read_changes", { session: "lead", file: "./src/a.ts" });
-    expect(shown.text).toContain("diff of");
+    const open = vi.fn(() => ({ diff: "+x" }));
+    state.ops.diffFile = open;
+    const listed = await call(LOCAL_CALLER, "read_changes", { session: "lead" });
+    const modified = '"folder\\\\café notes.txt" +0 -2';
+    const renamed = `${shownFile} (renamed from ${shownPrevious}) +1 -0`;
+    const waited = await call(LOCAL_CALLER, "wait_for_sessions", { sessions: ["lead"], wait: 0 });
+    expect(waited.text.split("\n")).toContain(
+      `  note: changes: ${modified}, ${renamed}, and 1 more`
+    );
+    expect(listed.text).toContain(`\n  ${modified}\n  ${renamed}\n  (and 1 more)\n`);
+    for (const name of [previous, ".env"]) {
+      const refused = await call(LOCAL_CALLER, "read_changes", { session: "lead", file: name });
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain("is not one of");
+    }
+    expect(open).not.toHaveBeenCalled();
+    const shown = await call(LOCAL_CALLER, "read_changes", { session: "lead", file: `./${file}` });
+    expect(shown.text).toContain(`diff of ${shownFile}`);
+    expect(shown.text).toContain("  | +x");
+    expect(open).toHaveBeenCalledWith({ workspaceId: "w-lead", file });
+    additions = 0;
+    open.mockReturnValue({ diff: "" });
+    const pure = await call(LOCAL_CALLER, "read_changes", { session: "lead", file });
+    expect(pure.text).toContain(
+      `${shownFile} was renamed from ${shownPrevious}. Its content is unchanged.`
+    );
   });
 });

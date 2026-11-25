@@ -1,8 +1,9 @@
 import type BetterSqlite3 from "better-sqlite3";
 import path from "path";
 import fs from "fs";
-import os from "os";
-import { resolveDefaultDatabasePath } from "../../../../shared/runtime";
+import { BACKEND_SHUTDOWN_TIMEOUT_MS, DATABASE_IN_USE, DatabaseInUseError } from "@shared/runtime";
+import { defaultDatabasePathForEnv } from "@shared/lib/child-env";
+import { configureBackendEnv } from "../../runtime-env";
 import {
   ADDITIVE_COLUMNS,
   BACKFILL_SQL,
@@ -12,15 +13,43 @@ import {
 } from "@shared/schema";
 import { isMissingSchemaObject, openSqliteDatabase } from "./sqlite";
 
-const DEFAULT_DB_PATH = resolveDefaultDatabasePath({
-  platform: process.platform,
-  homeDir: process.env.HOME || os.homedir(),
-  xdgDataHome: process.env.XDG_DATA_HOME,
-});
-
-const DB_PATH = process.env.DATABASE_PATH || DEFAULT_DB_PATH;
+configureBackendEnv();
+const DB_PATH = process.env.DATABASE_PATH
+  ? process.env.DATABASE_PATH.trim() || ":memory:"
+  : defaultDatabasePathForEnv(process.env, path.resolve(import.meta.dirname, "../../../.."));
 
 let dbInstance: BetterSqlite3.Database | null = null;
+let dbOwner: BetterSqlite3.Database | undefined;
+
+function canonicalDatabaseFile(filename: string): string {
+  const directory = path.dirname(filename);
+  fs.mkdirSync(directory, { recursive: true });
+  return fs.lstatSync(filename, { throwIfNoEntry: false })
+    ? fs.realpathSync.native(filename)
+    : path.join(fs.realpathSync.native(directory), path.basename(filename));
+}
+
+function claimDatabase(filename: string): BetterSqlite3.Database {
+  // Keep a write transaction on a stable sidecar for the life of the connection.
+  // The OS drops the lock on exit, including a crash. Leave the file in place
+  // so every backend contends for the same lock even during startup and shutdown.
+  const owner = openSqliteDatabase(`${filename}.owner`);
+  try {
+    const timeout =
+      process.env.NODE_ENV === "test" && process.env.DEUS_TEST_DB_OWNER_NO_WAIT === "1"
+        ? 0
+        : BACKEND_SHUTDOWN_TIMEOUT_MS;
+    owner.pragma(`busy_timeout = ${timeout}`);
+    owner.exec("BEGIN IMMEDIATE");
+    return owner;
+  } catch (error) {
+    owner.close();
+    if (error instanceof Error && "code" in error && error.code === "SQLITE_BUSY") {
+      throw new DatabaseInUseError(filename);
+    }
+    throw error;
+  }
+}
 
 interface ColumnInfo {
   name: string;
@@ -104,16 +133,12 @@ function initDatabase(): BetterSqlite3.Database {
     return dbInstance;
   }
 
-  // Ensure parent directory exists (first launch)
-  const dbDir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
-  }
-
   console.log("Opening database:", DB_PATH);
 
   try {
-    dbInstance = openSqliteDatabase(DB_PATH);
+    const filename = DB_PATH === ":memory:" ? DB_PATH : canonicalDatabaseFile(DB_PATH);
+    if (filename !== ":memory:") dbOwner = claimDatabase(filename);
+    dbInstance = openSqliteDatabase(filename);
     dbInstance.pragma("journal_mode = WAL");
     dbInstance.pragma("foreign_keys = ON");
     dbInstance.pragma("busy_timeout = 5000");
@@ -157,15 +182,10 @@ function initDatabase(): BetterSqlite3.Database {
     console.log("Database connected");
     return dbInstance;
   } catch (error) {
-    if (dbInstance) {
-      try {
-        dbInstance.close();
-      } finally {
-        dbInstance = null;
-      }
-    }
+    closeDatabaseHandles();
     // A whole stderr line after rollback and close, independent of how Node or Bun prints an Error.
     if (error instanceof PrelaunchSchemaError) console.error(PRELAUNCH_SCHEMA_MISMATCH);
+    if (error instanceof DatabaseInUseError) console.error(DATABASE_IN_USE);
     console.error("Failed to open database:", error);
     throw error;
   }
@@ -178,12 +198,20 @@ function getDatabase(): BetterSqlite3.Database {
   return dbInstance;
 }
 
+function closeDatabaseHandles(): void {
+  dbInstance?.close();
+  dbInstance = null;
+  dbOwner?.close();
+  dbOwner = undefined;
+}
+
 function closeDatabase(): void {
-  if (dbInstance) {
-    console.log("Closing database connection");
+  if (!dbInstance) return;
+  console.log("Closing database connection");
+  try {
     dbInstance.pragma("optimize");
-    dbInstance.close();
-    dbInstance = null;
+  } finally {
+    closeDatabaseHandles();
   }
 }
 

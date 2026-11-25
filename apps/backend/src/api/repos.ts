@@ -3,12 +3,9 @@
 import path from "path";
 import fs from "fs";
 import os from "os";
-import { spawn, execFile, execFileSync, type ChildProcess } from "child_process";
-import { promisify } from "util";
 import * as api from "@shared/api/repos";
 import type { ParsedInputOf } from "@shared/api/op";
 import { uuidv7 } from "@shared/lib/uuid";
-import { isExecError } from "@shared/lib/errors";
 import { githubRepoSlug, parseGithubRepository } from "@shared/git-origin";
 import type { BranchSummary, PRSummary } from "@shared/types/github";
 import type { InspectedRepository, Repository } from "@shared/types/repository";
@@ -16,13 +13,13 @@ import type { RepositoryRow } from "../db/types";
 import { getDatabase } from "../lib/database";
 import { AppError, ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 import { parseCloneAddress, repositoryKey } from "../lib/clone-address";
-import { getGitRemoteUrlSync } from "../lib/git-remotes";
-import { GitError, runGit } from "../lib/git-process";
+import { getGitRemoteUrl } from "../lib/git-remotes";
+import { GitError, runGit } from "@shared/lib/git-process";
 import {
-  getAllRepositories,
   getMaxRepositorySortOrder,
   getRepositoryById,
   getRepositoryByRootPath,
+  getRepositoryRows,
 } from "../db";
 import { resolveCloudRepoAccess } from "../services/cloud-workspace-init.service";
 import { defaultCloudOrgId } from "../services/agent/cloud/config";
@@ -37,11 +34,11 @@ import { parseGitHubRepo, runGh } from "../services/gh.service";
 import { githubInstallUrl } from "@shared/lib/github";
 import { readProjectFile, writeProjectFile } from "../services/project-environment.service";
 import { invalidate } from "../services/query-engine";
+import { holdingTurn } from "../services/agent/chat-turn";
+import { removeRepo, repoRemoval } from "../services/workspace-lifecycle";
 import { listRecentProjects } from "../services/recent-projects.service";
 import { publish } from "../services/streams";
 import { handle } from "./registry";
-
-const execFileAsync = promisify(execFile);
 
 /** One row of `gh pr list --json number,title,headRefName,baseRefName,url,isDraft`. */
 interface GhPullRequest {
@@ -119,7 +116,7 @@ export async function addCloudRepository(
     return getRepositoryById(db, repoId);
   })();
   if (!repo) throw new AppError(500, "Repository was not saved");
-  invalidate(["workspaces"]);
+  invalidate(["workspaces", "repos"]);
   return repo;
 }
 
@@ -131,7 +128,7 @@ async function listCloudRepositories(organizationId?: string | null) {
   }
   const { repos } = await listAccessibleRepos(orgId);
   const byOrigin = new Map<string, string>();
-  for (const repo of getAllRepositories(getDatabase())) {
+  for (const repo of getRepositoryRows(getDatabase())) {
     if (!repo.git_origin_url) continue;
     const key = repositoryKey(repo.git_origin_url);
     if (!byOrigin.has(key)) byOrigin.set(key, repo.id);
@@ -193,19 +190,14 @@ async function inspectRepository(rootPath: string): Promise<InspectedRepository>
   if (!fs.statSync(root).isDirectory()) throw new ValidationError("Path is not a directory");
 
   try {
-    root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd: root,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      // The first git spawn on a cold Mac can take more than 2s.
-      timeout: 10_000,
-    }).replace(/\r?\n$/, "");
+    root = (await runGit(["rev-parse", "--show-toplevel"], { cwd: root })).replace(/\r?\n$/, "");
   } catch (error) {
-    const failure = isExecError(error) ? error : undefined;
-    if (failure?.status === 128) throw new ValidationError("Path is not a git repository");
-    const cause = failure?.code ?? failure?.status;
+    if (!(error instanceof GitError)) throw error;
+    if (error.code === 128) throw new ValidationError("Path is not a git repository");
+    if (error.timedOut)
+      throw new ValidationError("Git timed out inspecting the repository folder.");
     throw new ValidationError(
-      `Git could not inspect the repository folder${cause ? ` (${cause})` : ""}.`
+      `Git could not inspect the repository folder${error.code === null ? "" : ` (${error.code})`}.`
     );
   }
   if (!path.isAbsolute(root) || !fs.statSync(root, { throwIfNoEntry: false })?.isDirectory()) {
@@ -216,7 +208,7 @@ async function inspectRepository(rootPath: string): Promise<InspectedRepository>
     root_path: root,
     name: path.basename(root),
     git_default_branch: await detectDefaultBranch(root),
-    git_origin_url: getGitRemoteUrlSync(root),
+    git_origin_url: await getGitRemoteUrl(root),
   };
 }
 
@@ -261,48 +253,12 @@ export async function addRepository(rootPath: string): Promise<Repository> {
 
   const repo = insert();
   if (!repo) throw new AppError(500, "Repository was not saved");
-  // "workspaces" carries every repository summary (the sidebar's project
-  // list), so other connected clients only see the new repo through it.
-  invalidate(["workspaces"]);
+  invalidate(["workspaces", "repos"]);
   return repo;
 }
 
 const pushCloneLine = (line: string) => publish(api.gitProgress, { operation: "clone" }, { line });
 const pushInitLine = (line: string) => publish(api.gitProgress, { operation: "init" }, { line });
-
-/**
- * Git's stderr one line at a time; git rewrites a line in place with `\r`.
- * `flush()` returns whatever was left unterminated.
- */
-function stderrLines(onLine: (line: string) => void) {
-  let buffer = "";
-  return {
-    push(chunk: string) {
-      buffer += chunk;
-      const lines = buffer.split(/[\r\n]+/);
-      buffer = lines.pop() || "";
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed) onLine(trimmed);
-      }
-    },
-    flush() {
-      const remaining = buffer.trim();
-      buffer = "";
-      return remaining;
-    },
-  };
-}
-
-/** Forward a spawned git's stderr progress to a callback one line at a time. */
-function pipeGitStderr(
-  proc: ChildProcess,
-  onLine: (line: string) => void
-): { flush: () => string } {
-  const lines = stderrLines(onLine);
-  proc.stderr?.on("data", (chunk: Buffer) => lines.push(chunk.toString()));
-  return lines;
-}
 
 /** What git said about a failed clone: its words, without the progress it printed on the way. */
 function cloneFailure(stderr: string): string {
@@ -315,8 +271,57 @@ function cloneFailure(stderr: string): string {
   return said.join("\n").slice(-2000);
 }
 
-/** How long a clone may run before it is stopped (git removes what it had half made). */
-const CLONE_TIMEOUT_MS = 300_000;
+async function cloneWithProgress(
+  url: string,
+  target: string,
+  options: { timeoutMs: number; onLine: (line: string) => void; depth?: number }
+) {
+  const { timeoutMs, onLine, depth } = options;
+  let pending = "";
+  try {
+    // Only https and ssh, redirects included. After `--` the address cannot be an option.
+    // Without `--recurse-submodules` git fetches no submodules, and the repository brings no hooks.
+    await runGit(
+      [
+        "-c",
+        "protocol.allow=never",
+        "-c",
+        "protocol.https.allow=always",
+        "-c",
+        "protocol.ssh.allow=always",
+        "clone",
+        "--progress",
+        ...(depth ? ["--depth", String(depth)] : []),
+        "--",
+        url,
+        target,
+      ],
+      {
+        cwd: path.dirname(target),
+        timeoutMs,
+        onStderr(chunk) {
+          // Git rewrites progress lines with a carriage return.
+          const lines = (pending + chunk).split(/[\r\n]+/);
+          pending = lines.pop()!;
+          for (const line of lines) if (line.trim()) onLine(line.trim());
+        },
+      }
+    );
+  } catch (error) {
+    if (!(error instanceof GitError)) throw error;
+    if (error.timedOut) {
+      throw new AppError(
+        500,
+        `git clone did not finish within ${timeoutMs / 60_000} minutes and was stopped.`
+      );
+    }
+    const said = cloneFailure(error.stderr);
+    const cause = error.cause instanceof Error ? error.cause.message : "";
+    throw new AppError(500, said || (cause ? `Failed to start git: ${cause}` : "git clone failed"));
+  } finally {
+    if (pending.trim()) onLine(pending.trim());
+  }
+}
 
 async function cloneRepository({
   url,
@@ -332,41 +337,10 @@ async function cloneRepository({
     }
     throw new ConflictError("Target directory already exists and is not a git repository");
   }
-
-  // No prompts, its own process group, the whole group stopped at the timeout
-  // (`runGit`). Only https and ssh, redirects included; the address after `--`,
-  // so nothing in it reads as an option. No --recurse-submodules: a plain clone
-  // fetches no submodule, and a repository brings no hooks of its own.
-  const lines = stderrLines(pushCloneLine);
-  try {
-    await runGit(
-      [
-        ...["-c", "protocol.allow=never"],
-        ...["-c", "protocol.https.allow=always", "-c", "protocol.ssh.allow=always"],
-        ...["clone", "--progress", "--", parsed.address.url, resolvedPath],
-      ],
-      {
-        cwd: path.dirname(resolvedPath),
-        timeoutMs: CLONE_TIMEOUT_MS,
-        onStderr: (chunk) => lines.push(chunk),
-      }
-    );
-  } catch (error) {
-    const remaining = lines.flush();
-    if (remaining) pushCloneLine(remaining);
-    if (!(error instanceof GitError)) throw error;
-    if (error.timedOut) {
-      throw new AppError(
-        500,
-        `git clone did not finish within ${CLONE_TIMEOUT_MS / 60_000} minutes and was stopped.`
-      );
-    }
-    const said = cloneFailure(error.stderr);
-    const cause = error.cause instanceof Error ? error.cause.message : "";
-    throw new AppError(500, said || (cause ? `Failed to start git: ${cause}` : "git clone failed"));
-  }
-  const remaining = lines.flush();
-  if (remaining) pushCloneLine(remaining);
+  await cloneWithProgress(parsed.address.url, resolvedPath, {
+    timeoutMs: 300_000,
+    onLine: pushCloneLine,
+  });
   pushCloneLine("Clone complete.");
   return { path: resolvedPath };
 }
@@ -379,46 +353,33 @@ async function initProject({
 }: ParsedInputOf<typeof api.gitInit>): Promise<{ path: string; githubUrl: string | null }> {
   const resolvedPath = resolveTargetPath(targetPath);
   if (fs.existsSync(resolvedPath)) throw new ConflictError("Target directory already exists");
+  const local = { cwd: resolvedPath, timeoutMs: 5000 };
 
   // The contract refuses a github template without its URL.
   if (templateType === "github" && templateUrl) {
     pushInitLine("Downloading template...");
-    await new Promise<void>((resolve, reject) => {
-      const proc = spawn("git", ["clone", "--depth", "1", templateUrl, resolvedPath], {
-        stdio: ["ignore", "pipe", "pipe"],
-        timeout: 120_000,
-      });
-      const { flush } = pipeGitStderr(proc, pushInitLine);
-
-      proc.on("close", (code) => {
-        const remaining = flush();
-        if (remaining) pushInitLine(remaining);
-        if (code === 0) resolve();
-        else reject(new Error(remaining || `git clone exited with code ${code}`));
-      });
-      proc.on("error", (err) => reject(err));
+    await cloneWithProgress(templateUrl, resolvedPath, {
+      timeoutMs: 120_000,
+      onLine: pushInitLine,
+      depth: 1,
     });
 
     // The template's history is not this project's: start a fresh repository.
     pushInitLine("Initializing as new project...");
     fs.rmSync(path.join(resolvedPath, ".git"), { recursive: true, force: true });
-    await execFileAsync("git", ["init"], { cwd: resolvedPath, timeout: 5000 });
+    await runGit(["init"], local);
   } else {
     pushInitLine("Creating project directory...");
     fs.mkdirSync(resolvedPath, { recursive: true });
 
     pushInitLine("Initializing git repository...");
-    await execFileAsync("git", ["init"], { cwd: resolvedPath, timeout: 5000 });
-
+    await runGit(["init"], local);
     fs.writeFileSync(path.join(resolvedPath, "README.md"), `# ${projectName}\n`);
   }
 
   pushInitLine("Creating initial commit...");
-  await execFileAsync("git", ["add", "."], { cwd: resolvedPath, timeout: 5000 });
-  await execFileAsync("git", ["commit", "-m", "Initial commit"], {
-    cwd: resolvedPath,
-    timeout: 5000,
-  });
+  await runGit(["add", "."], local);
+  await runGit(["commit", "-m", "Initial commit"], local);
 
   // A GitHub repository is a bonus: the project exists without the gh CLI or a
   // login. Created without --push, then pushed, so a failed push (GitHub can
@@ -444,9 +405,9 @@ async function initProject({
     if (githubUrl) {
       try {
         pushInitLine("Pushing initial commit...");
-        await execFileAsync("git", ["push", "-u", "origin", "HEAD"], {
+        await runGit(["push", "-u", "origin", "HEAD"], {
           cwd: resolvedPath,
-          timeout: 15_000,
+          timeoutMs: 15_000,
         });
       } catch (pushErr) {
         console.warn("[repos/init] git push failed (repo still created):", pushErr);
@@ -466,7 +427,7 @@ async function listOpenPrs(repoId: string): Promise<PRSummary[]> {
   const repo = requireRepo(repoId);
   // The stored origin, else what git says now (a project with no folder always has one).
   const originUrl =
-    repo.git_origin_url ?? (repo.root_path ? getGitRemoteUrlSync(repo.root_path) : null);
+    repo.git_origin_url ?? (repo.root_path ? await getGitRemoteUrl(repo.root_path) : null);
   const nwo = originUrl ? parseGitHubRepo(originUrl) : null;
   if (!nwo) return [];
 
@@ -521,7 +482,7 @@ async function listGithubBranches(
     getDatabase()
       .prepare("UPDATE repositories SET git_default_branch = ? WHERE id = ? AND root_path IS NULL")
       .run(found.defaultBranch, repo.id);
-    invalidate(["workspaces"]);
+    invalidate(["workspaces", "repos"]);
   }
   return { branches: found.branches.map((name) => ({ name })) };
 }
@@ -540,8 +501,7 @@ async function listRemoteBranches(
   ] as const) {
     let output: string;
     try {
-      const { stdout } = await execFileAsync(
-        "git",
+      output = await runGit(
         [
           "for-each-ref",
           "--sort=-committerdate",
@@ -549,9 +509,8 @@ async function listRemoteBranches(
           refs,
           "--count=100",
         ],
-        { cwd: repo.root_path, encoding: "utf-8", timeout: 5000 }
+        { cwd: repo.root_path, timeoutMs: 5000 }
       );
-      output = stdout;
     } catch {
       return { branches: [] };
     }
@@ -565,12 +524,12 @@ async function listRemoteBranches(
 }
 
 export default [
-  handle(api.repos, () => getAllRepositories(getDatabase())),
+  handle(api.repos, () => getRepositoryRows(getDatabase())),
   handle(api.repoEnvironmentFile, async ({ repoId }) => {
     // The local checkout is the only source: never another branch's file.
     const root = requireFolder(requireRepo(repoId));
     const project = readProjectFile(root);
-    const { stdout } = await execFileAsync("git", ["branch", "--show-current"], { cwd: root });
+    const stdout = await runGit(["branch", "--show-current"], { cwd: root });
     return { project, branch: stdout.trim() || "detached HEAD" };
   }),
   handle(api.repoPrs, ({ repoId }) => listOpenPrs(repoId)),
@@ -594,16 +553,27 @@ export default [
   handle(api.cloudRepoAccess, ({ repoId, organizationId, fresh }) =>
     resolveCloudRepoAccess(repoId, organizationId, { fresh })
   ),
-  handle(api.recentProjects, () => ({ projects: listRecentProjects() })),
+  handle(api.recentProjects, async () => ({ projects: await listRecentProjects() })),
   handle(api.inspectRepo, ({ root_path }) => inspectRepository(root_path)),
 
   handle(api.addRepo, ({ root_path }) => addRepository(root_path)),
+  handle(api.repoRemoval, async ({ repoId }) => {
+    const { confirmation } = repoRemoval(repoId, holdingTurn);
+    const folderExists =
+      !!confirmation.rootPath &&
+      (await fs.promises.stat(confirmation.rootPath).then(
+        (stat) => stat.isDirectory(),
+        () => false
+      ));
+    return { ...confirmation, folderExists };
+  }),
+  handle(api.removeRepo, ({ repoId, confirmed }) => removeRepo(repoId, confirmed, holdingTurn)),
   handle(api.addCloudRepo, ({ repository, organizationId }) =>
     addCloudRepository(repository, organizationId)
   ),
-  handle(api.saveRepoEnvironmentFile, ({ repoId, project }) => {
-    writeProjectFile(requireFolder(requireRepo(repoId)), project);
-  }),
+  handle(api.saveRepoEnvironmentFile, ({ repoId, project }) =>
+    writeProjectFile(requireFolder(requireRepo(repoId)), project)
+  ),
   handle(api.gitClone, cloneRepository),
   handle(api.gitInit, initProject),
 ];

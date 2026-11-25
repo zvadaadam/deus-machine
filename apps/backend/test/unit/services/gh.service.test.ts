@@ -5,12 +5,12 @@ import { vi, describe, it, expect, beforeEach, afterAll } from "vitest";
 
 // ─── Hoisted mocks (vi.mock factories run before imports) ─────────
 
-const { mockExecFileAsync, mockGetGitRemoteUrl } = vi.hoisted(() => {
+const { mockExecFileAsync, mockGetGitRemoteUrl, mockRunGit } = vi.hoisted(() => {
   const mockExecFileAsync = vi.fn<(...args: any[]) => any>(() =>
     Promise.resolve({ stdout: "", stderr: "" })
   );
   const mockGetGitRemoteUrl = vi.fn<(...args: any[]) => any>();
-  return { mockExecFileAsync, mockGetGitRemoteUrl };
+  return { mockExecFileAsync, mockGetGitRemoteUrl, mockRunGit: vi.fn() };
 });
 
 vi.mock("child_process", () => ({
@@ -21,6 +21,8 @@ vi.mock("util", () => ({
   promisify: () => mockExecFileAsync,
 }));
 
+vi.mock("@shared/lib/git-process", () => ({ runGit: mockRunGit }));
+
 vi.mock("../../../src/lib/git-remotes", () => ({
   getGitRemoteUrl: mockGetGitRemoteUrl,
 }));
@@ -28,6 +30,7 @@ vi.mock("../../../src/lib/git-remotes", () => ({
 import {
   classifyCheck,
   getPrStatus,
+  getPrStatusForRemoteBranch,
   runGh,
   FAILING_CONCLUSIONS,
   PENDING_STATUSES,
@@ -269,39 +272,12 @@ describe("runGh", () => {
     });
   });
 
-  it('returns gh_not_authenticated when stderr contains "gh auth login"', async () => {
-    const err = Object.assign(new Error("auth required"), {
-      killed: false,
-      code: 1,
-      stderr: "To get started with GitHub CLI, please run:  gh auth login",
-      stdout: "",
-    });
-    mockExecFileAsync.mockRejectedValue(err);
+  it("recognizes gh's authentication-required exit code", async () => {
+    mockExecFileAsync.mockRejectedValue(Object.assign(new Error(), { code: 4 }));
 
-    const result = await runGh(["pr", "list"], { cwd: "/workspace" });
-
-    expect(result).toEqual({
+    expect(await runGh(["pr", "list"], {})).toMatchObject({
       success: false,
       error: "gh_not_authenticated",
-      message: "GitHub CLI is not authenticated",
-    });
-  });
-
-  it('returns gh_not_authenticated when output contains "not logged into any github hosts"', async () => {
-    const err = Object.assign(new Error("not logged in"), {
-      killed: false,
-      code: 1,
-      stderr: "",
-      stdout: "not logged into any github hosts",
-    });
-    mockExecFileAsync.mockRejectedValue(err);
-
-    const result = await runGh(["pr", "list"], { cwd: "/workspace" });
-
-    expect(result).toEqual({
-      success: false,
-      error: "gh_not_authenticated",
-      message: "GitHub CLI is not authenticated",
     });
   });
 
@@ -339,10 +315,42 @@ describe("runGh", () => {
 // ─── getPrStatus ─────────────────────────────────────────────────
 
 describe("getPrStatus", () => {
-  it("does not call GitHub for a local-only project", async () => {
+  it.each([
+    [1, "HTTP 403: Forbidden", "unknown"],
+    [1, "HTTP 404: Not found", "unknown"],
+    [1, "GraphQL: Could not resolve the repository. (repository)", "unknown"],
+    [1, "dial tcp: connection refused", "unknown"],
+    [4, "", "gh_not_authenticated"],
+    ["ENOENT", "", "gh_not_installed"],
+    [null, "", "timeout"],
+  ] as const)("reports a failed lookup (exit %s, %s)", async (code, stderr, error) => {
+    mockExecFileAsync.mockRejectedValueOnce(
+      Object.assign(new Error(), { code, stderr, killed: code === null })
+    );
+    expect(await getPrStatusForRemoteBranch("https://github.com/test/project", "work")).toEqual({
+      has_pr: false,
+      conclusive: false,
+      error,
+    });
+  });
+
+  it("keeps a failed fork lookup inconclusive when the other repository has no PR", async () => {
+    mockRunGit.mockResolvedValueOnce("work");
+    mockGetGitRemoteUrl.mockImplementation(
+      async (_path, name) => `https://github.com/${name}/project`
+    );
     mockExecFileAsync
-      .mockResolvedValueOnce({ stdout: "main\n", stderr: "" })
-      .mockResolvedValueOnce({ stdout: "", stderr: "" });
+      .mockResolvedValueOnce({ stdout: "[]" })
+      .mockRejectedValueOnce(new Error("Failed"));
+    expect(await getPrStatus("/workspace")).toEqual({
+      has_pr: false,
+      conclusive: false,
+      error: "unknown",
+    });
+  });
+
+  it("does not call GitHub for a local-only project", async () => {
+    mockRunGit.mockResolvedValueOnce("main\n").mockResolvedValueOnce("");
     mockGetGitRemoteUrl.mockResolvedValue(null);
 
     expect(await getPrStatus("/workspace")).toEqual({
@@ -351,27 +359,26 @@ describe("getPrStatus", () => {
       no_remote: true,
       error: null,
     });
-    expect(mockExecFileAsync.mock.calls.map(([command]) => command)).toEqual(["git", "git"]);
+    expect(mockExecFileAsync).not.toHaveBeenCalled();
   });
 
   it("still lets gh resolve a custom-named remote", async () => {
     mockGetGitRemoteUrl.mockResolvedValue(null);
-    mockExecFileAsync
-      .mockResolvedValueOnce({ stdout: "main\n", stderr: "" })
-      .mockResolvedValueOnce({ stdout: "github\n", stderr: "" })
-      .mockResolvedValueOnce({ stdout: "[]", stderr: "" });
+    mockRunGit.mockResolvedValueOnce("main\n").mockResolvedValueOnce("github\n");
+    mockExecFileAsync.mockResolvedValueOnce({ stdout: "[]", stderr: "" });
 
     expect(await getPrStatus("/workspace")).toMatchObject({
       has_pr: false,
       conclusive: true,
       error: null,
     });
-    expect(mockExecFileAsync.mock.calls[2][0]).toBe("gh");
+    expect(mockExecFileAsync.mock.calls[0][0]).toBe("gh");
   });
 
   it("looks up the PR by workspace branch without author filtering", async () => {
     const pr = {
       number: 720,
+      baseRefName: "release/next",
       title: "feat(web): unify iOS popover styling",
       url: "https://github.com/expo/echo-backend/pull/720",
       state: "OPEN",
@@ -381,24 +388,25 @@ describe("getPrStatus", () => {
       reviewDecision: null,
       isDraft: false,
     };
-    mockExecFileAsync
-      .mockResolvedValueOnce({ stdout: "adam-zvada/fe/popup-consistency\n", stderr: "" })
-      .mockResolvedValueOnce({ stdout: JSON.stringify([pr]), stderr: "" });
+    mockRunGit.mockResolvedValueOnce("adam-zvada/fe/popup-consistency\n");
+    mockExecFileAsync.mockResolvedValueOnce({ stdout: JSON.stringify([pr]), stderr: "" });
 
     const result = await getPrStatus("/workspace");
 
     expect(result).toMatchObject({
       has_pr: true,
       pr_number: 720,
+      base_branch: "release/next",
       pr_url: "https://github.com/expo/echo-backend/pull/720",
       pr_state: "open",
     });
-    expect(mockExecFileAsync).toHaveBeenNthCalledWith(
-      2,
+    expect(mockExecFileAsync).toHaveBeenCalledWith(
       "gh",
       expect.arrayContaining(["--head", "adam-zvada/fe/popup-consistency"]),
       expect.any(Object)
     );
-    expect(mockExecFileAsync.mock.calls[1][1]).not.toContain("--author");
+    const args = mockExecFileAsync.mock.calls[0][1];
+    expect(args[args.indexOf("--json") + 1].split(",")).toContain("baseRefName");
+    expect(args).not.toContain("--author");
   });
 });

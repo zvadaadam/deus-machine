@@ -18,7 +18,7 @@ import { ChangesView } from "@/features/workspace/ui/ChangesView";
 import { CloudSandboxGate } from "@/features/workspace/ui/CloudSandboxGate";
 import { CloudSimulatorPanel } from "@/features/simulator/cloud/CloudSimulatorPanel";
 import { useCloudSimulatorStore } from "@/features/simulator/cloud/cloudSimulatorStore";
-import { isTabVisible, tabsFor } from "./content-tabs";
+import { isTabVisible, tabsFor } from "@/features/workspace-tabs/registry";
 import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
 import type { Workspace } from "@/shared/types";
@@ -83,7 +83,7 @@ export function MobileLayout({
   // A cloud computer hosts a device in the platform — billable, so a phone
   // must be able to see and stop it. Web-direct has no Mac backend to relay
   // the device commands through, so it stays chat-only. The phone layout has
-  // no local simulator, so only the cloud's shows (content-tabs decides).
+  // no local simulator, so only the cloud's shows.
   const cloudSimulator = !chatOnly && isTabVisible("simulator", undefined, tabsFor(workspace));
   const cloudStage = cloudGateStage(workspace);
   const simulatorLive = useCloudSimulatorStore(
@@ -98,13 +98,7 @@ export function MobileLayout({
 
   // File changes -- always queried for the badge count on the code tab,
   // and used by ChangesDiffViewer when the code tab is active.
-  const isReady = workspace.state === "ready";
-  const { data: fileChangesData } = useFileChanges(
-    !chatOnly && isReady ? workspace.id : null,
-    workspace.session_status,
-    isWatched,
-    workspace.state
-  );
+  const { data: fileChangesData } = useFileChanges(chatOnly ? null : workspace, isWatched);
   const fileChanges = useMemo(() => fileChangesData?.files ?? [], [fileChangesData]);
 
   // Insert code review prompt into the active chat's composer and switch

@@ -1,29 +1,28 @@
 // backend/src/services/agent/service.ts
 // Composition root for agent-server communication.
 //
-// Wires the AgentLink (the engine, in this process, on the standard wire)
-// straight into the event handler: the engine's lifecycle envelopes go to
-// persistence + WS push with nothing in between. No circular imports — this
-// module imports from its dependencies, none of them import back.
+// Wires AgentLink to the event handler for persistence and WS push, and relays
+// the live turn's questions and plans.
 //
-// Dependency graph (all arrows point down, no cycles):
-//
-//   service (this file)
-//       ├── client              (AgentLink: the in-process engine)
-//       ├── event-handler       (factory: createAgentEventHandler)
-//       ├── run-config          (turn params assembly)
-//       └── tool-relay          (frontend RPC relay)
+//   queue → turns → service (this file)
+//                     ├── client         (AgentLink: the in-process engine)
+//                     ├── event-handler  (persistence and WS push)
+//                     ├── run-config     (turn params assembly)
+//                     └── tool-relay     (frontend RPC relay)
 //
 // Initialized once at startup in server.ts via agentService.init().
 
 import type { AgentHarness } from "@shared/enums";
+import { WireRequestError } from "@zvada/agent-server/client";
 import type { HostToolSource } from "@zvada/agent-server/core";
+import { echoMessageId, WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
 import type {
   ElicitationOutcome,
   ElicitationRequestedEvent,
   PermissionOutcome,
   PermissionRequestedEvent,
   TurnCancelResult,
+  TurnSteerParams,
 } from "@zvada/agent-server/protocol";
 import {
   allowOnce,
@@ -34,13 +33,15 @@ import {
   planAnswer,
 } from "@shared/agent-asks";
 import { isUnknownEvent } from "@shared/protocol-types";
+import { hasAgentMessages } from "./agent-messages";
+import { holdingTurn, wireTurn, forgetChatTurns, turnNotices } from "./chat-turn";
 import { AgentLink } from "./client";
 import { LocalAgents } from "./local-agents";
 import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
 import { createAgentEventHandler, type AgentEventHandler } from "./event-handler";
-import { buildTurnStartParams, type DeusTurnOptions } from "./run-config";
+import { buildTurnStartParams, withoutImageParts, type DeusTurnOptions } from "./run-config";
 import { toolRequests } from "@shared/api/sessions";
-import { isPrompt, pendingFor, relay } from "./tool-relay";
+import { cancelSessionRelays, isPrompt, pendingFor, relay } from "./tool-relay";
 import { resolveTurnApps } from "../integrations";
 import {
   persistSessionNeedsPlanResponse,
@@ -53,7 +54,12 @@ import { openWith } from "../streams";
 import { agentDeviceFor } from "../simulator-context";
 import { setupForTurn } from "../project-environment.service";
 import { handleAutomationToolRequest } from "../automations";
-import { AgentServerDisconnectedError } from "../../lib/errors";
+import { getDatabase } from "../../lib/database";
+import {
+  AgentServerDisconnectedError,
+  DifferentTurnMessageError,
+  NotFoundError,
+} from "../../lib/errors";
 import { requireParam } from "../../lib/query-params";
 
 // ---- Singleton ----
@@ -81,6 +87,7 @@ export async function init(): Promise<void> {
     console.log(`[AgentService] Settled ${settled.value.length} chat(s) a restart interrupted`);
     invalidate(["workspaces", "sessions", "session"], { sessionIds: settled.value });
   }
+  turnNotices.withdrawCards = (id, turnId) => cancelSessionRelays(id, "turn interrupted", turnId);
   const handler = createAgentEventHandler();
   events = handler;
   // A client that starts following a chat while its agent waits on a question
@@ -88,41 +95,40 @@ export async function init(): Promise<void> {
   // follows every chat (a window's card host) is shown every chat's.
   // Prompts only: a request a client answers by itself (a diff, a terminal's
   // output) was sent to the clients following then, and would run twice.
-  openWith(toolRequests, ({ sessionId }) =>
-    pendingFor(sessionId)
-      .filter((request) => isPrompt(request.method))
-      .map((request) => ({ type: "request" as const, request }))
-  );
+  openWith(toolRequests, ({ sessionId }) => {
+    const pending = pendingFor(sessionId);
+    return [
+      { type: "pending" as const, requestIds: pending.map((request) => request.requestId) },
+      ...pending
+        .filter((request) => isPrompt(request.method))
+        .map((request) => ({ type: "request" as const, request })),
+    ];
+  });
   // Cloud sessions feed the SAME handler — one fold, one persistence path,
   // two transports.
   initCloudDriver(handler);
+  // The queue sends through this service. Connect its echo reader once both modules are ready.
+  const { userEcho } = await import("./queue");
 
   link = await AgentLink.open({
     onEnvelope: (envelope) => {
+      const { event, sessionId } = envelope;
+      const known = !isUnknownEvent(event);
+      // Withdraw this turn's cards before publishing its end and admitting its successor.
+      if (known && event.type === "turn.ended")
+        cancelSessionRelays(sessionId, "turn ended", event.turnId);
       handler.handle(envelope);
-      const { event } = envelope;
-      if (isUnknownEvent(event)) return;
+      if (!known) return;
+      if (event.type === "message.started" && event.role === "user" && event.steerId !== undefined)
+        userEcho(sessionId, event.turnId, event.steerId);
+      // The sending head stays until its text is published. A message end carries only ids.
+      if (event.type === "message.ended" && event.messageId === echoMessageId(event.turnId))
+        userEcho(sessionId, event.turnId);
       if (event.type === "permission.requested") void answerPermission(event);
       if (event.type === "elicitation.requested") void answerElicitation(event);
     },
-    onEventGap: (gap) => {
-      const turnId = handler.handleEventGap(gap);
-      if (!turnId || gap.reason !== "replay_failed") return;
-      // Replay exhaustion can hide the native terminal entirely. One
-      // targeted cancel reconciles it; a late reply cannot settle a successor.
-      void (async () => {
-        let confirmed = false;
-        try {
-          const result = await link?.cancelTurn(gap.sessionId, turnId);
-          confirmed =
-            result?.outcome === "cancelled" ||
-            (result?.outcome === "no_active_turn" && !result.activeTurnId);
-        } catch (error) {
-          console.warn("[AgentService] Replay recovery cancel failed:", error);
-        }
-        handler.settleEventGap(gap.sessionId, turnId, confirmed);
-      })();
-    },
+    onEventGap: (gap) =>
+      void handler.handleEventGap(gap, (turnId) => link?.cancelTurn(gap.sessionId, turnId)),
     onToolRequest: (method, params) => handleToolRequest(method, params),
     // Every chat here can operate the others (LLP 0019), through the engine's delivery.
     sessionTools: (own) => sessionTools?.(own) ?? own,
@@ -146,6 +152,7 @@ export async function shutdown(): Promise<void> {
   link = null;
   events = null;
   await closing?.close();
+  forgetChatTurns();
 }
 
 // ---- Public API ----
@@ -160,37 +167,54 @@ export async function startTurn(
   turnId: string,
   agentHarness: AgentHarness,
   prompt: string,
-  options: DeusTurnOptions
+  options: Omit<DeusTurnOptions, "agentMessages"> & { signal?: AbortSignal }
 ): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
-  const apps = await turnApps(agentHarness);
+  const { signal, ...run } = options;
+  signal?.throwIfAborted();
+  const stopped = Promise.withResolvers<never>();
+  const onAbort = () => stopped.reject(signal?.reason);
+  signal?.addEventListener("abort", onAbort);
+  const apps = await Promise.race([turnApps(agentHarness), stopped.promise]).finally(() =>
+    signal?.removeEventListener("abort", onAbort)
+  );
+  // Stop can arrive after the apps resolve and before this turn is registered.
+  signal?.throwIfAborted();
+  if (!getDatabase().prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId)) {
+    throw new NotFoundError("This chat no longer exists.");
+  }
   const device = agentDeviceFor(sessionId);
   const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, {
-    ...options,
+    ...run,
     ...apps,
+    agentMessages: hasAgentMessages(sessionId),
     setup: setupForTurn(sessionId),
     agentDeviceSession: device.session,
     simulator: device.udid ? { udid: device.udid } : null,
     // Negotiated at the handshake, not guessed from a harness list.
-    supportsImages:
-      link.getAgents().find((a) => a.type === agentHarness)?.capabilities.images ?? false,
+    supportsImages: supportsImages(agentHarness),
   });
-  // Mirror the admission BEFORE the quick-ack round-trip: the server can push
-  // the first envelopes in the same tick the ack line is processed, and the
-  // handler must already know which turn is live then. beginTurn is a no-op
-  // when the session is locally busy (the server will reject with turnActive)
-  // — the live turn's state must not be clobbered by a doomed registration.
-  const registered = events?.beginTurn(sessionId, turnId) ?? false;
+  // Wire before the request: the engine can publish the first event in the same tick as its answer.
+  wireTurn(sessionId, turnId);
+  await link.startTurn(params);
+}
+
+function supportsImages(harness: string): boolean {
+  return link?.getAgents().find((a) => a.type === harness)?.capabilities.images ?? false;
+}
+
+export async function steerTurn(harness: string, params: TurnSteerParams) {
+  if (!link) throw new AgentServerDisconnectedError();
   try {
-    await link.startTurn(params);
-  } catch (err) {
-    if (registered) events?.abortTurn(sessionId, turnId);
-    throw err;
+    return await link.engine.steerTurn({
+      ...params,
+      input: supportsImages(harness) ? params.input : withoutImageParts(params.input),
+    });
+  } catch (error) {
+    if (error instanceof WireRequestError && error.code === WIRE_ERROR_CODES.turnConflict)
+      throw new DifferentTurnMessageError();
+    throw error;
   }
-  // Server accepted a turn our local state thought was concurrent — the local
-  // view was stale (e.g. backend restart); register for real now.
-  if (!registered) events?.beginTurn(sessionId, turnId, { force: true });
-  events?.confirmTurn(sessionId, turnId);
 }
 
 /**
@@ -243,14 +267,8 @@ export async function stopSession(params: {
 }): Promise<TurnCancelResult> {
   if (!link) throw new Error("Agent service not initialized");
   const result = await link.cancelTurn(params.sessionId, params.turnId);
-  if (params.turnId) {
-    events?.settleEventGap(
-      params.sessionId,
-      params.turnId,
-      result.outcome === "cancelled" ||
-        (result.outcome === "no_active_turn" && !result.activeTurnId)
-    );
-  }
+  if (result.outcome === "cancelled")
+    cancelSessionRelays(params.sessionId, "turn stopped", result.turnId);
   if (result.outcome === "unconfirmed") {
     console.warn(`[AgentService] cancel unconfirmed for session=${params.sessionId}`);
   }
@@ -262,21 +280,10 @@ export function isConnected(): boolean {
   return link?.isConnected() ?? false;
 }
 
-/**
- * The turn the event handler believes is running for a session, if any.
- *
- * `undefined` means BOTH "no turn is live" and "there is no handler to ask"
- * (never initialized, or shut down) — callers must treat it as absence of
- * evidence, not as evidence of absence.
- */
 /** A chat's tools beside the Deus tools: the operator's, registered by services/assistants. */
 let sessionTools: ((own: HostToolSource) => HostToolSource) | undefined;
 export function provideSessionTools(compose: (own: HostToolSource) => HostToolSource): void {
   sessionTools = compose;
-}
-
-export function liveTurnId(sessionId: string): string | undefined {
-  return events?.liveTurnId(sessionId);
 }
 
 /**
@@ -293,6 +300,7 @@ async function answerPermission(event: PermissionRequestedEvent): Promise<void> 
 }
 
 async function askPlan(event: PermissionRequestedEvent): Promise<PermissionOutcome> {
+  if (event.turnId !== holdingTurn(event.sessionId)?.turnId) return { outcome: "cancelled" };
   try {
     const answer = (await handleToolRequest("exitPlanMode", {
       sessionId: event.sessionId,
@@ -321,6 +329,7 @@ async function answerElicitation(event: ElicitationRequestedEvent): Promise<void
 }
 
 async function askQuestions(event: ElicitationRequestedEvent): Promise<ElicitationOutcome> {
+  if (event.turnId !== holdingTurn(event.sessionId)?.turnId) return { action: "cancel" };
   const questions = event.mode === "question" ? askableQuestions(event.questions) : [];
   if (questions.length === 0) return { action: "decline" };
   try {
@@ -359,6 +368,7 @@ async function handleToolRequest(
   if (method === "agentDevice") return agentDeviceFor(requireParam(params, "sessionId", method));
 
   const sessionId = requireParam(params, "sessionId", method);
+  const turnId = holdingTurn(sessionId)?.turnId;
   const requestId = crypto.randomUUID();
   const isUserFacing = isPrompt(method);
   const sessionResources = ["workspaces", "sessions", "session"] as const;
@@ -377,13 +387,14 @@ async function handleToolRequest(
     return await relay({
       requestId,
       sessionId,
+      turnId,
       method,
       params,
       // User-facing methods wait indefinitely; auto-responding keep 2-min timeout
       timeoutMs: isUserFacing ? 24 * 60 * 60 * 1000 : 120_000,
     });
   } finally {
-    if (isUserFacing) {
+    if (isUserFacing && turnId !== undefined && holdingTurn(sessionId)?.turnId === turnId) {
       const result = persistSessionBackToWorking(sessionId);
       if (result.ok) invalidate([...sessionResources], { sessionIds: [sessionId] });
     }

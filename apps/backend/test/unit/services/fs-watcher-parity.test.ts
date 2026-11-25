@@ -13,7 +13,11 @@ import { join } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
 import { expect, it, vi } from "vitest";
 import { fileChanges } from "@shared/api/files";
-import { destroyAllWatchers, watchWorkspace } from "../../../src/services/fs-watcher.service";
+import {
+  canWatchWorkspace,
+  destroyAllWatchers,
+  watchWorkspace,
+} from "../../../src/services/fs-watcher.service";
 import { dropConnection, onFollow, subscribe, unsubscribe } from "../../../src/services/streams";
 import { addConnection, removeConnection } from "../../../src/services/ws.service";
 
@@ -49,7 +53,10 @@ it("delivers checkout changes with a bounded descriptor cost", async () => {
   };
   const count = () => readdirSync("/dev/fd").length;
   try {
-    if (process.platform !== "darwin") {
+    const shouldWatch =
+      process.platform === "darwin" || (process.platform === "linux" && "bun" in process.versions);
+    expect(canWatchWorkspace()).toBe(shouldWatch);
+    if (!shouldWatch) {
       expect(start).toThrow("File watching is unavailable");
       return;
     }
@@ -69,6 +76,8 @@ it("delivers checkout changes with a bounded descriptor cost", async () => {
 
     start();
     const visible = join(nested, "visible");
+    const later = join(nested, "new-directory");
+    const laterFile = join(later, "visible");
     const edits = {
       create: () => writeFileSync(visible, "create"),
       modify: () => writeFileSync(visible, "modify"),
@@ -78,6 +87,9 @@ it("delivers checkout changes with a bounded descriptor cost", async () => {
         renameSync(tmp, visible);
       },
       delete: () => unlinkSync(visible),
+      "mkdir after subscribing": () => mkdirSync(later),
+      "create in new directory": () => writeFileSync(laterFile, "first"),
+      "edit in new directory": () => writeFileSync(laterFile, "second"),
     };
     for (const [name, edit] of Object.entries(edits)) {
       // Let any trailing notification from the previous edit pass before arming this waiter.
@@ -107,9 +119,7 @@ it("delivers checkout changes with a bounded descriptor cost", async () => {
       end();
       await wait(10);
     }
-    // Bun 1.3.6 retains one FD per closed macOS recursive watch. Tighten to
-    // zero with the runtime upgrade. Node returns to its warmed baseline.
-    expect(count() - baseline).toBeLessThanOrEqual(process.versions.bun ? 100 : 0);
+    expect(count() - baseline).toBeLessThanOrEqual(0);
     start();
     expect(execFileSync("/bin/echo", ["watcher-parity"], { encoding: "utf8", timeout: 2000 })).toBe(
       "watcher-parity\n"

@@ -131,6 +131,43 @@ describe("database schema check at startup", () => {
     closeDatabase();
   });
 
+  it.each([true, false])("resumes Gemini with its first agent_messages=%s", async (enabled) => {
+    databaseFile(`
+      ALTER TABLE sessions DROP COLUMN agent_messages;
+      INSERT INTO repositories (id, name) VALUES ('r', 'Project');
+      INSERT INTO workspaces (id, repository_id, slug) VALUES ('w', 'r', 'work');
+      INSERT INTO sessions (id, workspace_id, agent_harness, agent_session_id) VALUES
+        ('resumed', 'w', 'gemini', 'native-old'), ('fresh', 'w', 'gemini', NULL);
+    `);
+    const { initDatabase, closeDatabase } = await open();
+    const db = initDatabase();
+    const { saveSetting } = await import("../../../src/services/settings.service");
+    const { hasAgentMessages } = await import("../../../src/services/agent/agent-messages");
+    expect(db.prepare("SELECT DISTINCT agent_messages FROM sessions").all()).toEqual([
+      { agent_messages: null },
+    ]);
+    saveSetting("agent_messages", enabled);
+    expect(hasAgentMessages("resumed")).toBe(false);
+    expect(hasAgentMessages("fresh")).toBe(enabled);
+    db.exec("UPDATE sessions SET agent_session_id = 'native-new' WHERE id = 'fresh'");
+    saveSetting("agent_messages", !enabled);
+    closeDatabase();
+
+    vi.resetModules();
+    const restart = await open();
+    const reopened = restart.initDatabase();
+    const gate = await import("../../../src/services/agent/agent-messages");
+    expect(reopened.prepare("SELECT id, agent_messages FROM sessions ORDER BY id").all()).toEqual([
+      { id: "fresh", agent_messages: Number(enabled) },
+      { id: "resumed", agent_messages: 0 },
+    ]);
+    expect(gate.hasAgentMessages("fresh")).toBe(enabled);
+    expect(gate.hasAgentMessages("resumed")).toBe(false);
+    reopened.exec("DELETE FROM sessions WHERE id = 'fresh'");
+    expect(gate.hasAgentMessages("fresh")).toBe(false);
+    restart.closeDatabase();
+  });
+
   it("stops on a column the schema has and the database lacks", async () => {
     databaseFile("ALTER TABLE workspaces DROP COLUMN organization_id");
     const { initDatabase } = await open();

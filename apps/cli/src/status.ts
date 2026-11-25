@@ -7,7 +7,9 @@ import { c, sym, blank, divider, kv, error, hint } from "./ui.js";
 import { readServerInfo } from "./config.js";
 import { httpGet } from "./lib/http.js";
 import { formatUptime, formatTimeAgo } from "./lib/format.js";
-import { harnessInfo } from "../../../shared/harnesses";
+import type { AgentAuthAnswer } from "../../../shared/agent-auth";
+import { agentReadiness } from "../../../shared/agent-readiness";
+import { HARNESSES, LOCAL_HARNESSES } from "../../../shared/harnesses";
 
 interface HealthResponse {
   status: string;
@@ -25,12 +27,6 @@ interface DeviceInfo {
   name: string;
   created_at: string;
   last_seen_at?: string;
-}
-
-/** `GET /api/settings/agent-auth`: each local agent's CLI and login (shared/agent-auth's AgentAuthAnswer). */
-interface AgentAuthResponse {
-  auth?: { harness: string; state: string; label?: string; email?: string }[];
-  clis?: { harness: string; state: string }[];
 }
 
 /** Show server status */
@@ -52,7 +48,7 @@ export async function showStatus(): Promise<void> {
     httpGet<HealthResponse>(port, "/api/health"),
     httpGet<RelayStatusResponse>(port, "/api/relay/status"),
     httpGet<{ devices: DeviceInfo[] }>(port, "/api/remote-auth/devices"),
-    httpGet<AgentAuthResponse>(port, "/api/settings/agent-auth"),
+    httpGet<AgentAuthAnswer>(port, "/api/settings/agent-auth"),
   ]);
 
   const isRunning = health !== null;
@@ -93,26 +89,22 @@ export async function showStatus(): Promise<void> {
   }
 
   // ── AI Agents ──
-  if (agentAuth?.auth?.length) {
+  if (agentAuth?.auth && agentAuth.clis) {
     blank();
     divider("AI Agents");
     blank();
-    for (const agent of agentAuth.auth) {
-      const cli = agentAuth.clis?.find((candidate) => candidate.harness === agent.harness);
+    for (const harness of LOCAL_HARNESSES) {
+      const agent = agentReadiness(agentAuth, harness);
       let status: string;
-      if (cli?.state === "installing") {
-        status = c.dim("installing");
-      } else if (cli && cli.state !== "ready" && cli.state !== "unmanaged") {
-        status = c.dim("not installed");
-      } else if (agent.state === "signed_in") {
-        const who = [agent.label, agent.email].filter(Boolean).join(" · ");
+      if (agent.state === "ready") {
+        const who = [agent.auth.label, agent.auth.email].filter(Boolean).join(" · ");
         status = c.green("signed in") + (who ? c.dim(` (${who})`) : "");
-      } else if (agent.state === "unknown") {
-        status = c.dim("status unavailable");
+      } else if (agent.state === "signed_out") {
+        status = c.yellow(`not signed in · ${agent.detail}`);
       } else {
-        status = c.yellow("not signed in");
+        status = c.dim(agent.detail);
       }
-      kv(harnessInfo(agent.harness)?.label ?? agent.harness, status, 14);
+      kv(HARNESSES[harness].label, status, 14);
     }
   }
 

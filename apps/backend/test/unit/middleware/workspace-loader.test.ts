@@ -1,119 +1,38 @@
-import { vi, describe, it, expect, beforeEach } from "vitest";
-import { Hono } from "hono";
-import { errorHandler } from "../../../src/middleware/error-handler";
+import { describe, it, expect, vi } from "vitest";
+import { computeWorkspacePath, loadWorkspace } from "../../../src/middleware/workspace-loader";
 
-const mockStmt = { get: vi.fn<(...args: any[]) => any>() };
-const mockDb = { prepare: vi.fn<(...args: any[]) => any>(() => mockStmt) };
-
+const get = vi.hoisted(() => vi.fn());
 vi.mock("../../../src/lib/database", () => ({
-  getDatabase: vi.fn<(...args: any[]) => any>(() => mockDb),
+  getDatabase: () => ({ prepare: () => ({ get }) }),
 }));
 
-import { withWorkspace, computeWorkspacePath } from "../../../src/middleware/workspace-loader";
+describe("loadWorkspace", () => {
+  const row = {
+    id: "ws-42",
+    kind: "worktree",
+    root_path: "/repo",
+    slug: "tokyo",
+    start_recoverable: 1,
+  };
 
-// The middleware sets these on the context; Hono needs the Variables map
-// declared to type c.get()/c.set().
-type TestEnv = { Variables: { workspace: unknown; workspacePath: string } };
-
-const createTestApp = () => {
-  const app = new Hono<TestEnv>();
-  app.get("/test/:id", withWorkspace, (c) => {
-    return c.json({
-      workspace: c.get("workspace"),
-      workspacePath: c.get("workspacePath"),
+  it("queries the requested id and returns the workspace and its checkout path", () => {
+    get.mockReturnValueOnce(row);
+    expect(loadWorkspace("ws-42")).toEqual({
+      workspace: { ...row, start_recoverable: true },
+      workspacePath: "/repo/.deus/tokyo",
     });
-  });
-  app.onError(errorHandler);
-  return app;
-};
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  mockDb.prepare.mockReturnValue(mockStmt);
-});
-
-describe("withWorkspace middleware", () => {
-  it("returns workspace data and computed path when found", async () => {
-    mockStmt.get.mockReturnValue({
-      id: "ws-1",
-      root_path: "/repo",
-      slug: "tokyo",
-      default_branch: "main",
-      start_recoverable: 1,
-    });
-
-    const app = createTestApp();
-    const res = await app.request("/test/ws-1");
-
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.workspace).toEqual({
-      id: "ws-1",
-      root_path: "/repo",
-      slug: "tokyo",
-      default_branch: "main",
-      start_recoverable: true,
-    });
-    expect(body.workspacePath).toBe("/repo/.deus/tokyo");
+    expect(get).toHaveBeenLastCalledWith("ws-42");
   });
 
-  it("returns 404 when workspace is not found", async () => {
-    mockStmt.get.mockReturnValue(undefined);
-
-    const app = createTestApp();
-    const res = await app.request("/test/missing");
-
-    expect(res.status).toBe(404);
-    const body = await res.json();
-    expect(body.error).toBe("Workspace not found");
-  });
-
-  it("returns 404 when root_path is null", async () => {
-    mockStmt.get.mockReturnValue({
-      id: "ws-1",
-      root_path: null,
-      slug: "tokyo",
-      start_recoverable: 0,
-    });
-
-    const app = createTestApp();
-    const res = await app.request("/test/ws-1");
-
-    expect(res.status).toBe(404);
-    const body = await res.json();
-    expect(body.error).toBe("Workspace not found");
-  });
-
-  it("returns 404 when slug is null", async () => {
-    mockStmt.get.mockReturnValue({
-      id: "ws-1",
-      root_path: "/repo",
-      slug: null,
-      start_recoverable: 0,
-    });
-
-    const app = createTestApp();
-    const res = await app.request("/test/ws-1");
-
-    expect(res.status).toBe(404);
-    const body = await res.json();
-    expect(body.error).toBe("Workspace not found");
-  });
-
-  it("queries database with the correct id parameter", async () => {
-    mockStmt.get.mockReturnValue({
-      id: "ws-42",
-      root_path: "/projects",
-      slug: "paris",
-      default_branch: "develop",
-      start_recoverable: 0,
-    });
-
-    const app = createTestApp();
-    await app.request("/test/ws-42");
-
-    expect(mockDb.prepare).toHaveBeenCalled();
-    expect(mockStmt.get).toHaveBeenCalledWith("ws-42");
+  it.each([
+    { missing: "row", result: undefined },
+    { missing: "checkout root", result: { ...row, root_path: null } },
+    { missing: "slug", result: { ...row, slug: null } },
+  ])("throws the same 404 for a missing $missing", ({ result }) => {
+    get.mockReturnValueOnce(result);
+    expect(() => loadWorkspace("ws-42")).toThrow(
+      expect.objectContaining({ statusCode: 404, message: "Workspace not found" })
+    );
   });
 });
 

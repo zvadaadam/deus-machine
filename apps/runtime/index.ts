@@ -4,7 +4,9 @@ import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, resolve } from "node:path";
 import packageJson from "../../package.json";
-import { PACKAGED_SYSTEM_PATHS } from "../../shared/runtime";
+import { DEUS_DB_FILENAME, PACKAGED_SYSTEM_PATHS } from "../../shared/runtime";
+import { defaultDatabasePathForEnv } from "../../shared/lib/child-env";
+import { configureBackendEnv } from "../backend/runtime-env";
 
 const VERSION = packageJson.version;
 const RUNTIME_NAME = "deus-runtime";
@@ -95,7 +97,7 @@ const RUNTIME_CHECKS = {
         10_000
       );
       openTerminal({
-        // Not a bare /bin/echo: see openTerminal on output Bun drops at exit.
+        // Exercise a shell that stays open after printing, like a workspace terminal.
         command: "/bin/sh",
         args: ["-c", "echo deus-runtime-terminal; sleep 0.1"],
         cols: 80,
@@ -195,8 +197,9 @@ function configureRuntimeEnv(command: RuntimeCommand, dataDir?: string): void {
     process.env.PORT ??= "0";
     if (dataDir) {
       process.env.DEUS_DATA_DIR = resolve(dataDir);
-      process.env.DATABASE_PATH = join(resolve(dataDir), "deus.db");
+      process.env.DATABASE_PATH = join(process.env.DEUS_DATA_DIR, DEUS_DB_FILENAME);
     }
+    process.env.DATABASE_PATH ||= defaultDatabasePathForEnv(process.env);
   }
 }
 
@@ -210,7 +213,7 @@ function isMacAppBundle(resourcesPath: string): boolean {
 }
 
 async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
-  configureRuntimeEnv(command, dataDir);
+  configureBackendEnv(() => configureRuntimeEnv(command, dataDir));
 
   if (command === "self-test") {
     const layout = resolveRuntimeLayout();

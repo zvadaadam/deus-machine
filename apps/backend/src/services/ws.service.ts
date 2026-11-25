@@ -3,11 +3,13 @@
 // Manages connected clients, heartbeat pings, message routing, and protocol dispatch.
 
 import { match } from "ts-pattern";
+import type { QServerFrame } from "@shared/types/query-protocol";
 import type { AdmittedAssistant } from "../api/registry";
 
 /** Minimal interface for sending/closing WebSocket-like connections.
  *  WSContext already satisfies this — used to also accept virtual relay connections. */
 export interface WsSendable {
+  /** A transport may throw FrameTooLarge before sending any bytes. */
   send(data: string | ArrayBuffer): void;
   close(code?: number, reason?: string): void;
 }
@@ -156,10 +158,35 @@ export function getConnection(id: string): WsConnection | undefined {
   return connections.get(id);
 }
 
-/** Record a pong from a client. */
-export function recordPong(id: string): void {
-  const conn = connections.get(id);
-  if (conn) conn.lastPong = Date.now();
+/** A transport refused the encoded message before sending any bytes. */
+export class FrameTooLarge extends Error {
+  constructor(bytes: number) {
+    super(`Frame is too large (${bytes} bytes)`);
+  }
+}
+
+type ConnectionFrame =
+  | QServerFrame
+  | { type: "connected"; connectionId: string }
+  | { type: "ping" }
+  | { type: "pong"; id?: string };
+
+/**
+ * Sends one frame and reports a gone connection or a refusal by its transport.
+ * The caller decides what to tell its peer when a frame is refused.
+ */
+export function sendFrame(
+  connectionId: string,
+  frame: ConnectionFrame
+): "sent" | "too-large" | "unavailable" {
+  const connection = connections.get(connectionId);
+  if (!connection) return "unavailable";
+  try {
+    connection.ws.send(JSON.stringify(frame));
+    return "sent";
+  } catch (error) {
+    return error instanceof FrameTooLarge ? "too-large" : "unavailable";
+  }
 }
 
 /** Close all connections and stop heartbeat (for shutdown). */
@@ -210,10 +237,7 @@ function checkHeartbeats(): void {
       continue;
     }
 
-    // Send ping
-    try {
-      conn.ws.send(JSON.stringify({ type: "ping" }));
-    } catch {
+    if (sendFrame(id, { type: "ping" }) === "unavailable") {
       closeConnection(conn, 1001, "Connection lost");
     }
   }
@@ -251,17 +275,10 @@ export function handleProtocolMessage(connectionId: string, msg: Record<string, 
     .with("ping", () => {
       // Echo a client probe through the same authenticated path, including relay
       // virtual connections, so the client can detect a silent one-way failure.
-      recordPong(connectionId);
-      try {
-        connection.ws.send(
-          JSON.stringify({ type: "pong", ...(typeof msg.id === "string" ? { id: msg.id } : {}) })
-        );
-      } catch {
+      const id = typeof msg.id === "string" ? msg.id : undefined;
+      if (sendFrame(connectionId, { type: "pong", id }) === "unavailable") {
         closeConnection(connection, 1001, "Connection lost");
       }
-    })
-    .with("pong", () => {
-      recordPong(connectionId);
     })
     .otherwise(() => {
       // Route q:* frames to query engine handler

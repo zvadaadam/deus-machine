@@ -10,6 +10,8 @@ import path from "node:path";
 import { chromium } from "playwright";
 import Database from "better-sqlite3";
 import { createServer } from "vite";
+import { TELL_USER } from "../../shared/agent-message.ts";
+import { DEUS_TOOLS_SERVER } from "../../shared/mcp-servers.ts";
 import { SCHEMA_SQL } from "../../shared/schema.ts";
 import { LOOPBACK_WEB_ORIGINS } from "../../shared/web-origins.ts";
 import { freePort } from "./remote-access/stack.mjs";
@@ -63,7 +65,17 @@ async function run() {
     directory
   );
   const chats = {};
-  for (const name of ["order", "long", "nested", "refusal", "claude-code", "codex-app-server"]) {
+  for (const name of [
+    "order",
+    "long",
+    "nested",
+    "bubbles",
+    "scroll",
+    "paginate",
+    "refusal",
+    "claude-code",
+    "codex-app-server",
+  ]) {
     const workspace = crypto.randomUUID(),
       session = crypto.randomUUID();
     chats[name] = { workspace, session };
@@ -71,11 +83,17 @@ async function run() {
       "INSERT INTO workspaces (id,repository_id,slug,title,state,setup_status,current_session_id) VALUES (?,'repo',?,?,'ready','completed',?)"
     ).run(workspace, name, name, session);
     const add = db.prepare(
-      "INSERT INTO sessions (id,workspace_id,agent_harness,title) VALUES (?,?,?,?)"
+      "INSERT INTO sessions (id,workspace_id,agent_harness,title,agent_messages) VALUES (?,?,?,?,?)"
     );
     // Errors belong to a side chat, without the first chat's workspace-start marker.
-    add.run(crypto.randomUUID(), workspace, "claude-code", "First chat");
-    add.run(session, workspace, name === "codex-app-server" ? name : "claude-code", "Transcript");
+    add.run(crypto.randomUUID(), workspace, "claude-code", "First chat", 0);
+    add.run(
+      session,
+      workspace,
+      name === "codex-app-server" ? name : "claude-code",
+      "Transcript",
+      name === "scroll" ? 1 : 0
+    );
     await mkdir(path.join(directory, ".deus", name), { recursive: true });
   }
 
@@ -239,6 +257,12 @@ async function run() {
                 error: "The fixture has no terminal",
               })
             );
+          } else if (
+            f.resource === "messages" &&
+            f.type === "q:request" &&
+            f.params?.sessionId === chats.paginate.session
+          ) {
+            server.send(JSON.stringify({ ...f, params: { ...f.params, limit: 16 } }));
           } else server.send(raw);
         });
         server.onMessage((raw) => route.send(raw));
@@ -252,22 +276,41 @@ async function run() {
       await page.goto(`${base}s/local/w/${chats[name].workspace}`, { timeout: 120_000 });
       await page.getByRole("log").waitFor();
     };
+    const chooseView = async (command) => {
+      await page.keyboard.press("Control+k");
+      await page.getByRole("dialog").getByRole("combobox").fill(command);
+      await page.getByRole("option", { name: command, exact: true }).click();
+    };
     const logView = page.getByRole("log");
+    const liveRegion = (el) => el.closest("[aria-live]").getAttribute("aria-live");
     const order = () =>
       logView
         .locator(".assistant-turn p, button[aria-label*=' activity'], [role=separator][aria-label]")
         .evaluateAll((nodes) =>
-          nodes.map((node) =>
-            node.tagName === "BUTTON"
-              ? "activity"
-              : (node.getAttribute("aria-label") ?? node.textContent)
-          )
+          nodes
+            .filter((node) => !node.closest("[inert]"))
+            .map((node) =>
+              node.tagName === "BUTTON"
+                ? "activity"
+                : (node.getAttribute("aria-label") ?? node.textContent)
+            )
         );
     await go("order");
     if (desktopCss) await page.locator("html.electron").waitFor();
     const turn = fixture(chats.order.session, "order");
     await emit(...turn.start("Check the transcript order."), turn.text("Progress A"), turn.tool());
-    await logView.getByText("Progress A", { exact: true }).waitFor();
+    await logView
+      .getByRole("button", { name: "Expand activity, Activity · 1 tool call" })
+      .waitFor();
+    const liveText = await logView
+      .getByText("Progress A", { exact: true })
+      .evaluateHandle((el) => el.firstChild);
+    await chooseView("Show full run");
+    await logView.locator(".agent-words").waitFor({ state: "detached" });
+    assert(
+      await liveText.evaluate((node) => node?.isConnected),
+      "switching readings kept the text node"
+    );
     const first = logView.getByRole("button", { name: /Expand activity/ });
     await first.click();
     const groupId = await logView
@@ -282,7 +325,7 @@ async function run() {
     await emit(c1);
     await logView.getByRole("separator", { name: "Compacting", exact: true }).waitFor();
     await emit(
-      turn.text("Progress B"),
+      turn.send("Progress B"),
       turn.compact("first", "completed"),
       turn.tool(),
       turn.compact("second", "completed"),
@@ -316,6 +359,14 @@ async function run() {
         "Auto-compacted",
       ]);
       assert.equal(await logView.getByRole("button", { name: "Copy response" }).count(), 1);
+      assert.equal(
+        await logView.getByText("Progress A", { exact: true }).evaluate(liveRegion),
+        "off"
+      );
+      assert.equal(
+        await logView.getByText("Progress C continued", { exact: true }).evaluate(liveRegion),
+        "polite"
+      );
     });
     const stop = fixture(chats.order.session, "stop");
     await emit(
@@ -344,6 +395,7 @@ async function run() {
       }
     );
 
+    await chooseView("Show chat bubbles");
     await check("a task keeps child progress and activity nested across two messages", async () => {
       const task = fixture(chats.nested.session, "nested");
       const parent = task.tool("task");
@@ -360,11 +412,13 @@ async function run() {
         task.end("end_turn")
       );
       await go("nested");
-      await logView.getByRole("button", { name: /Expand activity/ }).click();
+      await logView.getByRole("button", { name: /Expand activity, Worked/ }).click();
+      await logView.getByRole("button", { name: /Expand activity, Activity/ }).click();
       assert.equal(await logView.getByText("Child progress A", { exact: true }).count(), 0);
       await logView.getByRole("button", { name: "Expand agent Review the changes" }).click();
       await logView.getByText("Child progress B", { exact: true }).waitFor();
       assert.deepEqual(await order(), [
+        "activity",
         "activity",
         "Child progress A",
         "activity",
@@ -372,6 +426,552 @@ async function run() {
       ]);
     });
 
+    await check(
+      "parallel work and a kept answer retain their nodes across settlement",
+      async () => {
+        await go("bubbles");
+        const reply = fixture(chats.bubbles.session, "message");
+        const parallel = reply.tool();
+        const done = parallel.part.state;
+        parallel.part.state = {
+          status: "in_progress",
+          input: done.input,
+          title: "Checking the tag",
+          time: { start: 1 },
+        };
+        await emit(
+          ...reply.start("Check the release."),
+          parallel,
+          reply.send("The tag matches."),
+          reply.tool(),
+          reply.text("Ready.", "streaming")
+        );
+        await logView.getByText("The tag matches.", { exact: true }).waitFor();
+        await logView
+          .getByRole("button", { name: "Expand activity, Checking the tag · 1 tool call" })
+          .waitFor();
+        const liveAnswer = await logView.getByText("Ready.", { exact: true }).elementHandle();
+        const last = logView.getByRole("button", {
+          name: "Expand activity, Activity · 1 tool call",
+        });
+        const disclosure = await last.elementHandle();
+        await last.click();
+        const details = await page
+          .locator(`[id="${await disclosure.getAttribute("aria-controls")}"]`)
+          .elementHandle();
+        await disclosure.focus();
+        assert(await disclosure.evaluate((el) => el === globalThis.document.activeElement));
+        parallel.part.state = done;
+        await emit(parallel, reply.finishText("Ready."), {
+          ...reply.end("end_turn"),
+          tokens: { input: 900, output: 100 },
+          cost: 0.03,
+        });
+        const summary = logView.getByRole("button", { name: /^Expand activity, Worked for/ });
+        await summary.waitFor();
+        await page.waitForFunction(
+          (el) => el.closest(".fold-row").getBoundingClientRect().height === 0,
+          details
+        );
+        assert(
+          await liveAnswer.evaluate(
+            (el) => el.closest(".fold-row").getBoundingClientRect().height > 0
+          )
+        );
+        assert(await summary.evaluate((button) => button === globalThis.document.activeElement));
+        assert.equal(await liveAnswer.evaluate(liveRegion), "polite");
+        assert.equal(await details.evaluate(liveRegion), "off");
+        assert(await liveAnswer.evaluate((el) => el.isConnected && !el.closest("[inert]")));
+        assert(await details.evaluate((el) => el.isConnected && !!el.closest("[inert]")));
+        await summary.click();
+        assert(
+          await disclosure.evaluate(
+            (el) =>
+              el.isConnected &&
+              !el.closest("[inert]") &&
+              el.getAttribute("aria-expanded") === "true"
+          )
+        );
+        await logView.getByText("The tag matches.", { exact: true }).waitFor();
+        await page.reload();
+        await logView.getByText("Ready.", { exact: true }).waitFor();
+        assert.deepEqual(await order(), ["activity", "Ready."]);
+        const oldSend = logView.getByText("The tag matches.", { exact: true });
+        assert.equal(await oldSend.count(), 0, "unseen historical work is not mounted");
+        await summary.click();
+        const seen = await oldSend.elementHandle();
+        await logView.getByRole("button", { name: /^Collapse activity, Worked for/ }).click();
+        assert(await seen.evaluate((el) => el.isConnected && !!el.closest("[inert]")));
+      }
+    );
+    await check(
+      "a timed Worked line moves the same footer facts into keyboard-accessible Details",
+      async () => {
+        const footer = logView.locator(".turn-footer-slot");
+        assert.equal(await footer.innerText(), "Details");
+        await footer.getByRole("button", { name: "Copy response" }).waitFor();
+        const details = footer.getByRole("button", { name: "View turn details" });
+        await details.focus();
+        await page.keyboard.press("Enter");
+        const list = page.getByRole("dialog", { name: "Turn details" }).locator("dl");
+        await list.waitFor();
+        assert.deepEqual(await list.getByRole("term").allTextContents(), [
+          "Duration",
+          "Started",
+          "Finished",
+          "Tokens",
+          "Cost",
+        ]);
+        const [duration, start, end, tokens, cost] = await list
+          .getByRole("definition")
+          .allTextContents();
+        assert.ok(duration && start && end);
+        assert.equal(tokens, "1.0k tok");
+        assert.equal(cost, "$0.03");
+        await page.keyboard.press("Escape");
+        await page.waitForFunction(
+          (el) => el === globalThis.document.activeElement,
+          await details.elementHandle()
+        );
+        await chooseView("Show full run");
+        await footer
+          .getByLabel(`Turn took ${duration}. Started ${start}. Finished ${end}.`)
+          .waitFor();
+        assert.equal(await footer.getByRole("button", { name: "View turn details" }).count(), 0);
+        assert.ok(await footer.getByText(tokens, { exact: true }).isVisible());
+        assert.ok(await footer.getByText(cost, { exact: true }).isVisible());
+        await chooseView("Show chat bubbles");
+      }
+    );
+    await check(
+      "a turn ending while the reader is scrolled back settles when follow resumes",
+      async () => {
+        const turn = fixture(chats.bubbles.session, "reading");
+        const passage = Array.from(
+          { length: 48 },
+          (_, i) => `Check ${i + 1} before publishing.`
+        ).join("\n\n");
+        await emit(
+          ...turn.start("Verify the release."),
+          turn.text(passage),
+          turn.tool(),
+          turn.text("Verified.")
+        );
+        const group = logView.locator('[data-message-id="reading-reply-1"]');
+        await group.getByText("Verified.", { exact: true }).waitFor();
+        await logView.evaluate((pane) => {
+          pane.scrollTop = pane.scrollHeight;
+        });
+        await logView.hover();
+        await page.mouse.wheel(0, -500);
+        await page.waitForFunction(() =>
+          globalThis.document
+            .querySelector('button[aria-label="Scroll to bottom"]')
+            .parentElement.classList.contains("opacity-100")
+        );
+        await emit(turn.end("end_turn"));
+        await group.getByRole("button", { name: "Copy response" }).waitFor();
+        assert.equal(await group.getByRole("button", { name: /activity, Worked/ }).count(), 0);
+        assert.ok(await group.getByLabel(/^Turn took /).isVisible());
+        assert.equal(await group.locator("[inert]").count(), 0);
+        await logView.evaluate((pane) => {
+          pane.scrollTop = pane.scrollHeight;
+        });
+        await group.getByRole("button", { name: /^Expand activity, Worked/ }).waitFor();
+        assert.equal(await group.getByLabel(/^Turn took /).count(), 0);
+        await go("bubbles");
+        await logView.getByText("Verified.", { exact: true }).waitFor();
+        await group.getByRole("button", { name: /^Expand activity, Worked/ }).waitFor();
+      }
+    );
+    await check("a retained send joins only visible bubbles", async () => {
+      const turn = fixture(chats.bubbles.session, "joined");
+      await emit(
+        ...turn.start("Check the tag."),
+        turn.send("The tag is ready."),
+        turn.text("Checking approvals."),
+        turn.tool()
+      );
+      const sent = logView.getByText("The tag is ready.", { exact: true });
+      const corners = () =>
+        sent.evaluate((p) => {
+          const style = globalThis.getComputedStyle(p.closest("article"));
+          return [parseFloat(style.borderTopLeftRadius), parseFloat(style.borderBottomLeftRadius)];
+        });
+      await sent.waitFor();
+      const [outside, join] = await corners();
+      assert.ok(join < outside);
+      await emit(turn.end("end_turn"));
+      await logView
+        .locator('[data-message-id="joined-reply-1"]')
+        .getByRole("button", { name: /^Expand activity, Worked/ })
+        .waitFor();
+      assert.deepEqual(await corners(), [outside, outside]);
+    });
+    const waitForIdleBottom = (targetPage = page) =>
+      targetPage.waitForFunction(async () => {
+        const pane = globalThis.document.getElementById("chat-messages");
+        const top = pane.scrollTop;
+        // The chase retires after ten idle frames at its target.
+        for (let i = 0; i < 11; i++) {
+          await new Promise(globalThis.requestAnimationFrame);
+          if (pane.scrollTop !== top || Math.abs(pane.scrollHeight - pane.clientHeight - top) > 1)
+            return false;
+        }
+        return true;
+      });
+    await check(
+      "auto-scroll resumes for in-place streaming growth after idle and stays grounded when the turn folds",
+      async () => {
+        const turn = fixture(chats.bubbles.session, "streaming-scroll");
+        await emit(...turn.start("Stream a long update."));
+        await logView.getByText("Stream a long update.", { exact: true }).waitFor();
+        await waitForIdleBottom();
+        for (let i = 1; i <= 16; i++) {
+          await emit(
+            turn.send(`Update ${i}: verifying smooth follow while the existing message grows.`)
+          );
+        }
+        await logView
+          .getByText("Update 16: verifying smooth follow while the existing message grows.", {
+            exact: true,
+          })
+          .waitFor();
+        await page.waitForFunction(() => {
+          const pane = globalThis.document.getElementById("chat-messages");
+          return pane && pane.scrollHeight - (pane.scrollTop + pane.clientHeight) <= 24;
+        });
+        assert.equal(
+          await page.evaluate(() =>
+            globalThis.document
+              .querySelector('button[aria-label="Scroll to bottom"]')
+              .parentElement.classList.contains("opacity-100")
+          ),
+          false,
+          "following in-place growth should not pause auto-scroll"
+        );
+        await emit(turn.text("Done streaming."), turn.end("end_turn"));
+        await logView.getByText("Done streaming.", { exact: true }).waitFor();
+        await page.waitForFunction(() => {
+          const pane = globalThis.document.getElementById("chat-messages");
+          return pane && pane.scrollHeight - (pane.scrollTop + pane.clientHeight) <= 24;
+        });
+        assert.equal(
+          await page.evaluate(() =>
+            globalThis.document
+              .querySelector('button[aria-label="Scroll to bottom"]')
+              .parentElement.classList.contains("opacity-100")
+          ),
+          false,
+          "folding a settled turn at the bottom should not pause auto-scroll"
+        );
+      }
+    );
+    for (const [name, gap] of [
+      ["opening a settled Worked fold while following does not chase to the bottom", 0],
+      ["opening Worked after resuming 12 px from the bottom keeps the disclosure in place", 12],
+      [
+        "opening Worked just after Jump while its chase is active keeps the disclosure in place",
+        null,
+      ],
+    ]) {
+      await check(name, async () => {
+        await logView.evaluate((pane) => {
+          pane.scrollTop = pane.scrollHeight;
+        });
+        await waitForIdleBottom();
+        // Gentle 1px upward scroll ticks after idle must still accumulate and pause follow.
+        await logView.evaluate((pane) => {
+          for (let i = 0; i < 40; i++) {
+            pane.scrollTop = Math.max(0, pane.scrollTop - 1);
+            pane.dispatchEvent(new Event("scroll"));
+          }
+        });
+        await page.waitForFunction(() =>
+          globalThis.document
+            .querySelector('button[aria-label="Scroll to bottom"]')
+            .parentElement.classList.contains("opacity-100")
+        );
+        const worked = logView
+          .locator('[data-message-id="streaming-scroll-reply-1"]')
+          .getByRole("button", { name: /^Expand activity, Worked/ });
+        const before = await worked.evaluate((btn, gap) => {
+          const pane = btn.closest('[role="log"]');
+          const jump = globalThis.document.querySelector('button[aria-label="Scroll to bottom"]');
+          const bottom = pane.scrollHeight - pane.clientHeight;
+          const expected = {
+            scrollHeight: pane.scrollHeight,
+            scrollTop: bottom,
+            btnTop: btn.getBoundingClientRect().top + pane.scrollTop - bottom,
+          };
+          if (gap === null) {
+            // Reduced motion reaches the old bottom on Jump's first frame. Open before its next one.
+            jump.click();
+            globalThis.requestAnimationFrame(() => btn.click());
+          } else {
+            // Open on passive resume, before its first chase frame could run.
+            const resumed = new globalThis.MutationObserver(() => {
+              if (!jump.parentElement.classList.contains("opacity-0")) return;
+              resumed.disconnect();
+              btn.click();
+            });
+            resumed.observe(jump.parentElement, { attributeFilter: ["class"] });
+            pane.scrollTop = bottom - gap;
+          }
+          return expected;
+        }, gap);
+        const collapse = logView
+          .locator('[data-message-id="streaming-scroll-reply-1"]')
+          .getByRole("button", { name: /^Collapse activity, Worked/ });
+        await collapse.waitFor();
+        await page.waitForFunction(
+          (height) =>
+            globalThis.document.getElementById("chat-messages").scrollHeight > height + 200,
+          before.scrollHeight
+        );
+        const after = await collapse.evaluate(async (btn) => {
+          // Allow the measured expansion and its next chase frame to reach the screen.
+          await new Promise(globalThis.requestAnimationFrame);
+          await new Promise(globalThis.requestAnimationFrame);
+          const pane = globalThis.document.getElementById("chat-messages");
+          return {
+            scrollTop: pane.scrollTop,
+            scrollHeight: pane.scrollHeight,
+            clientHeight: pane.clientHeight,
+            btnTop: btn.getBoundingClientRect().top,
+          };
+        });
+        await collapse.click();
+        assert.ok(
+          Math.abs(after.scrollTop - before.scrollTop) <= 1,
+          `expected the old bottom at ${before.scrollTop}px, got ${after.scrollTop}px`
+        );
+        assert.ok(
+          after.scrollHeight - (after.scrollTop + after.clientHeight) > 100,
+          "opening Worked while following should not chase to the bottom"
+        );
+        assert.ok(
+          Math.abs(after.btnTop - before.btnTop) < 40,
+          `Worked button shifted by ${after.btnTop - before.btnTop}px`
+        );
+      });
+    }
+    await check("a new live turn still follows after the reader opens Worked", async () => {
+      const previous = logView.locator('[data-message-id="streaming-scroll-reply-1"]');
+      await previous.getByRole("button", { name: /^Expand activity, Worked/ }).click();
+      await previous.getByRole("button", { name: /^Collapse activity, Worked/ }).waitFor();
+      const next = fixture(chats.bubbles.session, "follow-after-worked");
+      await emit(...next.start("Continue after the fold."), next.send("Checking the next change."));
+      await logView.getByText("Checking the next change.", { exact: true }).waitFor();
+      await waitForIdleBottom();
+      await emit(next.text("Finished checking."), next.end("end_turn"));
+    });
+    await check(
+      "gentle 1px upward scroll ticks pause an active normal-motion chase on an agent_messages chat",
+      async () => {
+        const motionContext = await browser.newContext({
+          viewport: { width: 1280, height: 760 },
+          reducedMotion: "no-preference",
+        });
+        const motionPage = await motionContext.newPage();
+        motionPage.setDefaultTimeout(12_000);
+        try {
+          const live = fixture(chats.scroll.session, "active-chase");
+          await emit(...live.start("Stream updates for active chase test."));
+          await motionPage.goto(`${base}s/local/w/${chats.scroll.workspace}`, { timeout: 60_000 });
+          const motionLog = motionPage.getByRole("log");
+          await motionLog
+            .getByText("Stream updates for active chase test.", { exact: true })
+            .waitFor();
+          // Let initial mount chase settle, then push a burst of tell_user bubbles so
+          // a fresh normal-motion chase starts with large remaining distance.
+          await waitForIdleBottom(motionPage);
+          const burst = [];
+          for (let i = 1; i <= 28; i++) {
+            burst.push(
+              live.send(
+                `Milestone ${i}: detailed status line verifying smooth active chase interruption across rAF ticks.`
+              )
+            );
+          }
+          await emit(...burst);
+          await motionPage.waitForFunction(() => {
+            const pane = globalThis.document.getElementById("chat-messages");
+            return (
+              pane &&
+              pane.scrollHeight > pane.clientHeight + 700 &&
+              pane.scrollTop > 40 &&
+              pane.scrollHeight - (pane.scrollTop + pane.clientHeight) > 300
+            );
+          });
+          // Interleave 40x 1px upward scroll steps across active rAF chase frames.
+          const result = await motionPage.evaluate(
+            () =>
+              new Promise((resolve) => {
+                const pane = globalThis.document.getElementById("chat-messages");
+                const startTop = pane.scrollTop;
+                let steps = 0;
+                const step = () => {
+                  pane.scrollTop = Math.max(0, pane.scrollTop - 1);
+                  pane.dispatchEvent(new Event("scroll"));
+                  if (++steps < 40) {
+                    globalThis.requestAnimationFrame(step);
+                  } else {
+                    globalThis.setTimeout(() => {
+                      const btn = globalThis.document.querySelector(
+                        'button[aria-label="Scroll to bottom"]'
+                      );
+                      resolve({
+                        startTop,
+                        endTop: pane.scrollTop,
+                        maxTop: pane.scrollHeight - pane.clientHeight,
+                        paused: btn?.parentElement?.classList.contains("opacity-100") ?? false,
+                      });
+                    }, 120);
+                  }
+                };
+                globalThis.requestAnimationFrame(step);
+              })
+          );
+          assert.equal(
+            result.paused,
+            true,
+            `expected active chase to pause after 1px upward steps (${JSON.stringify(result)})`
+          );
+          assert.ok(
+            result.maxTop - result.endTop > 200,
+            `active chase overrode upward steps to bottom (${JSON.stringify(result)})`
+          );
+        } finally {
+          await motionContext.close();
+        }
+      }
+    );
+    await check(
+      "two-stage prepend preserves the visible anchor row across load-older and a delayed remeasure",
+      async () => {
+        for (let i = 1; i <= 18; i++) {
+          const older = fixture(chats.paginate.session, `page-${i}`);
+          await emit(
+            ...older.start(`Prompt number ${i} for history pagination.`),
+            older.text(`Answer number ${i} confirming pagination anchor stability.`),
+            older.end("end_turn")
+          );
+        }
+        await go("paginate");
+        await logView
+          .getByText("Answer number 18 confirming pagination anchor stability.", { exact: true })
+          .waitFor();
+        await logView.evaluate((pane) => {
+          pane.scrollTop = 0;
+          pane.dispatchEvent(new Event("scroll"));
+        });
+        const loadButton = logView.getByRole("button", { name: "Load earlier messages" });
+        await loadButton.waitFor();
+        await page.waitForTimeout(150);
+        const anchor = await logView.evaluate((pane) => {
+          const paneTop = pane.getBoundingClientRect().top;
+          const rows = [...pane.querySelectorAll("[data-message-id]")];
+          const first = rows.find((el) => el.getBoundingClientRect().bottom > paneTop + 4);
+          return {
+            id: first.getAttribute("data-message-id"),
+            offset: first.getBoundingClientRect().top - paneTop,
+          };
+        });
+        await loadButton.click();
+        await page.waitForFunction(
+          () => globalThis.document.querySelectorAll("#chat-messages [data-message-id]").length > 16
+        );
+        await page.waitForTimeout(200);
+        const stage1 = await logView.evaluate((pane, anchorId) => {
+          const paneTop = pane.getBoundingClientRect().top;
+          const el = pane.querySelector(`[data-message-id="${anchorId}"]`);
+          return {
+            found: !!el,
+            offset: el ? el.getBoundingClientRect().top - paneTop : null,
+            gap: pane.scrollHeight - (pane.scrollTop + pane.clientHeight),
+          };
+        }, anchor.id);
+        assert.ok(stage1.found, "anchor row should remain visible after stage-1 prepend");
+        assert.ok(stage1.gap > 200, `stage-1 prepend jumped to bottom (gap=${stage1.gap})`);
+        assert.ok(
+          Math.abs(stage1.offset - anchor.offset) < 30,
+          `stage-1 anchor drifted from ${anchor.offset} to ${stage1.offset}`
+        );
+        // Stage 2: grow a newly prepended row above the anchor to trigger ResizeObserver remeasure.
+        await logView.evaluate((pane, anchorId) => {
+          const anchorEl = pane.querySelector(`[data-message-id="${anchorId}"]`);
+          const anchorIdx = Number(anchorEl.getAttribute("data-index"));
+          const above = [...pane.querySelectorAll("[data-index]")]
+            .filter((el) => Number(el.getAttribute("data-index")) < anchorIdx)
+            .at(-1);
+          const spacer = globalThis.document.createElement("div");
+          spacer.style.height = "240px";
+          above.firstElementChild.appendChild(spacer);
+        }, anchor.id);
+        await page.waitForTimeout(250);
+        const stage2 = await logView.evaluate((pane, anchorId) => {
+          const paneTop = pane.getBoundingClientRect().top;
+          const el = pane.querySelector(`[data-message-id="${anchorId}"]`);
+          return {
+            found: !!el,
+            offset: el ? el.getBoundingClientRect().top - paneTop : null,
+            gap: pane.scrollHeight - (pane.scrollTop + pane.clientHeight),
+          };
+        }, anchor.id);
+        assert.ok(stage2.found, "anchor row should remain visible after stage-2 remeasure");
+        assert.ok(stage2.gap > 200, `stage-2 remeasure jumped to bottom (gap=${stage2.gap})`);
+        assert.ok(
+          Math.abs(stage2.offset - anchor.offset) < 30,
+          `stage-2 anchor drifted from ${anchor.offset} to ${stage2.offset}`
+        );
+      }
+    );
+    for (const harness of ["codex-app-server", "claude-code"]) {
+      await check(
+        `a stored ${harness} plan with no prose keeps its card after reload`,
+        async () => {
+          const { session } = chats[harness];
+          const planTurn = fixture(session, "plan-" + harness);
+          const prior = planTurn.tool(),
+            plan = planTurn.tool("switch_mode");
+          const input = { plan: "Verify the release before publishing." };
+          plan.part.toolName = harness === "codex-app-server" ? "plan" : "ExitPlanMode";
+          const time = { start: 1, end: 2 };
+          plan.part.state =
+            harness === "codex-app-server"
+              ? { status: "completed", input, output: "", time }
+              : {
+                  status: "failed",
+                  input,
+                  error: "The user doesn't want to proceed with this plan.",
+                  time,
+                };
+          await emit(
+            ...planTurn.start("Prepare a release plan."),
+            prior,
+            plan,
+            planTurn.end("end_turn")
+          );
+          await go(harness);
+          const stored = await backend.read("messages", { sessionId: session });
+          const reply = stored.messages.find((message) => message.id === plan.part.messageId);
+          assert.deepEqual(
+            reply.parts.map((part) => [part.type, part.toolName, part.state.status]),
+            [
+              ["tool", "Bash", "completed"],
+              ["tool", plan.part.toolName, plan.part.state.status],
+            ]
+          );
+          await page.reload();
+          const card = logView.getByText(input.plan, { exact: true });
+          await card.waitFor();
+          assert(await card.evaluate((el) => !el.closest("[inert]")));
+          assert.equal(await logView.getByRole("button", { name: "Copy response" }).count(), 0);
+        }
+      );
+    }
+    await chooseView("Show full run");
     await check("the long turn has twelve independent, single-line groups", async () => {
       const long = fixture(chats.long.session, "long");
       const events = long.start("Review the changes and run the checks.");
@@ -440,26 +1040,32 @@ async function run() {
         );
       });
     }
-    await check(
-      "the rate-limit action creates a chat where the workspace supports it",
-      async () => {
-        const { session, workspace } = chats.order;
-        const rate = fixture(session, "rate-local");
-        await emit(
-          ...rate.start("Try the account again."),
-          rate.error("rate_limit", "Usage limit reached.")
-        );
-        await go("order");
-        const card = logView.getByRole("alert");
-        await card.getByText("Start a new chat to try again.", { exact: true }).waitFor();
-        const count = () =>
-          db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE workspace_id=?").get(workspace).n;
-        const before = count();
-        await card.getByRole("button", { name: "New chat", exact: true }).click();
-        await until("the new local chat", () => count() === before + 1);
-        await page.getByRole("tab", { name: "New chat", exact: true, selected: true }).waitFor();
+    await check("only a context limit offers to open a new chat", async () => {
+      const { session, workspace } = chats.order;
+      await go("order");
+      const card = logView.getByRole("alert");
+      for (const [category, message] of [
+        ["rate_limit", "Try the account again later."],
+        ["process_exit", "The agent process stopped."],
+      ]) {
+        const turn = fixture(session, category);
+        await emit(...turn.start("Continue."), turn.error(category, message), turn.end("error"));
+        await card.getByText(message, { exact: true }).waitFor();
+        assert.equal(await card.getByRole("button", { name: "New chat", exact: true }).count(), 0);
       }
-    );
+      const full = fixture(session, "context-full");
+      await emit(
+        ...full.start("Continue."),
+        full.error("context_limit", "Conversation is full."),
+        full.end("error")
+      );
+      const count = () =>
+        db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE workspace_id=?").get(workspace).n;
+      const before = count();
+      await card.getByRole("button", { name: "New chat", exact: true }).click();
+      await until("the new local chat", () => count() === before + 1);
+      await page.getByRole("tab", { name: "New chat", exact: true, selected: true }).waitFor();
+    });
     const hostedPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
     hostedPage.setDefaultTimeout(12_000);
     await hostedPage.addInitScript(() => {
@@ -615,6 +1221,19 @@ function fixture(sessionId, turnId) {
       });
     },
     text: (text, state = "done") => part("text", { text, state }),
+    send: (message) =>
+      part("tool", {
+        kind: "other",
+        toolName: `mcp__${DEUS_TOOLS_SERVER}__${TELL_USER}`,
+        mcp: { server: DEUS_TOOLS_SERVER, tool: TELL_USER },
+        toolCallId: messageId + "-call-" + partIndex,
+        state: {
+          status: "completed",
+          input: { message },
+          output: "Message sent.",
+          time: { start: 1, end: 2 },
+        },
+      }),
     delta: (text) =>
       event("message.part.delta", {
         messageId,

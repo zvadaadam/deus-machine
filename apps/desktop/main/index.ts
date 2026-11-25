@@ -13,6 +13,7 @@
  */
 
 import { app, BrowserWindow, ipcMain, session, shell, type IpcMainInvokeEvent } from "electron";
+import { mkdirSync } from "node:fs";
 import { join } from "path";
 import { homedir } from "os";
 import { is } from "@electron-toolkit/utils";
@@ -32,6 +33,7 @@ import {
 } from "./app-protocol";
 import { registerNativeHandlers } from "./native-handlers";
 import { limitPermissions } from "./permissions";
+import { registerWorkspaceLinks } from "./workspace-links";
 import { WEBVIEW_PARTITION } from "../../../shared/browser";
 import { registerBrowserEmulationHandlers } from "./browser-emulation";
 import { registerBrowserCookieHandlers } from "./browser-cookies";
@@ -50,7 +52,7 @@ import {
   initMainProcessLogging,
   logMainProcess,
 } from "./startup-diagnostics";
-import { resolveDefaultDataDir } from "../../../shared/runtime";
+import { DatabaseInUseError, resolveDefaultDataDir } from "../../../shared/runtime";
 
 // ---------------------------------------------------------------------------
 // Single Instance Lock
@@ -59,13 +61,17 @@ import { resolveDefaultDataDir } from "../../../shared/runtime";
 // DEUS_USER_DATA_DIR isolates a whole app instance (dev parallel instances,
 // e2e runs) WITHOUT overriding HOME — a HOME override breaks macOS Keychain
 // resolution and with it safeStorage, which the credential vault requires.
+const userDataOverride = process.env.DEUS_USER_DATA_DIR;
+const devRoot = app.isPackaged || userDataOverride ? undefined : app.getAppPath();
 const canonicalUserDataPath =
-  process.env.DEUS_USER_DATA_DIR ||
+  userDataOverride ||
   resolveDefaultDataDir({
     platform: process.platform,
     homeDir: process.env.HOME || homedir(),
     xdgDataHome: process.env.XDG_DATA_HOME,
+    devRoot,
   });
+if (devRoot) mkdirSync(canonicalUserDataPath, { recursive: true });
 app.setPath("userData", canonicalUserDataPath);
 
 if (!app.requestSingleInstanceLock()) {
@@ -110,6 +116,8 @@ ipcMain.handle = (channel, listener) =>
     if (!fromWindow(event)) throw new Error(`"${channel}" answers only the app's window`);
     return listener(event, ...args);
   });
+
+registerWorkspaceLinks(() => mainWindow);
 
 let quitState: "running" | "stopping" | "stopped" = "running";
 
@@ -381,7 +389,10 @@ app.whenReady().then(async () => {
       ...(backup
         ? databaseRecoveryMessage(backup, devRendererUrl)
         : {
-            message: "Failed to Start",
+            message:
+              err instanceof DatabaseInUseError
+                ? "Quit the other Deus app or stop “deus start”, then open Deus again."
+                : "Failed to Start",
             detail: formatStartupFailureDetail(err),
             buttons: ["Show Logs", "OK"],
           }),
@@ -436,13 +447,6 @@ app.whenReady().then(async () => {
   if (!is.dev) {
     if (mainWindow && !mainWindow.isDestroyed()) setupAutoUpdater(mainWindow);
   }
-});
-
-// Second instance: focus existing window.
-app.on("second-instance", (_event, _commandLine) => {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.focus();
 });
 
 // Quit when all windows are closed (all platforms including macOS)

@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { api } from "@shared/api";
+import { native } from "@/platform/native";
+import { call } from "@/platform/ws";
+import { resolveBackendEndpoints } from "@/shared/config/backend.config";
+import { toast } from "sonner";
 import { extractChatResources } from "@/features/session/lib/chatResources";
-import { offeredActions, openingOf } from "@/features/session/lib/openFromChat";
+import { offeredActions, openFromChat, openingOf } from "@/features/session/lib/openFromChat";
 import type { Part } from "@shared/protocol-types";
 import type { ChatPlace } from "@/features/workspace/lib/reach";
 
@@ -67,5 +72,67 @@ describe("a resource card's actions, by where the chat is", () => {
       to: "browser-tab",
       url: "http://localhost:5173/",
     });
+  });
+});
+
+vi.mock("@/platform/ws", async (original) => ({
+  ...(await original<typeof import("@/platform/ws")>()),
+  call: vi.fn(),
+}));
+vi.mock("@/shared/config/backend.config", async (original) => ({
+  ...(await original<typeof import("@/shared/config/backend.config")>()),
+  resolveBackendEndpoints: vi.fn(),
+}));
+
+describe("opening a chat file preview in the web browser", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+  });
+
+  it.each([
+    [
+      "a direct LAN path",
+      "/api/workspaces/w/file-preview?path=a%20b.png",
+      "http://studio.local:8080/api/workspaces/w/file-preview?path=a%20b.png",
+    ],
+    [
+      "an absolute relay URL",
+      "https://relay.example/files/opaque",
+      "https://relay.example/files/opaque",
+    ],
+  ])(
+    "opens %s from the Mac in the tab reserved during the click",
+    async (_name, returned, expected) => {
+      const tab = { open: vi.fn(), cancel: vi.fn() };
+      const reserve = vi.spyOn(native.window, "openExternalPending").mockReturnValue(tab);
+      vi.mocked(resolveBackendEndpoints).mockResolvedValue({
+        apiBase: "http://studio.local:8080/api",
+        wsUrl: "ws://studio.local:8080/ws",
+      });
+      vi.mocked(call).mockResolvedValue({ url: returned });
+
+      const opening = openFromChat("w", { to: "file-preview", path: "a b.png" });
+      expect(reserve).toHaveBeenCalledTimes(1);
+      await opening;
+      expect(call).toHaveBeenCalledWith(api.fileUrl, {
+        kind: "preview",
+        workspaceId: "w",
+        path: "a b.png",
+      });
+      expect(tab.open).toHaveBeenCalledWith(expected);
+      expect(tab.cancel).not.toHaveBeenCalled();
+    }
+  );
+
+  it("closes the reserved tab and shows the Mac's refusal", async () => {
+    const tab = { open: vi.fn(), cancel: vi.fn() };
+    vi.spyOn(native.window, "openExternalPending").mockReturnValue(tab);
+    const notify = vi.spyOn(toast, "error").mockReturnValue(1);
+    vi.mocked(call).mockRejectedValue(new Error("HTML previews are unavailable over the relay"));
+    await openFromChat("w", { to: "file-preview", path: "index.html" });
+    expect(tab.cancel).toHaveBeenCalledOnce();
+    expect(tab.open).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith("HTML previews are unavailable over the relay");
   });
 });

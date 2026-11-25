@@ -11,6 +11,19 @@ this checkout; start a backend yourself for a runner (`dev:web` below) with
 
 ## Test Files
 
+`node --import tsx test/e2e/database-owner.runtime.mjs` reopens a Node 22 backend after its desktop pipes close
+or a cleanup throws. It checks a stuck agent and its child are gone at backend exit.
+
+### Transcript scrolling
+
+`chat-scroll.browser.mjs` bundles the transcript and styles in memory and drives
+them in Chromium with fixture messages. It covers history anchoring, disclosure
+position, and live follow without starting a backend.
+
+```sh
+NODE_ENV=test node test/e2e/chat-scroll.browser.mjs
+```
+
 ### Runtime client network and relay tests
 
 `runtime-client-network.runtime.mjs` starts the real backend and Vite app with an
@@ -90,6 +103,21 @@ bun run test:e2e
 The default command runs `test:e2e:workspace-start` in a disposable repository and database.
 
 Screenshots and `results.json` land in `.context/workspace-start/`.
+
+### Desktop workspace links
+
+`workspace-links.desktop.mjs` opens links to three chats in two workspaces in the
+built Electron app, using a fresh database under `.context/workspace-links-desktop/`. It checks
+launch and running links, the workspace's active chat, Automations, Settings, onboarding,
+refused and missing destinations, and two links arriving together. More workspace rows let it
+scroll the sidebar by touch and drag a project header past another project. On macOS it samples
+the frontmost app through shutdown. On Linux, run it on a virtual display with `xvfb-run -a`.
+
+```sh
+bun run native:node
+bun run build
+bun run test:e2e:workspace-links
+```
 
 ### Account-bound remote access (`remote-access/`)
 
@@ -392,8 +420,8 @@ takes about 13 seconds with the Postgres image pulled. It checks, in order:
   new workspace, set up for real, with `started_by` and the title; the same call
   made twice at once makes one workspace and the second answer is the first's
   result. A start whose setup fails (a project folder that is not a
-  repository) leaves the workspace in error, `wait_for_sessions` gives its
-  reason, and `archive` removes it.
+  repository) leaves the workspace in error. The start and `wait_for_sessions`
+  both give the stored reason with a home-relative folder, and `archive` removes the workspace.
 - The starts-per-minute limit: the eleventh start within a minute is refused
   (`limit_rate`) and makes no chat.
 - `wait_for_sessions` on a settled and a working chat: `until: any` answers at
@@ -426,16 +454,12 @@ takes about 13 seconds with the Postgres image pulled. It checks, in order:
   it, so with the computer away `initialize` and `tools/list` are refused (not
   on the account) rather than answered from memory.
 
-It prints `SKIP` for what needs the engine's model lists (`list_models`, and a
-start naming a model), and `KNOWN FAILURE` for one bug in the engine package:
-`start_session`'s own answer for a workspace whose setup failed reads "setup
-failed" rather than the reason, because it renders the entry read at the start
-(`src/operator/operator.ts`, `ownOutcome`). A message an assistant sends is not
-stored here (the engine's echo writes it), so `messages.origin` is the unit
-tests' to hold.
+It prints `SKIP` for what needs the engine's model lists (`list_models` and a
+start naming a model). The engine's echo stores a message an assistant sends,
+so the unit tests cover `messages.origin`.
 
 Logs, Worker state, the run's database and `results.json` (each check's
-evidence: the tools' own words, and what was skipped or is a known failure) go
+evidence includes the tools' own words and what was skipped) go
 to `.context/assistants-e2e/`.
 
 ### `controls.browser.mjs`

@@ -1,29 +1,27 @@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { memo, useMemo } from "react";
+import { Fragment, memo, useMemo, type ReactNode } from "react";
 import { CopyIcon } from "@/components/ui/copy-icon";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { Message, SessionTurn } from "@/shared/types";
 import { useCopyToClipboard } from "@/shared/hooks";
 import { cn } from "@/shared/lib/utils";
 import { formatTurnDurationLabel } from "./utils/formatTurnDurationLabel";
-import { getTurnFooterData } from "./utils";
+import type { TurnFooterData } from "./utils";
 
-interface TurnFooterProps {
-  messages: Message[];
-  turn?: SessionTurn;
-  startedAt?: string | null;
+/** Progress and the settled footer exchange their content in one measured row. */
+export function TurnFooterSlot({ children }: { children: ReactNode }) {
+  return <div className="turn-footer-slot flex h-9 shrink-0 items-center">{children}</div>;
 }
 
-export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }: TurnFooterProps) {
+export const TurnFooter = memo(function TurnFooter({
+  copyText,
+  startedAt: startMs,
+  durationMs,
+  tokens,
+  cost,
+  attribution,
+  workedTime,
+}: TurnFooterData & { workedTime: string | null }) {
   const { copy, copied } = useCopyToClipboard({ resetDelay: 1600 });
-  const {
-    copyText,
-    startedAt: startMs,
-    durationMs,
-    tokens,
-    cost,
-    attribution,
-  } = useMemo(() => getTurnFooterData(messages, startedAt, turn), [messages, startedAt, turn]);
 
   // Billed tokens = non-cached input + cache reads/writes + output (the three
   // input buckets are disjoint by protocol invariant, so this never double-counts).
@@ -60,72 +58,78 @@ export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }
 
   return (
     <div className="text-muted-foreground/70 flex items-center gap-1 px-2 py-1 text-xs">
-      {durationMs != null &&
-        (timestampTooltip ? (
-          <TooltipProvider delayDuration={200}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span
-                  tabIndex={0}
-                  className="hover:bg-foreground/5 focus-visible:ring-ring inline-flex cursor-help rounded-sm px-1 font-mono tracking-tight tabular-nums transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                  aria-label={`Turn took ${formatTurnDurationLabel(durationMs)}. Started ${timestampTooltip.startedLabel}. Finished ${timestampTooltip.endedLabel}.`}
-                >
-                  {formatTurnDurationLabel(durationMs)}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="px-2.5 py-1.5">
-                <div className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1">
-                  <span className="text-muted-foreground/70">Started</span>
-                  <span className="font-mono tabular-nums">{timestampTooltip.startedLabel}</span>
-                  <span className="text-muted-foreground/70">Finished</span>
-                  <span className="font-mono tabular-nums">{timestampTooltip.endedLabel}</span>
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        ) : (
-          <span className="font-mono tracking-tight tabular-nums">
-            {formatTurnDurationLabel(durationMs)}
-          </span>
-        ))}
+      {!workedTime && (
+        <>
+          {durationMs != null &&
+            (timestampTooltip ? (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      tabIndex={0}
+                      className="hover:bg-foreground/5 focus-visible:ring-ring inline-flex cursor-help rounded-sm px-1 font-mono tracking-tight tabular-nums transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                      aria-label={`Turn took ${formatTurnDurationLabel(durationMs)}. Started ${timestampTooltip.startedLabel}. Finished ${timestampTooltip.endedLabel}.`}
+                    >
+                      {formatTurnDurationLabel(durationMs)}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="px-2.5 py-1.5">
+                    <div className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1">
+                      <span className="text-muted-foreground/70">Started</span>
+                      <span className="font-mono tabular-nums">
+                        {timestampTooltip.startedLabel}
+                      </span>
+                      <span className="text-muted-foreground/70">Finished</span>
+                      <span className="font-mono tabular-nums">{timestampTooltip.endedLabel}</span>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <span className="font-mono tracking-tight tabular-nums">
+                {formatTurnDurationLabel(durationMs)}
+              </span>
+            ))}
 
-      {durationMs != null && (tokenLabel || costLabel || copyText) && (
-        <span className="text-muted-foreground/30" aria-hidden="true">
-          •
-        </span>
+          {durationMs != null && (tokenLabel || costLabel || copyText) && (
+            <span className="text-muted-foreground/30" aria-hidden="true">
+              •
+            </span>
+          )}
+
+          {tokenLabel && (
+            <span
+              className="font-mono tracking-tight tabular-nums"
+              title="Harness-reported tokens for this turn"
+            >
+              {tokenLabel}
+            </span>
+          )}
+
+          {tokenLabel && costLabel && (
+            <span className="text-muted-foreground/30" aria-hidden="true">
+              •
+            </span>
+          )}
+
+          {costLabel && (
+            <span
+              className="font-mono tracking-tight tabular-nums"
+              title="Harness-reported cost for this turn"
+            >
+              {costLabel}
+            </span>
+          )}
+
+          {(tokenLabel || costLabel) && copyText && (
+            <span className="text-muted-foreground/30" aria-hidden="true">
+              •
+            </span>
+          )}
+        </>
       )}
 
-      {tokenLabel && (
-        <span
-          className="font-mono tracking-tight tabular-nums"
-          title="Harness-reported tokens for this turn"
-        >
-          {tokenLabel}
-        </span>
-      )}
-
-      {tokenLabel && costLabel && (
-        <span className="text-muted-foreground/30" aria-hidden="true">
-          •
-        </span>
-      )}
-
-      {costLabel && (
-        <span
-          className="font-mono tracking-tight tabular-nums"
-          title="Harness-reported cost for this turn"
-        >
-          {costLabel}
-        </span>
-      )}
-
-      {(tokenLabel || costLabel) && copyText && (
-        <span className="text-muted-foreground/30" aria-hidden="true">
-          •
-        </span>
-      )}
-
-      {attribution && (
+      {(attribution || workedTime) && (
         <Popover>
           <PopoverTrigger asChild>
             <button
@@ -136,10 +140,31 @@ export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }
               Details
             </button>
           </PopoverTrigger>
-          <PopoverContent side="top" align="start" className="w-80 p-3 text-xs">
+          <PopoverContent
+            aria-label="Turn details"
+            side="top"
+            align="start"
+            className="w-80 p-3 text-xs"
+          >
             <p className="text-foreground mb-3 font-medium">Turn details</p>
             <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2">
-              {attribution.execution && (
+              {workedTime &&
+                Object.entries({
+                  Duration: workedTime,
+                  Started: timestampTooltip?.startedLabel,
+                  Finished: timestampTooltip?.endedLabel,
+                  Tokens: tokenLabel,
+                  Cost: costLabel,
+                }).map(
+                  ([label, value]) =>
+                    value && (
+                      <Fragment key={label}>
+                        <dt className="text-muted-foreground">{label}</dt>
+                        <dd className="font-mono tabular-nums">{value}</dd>
+                      </Fragment>
+                    )
+                )}
+              {attribution?.execution && (
                 <>
                   <dt className="text-muted-foreground">Harness</dt>
                   <dd className="break-words">{attribution.execution.harness}</dd>
@@ -159,16 +184,20 @@ export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }
                   )}
                 </>
               )}
-              <dt className="text-muted-foreground">AI account</dt>
-              <dd className="break-words">
-                {attribution.providerCredentialSource?.account?.label ??
-                  (attribution.providerCredentialSource?.source === "sdk_api_key"
-                    ? "SDK-supplied API key"
-                    : attribution.providerCredentialSource
-                      ? "Personal account"
-                      : "—")}
-              </dd>
-              {attribution.providerCredentialSource && (
+              {attribution && (
+                <>
+                  <dt className="text-muted-foreground">AI account</dt>
+                  <dd className="break-words">
+                    {attribution.providerCredentialSource?.account?.label ??
+                      (attribution.providerCredentialSource?.source === "sdk_api_key"
+                        ? "SDK-supplied API key"
+                        : attribution.providerCredentialSource
+                          ? "Personal account"
+                          : "—")}
+                  </dd>
+                </>
+              )}
+              {attribution?.providerCredentialSource && (
                 <>
                   <dt className="text-muted-foreground">Provider</dt>
                   <dd>{attribution.providerCredentialSource.provider}</dd>
@@ -180,7 +209,7 @@ export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }
                   </dd>
                 </>
               )}
-              {attribution.providerCredentialSource?.account && (
+              {attribution?.providerCredentialSource?.account && (
                 <>
                   <dt className="text-muted-foreground">Account ID</dt>
                   <dd className="font-mono text-[10px] break-all select-text">

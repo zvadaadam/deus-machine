@@ -46,6 +46,8 @@ export const PreferencesFile = z
   .object({
     theme: z.enum(["light", "dark", "system"]).optional(),
     diff_view_mode: z.string().optional(),
+    chat_view: z.enum(["bubbles", "full"]).optional(),
+    agent_messages: z.boolean().optional(),
     onboarding_completed: z.boolean().optional(),
     anthropic_api_key: z.string().optional(),
     // A level the model lists (an open vocabulary); a blank reads as the default, see readThinkingLevel.

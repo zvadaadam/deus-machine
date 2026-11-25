@@ -3,6 +3,11 @@
  * Pure functions for display formatting
  */
 
+/** Shorten the user directory in a local project path. */
+export function abbreviatePath(path: string): string {
+  return path.replace(/^\/(?:Users|home)\/[^/]+/, "~");
+}
+
 /**
  * Format timestamp as relative time (e.g., "2h ago", "5d ago")
  * @param dateString - ISO date string from database

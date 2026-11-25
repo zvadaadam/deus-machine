@@ -5,16 +5,35 @@ import { invalidateCache } from "./files.service";
 import { publish, refuseSubscribers } from "./streams";
 
 const watchers = new Map<string, ReturnType<typeof startWatch>>();
+const watchedDotFolders = new Set([
+  ".github",
+  ".vscode",
+  ".devcontainer",
+  ".husky",
+  ".config",
+  ".storybook",
+]);
+const ignoredFolders = new Set(["node_modules", "target", "dist", "build"]);
 
 function ignored(filename: string | null): boolean {
   if (!filename || filename === ".deus/environment.json") return false;
   // Ignore descendants only. The leaf can be a regular file or an editor's hidden temporary file.
-  return /(^|\/)(?:\.[^/]+|node_modules|target|dist|build)\//.test(filename);
+  const folders = filename.split("/");
+  folders.pop();
+  return folders.some((folder) =>
+    folder.startsWith(".") ? !watchedDotFolders.has(folder) : ignoredFolders.has(folder)
+  );
+}
+
+export function canWatchWorkspace(): boolean {
+  // On Linux, Node 22 misses a delete after an atomic replace.
+  return (
+    process.platform === "darwin" || (process.platform === "linux" && Boolean(process.versions.bun))
+  );
 }
 
 function startWatch(workspaceId: string, workspacePath: string) {
-  // Enable Linux when its pinned runtime passes the recursive watch checks: Bun 1.3.6 leaks and misses deep edits, Node 22 misses a delete.
-  if (process.platform !== "darwin")
+  if (!canWatchWorkspace())
     throw new ValidationError("File watching is unavailable on this platform.");
 
   const scope = { workspaceId };

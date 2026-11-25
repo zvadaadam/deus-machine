@@ -11,7 +11,7 @@
  *       +-- /connect            -> ConnectPage (the account's computers)
  *       +-- /connect/$serverId  -> redirect to /s/$serverId (older shared links)
  *       +-- /s/$serverId        -> ServerLayout (wraps nested routes)
- *           +-- /               -> redirects to last workspace
+ *           +-- /               -> Home
  *           +-- /w/$workspaceId -> WorkspaceRoute
  *           +-- /settings       -> SettingsRoute
  *
@@ -23,17 +23,26 @@
  * params and pass them as props.
  */
 
-import { createRouter, createRootRoute, createRoute, redirect } from "@tanstack/react-router";
+import {
+  createRouter,
+  createRootRoute,
+  createRoute,
+  redirect,
+  type HistoryLocation,
+} from "@tanstack/react-router";
 import { RootLayout } from "./routes/root";
 import { ConnectPage } from "./routes/connect";
 import { ServerLayout } from "./shells/ServerLayout";
 import { WorkspaceRoute } from "./routes/workspace";
+import { workspaceSearch } from "@/features/workspace/lib/workspaceAddress";
 import { SettingsRoute } from "./routes/settings";
 import { getDeploymentMode } from "@/shared/config/backend.config";
 
 // --- Root route ---
 const rootRoute = createRootRoute({
   component: RootLayout,
+  // Keep the history visit with the params and search of the match that actually renders.
+  beforeLoad: (): { visit: HistoryLocation } => ({ visit: webRouter.history.location }),
 });
 
 // --- /connect (the signed-in account's computers) ---
@@ -59,7 +68,7 @@ const serverRoute = createRoute({
   component: ServerLayout,
 });
 
-// --- /s/$serverId/ (index -- redirect to last workspace or show default) ---
+// --- /s/$serverId/ (Home) ---
 const serverIndexRoute = createRoute({
   getParentRoute: () => serverRoute,
   path: "/",
@@ -70,6 +79,7 @@ const serverIndexRoute = createRoute({
 const workspaceRoute = createRoute({
   getParentRoute: () => serverRoute,
   path: "/w/$workspaceId",
+  validateSearch: workspaceSearch,
   component: WorkspaceRoute,
 });
 
@@ -114,6 +124,7 @@ const directWorkspaceRoute = createRoute({
   getParentRoute: () => directLayoutRoute,
   path: "/w/$workspaceId",
   beforeLoad: guardWebDirect,
+  validateSearch: workspaceSearch,
   component: WorkspaceRoute,
 });
 

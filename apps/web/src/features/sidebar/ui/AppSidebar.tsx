@@ -1,22 +1,9 @@
 import * as React from "react";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  MouseSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
+import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Blocks, ClockFading, Cloud, FolderOpen, SquarePen, type LucideIcon } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { useReorderSensors } from "@/shared/hooks/useReorderSensors";
 import { Glide } from "@/components/ui/glide";
 import { Sidebar, SidebarContent, SidebarMenu, useSidebar } from "@/components/ui/sidebar";
 import { useUIStore } from "@/shared/stores/uiStore";
@@ -96,15 +83,7 @@ export function AppSidebar({
     [repositories, repositoryOrder, reorderRepositories]
   );
 
-  // Mouse: 5px distance differentiates click from drag
-  // Touch: 250ms long-press required before drag activates (allows normal scrolling)
-  const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
+  const sensors = useReorderSensors({ startKeys: ["Space"] });
 
   /**
    * Handle drag end - reorder repositories
@@ -133,7 +112,7 @@ export function AppSidebar({
   }
 
   return (
-    <Sidebar variant="inset" collapsible="offcanvas" className="p-0">
+    <Sidebar className="p-0">
       <SidebarHeader
         profile={profile}
         places={places}
@@ -207,6 +186,12 @@ export function AppSidebar({
         <SidebarContent className="scrollbar-hidden">
           <DndContext
             sensors={sensors}
+            accessibility={{
+              screenReaderInstructions: {
+                draggable:
+                  "Press Enter to expand or collapse this project. Press Space to pick up the project, use Up or Down to move it, then Space to drop or Escape to cancel.",
+              },
+            }}
             collisionDetection={closestCenter}
             onDragStart={() => setDragging(true)}
             onDragCancel={() => setDragging(false)}

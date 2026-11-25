@@ -62,7 +62,7 @@ function App() {
 // Layout and copy feedback use their own page so the reference controls keep their layout.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
-import { ContentTabBar } from "@/app/layouts/ContentTabBar";
+import { WorkspaceTabBar } from "@/features/workspace-tabs";
 import { CopyButton } from "@/features/session/ui/tools/components/CopyButton";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -73,10 +73,33 @@ import { SettingsSidebar } from "@/features/settings/ui/SettingsSidebar";
 const client = new QueryClient();
 client.setQueryData(queryKeys.settings.all, {});
 function NoJumps() {
- const [tab, setTab] = useState("changes"), [pending, setPending] = useState(false);
+ const [tabs, setTabs] = useState([
+   { id: "t-changes", kind: "changes" as const },
+   { id: "t-files", kind: "files" as const },
+ ]);
+ const [activeTabId, setActiveTabId] = useState("t-changes");
+ const [pending, setPending] = useState(false);
  return <QueryClientProvider client={client}><TooltipProvider>
-   <ContentTabBar activeTab={tab} onTabChange={setTab} visibility={{}} />
-   <output data-testid="panel">{tab}</output>
+   <WorkspaceTabBar
+     workspaceId="controls"
+     tabs={tabs}
+     activeTabId={activeTabId}
+     onTabSelect={setActiveTabId}
+     onTabClose={(id) => setTabs((prev) => prev.filter((t) => t.id !== id))}
+     onTabAdd={() => {}}
+     onTabReorder={(draggedId, targetId) =>
+       setTabs((prev) => {
+         const from = prev.findIndex((t) => t.id === draggedId);
+         const to = prev.findIndex((t) => t.id === targetId);
+         if (from === -1 || to === -1) return prev;
+         const next = [...prev];
+         const [moved] = next.splice(from, 1);
+         next.splice(to, 0, moved);
+         return next;
+       })
+     }
+   />
+   <output data-testid="panel">{tabs.find((t) => t.id === activeTabId)?.kind}</output>
    <Tabs defaultValue="Pull Requests"><TabsList aria-label="References">
      {["Pull Requests", "Branches", "Tags", "History"].map(label =>
        <TabsTrigger key={label} value={label}><Link2/>{label}</TabsTrigger>)}
@@ -141,6 +164,13 @@ function assertSameBounds(before, after, message) {
       `${message} (${key}: ${before[key]} → ${after[key]})`
     );
 }
+async function waitForFunction(page, message, predicate, arg) {
+  try {
+    await page.waitForFunction(predicate, arg);
+  } catch (cause) {
+    throw new Error(message, { cause });
+  }
+}
 let browser;
 try {
   await new Promise((resolve) => http.listen(0, "127.0.0.1", resolve));
@@ -165,6 +195,8 @@ try {
   const before = await primary.boundingBox();
   await primary.hover();
   await page.mouse.down();
+  await expect(primary.and(page.locator(":active"))).toBeVisible();
+  await primary.evaluate((el) => Promise.allSettled(el.getAnimations().map((a) => a.finished)));
   assertSameBounds(
     before,
     await primary.boundingBox(),
@@ -178,11 +210,9 @@ try {
   assert.equal(await page.getByText("Actions: 1", { exact: true }).count(), 1);
   await primary.focus();
   await page.keyboard.press("Tab");
-  assert(
-    await page
-      .getByRole("button", { name: "secondary", exact: true })
-      .evaluate((el) => el.matches(":focus-visible") && getComputedStyle(el).boxShadow !== "none")
-  );
+  const secondary = page.getByRole("button", { name: "secondary", exact: true });
+  await expect(secondary.and(page.locator(":focus-visible"))).toBeFocused();
+  await expect(secondary).not.toHaveCSS("box-shadow", "none");
   await page.getByRole("button", { name: "main", exact: true }).focus();
   await page.keyboard.press("ArrowDown");
   await page.getByRole("menuitem", { name: "Choose branch" }).waitFor();
@@ -227,6 +257,7 @@ try {
       });
     });
     await rows.nth(1).hover();
+    await list.locator(marker).filter({ hasText: "Rename branch" }).waitFor();
     await page.locator(`[data-slot="${slot}"][data-saw-travel]`).waitFor();
     if (itemRole === "option") {
       await page.getByPlaceholder("Branch command").hover();
@@ -276,9 +307,9 @@ try {
   }
   await page.getByRole("combobox", { name: "Environment" }).click();
   await page.getByRole("option", { name: "Local", exact: true }).click();
-  assert.equal(await page.getByRole("combobox", { name: "Environment" }).textContent(), "Local");
+  await expect(page.getByRole("combobox", { name: "Environment" })).toHaveText("Local");
   await page.getByRole("link", { name: "Link action" }).click();
-  assert(page.url().endsWith("#target"), "Button asChild preserves link behavior");
+  await expect(page, "Button asChild preserves link behavior").toHaveURL(/#target$/);
   const survivingTab = page.getByTestId("second-tabs").getByRole("tab", { name: "First" });
   const indicator = () =>
     survivingTab.evaluate((el) => {
@@ -297,18 +328,9 @@ try {
   );
   await survivingTab.focus();
   await page.keyboard.press("ArrowRight");
-  await page
-    .getByTestId("second-tabs")
-    .locator('[role="tab"][aria-selected="true"]')
-    .filter({ hasText: "Second" })
-    .waitFor();
-  assert.equal(
-    await page
-      .getByTestId("second-tabs")
-      .getByRole("tab", { name: "Second" })
-      .getAttribute("aria-selected"),
-    "true"
-  );
+  await expect(
+    page.getByTestId("second-tabs").getByRole("tab", { name: "Second" })
+  ).toHaveAttribute("aria-selected", "true");
   for (const theme of ["light", "dark"]) {
     await page.evaluate(async (t) => {
       document.documentElement.classList.toggle("dark", t === "dark");
@@ -326,25 +348,22 @@ try {
       .screenshot({ path: path.join(artifacts, `reference-${theme}.png`) });
   }
   const spinner = page.getByTestId("spinner");
-  assert.notEqual(await spinner.evaluate((el) => getComputedStyle(el).animationName), "none");
+  await expect(spinner).not.toHaveCSS("animation-name", "none");
   await page.emulateMedia({ reducedMotion: "reduce" });
-  assert.equal(await spinner.evaluate((el) => el.getAnimations().length), 0);
-  assert.equal(await primary.evaluate((el) => getComputedStyle(el).transitionDuration), "0.08s");
+  await expect.poll(() => spinner.evaluate((el) => el.getAnimations().length)).toBe(0);
+  await expect(primary).toHaveCSS("transition-duration", "0.08s");
 
-  // Pause at animationstart so even a slow CI machine can inspect the painted intermediate frames.
-  await page.evaluate(() => {
-    document.addEventListener("animationstart", ({ target, animationName }) => {
-      if (!target.matches('[data-slot="dropdown-menu-content"], [data-slot="dialog-content"]'))
-        return;
-      target
-        .getAnimations()
-        .find((a) => a.animationName === animationName)
-        ?.pause();
-    });
+  // Start paused: a busy renderer can deliver animationstart and animationend in one frame.
+  await page.addStyleTag({
+    content:
+      '[data-slot="dropdown-menu-content"], [data-slot="dialog-content"] { animation-play-state: paused !important }',
   });
-  for (const [trigger, slot, enter, exit] of [
-    ["main", "dropdown-menu-content", 160, 120],
-    ["Open dialog", "dialog-content", 240, 160],
+  // A surface can paint before Radix handles Escape. Use each surface's own close action.
+  const renameBranch = page.getByRole("menuitem", { name: "Rename branch" });
+  const closeDialog = page.getByRole("button", { name: "Close", exact: true });
+  for (const [trigger, slot, enter, exit, close] of [
+    ["main", "dropdown-menu-content", 160, 120, renameBranch],
+    ["Open dialog", "dialog-content", 240, 160, closeDialog],
   ]) {
     const selector = `[data-slot="${slot}"]`;
     for (const [state, duration] of [
@@ -352,9 +371,11 @@ try {
       ["closed", exit],
     ]) {
       if (state === "open") await page.getByRole("button", { name: trigger, exact: true }).click();
-      else await page.keyboard.press("Escape");
+      else await close.press("Enter");
       const surface = page.locator(`${selector}[data-state="${state}"]`);
-      await page.waitForFunction(
+      await waitForFunction(
+        page,
+        `Waiting for the ${slot} ${state} animation to pause`,
         (s) =>
           document
             .querySelector(s)
@@ -424,7 +445,7 @@ try {
   await navigation
     .locator("li ~ li")
     .evaluateAll((items) => items.forEach((item) => item.remove()));
-  await settings.waitForFunction(() => {
+  await waitForFunction(settings, "Waiting for the Settings list to shrink to one row", () => {
     const list = document.querySelector('[data-slot="sidebar-content"]');
     return list.scrollHeight === list.querySelector("ul").offsetHeight;
   });
@@ -496,14 +517,14 @@ try {
   // Nothing jumps. Measure the controls in both motion settings.
   for (const reducedMotion of ["no-preference", "reduce"]) {
     const sample = await browser.newPage({ reducedMotion, permissions: ["clipboard-write"] });
+    await sample.clock.install();
     await sample.goto(url + "#no-jumps");
-    const strip = sample.getByRole("tablist", { name: "Content panel" });
+    const strip = sample.getByRole("tablist", { name: "Workspace tabs" });
     const files = strip.getByRole("tab", { name: "Files" });
     const panel = sample.getByTestId("panel");
     const timeline = await sample.context().newCDPSession(sample);
     // Hold the CSS timeline while input and React continue normally.
     await timeline.send("Animation.setPlaybackRate", { playbackRate: 0 });
-    const initialWidth = (await files.boundingBox()).width;
     await files.evaluate((tab) => {
       const selected = new MutationObserver(() => {
         tab.dataset.panelAtSelection = document.querySelector('[data-testid="panel"]').textContent;
@@ -513,27 +534,7 @@ try {
     });
     await files.click();
     await expect(files).toHaveAttribute("data-panel-at-selection", "files");
-    const travel = await files.evaluate((tab) => {
-      const width = () => tab.getBoundingClientRect().width;
-      const move = tab
-        .getAnimations({ subtree: true })
-        .find((a) => a.transitionProperty === "grid-template-columns");
-      let middle = null;
-      if (move) {
-        move.pause();
-        move.currentTime = move.effect.getTiming().duration / 2;
-        middle = width();
-        move.finish();
-      }
-      return { middle, end: width() };
-    });
-    assert(travel.end > initialWidth);
-    if (reducedMotion === "reduce") assert.equal(travel.middle, null, "Reduced motion snaps");
-    else
-      assert(
-        initialWidth < travel.middle && travel.middle < travel.end,
-        "The tab grows between its endpoints"
-      );
+    await expect(panel).toHaveText("files");
 
     const references = sample.getByRole("tablist", { name: "References" }).getByRole("tab");
     const fourth = await references.nth(3).boundingBox();
@@ -566,6 +567,9 @@ try {
     const pending = sample.getByRole("button", { name: "Toggle pending" });
     await pending.click();
     const skeleton = sample.locator('[data-slot="skeleton"]');
+    await expect
+      .poll(() => skeleton.evaluate((el) => el.getAnimations().map((a) => a.animationName)))
+      .toContain("fadeIn");
     const read = await skeleton.evaluate((placeholder) => {
       const animations = placeholder.getAnimations();
       const fade = animations.find((a) => a.animationName === "fadeIn");
@@ -592,23 +596,23 @@ try {
     await timeline.send("Animation.setPlaybackRate", { playbackRate: 1 });
 
     const changes = strip.getByRole("tab", { name: "Changes" });
-    await sample.clock.install();
     await changes.evaluate((button) => button.click());
+    await expect(changes).toHaveAttribute("aria-selected", "true");
     await changes.hover();
-    await sample.clock.fastForward(700);
-    const activeDescription = await changes.getAttribute("aria-describedby");
+    await sample.clock.runFor(700);
+    await expect(changes).not.toHaveAttribute("aria-describedby", /.+/);
     // Keep the pointer in the panel. Moving it to Files can dismiss the stale tooltip.
     await panel.hover();
     await files.evaluate((button) => button.click());
     await strip.getByRole("tab", { name: "Files", selected: true }).waitFor();
-    await sample.clock.fastForward(700);
-    assert.equal(await sample.locator('[data-slot="tooltip-content"]:visible').count(), 0);
-    assert.equal(activeDescription, null);
+    await sample.clock.runFor(700);
+    await expect(sample.locator('[data-slot="tooltip-content"]:visible')).toHaveCount(0);
 
     await changes.hover();
     const hint = sample.getByRole("tooltip", { name: "Changes" });
     await hint.waitFor();
-    assert.equal(await changes.getAttribute("aria-describedby"), await hint.getAttribute("id"));
+    await expect(changes).toHaveAttribute("aria-describedby", await hint.getAttribute("id"));
+    await sample.screenshot({ path: path.join(artifacts, `tabs-${reducedMotion}.png`) });
     await changes.click();
     await hint.waitFor({ state: "detached" });
     await panel.hover();

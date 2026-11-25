@@ -42,6 +42,7 @@ describe("SubagentMessageList", () => {
       React.createElement(
         SessionProvider,
         {
+          sessionId: "session-1",
           subagentMessages: new Map(),
           sessionStatus: "idle",
         },
@@ -49,6 +50,7 @@ describe("SubagentMessageList", () => {
       )
     );
 
+    expect(markup).not.toContain('aria-live="off"');
     expect(markup).toContain("First");
     expect(markup).toContain("After tool");
     expect(markup).not.toContain("Second");
@@ -61,6 +63,7 @@ describe("SubagentMessageList", () => {
       React.createElement(
         SessionProvider,
         {
+          sessionId: "session-1",
           subagentMessages: new Map(),
           sessionStatus: "idle",
         },

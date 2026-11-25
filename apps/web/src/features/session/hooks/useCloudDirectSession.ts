@@ -39,7 +39,7 @@ import {
   patchWorkspaceSessionStatus,
 } from "../lib/agentEventFold";
 import { connectCloudSessionSocket } from "../cloud/cloudSessionSocket";
-import { hasParkedDirectQuestion, setDirectQuestionParked } from "../cloud/directQuestionState";
+import { setDirectQuestionParked } from "../cloud/directQuestionState";
 import { makeCloudFrameHandler } from "../cloud/cloudFrameHandler";
 import { returnRefusedMessage } from "../lib/returnToComposer";
 import type { ToolRequestEventData } from "@shared/types/query-protocol";
@@ -53,6 +53,7 @@ import {
   toolRequestFromElicitation,
 } from "../cloud/directSessionRegistry";
 import { getRuntimeClient, setToolResponseInterceptor } from "@/platform/ws";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { runtimeForQueryClient } from "@/platform/ws/runtime-client";
 import { api } from "@shared/api";
 import type { AnyStream, EventOf, ScopeOf } from "@shared/api/stream";
@@ -118,9 +119,6 @@ function presentDirectQuestion(pending: PendingDirectQuestion): void {
 function parkDirectQuestion(pending: PendingDirectQuestion): void {
   setDirectQuestionParked(pending.sessionId, true, pending.queryClient);
   patchSessionDetail(pending.queryClient, pending.sessionId, { status: "needs_response" });
-  // The sidebar/home rows read the workspace projection, not the session
-  // detail — and discovery would keep saying "running" (see directQuestionState).
-  patchWorkspaceSessionStatus(pending.queryClient, pending.sessionId, "needs_response");
   presentDirectQuestion(pending);
 }
 
@@ -145,8 +143,8 @@ function settleDirectQuestionState(
       .get(sessionId)
       ?.state.turns.some((turn) => turn.status === "active") ??
     false;
-  patchWorkspaceSessionStatus(qc, sessionId, live ? "working" : "idle");
   if (live) patchSessionDetail(qc, sessionId, { status: "working" });
+  else if (isCloudDirectWebMode()) patchWorkspaceSessionStatus(qc, sessionId, "idle");
 }
 
 /** The fold's active turn — what a freshly arrived question belongs to. */
@@ -584,6 +582,7 @@ export function useCloudDirectSession(
             toast.error(refusal.message);
             return;
           }
+          patchSessionDetail(queryClient, sessionId, { status: "error" });
         }
         setError(refusal.message, refusal.category);
         return;
@@ -614,13 +613,6 @@ export function useCloudDirectSession(
         folds.get(sessionId)?.state.turns.some((turn) => turn.turnId === pendingTurn?.turnId)
       )
         pendingTurn = null;
-      // The snapshot's projection (`backfillSnapshot`) writes "working" for a
-      // session with a current turn — but a turn parked on a question is
-      // waiting on the user, not generating. Re-assert it after the fold.
-      if (frame.type === "session.snapshot" && hasParkedDirectQuestion(sessionId, queryClient)) {
-        patchSessionDetail(queryClient, sessionId, { status: "needs_response" });
-        patchWorkspaceSessionStatus(queryClient, sessionId, "needs_response");
-      }
     };
 
     // Terminal failure (retries exhausted) leaves a dead socket registered.
@@ -668,12 +660,8 @@ export function useCloudDirectSession(
       sessionId,
       {
         sendMessage: (prompt, turnId, options) => {
-          // Enforce deus's one-live-turn contract here, where the fold state is in
-          // reach — agnt itself QUEUES overlapping sends, so without this a
-          // double-send starts a second turn (parity with the Mac driver's
-          // `liveTurnId` guard). The fold covers ADMITTED turns; `pendingTurn`
-          // covers the echo round-trip a double-Enter fits inside. The throw
-          // rolls the optimistic bubble back.
+          // The platform queues overlapping sends. The fold holds an admitted turn, and pendingTurn
+          // covers a second Enter before its echo, as the Mac's turn record does.
           if (
             pendingTurnActive() ||
             folds.get(sessionId)?.state.turns.some((turn) => turn.status === "active")

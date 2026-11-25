@@ -4,7 +4,12 @@
 // tool briefing. Every harness has the deus tools (Claude in process, Codex
 // over loopback HTTP), so every harness gets the same append.
 
-import { buildWorkspaceContext, type Simulator, type WorkspaceSetup } from "./workspace-context";
+import {
+  AGENT_MESSAGES,
+  buildWorkspaceContext,
+  type Simulator,
+  type WorkspaceSetup,
+} from "./workspace-context";
 
 const FALLBACK_CONTEXT =
   "You are working inside Deus, a desktop app that orchestrates multiple AI coding agents in parallel.";
@@ -27,10 +32,11 @@ The recording stops itself after maxDurationSeconds (default 300). If recording_
 `;
 
 export function buildSystemPromptAppend(
+  agentMessages: boolean,
   cwd?: string,
   simulator?: Simulator | null,
   setup?: WorkspaceSetup | null
 ): string {
   const workspaceContext = buildWorkspaceContext(cwd, simulator, setup) || FALLBACK_CONTEXT;
-  return `${workspaceContext}\n${SCREEN_RECORDING}`.trim();
+  return `${workspaceContext}\n${SCREEN_RECORDING}${agentMessages ? AGENT_MESSAGES : ""}`.trim();
 }

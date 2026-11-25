@@ -1,18 +1,17 @@
-import { EventEmitter } from "node:events";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import { pathToFileURL } from "node:url";
 import path from "node:path";
 import os from "os";
-import { vi, describe, it, expect, beforeEach } from "vitest";
+import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as api from "@shared/api/repos";
 import { isOp } from "@shared/api/op";
-import { GitError } from "../../../src/lib/git-process";
+import { GitError, runGit } from "@shared/lib/git-process";
 import { operations, published } from "../../helpers";
 
 const {
   mockStmt,
   mockDb,
-  mockFs,
-  mockExecFile,
-  mockSpawn,
   mockInvalidate,
   mockPublish,
   mockRunGh,
@@ -20,7 +19,6 @@ const {
   mockWriteProjectFile,
   mockListRecentProjects,
   mockResolveCloudRepoAccess,
-  mockRunGit,
 } = vi.hoisted(() => {
   const mockStmt = {
     all: vi.fn<(...args: any[]) => any>(() => []),
@@ -33,18 +31,6 @@ const {
       prepare: vi.fn<(...args: any[]) => any>(() => mockStmt),
       transaction: vi.fn<(...args: any[]) => any>((fn: Function) => fn),
     },
-    mockFs: {
-      realpathSync: vi.fn<(...args: any[]) => any>((p: string) => p),
-      accessSync: vi.fn<(...args: any[]) => any>(),
-      statSync: vi.fn<(...args: any[]) => any>(() => ({ isDirectory: () => true })),
-      existsSync: vi.fn<(...args: any[]) => any>(() => false),
-      mkdirSync: vi.fn<(...args: any[]) => any>(),
-      writeFileSync: vi.fn<(...args: any[]) => any>(),
-      rmSync: vi.fn<(...args: any[]) => any>(),
-      constants: { R_OK: 4, X_OK: 1 },
-    },
-    mockExecFile: vi.fn<(...args: any[]) => any>(),
-    mockSpawn: vi.fn<(...args: any[]) => any>(),
     mockInvalidate: vi.fn<(...args: any[]) => any>(),
     mockPublish: vi.fn<(...args: any[]) => any>(),
     mockRunGh: vi.fn<(...args: any[]) => any>(),
@@ -52,8 +38,6 @@ const {
     mockWriteProjectFile: vi.fn<(...args: any[]) => any>(),
     mockListRecentProjects: vi.fn<(...args: any[]) => any>(),
     mockResolveCloudRepoAccess: vi.fn<(...args: any[]) => any>(),
-    mockRunGit:
-      vi.fn<(args: string[], options: { onStderr?: (chunk: string) => void }) => Promise<string>>(),
   };
 });
 
@@ -65,30 +49,10 @@ vi.mock("../../../src/services/git.service", () => ({
   detectDefaultBranch: vi.fn<(...args: any[]) => any>(async () => "main"),
 }));
 
-vi.mock("child_process", () => ({
-  execFileSync: vi.fn<(...args: any[]) => any>(
-    (cmd: string, args: string[], opts?: { cwd?: string; encoding?: string }) => {
-      if (cmd === "git" && args?.includes("--show-toplevel")) {
-        return (opts?.cwd ?? "") + "\n";
-      }
-      if (cmd === "git" && args?.[0] === "remote" && args?.[1] === "get-url") {
-        return opts?.encoding
-          ? "https://github.com/zvadaadam/deus.git"
-          : Buffer.from("https://github.com/zvadaadam/deus.git\n");
-      }
-      return Buffer.from("");
-    }
-  ),
-  execFile: mockExecFile,
-  spawn: mockSpawn,
-}));
-
-vi.mock("fs", () => ({ default: mockFs, ...mockFs }));
-
-vi.mock("../../../src/lib/git-process", async (actual) => ({
-  ...(await actual<typeof import("../../../src/lib/git-process")>()),
-  runGit: mockRunGit,
-}));
+vi.mock("@shared/lib/git-process", async (read) => {
+  const actual = await read<typeof import("@shared/lib/git-process")>();
+  return { ...actual, runGit: vi.fn(actual.runGit) };
+});
 
 vi.mock("@shared/lib/uuid", () => ({
   uuidv7: vi.fn<(...args: any[]) => any>(() => "test-uuid-1234"),
@@ -131,43 +95,17 @@ const REPO = {
   git_origin_url: "https://github.com/zvadaadam/deus.git",
   updated_at: "2024-01-01T00:00:00Z",
 };
-const TARGET = path.join(os.homedir(), "deus");
+const mockRunGit = vi.mocked(runGit);
+let home: string;
+let target: string;
+const git = (cwd: string, ...args: string[]) =>
+  execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe" }).trim();
 
-/** What `git <args>` printed: the answer the handler's promisified `execFile` resolves with. */
-function git(answer: (args: string[]) => string | Error) {
-  mockExecFile.mockImplementation(
-    (_cmd: string, args: string[], _opts: unknown, done: (...result: unknown[]) => void) => {
-      const result = answer(args);
-      if (result instanceof Error) done(result);
-      else done(null, { stdout: result, stderr: "" });
-    }
-  );
-}
-
-/** The process `spawn` hands back, driven by the test. */
-function spawnedGit() {
-  const proc = Object.assign(new EventEmitter(), { stderr: new EventEmitter() });
-  mockSpawn.mockReturnValue(proc);
-  return proc;
-}
-
-/** A clone run through `runGit`, driven by the test: its stderr, then how it ends. */
-function clonedGit() {
-  let onStderr: (chunk: string) => void = () => {};
-  let settle: { resolve: (out: string) => void; reject: (error: unknown) => void };
-  mockRunGit.mockImplementation(
-    (_args: string[], options: { onStderr?: (chunk: string) => void }) =>
-      new Promise((resolve, reject) => {
-        onStderr = options.onStderr ?? (() => {});
-        settle = { resolve, reject };
-      })
-  );
-  return {
-    stderr: (chunk: string) => onStderr(chunk),
-    succeed: () => settle.resolve(""),
-    fail: (stderr: string, timedOut = false, cause?: Error) =>
-      settle.reject(new GitError(mockRunGit.mock.calls[0]![0], stderr, timedOut, cause)),
-  };
+function repository(name: string) {
+  const folder = path.join(home, name);
+  git(home, "init", "-q", "-b", "main", folder);
+  git(folder, "remote", "add", "origin", REPO.git_origin_url);
+  return folder;
 }
 
 /**
@@ -188,11 +126,25 @@ beforeEach(() => {
   mockStmt.all.mockReset().mockReturnValue([]);
   mockDb.prepare.mockReturnValue(mockStmt);
   mockDb.transaction.mockImplementation((fn: Function) => fn);
-  mockFs.existsSync.mockReset().mockReturnValue(false);
   mockRunGh.mockReset();
-  git(() => "");
+  mockRunGit.mockReset();
+  home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "deus-repos-")));
+  target = path.join(home, "deus");
+  vi.stubEnv("HOME", home);
+  vi.stubEnv("GIT_ALLOW_PROTOCOL", "file");
+  vi.stubEnv("GIT_CONFIG_NOSYSTEM", "1");
+  vi.stubEnv("GIT_CONFIG_GLOBAL", path.join(home, ".gitconfig"));
+  fs.writeFileSync(
+    path.join(home, ".gitconfig"),
+    "[user]\n\tname = Repos Test\n\temail = test@example.test\n[init]\n\tdefaultBranch = main\n"
+  );
   // A GitHub repository that could not be created is logged, by design.
   vi.spyOn(console, "warn").mockImplementation(() => {});
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  fs.rmSync(home, { recursive: true, force: true });
 });
 
 it("answers every operation the contract declares", () => {
@@ -225,10 +177,11 @@ describe("addRepo", () => {
   });
 
   it("answers with the created repository and tells subscribers", async () => {
+    const folder = repository("my-project");
     const createdRepo = {
       id: "test-uuid-1234",
       name: "my-project",
-      root_path: "/path/to/my-project",
+      root_path: folder,
       git_default_branch: "main",
     };
 
@@ -237,30 +190,31 @@ describe("addRepo", () => {
       .mockReturnValueOnce({ max: 0 })
       .mockReturnValueOnce(createdRepo);
 
-    const repo = await run(api.addRepo, { root_path: "/path/to/my-project" });
+    const repo = await run(api.addRepo, { root_path: folder });
     expect(repo.id).toBe("test-uuid-1234");
     expect(repo.name).toBe("my-project");
     expect(mockStmt.run).toHaveBeenCalledWith(
       "test-uuid-1234",
       "my-project",
-      "/path/to/my-project",
+      folder,
       "main",
       1,
       "https://github.com/zvadaadam/deus.git"
     );
-    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces"]);
+    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "repos"]);
   });
 
   it("refuses a repository that was already added, naming the existing one", async () => {
+    const folder = repository("existing");
     const existingRepo = {
       id: "existing-id",
       name: "existing-repo",
-      root_path: "/path/to/existing",
+      root_path: folder,
     };
 
     mockStmt.get.mockReturnValueOnce(existingRepo);
 
-    await expect(run(api.addRepo, { root_path: "/path/to/existing" })).rejects.toMatchObject({
+    await expect(run(api.addRepo, { root_path: folder })).rejects.toMatchObject({
       statusCode: 409,
       message: "Repository already exists",
       details: existingRepo,
@@ -277,50 +231,51 @@ describe("addRepo", () => {
       .mockReturnValueOnce({ max: 0 })
       .mockReturnValueOnce({ id: "test-uuid-1234", name: "repo" });
 
-    await run(api.addRepo, { root_path: "/path/to/repo" });
+    const folder = repository("repo");
+    await run(api.addRepo, { root_path: folder });
 
-    expect(detectDefaultBranch).toHaveBeenCalledWith("/path/to/repo");
+    expect(detectDefaultBranch).toHaveBeenCalledWith(folder);
   });
 
-  it("refuses a folder that is not a git repository in git's locale", async () => {
-    const { execFileSync } = await import("child_process");
-    vi.mocked(execFileSync).mockImplementationOnce(() => {
-      throw Object.assign(
-        new Error("fatal : ni ceci ni aucun de ses répertoires parents n'est un dépôt git"),
-        { status: 128 }
-      );
+  it("inspects a checkout and refuses a non-repository under a German locale", async () => {
+    vi.stubEnv("LANG", "de_DE.UTF-8");
+    vi.stubEnv("LC_ALL", "de_DE.UTF-8");
+    const folder = repository("deus");
+    const subfolder = path.join(folder, "src");
+    fs.mkdirSync(subfolder);
+    await expect(run(api.inspectRepo, { root_path: subfolder })).resolves.toEqual({
+      root_path: folder,
+      name: "deus",
+      git_default_branch: "main",
+      git_origin_url: REPO.git_origin_url,
     });
-
-    await expect(run(api.addRepo, { root_path: "/path/to/folder" })).rejects.toMatchObject({
+    await expect(run(api.addRepo, { root_path: home })).rejects.toMatchObject({
       statusCode: 400,
       message: "Path is not a git repository",
     });
+    expect(mockStmt.run).not.toHaveBeenCalled();
   });
 });
 
 describe("inspectRepo", () => {
-  it.each(["", "relative", "/vanished"])(
-    "refuses a missing or invalid toplevel %j before writing",
+  it.each(["", "relative", "vanished"])(
+    "refuses an invalid toplevel %j before writing",
     async (root) => {
-      const { execFileSync } = await import("child_process");
-      vi.mocked(execFileSync).mockReturnValueOnce(root);
-      if (root === "/vanished")
-        mockFs.statSync
-          .mockImplementationOnce(() => ({ isDirectory: () => true }))
-          .mockReturnValueOnce(undefined);
-      await expect(run(api.addRepo, { root_path: "/path/to/clone" })).rejects.toThrow(
+      mockRunGit.mockResolvedValueOnce(root === "vanished" ? path.join(home, root) : root);
+      await expect(run(api.addRepo, { root_path: home })).rejects.toThrow(
         /git.*(folder|toplevel)/i
       );
       expect(mockStmt.run).not.toHaveBeenCalled();
     }
   );
 
-  it("returns normalized repo metadata without registering it", async () => {
-    await expect(run(api.inspectRepo, { root_path: "/path/to/deus" })).resolves.toEqual({
-      root_path: "/path/to/deus",
+  it("inspects a repository without an origin", async () => {
+    git(home, "init", "-q", target);
+    await expect(run(api.inspectRepo, { root_path: target })).resolves.toEqual({
+      root_path: target,
       name: "deus",
       git_default_branch: "main",
-      git_origin_url: "https://github.com/zvadaadam/deus.git",
+      git_origin_url: null,
     });
     expect(mockStmt.run).not.toHaveBeenCalled();
   });
@@ -330,21 +285,18 @@ describe("gitClone", () => {
   const url = "https://github.com/example/deus";
 
   it("returns a specific error when the target exists but is not a git repo", async () => {
-    mockFs.existsSync.mockImplementation((target: string) => target === TARGET);
+    fs.mkdirSync(target);
 
-    await expect(run(api.gitClone, { url, targetPath: TARGET })).rejects.toMatchObject({
+    await expect(run(api.gitClone, { url, targetPath: target })).rejects.toMatchObject({
       statusCode: 409,
       message: "Target directory already exists and is not a git repository",
     });
   });
 
   it("returns an already-cloned error when the target already has .git", async () => {
-    const gitPath = path.join(TARGET, ".git");
-    mockFs.existsSync.mockImplementation(
-      (target: string) => target === TARGET || target === gitPath
-    );
+    repository("deus");
 
-    await expect(run(api.gitClone, { url, targetPath: TARGET })).rejects.toMatchObject({
+    await expect(run(api.gitClone, { url, targetPath: target })).rejects.toMatchObject({
       statusCode: 409,
       message: "Target already contains a git repository",
     });
@@ -359,7 +311,7 @@ describe("gitClone", () => {
       "/Users/someone/repo",
       "--upload-pack=touch /tmp/pwned",
     ]) {
-      await expect(run(api.gitClone, { url: unsafe, targetPath: TARGET })).rejects.toMatchObject({
+      await expect(run(api.gitClone, { url: unsafe, targetPath: target })).rejects.toMatchObject({
         statusCode: 400,
       });
     }
@@ -369,7 +321,7 @@ describe("gitClone", () => {
   it("refuses an address with a credential in it, without repeating it", async () => {
     const refused = run(api.gitClone, {
       url: "https://someone:ghp_secret@github.com/a/b",
-      targetPath: TARGET,
+      targetPath: target,
     });
     await expect(refused).rejects.toMatchObject({ statusCode: 400 });
     await expect(refused).rejects.not.toThrow(/ghp_secret/);
@@ -377,7 +329,9 @@ describe("gitClone", () => {
   });
 
   it("refuses a target outside the home directory", async () => {
-    await expect(run(api.gitClone, { url, targetPath: "/etc/deus" })).rejects.toMatchObject({
+    await expect(
+      run(api.gitClone, { url, targetPath: path.join(path.dirname(home), "outside") })
+    ).rejects.toMatchObject({
       statusCode: 400,
       message: "Target path must be within the home directory",
     });
@@ -385,23 +339,22 @@ describe("gitClone", () => {
   });
 
   it("publishes git's progress to the clients following a clone and answers with where the clone is", async () => {
-    const git = clonedGit();
-    const cloning = run(api.gitClone, { url, targetPath: "~/deus" });
-    await vi.waitFor(() => expect(mockRunGit).toHaveBeenCalled());
-
-    git.stderr("Cloning into 'deus'...\nReceiving objects:  50%\r");
-    git.stderr("Receiving objects: 100%");
-    git.succeed();
-
-    await expect(cloning).resolves.toEqual({ path: TARGET });
+    mockRunGit.mockImplementationOnce(async (_args, { onStderr }) => {
+      onStderr?.("Cloning into 'deus'...\nReceiving objects:  50%\r");
+      onStderr?.("Receiving objects: 100%");
+      return "";
+    });
+    await expect(run(api.gitClone, { url, targetPath: "~/deus" })).resolves.toEqual({
+      path: target,
+    });
     // https and ssh only, the address after `--`, in the runner (no prompts, its own group, a timeout).
     expect(mockRunGit).toHaveBeenCalledWith(
       [
         ...["-c", "protocol.allow=never"],
         ...["-c", "protocol.https.allow=always", "-c", "protocol.ssh.allow=always"],
-        ...["clone", "--progress", "--", url, TARGET],
+        ...["clone", "--progress", "--", url, target],
       ],
-      expect.objectContaining({ cwd: path.dirname(TARGET), timeoutMs: 300_000 })
+      expect.objectContaining({ cwd: path.dirname(target), timeoutMs: 300_000 })
     );
     expect(progress("clone")).toEqual([
       "Cloning into 'deus'...",
@@ -423,22 +376,19 @@ describe("gitClone", () => {
       ["example/deus", "https://github.com/example/deus"],
     ]) {
       mockRunGit.mockReset().mockResolvedValue("");
-      await run(api.gitClone, { url: given!, targetPath: TARGET });
-      expect(mockRunGit.mock.calls[0]![0].slice(-3)).toEqual(["--", cloned, TARGET]);
+      await run(api.gitClone, { url: given!, targetPath: target });
+      expect(mockRunGit.mock.calls[0]![0].slice(-3)).toEqual(["--", cloned, target]);
     }
   });
 
   it("fails with git's words, without its progress, when the clone fails", async () => {
-    const git = clonedGit();
-    const cloning = run(api.gitClone, { url, targetPath: TARGET });
-    await vi.waitFor(() => expect(mockRunGit).toHaveBeenCalled());
-
     const said =
       "Cloning into 'deus'...\nremote: Repository not found.\nfatal: repository not found\n";
-    git.stderr(said);
-    git.fail(said.trim());
-
-    await expect(cloning).rejects.toMatchObject({
+    mockRunGit.mockImplementationOnce(async (args, { onStderr }) => {
+      onStderr?.(said);
+      throw new GitError(args, { stderr: said.trim(), code: 128 });
+    });
+    await expect(run(api.gitClone, { url, targetPath: target })).rejects.toMatchObject({
       statusCode: 500,
       message: "remote: Repository not found.\nfatal: repository not found",
     });
@@ -450,24 +400,18 @@ describe("gitClone", () => {
   });
 
   it("says a clone was stopped at its timeout", async () => {
-    const git = clonedGit();
-    const cloning = run(api.gitClone, { url, targetPath: TARGET });
-    await vi.waitFor(() => expect(mockRunGit).toHaveBeenCalled());
-    git.fail("", true);
-    await expect(cloning).rejects.toMatchObject({
+    mockRunGit.mockRejectedValueOnce(new GitError(["clone"], { timedOut: true }));
+    await expect(run(api.gitClone, { url, targetPath: target })).rejects.toMatchObject({
       statusCode: 500,
       message: "git clone did not finish within 5 minutes and was stopped.",
     });
   });
 
   it("fails when git cannot be started", async () => {
-    const git = clonedGit();
-    const cloning = run(api.gitClone, { url, targetPath: TARGET });
-    await vi.waitFor(() => expect(mockRunGit).toHaveBeenCalled());
-
-    git.fail("", false, new Error("spawn git ENOENT"));
-
-    await expect(cloning).rejects.toMatchObject({
+    mockRunGit.mockRejectedValueOnce(
+      new GitError(["clone"], { cause: new Error("spawn git ENOENT") })
+    );
+    await expect(run(api.gitClone, { url, targetPath: target })).rejects.toMatchObject({
       statusCode: 500,
       message: "Failed to start git: spawn git ENOENT",
     });
@@ -475,7 +419,7 @@ describe("gitClone", () => {
 });
 
 describe("gitInit", () => {
-  const input = { projectName: "demo", targetPath: TARGET };
+  const input = { projectName: "demo", targetPath: "~/deus" };
 
   it("refuses a name that is not a plain folder name", async () => {
     await expect(run(api.gitInit, { ...input, projectName: "../demo" })).rejects.toMatchObject({
@@ -493,12 +437,12 @@ describe("gitInit", () => {
         message: "gitInit: templateUrl: Only HTTPS URLs are allowed",
       });
     }
-    expect(mockSpawn).not.toHaveBeenCalled();
-    expect(mockFs.mkdirSync).not.toHaveBeenCalled();
+    expect(mockRunGit).not.toHaveBeenCalled();
+    expect(fs.existsSync(target)).toBe(false);
   });
 
   it("refuses a target that already exists", async () => {
-    mockFs.existsSync.mockImplementation((target: string) => target === TARGET);
+    fs.mkdirSync(target);
 
     await expect(run(api.gitInit, input)).rejects.toMatchObject({
       statusCode: 409,
@@ -507,23 +451,23 @@ describe("gitInit", () => {
   });
 
   it("creates an empty project with a first commit and its GitHub repository", async () => {
-    mockRunGh.mockResolvedValue({ success: true, stdout: "https://github.com/me/demo\n" });
+    const bare = path.join(home, "origin.git");
+    git(home, "init", "--bare", "-q", bare);
+    mockRunGh.mockImplementation(async () => {
+      git(target, "remote", "add", "origin", bare);
+      return { success: true, stdout: "https://github.com/me/demo\n" };
+    });
 
     await expect(run(api.gitInit, { ...input, templateType: "empty" })).resolves.toEqual({
-      path: TARGET,
+      path: target,
       githubUrl: "https://github.com/me/demo",
     });
 
-    expect(mockFs.writeFileSync).toHaveBeenCalledWith(path.join(TARGET, "README.md"), "# demo\n");
-    expect(mockExecFile.mock.calls.map(([, args]) => args[0])).toEqual([
-      "init",
-      "add",
-      "commit",
-      "push",
-    ]);
+    expect(git(bare, "show", "main:README.md")).toBe("# demo");
+    expect(git(bare, "rev-parse", "main")).toBe(git(target, "rev-parse", "HEAD"));
     expect(mockRunGh).toHaveBeenCalledWith(
-      ["repo", "create", "demo", "--private", "--source", TARGET, "--remote", "origin"],
-      expect.objectContaining({ cwd: TARGET })
+      ["repo", "create", "demo", "--private", "--source", target, "--remote", "origin"],
+      expect.objectContaining({ cwd: target })
     );
     expect(progress("init")).toEqual([
       "Creating project directory...",
@@ -549,30 +493,32 @@ describe("gitInit", () => {
       message: "Not signed in to GitHub",
     });
 
-    await expect(run(api.gitInit, input)).resolves.toEqual({ path: TARGET, githubUrl: null });
+    await expect(run(api.gitInit, input)).resolves.toEqual({ path: target, githubUrl: null });
     expect(progress("init")).toContain("GitHub: Not signed in to GitHub");
-    expect(mockExecFile.mock.calls.map(([, args]) => args[0])).not.toContain("push");
+    expect(mockRunGit.mock.calls.map(([args]) => args[0])).not.toContain("push");
   });
 
   it("starts from a copy of a GitHub template, without its history", async () => {
     mockRunGh.mockResolvedValue({ success: false, error: "gh_not_installed", message: "" });
-    const proc = spawnedGit();
+    const template = repository("template");
+    fs.writeFileSync(path.join(template, "example.txt"), "template contents");
+    git(template, "add", ".");
+    git(template, "commit", "-qm", "Template history");
+    const bare = path.join(home, "template.git");
+    git(home, "clone", "--bare", "-q", template, bare);
     const templateUrl = "https://github.com/acme/template";
-    const creating = run(api.gitInit, { ...input, templateType: "github", templateUrl });
+    git(home, "config", "--global", `url.${pathToFileURL(bare).href}.insteadOf`, templateUrl);
 
-    proc.emit("close", 0);
-
-    await expect(creating).resolves.toEqual({ path: TARGET, githubUrl: null });
-    expect(mockSpawn).toHaveBeenCalledWith(
-      "git",
-      ["clone", "--depth", "1", templateUrl, TARGET],
-      expect.objectContaining({ timeout: 120_000 })
-    );
-    expect(mockFs.rmSync).toHaveBeenCalledWith(path.join(TARGET, ".git"), {
-      recursive: true,
-      force: true,
+    await expect(
+      run(api.gitInit, { ...input, templateType: "github", templateUrl })
+    ).resolves.toEqual({
+      path: target,
+      githubUrl: null,
     });
-    expect(mockFs.writeFileSync).not.toHaveBeenCalled();
+    expect(git(target, "log", "--format=%s")).toBe("Initial commit");
+    expect(git(target, "show", "HEAD:example.txt")).toBe("template contents");
+    expect(git(target, "remote")).toBe("");
+    expect(progress("init")).toContain(`Cloning into '${target}'...`);
   });
 });
 
@@ -587,24 +533,20 @@ describe("repoEnvironmentFile", () => {
   it("answers with the checkout's file and its branch", async () => {
     mockStmt.get.mockReturnValueOnce(REPO);
     mockReadProjectFile.mockReturnValue({ version: 1, setup: "bun install" });
-    git(() => "feature/login\n");
+    mockRunGit.mockResolvedValueOnce("feature/login\n");
 
     await expect(run(api.repoEnvironmentFile, { repoId: REPO.id })).resolves.toEqual({
       project: { version: 1, setup: "bun install" },
       branch: "feature/login",
     });
     expect(mockReadProjectFile).toHaveBeenCalledWith(REPO.root_path);
-    expect(mockExecFile).toHaveBeenCalledWith(
-      "git",
-      ["branch", "--show-current"],
-      { cwd: REPO.root_path },
-      expect.any(Function)
-    );
+    expect(mockRunGit).toHaveBeenCalledWith(["branch", "--show-current"], { cwd: REPO.root_path });
   });
 
   it("says so when no branch is checked out", async () => {
     mockStmt.get.mockReturnValueOnce(REPO);
     mockReadProjectFile.mockReturnValue(null);
+    mockRunGit.mockResolvedValueOnce("");
 
     await expect(run(api.repoEnvironmentFile, { repoId: REPO.id })).resolves.toEqual({
       project: null,
@@ -720,7 +662,7 @@ describe("repoPrs", () => {
 describe("repoBranches", () => {
   it("lists origin's branches by name, marked as the clone's remote-tracking refs", async () => {
     mockStmt.get.mockReturnValueOnce(REPO);
-    git(() => "main\nHEAD\nfeature/login\n\n");
+    mockRunGit.mockResolvedValueOnce("main\nHEAD\nfeature/login\n\n");
 
     await expect(run(api.repoBranches, { repoId: REPO.id })).resolves.toEqual({
       branches: [
@@ -728,17 +670,15 @@ describe("repoBranches", () => {
         { name: "feature/login", is_remote: true },
       ],
     });
-    expect(mockExecFile).toHaveBeenCalledWith(
-      "git",
+    expect(mockRunGit).toHaveBeenCalledWith(
       expect.arrayContaining(["for-each-ref", "--sort=-committerdate", "refs/remotes/origin/"]),
-      expect.objectContaining({ cwd: REPO.root_path }),
-      expect.any(Function)
+      expect.objectContaining({ cwd: REPO.root_path })
     );
   });
 
   it("lists the project's own branches when it has no origin", async () => {
     mockStmt.get.mockReturnValueOnce(REPO);
-    git((args) => (args.includes("refs/heads/") ? "main\nwip\n" : ""));
+    mockRunGit.mockResolvedValueOnce("").mockResolvedValueOnce("main\nwip\n");
 
     await expect(run(api.repoBranches, { repoId: REPO.id })).resolves.toEqual({
       branches: [
@@ -750,7 +690,7 @@ describe("repoBranches", () => {
 
   it("answers with no branches when git fails", async () => {
     mockStmt.get.mockReturnValueOnce(REPO);
-    git(() => new Error("fatal: not a git repository"));
+    mockRunGit.mockRejectedValueOnce(new GitError([], { code: 128 }));
 
     await expect(run(api.repoBranches, { repoId: REPO.id })).resolves.toEqual({ branches: [] });
   });
@@ -787,7 +727,7 @@ describe("cloudRepoAccess", () => {
 describe("recentProjects", () => {
   it("answers with the projects found on this computer", async () => {
     const projects = [{ name: "app", path: "/projects/app", source: "cursor" }];
-    mockListRecentProjects.mockReturnValue(projects);
+    mockListRecentProjects.mockResolvedValue(projects);
 
     await expect(run(api.recentProjects)).resolves.toEqual({ projects });
   });

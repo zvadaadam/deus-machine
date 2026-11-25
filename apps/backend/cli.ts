@@ -25,9 +25,12 @@
 //   bun run cli:backend -- "Say hello"
 //   bun run cli:backend --db-only           # just dump latest session
 
+import { DB_PATH, closeDatabase, getDatabase, initDatabase } from "./src/lib/database";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import { AgentLink } from "./src/services/agent/client";
+import { hasAgentMessages } from "./src/services/agent/agent-messages";
 import type { AgentHarness } from "@shared/enums";
+import { DEFAULT_AGENT_HARNESS } from "@shared/models";
 import { isUnknownEvent, type AnyLifecycleEvent } from "@shared/protocol-types";
 import { buildTurnStartParams } from "./src/services/agent/run-config";
 import {
@@ -44,7 +47,6 @@ import {
   planAnswer,
   questionAnswer,
 } from "@shared/agent-asks";
-import { DB_PATH, closeDatabase, getDatabase, initDatabase } from "./src/lib/database";
 import { insertWorkspaceFixture } from "./src/services/workspace-lifecycle";
 import { persistChanges } from "./src/services/agent/persistence";
 import type { ConversationChange } from "@zvada/agent-server/protocol";
@@ -124,7 +126,7 @@ function parseArgs() {
   }
 
   return {
-    agent: opts.agent || "claude-code",
+    agent: opts.agent || DEFAULT_AGENT_HARNESS,
     cwd: opts.cwd || process.cwd(),
     prompt: positional.join(" ") || "Say exactly: HELLO WORLD. No skills or agents.",
     dbOnly,
@@ -249,7 +251,7 @@ async function main() {
   // 2. Create workspace + session
   const repoId = uuidv7();
   const workspaceId = uuidv7();
-  const sessionId = `cli-${Date.now()}`;
+  const sessionId = uuidv7();
 
   db.prepare(
     `INSERT OR IGNORE INTO repositories (id, name, root_path) VALUES (?, 'cli-test', ?)`
@@ -289,6 +291,7 @@ async function main() {
   // `reduceConversationWithChanges` → `persistChanges` → `applySessionFacts`
   // path the event handler runs, described by the same `describeEvent`. What
   // is left below is colouring and the harness's own "am I done yet".
+  const turnId = uuidv7();
   let turnDone = false;
   const facts: SessionFacts = { errorReported: false };
   let conversation = emptyConversation();
@@ -323,9 +326,9 @@ async function main() {
     const writes = isDelta
       ? []
       : persistChanges(sessionId, folded.state, folded.changes, (turn) =>
-          turnOutcomeFor(facts, turn)
+          turnOutcomeFor(facts, turnId, turn)
         );
-    const factWrites = applySessionFacts(facts, sessionId, event, conversation);
+    const factWrites = applySessionFacts(facts, turnId, sessionId, event, conversation);
 
     // The harness stops when the turn is over, or when an error ended it.
     // `isUnknownEvent` first: `UnknownEvent.type` is an open string, so
@@ -372,9 +375,9 @@ async function main() {
   banner("Sending Turn");
   console.log(`  ${c.dim}${opts.prompt}${c.reset}\n`);
 
-  const turnId = uuidv7();
   const params = buildTurnStartParams(sessionId, turnId, opts.agent as AgentHarness, opts.prompt, {
     cwd: opts.cwd,
+    agentMessages: hasAgentMessages(sessionId),
     permissionMode: "default",
     supportsImages: init.harnesses[opts.agent]?.images ?? false,
   });

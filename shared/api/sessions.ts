@@ -8,6 +8,7 @@ import { resumableStream, stream } from "./stream";
 import type { CloudSaveFailure } from "../cloud-autosave";
 import type { AgentConversationSnapshot } from "../cloud-session-snapshot";
 import type { DecodedWireEventEnvelope } from "../protocol-types";
+import type { Origin } from "@zvada/agent-server/protocol";
 import type { ToolRequestEventData } from "../types/query-protocol";
 
 const sessionId = z.object({ sessionId: z.string().min(1) });
@@ -55,10 +56,7 @@ export const createSession = write({
   output: out<Session>(),
 });
 
-/**
- * Start a turn. Answers once the agent has admitted it; the prompt and the
- * reply then arrive as the session's events. Refused while a turn is running.
- */
+/** Start a turn, or hold the message for the next turn in a busy local chat. */
 export const sendMessage = write({
   name: "sendMessage",
   input: sessionId.extend({
@@ -72,7 +70,80 @@ export const sendMessage = write({
     /** A cloud turn must name one; a local turn uses the model's default without it. */
     thinkingLevel: z.string().optional(),
   }),
-  output: out<{ turnId: string }>(),
+  output: out<{ turnId: string; queued?: true }>(),
+});
+
+export type QueuedMessages = {
+  paused: "stopped" | "failed" | "limit" | null;
+  stoppedBy?: Origin;
+  /** The provider's reset time in epoch milliseconds, when known. */
+  limit?: { resetsAt?: number; continues: boolean };
+  items: {
+    id: string;
+    text: string;
+    images: number;
+    state: "sending" | "steering" | "waiting";
+    origin?: Origin;
+  }[];
+};
+
+/** A local chat's sending head, unread steers and waiting messages, held in this process. */
+export const queuedMessages = live({
+  name: "queuedMessages",
+  input: sessionId,
+  output: out<QueuedMessages>(),
+});
+
+const queuedMessageId = sessionId.extend({ id: z.string().min(1) });
+
+/** Full composer content, available while the row is waiting. */
+export const queuedMessage = read({
+  name: "queuedMessage",
+  input: queuedMessageId,
+  output: out<{ content: string | null }>(),
+});
+
+const steerTarget = {
+  /** The turn this client shows as running. */
+  turnId: z.string().min(1).optional(),
+};
+
+export const steerMessage = write({
+  name: "steerMessage",
+  input: sendMessage.input.extend(steerTarget),
+  output: out<{ outcome: "steered" | "queued" | "sent" | "unconfirmed" }>(),
+});
+
+export const steerQueuedMessage = write({
+  name: "steerQueuedMessage",
+  input: queuedMessageId.extend(steerTarget),
+  output: out<{ outcome: "steered" | "queued" | "gone" | "unconfirmed" }>(),
+});
+
+/** Move a waiting row before another waiting row, or to the end with `before: null`. */
+export const moveQueuedMessage = write({
+  name: "moveQueuedMessage",
+  input: queuedMessageId.extend({ before: z.string().min(1).nullable() }),
+  output: out<{ moved: boolean }>(),
+});
+
+export const removeQueuedMessage = write({
+  name: "removeQueuedMessage",
+  input: queuedMessageId,
+  output: out<{ removed: boolean }>(),
+});
+
+export const resumeQueuedMessages = write({
+  name: "resumeQueuedMessages",
+  input: sessionId,
+  output: out<Record<string, never>>(),
+});
+
+/** Schedule the local chat for one minute after its reset, continue now if it has reset, or cancel. */
+export const continueAfterLimit = write({
+  name: "continueAfterLimit",
+  input: sessionId.extend({ on: z.boolean() }),
+  output: out<Record<string, never>>(),
 });
 
 /**
@@ -117,6 +188,8 @@ export const cloudSaveFailures = stream({
 });
 
 export type ToolRequestEvent =
+  /** A new subscription opens with the IDs the host still waits on. */
+  | { type: "pending"; requestIds: string[] }
   /** An agent asks a client to do or answer something (approve a plan, show a diff). */
   | { type: "request"; request: ToolRequestEventData }
   /** The agent no longer waits for that answer: drop the prompt. */

@@ -23,26 +23,19 @@ import { isGenericTurnFailure } from "@shared/lib/send-refusal";
 import { isUnknownEvent, type AnyLifecycleEvent } from "@shared/protocol-types";
 import {
   persistAgentSessionId,
-  persistSessionError,
-  persistSessionWorking,
+  persistSessionStatus,
+  type SessionProjection,
   type TurnOutcomeWrite,
   type WriteResult,
 } from "./persistence";
 
 // ---- Session facts ----
 
-/**
- * The per-session state deus keeps beside the engine's fold: which turn is
- * live, and whether its error was already reported. The conversation itself is
- * the reducer's — nothing here is derivable from it.
- */
 export interface SessionFacts {
-  /** The live turn — cleared at its turn.ended. */
-  turnId?: string;
-  /** Latest locally accepted turn, retained so historical replay cannot own the session. */
-  acceptedTurnId?: string;
   /** One terminal error per turn: turn.ended(error) must not double-report. */
   errorReported: boolean;
+  /** Reset times by window, from this turn's own limit reports. */
+  limitResets?: Map<string, number>;
   /** A native terminal can be successful even when its transcript is incomplete. */
   deliveryFailure?: { turnId: string; message: string };
 }
@@ -71,18 +64,12 @@ function turnOutcome(turn: ConversationTurn, alreadyReported: boolean): TurnOutc
   return { status: "idle" };
 }
 
-/**
- * `turnOutcome`, plus the two flags an ended turn moves.
- *
- * This is the `outcomeFor` callback `persistChanges` takes, so deciding the
- * outcome and advancing the dedupe flag stay in step whichever event ended the
- * turn.
- */
+/** Compute the session outcome for persistChanges while advancing this turn's error and delivery reports. */
 export function turnOutcomeFor(
   facts: SessionFacts,
+  owner: string | undefined,
   turn: ConversationTurn
 ): TurnOutcomeWrite | undefined {
-  const owner = facts.turnId ?? facts.acceptedTurnId;
   if (owner !== undefined && owner !== turn.turnId) return;
   const failure = facts.deliveryFailure?.turnId === turn.turnId ? facts.deliveryFailure : undefined;
   const outcome: TurnOutcomeWrite = failure
@@ -92,7 +79,6 @@ export function turnOutcomeFor(
       }
     : turnOutcome(turn, facts.errorReported);
   if (failure) facts.deliveryFailure = undefined;
-  if (facts.turnId === turn.turnId) facts.turnId = undefined;
   if (outcome.status === "error") facts.errorReported = true;
   return outcome;
 }
@@ -107,22 +93,17 @@ export function turnOutcomeFor(
  */
 export function applySessionFacts(
   facts: SessionFacts,
+  owner: string | undefined,
   sessionId: string,
   event: AnyLifecycleEvent,
-  conversation: ConversationState
+  conversation: ConversationState,
+  deferred?: { prior?: SessionProjection }
 ): SessionFactWrite[] {
   if (isUnknownEvent(event)) return [];
-  const owner = facts.turnId ?? facts.acceptedTurnId;
-  const rejectedSend =
-    event.type === "error" && event._meta?.cloudErrorCode === "MESSAGE_SEND_FAILED";
-  if (
-    owner !== undefined &&
-    "turnId" in event &&
-    event.turnId !== undefined &&
-    event.turnId !== owner &&
-    !rejectedSend
-  )
-    return [];
+  const turnId = "turnId" in event ? event.turnId : undefined;
+  const otherError =
+    event.type === "error" && (deferred || event._meta?.cloudErrorCode === "MESSAGE_SEND_FAILED");
+  if (owner !== undefined && turnId !== undefined && turnId !== owner && !otherError) return [];
 
   return match(event)
     .with({ type: "session.created" }, (e): SessionFactWrite[] => {
@@ -139,22 +120,23 @@ export function applySessionFacts(
       ];
     })
     .with({ type: "turn.started" }, (e): SessionFactWrite[] => {
-      // A turn admitted here is already 'working' (the send wrote it); one
-      // started elsewhere (another device's cloud turn) is not until now. Keep
-      // the admission mirror truthful on the replay path too (state rebuilt
-      // after a backend restart has no turnId). A replayed turn that already
-      // ended leaves the status alone.
-      const startedElsewhere =
-        facts.turnId !== e.turnId &&
-        conversation.turns.find((turn) => turn.turnId === e.turnId)?.status !== "ended";
-      facts.turnId = e.turnId;
-      // A turn deus did NOT admit via beginTurn (replay, engine-initiated)
-      // would otherwise inherit the previous turn's dedupe flag, and its
-      // terminal error message would be dropped as "already reported".
+      if (
+        owner !== e.turnId ||
+        conversation.turns.find((t) => t.turnId === e.turnId)?.status === "ended"
+      )
+        return [];
       facts.errorReported = false;
-      return startedElsewhere
-        ? [{ fact: "session-working", result: persistSessionWorking(sessionId) }]
-        : [];
+      return [{ fact: "session-working", result: persistSessionStatus(sessionId, "working") }];
+    })
+    .with({ type: "session.limits" }, (e) => {
+      if (owner !== e.turnId) return [];
+      for (const window of e.windows) {
+        const status = window.status ?? ((window.usedPercent ?? 0) >= 100 ? e.status : undefined);
+        if (status === "limited" && window.resetsAt !== undefined)
+          (facts.limitResets ??= new Map()).set(window.id, window.resetsAt);
+        else facts.limitResets?.delete(window.id);
+      }
+      return [];
     })
     .with({ type: "error" }, (e): SessionFactWrite[] => {
       // A recoverable error means the turn CONTINUES (retry/backoff in
@@ -174,9 +156,12 @@ export function applySessionFacts(
       )
         return [];
       facts.errorReported = true;
-      return [
-        { fact: "session-error", result: persistSessionError(sessionId, e.message, e.category) },
-      ];
+      if (deferred) {
+        deferred.prior = ["error", e.message, e.category];
+        return [];
+      }
+      const result = persistSessionStatus(sessionId, "error", e.message, e.category);
+      return [{ fact: "session-error", result }];
     })
     .otherwise(() => []);
 }

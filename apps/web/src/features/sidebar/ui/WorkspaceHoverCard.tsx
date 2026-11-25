@@ -13,6 +13,7 @@ import { call } from "@/platform/ws";
 import type { Workspace, DiffStats } from "@/shared/types";
 import { useAutomationForWorkspace } from "@/features/automations";
 import { uiActions } from "@/shared/stores/uiStore";
+import { SETUP_FAILED } from "@/features/workspace/lib/startState";
 import { prTargetBranch } from "@/features/workspace/lib/prState";
 import type { DisplayStatus } from "../lib/status";
 import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "../lib/utils";
@@ -122,8 +123,10 @@ function LiveActivityLine({ sessionId }: { sessionId: string }) {
 }
 
 interface WorkspaceHoverCardProps {
+  hidePreview: boolean;
   workspace: Workspace;
   displayStatus: DisplayStatus;
+  workingChatId?: string;
   diffStats?: DiffStats;
   /** Live working duration, already formatted (e.g. "4:29"). */
   workingDuration?: string | null;
@@ -139,15 +142,16 @@ interface WorkspaceHoverCardProps {
  * Read-only: clicking anywhere still just opens the workspace.
  */
 export function WorkspaceHoverCard({
+  hidePreview,
   workspace,
   displayStatus,
+  workingChatId,
   diffStats,
   workingDuration,
   children,
 }: WorkspaceHoverCardProps) {
   const displayName = getWorkspaceDisplayName(workspace);
   const secondaryText = getWorkspaceSecondaryText(workspace);
-  const isWorking = displayStatus === "working";
   // Provenance + where the files live — the two facts the row can't fit.
   const automation = useAutomationForWorkspace(workspace.id);
   const isCloud = workspace.kind === "cloud";
@@ -163,104 +167,110 @@ export function WorkspaceHoverCard({
 
   const branch = workspace.git_branch;
   const targetBranch = prTargetBranch(workspace);
-  const timeText =
-    isWorking && workingDuration ? workingDuration : formatTimeAgo(workspace.updated_at);
+  const timeText = workingDuration ?? formatTimeAgo(workspace.updated_at);
 
   return (
     <HoverCard openDelay={500} closeDelay={100}>
       <HoverCardTrigger asChild>{children}</HoverCardTrigger>
-      <HoverCardContent side="right" collisionPadding={12} className="flex w-64 flex-col gap-2">
-        {/* Head: identity + state icon */}
-        <div className="flex items-center gap-2">
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            {secondaryText && <span className="text-text-muted text-2xs">{secondaryText}</span>}
-            <span className="text-text-primary truncate text-base font-semibold">
-              {displayName}
-            </span>
+      {!hidePreview && (
+        <HoverCardContent side="right" collisionPadding={12} className="flex w-64 flex-col gap-2">
+          {/* Head: identity + state icon */}
+          <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              {secondaryText && <span className="text-text-muted text-2xs">{secondaryText}</span>}
+              <span className="text-text-primary truncate text-base font-semibold">
+                {displayName}
+              </span>
+            </div>
+            <WorkspaceGitIcon
+              workspace={workspace}
+              displayStatus={displayStatus}
+              working={!!workingChatId}
+            />
           </div>
-          <WorkspaceGitIcon workspace={workspace} displayStatus={displayStatus} />
-        </div>
 
-        {/* Context: where it runs · what created it */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="bg-bg-raised text-text-secondary text-2xs flex items-center gap-1 rounded-full px-2 py-0.5 font-medium">
-            {isCloud ? (
-              <>
-                <Cloud className="h-2.5 w-2.5" /> Runs in Deus Cloud
-              </>
-            ) : (
-              <>
-                <Laptop className="h-2.5 w-2.5" /> Runs locally
-              </>
-            )}
-          </span>
-          {automation && (
-            <button
-              type="button"
-              title={`Triggered by the "${automation.name}" automation — click for its runs`}
-              onClick={(e) => {
-                e.stopPropagation();
-                uiActions.openAutomations(automation.id);
-              }}
-              className="control-interaction bg-bg-raised text-text-secondary hover:text-text-primary text-2xs flex min-w-0 items-center gap-1 rounded-full px-2 py-0.5 font-medium"
-            >
-              <ClockFading className="h-2.5 w-2.5 shrink-0" />
-              <span className="truncate">Automation · {automation.name}</span>
-            </button>
-          )}
-        </div>
-
-        {isWorking && workspace.current_session_id && (
-          <LiveActivityLine sessionId={workspace.current_session_id} />
-        )}
-
-        {/* Chips: PR · CI · diff */}
-        {(prLabel || showCi || hasChanges) && (
+          {/* Context: where it runs · what created it */}
           <div className="flex flex-wrap items-center gap-1.5">
-            {prLabel && (
-              <span className="bg-bg-raised text-text-secondary text-2xs rounded-full px-2 py-0.5 font-medium">
-                {prLabel}
-              </span>
+            <span className="bg-bg-raised text-text-secondary text-2xs flex items-center gap-1 rounded-full px-2 py-0.5 font-medium">
+              {isCloud ? (
+                <>
+                  <Cloud className="h-2.5 w-2.5" /> Runs in Deus Cloud
+                </>
+              ) : (
+                <>
+                  <Laptop className="h-2.5 w-2.5" /> Runs locally
+                </>
+              )}
+            </span>
+            {workspace.setup_status === "failed" && (
+              <span className="text-accent-red-muted text-xs">{SETUP_FAILED}</span>
             )}
-            {showCi && (
-              <span className="bg-bg-raised text-text-secondary text-2xs flex items-center gap-1.5 rounded-full px-2 py-0.5 font-medium">
-                <span
-                  className={cn(
-                    "h-1.5 w-1.5 rounded-full",
-                    match(workspace.pr_ci_status)
-                      .with("passing", () => "bg-accent-green")
-                      .with("failing", () => "bg-accent-red")
-                      .otherwise(() => "bg-accent-gold")
-                  )}
-                />
-                CI
-              </span>
-            )}
-            {hasChanges && (
-              <span className="bg-bg-raised text-2xs rounded-full px-2 py-0.5 font-medium">
-                {additions > 0 && <span className="text-accent-green">+{additions}</span>}
-                {additions > 0 && deletions > 0 && " "}
-                {deletions > 0 && <span className="text-accent-red">−{deletions}</span>}
-              </span>
+            {automation && (
+              <button
+                type="button"
+                title={`Triggered by the "${automation.name}" automation — click for its runs`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  uiActions.openAutomations(automation.id);
+                }}
+                className="control-interaction bg-bg-raised text-text-secondary hover:text-text-primary text-2xs flex min-w-0 items-center gap-1 rounded-full px-2 py-0.5 font-medium"
+              >
+                <ClockFading className="h-2.5 w-2.5 shrink-0" />
+                <span className="truncate">Automation · {automation.name}</span>
+              </button>
             )}
           </div>
-        )}
 
-        {/* Footer: branch → target · time */}
-        <div className="flex items-center justify-between gap-2">
-          {branch ? (
-            <span className="flex min-w-0 items-center gap-1">
-              <GitBranch className="text-text-disabled h-2.5 w-2.5 shrink-0" />
-              <span className="text-text-muted text-2xs truncate font-mono">
-                {branch} → {targetBranch}
-              </span>
-            </span>
-          ) : (
-            <span />
+          {workingChatId && <LiveActivityLine sessionId={workingChatId} />}
+
+          {/* Chips: PR · CI · diff */}
+          {(prLabel || showCi || hasChanges) && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {prLabel && (
+                <span className="bg-bg-raised text-text-secondary text-2xs rounded-full px-2 py-0.5 font-medium">
+                  {prLabel}
+                </span>
+              )}
+              {showCi && (
+                <span className="bg-bg-raised text-text-secondary text-2xs flex items-center gap-1.5 rounded-full px-2 py-0.5 font-medium">
+                  <span
+                    className={cn(
+                      "h-1.5 w-1.5 rounded-full",
+                      match(workspace.pr_ci_status)
+                        .with("passing", () => "bg-accent-green")
+                        .with("failing", () => "bg-accent-red")
+                        .otherwise(() => "bg-accent-gold")
+                    )}
+                  />
+                  CI
+                </span>
+              )}
+              {hasChanges && (
+                <span className="bg-bg-raised text-2xs rounded-full px-2 py-0.5 font-medium">
+                  {additions > 0 && <span className="text-accent-green">+{additions}</span>}
+                  {additions > 0 && deletions > 0 && " "}
+                  {deletions > 0 && <span className="text-accent-red">−{deletions}</span>}
+                </span>
+              )}
+            </div>
           )}
-          <span className="text-text-disabled text-2xs shrink-0">{timeText}</span>
-        </div>
-      </HoverCardContent>
+
+          {/* Footer: branch → target · time */}
+          <div className="flex items-center justify-between gap-2">
+            {branch ? (
+              <span className="flex min-w-0 items-center gap-1">
+                <GitBranch className="text-text-disabled h-2.5 w-2.5 shrink-0" />
+                <span className="text-text-muted text-2xs truncate font-mono">
+                  {branch} → {targetBranch}
+                </span>
+              </span>
+            ) : (
+              <span />
+            )}
+            <span className="text-text-disabled text-2xs shrink-0">{timeText}</span>
+          </div>
+        </HoverCardContent>
+      )}
     </HoverCard>
   );
 }

@@ -1,11 +1,3 @@
-/**
- * Agent Config Panel — top-level container that replaces the old ConfigPanel.
- *
- * Layout: flex row (sidebar + category content). No panel-level header —
- * the parent ContentTabBar already identifies this as "Agent Config".
- * Both scopes (project + global) are always visible; no scope filter.
- */
-
 import { useState, type ReactNode } from "react";
 import { match } from "ts-pattern";
 import { Cloud } from "lucide-react";

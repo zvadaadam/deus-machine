@@ -65,13 +65,14 @@ export function WorkspaceStartState({ workspace, className }: WorkspaceStartStat
             {waiting && (
               <div className="w-full pt-8 pb-8 opacity-70" data-slot="waiting-message">
                 <SessionProvider
+                  sessionId={waiting.session_id}
                   sessionStatus="idle"
                   workspaceId={workspace.id}
                   workspacePath={localFolder(workspace)}
                   cloud={workspace.kind === "cloud"}
                   subagentMessages={NO_SUBAGENTS}
                 >
-                  <MessageItem message={waiting} isLastInTurn />
+                  <MessageItem message={waiting} />
                 </SessionProvider>
               </div>
             )}

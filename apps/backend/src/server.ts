@@ -1,8 +1,9 @@
+import { initDatabase, closeDatabase, DB_PATH } from "./lib/database";
 import * as Sentry from "@sentry/node";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
-import { initDatabase, closeDatabase, DB_PATH } from "./lib/database";
-import { stopProcessGroups } from "./lib/process-groups";
+import { stopProcessGroups } from "@shared/lib/process-groups";
+import { beforeBreadcrumb } from "@shared/lib/sentry-breadcrumb";
 import {
   closeAll as closeAllWsConnections,
   onDeviceConnectionsChange,
@@ -28,6 +29,7 @@ import { refreshCloudOrganizations } from "./services/cloud-settings.service";
 import { forgetUnusedAssistants } from "./services/assistants";
 import { startIntegrations } from "./services/integrations";
 import { failInterruptedWorkspaces } from "./services/workspace-init.service";
+import { deleteEmptyUnnamedProjects } from "./services/workspace-lifecycle";
 import { stopWhenStdinEnds } from "./lib/parent-stdin";
 
 // Initialize Sentry before anything else.
@@ -36,6 +38,7 @@ Sentry.init({
   dsn: "https://7d01f9d51458e372a7e6f48649842653@o4510970844020736.ingest.us.sentry.io/4510971283898368",
   environment: process.env.NODE_ENV === "production" ? "production" : "development",
   sendDefaultPii: false,
+  beforeBreadcrumb,
   initialScope: { tags: { process: "backend" } },
 });
 
@@ -50,6 +53,7 @@ Sentry.init({
 const db = initDatabase();
 // Assistants unused for a month are forgotten (also whenever the list is read).
 forgetUnusedAssistants();
+deleteEmptyUnnamedProjects();
 
 // Workspaces the previous process was still starting when it stopped.
 void failInterruptedWorkspaces()
@@ -59,8 +63,7 @@ void failInterruptedWorkspaces()
   .catch((err) => console.warn("[server] Workspace recovery failed:", err));
 
 // Backfill git_origin_url for repos added before we tracked origin URLs.
-// Runs once at startup (fire-and-forget) so WS subscribers get the data
-// on their first snapshot instead of waiting for a `repos` read.
+// Runs in the background at startup and publishes any origins it finds.
 async function backfillGitOriginUrls(): Promise<void> {
   const { getGitRemoteUrl } = await import("./lib/git-remotes");
 
@@ -93,7 +96,7 @@ async function backfillGitOriginUrls(): Promise<void> {
 
     // Push fresh data to WS subscribers so sidebar shows GitHub icons immediately
     if (updated > 0) {
-      invalidate(["workspaces"]);
+      invalidate(["workspaces", "repos"]);
     }
   } catch {
     // Backfill failed — not critical, icons will appear after next workspace creation
@@ -172,7 +175,8 @@ const server = serve(
   (info) => {
     void onListening(info.port).catch((error) => {
       console.error("[server] Startup failed:", error);
-      process.exit(1);
+      process.exitCode = 1;
+      shutdown();
     });
   }
 );
@@ -184,17 +188,8 @@ injectWebSocket(server);
 process.on("uncaughtException", (error, origin) => {
   console.error("[FATAL] Uncaught Exception:", origin, error);
   Sentry.captureException(error);
-  stopProcessGroups();
-  Sentry.close(2000).finally(() => {
-    destroyAllSimulators();
-    destroyAllPtySessions();
-    destroyAllWatchers();
-    void agentService.shutdown();
-    try {
-      closeDatabase();
-    } catch {}
-    process.exit(1);
-  });
+  process.exitCode = 1;
+  shutdown();
 });
 
 process.on("unhandledRejection", (reason) => {
@@ -211,19 +206,42 @@ function shutdown() {
   console.log("\nShutting down...");
   // First, so a checkout or a setup script stops while the rest shuts down.
   stopProcessGroups();
-  void agentService.shutdown().finally(() => {
-    destroyAllSimulators();
-    destroyAllPtySessions();
-    destroyAllWatchers();
-    stopLocalServerDiscovery();
-    disconnectFromRelay();
-    closeAllWsConnections();
-    closeDatabase();
-    process.exit(0);
+  const report = process.exitCode === 1 ? Sentry.close(2000) : undefined;
+  void Promise.allSettled([agentService.shutdown(), report]).then(([engine]) => {
+    try {
+      try {
+        if (engine.status === "rejected") {
+          process.exitCode = 1;
+          console.error("[server] Engine shutdown failed:", engine.reason);
+        }
+        destroyAllSimulators();
+        destroyAllPtySessions();
+        destroyAllWatchers();
+        stopLocalServerDiscovery();
+        disconnectFromRelay();
+        closeAllWsConnections();
+      } finally {
+        closeDatabase();
+      }
+    } catch (error) {
+      process.exitCode = 1;
+      console.error("[server] Shutdown failed:", error);
+    } finally {
+      process.exit();
+    }
   });
 }
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 // Started by the desktop: stop when it does, even if it crashed or was killed.
-if (stopWhenStdinEnds(shutdown)) console.log("[server] Stopping when the desktop does");
+if (stopWhenStdinEnds(shutdown)) {
+  // After a force-quit there is no reader for either log pipe. Reporting
+  // EPIPE as a fatal exception would write to the same broken pipe again.
+  for (const output of [process.stdout, process.stderr]) {
+    output.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code !== "EPIPE") throw error;
+    });
+  }
+  console.log("[server] Stopping when the desktop does");
+}

@@ -1,15 +1,20 @@
 /**
  * Row transitions run synchronously and publish their writes.
  * A transition that leaves publication to its caller names the sequence that caller finishes.
- * Only changeWorkspaceState and runWorkspaceAttempt run caller-supplied code.
+ * Only changeWorkspaceState, runWorkspaceAttempt and repoRemoval run caller-supplied code.
  */
+import { isDeepStrictEqual } from "node:util";
+import type { RepoRemovalConfirmation } from "@shared/api/repos";
+import { sessionEvents } from "@shared/api/sessions";
 import type { InitFetchIssue, SetupStatus } from "@shared/enums";
+import { CLOUD_PROJECT_REMOVAL_REASON } from "@shared/types/repository";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getWorkspaceRaw, START_RECOVERABLE, type WorkspaceRow } from "../db";
 import { getDatabase } from "../lib/database";
 import { ConflictError, NotFoundError } from "../lib/errors";
 import { invalidate } from "./query-engine";
 import { writeSetupStatusFile } from "./setup-status";
+import { resetSubscribers } from "./streams";
 
 export type Stage = "fetch" | "worktree" | "session";
 
@@ -238,6 +243,108 @@ export function deleteFailedWorkspace(workspaceId: string): void {
   if (!deleted.changes) throw new ConflictError("This workspace has chats. Archive it instead.");
   cloudReports.delete(workspaceId);
   invalidate(["workspaces", "sessions"]);
+}
+
+type HoldingTurn = (sessionId: string) => { turnId: string } | undefined;
+
+export function repoRemoval(repoId: string, holdingTurn: HoldingTurn) {
+  const db = getDatabase();
+  const row = db
+    .prepare<
+      [string],
+      {
+        rootPath: string | null;
+        archivedWorkspaces: number;
+        remaining: number;
+        cloud: number;
+        automations: number;
+      }
+    >(
+      `SELECT r.root_path AS rootPath,
+              COUNT(w.id) FILTER (WHERE w.state = 'archived') AS archivedWorkspaces,
+              COUNT(w.id) FILTER (WHERE w.state != 'archived') AS remaining,
+              COUNT(w.id) FILTER (WHERE w.kind = 'cloud') AS cloud,
+              (SELECT COUNT(*) FROM automations WHERE repository_id = r.id) AS automations
+         FROM repositories r LEFT JOIN workspaces w ON w.repository_id = r.id
+        WHERE r.id = ? GROUP BY r.id`
+    )
+    .get(repoId);
+  if (!row) throw new NotFoundError("Project not found.");
+  const { rootPath, archivedWorkspaces, remaining, cloud, automations } = row;
+  if (cloud) throw new ConflictError(CLOUD_PROJECT_REMOVAL_REASON);
+  if (remaining) {
+    throw new ConflictError(
+      remaining === 1
+        ? "Archive the remaining workspace first."
+        : `Archive the remaining ${remaining} workspaces first.`
+    );
+  }
+  const chats = db
+    .prepare<[string], { id: string }>(
+      `SELECT s.id FROM sessions s JOIN workspaces w ON w.id = s.workspace_id
+        WHERE w.repository_id = ?`
+    )
+    .all(repoId);
+  if (chats.some(({ id }) => holdingTurn(id))) {
+    throw new ConflictError(
+      "A chat in an archived workspace is still working. Restore the workspace and stop it, or wait for it to finish."
+    );
+  }
+  return {
+    confirmation: { rootPath, counts: { archivedWorkspaces, chats: chats.length, automations } },
+    chats,
+  };
+}
+
+function unlinkAndDeleteProject(repoId: string): void {
+  const db = getDatabase();
+  // Platform runs keep their history. Their local adoption points at rows the cascade removes.
+  db.prepare(
+    `WITH removed_workspaces AS (SELECT id FROM workspaces WHERE repository_id = ?)
+     UPDATE automation_runs SET workspace_id = NULL, session_id = NULL
+      WHERE workspace_id IN removed_workspaces
+         OR session_id IN (SELECT id FROM sessions WHERE workspace_id IN removed_workspaces)`
+  ).run(repoId);
+  db.prepare("UPDATE automations SET repository_id = NULL WHERE repository_id = ?").run(repoId);
+  db.prepare("DELETE FROM repositories WHERE id = ?").run(repoId);
+}
+
+export function removeRepo(
+  repoId: string,
+  confirmed: RepoRemovalConfirmation,
+  holdingTurn: HoldingTurn
+): void {
+  const removedChats = getDatabase()
+    .transaction(() => {
+      const { confirmation, chats } = repoRemoval(repoId, holdingTurn);
+      if (!isDeepStrictEqual(confirmed, confirmation)) {
+        throw new ConflictError(
+          "This project changed. Review what will be removed and confirm again."
+        );
+      }
+      unlinkAndDeleteProject(repoId);
+      return chats;
+    })
+    .immediate();
+  for (const { id } of removedChats) resetSubscribers(sessionEvents, { sessionId: id });
+  invalidate([...WORKSPACE_RESOURCES, "repos", "automations", "automationRuns"]);
+}
+
+export function deleteEmptyUnnamedProjects(): void {
+  const db = getDatabase();
+  const removed = db
+    .transaction(() => {
+      const projects = db
+        .prepare<[], { id: string }>(
+          `SELECT id FROM repositories WHERE name = ''
+            AND NOT EXISTS (SELECT 1 FROM workspaces WHERE repository_id = repositories.id)`
+        )
+        .all();
+      for (const { id } of projects) unlinkAndDeleteProject(id);
+      return projects.length;
+    })
+    .immediate();
+  if (removed) invalidate(["workspaces", "repos", "automations"]);
 }
 
 export function runningSetups() {

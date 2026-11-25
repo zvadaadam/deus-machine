@@ -4,7 +4,6 @@
  * Default state: thin vertical strip (~24px) on the right edge of the diff viewer.
  * On hover: a floating panel slides in showing the full ChangesFilesPanel.
  *
- * Each line's color encodes change type: green=added, yellow=modified, red=deleted.
  * Clicking a line scrolls the diff viewer to that file.
  *
  * The hover panel is rendered via Portal to escape ancestor overflow-hidden containers.
@@ -17,7 +16,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, m } from "framer-motion";
 import { PinIcon } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
-import { getChangeStatus, STATUS_BG, fileChangePath } from "../lib/workspace.utils";
+import { fileChangeLabel, STATUS_BG } from "../lib/workspace.utils";
 import { ChangesFilesPanel } from "./ChangesFilesPanel";
 import type { FileChange } from "@/shared/types";
 
@@ -98,23 +97,19 @@ export function ChangesMinimap({
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
-        {fileChanges.map((fc, index) => {
-          const path = fileChangePath(fc);
-          const status = getChangeStatus(fc);
-          return (
-            <button
-              key={path || `file-${index}`}
-              type="button"
-              onClick={() => handleFileClickAndPin(path)}
-              className={cn(
-                "h-[2px] flex-shrink-0 rounded-full transition-opacity",
-                STATUS_BG[status],
-                selectedFile === path ? "w-3.5 opacity-100" : "w-2.5 opacity-60"
-              )}
-              aria-label={`${path} (${status})`}
-            />
-          );
-        })}
+        {fileChanges.map((change) => (
+          <button
+            key={change.file}
+            type="button"
+            onClick={() => handleFileClickAndPin(change.file)}
+            className={cn(
+              "h-[2px] flex-shrink-0 rounded-full transition-opacity",
+              STATUS_BG[change.status],
+              selectedFile === change.file ? "w-3.5 opacity-100" : "w-2.5 opacity-60"
+            )}
+            aria-label={fileChangeLabel(change)}
+          />
+        ))}
       </div>
 
       {/* Floating panel — rendered in a Portal to escape overflow-hidden ancestors */}

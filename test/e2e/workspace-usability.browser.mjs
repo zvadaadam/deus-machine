@@ -25,6 +25,8 @@ import { GithubCloudAccess } from "@/features/settings/ui/sections/GithubCloudAc
 import { CloudSection } from "@/features/settings/ui/sections/CloudSection";
 import { OnboardingOverlay } from "@/features/onboarding/ui/OnboardingOverlay";
 import { AssistantTurn } from "@/features/session/ui/AssistantTurn";
+import { MessageItem } from "@/features/session/ui/MessageItem";
+import { TurnFooterSlot } from "@/features/session/ui/TurnFooter";
 import { SessionComposer } from "@/features/session/ui/SessionComposer";
 import { SessionPanel } from "@/features/session/ui/SessionPanel";
 import { composerStore, emptyComposer, sessionComposerActions } from "@/features/session/store/sessionComposerStore";
@@ -32,7 +34,8 @@ import { useFirstMessageDelivery } from "@/features/session/hooks/useFirstMessag
 import { pendingFirstMessages } from "@/features/workspace/store/workspaceStartStore";
 import { makeCloudFrameHandler } from "@/features/session/cloud/cloudFrameHandler";
 import { SessionProvider } from "@/features/session/context";
-import { FileBrowserPanel } from "@/features/file-browser/ui/FileBrowserPanel";
+import { FilesView } from "@/features/workspace/ui/FilesView";
+import type { Workspace } from "@/shared/types";
 import { useChatTabs } from "@/app/layouts/useChatTabs";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { queryKeys } from "@/shared/api/queryKeys";
@@ -111,11 +114,14 @@ function App() {
   const [view, setView] = useState(location.search.startsWith("?welcome") ? "Welcome" : location.search.startsWith("?direct") ? "Direct" : location.search === "?history" ? "History" : location.search ? "Onboarding" : "GitHub");
   const [phase, setPhase] = useState(0);
   const [laterTool, setLaterTool] = useState(false);
-  const [fileMode, setFileMode] = useState("all");
-  const messages = [{ id: "m", session_id: "s", turn_id: "turn", role: "assistant", seq: 1, parts: [
+  const messages: any[] = [{ id: "m", session_id: "s", turn_id: "turn", role: "assistant", seq: 1, parts: [
     { type: "reasoning", id: "r", text: "Check the project before changing it.", state: "done" },
     { type: "tool", id: "t", toolCallId: "t", toolName: "Bash", kind: "execute", state: { status: "completed", input: {command: "bun test"}, output: "All checks passed", title: "Run tests" } },
     { type: "text", id: "a", text: "The useful answer stays visible.", state: phase ? "done" : "streaming" },
+    { type: "tool", id: "image", toolCallId: "image", toolName: "Read", kind: "read", state: {
+      status: "completed", input: {file_path: "pixel.png"}, output: "",
+      content: [{type: "image", mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"}],
+    } },
     ...(laterTool ? [{ type: "tool", id: "t2", toolCallId: "t2", toolName: "Bash", kind: "execute", state: {status: phase ? "completed" : "in_progress", input: {command: "bun run build"}, title: "Build project", output: ""} }] : []),
   ] }];
   return <QueryClientProvider client={client}><TooltipProvider>
@@ -128,13 +134,16 @@ function App() {
         {view === "Direct" && <SessionPanel sessionId="history-session" workspacePath="" workspaceKind="cloud" embedded={location.search !== "?direct-modal"} />}
         {view === "GitHub" && <GithubCloudAccess />}
         {view === "Cloud" && <CloudSection />}
-        {view === "Files" && <div className="h-[650px]"><FileBrowserPanel selectedWorkspace={{id: "workspace", kind: "cloud"} as any} filterMode={fileMode as any} onFilterModeChange={setFileMode} /></div>}
+        {view === "Files" && <div className="h-[650px]"><FilesView workspace={{id: "workspace", kind: "cloud", state: "ready"} as Workspace} /></div>}
         {view === "Tabs" && <TabJourney />}
         {view === "Chat" && <>
           <button onClick={() => setPhase(p => p + 1)}>Advance turn</button>
           <button onClick={() => setLaterTool(true)}>Run another tool</button>
-          <SessionProvider sessionStatus={phase === 1 ? "idle" : "working"} workspaceId="workspace" subagentMessages={new Map()}>
-            <AssistantTurn messages={messages as any} isOpen={phase === 0} isStreaming={phase === 0} turn={phase ? {turnId: "turn", stopReason: "end_turn", endedAt: 1} : undefined} />
+          <SessionProvider sessionId="s" sessionStatus={phase === 1 ? "idle" : "working"} workspaceId="workspace" subagentMessages={new Map()}>
+            <MessageItem message={{id: "prompt", session_id: "s", turn_id: "turn", role: "user", seq: 0, parts: [
+              {type: "text", id: "prompt-text", text: "Please check this change. ".repeat(100), state: "done"},
+            ]}} />
+            <AssistantTurn rowId="turn:turn" view="bubbles" messages={messages} ended={phase > 0} streaming={phase === 0} footerGroups={phase ? [messages] : undefined} progressSlot={phase === 0 ? <TurnFooterSlot>Working</TurnFooterSlot> : undefined} turn={phase ? {turnId: "turn", stopReason: "end_turn", endedAt: 1} : undefined} />
           </SessionProvider>
         </>}
       </main>
@@ -209,7 +218,7 @@ const server = await createServer({
         const sendMutate = async (name, params) => { const r = await fetch("/api/mutate/" + name, {method: "POST", body: JSON.stringify(params)}); return r.json(); };
         export const isConnected = () => location.search.startsWith("?welcome");
         // Writes this fixture answers are fetched; every other write is recorded for the test to inspect.
-        const answered = new Set(["createSession", "invalidateFileCache", "addRepo", "saveSetting"]);
+        const answered = new Set(["createSession", "addRepo", "saveSetting"]);
         export const call = async (op, input) => {
           if (op.kind === "read") return sendRequest(op.name);
           if (!answered.has(op.name)) { window.welcomeCommands.push({name: op.name, params: input}); return {}; }
@@ -335,6 +344,7 @@ const server = await createServer({
             createdSessions.push(session);
             return json({ success: true, data: session });
           }
+          if (req.url === "/api/query/queuedMessages") return json({ paused: null, items: [] });
           if (req.url === "/api/query/messages") {
             historyRequests++;
             const respond = () =>
@@ -363,7 +373,6 @@ const server = await createServer({
               : json({
                   projects: [{ name: "test-project", path: "/fixture/project", source: "cursor" }],
                 });
-          if (req.url === "/api/mutate/invalidateFileCache") return json({ success: true });
           if (req.url === "/api/mutate/addRepo") {
             // The Deus source, cloned at the end of onboarding, registers; any other folder is not a repository.
             let body = "";
@@ -383,6 +392,7 @@ const server = await createServer({
               { git_origin_url: "https://github.com/deus/app.git" },
               { git_origin_url: "https://github.com/deus/other.git" },
             ]);
+          if (req.url === "/api/query/diffFiles") return json({ files: [] });
           if (req.url === "/api/query/workspaceFiles") {
             fileRequests++;
             return filesOnline
@@ -489,36 +499,66 @@ try {
   await page.screenshot({ path: path.join(artifacts, "cloud-desktop.png") });
 
   await page.getByRole("button", { name: "Chat", exact: true }).click();
-  await page.getByText("The useful answer stays visible.", { exact: true }).waitFor();
-  const disclosure = page.getByRole("button", { name: /Expand activity/ });
+  const answer = page.getByText("The useful answer stays visible.", { exact: true });
+  const disclosure = page.getByRole("button", { name: /activity, Activity · 1 tool call/ });
+  await disclosure.waitFor();
+  await answer.waitFor();
   await disclosure.click();
+  const bash = page.getByRole("button", { name: /Bash tool details$/ });
+  const read = page.getByRole("button", { name: /Read tool details$/ });
+  const longMessage = page.getByRole("button", { name: /^Show (more|less)$/ });
+  await longMessage.click();
+  await bash.click();
+  assert.equal(await read.getAttribute("aria-expanded"), "true", "An image Read opens by default");
+  await read.click();
+  assert.equal(await read.getAttribute("aria-expanded"), "false", "Its first click closes it");
+  await page.getByRole("button", { name: "Cloud", exact: true }).click();
+  await bash.waitFor({ state: "detached" });
+  await page.getByRole("button", { name: "Chat", exact: true }).click();
+  assert.equal(await longMessage.getAttribute("aria-expanded"), "true", "The message stays open");
+  await longMessage.click();
+  assert.equal(await bash.getAttribute("aria-expanded"), "true", "Bash stays open after remount");
+  assert.equal(
+    await read.getAttribute("aria-expanded"),
+    "false",
+    "Read stays closed after remount"
+  );
+  const activityId = await disclosure.getAttribute("aria-controls");
+  const details = page.locator(`[id="${activityId}"]`);
+  const node = await details.elementHandle();
   await page.getByRole("button", { name: "Toggle thinking details" }).waitFor();
-  const activityId = await page
-    .getByRole("button", { name: /Collapse activity/ })
-    .getAttribute("aria-controls");
-  await page.evaluate((id) => {
-    window.activityNode = document.getElementById(id);
-  }, activityId);
   await page.getByRole("button", { name: "Run another tool" }).click();
   await page.getByText("Build project · 1 tool call", { exact: true }).waitFor();
-  await page.waitForFunction(() => document.querySelector(".assistant-turn .opacity-60") === null);
   for (let i = 0; i < 2; i++) {
     await page.getByRole("button", { name: "Advance turn" }).click();
-    assert.equal(
-      await page.getByRole("button", { name: /Collapse activity/ }).getAttribute("aria-expanded"),
-      "true"
-    );
+    await page.getByRole("button", { name: "Copy response" }).waitFor();
     assert(
-      await page.evaluate((id) => window.activityNode === document.getElementById(id), activityId),
-      "Completing or starting another turn must not remount activity"
+      await node.evaluate((el) => el.isConnected),
+      "The open fold survives the end of the turn"
     );
   }
-  await page.getByRole("button", { name: /Collapse activity/ }).click();
-  await page.getByText("The useful answer stays visible.", { exact: true }).waitFor();
+  const worked = page.getByRole("button", { name: /^Expand activity, Worked/ });
+  await page.keyboard.press("Tab");
+  await worked.focus();
+  assert(
+    await worked.evaluate((button) => {
+      const rows = document.getElementById(button.getAttribute("aria-controls"));
+      return (
+        rows &&
+        !rows.contains(button) &&
+        button.matches(":focus-visible") &&
+        globalThis.getComputedStyle(button).boxShadow.includes("2px inset")
+      );
+    }),
+    "Worked has visible keyboard focus outside its controlled rows"
+  );
+  await worked.press("Enter");
+  await page.locator(`button[aria-controls="${activityId}"]`).click();
+  await answer.waitFor();
   await page.screenshot({ path: path.join(artifacts, "chat-desktop.png") });
 
   await page.getByRole("button", { name: "Files", exact: true }).click();
-  await page.getByRole("alert").waitFor();
+  await page.getByRole("alert").filter({ hasText: "Cloud computer is reconnecting" }).waitFor();
   filesOnline = true;
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await page.getByRole("treeitem", { name: "README.md", exact: true }).waitFor();
@@ -529,17 +569,6 @@ try {
   await page.evaluate(() => window.reconnectFiles());
   await reconnectResponse;
   assert.equal(fileRequests, before + 1, "A reconnect refreshes Files without a polling loop");
-  await page.getByRole("button", { name: "Changes", exact: true }).click();
-  await page.getByRole("button", { name: "All changes", exact: true }).click();
-  filesOnline = false;
-  await page.getByRole("menuitem", { name: "Refresh files", exact: true }).click();
-  await page
-    .locator('[data-sonner-toast][data-type="error"]')
-    .filter({ hasText: "Cloud computer is reconnecting" })
-    .waitFor();
-  filesOnline = true;
-  await page.getByRole("button", { name: "Try again", exact: true }).click();
-  await page.getByRole("button", { name: "All files", exact: true }).waitFor();
 
   await page.getByRole("button", { name: "Tabs", exact: true }).click();
   const labels = page.locator("output");

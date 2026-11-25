@@ -9,7 +9,7 @@ Design inspiration: Linear, Vercel, Stripe, Perplexity. Dense, pro-consumer aest
 Electron desktop app + React frontend + Node.js backend. Monorepo under `apps/`. The local agent engine runs Claude Code, Codex and Gemini.
 
 - **Package manager: Bun.** Always `bun add`, `bun install`, `bun run`, `bunx`. Never npm or yarn — CI uses `bun install --frozen-lockfile`.
-- **Desktop + Mobile Web:** Primary target is Electron. Web version lives at the root domain (`deusmachine.ai` — the landing worker edge-routes `/` to the landing for new visitors and everything else to the app; `app.deusmachine.ai` stays a working alias (canonical 301 configured at the edge)) and also supports mobile via `MobileLayout`. Don't write `isElectronEnv` conditionals for feature parity.
+- **Desktop + Mobile Web:** Primary target is Electron. The web app runs at `deusmachine.ai` and its alias `app.deusmachine.ai`, with mobile support via `MobileLayout`. At the root domain the landing worker serves the landing page at `/` for new visitors and routes everything else to the app. Don't write `isElectronEnv` conditionals for feature parity.
 - **Key libraries:** `ts-pattern` for discriminated unions (prefer `.exhaustive()`), Zustand for UI state, TanStack Query v5 for server state, Framer Motion for presence/layout animations, Tailwind CSS v4.
 
 ## Running the App
@@ -28,10 +28,10 @@ New machine or broken toolchain? `bun run doctor` checks Node (22.x, see `.node-
 
 ## Cursor Cloud setup
 
-Fresh cloud images should have Bun available. If `command -v bun` fails, install it before any repo commands:
+Fresh cloud images should have Bun available. Install the version pinned in `package.json` if `bun --version` differs or Bun is missing.
 
 ```bash
-curl -fsSL https://bun.sh/install | bash
+curl -fsSL https://bun.sh/install | bash -s "bun-v$(node -p "require('./package.json').packageManager.split('@')[1]")"
 export PATH="$HOME/.bun/bin:$PATH"
 ```
 
@@ -45,7 +45,7 @@ bun run test:agent-server
 bun run dev:web
 ```
 
-`bun run dev:web` is the preferred cloud smoke because it rebuilds the Node native module ABI, starts the backend (which runs the agent engine in its process), and then starts Vite with the emitted backend port. Confirm the terminal shows `[AgentService] Engine started, agents: [claude-code, codex-app-server, gemini]`, `[BACKEND_PORT]...` and `Server ready!` before opening the frontend URL.
+`bun run dev:web` is the preferred cloud smoke. It checks that Node can open SQLite, repairs the native module if needed, starts the backend (including the agent engine), and points Vite at the port the backend reports. Confirm the terminal shows `[AgentService] Engine started, agents: [claude-code, codex-app-server, gemini]`, `[BACKEND_PORT]...` and `Server ready!` before opening the frontend URL.
 
 For browser-based UI smoke tests, install the Playwright browser after dependencies are installed:
 
@@ -72,9 +72,9 @@ Frontend (React)
 Backend ⊃ Agent engine (apps/agent-server/) — in process, the standard wire on an in-process channel
 ```
 
-**Electron Main** — Thin shell. Window lifecycle, native dialogs, process spawning. No business logic. It starts the backend and restarts one that exits, five times at most unless one stays up a minute (`backend-process.ts`). The backend stops when the desktop does, however that ends: its stdin is a pipe the desktop holds (`apps/backend/src/lib/parent-stdin.ts`), whose first line is the backend's spawn token. The token is in no process's environment, where every child would inherit it and `ps eww` would show it; the desktop keeps it in memory (`deus-cloud-provision.ts`). The preload offers the window only what the web app calls, and never the backend's spawn token; `test/unit/desktop/ipc-surface.test.ts` holds the preload, the main handlers and the web app's calls equal, so an unused channel is deleted, not kept. Every renderer runs sandboxed, so both preloads are single CommonJS files that require only `electron`. A main-process handler answers only the window's own page, never a Browser-tab guest or a frame inside the window (`index.ts`); web permissions are refused unless listed (`permissions.ts`), so a page in the Browser tab gets no camera, microphone, location, notifications or other apps. The installed app cannot be run as Node, given Node flags or inspected, and loads only its own checked `app.asar` (the fuses in `electron-builder.yml`).
+**Electron Main** — Thin shell. Window lifecycle, native dialogs, process spawning. No business logic. It starts the backend and restarts one that exits, five times at most unless one stays up a minute (`backend-process.ts`). The backend stops when the desktop does, however that ends: its stdin is a pipe the desktop holds (`apps/backend/src/lib/parent-stdin.ts`), whose first line is the backend's spawn token. The token is in no process's environment, where every child would inherit it and `ps eww` would show it; the desktop keeps it in memory (`deus-cloud-provision.ts`). The preload offers the window only what the web app calls, and never the backend's spawn token; `test/unit/desktop/ipc-surface.test.ts` holds the preload, the main handlers and the web app's calls equal, so an unused channel is deleted, not kept. Every renderer runs sandboxed, so both preloads are single CommonJS files that require only `electron`. A main-process handler answers only the window's own page, never a Browser-tab guest or a frame inside the window (`index.ts`); web permissions are refused unless listed (`permissions.ts`), so a page in the Browser tab gets no camera, microphone, location, notifications or other apps. Only the packaged app registers `deus://workspace?id=<workspace id>` (with `&session=<chat id>` for a chat). The main process keeps the latest link accepted by `shared/workspace-link.ts` until the window's own page asks, and hands it only the validated ids. The installed app cannot be run as Node, given Node flags or inspected, and loads only its own checked `app.asar` (the fuses in `electron-builder.yml`).
 
-**Backend (Hono)** — All business logic. DB reads/writes, config, agent event persistence, tool relay, PTY, file watching. Operations in `src/api/`, answered over the socket; the few HTTP routes under `/api`. Runs the agent engine in its own process. A request from this computer needs no token, so it must be addressed to `localhost`, `127.0.0.1` or `[::1]` and come from no page or a page whose origin is in `DEUS_WEB_ORIGINS`, which the launcher sets (`shared/web-origins.ts`; `middleware/loopback-origin-gate.ts`): the desktop passes its window's origin (`app://deus` packaged, served by `apps/desktop/main/app-protocol.ts`; Vite's in dev), `dev:web` and the e2e runners `LOOPBACK_WEB_ORIGINS`. A backend started without it trusts no page. The app opens no remote-debugging port; agents' browser tools run their own browser.
+**Backend (Hono)** — All business logic. DB reads/writes, config, agent event persistence, tool relay, PTY, file watching. Operations in `src/api/`, answered over the socket; the few HTTP routes under `/api`. The agent engine runs inside the backend process. A request from this computer needs no token, so it must be addressed to `localhost`, `127.0.0.1` or `[::1]` and come from no page or a page whose origin is in `DEUS_WEB_ORIGINS`, which the launcher sets (`shared/web-origins.ts`; `middleware/loopback-origin-gate.ts`): the desktop passes its window's origin (`app://deus` packaged, served by `apps/desktop/main/app-protocol.ts`; Vite's in dev), `dev:web` and the e2e runners `LOOPBACK_WEB_ORIGINS`. A backend started without it trusts no page. The app opens no remote-debugging port; agents' browser tools run their own browser.
 
 **Agent engine** (`apps/agent-server/`) — Stateless. `@zvada/agent-server` with deus's seams: the Deus tools (one source, `deusTools`, with the session tools the backend adds beside them (`chatTools`), handed to the engine as `hostTools`: the engine gives them to every harness as the MCP server `deus_chat_tools`, in process for Claude and at its own loopback for Codex and Gemini, and each call names the session, the turn and its mode), the tool policy, checkpoint hooks and titles. No DB access, no direct frontend communication; the tools reach the backend through `host-link.ts`, which the backend registers (`startEngine`). Keep blocking work off it: it shares the backend's event loop. A turn does not survive the process (the engine keeps turns in memory), so at engine start every local chat the database still shows working or waiting is settled as an error saying Deus quit mid-turn (`settleInterruptedSessions` in `services/agent/persistence.ts`; cloud chats are the platform's to settle).
 
@@ -99,6 +99,9 @@ in Settings → AI Providers or during onboarding. The picker then lists the mod
 A model already chosen or recorded stays visible while the list is unavailable.
 Its chats have no Plan toggle. Deus declines a question from its question form. Deus tool cards
 show the call's input and status without result text. Gemini takes instructions once per conversation.
+In full access (`bypass_permissions`), the engine starts `agy` with `--dangerously-skip-permissions`.
+Commands can use the network, commit in the worktree and write outside it. Switching into or out
+of full access restarts `agy` and resumes the conversation.
 
 ### How agents drive a simulator (agent-device)
 
@@ -155,7 +158,7 @@ Single WS connection (`/ws`) using `q:` prefixed JSON frames:
 | `q:request` / `q:response`               | A read, answered once (`diffStats`, `settings`)                                                            |
 | `q:subscribe` / `q:snapshot` / `q:delta` | A live read: its value, sent again whenever it changes (workspaces, sessions)                              |
 | `q:subscribe` / `q:event` / `q:reset`    | A stream of events, sent only to the connections following it (a chat's agent events, a terminal's output) |
-| `q:mutate` / `q:mutate_result`           | A write, never sent twice (archiveWorkspace, sendMessage, stopSession)                                     |
+| `q:mutate` / `q:mutate_result`           | A write, never sent twice (archiveWorkspace, sendMessage, steerMessage, stopSession)                       |
 | `q:tool_response`                        | The answer to something an agent asked this client                                                         |
 
 **One contract.** Every operation and stream a host offers is declared once in
@@ -188,13 +191,74 @@ client package does this bookkeeping; a consumer supplies only `onReset`
 not reload the chats a window holds, and a phone following one chat is not
 sent every other chat's tokens.
 
-A turn's parts are drawn in their recorded order (`session/lib/assistantTurnContent.ts`).
+A turn is one list of rows in recorded order: words, runs of work and cards
+(`session/lib/assistantTurnContent.ts`). Both readings of a chat (`chat_view`:
+bubbles, the default, or the full run) draw that list, and a row keeps its key
+and place while the turn runs and when it ends. In bubbles, an ended turn
+closes its rows under one "Worked" line, except its closing words (else the
+last send, else the last passage), a card still waiting, pictures and
+recordings. A turn with no words keeps its last card. Each stretch of a turn
+split by a steer is its own list. Nested sub-agents read as the full run.
+
+`tell_user` (setting `agent_messages`, on by default) lets a local chat's
+agent send the person a message while it works. The call stores nothing: the
+completed part is the message, and `shared/agent-message.ts` is its only
+reader, for the transcript, Copy, the cards, and what other chats and
+assistants read. Whether a chat has the tool is decided once, when its agent
+first asks, and stored on the chat (`sessions.agent_messages`), so its
+instructions and its tool list never disagree. The `session` and `sessions`
+reads carry it as `agent_messages`. While such a chat runs, words outside a
+send belong to its work line.
+
 A compaction of the running turn appears when that turn settles. An unfinished
 last turn record is the open turn. A replay can append an older end, so otherwise
 `session/lib/conversationView.ts` uses the newest message's turn record, or the
 chat's working status until that record arrives.
 
-A `fileChanges` subscription names one workspace. On macOS its first follower
+While a local chat works, Enter on a keyboard and Send on a phone queue the message.
+Command-Enter (Ctrl-Enter outside macOS) asks to steer the turn on screen. The person's
+row arrow does the same, except on a kept steer, which it moves first for its own turn.
+If the turn is gone, unnamed or cannot take the message, the fresh steer or the arrow's
+row goes first. With a question or plan open, a new message appends and a row stays in
+place unless the steer names an older turn.
+The backend holds up to 20 messages per chat in memory (`services/agent/queue.ts`).
+At most five can come from agents and assistants together, including unread steers.
+Each composer follows `queuedMessages` for the sender, text and picture count in
+`session/ui/QueuedMessageList.tsx`. Edit reads a waiting row's full content with
+`queuedMessage`, puts it in the composer, then calls `removeQueuedMessage`.
+Dragging a waiting row's grip, or using Space and the arrow keys, calls
+`moveQueuedMessage` to put it before another waiting row or last. The sending head
+stays first until its user echo is complete.
+A fatal error leaves the local turn holding its chat until it ends. A message the person sends then queues and waits for Resume after the failed end.
+A plain send joins an open queue behind its waiting messages. After Stop, waiting messages
+stay held until Resume. A fresh send can still start an idle chat while its queue is held.
+A message the person sends after Stop starts its own turn when the stopped turn ends or Deus gives it up.
+An empty Stop or failure hold clears when its turn settles. A usage limit can hold an empty queue.
+The rules above `transition` in `services/agent/queue.ts` say who may resume each hold.
+During local app setup, Stop returns the chat to idle at once, except for an agent's or
+assistant's first task, which ends in an error saying it was not delivered. The person
+keeps their draft, a queue head waits first, and an operator's send is refused
+with “Stopped before it started.” `turn()` reports that send cancelled, and by whom,
+until the chat's next turn ends or Deus restarts. The transcript does not show it.
+Once the start request reaches the wire, Stop
+waits for its answer (up to 30 seconds) and cancels the turn if it is still live.
+If the start reply is lost after the turn's events arrive, the chat keeps working
+and its queue advances at the turn's end.
+If the engine reports no active turn, the chat settles at once. A confirmed cancel withdraws the cards
+and keeps the chat occupied for final echoes. If no end arrives within 15 seconds of confirmation, the watchdog
+frees the chat, records the local end and returns unread steers to the queue. Windows following the chat
+reread it if that turn has a message. A late engine end can update the outcome.
+A late read removes its recovered steer and withdraws the retry if it is still in app setup.
+If the cancel is unconfirmed and the turn is still live, the watchdog records a warning and leaves it running.
+Resume appears above held rows, even before the turn ends. At a usage limit, pressing Continue
+before the reported reset schedules a turn one minute after it. The person can enable this for future limits in Settings.
+Pressing Continue after the reset starts the turn at once. While Deus stays open, the first waiting message goes, or “Continue.”
+with the chat's settings. A new send, Resume, Stop, hiding the chat or archiving its workspace clears the schedule.
+A steer read mid-turn splits one reply into groups with one footer (`groupTurns` in
+`session/lib/chatTimeline.ts`). Cloud chats keep their send, including the hosted web's
+direct lane.
+
+A `fileChanges` subscription names one workspace. On macOS or on Linux with Bun, its first follower
 opens a recursive watch on the local checkout. The last one leaving, including
 a dropped connection, closes it after three seconds so a quick return reuses
 the watch. An opening event confirms the watch and refreshes Files and Changes.
@@ -240,6 +304,13 @@ project with no folder never reaches git or the filesystem: its branches come fr
 GitHub (`repoBranches`, through `services/github-remote.ts`, whose API base
 `DEUS_GITHUB_API_URL` overrides), a local workspace on it is refused in words, and in
 the composer its Cloud switch is on and locked ("<name> is not on this Mac").
+Windows follow the live `repos` list. The app can remove an empty project or one with only archived local
+workspaces once their chats settle. When all are archived and one is cloud, hovering over or tapping Remove
+explains why the project must stay.
+The confirmation says when the project's folder is gone.
+After rechecking the recorded path and counts, `workspace-lifecycle.ts` unlinks local automations and deletes
+the project, its workspaces and chats. The folder, checkouts and Git branches stay on disk.
+Startup also clears automation links before deleting empty-named projects with no workspaces.
 
 A workspace is created in one place: Home, whose composer sends the first
 message with it. Everything that wants one goes there through
@@ -283,6 +354,7 @@ progress channel: the desktop, the web app and a phone all follow it.
   workspace, from what is on this computer, and records why
   (`init_fetch_issue`: `offline`, `auth` or `failed`). A project with no remote
   named `origin` records `no_origin` and the start line says "No origin to check".
+  `no_origin` needs Git 2.30 or newer. Older Git reports a missing origin as a failed fetch.
 - Once the checkout exists, the first chat can take its message while the project's
   setup script runs. A local turn is told the running command, log and status
   file, or a failure's quoted reason and last log lines. After a repair the
@@ -300,11 +372,14 @@ progress channel: the desktop, the web app and a phone all follow it.
   that never started and refuses any other: a used one is archived.
 - A backend that stops mid-start leaves `initializing` rows nothing is working
   on. `failInterruptedWorkspaces` fails them at startup.
-- Git commands that can run long go through `lib/git-process.ts` (`runGit`):
-  no prompts, their own process group, and a timeout that stops the whole
-  group. An `execFile` timeout stops only git itself, and `git worktree add`'s
-  checkout child keeps writing; a worktree cut short stays locked, which only
-  `git worktree remove --force --force` clears (`removeWorktree`).
+- Every git command the backend and the engine run goes through
+  `shared/lib/git-process.ts` (`runGit`; `git-process-fence.test.ts` trips
+  on the ordinary spellings of a direct spawn): no prompts, `LC_ALL=C`, its
+  own process group, and a timeout and a stdout limit that stop the whole
+  group. An `execFile` timeout stops only git itself, and
+  `git worktree add`'s checkout child keeps writing; a worktree cut short
+  stays locked, which only `git worktree remove --force --force` clears
+  (`removeWorktree`).
 - A name is free only if the database, the `.deus` folder and the repository's
   branches all lack it; a name found taken is never reused or removed.
 - Cloud workspaces provision through `cloud-workspace-init.service.ts`. They
@@ -342,11 +417,11 @@ the window (`capabilities.singleWindow`): a browser tab keeps its own
 not find it and send it too; the desktop app, which is one window, keeps it on the
 device (localStorage), so quitting does not lose it either. Quitting before the
 first chat opens stops the start, so the reopened desktop app shows a failed
-start with the message still waiting, and Retry sends it. It is sent once: a chat that already
-has a message, or is answering one, is never sent it again, and a send the
-backend refuses goes into that chat's composer with a toast rather than being
-retried. Send it from anywhere else and two workspaces started in a row lose
-one.
+start with the message still waiting, and Retry sends it. The window sends once,
+skipping a chat already spoken to or working. If another client starts a local
+turn after that check, the first message queues behind its turn. A full queue or any
+other refusal returns it to the chat's composer with a toast. Send it from anywhere
+else and two workspaces started in a row lose one.
 
 A message the cloud platform refuses after the backend took it (a channel `error`,
 `MESSAGE_SEND_FAILED`) is never lost either, first message or not: its bubble goes and
@@ -354,8 +429,7 @@ its text and images go back into that chat's composer, ahead of anything typed t
 since (`session/lib/returnToComposer.ts`, from the fold on both lanes). Nothing is
 resent. The card shows the platform's sentence, not its codes (`shared/lib/send-refusal.ts`);
 a refused AI provider account (reconnect, none, the company's unusable) is category
-`_provider_account`, not an internal error, and its card offers "Open AI Providers"
-instead of "Retry in new chat".
+`_provider_account`, and its card offers "Open AI Providers".
 
 `hasCheckout(workspace)` (it has a chat) says whether there is somewhere to
 work. Without one there is no branch to open a pull request from and nothing
@@ -364,22 +438,29 @@ is the chat column alone. A workspace that is still starting can be opened
 from the sidebar; its row, the header chip and the chat word the step the
 same way (`workspaceStart(workspace).brief`, `SETUP_RUNNING`, `SETUP_FAILED`).
 
+The header's pull request button is one state (`derivePRActionState` in
+`features/workspace/lib/prState.ts`). Merge names the pull request's own
+base, not the workspace's target. A failed or inconclusive lookup keeps what the
+workspace row last knew of the pull request, or offers Create PR with the reason
+beside it when one was reported.
+
 The start page has the chat's composer (`WorkspaceStartComposer`), where the
 chat will have it, keyed by the workspace since there is no chat yet. One
 message waits per workspace: sending there when nothing waits makes it the
 waiting message. While it waits, Send is disabled and a line says why.
 What is typed there stays in the box and moves to the chat's composer when the chat opens
 (`sessionComposerActions.move`, from `useFirstMessageDelivery`), before the
-waiting message is sent. The waiting message is per client, so another device
-or window can speak to the chat first; this client's message is then never
-sent, and goes into that chat's composer instead (`missedFirstMessages`). A
-failure that cannot be retried has no composer: nothing typed there could be
-sent.
+waiting message is sent. The waiting message is per client. If the window's delivery
+check finds another window or device has already spoken, its waiting message goes
+into that chat's composer (`missedFirstMessages`). A failure that cannot be retried
+has no composer: nothing typed there could be sent.
 
 `bun run test:e2e:workspace-start` runs these against the real backend, git and
 web app (see `test/e2e/README.md`).
 
 ### Remote access (relay)
+
+Use the `deus-remote-lab` skill to exercise remote access and assistants on loopback or reproduce a remote-access report.
 
 Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
 
@@ -393,6 +474,14 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   public keys (`RELAY_TICKET_JWKS`), consumes it once, pins the machine to its
   first host's account, and names the verified account on `client_connected` and
   `pair_request`. It has no public status route and holds no minting key.
+  The relay keeps no viewer credential and closes every viewer when a new host
+  tunnel registers, so interactive clients dial again with a fresh ticket.
+  A file URL needs no ticket. The Mac registers a route key for this process, and
+  only the Mac recognises the file handle. The relay serves a fixed list of video,
+  image and PDF types. A well-formed file request with the wrong key is billed
+  and creates the relay object if needed, even for a machine id never registered.
+  Enough requests can slow that machine's chat. Checking the key at the edge would
+  need a secret there. A previously paired device keeps the key until the Mac restarts.
 - **The Mac** approves each device once (pairing code, or the QR link
   `/s/<machine>#pair=CODE`, whose fragment never reaches a server) and binds the
   grant to the relay-verified account and this machine id
@@ -474,21 +563,25 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   `list_sessions`, `read_session`, `wait_for_sessions`, `list_models`,
   `start_session`, `send_message`, `answer_request`, `stop_sessions` and
   `archive`, their words, waits, rules and limits; Deus is their host
-  (`services/assistants/host.ts`) and adds `read_changes`, `add_project` and
-  `send_feedback` (a report about Deus itself to the Deus team's Hivenet board,
+  (`services/assistants/host.ts`) and adds `read_queue`, `manage_queue`, `read_changes`,
+  `add_project` and `send_feedback` (a report about Deus itself to the Deus team's Hivenet board,
   `services/assistants/feedback.ts`: the report alone,
-  `consent.telemetry: false`). A session is one chat of one of this computer's
+  `consent.telemetry: false`). The registry refuses project removal as an assistant operation.
+  Neither the assistant nor the chat tool list offers it.
+  A session is one chat of one of this computer's
   own workspaces (`workspace:N`, numbered by creation; cloud workspaces are
   not listed); a workspace being set up is its first chat under the id minted
   with it (`first_session_id`). Who started each workspace, chat and message
   is kept (`started_by`, `messages.origin`), and the agent reading a message
-  is told when an agent or an assistant sent it. The package holds nothing
-  between calls: a message to a busy chat is sent within the call if its turn
-  ends on its own in time, else nothing is sent and the answer says why. The
-  host holds only a new workspace's first task: `start` takes it and sends it
-  as the turn the package minted once the first chat is ready. A start that took
-  longer than 30 minutes sends nothing, and the chat says so in its error; a stop
-  drops it. At its commit, in one synchronous step, the host refuses
+  is told who sent it. `list_sessions` dates a working chat by its last agent event, or
+  its send until one arrives. Other chats use their last prompt or turn end, whichever is later.
+  On a working chat, `send_message` steers the turn it saw by
+  default. If the turn ends before reading the message, it goes first in the queue.
+  A kept steer runs only as its own turn, even with `send_now`. The host finds read
+  steers in `messages.steer_id` and kept ones in `turns.outcome.undeliveredSteers`.
+  For a new workspace, `start` holds the first task until its chat is ready and sends
+  it as the turn the package minted. A stop drops it. If setup takes over 30 minutes
+  or the first send fails, the chat says so unless another turn took it. At its commit, in one synchronous step, the host refuses
   (`Refused`): a start by an archived chat or into an archived workspace; a
   fourth agent-started local workspace while three are starting or running setup.
   It also refuses an archive whose members are still starting, still working
@@ -498,13 +591,16 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   read leaves it out, the current chat moves to the newest visible one, it
   takes no message and stops counting against its starter). A chat the person
   started is closed by the person; archive its workspace instead.
-  Archiving a workspace is the app's. A stop is of one turn, and records who
-  stopped it (`turns.cancelled_by`, the first stop that takes effect). Each
+  A workspace archive records the caller, including a calling chat's name. The first Stop that takes effect
+  records who stopped the turn, in memory only during app setup and in `turns.cancelled_by` once on the wire. Each
   host mutation re-reads what it depends on in the same synchronous step as
   its write (`mayStart`, `mayTouch`, `mayArchive`; a workspace's archive
   inside the app's archive queue). A chat's number is stored when it is
-  made (`sessions.chat`, a trigger) and never moves. A follow-up uses the chat's recorded
-  model as its composer would (`turn-settings.ts`). Without a recorded model, the host
+  made (`sessions.chat`, a trigger) and never moves. `list_models` shows each local agent's
+  readiness beside its models using the same CLI and login check as Settings → AI Providers,
+  onboarding and `deus status` (`shared/agent-readiness.ts`). `start_session` gives the chosen agent's
+  check 3 seconds and refuses a reported sign-out before making a workspace or chat. A follow-up uses the chat's
+  recorded model as its composer would (`turn-settings.ts`). Without a recorded model, the host
   uses the agent's default in the engine catalog (which can differ from the composer's
   account default because a send does not wait for a model list) or refuses the
   follow-up if the catalog has none. A project only in the cloud is refused
@@ -515,27 +611,48 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   `~/Developer/<name>` when that folder is already its clone, refuses any other
   folder there in words, and otherwise runs the app's own clone and add
   (`gitClone`, `addRepo`, through `act`) into `~/Developer/<name>`, which
-  gives a folderless project its folder. A clone outlasting the call answers
+  gives a folderless project its folder. Its answers, and the reason an
+  assistant is given for a session in error, show the home folder as `~` and
+  paths under it as `~/…` (`home-relative.ts`). Stored paths stay absolute. A
+  clone outlasting the call answers
   "still cloning"; a second call for that folder joins it, and the first call
   after it ends hears the outcome. The address rule (`lib/clone-address.ts`)
   is the app's clone's too: https or ssh only, no credentials, whitespace,
   control characters or leading `-`; git gets it after `--` through
   `runGit` with only the https and ssh transports allowed. `read_changes(file)` shows only a file in the
-  workspace's changed-files list (normalised paths): git prints a whole file
-  as the diff of an unchanged one, and that may be an ignored secret. What a
+  workspace's changed-files list (normalised paths), and the local diff read
+  refuses any other itself (`getFileDiff`): a file git does not list may be
+  an ignored secret, and its diff would be the whole file. One file's patch
+  is the base's blob against the working file (a submodule entry's is git's
+  own for that path), read between two looks at the file: one that changed
+  meanwhile is refused. A pure rename's patch is empty and the answer says
+  so. The list is git's own,
+  read NUL-delimited (`parseDiffFiles` in `services/git.service.ts`): one row
+  per path with git's status, a rename under its new name with the old one
+  beside it (an untracked file's lines are counted from the file). Changes
+  shows those rows; Files shows the files its scan lists, with the same
+  status on each. What a
   repository wrote and names follow the package's untrusted-text rule
   (`quoted()`, `quote()`). An answer takes the one path a card's does
   (`tool-relay.ts` `answer`): whoever answers first, the others' question or
-  plan card is withdrawn.
+  plan card is withdrawn. Settling a local turn withdraws its unanswered cards too.
 - **Chats operate chats.** Every local chat has the same tools as its own
   (`withSessionTools` in `operator.ts`, registered with the agent service and
   handed to the engine with the Deus tools in one source): the chat itself is
   the caller, plan mode reads only, a chat cannot act on itself, and depth,
   chats per starter and starts per minute are limited. The turn's
-  instructions carry the package's `OPERATOR_GUIDANCE`
-  (`workspace-context.ts`). A message another chat or an assistant sent shows
-  "Sent from" above its bubble (`session/ui/SentFrom.tsx`), and the chip opens
-  the sending chat. A chat runs with full access or in plan mode, nothing
+  instructions carry the package's `OPERATOR_GUIDANCE`. For this computer's `deus://workspace`
+  links, give `read_session` the link's `session` value as `session`. Without it, pass the link's `id`
+  as `session` to read the workspace's current chat (`workspace-context.ts`). "Sent from"
+  names the sender on a queued row and above its bubble, including a steer read mid-turn.
+  The chip opens the sending chat (`session/ui/SentFrom.tsx`). List, wait and read say what
+  waits and what holds it, including a usage limit's known reset time and whether the chat
+  will continue. An agent or assistant queuing its own waiting text gets the row's
+  position without adding a row. The person's sends skip this check.
+  `read_queue` lists another chat's rows. With `manage_queue` a sender can request Resume,
+  send or remove its own waiting row. `send_now` keeps an unread row in place and reports any hold.
+  This window and paired devices speak as the person and may change any row.
+  A chat runs with full access or in plan mode, nothing
   between: Deus approves a chat's tool requests itself. A mode between the
   two must route these tools' writes to the person before it ships.
 
@@ -560,6 +677,15 @@ filter: it tears nothing down, and agents elsewhere keep running. The rules are 
 functions in `features/sidebar/lib/location.ts`; the choice (`location`,
 `cloudOrganizationId`) is kept in the sidebar store; one hook, `useWindowPlace`, wires
 them for `MainLayout`.
+
+Selecting a workspace writes `/s/<computer>/w/<workspace>` on the relay (`local` in
+`dev:web`) or `/w/<workspace>` on web-direct. Changing chats replaces `?session=<chat>`
+in that history entry. Copy link uses the same browser address (`workspaceAddress` in
+`features/workspace/lib/workspaceAddress.ts`) or `deus://workspace?id=<workspace>` in
+the desktop app. Every workspace row can copy its link, including while it starts or
+after a failed start. Each tab with a chat copies its own link, even when inactive.
+On touch, holding a workspace row opens its menu. Holding a chat tab or a project
+header starts a drag.
 
 What the window knows of the cloud is one live read, `cloudOrganizations`
 (`useCloudOrganizations()`): whether this backend can act there (`available`), the
@@ -640,16 +766,22 @@ in Last Editor", a chat card's Open and Reveal in Finder, and the agent configur
 (`agentConfigOf`: the Agent tab and the `/` menu read the workspace's own folder; a cloud
 agent gets none of this computer's) offer nothing without one. So a project skill, command,
 hook or MCP server added in the Agent tab is a change in the workspace's branch, and the
-tab says so. Rule 2, `openAddress` /
-`openFile`: what a link or file in the chat does. Local is unchanged; in the cloud an
-internet address opens in the person's browser, a localhost one in the cloud preview at
-its port (or says "That address is on the cloud computer"), and a file in the Files tab
-(text) or says it cannot be shown. `session/lib/openFromChat.ts` carries the rule out; the
-`file-preview` route refuses a cloud workspace. Which tabs a workspace has is
-`app/layouts/content-tabs.ts` (`tabsFor`): a cloud workspace's Browser and Simulator are
-its computer's and ignore this computer's settings. "New workspace from a pull request or
-branch" is local (`offersNewFromBranch`). The header menu marks a place with a working or
-unread workspace (`placeActivity`). The sidebar's diff numbers never connect to a cloud
+tab says so. Rule 2 (`openAddress` and `openFile`) covers chat links, chat files and
+addresses typed in New Tab. In the cloud an internet address opens in the person's browser.
+A localhost address opens at its port in the cloud preview, or says "That address is on the
+cloud computer". A chat file opens in its own File tab, or in Changes when requested.
+If the cloud computer cannot show the file, the chat says so.
+`session/lib/openFromChat.ts` carries out the rule. For a local file preview, the desktop opens
+its Browser tab. On the web or a phone, the click opens a tab while Deus asks the host for the
+file's address. HTML previews need a direct connection. The `file-preview` route refuses a cloud
+workspace. `tabsFor` in `features/workspace-tabs/registry.ts` decides which tabs each workspace
+has. A cloud workspace's Browser and Simulator run on its computer and ignore this computer's
+settings. "New workspace from a pull request or
+branch" is local (`offersNewFromBranch`). The sidebar row and the place menu read every
+visible chat's activity (`placeActivity` in the menu). A waiting chat or an unseen reply can
+mark the row while another chat's working grid runs. A failed setup has its own mark.
+Reopen lists every visible chat without a tab, those closed in this visit first.
+The sidebar's diff numbers never connect to a cloud
 computer: a `diff.request` to a sandbox whose agent is not connected makes the platform
 resume it, so `diffStats` asks only a session with an open channel that is not asleep.
 
@@ -680,8 +812,9 @@ the catalog can move to a package the day Deus Cloud reads it too.
 - **Credentials.** An account's row says how it is held
   (`integration_connections.kind`): `oauth` and `secret` (a pasted key, a
   local server's variables) keep a credential sealed by `vault.ts` (key in the
-  macOS Keychain, else a 0600 file; found once at startup, and until the
-  Keychain answers nothing is sealed or opened, never a second key made); `cli` stores
+  macOS Keychain, else a 0600 file). Startup reads the key only for saved
+  credentials. The first seal creates a missing key, never a second. Until the
+  Keychain answers, nothing is sealed or opened. `cli` stores
   nothing (the signed-in CLI supplies the token at each use); `managed` is
   held by Deus Cloud. A credential sealed under a lost key opens as null and
   its app asks to connect again.
@@ -771,6 +904,8 @@ the catalog can move to a package the day Deus Cloud reads it too.
 
 Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 13 tables: `repositories`, `workspaces`, `sessions`, `messages`, `turns`, `parts`, `compactions`, `paired_devices`, `assistants`, `automations`, `automation_runs`, `extension_installations`, `integration_connections`.
 
+- The backend source and a checkout's `deus start` default to `.deus-dev/deus.db`. The dev desktop and `dev:web` resolve `DATABASE_PATH` from the backend's working directory. When that path matches the installed default in a legacy `DEUS_PACKAGED=1` shell, the dev launcher or source backend drops the override and logs why. The packaged runtime sets its installed default before loading the backend. The dev desktop keeps its Electron profile in `.deus-dev`, so each new worktree starts signed out.
+- Before it opens the database, each backend takes a SQLite write lock on the `.owner` sidecar. It waits up to twenty seconds so the previous backend can drain a stuck turn and stop its agent processes after a force-quit. The OS releases the lock on exit, including a crash.
 - `repositories.root_path` is nullable (a project not on this computer).
 - Turn accounting, execution, provider account snapshots and outcomes belong to `turns`, keyed by `(session_id, turn_id)`. Messages contain transcript content only.
 - Only the backend writes to DB
@@ -780,25 +915,29 @@ Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `s
 - Column changes, pre-launch (now): `shared/schema.ts` is the whole schema, not a migration replay. To add a column, put it in `SCHEMA_SQL` and, if existing databases should keep working, in `ADDITIVE_COLUMNS` (nullable or defaulted); anything else is a reset. At startup the backend compares the database with a fresh copy of `SCHEMA_SQL` (a missing column, a NOT NULL that differs, a leftover column an insert would fail on) and stops on a mismatch. After the backend exits, the desktop offers **Start Fresh**, which moves the database and its SQLite side files to a dated name beside the original. The installed app reopens. Under `bun run dev`, Deus quits and logs how to start it again. The CLI prints `PRELAUNCH_SCHEMA_RESET_HINT` with its fresh data directory option.
 - Column changes, post-launch: the above stops applying. Deprecate by renaming with a `DEPRECATED_` prefix, never drop.
 
+## Releases
+
+A merge to `main` deploys the relay and landing when their files change.
+The desktop, npm CLI and hosted web ship together from a release tag. See [docs/releases.md](docs/releases.md).
+
 ## Testing
 
-```bash
-bun run test:backend          # apps/backend/test/unit/
-bun run test:agent-server     # apps/agent-server/test/
-bun run test:app              # test/unit/ (web app, desktop main, runtime scripts)
-bun run test:runtime-client   # packages/runtime-client/test/ (no app aliases or React)
-bun run test:e2e:cloud        # test/e2e/cloud/ (a cloud workspace in the real app, scripted platform)
-```
+Run `bun run check` before pushing. It runs the CI groups for this platform and
+reports each command. Use `bun run check <group>` for one group.
+The `test:e2e:*` runners are outside the gate, so run the ones your change touches (see [test/e2e/README.md](test/e2e/README.md)).
+Desktop checks launch the app through `test/e2e/lib/launch-in-background.mjs` and browsers run headless so every local test leaves the foreground to the person.
+The gate runs the packaged Electron smoke only in CI because it opens a window.
 
 Vitest with `vi.mock()` and `vi.hoisted()`. Tests live outside `src/` — never colocate.
 
-What ships is not what those run on, so two checks run the shipped thing. The
-packaged app's backend is Bun, with `bun:sqlite` behind `apps/backend/src/lib/sqlite.ts`
-and Bun's own terminal behind `openTerminal` in `services/pty.service.ts`:
-`bun run test:bun` runs `sqlite-parity.test.ts`, `pty-parity.test.ts` and
-`fs-watcher-parity.test.ts` on it
-(the same files run on Node inside `test:backend`); add a case there when the
-backend starts using another SQLite or terminal call. `bun run smoke:cli-package` packs the npm CLI, installs the
+The backend unit tests run the checkout on Node. The desktop ships a Bun backend,
+with `bun:sqlite` behind `apps/backend/src/lib/sqlite.ts` and Bun's own terminal
+behind `openTerminal` in `services/pty.service.ts`. `bun run test:bun` runs
+`sqlite-parity.test.ts`, `pty-parity.test.ts` and `fs-watcher-parity.test.ts` on
+that runtime. The same files run on Node inside `test:backend`. Add a case there
+when the backend starts using another SQLite or terminal call.
+
+`bun run smoke:cli-package` packs the npm CLI, installs the
 tarball into an empty folder and runs `deus --version` and `deus start`. It
 installs with npm, the one place npm is used, because that is how a person
 installs it.

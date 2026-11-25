@@ -3,8 +3,12 @@ import { EventEmitter } from "node:events";
 import { mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fileChanges } from "@shared/api/files";
+import { SCHEMA_SQL } from "@shared/schema";
+import * as database from "../../../src/lib/database";
+import { removeRepo, repoRemoval } from "../../../src/services/workspace-lifecycle";
 import { dropConnection, subscribe, unsubscribe } from "../../../src/services/streams";
 import { destroyAllWatchers } from "../../../src/services/fs-watcher.service";
 import { scanWorkspaceFiles } from "../../../src/services/files.service";
@@ -20,10 +24,9 @@ vi.mock("node:fs", async (original) => ({
   watch,
 }));
 vi.mock("../../../src/middleware/workspace-loader", () => ({ loadWorkspace: load }));
+vi.mock("../../../src/services/relay.service", () => ({ getRelayStatus: vi.fn() }));
 vi.mock("../../../src/services/ws.service", () => ({
-  getConnection: (id: string) => ({
-    ws: { send: (raw: string) => clients.get(id)?.push(JSON.parse(raw)) },
-  }),
+  sendFrame: (id: string, frame: { type: string; data?: unknown }) => clients.get(id)?.push(frame),
 }));
 
 const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
@@ -58,21 +61,54 @@ afterEach(() => {
 });
 
 describe("the fileChanges subscription", () => {
+  it("closes the window's last watch and refuses a new fileChanges follow after project removal", async () => {
+    const db = new Database(":memory:");
+    const connection = vi.spyOn(database, "getDatabase").mockReturnValue(db);
+    const loader = await vi.importActual<typeof import("../../../src/middleware/workspace-loader")>(
+      "../../../src/middleware/workspace-loader"
+    );
+    load.mockImplementation(loader.loadWorkspace);
+    try {
+      db.exec(SCHEMA_SQL);
+      db.exec(`
+        INSERT INTO repositories (id, name, root_path) VALUES ('r', 'Project', '/repo');
+        INSERT INTO workspaces (id, repository_id, slug, state) VALUES ('w', 'r', 'work', 'ready');
+        INSERT INTO sessions (id, workspace_id) VALUES ('s', 'w');
+        UPDATE workspaces SET current_session_id = 's' WHERE id = 'w';
+      `);
+      open("window");
+      db.exec("UPDATE workspaces SET state = 'archived' WHERE id = 'w'");
+      unsubscribe("window", "files");
+      const noLiveTurn = () => undefined;
+      removeRepo("r", repoRemoval("r", noLiveTurn).confirmation, noLiveTurn);
+
+      expect(() => subscribe("later", "files", fileChanges, { workspaceId: "w" })).toThrow(
+        expect.objectContaining({ statusCode: 404, message: "Workspace not found" })
+      );
+      vi.advanceTimersByTime(3000);
+      expect(watch).toHaveBeenCalledOnce();
+      expect(native().close).toHaveBeenCalledOnce();
+    } finally {
+      connection.mockRestore();
+      db.close();
+    }
+  });
+
   it("returns the current cached tree when the watch starts and when it publishes", async () => {
     const root = await mkdtemp(join(tmpdir(), "deus-watch-cache-"));
-    const tree = () => scanWorkspaceFiles(root).files.map((file) => file.path);
+    const tree = async () => (await scanWorkspaceFiles(root)).files.map((file) => file.path);
     try {
       execFileSync("git", ["init", "-q", root]);
-      expect(tree()).toEqual([]);
+      expect(await tree()).toEqual([]);
       await writeFile(join(root, "before-watch.txt"), "");
       load.mockReturnValueOnce({ workspacePath: root, workspace: { current_session_id: "chat" } });
       const frames = open("ui");
-      const atStart = tree();
+      const atStart = await tree();
       await writeFile(join(root, "during-watch.txt"), "");
       changed("during-watch.txt");
       vi.advanceTimersByTime(500);
       expect(frames.map((frame) => frame.type)).toEqual(["q:event"]);
-      expect({ atStart, afterEvent: tree() }).toEqual({
+      expect({ atStart, afterEvent: await tree() }).toEqual({
         atStart: ["before-watch.txt"],
         afterEvent: ["before-watch.txt", "during-watch.txt"],
       });
@@ -123,39 +159,48 @@ describe("the fileChanges subscription", () => {
     expect(back.map((f) => f.type)).toEqual(["q:event"]);
   });
 
-  it("ignores private and generated subtrees, but hears recipes, hidden leaves and nameless events", () => {
+  it("ignores git, worktrees and generated subtrees, but hears edits under project dot-folders", () => {
     const frames = open("a");
     for (const name of [
       ".git/index.lock",
-      "src/.cache/a",
       "build/output",
       "foo/node_modules/pkg",
       "target/log",
       "dist/app",
       ".deus/other/src",
       "src/.deus/environment.json",
+      "src/.cache/a",
+      ".venv/lib/site-packages/pkg.py",
+      ".github/.cache/a",
     ])
       changed(name);
     vi.advanceTimersByTime(500);
     expect(frames).toHaveLength(0);
-    for (const name of [
+    const heard = [
+      ".github/workflows/ci.yml",
+      ".vscode/settings.json",
+      ".devcontainer/devcontainer.json",
+      ".husky/pre-commit",
+      "src/.config/tool.toml",
+      ".storybook/main.ts",
       ".deus",
       ".deus/environment.json",
       ".gitignore",
       "src/.save-tmp",
       null,
       "",
-    ]) {
+    ];
+    for (const name of heard) {
       changed(name);
       vi.advanceTimersByTime(500);
     }
-    expect(frames.map((f) => f.data)).toEqual(Array(6).fill(null));
+    expect(frames.map((f) => f.data)).toEqual(Array(heard.length).fill(null));
     for (let i = 0; i < 20; i++) {
       changed(".DS_Store");
       vi.advanceTimersByTime(10);
     }
     vi.advanceTimersByTime(499);
-    expect(frames).toHaveLength(7);
+    expect(frames).toHaveLength(heard.length + 1);
   });
 
   it.each(["dist", "literal\\node_modules\\source"])(
@@ -182,7 +227,7 @@ describe("the fileChanges subscription", () => {
     expect(watch).not.toHaveBeenCalled();
   });
 
-  it.each(["linux", "win32"])("leaves %s polling", (platform) => {
+  it.each(["linux", "win32"])("leaves Node on %s polling", (platform) => {
     asPlatform(platform);
     expect(() => open("ui")).toThrow("File watching is unavailable");
     expect(watch).not.toHaveBeenCalled();

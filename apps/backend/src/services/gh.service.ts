@@ -6,6 +6,7 @@ import { createBackendChildEnv } from "@shared/lib/child-env";
 import { extendCliPath, resolveCliExecutable } from "@shared/lib/cli-path";
 import { parseGitHubRepo } from "@shared/lib/github";
 import { getGitRemoteUrl } from "../lib/git-remotes";
+import { runGit } from "@shared/lib/git-process";
 export { parseGitHubRepo };
 
 const execFileAsync = promisify(execFile);
@@ -26,7 +27,7 @@ export async function runGh(
   | { success: true; stdout: string }
   | {
       success: false;
-      error: "gh_not_installed" | "gh_not_authenticated" | "timeout" | "unknown";
+      error: NonNullable<PRStatus["error"]>;
       message: string;
     }
 > {
@@ -48,8 +49,7 @@ export async function runGh(
         };
       if (err.killed)
         return { success: false, error: "timeout", message: "GitHub CLI command timed out" };
-      const output = `${err.stderr ?? ""} ${err.stdout ?? ""}`.toLowerCase();
-      if (output.includes("gh auth login") || output.includes("not logged into any github hosts"))
+      if (err.code === 4)
         return {
           success: false,
           error: "gh_not_authenticated",
@@ -124,10 +124,9 @@ export async function getPrStatus(workspacePath: string): Promise<PrStatusRespon
   // Resolve current branch name
   let headBranch: string;
   try {
-    const { stdout } = await execFileAsync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    const stdout = await runGit(["rev-parse", "--abbrev-ref", "HEAD"], {
       cwd: workspacePath,
-      encoding: "utf-8",
-      timeout: 3000,
+      timeoutMs: 3000,
     });
     headBranch = stdout.trim();
   } catch {
@@ -144,12 +143,10 @@ export async function getPrStatus(workspacePath: string): Promise<PrStatusRespon
   // A local-only project has no PR to look up. Letting gh infer a repository
   // here turns its "no git remotes found" error into a false network warning.
   if (!originUrl && !upstreamUrl) {
-    const remotes = await execFileAsync("git", ["remote"], {
-      cwd: workspacePath,
-      encoding: "utf-8",
-      timeout: 3000,
-    }).catch(() => undefined);
-    if (remotes?.stdout.trim() === "") {
+    const remotes = await runGit(["remote"], { cwd: workspacePath, timeoutMs: 3000 }).catch(
+      () => undefined
+    );
+    if (remotes?.trim() === "") {
       return { has_pr: false, conclusive: false, no_remote: true, error: null };
     }
     // A custom remote name (or an inconclusive check) still lets gh resolve it.
@@ -186,9 +183,7 @@ async function queryPrStatus(
   attempts: { repoArg: string | null; headArg: string }[],
   workspacePath: string | undefined
 ): Promise<PrStatusResponse> {
-  let lastError: string | null = null;
-  let hadSuccessfulResponse = false;
-  let allAttemptsSucceeded = true;
+  let lookupFailed = false;
 
   for (const { repoArg, headArg } of attempts) {
     const args = [
@@ -199,41 +194,32 @@ async function queryPrStatus(
       "--state",
       "all",
       "--json",
-      "number,title,url,state,mergeable,mergeStateStatus,statusCheckRollup,reviewDecision,isDraft",
+      "number,title,url,state,baseRefName,mergeable,mergeStateStatus,statusCheckRollup,reviewDecision,isDraft",
     ];
     if (repoArg) {
-      const parsed = parseGitHubRepo(repoArg);
-      if (parsed) args.push("--repo", parsed);
-      else args.push("--repo", repoArg);
+      args.push("--repo", parseGitHubRepo(repoArg) ?? repoArg);
     }
 
     const result = await runGh(args, { cwd: workspacePath });
     if (!result.success) {
-      // Surface specific errors (installed/auth) immediately
-      if (
-        result.error === "gh_not_installed" ||
-        result.error === "gh_not_authenticated" ||
-        result.error === "timeout"
-      ) {
+      if (result.error !== "unknown") {
         return { has_pr: false, conclusive: false, error: result.error };
       }
-      lastError = result.error; // Track for surfacing if all attempts fail
-      allAttemptsSucceeded = false;
+      lookupFailed = true;
       continue;
     }
 
     let prs: any[];
     try {
-      prs = JSON.parse(result.stdout || "[]");
+      prs = JSON.parse(result.stdout);
     } catch {
-      allAttemptsSucceeded = false;
+      lookupFailed = true;
       continue;
     }
     if (!Array.isArray(prs)) {
-      allAttemptsSucceeded = false;
+      lookupFailed = true;
       continue;
     }
-    hadSuccessfulResponse = true;
 
     // Priority: OPEN > MERGED > CLOSED. Open PRs are actionable,
     // merged PRs show archive, closed PRs show a non-actionable status.
@@ -246,22 +232,26 @@ async function queryPrStatus(
       const upperState = pr.state?.toUpperCase();
       const state: "open" | "merged" | "closed" =
         upperState === "MERGED" ? "merged" : upperState === "CLOSED" ? "closed" : "open";
+      const identity = {
+        has_pr: true,
+        conclusive: true,
+        pr_number: pr.number,
+        pr_title: pr.title,
+        pr_url: pr.url,
+        base_branch: pr.baseRefName,
+        pr_state: state,
+        is_draft: pr.isDraft === true,
+        error: null,
+      };
 
       // Closed PRs are terminal — no CI or merge status is relevant
       if (state === "closed") {
         return {
-          has_pr: true,
-          conclusive: true,
-          pr_number: pr.number,
-          pr_title: pr.title,
-          pr_url: pr.url,
-          pr_state: "closed",
+          ...identity,
           merge_status: "blocked",
-          is_draft: pr.isDraft === true,
           has_conflicts: false,
           ci_status: "unknown",
           review_status: "none",
-          error: null,
         };
       }
 
@@ -298,33 +288,18 @@ async function queryPrStatus(
       const reviewStatus = reviewMap[pr.reviewDecision ?? ""] ?? "none";
 
       return {
-        has_pr: true,
-        conclusive: true,
-        pr_number: pr.number,
-        pr_title: pr.title,
-        pr_url: pr.url,
-        pr_state: state,
+        ...identity,
         merge_status: mergeStatus,
-        is_draft: pr.isDraft === true,
         has_conflicts: pr.mergeStateStatus === "DIRTY",
         ci_status: ciStatus,
         checks_done: checksDone,
         checks_total: checksTotal,
         checks: checkDetails,
         review_status: reviewStatus,
-        error: null,
       };
     }
   }
 
-  // If all attempts failed with errors, surface it instead of silently showing "no PR".
-  // lastError is only set for 'unknown' errors (timeout/auth/install return immediately).
-  // "No PR" is authoritative only when EVERY attempted repo lookup returned
-  // valid output — a fork whose upstream query succeeded (empty) but whose
-  // origin query failed has NOT been conclusively checked.
-  return {
-    has_pr: false,
-    conclusive: hadSuccessfulResponse && allAttemptsSucceeded,
-    error: !hadSuccessfulResponse && lastError ? "network" : null,
-  };
+  // A fork can have a PR in either repository.
+  return { has_pr: false, conclusive: !lookupFailed, error: lookupFailed ? "unknown" : null };
 }

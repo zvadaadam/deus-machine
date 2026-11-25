@@ -58,15 +58,17 @@ export const diffFiles = read({
   output: out<{ files: FileChange[]; truncated?: boolean; total_count?: number }>(),
 });
 
+export interface FileDiff {
+  file: string;
+  diff: string;
+  old_content: string | null;
+  new_content: string | null;
+}
+
 export const diffFile = read({
   name: "diffFile",
   input: workspaceId.extend({ file: z.string().min(1) }),
-  output: out<{
-    file: string;
-    diff: string;
-    old_content: string | null;
-    new_content: string | null;
-  }>(),
+  output: out<FileDiff>(),
 });
 
 /** The workspace's pull request. Reading it also stores the snapshot the sidebar shows. */

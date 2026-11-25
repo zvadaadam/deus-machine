@@ -1,38 +1,17 @@
-/**
- * PR View State -- derives a single discriminated union from raw PR + GH CLI status.
- *
- * This is the ONLY place that interprets PRStatus into what the UI should show.
- * The priority ordering is explicit: earlier checks shadow later ones.
- *
- * Pure function. No React. Trivially testable.
- */
-
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { PRStatus, GhCliStatus, CheckDetail, Workspace } from "@/shared/types";
 
 /**
- * Discriminated union of all possible PR action states.
- * Each variant carries only the data its rendering path needs.
- *
- * Priority after the first lookup (highest to lowest):
- *   1. GitHub integration unavailable (blocks PR actions)
- *   2. error (GitHub unreachable — timeout or network failure)
- *   3. no remote, or offer Create PR when there is no known PR
- *   4. merged (terminal)
- *   5. closed (terminal — not merged)
- *   6. conflicts (must resolve before anything else)
- *   7. CI failing (fixable, blocks merge)
- *   8. changes requested (reviewer feedback pending)
- *   9. CI pending (waiting, no action)
- *  10. ready to merge (all green)
- *  11. awaiting review (CI passed, needs review)
+ * Wait for the first lookup. A known PR shows merged, closed, conflicts, failing checks, requested
+ * changes, pending checks, then ready or awaiting review. An incomplete snapshot shows the PR link.
+ * Without a PR, check CLI availability, then the remote, then offer Create PR with any lookup warning.
  */
 export type PRActionState =
   | { type: "checking" }
-  | { type: "gh_unavailable"; reason: "not_installed" | "not_authenticated" }
-  | { type: "error"; reason: "timeout" | "network" }
+  | { type: "gh_unavailable"; warning: string }
+  | { type: "linked"; prNumber: number; prUrl: string; warning: string }
   | { type: "no_remote" }
-  | { type: "create_pr" }
+  | { type: "create_pr"; warning?: string }
   | { type: "merged"; prNumber: number; prUrl: string }
   | { type: "closed"; prNumber: number; prUrl: string }
   | { type: "conflicts"; prNumber: number; prUrl: string }
@@ -46,66 +25,74 @@ export type PRActionState =
     }
   | { type: "changes_requested"; prNumber: number; prUrl: string }
   | { type: "ci_pending"; prNumber: number; prUrl: string; checksDone: number; checksTotal: number }
-  | { type: "ready_to_merge"; prNumber: number; prUrl: string }
+  | { type: "ready_to_merge"; prNumber: number; prUrl: string; baseBranch: string }
   | { type: "awaiting_review"; prNumber: number; prUrl: string };
 
-/**
- * Collapses PRStatus + GhCliStatus into a single discriminated state.
- * The priority ordering ensures that when multiple flags are true
- * (e.g., conflicts + CI failing), only the highest-priority state wins.
- */
+const LOOKUP_WARNINGS: Record<NonNullable<PRStatus["error"]>, string> = {
+  gh_not_installed: "GitHub integration is unavailable on this computer. Check Settings.",
+  gh_not_authenticated: "Connect GitHub in Settings to check for a pull request.",
+  timeout: "GitHub took too long to check for a pull request.",
+  unknown: "Could not check for a pull request on GitHub.",
+};
+
+export function mergeLabel(baseBranch: string): string {
+  return `Merge into ${baseBranch}`;
+}
+
 export function derivePRActionState(
-  lookup: Pick<UseQueryResult<PRStatus | null>, "data" | "isLoading" | "isFetched" | "isEnabled">,
-  ghStatus: GhCliStatus | null | undefined
+  lookup: Pick<
+    UseQueryResult<PRStatus | null>,
+    "data" | "isLoading" | "isFetched" | "isEnabled" | "isError"
+  >,
+  ghStatus: GhCliStatus | null | undefined,
+  workspace?: Workspace | null
 ): PRActionState {
-  // A refresh after a rejected read can be loading again with no data.
   if (lookup.isEnabled && lookup.isLoading && !lookup.isFetched) return { type: "checking" };
-  const prStatus = lookup.data;
+  let failure = lookup.isError ? "unknown" : lookup.data?.error;
+  if (ghStatus?.isInstalled === false) failure = "gh_not_installed";
+  else if (ghStatus?.isAuthenticated === false) failure = "gh_not_authenticated";
+  else if (workspace?.pr_number && lookup.data?.conclusive === false && !lookup.data.has_pr)
+    failure ??= "unknown";
 
-  // GitHub integration gates PR actions.
-  if (ghStatus && !ghStatus.isInstalled) {
-    return { type: "gh_unavailable", reason: "not_installed" };
-  }
-  if (ghStatus && ghStatus.isInstalled && !ghStatus.isAuthenticated) {
-    return { type: "gh_unavailable", reason: "not_authenticated" };
-  }
-
-  // GitHub integration errors from the PR status endpoint can arrive during
-  // the ghStatus 5-minute stale window.
-  if (prStatus?.error === "gh_not_installed") {
-    return { type: "gh_unavailable", reason: "not_installed" };
-  }
-  if (prStatus?.error === "gh_not_authenticated") {
-    return { type: "gh_unavailable", reason: "not_authenticated" };
-  }
-
-  // GitHub unreachable — surface error before interpreting has_pr,
-  // since has_pr: false might just mean the request failed.
-  if (prStatus?.error === "timeout") {
-    return { type: "error", reason: "timeout" };
-  }
-  if (prStatus?.error === "network") {
-    return { type: "error", reason: "network" };
+  // The row keeps the last known lifecycle, or the link a PR workspace started with.
+  let prStatus = failure ? undefined : lookup.data;
+  if (
+    failure &&
+    workspace?.pr_number &&
+    workspace.pr_url &&
+    (workspace.pr_state || !workspace.pr_checked_at)
+  ) {
+    prStatus = {
+      has_pr: true,
+      pr_number: workspace.pr_number,
+      pr_url: workspace.pr_url,
+      pr_state: workspace.pr_state ?? undefined,
+      has_conflicts: !!workspace.pr_has_conflicts,
+      ci_status: workspace.pr_ci_status ?? undefined,
+      review_status: workspace.pr_review_status ?? undefined,
+    };
   }
 
   if (!prStatus?.has_pr || !prStatus.pr_number) {
-    return { type: prStatus?.no_remote ? "no_remote" : "create_pr" };
+    if (failure === "gh_not_installed" || failure === "gh_not_authenticated") {
+      return { type: "gh_unavailable", warning: LOOKUP_WARNINGS[failure] };
+    }
+    if (prStatus?.no_remote) return { type: "no_remote" };
+    if (failure) return { type: "create_pr", warning: LOOKUP_WARNINGS[failure] };
+    return { type: "create_pr" };
   }
 
   const prNumber = prStatus.pr_number;
   const prUrl = prStatus.pr_url ?? "";
 
-  // Merged is terminal
-  if (prStatus.merge_status === "merged") {
+  if (prStatus.pr_state === "merged" || prStatus.merge_status === "merged") {
     return { type: "merged", prNumber, prUrl };
   }
 
-  // Closed (not merged) is terminal — no actionable state
   if (prStatus.pr_state === "closed") {
     return { type: "closed", prNumber, prUrl };
   }
 
-  // Priority-ordered actionable states for open PRs
   if (prStatus.has_conflicts) {
     return { type: "conflicts", prNumber, prUrl };
   }
@@ -121,25 +108,19 @@ export function derivePRActionState(
   if (prStatus.ci_status === "pending") {
     return { type: "ci_pending", prNumber, prUrl, checksDone, checksTotal };
   }
-  // merge_status "ready" means GitHub confirmed MERGEABLE. But GitHub may
-  // also report UNKNOWN while recalculating — treat CI passing + no blockers
-  // as ready so we don't flash "Awaiting review" during that window.
-  if (
-    prStatus.merge_status === "ready" ||
-    (prStatus.ci_status === "passing" && !prStatus.has_conflicts)
-  ) {
-    return { type: "ready_to_merge", prNumber, prUrl };
+  // GitHub can still be recalculating mergeability after the checks have passed.
+  const ready = prStatus.merge_status === "ready" || prStatus.ci_status === "passing";
+  if (ready && prStatus.base_branch) {
+    return { type: "ready_to_merge", prNumber, prUrl, baseBranch: prStatus.base_branch };
   }
-
-  // Fallback: unknown CI, draft PRs, or any other open PR state
+  // The row has no mergeability or base. It can still say that a review is required.
+  if (failure && (ready || prStatus.review_status !== "review_required")) {
+    return { type: "linked", prNumber, prUrl, warning: LOOKUP_WARNINGS[failure] };
+  }
   return { type: "awaiting_review", prNumber, prUrl };
 }
 
-/**
- * The branch a workspace's pull request goes into: its own target (the branch
- * it started from), else its project's default branch. The one rule for the
- * header's PR target and the sidebar's hover card.
- */
+/** The starting target for Create PR and the sidebar's workspace hover card. */
 export function prTargetBranch(
   workspace: Pick<Workspace, "git_target_branch" | "git_default_branch"> | null | undefined
 ): string {

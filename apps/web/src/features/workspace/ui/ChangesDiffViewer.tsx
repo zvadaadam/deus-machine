@@ -16,7 +16,6 @@ import { forwardRef, useImperativeHandle, useRef, useCallback, useState, useEffe
 import { ChevronsUpDown } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { ChangesDiffSection } from "./ChangesDiffSection";
-import { fileChangePath } from "../lib/workspace.utils";
 import { workspaceLayoutActions } from "../store";
 import type { FileChange } from "@/shared/types";
 
@@ -111,8 +110,7 @@ export const ChangesDiffViewer = forwardRef<ChangesDiffViewerRef, ChangesDiffVie
 
         let best: string | null = null;
 
-        for (const fc of changes) {
-          const path = fileChangePath(fc);
+        for (const { file: path } of changes) {
           const el = sectionRefsMap.current.get(path);
           if (!el) continue;
 
@@ -128,7 +126,7 @@ export const ChangesDiffViewer = forwardRef<ChangesDiffViewerRef, ChangesDiffVie
         // pick the last section that's at least partially visible.
         if (best === null) {
           for (let i = changes.length - 1; i >= 0; i--) {
-            const path = fileChangePath(changes[i]);
+            const path = changes[i].file;
             const el = sectionRefsMap.current.get(path);
             if (!el) continue;
             const rect = el.getBoundingClientRect();
@@ -227,19 +225,16 @@ export const ChangesDiffViewer = forwardRef<ChangesDiffViewerRef, ChangesDiffVie
           ref={scrollContainerRef}
           className="divide-border/40 flex flex-1 flex-col divide-y overflow-y-auto pb-3"
         >
-          {fileChanges.map((fc) => {
-            const path = fileChangePath(fc);
-            return (
-              <ChangesDiffSection
-                key={path}
-                workspaceId={workspaceId}
-                fileChange={fc}
-                isActive={activeFile === path}
-                sectionRef={sectionRefCallback}
-                expandStateKey={expandStateKey}
-              />
-            );
-          })}
+          {fileChanges.map((change) => (
+            <ChangesDiffSection
+              key={change.file}
+              workspaceId={workspaceId}
+              fileChange={change}
+              isActive={activeFile === change.file}
+              sectionRef={sectionRefCallback}
+              expandStateKey={expandStateKey}
+            />
+          ))}
         </div>
       </div>
     );

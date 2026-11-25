@@ -1,19 +1,24 @@
+import { spawnSync } from "node:child_process";
 import { EventEmitter, once } from "node:events";
 import {
-  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
-  symlinkSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, relative } from "node:path";
+import { basename, join, relative, resolve } from "node:path";
 import { PassThrough } from "node:stream";
 import { app } from "electron";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import {
+  DATABASE_IN_USE,
+  DatabaseInUseError,
+  resolveDefaultDatabasePath,
+} from "../../../shared/runtime";
 import { PRELAUNCH_SCHEMA_MISMATCH } from "../../../shared/schema";
 import {
   databaseRecoveryMessage,
@@ -42,12 +47,22 @@ vi.mock("../../../apps/desktop/main/startup-diagnostics", () => ({ logMainProces
 
 let directory: string;
 let database: string;
+let installedDatabase: string;
+const webBackendCwd = resolve(import.meta.dirname, "../../../apps/backend");
 beforeEach(() => {
   vi.clearAllMocks();
-  directory = mkdtempSync(join(tmpdir(), "deus-recovery-"));
+  directory = realpathSync.native(mkdtempSync(join(tmpdir(), "deus-recovery-")));
   database = join(directory, "chats.db");
+  installedDatabase = resolveDefaultDatabasePath({
+    platform: process.platform,
+    homeDir: directory,
+    xdgDataHome: directory,
+  });
+  vi.stubEnv("HOME", directory);
+  vi.stubEnv("XDG_DATA_HOME", directory);
   vi.stubEnv("DEUS_USER_DATA_DIR", directory);
   vi.stubEnv("DATABASE_PATH", database);
+  vi.stubEnv("DEUS_PACKAGED", undefined);
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -72,6 +87,20 @@ async function failedChild(stdout: string, stderr: string, code: number) {
   return failure.catch((error: unknown) => error);
 }
 
+function expectWebDatabase(override: string, expected: string) {
+  const probe = join(directory, "backend");
+  writeFileSync(probe, '#!/bin/sh\nprintf "database=%s\\n" "${DATABASE_PATH-<unset>}"\n', {
+    mode: 0o755,
+  });
+  const result = spawnSync("bun", [resolve(webBackendCwd, "../../scripts/runtime/dev.ts")], {
+    env: { ...process.env, NODE_EXECUTABLE: probe, DATABASE_PATH: override },
+    encoding: "utf8",
+    timeout: 10_000,
+  });
+  expect(result.stderr).toContain("Backend failed to start"); // The probe exits before Vite starts.
+  expect(result.stdout).toContain(`database=${expected}\n`);
+}
+
 it("offers recovery only for the failed child's own whole stderr line and uses its database path", async () => {
   const ordinary = "Backend exited before starting (code=1, signal=null)";
   const mismatch = await failedChild("", PRELAUNCH_SCHEMA_MISMATCH, 1);
@@ -94,37 +123,54 @@ it("offers recovery only for the failed child's own whole stderr line and uses i
   );
 });
 
-it.each(["", " "])(
-  "resolves a relative database path from the child's working directory (padding %j)",
-  async (padding) => {
-    await failedChild("", "", 1);
-    const path = relative(spawn.mock.lastCall![2].cwd, database);
-    vi.stubEnv("DATABASE_PATH", padding + path + padding);
-    const mismatch = await failedChild("", PRELAUNCH_SCHEMA_MISMATCH, 1);
-    const childDatabase = spawn.mock.lastCall![2].env.DATABASE_PATH;
-    expect(childDatabase).toBe(database);
-    expect(mismatch).toHaveProperty("databasePath", childDatabase);
+it.each([true, false])(
+  "reports contention on the dev database from a legacy shell (installed path: %s)",
+  async (installed) => {
+    vi.stubEnv("DEUS_PACKAGED", "1");
+    vi.stubEnv("NODE_ENV", "production");
+    const override = installed ? installedDatabase : database;
+    vi.stubEnv("DATABASE_PATH", override);
+    expectWebDatabase(override, installed ? "<unset>" : database);
+    const error = await failedChild("", DATABASE_IN_USE, 1);
+    const env = spawn.mock.lastCall![2].env;
+    expect(env.DATABASE_PATH).toBe(installed ? join(directory, "deus.db") : database);
+    expect(env.DEUS_PACKAGED).toBeUndefined();
+    expect(env.NODE_ENV).toBeUndefined();
+    expect(error).toEqual(new DatabaseInUseError(env.DATABASE_PATH));
   }
 );
 
-it("opens and sets aside the same file when the configured path has a symlink followed by '..'", async () => {
-  const other = join(directory, "other");
-  mkdirSync(join(other, "state"), { recursive: true });
-  symlinkSync(join(other, "state"), join(directory, "link"), "dir");
-  writeFileSync(join(other, "chats.db"), "other chats");
-  writeFileSync(database, "my chats");
-  const configured = `${directory}/link/../chats.db`; // join would remove link/..
-  expect(readFileSync(configured, "utf8")).toBe("other chats");
-  vi.stubEnv("DATABASE_PATH", configured);
-  const mismatch = await failedChild("", PRELAUNCH_SCHEMA_MISMATCH, 1);
-  if (!(mismatch instanceof OutdatedDatabaseError)) throw mismatch;
-  const childDatabase = spawn.mock.lastCall![2].env.DATABASE_PATH;
-  expect(childDatabase).toBe(database);
-  expect(mismatch.databasePath).toBe(childDatabase);
-  const backup = datedBackupPath(mismatch.databasePath);
-  moveDatabaseAside(mismatch.databasePath, backup);
-  expect(readFileSync(backup, "utf8")).toBe("my chats");
-  expect(readFileSync(configured, "utf8")).toBe("other chats");
+it.each(["", " "])(
+  "resolves a relative database path from the child's working directory (padding %j)",
+  async (padding) => {
+    vi.stubEnv("DATABASE_PATH", `${padding}chats.db${padding}`);
+    const mismatch = await failedChild("", PRELAUNCH_SCHEMA_MISMATCH, 1);
+    const { cwd, env } = spawn.mock.lastCall![2];
+    expect(env.DATABASE_PATH).toBe(join(cwd, "chats.db"));
+    expect(mismatch).toHaveProperty("databasePath", env.DATABASE_PATH);
+  }
+);
+
+it("drops a legacy relative override that names the installed file only from the backend cwd", async () => {
+  vi.stubEnv("DEUS_PACKAGED", "1");
+  await failedChild("", "", 1);
+  const desktopCwd = spawn.mock.lastCall![2].cwd;
+  const caller = process.cwd();
+  try {
+    process.chdir(join(webBackendCwd, "src/lib"));
+    const desktopPath = relative(desktopCwd, installedDatabase);
+    const webPath = relative(webBackendCwd, installedDatabase);
+    expect(resolve(desktopPath)).not.toBe(installedDatabase);
+    expect(resolve(webPath)).not.toBe(installedDatabase);
+    expectWebDatabase(webPath, "<unset>");
+    vi.stubEnv("DATABASE_PATH", desktopPath);
+    const mismatch = await failedChild("", PRELAUNCH_SCHEMA_MISMATCH, 1);
+    const childDatabase = spawn.mock.lastCall![2].env.DATABASE_PATH;
+    expect(childDatabase).toBe(join(directory, "deus.db"));
+    expect(mismatch).toHaveProperty("databasePath", childDatabase);
+  } finally {
+    process.chdir(caller);
+  }
 });
 
 it.each([":memory:", "   "])(

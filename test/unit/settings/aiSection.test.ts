@@ -51,6 +51,19 @@ const render = () =>
   );
 
 describe("local agent status", () => {
+  it("offers automatic continuation for local chats and defaults it off", () => {
+    const label = "When a usage limit resets, continue the chats it stopped.";
+    for (const on of [undefined, true]) {
+      const props = { settings: { continue_after_usage_limit: on }, saveSetting: vi.fn() };
+      const html = renderToStaticMarkup(createElement(AISection, props));
+      expect(html).toContain(label);
+      expect(html).toContain(`aria-checked="${on === true}"`);
+      expect(
+        renderToStaticMarkup(createElement(AISection, { ...props, cloudOnly: true }))
+      ).not.toContain(label);
+    }
+  });
+
   it("offers sign-in for a signed-out agent", () => {
     state.data = { auth: [claude({}), codex], clis: ready, logins: [] };
     const html = render();
@@ -105,12 +118,14 @@ describe("local agent status", () => {
           totalBytes: 100,
         },
         { harness: "codex-app-server", state: "missing" },
+        { harness: "gemini", state: "missing", version: "1.5.14" },
       ],
       logins: [],
     };
     const html = render();
     expect(html).toContain("Installing 0.3.288 · 45%");
-    expect(html).toContain("Not installed");
+    expect(html).toContain(">Not available on this computer<");
+    expect(html).toContain(">installs with its first turn<");
     expect(html.match(/>Install<\/button>/g)).toHaveLength(1);
     expect(html).not.toContain(">Sign in</button>");
   });
@@ -129,4 +144,17 @@ describe("local agent status", () => {
       expect(html).not.toContain(">Sign in</button>");
     }
   );
+});
+
+it("checks Agent messages by default and honours a saved choice", () => {
+  for (const [saved, checked] of [
+    [undefined, true],
+    [false, false],
+    [true, true],
+  ] as const) {
+    const settings = { agent_messages: saved };
+    const html = renderToStaticMarkup(createElement(AISection, { settings, saveSetting: vi.fn() }));
+    const toggle = html.match(/<button\b[^>]*\bid="agent-messages"[^>]*>/)?.[0];
+    expect(toggle).toContain(`aria-checked="${checked}"`);
+  }
 });

@@ -1,21 +1,19 @@
 import type { Workspace, RepoGroup, FileChange } from "@/shared/types";
+import type { FileChangeStatus } from "@shared/types/workspace";
 
-export type ChangeStatus = "added" | "modified" | "deleted";
-
-export function getChangeStatus(change: FileChange): ChangeStatus {
-  if (change.additions > 0 && change.deletions === 0) return "added";
-  if (change.deletions > 0 && change.additions === 0) return "deleted";
-  return "modified";
-}
-
-export const STATUS_BG: Record<ChangeStatus, string> = {
+export const STATUS_BG: Record<FileChangeStatus, string> = {
   added: "bg-success",
   modified: "bg-warning",
   deleted: "bg-destructive",
+  renamed: "bg-warning",
 };
 
-export function fileChangePath(fc: FileChange): string {
-  return fc.file || fc.file_path || "";
+export function renameOriginLabel(previousPath: string): string {
+  return `renamed from ${previousPath}`;
+}
+
+export function fileChangeLabel({ file, status, previous_path }: FileChange): string {
+  return `${file} (${previous_path ? renameOriginLabel(previous_path) : status})`;
 }
 
 /**

@@ -53,8 +53,11 @@ const {
 
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
-const socketFor = vi.hoisted(() => vi.fn());
-vi.mock("../../../src/services/ws.service", () => ({ getConnection: socketFor }));
+const sendFrame = vi.hoisted(() => vi.fn());
+vi.mock("../../../src/services/ws.service", () => ({
+  getConnection: (id: string) => ({ deviceId: id }),
+  sendFrame,
+}));
 vi.mock("../../../src/services/agent", () => ({ answerToolRequest: vi.fn() }));
 vi.mock("../../../src/services/streams", () => ({
   resetSubscribers: mockResetSubscribers,
@@ -96,6 +99,7 @@ import {
 } from "../../../src/services/automations/service";
 import { summaryToRow, runSummaryToRow } from "../../../src/services/automations/platform";
 import { archiveWorkspace } from "../../../src/services/workspace-archive.service";
+import { removeRepo, repoRemoval } from "../../../src/services/workspace-lifecycle";
 import * as store from "../../../src/services/automations/store";
 import { resetCloudModelListsForTests } from "../../../src/services/agent/cloud/models";
 import { handleAutomationToolRequest } from "../../../src/services/automations/agent-rpc";
@@ -105,6 +109,7 @@ import { handleAutomationToolRequest } from "../../../src/services/automations/a
 // ============================================================================
 
 const ORIGIN = "https://github.com/acme/widgets";
+const noLiveTurn = () => undefined;
 const AUTH = { baseUrl: "https://api.test", apiKey: "agnt_sk_test" };
 const CLOUD_CONFIG = { ...AUTH, orgId: "org-1", deusCloudSessionToken: "workos-bearer" };
 const AUTOMATION_AUTH = {
@@ -327,6 +332,17 @@ describeWithDb("runSummaryToRow", () => {
 // ============================================================================
 
 describeWithDb("refreshAutomations", () => {
+  it("keeps the project link empty when a refresh finishes after project removal", async () => {
+    const reply = Promise.withResolvers<ReturnType<typeof localSummary>>();
+    sdk.getAutomation.mockReturnValue(reply.promise);
+    sdk.listAutomationRuns.mockReturnValue(gen([]));
+    const refreshing = refreshAutomations("auto-1");
+    removeRepo("r1", repoRemoval("r1", noLiveTurn).confirmation, noLiveTurn);
+    reply.resolve(localSummary());
+    await refreshing;
+    expect(store.getAutomationRaw("auto-1")).toMatchObject({ repository_id: null });
+  });
+
   it.each(["full", "single"])("discards an in-flight %s refresh after sign-out", async (kind) => {
     mockGetCloudConfig.mockReturnValue({ ...CLOUD_CONFIG, deusCloudSessionToken: `owner-${kind}` });
     let release!: (summary: ReturnType<typeof localSummary>) => void;
@@ -1103,6 +1119,29 @@ describeWithDb("openAutomationRun", () => {
     expect(db.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toEqual({ n: 1 });
   });
 
+  it("refuses adoption when the session detail arrives after project removal", async () => {
+    const detail = Promise.withResolvers<{ workspaceId: string; messages: [] }>();
+    sdk.getSession.mockReturnValue(detail.promise);
+    const opening = openAutomationRun("run-1");
+    expect(sdk.getSession).toHaveBeenCalledOnce();
+    removeRepo("r1", repoRemoval("r1", noLiveTurn).confirmation, noLiveTurn);
+    detail.resolve({ workspaceId: "agnt-ws-1", messages: [] });
+    await expect(opening).rejects.toThrow("This automation's repository isn't on this Mac.");
+    expect(db.prepare("SELECT id FROM workspaces").all()).toEqual([]);
+    expect(db.prepare("SELECT id FROM sessions").all()).toEqual([]);
+    expect(store.getRun("run-1")).toMatchObject({ workspace_id: null, session_id: null });
+  });
+
+  it("keeps the project of an archived automation run's cloud workspace", async () => {
+    const { confirmation } = repoRemoval("r1", noLiveTurn);
+    const { workspaceId } = await openAutomationRun("run-1");
+    await archiveWorkspace(workspaceId);
+    expect(() => removeRepo("r1", confirmation, noLiveTurn)).toThrow(
+      "This project has cloud workspaces, so it can't be removed yet."
+    );
+    expect(store.getRun("run-1")?.workspace_id).toBe(workspaceId);
+  });
+
   it.each(["ready", "archived"])(
     "reuses the newest %s workspace on the computer for a new chat",
     async (state) => {
@@ -1241,7 +1280,7 @@ describeWithDb("openAutomationRun", () => {
     const { default: operations } = await import("../../../src/api/workspaces");
     engine.serveOperations(new Registry(operations));
     const frames = new Map(["window", "phone"].map((id) => [id, vi.fn()]));
-    socketFor.mockImplementation((id: string) => ({ deviceId: id, ws: { send: frames.get(id) } }));
+    sendFrame.mockImplementation((id, frame) => frames.get(id)?.(frame));
     for (const [id, send] of frames) {
       engine.handleFrame(id, { type: "q:subscribe", resource: "workspaces", id: "sidebar" });
       expect(send).toHaveBeenCalledOnce();
@@ -1254,7 +1293,7 @@ describeWithDb("openAutomationRun", () => {
       });
       for (const send of frames.values()) {
         expect(send).toHaveBeenCalledOnce();
-        expect(JSON.parse(send.mock.calls[0][0]).data[0].workspaces).toContainEqual(
+        expect(send.mock.calls[0][0].data[0].workspaces).toContainEqual(
           expect.objectContaining({ id: first.workspaceId, current_session_id: first.sessionId })
         );
       }

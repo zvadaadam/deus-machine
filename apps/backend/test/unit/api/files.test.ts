@@ -8,12 +8,15 @@ import { operations } from "../../helpers";
 
 const files = vi.hoisted(() => ({
   scanWorkspaceFiles: vi.fn(),
-  invalidateCache: vi.fn(),
   readTextFile: vi.fn(),
   listTopFiles: vi.fn(),
   fuzzySearchFiles: vi.fn(),
 }));
 vi.mock("../../../src/services/files.service", () => files);
+const relay = vi.hoisted(() => ({ serverId: "0123456789abcdef", relayUrl: "wss://relay.test" }));
+vi.mock("../../../src/services/relay.service", () => ({
+  getRelayStatus: () => relay,
+}));
 
 vi.mock("../../../src/middleware/workspace-loader", () => ({
   loadWorkspace: () => ({
@@ -38,7 +41,12 @@ vi.mock("fs", async (importOriginal) => {
   const actual = (await importOriginal()) as any;
   return {
     ...actual,
-    default: { ...actual.default, existsSync: mockExistsSync, realpathSync: mockRealpathSync },
+    default: {
+      ...actual.default,
+      existsSync: mockExistsSync,
+      realpathSync: mockRealpathSync,
+      statSync: () => ({ isFile: () => true, size: 7, dev: 1, ino: 2 }),
+    },
     existsSync: mockExistsSync,
     realpathSync: mockRealpathSync,
   };
@@ -51,6 +59,7 @@ const workspace = { workspaceId: "ws-123" };
 const WORKSPACE_PATH = "/repos/myrepo/.deus/test-ws";
 
 beforeEach(() => {
+  relay.relayUrl = "wss://relay.test";
   vi.clearAllMocks();
   mockExistsSync.mockReturnValue(true);
   mockRealpathSync.mockImplementation((p: string) => p);
@@ -82,13 +91,6 @@ describe("workspaceFiles", () => {
       statusCode: 400,
       message: "workspaceFiles requires workspaceId",
     });
-  });
-});
-
-describe("invalidateFileCache", () => {
-  it("forgets the workspace's scan and answers nothing", async () => {
-    expect(await run(api.invalidateFileCache, workspace)).toBeUndefined();
-    expect(files.invalidateCache).toHaveBeenCalledWith(WORKSPACE_PATH);
   });
 });
 
@@ -180,5 +182,40 @@ describe("fileSearch", () => {
       statusCode: 400,
     });
     expect(files.listTopFiles).not.toHaveBeenCalled();
+  });
+});
+
+describe("fileUrl", () => {
+  it.each([
+    ["ws://staging-relay.test:8787", "http://staging-relay.test:8787"],
+    ["https://relay.test", "https://relay.test"],
+    ["http://relay.test", "http://relay.test"],
+  ])("uses the file origin configured by %s", async (override, origin) => {
+    relay.relayUrl = override;
+    const relayed = operations(fileHandlers, { relayed: true, deviceId: "phone", assistant: null });
+    const { url } = await relayed(api.fileUrl, { kind: "preview", ...workspace, path: "a.png" });
+    expect(new URL(url).origin).toBe(origin);
+  });
+
+  it("gives direct callers the existing recording and workspace paths", async () => {
+    const { url } = await run(api.fileUrl, { kind: "recording", path: "/tmp/one #.mp4" });
+    expect(url).toBe("/api/files/stream?path=%2Ftmp%2Fone%20%23.mp4");
+    expect(
+      await run(api.fileUrl, { kind: "preview", workspaceId: "w/1", path: "one #.html" })
+    ).toEqual({ url: "/api/workspaces/w%2F1/file-preview?path=one%20%23.html" });
+  });
+
+  it("issues an opaque reusable URL to a relayed device and refuses HTML previews", async () => {
+    const relayed = operations(fileHandlers, { relayed: true, deviceId: "phone", assistant: null });
+    const input = { kind: "preview" as const, workspaceId: "ws-123", path: "assets/file.png" };
+    const { url } = await relayed(api.fileUrl, input);
+    expect(url).toMatch(
+      /^https:\/\/relay\.test\/api\/servers\/0123456789abcdef\/files\/[\w-]{22}\/[\w-]{22}$/
+    );
+    expect(await relayed(api.fileUrl, input)).toEqual({ url });
+    const other = operations(fileHandlers, { relayed: true, deviceId: "tablet", assistant: null });
+    expect((await other(api.fileUrl, input)).url).not.toBe(url);
+    for (const path of ["site.html", "site.htm"])
+      await expect(relayed(api.fileUrl, { ...input, path })).rejects.toThrow(/HTML previews/);
   });
 });

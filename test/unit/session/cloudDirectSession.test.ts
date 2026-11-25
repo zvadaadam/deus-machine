@@ -11,6 +11,7 @@ import { composerStore } from "@/features/session/store/sessionComposerStore";
 import { toast } from "sonner";
 import { queryKeys } from "@/shared/api/queryKeys";
 import type { PaginatedMessages } from "@shared/types/session";
+import type { RepoGroup } from "@shared/types/workspace";
 import { api } from "@shared/api";
 import type { ToolRequestEvent } from "@shared/api/sessions";
 import {
@@ -116,6 +117,7 @@ afterEach(() => {
   queryClient.clear();
   runtime.dispose();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 function snapshot(status: "ready" | "stopped") {
@@ -318,8 +320,19 @@ describe("direct cloud session published frames", () => {
     });
   });
 
-  it("returns only the rejected send to the composer and leaves unrelated errors alone", async () => {
+  it("returns only the rejected send and settles its hosted workspace row", async () => {
+    vi.stubEnv("VITE_CLOUD_DIRECT", "1");
     const sessionId = "deus-direct-1";
+    const list = ["workspaces", "by-repo"];
+    queryClient.setQueryData(list, [
+      {
+        workspaces: [
+          { current_session_id: sessionId, chats: [{ id: sessionId, status: "working" }] },
+        ],
+      },
+    ]);
+    const status = () =>
+      queryClient.getQueryData<RepoGroup[]>(list)?.[0].workspaces[0].chats?.[0].status;
     queryClient.setQueryData<PaginatedMessages>(messagesKey(sessionId), {
       messages: [createOptimisticUserMessage({ sessionId, turnId: "pending", content: "Hello" })],
       turns: [],
@@ -339,6 +352,7 @@ describe("direct cloud session published frames", () => {
       queryClient.getQueryData<PaginatedMessages>(messagesKey(sessionId))!.messages
     ).toHaveLength(1);
     expect(setState).not.toHaveBeenCalled();
+    expect(status()).toBe("working");
     onFrame({
       type: "error",
       code: "MESSAGE_SEND_FAILED",
@@ -349,6 +363,7 @@ describe("direct cloud session published frames", () => {
       []
     );
     expect(setState).toHaveBeenCalledWith({ message: "Account unavailable", category: "internal" });
+    expect(status()).toBe("error");
     // Not lost: what was sent is back in the chat's composer.
     await vi.waitFor(() =>
       expect(composerStore(queryClient).getState().pendingContent[sessionId]?.draft).toBe("Hello")

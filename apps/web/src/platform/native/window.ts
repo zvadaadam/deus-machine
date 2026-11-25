@@ -1,5 +1,6 @@
 import { capabilities } from "../capabilities";
 import { invoke } from "../electron/invoke";
+import type { WorkspaceLink } from "@shared/workspace-link";
 
 // Whether this renderer has put the main window on screen (the app or
 // onboarding). The startup safety net in App.tsx acts only when nothing has:
@@ -15,6 +16,11 @@ export async function show(): Promise<void> {
   if (!capabilities.windowLifecycle) return;
   revealed = true;
   await invoke("show_main_window");
+}
+
+export async function takeWorkspaceLink(): Promise<WorkspaceLink | null> {
+  if (!capabilities.windowLifecycle) return null;
+  return invoke<WorkspaceLink | null>("take_workspace_link");
 }
 
 export async function setZoom(level: number): Promise<void> {

@@ -1,5 +1,6 @@
 import { RefreshCw } from "lucide-react";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -8,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Field, FieldContent, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Separator } from "@/components/ui/separator";
 import { useAgentAuth } from "../../api/settings.queries";
 import type { SettingsSectionProps } from "./types";
@@ -78,6 +80,22 @@ export function AISection({
       <div className="space-y-4">
         <Separator />
 
+        <Field orientation="horizontal">
+          <FieldContent>
+            <FieldLabel htmlFor="agent-messages">Agent messages</FieldLabel>
+            <FieldDescription>
+              In new local chats, agents send you updates while they work. In Chat bubbles, their
+              other text waits inside the work line.
+            </FieldDescription>
+          </FieldContent>
+          <Switch
+            id="agent-messages"
+            checked={settings.agent_messages !== false}
+            onCheckedChange={(checked) => saveSetting("agent_messages", checked)}
+          />
+        </Field>
+        <Separator />
+
         {/* Default thinking level */}
         <div className="space-y-2">
           <Label htmlFor="thinking-level" className="text-sm">
@@ -100,6 +118,16 @@ export function AISection({
               <SelectItem value="high">High</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <Label htmlFor="continue-after-limit">
+            When a usage limit resets, continue the chats it stopped.
+          </Label>
+          <Switch
+            id="continue-after-limit"
+            checked={settings.continue_after_usage_limit === true}
+            onCheckedChange={(on) => saveSetting("continue_after_usage_limit", on)}
+          />
         </div>
       </div>
     </div>

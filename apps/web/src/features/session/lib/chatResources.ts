@@ -1,3 +1,4 @@
+import { withSentText } from "@shared/agent-message";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import type { Root, RootContent } from "mdast";
 import type { Part, ToolPart } from "@shared/protocol-types";
@@ -79,22 +80,20 @@ export function extractChatResources({
 }: ExtractChatResourcesOptions): ChatResource[] {
   if (!isComplete) return [];
 
-  // Parts arrive in order (position is the event's knowledge, not a field).
-  const sortedParts = parts;
-  const assistantContent = sortedParts
+  const assistantContent = withSentText(parts)
     .filter((part): part is Extract<Part, { type: "text" }> => part.type === "text")
     .map((part) => part.text)
     .join("\n");
 
   const markdown = readMarkdownResources(assistantContent);
-  const editedPaths = extractEditedPaths(sortedParts, workspacePath);
+  const editedPaths = extractEditedPaths(parts, workspacePath);
   const markdownPaths = markdown.destinations
     .map((path) => normalizeResourcePath(path, workspacePath))
     .filter((path): path is string => path != null);
 
   const filePaths = dedupePaths([
     ...editedPaths,
-    ...extractReferencedPaths(sortedParts, workspacePath),
+    ...extractReferencedPaths(parts, workspacePath),
     ...markdownPaths,
   ]).filter((path) => {
     const extension = getExtension(path);
@@ -378,14 +377,6 @@ function getExtension(path: string): string | null {
 export function isBrowserPreviewPath(path: string): boolean {
   const extension = getExtension(path);
   return extension != null && BROWSER_PREVIEW_EXTENSIONS.has(extension);
-}
-
-export function createWorkspacePreviewUrl(
-  baseUrl: string,
-  workspaceId: string,
-  relativePath: string
-): string {
-  return `${baseUrl}/workspaces/${encodeURIComponent(workspaceId)}/file-preview?path=${encodeURIComponent(relativePath)}`;
 }
 
 function basename(path: string): string {

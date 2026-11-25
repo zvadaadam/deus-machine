@@ -1,8 +1,7 @@
 // backend/src/services/assistants/operator.ts
 // The operator tools this computer offers (`@zvada/agent-server/operator`,
 // LLP 0019): the package's session tools over this computer's chats
-// (./host.ts), and the three Deus adds (a workspace's changes, adding a
-// project by cloning it (./add-project.ts), feedback to the Deus team).
+// (./host.ts), and Deus's workspace changes, queue controls, project cloning and feedback.
 //
 // Two kinds of caller reach them. Outside callers (an assistant, a paired
 // device, this computer's window) through MCP (`answerMcp`, the `agentMcp`
@@ -23,9 +22,11 @@ import {
   callHint,
   createMcpHandler,
   createOperator,
+  json,
   operatorSessionTools,
   quote,
   quoted,
+  refuse,
   tool,
   type ExternalCaller,
   type McpHandler,
@@ -35,12 +36,24 @@ import type { HostToolSource } from "@zvada/agent-server/core";
 import * as workspaces from "@shared/api/workspaces";
 import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
 import type { Caller } from "../../api/registry";
+import { sameOrigin } from "../../db";
+import { removeQueuedMessage, resumeQueuedMessages, steerQueuedMessage } from "../agent/queue";
+import { holdingTurn } from "../agent/chat-turn";
 import { provideSessionTools } from "../agent/service";
 import { getServerName } from "../server-name";
 import { currentHost } from "./access";
 import { addProjectTool } from "./add-project";
 import { FEEDBACK_CATEGORIES, FeedbackNotSent, sendFeedback } from "./feedback";
-import { createDeusHost, refusing, whereSentence, type DeusHost } from "./host";
+import {
+  createDeusHost,
+  formatFileChange,
+  mayTouch,
+  queueView,
+  refusing,
+  whereSentence,
+  type DeusHost,
+  type Who,
+} from "./host";
 import * as store from "./store";
 
 /** One file's diff is cut here: enough to review a change, not a whole regenerated file. */
@@ -61,6 +74,107 @@ const sessionArg = z
   .describe("The session, as list_sessions prints it");
 
 function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
+  async function otherQueue(caller: Who, session: string) {
+    const { id } = await operator().find(caller, session);
+    if (caller.kind === "session" && id === caller.sessionId) throw refuse.self("session");
+    return id;
+  }
+  const readQueueTool = tool<{ session: typeof sessionArg }, Caller>({
+    name: "read_queue",
+    title: "Read queue",
+    description: "List another chat's queue in order, with ids, senders, states and any hold.",
+    input: { session: sessionArg },
+    effect: "read",
+    run: async ({ session }, caller) => {
+      const { items, senderName, hold } = queueView(caller, await otherQueue(caller, session));
+      const rows = items.map(({ id, text, images, state, origin }, i) => {
+        const first = [...text.match(/^[^\n\r\v\f\u0085\u2028\u2029]{0,161}/u)![0]];
+        if (first.length > 160) first.splice(159, 2, "…");
+        const preview =
+          first.length || !images
+            ? quoted(first.join(""))
+            : `${images} image${images === 1 ? "" : "s"}`;
+        return `${i + 1}. ${state} · from ${senderName(origin)} · ${preview} · message ${json(id)}`;
+      });
+      return [
+        rows.length ? rows.join("\n") : "The queue is empty.",
+        hold ?? "The queue is open.",
+      ].join("\n");
+    },
+  });
+  const manageInput = {
+    session: sessionArg,
+    action: z.enum(["send_now", "remove", "resume"]),
+    message: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("For send_now or remove, copy the message id from read_queue."),
+  };
+  const manageQueueTool = tool<typeof manageInput, Caller>({
+    name: "manage_queue",
+    title: "Manage queue",
+    description: "Ask to send your waiting message now, remove it, or resume a held queue.",
+    input: manageInput,
+    effect: "write",
+    run: ({ session, action, message }, caller) =>
+      refusing(async () => {
+        const sessionId = await otherQueue(caller, session);
+        mayTouch(caller, sessionId);
+        const { items, by, hold } = queueView(caller, sessionId);
+        if (action === "resume") {
+          const result = await resumeQueuedMessages(sessionId, by);
+          const empty = items.length ? "" : " Nothing waits.";
+          switch (result.outcome) {
+            case "open":
+              return "There is nothing to resume.";
+            case "person_only":
+            case "before_reset":
+              throw new OperatorError(
+                result.outcome === "person_only" ? "person_only" : "busy",
+                `Nothing was resumed. The queue is ${hold}.${empty}`
+              );
+            case "resumed":
+              return `Resumed. ${result.turnId ? `Started turn ${json(result.turnId)}.` : "No new turn started."} ${queueView(caller, sessionId).note ?? "Nothing waits"}.`;
+          }
+        }
+        if (message === undefined)
+          throw refuse.invalidInput(
+            "manage_queue",
+            "message",
+            "copy the message id from read_queue"
+          );
+        const row = items.find((item) => item.id === message);
+        if (!row) return "That message is no longer waiting.";
+        if (by.kind !== "person" && !sameOrigin(row.origin, by))
+          throw new OperatorError("not_yours", "Only its sender or the person can change it.");
+        if (row.state !== "waiting") return "That message is no longer waiting.";
+        if (action === "remove") {
+          removeQueuedMessage(sessionId, message);
+          return `Removed. ${queueView(caller, sessionId).note ?? "Nothing waits"}.`;
+        }
+        const turnId = holdingTurn(sessionId)?.turnId;
+        const outcome = await steerQueuedMessage(sessionId, message, turnId, "in_place");
+        if (outcome === "own_turn")
+          return `It waits for its own turn in its place.${hold ? ` The queue is ${hold}.` : ""}`;
+        if (outcome === "read" && turnId) return `Read in turn ${json(turnId)}.`;
+        if (outcome === "unconfirmed")
+          return "Delivery unconfirmed. It keeps its place in the queue.";
+        if (outcome === "acknowledged" && turnId)
+          return `Sent into turn ${json(turnId)}, not yet read. If the turn ends first, it keeps its place in the queue.`;
+        if (outcome === "sent") return "Started as its own turn.";
+        const now = queueView(caller, sessionId);
+        const index = now.items.findIndex((item) => item.id === message);
+        if (index < 0) return "That message is no longer waiting.";
+        if (now.items[index]?.state === "sending") return "Starting as its own turn.";
+        if (now.hold) return `The queue is ${now.hold}.`;
+        if (outcome === "refused")
+          return `The turn did not take it. Waiting at position ${index + 1}.`;
+        if (outcome === "question" || outcome === "plan")
+          return `Waiting behind the chat's ${outcome}.`;
+        return `Waiting at position ${index + 1}.`;
+      }),
+  });
   const readChanges = tool<
     { session: typeof sessionArg; file: z.ZodOptional<z.ZodString> },
     Caller
@@ -87,9 +201,10 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
           workspaceId,
         });
         if (file) {
-          // Only a changed file: the diff of an unchanged one is the whole file,
-          // and that may be a secret git ignores (.env).
-          const listed = files.find((f) => normal(f.file) === normal(file));
+          const literal = path.posix.normalize(file);
+          const listed =
+            files.find((f) => f.file === literal) ??
+            files.find((f) => normal(f.file) === normal(file));
           if (!listed) {
             throw new OperatorError(
               "not_found",
@@ -101,7 +216,12 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
             workspaceId,
             file: listed.file,
           });
-          if (!diff.trim()) return `${quoted(listed.file)}: no changes`;
+          if (!diff.trim()) {
+            if (listed.previous_path && !listed.additions && !listed.deletions) {
+              return `${quoted(listed.file)} was renamed from ${quoted(listed.previous_path)}. Its content is unchanged.`;
+            }
+            return `${quoted(listed.file)} has no content patch.`;
+          }
           const cut = diff.length > DIFF_LIMIT;
           return [
             `diff of ${quoted(listed.file)} (+${listed.additions} -${listed.deletions}):`,
@@ -114,7 +234,7 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
         const shown = files.slice(0, FILES_LIMIT);
         return [
           `${name}: ${total} file(s) changed`,
-          ...shown.map((f) => `  ${quoted(f.file)}  +${f.additions} -${f.deletions}`),
+          ...shown.map((change) => `  ${formatFileChange(change)}`),
           ...(total > shown.length ? [`  (and ${total - shown.length} more)`] : []),
           `  ${callHint("read_changes", { session, file: shown[0]!.file })}`,
         ].join("\n");
@@ -167,7 +287,7 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
         });
         // The board's words are another party's: quoted, as an agent's are.
         return [
-          `Sent to the Deus team (thread ${quoted(receipt.threadId)}). Thank you.`,
+          `Sent to the Deus team (thread ${json(receipt.threadId)}). Thank you.`,
           ...(receipt.knownIssue ? ["known issue:", quote(receipt.knownIssue)] : []),
           ...(receipt.guidance ? ["the Deus team:", quote(receipt.guidance)] : []),
         ].join("\n");
@@ -183,7 +303,7 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
     },
   });
 
-  return [readChanges, addProjectTool(host), sendFeedbackTool];
+  return [readChanges, readQueueTool, manageQueueTool, addProjectTool(host), sendFeedbackTool];
 }
 
 let operator: Operator<Caller> | null = null;

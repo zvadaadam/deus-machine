@@ -135,8 +135,21 @@ describe("signInLocalAgent", () => {
 });
 
 describe("Gemini in Settings", () => {
+  const overrideError =
+    "agy CLI override points to a missing file: /gone/agy (from $ANTIGRAVITY_CLI_PATH)";
   it.each([
-    [{ harness: "gemini", state: "missing" }, googleSignedOut, ["Not installed", "Install"]],
+    [{ harness: "gemini", state: "missing" }, googleSignedOut, ["Not available on this computer"]],
+    [
+      { harness: "gemini", state: "missing", version: installed.version },
+      googleSignedOut,
+      ["installs with its first turn", "Install"],
+    ],
+    [{ harness: "gemini", state: "failed", error: overrideError }, googleAccount, [overrideError]],
+    [
+      { harness: "gemini", state: "failed", version: installed.version, error: "Offline" },
+      googleSignedOut,
+      ["Couldn’t install", "Try again"],
+    ],
     [
       {
         harness: "gemini",
@@ -159,6 +172,9 @@ describe("Gemini in Settings", () => {
       );
       const html = renderToStaticMarkup(createElement(LocalAgentRow, { harness: "gemini", state }));
       for (const label of ["Gemini", "Google", ...labels]) expect(html).toContain(`>${label}<`);
+      for (const action of ["Install", "Try again"]) {
+        expect(html.includes(`>${action}</button>`)).toBe(labels.includes(action));
+      }
     }
   );
 });

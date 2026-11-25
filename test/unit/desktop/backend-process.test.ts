@@ -109,13 +109,14 @@ afterEach(async () => {
 });
 
 describe("desktop backend process", () => {
-  it("keeps shutdown pending until the backend actually exits", async () => {
+  it("waits for a stuck turn to drain and its agent to exit before quitting", async () => {
     const resourcesPath = createTempResourcesRoot();
     createRuntimeExecutable(resourcesPath);
     (process as { resourcesPath?: string }).resourcesPath = resourcesPath;
     const child = createFakeChild();
     child.kill.mockImplementation(() => true);
     mockSpawn.mockReturnValue(child);
+    vi.useFakeTimers();
     const starting = spawnBackend();
     child.stdout.write("[BACKEND_PORT]45678\n");
     await starting;
@@ -124,12 +125,16 @@ describe("desktop backend process", () => {
     const stopping = stopBackend().then(() => {
       stopped = true;
     });
-    await Promise.resolve();
-    expect(child.kill).toHaveBeenCalledWith("SIGTERM");
-    expect(stopped).toBe(false);
-    child.exitCode = 0;
-    child.emit("exit", 0, null);
-    await stopping;
+    try {
+      await vi.advanceTimersByTimeAsync(13_000);
+      expect(child.kill.mock.calls).toEqual([["SIGTERM"]]);
+      expect(stopped).toBe(false);
+    } finally {
+      child.exitCode = 0;
+      child.emit("exit", 0, null);
+      await stopping;
+      vi.useRealTimers();
+    }
     expect(stopped).toBe(true);
   });
 
@@ -208,6 +213,33 @@ describe("desktop backend process", () => {
       child.exitCode = 1;
       child.emit("exit", 1, null);
     }
+
+    it("does not spawn after Quit while a retry waits for the timed-out backend to exit", async () => {
+      const { backend, children } = await freshBackend();
+      vi.useFakeTimers();
+      try {
+        const starting = backend.spawnBackend();
+        children[0].stdout.write("[BACKEND_PORT]40000\n");
+        await starting;
+        crash(children[0]);
+        await vi.advanceTimersByTimeAsync(1_000);
+
+        const stalled = children[1];
+        stalled.kill.mockImplementation(() => true);
+        await vi.advanceTimersByTimeAsync(30_000);
+        const beforeRetry = stalled.kill.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(2_000);
+        expect(stalled.kill.mock.calls.length).toBe(beforeRetry + 1);
+        const quitting = backend.stopBackend();
+        crash(stalled);
+        await quitting;
+        expect(mockSpawn).toHaveBeenCalledTimes(2);
+      } finally {
+        if (children[1]?.exitCode === null) crash(children[1]);
+        await backend.stopBackend();
+        vi.useRealTimers();
+      }
+    });
 
     it("stops after five restarts when each backend crashes soon after starting", async () => {
       const { backend, children } = await freshBackend();

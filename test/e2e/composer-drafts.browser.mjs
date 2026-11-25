@@ -61,6 +61,25 @@ await writeFile(
   path.join(directory, "preferences.json"),
   JSON.stringify({ onboarding_completed: true, remote_access_enabled: false })
 );
+// The embedded engine runs a real local turn. Its fixture CLI answers initialization
+// and keeps reading the prompt stream until the backend closes it.
+const claude = path.join(directory, "held-claude.mjs");
+await writeFile(
+  claude,
+  `#!/usr/bin/env node
+import { createInterface } from "node:readline";
+for await (const line of createInterface({ input: process.stdin })) {
+  const request = JSON.parse(line);
+  if (request.type === "control_request") {
+    console.log(JSON.stringify({ type: "control_response", response: {
+      subtype: "success", request_id: request.request_id, response: { models: [] },
+    }}));
+  }
+}
+`,
+  { mode: 0o755 }
+);
+await mkdir(path.join(project, ".deus", "ready"), { recursive: true });
 const png = path.join(directory, "screenshot.png");
 await writeFile(
   png,
@@ -193,6 +212,7 @@ try {
       DEUS_USER_DATA_DIR: directory,
       TMPDIR: directory,
       AGENT_ALLOW_AGENTLESS: "0",
+      CLAUDE_CLI_PATH: claude,
       AGNT_BASE_URL: platform.url,
       DEUS_CLOUD_AGNT_URL: platform.url,
       AGNT_API_KEY: "agnt_sk_fixture",
@@ -249,6 +269,8 @@ try {
       { exact: true }
     );
   const tabs = page.getByRole("tablist", { name: "Session tabs" }).getByRole("tab");
+  const fullQueue =
+    "This chat already has 20 messages waiting. Remove one, or wait for the agent to take them.";
   const data = [];
   let heldUpdates;
   let refusedId,
@@ -273,15 +295,33 @@ try {
       }
       socket.send(raw);
     });
-    socket.onMessage((raw) => {
+    socket.onMessage(async (raw) => {
       const frame = JSON.parse(String(raw));
       if (frame.type === "q:mutate" && frame.action === "sendMessage") {
         data.push(frame.params);
         if (frame.params.sessionId !== cloudChat) {
-          // Reject local fixture sends at the host's busy check before a CLI could run.
-          db.prepare("UPDATE sessions SET status = 'working' WHERE id = ?").run(
-            frame.params.sessionId
+          // Another client fills the busy chat's queue before the window's send reaches it.
+          const { sessionId, agentHarness, model } = frame.params;
+          const turnId = crypto.randomUUID();
+          assert.deepEqual(
+            await host.write("sendMessage", {
+              sessionId,
+              agentHarness,
+              model,
+              turnId,
+              content: "Hold this chat",
+            }),
+            { turnId }
           );
+          for (let i = 1; i <= 20; i++) {
+            const filler = await host.write("sendMessage", {
+              sessionId,
+              agentHarness,
+              model,
+              content: `Queued ${i}`,
+            });
+            assert.equal(filler.queued, true, `Queued ${i}`);
+          }
         }
         if (frame.params.sessionId === firstChat) refusedId = frame.id;
         if (frame.params.sessionId === cloudChat) lostId = frame.id;
@@ -509,8 +549,9 @@ try {
     await input.fill("Refused draft");
     await input.press("Enter");
     await until(() => refusal?.success === false, 5000, "backend refusal");
-    await page.locator("[data-sonner-toast]").first().waitFor();
-    db.prepare("UPDATE sessions SET status = 'idle' WHERE id = ?").run(firstChat);
+    assert.equal(refusal.error, fullQueue);
+    await page.locator("[data-sonner-toast]").getByText(fullQueue, { exact: true }).waitFor();
+    await value(input, "Refused draft");
     await page.reload();
     await value(input, "Refused draft");
   });
@@ -591,6 +632,7 @@ try {
       await dropPicture(page, input, "Start");
       await page.getByRole("button", { name: "Retry", exact: true }).first().click();
       await page.locator('[data-slot="workspace-start-state"]').waitFor({ state: "detached" });
+      await page.locator("[data-sonner-toast]").getByText(fullQueue, { exact: true }).waitFor();
       await value(input, "first waiting message\n\nmy follow-up");
       await preview(page).waitFor();
       await page.reload();

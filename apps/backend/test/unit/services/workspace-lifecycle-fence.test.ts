@@ -8,6 +8,7 @@ import { expect, it } from "vitest";
 const backend = path.resolve(__dirname, "../../..");
 const owner = "src/services/workspace-lifecycle.ts";
 const unknown = "«dynamic»";
+const ownedDeletes = ["workspaces", "repositories"];
 const protectedColumns = new Set([
   "state",
   "init_stage",
@@ -34,9 +35,11 @@ function guardedSchema() {
   guard.exec(`CREATE TABLE workspaces (${definitions.join(", ")})`);
   guard.exec(SCHEMA_SQL);
   guard.pragma("recursive_triggers = ON"); // REPLACE also deletes its conflicting row.
-  guard.exec(
-    "CREATE TRIGGER fence_delete BEFORE DELETE ON workspaces BEGIN SELECT forbidden_workspace_delete(); END"
-  );
+  for (const table of ownedDeletes) {
+    guard.exec(
+      `CREATE TRIGGER fence_delete_${table} BEFORE DELETE ON ${table} BEGIN SELECT forbidden_delete(); END`
+    );
+  }
   return guard;
 }
 
@@ -61,9 +64,14 @@ function writesLifecycle(sql: string, db: Database.Database, directRun = false) 
     const target =
       /\b(?:update(?:\s+or\s+\w+)?|(?:insert(?:\s+or\s+\w+)?|replace)\s+into|delete\s+from)\b\s*(?:["'`[]?\w+["'`\]]?\s*\.\s*)?["'`[]?([\w«»]*)/gi;
     const targets = [...raw.matchAll(target)].map((match) => match[1].toLowerCase());
-    if (targets.some((t) => t.includes(unknown) && "workspaces".startsWith(t.split(unknown)[0])))
+    if (
+      targets.some(
+        (t) =>
+          t.includes(unknown) && ownedDeletes.some((table) => table.startsWith(t.split(unknown)[0]))
+      )
+    )
       return true;
-    if (!targets.includes("workspaces")) continue;
+    if (!ownedDeletes.some((table) => targets.includes(table))) continue;
     try {
       db.prepare(`EXPLAIN ${raw.replaceAll(unknown, "?")}`);
     } catch {
@@ -229,12 +237,15 @@ function violations(file: ts.SourceFile, checker: ts.TypeChecker, db: Database.D
   return found;
 }
 
-it("keeps workspace lifecycle writes and deletion in the owner", () => {
+it("keeps workspace lifecycle writes and project and workspace deletion in the owner", () => {
   // Schema creation/backfill lives in shared/schema.ts. Unit, integration
   // and e2e fixtures live outside src. The integration CLI is checked too.
-  const files = readdirSync(path.join(backend, "src"), { recursive: true, encoding: "utf8" })
-    .filter((f) => /\.(?:[cm]?[jt]sx?|sql)$/.test(f))
-    .map((f) => `src/${f}`)
+  const files = ["src", "../agent-server"]
+    .flatMap((dir) =>
+      readdirSync(path.join(backend, dir), { recursive: true, encoding: "utf8" })
+        .filter((f) => /\.(?:[cm]?[jt]sx?|sql)$/.test(f) && !f.includes("node_modules/"))
+        .map((f) => path.join(dir, f))
+    )
     .concat("cli.ts")
     .filter((f) => f !== owner);
   const paths = files.map((f) => path.resolve(backend, f));
@@ -261,7 +272,7 @@ it("keeps workspace lifecycle writes and deletion in the owner", () => {
 });
 
 it("checks assembled statements and distinguishes assignment targets from reads", () => {
-  const file = "examples.ts";
+  const file = path.join(backend, "src/examples.ts");
   const source = [
     'const table = "work" + "spaces";',
     'const head = "UPDATE " + table + " SET ";',
@@ -286,6 +297,9 @@ it("checks assembled statements and distinguishes assignment targets from reads"
     'let sql = head + "title = ?"; sql += ", setup_status = ?";',
     "db.exec(sql); // reject",
     'db.query("DELETE FROM " + table); // reject',
+    'db.query("DELETE FROM " + "repositories"); // reject',
+    'db.exec("REPLACE INTO main.repositories (id, name) VALUES (?, ?)"); // reject',
+    'db.prepare("UPDATE repositories SET name = ?");',
     'db.run("/* archived */ UPDATE workspaces SET state = 1"); // reject',
     'db.run("-- note\\nDELETE FROM workspaces"); // reject',
     'db.run("/* title only */ UPDATE workspaces SET title = state");',
@@ -316,8 +330,8 @@ it("checks assembled statements and distinguishes assignment targets from reads"
   expect(found.map((message) => Number(message.match(/:(\d+) /)?.[1]))).toEqual(badLines);
 });
 
-// The owner can publish through invalidate and write its setup-status file
-// mirror. That helper does only file I/O. Services call the owner from above.
+// The owner can publish changes, reset a chat's stream and write its setup-status
+// file mirror. Services, including the source of live turn ids, call it from above.
 function forbiddenImports(source: string, mirror = false): string[] {
   const file = ts.createSourceFile("owner.ts", source, ts.ScriptTarget.Latest, true);
   const found: string[] = [];
@@ -328,16 +342,22 @@ function forbiddenImports(source: string, mirror = false): string[] {
     const allowed = mirror
       ? ["node:fs", "node:os", "node:path"].includes(spec) ||
         (spec === "@shared/enums" && ts.isImportDeclaration(node) && node.importClause?.isTypeOnly)
-      : ["../db", "../lib/database", "../lib/errors", "@shared/enums", "@shared/lib/uuid"].includes(
+      : (spec === "@shared/api/repos" &&
+          ts.isImportDeclaration(node) &&
+          node.importClause?.isTypeOnly) ||
+        ["../db", "../lib/database", "../lib/errors", "@shared/enums", "@shared/lib/uuid"].includes(
           spec
         );
     if (allowed) return;
-    const binding =
-      spec === "./query-engine"
-        ? "invalidate"
-        : spec === "./setup-status"
-          ? "writeSetupStatusFile"
-          : null;
+    const bindings: Record<string, string> = {
+      "node:util": "isDeepStrictEqual",
+      "./query-engine": "invalidate",
+      "./setup-status": "writeSetupStatusFile",
+      "./streams": "resetSubscribers",
+      "@shared/api/sessions": "sessionEvents",
+      "@shared/types/repository": "CLOUD_PROJECT_REMOVAL_REASON",
+    };
+    const binding = bindings[spec];
     if (
       !mirror &&
       binding &&
@@ -376,6 +396,8 @@ it("keeps the lifecycle owner below the services that use it", () => {
   ).toEqual([]);
   expect(
     forbiddenImports(`
+    import type { RepoRemovalConfirmation } from "@shared/api/repos";
+    import { removeRepo } from "@shared/api/repos";
     import type { Stage } from "./workspace-init.service";
     import {helper} from "../lib/reexported-service";
     const agent = import("./agent/cloud/driver");
@@ -384,13 +406,20 @@ it("keeps the lifecycle owner below the services that use it", () => {
     import * as queries from "./query-engine";
     import { invalidate } from "./query-engine";
     import { writeSetupStatusFile } from "./setup-status";
+    import { resetSubscribers } from "./streams";
+    import { sessionEvents } from "@shared/api/sessions";
+    import { publish } from "./streams";
+    import { liveTurnId } from "./agent/service";
   `)
   ).toEqual([
+    "@shared/api/repos",
     "./workspace-init.service",
     "../lib/reexported-service",
     "./agent/cloud/driver",
     "../lib/../services/project-environment.service",
     "<dynamic>",
     "./query-engine",
+    "./streams",
+    "./agent/service",
   ]);
 });

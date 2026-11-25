@@ -17,7 +17,8 @@ import {
 } from "../db";
 import { cloudAccount } from "../services/agent/cloud/config";
 import { mintCloudSessionToken } from "../services/agent/cloud/session-token";
-import { sendMessage, stopSession } from "../services/agent/turns";
+import { stopSession } from "../services/agent/turns";
+import * as queue from "../services/agent/queue";
 import { refreshWorkspaceGithubTokenIfStale } from "../services/cloud-workspace-init.service";
 import { invalidate } from "../services/query-engine";
 import { handle } from "./registry";
@@ -109,7 +110,25 @@ export default [
     return getSessionRaw(db, sessionId)!;
   }),
   // A client's send is the person's: no origin comes from the operation's input.
-  handle(api.sendMessage, (input) => sendMessage(input)),
+  handle(api.sendMessage, queue.sendOrQueue),
+  handle(api.queuedMessages, ({ sessionId }) => queue.queuedMessages(sessionId)),
+  handle(api.queuedMessage, ({ sessionId, id }) => queue.queuedMessage(sessionId, id)),
+  handle(api.steerMessage, (input) => queue.steerMessage(input)),
+  handle(api.steerQueuedMessage, async ({ sessionId, id, turnId }) => {
+    const outcome = await queue.steerQueuedMessage(sessionId, id, turnId, "front");
+    if (outcome === "unconfirmed") return { outcome } as const;
+    if (outcome === "read" || outcome === "acknowledged") return { outcome: "steered" } as const;
+    return { outcome: outcome === "sent" || outcome === "gone" ? "gone" : "queued" } as const;
+  }),
+  handle(api.moveQueuedMessage, ({ sessionId, id, before }) =>
+    queue.moveQueuedMessage(sessionId, id, before)
+  ),
+  handle(api.removeQueuedMessage, ({ sessionId, id }) => queue.removeQueuedMessage(sessionId, id)),
+  handle(api.resumeQueuedMessages, async ({ sessionId }) => {
+    await queue.resumeQueuedMessages(sessionId);
+    return {};
+  }),
+  handle(api.continueAfterLimit, ({ sessionId, on }) => queue.continueAfterLimit(sessionId, on)),
   // A client's stop is the person's.
   handle(api.stopSession, (input) => stopSession(input)),
 ];

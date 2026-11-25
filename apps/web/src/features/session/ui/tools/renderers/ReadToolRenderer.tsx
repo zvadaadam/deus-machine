@@ -1,19 +1,20 @@
 import { BaseToolRenderer, CodeBlock, ToolFileLink, ToolFileTypeIcon } from "../components";
 import type { ToolRendererProps } from "../../chat-types";
 import { detectLanguageFromPath } from "../utils/detectLanguage";
+import { extractImage, renderToolImage } from "./shared";
 
 export function ReadToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { file_path, offset } = toolUse.input ?? {};
   const safeFilePath = typeof file_path === "string" ? file_path : "";
   const language = safeFilePath ? detectLanguageFromPath(safeFilePath) : undefined;
 
-  const rawContent =
-    !toolResult || toolResult.is_error
-      ? ""
-      : typeof toolResult.content === "object"
-        ? JSON.stringify(toolResult.content, null, 2)
-        : toolResult.content;
-  const normalizedRead = normalizeReadResult(rawContent, typeof offset === "number" ? offset : 0);
+  const content = toolResult && !toolResult.is_error ? toolResult.content : "";
+  const image = extractImage(content);
+  const fileContent = image ? "" : content;
+  const normalizedRead = normalizeReadResult(
+    typeof fileContent === "string" ? fileContent : JSON.stringify(fileContent, null, 2),
+    typeof offset === "number" ? offset : 0
+  );
   const lineCount = normalizedRead.code ? normalizedRead.code.split("\n").length : null;
 
   return (
@@ -23,7 +24,7 @@ export function ReadToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
       toolUse={toolUse}
       toolResult={toolResult}
       isLoading={isLoading}
-      defaultExpanded={false}
+      defaultExpanded={!!image}
       renderSummary={() => (
         <>
           <ToolFileLink path={safeFilePath} target="files" />
@@ -33,6 +34,7 @@ export function ReadToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
         </>
       )}
       renderContent={() => {
+        if (image) return renderToolImage(image, safeFilePath || "Read image");
         if (!normalizedRead.code) return null;
 
         return (

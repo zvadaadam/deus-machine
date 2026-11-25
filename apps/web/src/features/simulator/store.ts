@@ -6,10 +6,10 @@
 
 import { create } from "zustand";
 import { transition } from "./machine";
-import type { SimPhase, SimPhaseLabel, SimEvent } from "./machine";
+import type { SimPhase, SimEvent } from "./machine";
 
 // Re-export so consumers can import from store or machine.
-export type { SimPhase, SimPhaseLabel, SimEvent };
+export type { SimPhase, SimEvent };
 
 // ---------------------------------------------------------------------------
 // Store shape
@@ -50,25 +50,10 @@ interface SimulatorStore {
    * eliminating).
    */
   clearWorkspaceSession: (workspaceId: string) => void;
-
-  /**
-   * workspaceId → phase label (derived view of sessions for ContentTabBar).
-   * Kept in sync automatically by setSession/dispatch/clearWorkspaceSession.
-   */
-  phases: Record<string, SimPhaseLabel>;
-}
-
-// Drop both maps' entries for a workspace. Centralizes the "idle keys are
-// absent" invariant — every transition to idle must go through this.
-function withoutWorkspace(state: SimulatorStore, workspaceId: string): Partial<SimulatorStore> {
-  const { [workspaceId]: _s, ...sessions } = state.sessions;
-  const { [workspaceId]: _p, ...phases } = state.phases;
-  return { sessions, phases };
 }
 
 export const useSimulatorStatusStore = create<SimulatorStore>()((set, get) => ({
   sessions: {},
-  phases: {},
 
   dispatch: (workspaceId, event) => {
     const current = get().sessions[workspaceId] ?? { phase: "idle" };
@@ -81,29 +66,23 @@ export const useSimulatorStatusStore = create<SimulatorStore>()((set, get) => ({
       return false;
     }
 
-    if (next.phase === "idle") {
-      set((s) => withoutWorkspace(s, workspaceId));
-    } else {
-      set((s) => ({
-        sessions: { ...s.sessions, [workspaceId]: next },
-        phases: { ...s.phases, [workspaceId]: next.phase },
-      }));
-    }
+    get().setSession(workspaceId, next);
     return true;
   },
 
   setSession: (workspaceId, phase) => {
     if (phase.phase === "idle") {
-      set((s) => withoutWorkspace(s, workspaceId));
+      get().clearWorkspaceSession(workspaceId);
     } else {
-      set((s) => ({
-        sessions: { ...s.sessions, [workspaceId]: phase },
-        phases: { ...s.phases, [workspaceId]: phase.phase },
-      }));
+      set((s) => ({ sessions: { ...s.sessions, [workspaceId]: phase } }));
     }
   },
 
-  clearWorkspaceSession: (workspaceId) => set((s) => withoutWorkspace(s, workspaceId)),
+  clearWorkspaceSession: (workspaceId) =>
+    set((state) => {
+      const { [workspaceId]: _removed, ...sessions } = state.sessions;
+      return { sessions };
+    }),
 }));
 
 // ---------------------------------------------------------------------------

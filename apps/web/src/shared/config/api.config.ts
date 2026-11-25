@@ -123,13 +123,13 @@ export function setBackendPort(port: number): void {
 
 /**
  * Get the base URL for API requests (async).
- * Throws in relay mode — HTTP is tunneled over WS via client.ts bridge.
+ * Direct backend HTTP routes require a local connection.
  */
 export async function getBaseURL(): Promise<string> {
   // Lazy import to avoid circular dependency
   const { isRelayMode } = await import("./backend.config");
   if (isRelayMode()) {
-    throw new Error("getBaseURL() unavailable in relay mode — use WS bridge");
+    throw new Error("Direct backend HTTP routes are unavailable through the relay");
   }
   const port = await getBackendPort();
   return `http://localhost:${port}/api`;

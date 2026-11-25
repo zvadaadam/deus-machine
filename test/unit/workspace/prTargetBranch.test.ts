@@ -35,7 +35,6 @@ const render = (workspace: Partial<Workspace> | null) => {
   const once = () =>
     useWorkspaceActions({
       selectedWorkspace: workspace as Workspace | null,
-      setContentTab: vi.fn(),
     });
   once();
   cursor.i = 0;
