@@ -61,13 +61,10 @@ export function getTurnsForMessages(
   return rows.map(decodeTurn);
 }
 
+type StoredTurn = SessionTurn & { cancelledBy?: Origin };
+
 /** Replaces one already-merged record; accounting is never summed on write. */
-export function saveTurn(
-  db: Database.Database,
-  sessionId: string,
-  turn: SessionTurn,
-  cancelledBy?: Origin
-): void {
+export function saveTurn(db: Database.Database, sessionId: string, turn: StoredTurn): void {
   const json = (value: unknown) => (value === undefined ? null : JSON.stringify(value));
   db.prepare(
     `
@@ -99,6 +96,6 @@ export function saveTurn(
     ),
     json(turn.tokens),
     turn.cost ?? null,
-    json(cancelledBy)
+    json(turn.cancelledBy)
   );
 }

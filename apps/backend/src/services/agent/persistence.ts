@@ -240,10 +240,7 @@ export function persistStopCredit(id: string, turnId: string, by?: Origin) {
 }
 
 /** A lost link can leave a row active. A warning on a live turn keeps its card available. */
-export function persistStopStatus(
-  id: string,
-  status: "idle" | "error" | null = "idle"
-): WriteResult<boolean> {
+export function persistStopStatus(id: string, status: "idle" | "error" | null = "idle") {
   try {
     const warning = status === "idle" ? null : "The agent never confirmed the stop request.";
     const { changes } = getDatabase()
@@ -253,9 +250,10 @@ export function persistStopStatus(
      WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
       )
       .run(status, warning, warning && "internal", id, ...ACTIVE_TURN_STATUSES);
-    return { ok: true, value: changes > 0 };
+    return changes > 0;
   } catch (error) {
-    return failed("Stop status", error);
+    failed("Stop status", error);
+    return false;
   }
 }
 
@@ -269,13 +267,9 @@ export function persistTurn(
   const db = getDatabase();
   try {
     db.transaction(() => {
-      const record = turnRecord(
-        turn,
-        providerCredentialSource,
-        getTurn(db, sessionId, turn.turnId)
-      );
-      saveTurn(db, sessionId, record, turn.cancelledBy);
-
+      const prior = getTurn(db, sessionId, turn.turnId);
+      const record = turnRecord(turn, providerCredentialSource, prior);
+      saveTurn(db, sessionId, { ...record, cancelledBy: turn.cancelledBy });
       if (outcome) writeStatus(sessionId, terminalStatus(outcome));
     })();
     return { ok: true, value: undefined };

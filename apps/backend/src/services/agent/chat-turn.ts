@@ -22,6 +22,7 @@ export type NativeEnd = {
 };
 export type TurnNotice =
   | NativeEnd
+  | { type: "engine_idle" }
   | { type: "stop"; turnId?: string; by: Origin }
   | { type: "interrupted"; turnId?: string; gone: boolean; cause: "failure" | "cancelled" };
 export const turnNotices: {
@@ -195,32 +196,31 @@ export function askStop(id: string, origin: Origin) {
   if (turn) (turn.stops ??= new Set()).add(by);
   turnNotices.queue?.(id, { type: "stop", turnId: turn?.turnId, by });
 
-  // A confirmed Stop waits for its holder's final echoes; an unconfirmed Stop warns even after handler loss.
-  return (result?: TurnCancelResult) => {
+  // A confirmed Stop waits for its holder's final echoes, while an unconfirmed Stop still warns after handler loss.
+  return (result?: TurnCancelResult | { outcome: "released" }) => {
+    const absent = result?.outcome === "no_active_turn";
     if (turn) {
       // A Stop with no effect passes its credit to the next.
-      if (!result || result.outcome === "no_active_turn") turn.stops?.delete(by);
+      if (!result || absent || result.outcome === "released") turn.stops?.delete(by);
       persistStopCredit(id, turn.turnId, firstStop(turn));
     }
     // The requested turn can end and a successor start during the RPC.
     const current = chats.get(id) === chat;
     const unconfirmed = current && (!result || result.outcome === "unconfirmed");
-    if (current && !(result?.outcome === "no_active_turn" && result.activeTurnId)) {
+    if (current && !(absent && result.activeTurnId)) {
       const kind = unconfirmed ? "warn" : "settle";
-      if (result?.outcome === "no_active_turn" && chat.turn) {
+      if (absent && chat.turn) {
         releaseTurn(id, chat.turn.turnId, { type: "gone" });
       } else if (!chat.turn && !unconfirmed) {
         clearDeadline(chat);
-        const saved = persistStopStatus(id);
-        if (saved.ok && saved.value) notify(id);
+        if (persistStopStatus(id)) notify(id);
       } else if (!chat.deadline || (kind === "settle" && chat.deadline.kind === "warn")) {
         clearTimeout(chat.deadline?.timer);
         const timer = setTimeout(() => {
           delete chat.deadline;
           if (kind === "settle" && turn) return releaseTurn(id, turn.turnId, { type: "cancelled" });
           // A lost handler can leave an active row with nobody to settle it.
-          const saved = persistStopStatus(id, chat.turn ? null : "error");
-          if (saved.ok && saved.value) {
+          if (persistStopStatus(id, chat.turn ? null : "error")) {
             reportInterruption(id, turn?.turnId, !chat.turn);
             notify(id);
           }
@@ -228,6 +228,7 @@ export function askStop(id: string, origin: Origin) {
         }, 15_000).unref();
         chat.deadline = { kind, timer };
       }
+      if (absent && chats.get(id) === chat) turnNotices.queue?.(id, { type: "engine_idle" });
     }
     chat.pendingStops--;
     prune(id, chat);

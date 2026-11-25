@@ -306,8 +306,10 @@ function waitForWinner(q: Queue, { competingTurnId }: ChatBusyError) {
   return false;
 }
 
-async function drain(q: Queue | undefined) {
-  if (!q || q.busyOn) return;
+// A busy head waits for the named end, engine-confirmed absence, or the person's Resume.
+async function drain(q: Queue | undefined, retryBusy = false) {
+  if (!q || (q.busyOn && !retryBusy)) return;
+  delete q.busyOn;
   const head = q.items[0];
   const canStart = !q.pause || (q.pause.reason === "resumed" && q.pause.scope === "turn");
   if (!canStart || !head || stateOf(head) !== "waiting") return;
@@ -608,8 +610,9 @@ export async function resumeQueuedMessages(sessionId: string, by?: Origin) {
   const q = queues.get(sessionId);
   if (!q) return { outcome: "open" } as const;
   const refusal = changed(q, { type: "resume", by });
-  if (refusal) return { outcome: refusal };
-  return { outcome: "resumed", turnId: (await drain(q))?.turnId } as const;
+  const retry = !!q.busyOn && !agentOrigin(by);
+  if (refusal && !retry) return { outcome: refusal };
+  return { outcome: "resumed", turnId: (await drain(q, retry))?.turnId } as const;
 }
 
 export function continueAfterLimit(sessionId: string, on: boolean) {
@@ -728,6 +731,7 @@ turnNotices.recover = (id, turnId, returnHead) => {
 
 /** A live turn can still echo. Once it is gone, return its unread steers to the queue. */
 turnNotices.queue = (id, event) => {
+  if (event.type === "engine_idle") return void drain(queues.get(id), true);
   const keepEmpty =
     event.type === "stop" || (event.type === "end" ? !!event.limit : event.cause === "cancelled");
   const q = queues.get(id) ?? (keepEmpty && localChat(id) ? queueFor(id) : undefined);
@@ -738,10 +742,9 @@ turnNotices.queue = (id, event) => {
   }
   const gone = event.type === "end" || event.gone;
   const turnId = gone ? event.turnId : undefined;
-  const winner = turnId !== undefined && q.busyOn === turnId;
-  if (winner) delete q.busyOn;
   if (turnId !== undefined) turnNotices.recover?.(id, turnId);
   const missingEcho = turnId !== undefined && recoverAttempt(q, turnId);
   changed(q, event.type === "end" ? { ...event, missingEcho } : event);
-  if (winner || (event.type === "end" ? event.outcome?.status : gone)) void drain(q);
+  const winnerEnded = event.type === "end" && q.busyOn === event.turnId;
+  if (winnerEnded || (event.type === "end" ? event.outcome : gone)) void drain(q, winnerEnded);
 };

@@ -127,20 +127,8 @@ export async function init(): Promise<void> {
       if (event.type === "permission.requested") void answerPermission(event);
       if (event.type === "elicitation.requested") void answerElicitation(event);
     },
-    onEventGap: (gap) => {
-      const turnId = handler.handleEventGap(gap);
-      if (!turnId || gap.reason !== "replay_failed") return;
-      // Replay exhaustion can hide the native terminal entirely. One
-      // targeted cancel reconciles it; a late reply cannot settle a successor.
-      void (async () => {
-        const result = await link?.cancelTurn(gap.sessionId, turnId).catch((error: unknown) => {
-          console.warn("[AgentService] Replay recovery cancel failed:", error);
-        });
-        const absent = result?.outcome === "no_active_turn";
-        const gone = result?.outcome === "cancelled" || (absent && !result.activeTurnId);
-        handler.settleEventGap(gap.sessionId, turnId, gone, absent ? undefined : "cancelled");
-      })();
-    },
+    onEventGap: (gap) =>
+      void handler.handleEventGap(gap, (turnId) => link?.cancelTurn(gap.sessionId, turnId)),
     onToolRequest: (method, params) => handleToolRequest(method, params),
     // Every chat here can operate the others (LLP 0019), through the engine's delivery.
     sessionTools: (own) => sessionTools?.(own) ?? own,

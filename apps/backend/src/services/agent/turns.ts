@@ -410,7 +410,7 @@ export async function stopSession(
     }
     // Once on the wire, the start can still succeed. Only cancel it if it survives the answer.
     await setup.done;
-    if (holdingTurn(sessionId) !== turn) return answer({ outcome: "no_active_turn" });
+    if (holdingTurn(sessionId) !== turn) return answer({ outcome: "released" });
   }
   let result: Awaited<ReturnType<typeof agentService.stopSession>> | undefined;
   try {

@@ -100,16 +100,10 @@ export function applySessionFacts(
   deferred?: { prior?: SessionProjection }
 ): SessionFactWrite[] {
   if (isUnknownEvent(event)) return [];
+  const turnId = "turnId" in event ? event.turnId : undefined;
   const otherError =
     event.type === "error" && (deferred || event._meta?.cloudErrorCode === "MESSAGE_SEND_FAILED");
-  if (
-    owner !== undefined &&
-    "turnId" in event &&
-    event.turnId !== undefined &&
-    event.turnId !== owner &&
-    !otherError
-  )
-    return [];
+  if (owner !== undefined && turnId !== undefined && turnId !== owner && !otherError) return [];
 
   return match(event)
     .with({ type: "session.created" }, (e): SessionFactWrite[] => {
