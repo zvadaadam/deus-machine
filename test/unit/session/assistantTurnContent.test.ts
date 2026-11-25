@@ -113,7 +113,14 @@ it.each<[string, Part[], RowShape, RowShape, string[]]>([
     [w, s, a],
     [["work"], "send", "answer"],
     [["work"], "send"],
-    ["send", "answer"],
+    ["answer"],
+  ],
+  [
+    "closing send echoed by two native paragraphs keeps only the send",
+    [w, send("echo-send", "note\n\nanswer"), n, reasoning, a],
+    [["work"], "echo-send", "note", ["think"], "answer"],
+    [["work"], "echo-send", ["note", "think", "answer"]],
+    ["echo-send"],
   ],
   [
     "closing send echoed by final text keeps only the send",
@@ -324,7 +331,7 @@ it("ends every steer-split group together and copies the kept words of each thro
   }
 });
 
-it("copies the closing sends and text and makes cards from links even in a folded send", () => {
+it("copies the last user-facing message and makes cards from links even in a folded send", () => {
   const link = send("resources", "See [the notes](notes.md) and http://localhost:5173.");
   const parts = [link, w, send("update"), a];
   const row: Message = {
@@ -335,7 +342,7 @@ it("copies the closing sends and text and makes cards from links even in a folde
     sent_at: null,
     parts,
   };
-  expect(getTurnFooterData([[row]]).copyText).toBe("update\n\nanswer");
+  expect(getTurnFooterData([[row]]).copyText).toBe("answer");
   expect(getTurnFooterData([[{ ...row, parts: [link, w] }]]).copyText).toContain("[the notes]");
   expect(getTurnFooterData([[{ ...row, parts: [w, n, reasoning, a] }]]).copyText).toBe(
     "note\n\nanswer"
@@ -355,6 +362,10 @@ it("copies the closing sends and text and makes cards from links even in a folde
       ],
     ]).copyText
   ).toBe("Ready.");
+  expect(
+    getTurnFooterData([[{ ...row, parts: [send("echo", "note\n\nanswer"), n, reasoning, a] }]])
+      .copyText
+  ).toBe("note\n\nanswer");
   expect(extractChatResources({ parts, isComplete: true }).map(({ id }) => id)).toEqual([
     "file:notes.md",
     "website:http://localhost:5173/",

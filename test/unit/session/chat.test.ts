@@ -36,7 +36,7 @@ vi.mock("@/features/session/hooks/useAutoScroll", () => ({
     handleScrollToBottomClick: () => {},
     transcriptRef: () => {},
     liveTailRef: () => {},
-    syncScrollPosition: () => {},
+    preserveScrollPosition: (restore: () => void) => restore(),
   }),
 }));
 

@@ -17,8 +17,8 @@ import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 
 import { useWorkingDuration } from "@/shared/hooks";
 import { useAutoScroll } from "../hooks";
-import { measureElement, useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useMemo, useRef, useEffect, useLayoutEffect, useState } from "react";
+import { useTranscriptVirtualizer } from "../hooks/useTranscriptVirtualizer";
+import { useCallback, useMemo, useRef, useEffect, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { CircularPixelGrid } from "./CircularPixelGrid";
 import { CloudEnvGroup, useCloudEnvEntries } from "./CloudEnvProgress";
@@ -204,14 +204,20 @@ export function Chat({
     [timeline]
   );
 
+  const liveTailIndex =
+    active && openTurnId
+      ? timeline.findLastIndex(
+          (row) => row.type === "assistant" && row.turnId === openTurnId && !row.ended
+        )
+      : -1;
   const {
     showScrollButton,
     handleScrollToBottomClick,
     transcriptRef,
     liveTailRef,
-    syncScrollPosition,
+    preserveScrollPosition,
   } = useAutoScroll({
-    running: !!agentMessages && active && !!openTurnId,
+    running: active && !!openTurnId,
     // New messages can extend an existing turn; empty outcomes can add an
     // item without a message. Track both, independently of stable React keys.
     contentCount: messages.length + timeline.length,
@@ -229,143 +235,15 @@ export function Chat({
   }
   if (!showScrollButton && deferredTurns.size) setDeferredTurns(new Set());
 
-  const list = useRef<HTMLDivElement>(null);
-  const visibleAnchorRef = useRef<{ key: string | number | bigint; offsetFromTop: number } | null>(
-    null
-  );
-  const prependAnchorRef = useRef<{ key: string | number | bigint; offsetFromTop: number } | null>(
-    null
-  );
-  const timelineKeysRef = useRef<(string | number | bigint)[]>([]);
-  timelineKeysRef.current = timeline.map((_, index) => getItemKey(index));
-
-  const virtualizer = useVirtualizer({
+  const { list, listHeight, items, measure, loadOlder } = useTranscriptVirtualizer({
+    paneRef: messagesContainerRef,
     count: timeline.length,
-    getScrollElement: () => messagesContainerRef.current,
+    firstSeq: messages[0]?.seq,
     estimateSize,
-    overscan: 8,
     getItemKey,
-    measureElement: (element, entry, instance) => {
-      const anchor = prependAnchorRef.current;
-      const anchorIndex = anchor ? timelineKeysRef.current.indexOf(anchor.key) : -1;
-      // Preserve the visible anchor row + offset through both stages of a prepend
-      // (initial estimate mount and later ResizeObserver remeasurements).
-      instance.shouldAdjustScrollPositionOnItemSizeChange =
-        anchorIndex >= 0
-          ? (item, delta, v) => {
-              if (list.current) list.current.style.height = `${v.getTotalSize() + delta}px`;
-              return item.index < anchorIndex;
-            }
-          : entry
-            ? (item, delta, v) => {
-                // resizeItem scrolls before it records the new size. Give that scroll its measured range.
-                if (list.current) list.current.style.height = `${v.getTotalSize() + delta}px`;
-                const edge = delta > 0 && !showScrollButton ? item.start : item.end;
-                return edge <= (v.scrollOffset ?? 0);
-              }
-            : undefined;
-      const size = measureElement(element, entry, instance);
-      if (anchorIndex >= 0 && messagesContainerRef.current) {
-        syncScrollPosition(messagesContainerRef.current.scrollTop, { pauseIfAway: true });
-      }
-      return size;
-    },
+    preserveScrollPosition,
+    onLoadOlder,
   });
-
-  const recordVisibleAnchor = useCallback(() => {
-    const el = messagesContainerRef.current;
-    if (!el) return;
-    const listOffset = list.current?.offsetTop ?? 0;
-    const scrollTop = el.scrollTop;
-    const items = virtualizer.getVirtualItems();
-    const firstVisible = items.find((item) => listOffset + item.end > scrollTop) ?? items[0];
-    if (firstVisible) {
-      visibleAnchorRef.current = {
-        key: firstVisible.key,
-        offsetFromTop: listOffset + firstVisible.start - scrollTop,
-      };
-    }
-  }, [virtualizer]);
-
-  useEffect(() => {
-    const el = messagesContainerRef.current;
-    if (!el) return;
-    const clearPrependAnchor = () => {
-      prependAnchorRef.current = null;
-    };
-    const onScroll = () => {
-      if (!prependAnchorRef.current) recordVisibleAnchor();
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    el.addEventListener("wheel", clearPrependAnchor, { passive: true });
-    el.addEventListener("pointerdown", clearPrependAnchor, { passive: true });
-    el.addEventListener("touchstart", clearPrependAnchor, { passive: true });
-    el.addEventListener("keydown", clearPrependAnchor);
-    return () => {
-      el.removeEventListener("scroll", onScroll);
-      el.removeEventListener("wheel", clearPrependAnchor);
-      el.removeEventListener("pointerdown", clearPrependAnchor);
-      el.removeEventListener("touchstart", clearPrependAnchor);
-      el.removeEventListener("keydown", clearPrependAnchor);
-    };
-  }, [recordVisibleAnchor]);
-
-  const firstKey = timeline.length ? getItemKey(0) : null;
-  const lastKey = timeline.length ? getItemKey(timeline.length - 1) : null;
-  const prevTimelineRef = useRef<{
-    count: number;
-    firstKey: string | number | bigint | null;
-    lastKey: string | number | bigint | null;
-  }>({ count: timeline.length, firstKey, lastKey });
-
-  useLayoutEffect(() => {
-    const prev = prevTimelineRef.current;
-    const prepended =
-      timeline.length > prev.count &&
-      prev.count > 0 &&
-      lastKey === prev.lastKey &&
-      firstKey !== prev.firstKey;
-    prevTimelineRef.current = { count: timeline.length, firstKey, lastKey };
-
-    if (!prepended) {
-      if (timeline.length !== prev.count || lastKey !== prev.lastKey) {
-        prependAnchorRef.current = null;
-      }
-      recordVisibleAnchor();
-      return;
-    }
-
-    const el = messagesContainerRef.current;
-    const anchor = prependAnchorRef.current ?? visibleAnchorRef.current;
-    if (!el || !anchor) return;
-
-    const anchorIndex = timelineKeysRef.current.indexOf(anchor.key);
-    if (anchorIndex < 0) return;
-
-    prependAnchorRef.current = anchor;
-    // Call getTotalSize() first so TanStack refreshes measurementsCache with
-    // any initial mount measurements from this commit.
-    const totalSize = virtualizer.getTotalSize();
-    const measurement = virtualizer.measurementsCache[anchorIndex];
-    if (measurement) {
-      if (list.current) list.current.style.height = `${totalSize}px`;
-      const listOffset = list.current?.offsetTop ?? 0;
-      const nextScrollTop = Math.max(0, listOffset + measurement.start - anchor.offsetFromTop);
-      el.scrollTop = nextScrollTop;
-      virtualizer.scrollOffset = nextScrollTop;
-      syncScrollPosition(nextScrollTop, { pauseIfAway: true });
-    }
-  }, [timeline.length, firstKey, lastKey, virtualizer, recordVisibleAnchor, syncScrollPosition]);
-
-  const handleScrollToBottom = useCallback(() => {
-    prependAnchorRef.current = null;
-    handleScrollToBottomClick();
-  }, [handleScrollToBottomClick]);
-
-  const handleLoadOlder = useCallback(() => {
-    recordVisibleAnchor();
-    onLoadOlder?.();
-  }, [onLoadOlder, recordVisibleAnchor]);
 
   const progressSlot = (
     <TurnFooterSlot>
@@ -407,7 +285,7 @@ export function Chat({
                   <button
                     type="button"
                     className="control-interaction text-muted-foreground hover:text-foreground bg-muted/50 hover:bg-muted flex items-center gap-2 rounded-full px-3 py-1.5 text-sm"
-                    onClick={handleLoadOlder}
+                    onClick={loadOlder}
                     disabled={loadingOlder}
                   >
                     {loadingOlder ? (
@@ -427,13 +305,13 @@ export function Chat({
               <div
                 ref={list}
                 style={{
-                  height: virtualizer.getTotalSize(),
+                  height: listHeight,
                   width: "100%",
                   position: "relative",
                   overflowAnchor: "none", // TanStack already corrects the scroll position.
                 }}
               >
-                {virtualizer.getVirtualItems().map((virtualItem) => {
+                {items.map((virtualItem) => {
                   const turnIndex = virtualItem.index;
                   const turn = timeline[turnIndex];
                   if (!turn) return null;
@@ -463,7 +341,7 @@ export function Chat({
                   return (
                     <div
                       key={virtualItem.key}
-                      ref={virtualizer.measureElement}
+                      ref={measure}
                       data-index={virtualItem.index}
                       data-message-id={messageId}
                       style={{
@@ -475,14 +353,7 @@ export function Chat({
                       }}
                     >
                       <div
-                        ref={
-                          active &&
-                          turnIndex === timeline.length - 1 &&
-                          turn.type === "assistant" &&
-                          !turn.ended
-                            ? liveTailRef
-                            : undefined
-                        }
+                        ref={turnIndex === liveTailIndex ? liveTailRef : undefined}
                         className={cn(
                           spacingClass,
                           "chat-turn-wrapper min-w-0",
@@ -605,7 +476,7 @@ export function Chat({
           variant="secondary"
           size="icon"
           className="rounded-full shadow-lg transition-shadow hover:shadow-xl"
-          onClick={handleScrollToBottom}
+          onClick={handleScrollToBottomClick}
           title="Scroll to bottom"
           aria-label="Scroll to bottom"
           aria-controls="chat-messages"

@@ -232,19 +232,16 @@ export function useAutoScroll({
     resume();
   }, [resume]);
 
-  const syncScrollPosition = useCallback(
-    (scrollTop: number, { pauseIfAway = false }: { pauseIfAway?: boolean } = {}) => {
+  const preserveScrollPosition = useCallback(
+    (restore: () => void) => {
+      stopChase();
+      restore();
       const container = messagesContainerRef.current;
-      lastScrollTopRef.current = scrollTop;
       if (!container) return;
-      if (pauseIfAway && !isAtBottom(container)) {
-        stopChase();
-        isPausedRef.current = true;
-        pausedAtRef.current = Date.now();
-        setShowScrollButton(true);
-      }
+      lastScrollTopRef.current = container.scrollTop;
+      if (!isAtBottom(container)) pauseFromLoop();
     },
-    [messagesContainerRef, stopChase]
+    [messagesContainerRef, pauseFromLoop, stopChase]
   );
 
   // ── Scroll listener: pause detection + re-engagement ────────────────
@@ -403,6 +400,6 @@ export function useAutoScroll({
     handleScrollToBottomClick: scrollToBottom,
     transcriptRef: setTranscriptNode,
     liveTailRef: setLiveTailNode,
-    syncScrollPosition,
+    preserveScrollPosition,
   };
 }

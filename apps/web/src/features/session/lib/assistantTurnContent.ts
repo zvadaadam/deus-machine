@@ -59,6 +59,10 @@ export function assistantTurnContent(parts: Parts, condensed = false): TurnBlock
   return rows;
 }
 
+export function joinAnswerText(parts: readonly TextPart[]): string {
+  return parts.map((part) => part.text.trim()).join("\n\n");
+}
+
 /** Closing words, or the last send/passage when the turn finished on work or a card. */
 export function answerParts(parts: Parts): TextPart[] {
   const closing: TextPart[] = [];
@@ -76,23 +80,14 @@ export function answerParts(parts: Parts): TextPart[] {
     if (!part.text.trim()) continue;
     if (send) {
       closing.length = 0;
-      closing.push(send);
       lastSend = send;
-    } else {
-      closing.push(part);
     }
+    closing.push(part);
     lastText = part;
   }
-  if (
-    closing.length > 1 &&
-    closing[0] === lastSend &&
-    closing
-      .slice(1)
-      .map((part) => part.text)
-      .join("")
-      .trim() === lastSend.text.trim()
-  ) {
-    return [lastSend];
+  if (lastSend && closing[0] === lastSend && closing.length > 1) {
+    const reply = closing.slice(1);
+    return joinAnswerText(reply) === lastSend.text.trim() ? [lastSend] : reply;
   }
   const fallback = lastSend ?? lastText;
   return closing.length || !fallback ? closing : [fallback];
