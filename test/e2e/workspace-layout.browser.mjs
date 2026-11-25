@@ -249,9 +249,15 @@ try {
   // Omnibox combobox semantics + file search opens a dedicated file tab with rendered content.
   const omnibox = page.getByRole("combobox", { name: "Search files or enter a URL" });
   assert.equal(await omnibox.getAttribute("aria-expanded"), "false");
-  await omnibox.fill("README");
+  const fileReads = () => requests.filter((url) => url === "/api/query/workspaceFiles").length;
+  assert.equal(fileReads(), 0, "a cold New Tab has not requested the file tree");
+  await omnibox.press("r");
   assert.equal(await omnibox.getAttribute("aria-expanded"), "true");
-  await page.getByRole("option").filter({ hasText: "README.md" }).click();
+  const readme = page.getByRole("option").filter({ hasText: "README.md" });
+  await readme.waitFor();
+  assert.equal(fileReads(), 1, "the first keystroke requested the file tree");
+  await page.screenshot({ path: path.join(artifacts, "new-tab-first-keystroke.png") });
+  await readme.click();
   const readmeTab = tabs.getByRole("tab", { name: "README.md", exact: true });
   await readmeTab.waitFor();
   await page.getByText("Welcome to browser-style tabs.").waitFor();

@@ -228,12 +228,11 @@ function RecordingCard({
     <button
       type="button"
       className={cn(
-        "border-border/40 group relative overflow-hidden rounded-xl border text-left",
+        "border-border/40 group relative w-full overflow-hidden rounded-xl border text-left",
         "bg-background",
         "cursor-pointer transition-[border-color,box-shadow]",
         "hover:border-border/60 hover:shadow-lg"
       )}
-      style={{ width: "100%", minWidth: "400px" }}
       onClick={onClick}
       aria-label="Open recording player"
     >
@@ -362,6 +361,9 @@ function VideoModal({
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.92, opacity: 0, transition: tempo.slow.exit }}
         transition={tempo.slow}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Recording player"
         className="bg-background border-border/40 relative flex max-h-[85vh] w-[90vw] max-w-5xl flex-col overflow-hidden rounded-xl border shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -375,9 +377,9 @@ function VideoModal({
           <X className="h-4 w-4" />
         </button>
 
-        <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-visible">
           {/* Video panel */}
-          <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex min-w-0 shrink-0 flex-col md:flex-1">
             <div
               className="relative w-full cursor-pointer bg-black"
               style={{ aspectRatio: "16 / 9" }}
@@ -449,9 +451,8 @@ function VideoModal({
             )}
           </div>
 
-          {/* Metadata sidebar */}
           {(meaningfulEvents.length > 0 || hasChapters) && (
-            <div className="border-border/40 flex w-64 flex-shrink-0 flex-col border-l">
+            <div className="border-border/40 flex shrink-0 flex-col border-t md:w-64 md:border-t-0 md:border-l">
               <div className="text-muted-foreground px-3 pt-3 pb-2 text-[11px] font-semibold tracking-wider uppercase">
                 Timeline
               </div>

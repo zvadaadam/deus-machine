@@ -766,14 +766,16 @@ in Last Editor", a chat card's Open and Reveal in Finder, and the agent configur
 (`agentConfigOf`: the Agent tab and the `/` menu read the workspace's own folder; a cloud
 agent gets none of this computer's) offer nothing without one. So a project skill, command,
 hook or MCP server added in the Agent tab is a change in the workspace's branch, and the
-tab says so. Rule 2, `openAddress` /
-`openFile`: what a link or file in the chat does. Local is unchanged; in the cloud an
-internet address opens in the person's browser, a localhost one in the cloud preview at
-its port (or says "That address is on the cloud computer"), and a file in the Files tab
-(text) or says it cannot be shown. `session/lib/openFromChat.ts` carries the rule out; the
-`file-preview` route refuses a cloud workspace. Which tabs a workspace has is
-`app/layouts/content-tabs.ts` (`tabsFor`): a cloud workspace's Browser and Simulator are
-its computer's and ignore this computer's settings. "New workspace from a pull request or
+tab says so. Rule 2 (`openAddress` and `openFile`) covers chat links, chat files and
+addresses typed in New Tab. In the cloud an internet address opens in the person's browser.
+A localhost address opens at its port in the cloud preview, or says "That address is on the
+cloud computer". A file opens as text in the Files tab or says it cannot be shown.
+`session/lib/openFromChat.ts` carries out the rule. For a local file preview, the desktop opens
+its Browser tab. On the web or a phone, the click opens a tab while Deus asks the host for the
+file's address. HTML previews need a direct connection. The `file-preview` route refuses a cloud
+workspace. `tabsFor` in `features/workspace-tabs/registry.ts` decides which tabs each workspace
+has. A cloud workspace's Browser and Simulator run on its computer and ignore this computer's
+settings. "New workspace from a pull request or
 branch" is local (`offersNewFromBranch`). The sidebar row and the place menu read every
 visible chat's activity (`placeActivity` in the menu). A waiting chat or an unseen reply can
 mark the row while another chat's working grid runs. A failed setup has its own mark.
@@ -901,8 +903,8 @@ the catalog can move to a package the day Deus Cloud reads it too.
 
 Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 13 tables: `repositories`, `workspaces`, `sessions`, `messages`, `turns`, `parts`, `compactions`, `paired_devices`, `assistants`, `automations`, `automation_runs`, `extension_installations`, `integration_connections`.
 
-- Checkout launchers and `cli:backend` use `.deus-dev/deus.db` in their checkout by default. They accept `DATABASE_PATH` from a development shell and discard it from a legacy shell marked `DEUS_PACKAGED=1`. The dev desktop uses the same directory for its Electron profile, so each new worktree starts signed out.
-- Before it opens the database, each backend takes a SQLite write lock on the `.owner` sidecar. It waits up to ten seconds for an earlier backend to finish closing. The OS releases the lock on exit, including a crash.
+- An unpackaged backend defaults to its checkout's `.deus-dev/deus.db`, as does `deus start` in a checkout. Dev launchers accept `DATABASE_PATH` and discard the installed default inherited from a legacy `DEUS_PACKAGED=1` shell. The dev desktop keeps its Electron profile in `.deus-dev`, so each new worktree starts signed out.
+- Before it opens the database, each backend takes a SQLite write lock on the `.owner` sidecar. It waits up to twenty seconds so the previous backend can drain a stuck turn and stop its agent processes after a force-quit. The OS releases the lock on exit, including a crash.
 - `repositories.root_path` is nullable (a project not on this computer).
 - Turn accounting, execution, provider account snapshots and outcomes belong to `turns`, keyed by `(session_id, turn_id)`. Messages contain transcript content only.
 - Only the backend writes to DB

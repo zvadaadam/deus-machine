@@ -23,12 +23,6 @@ const PAUSE_COOLDOWN_MS = 500;
 const CHASE_FACTOR = 0.25;
 const GRACE_FRAMES = 15; // ~250ms — absorbs trackpad inertia after resume
 
-// ── Debug logging ────────────────────────────────────────────────────────
-const DEBUG = false;
-const log = (...args: unknown[]) => {
-  if (DEBUG) console.log("[autoscroll]", ...args);
-};
-
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 const reducedMotionQuery =
@@ -71,7 +65,6 @@ export function useAutoScroll({
   // ── Chase loop ──────────────────────────────────────────────────────
 
   const pauseFromLoop = useCallback(() => {
-    log("PAUSE (from loop) — user scroll detected");
     isPausedRef.current = true;
     pausedAtRef.current = Date.now();
     setShowScrollButton(true);
@@ -79,29 +72,20 @@ export function useAutoScroll({
 
   const startChase = useCallback(
     ({ grace = false }: { grace?: boolean } = {}) => {
-      if (chaseRafRef.current !== null) {
-        log("startChase: already running, skip");
-        return;
-      }
-
-      log("startChase: starting new chase loop, grace:", grace);
+      if (chaseRafRef.current !== null) return;
 
       let idleFrames = 0;
       let lastWrittenScrollTop = -1;
       let prevTarget = -1;
       let upwardAccum = 0;
       let graceFrames = grace ? GRACE_FRAMES : 0;
-      let tickCount = 0;
 
       const tick = () => {
         const el = messagesContainerRef.current;
         if (!el || isPausedRef.current) {
-          log("tick: exit — el:", !!el, "isPaused:", isPausedRef.current);
           chaseRafRef.current = null;
           return;
         }
-
-        tickCount++;
 
         const scrollTop = el.scrollTop;
         const scrollHeight = el.scrollHeight;
@@ -114,29 +98,17 @@ export function useAutoScroll({
         const shrink = prevTarget >= 0 ? Math.max(0, prevTarget - target) : 0;
         prevTarget = target;
 
-        // Log every 30th tick to avoid spam, but always log key events
-        const shouldLogTick = tickCount % 30 === 1;
-
         // ── In-loop pause detection ──────────────────────────────────
         if (graceFrames > 0) {
           graceFrames--;
           upwardAccum = 0;
-          if (shouldLogTick) {
-            log(
-              `tick ${tickCount}: grace=${graceFrames}, scrollTop=${Math.round(scrollTop)}, lastWritten=${Math.round(lastWrittenScrollTop)}, distance=${Math.round(distance)}`
-            );
-          }
         } else if (lastWrittenScrollTop >= 0) {
           const expectedMin = Math.max(0, lastWrittenScrollTop - shrink);
           const nearBottom = scrollTop + clientHeight >= scrollHeight - 5;
 
           if (scrollTop < expectedMin) {
             upwardAccum += expectedMin - scrollTop;
-            log(
-              `tick ${tickCount}: BACKWARD DETECTED — scrollTop=${Math.round(scrollTop)}, expectedMin=${Math.round(expectedMin)}, accum=${Math.round(upwardAccum)}, nearBottom=${nearBottom}`
-            );
             if (upwardAccum > 2 && !nearBottom) {
-              log(`tick ${tickCount}: → PAUSING (accumulated upward=${Math.round(upwardAccum)}px)`);
               lastScrollTopRef.current = scrollTop;
               pauseFromLoop();
               chaseRafRef.current = null;
@@ -152,10 +124,6 @@ export function useAutoScroll({
             }
           } else if (scrollTop > lastWrittenScrollTop + 1 || nearBottom) {
             upwardAccum = 0;
-          } else if (shouldLogTick) {
-            log(
-              `tick ${tickCount}: scrollTop=${Math.round(scrollTop)}, lastWritten=${Math.round(lastWrittenScrollTop)}, distance=${Math.round(distance)}, target=${Math.round(target)}`
-            );
           }
         }
 
@@ -165,7 +133,6 @@ export function useAutoScroll({
           if (distance > 0) el.scrollTop = target;
           lastScrollTopRef.current = el.scrollTop;
           if (++idleFrames >= 10) {
-            log(`tick ${tickCount}: idle self-stop (10 idle frames)`);
             chaseRafRef.current = null;
             return;
           }
@@ -188,7 +155,6 @@ export function useAutoScroll({
         // Count as idle if scroll position didn't change (already at target)
         if (el.scrollTop === lastWrittenScrollTop) {
           if (++idleFrames >= 10) {
-            log(`tick ${tickCount}: idle self-stop (stalled)`);
             lastScrollTopRef.current = el.scrollTop;
             chaseRafRef.current = null;
             return;
@@ -209,7 +175,6 @@ export function useAutoScroll({
 
   const stopChase = useCallback(() => {
     if (chaseRafRef.current !== null) {
-      log("stopChase: cancelling rAF");
       cancelAnimationFrame(chaseRafRef.current);
       chaseRafRef.current = null;
     }
@@ -217,18 +182,19 @@ export function useAutoScroll({
 
   // ── Resume ──────────────────────────────────────────────────────────
 
-  const resume = useCallback(() => {
-    log("RESUME — isPaused was:", isPausedRef.current);
-    isPausedRef.current = false;
-    setShowScrollButton(false);
-    stopChase();
-    startChase({ grace: true });
-  }, [startChase, stopChase]);
+  const resume = useCallback(
+    (chase = true) => {
+      isPausedRef.current = false;
+      setShowScrollButton(false);
+      stopChase();
+      if (chase) startChase({ grace: true });
+    },
+    [startChase, stopChase]
+  );
 
   // ── Scroll to bottom ───────────────────────────────────────────────
 
   const scrollToBottom = useCallback(() => {
-    log("scrollToBottom clicked");
     resume();
   }, [resume]);
 
@@ -270,7 +236,6 @@ export function useAutoScroll({
         // (accumulated against the baseline so 1px trackpad ticks still trip
         // it) so content growing below the fold never triggers a false pause.
         if (chaseRafRef.current === null && movedUp && !isAtBottom(container)) {
-          log("scroll listener: chase idle + scrolled up → PAUSE");
           lastScrollTopRef.current = currentScrollTop;
           isPausedRef.current = true;
           pausedAtRef.current = Date.now();
@@ -282,8 +247,13 @@ export function useAutoScroll({
       // Already paused — check for re-engagement (scroll back to bottom)
       if (!isAtBottom(container)) return;
       const remaining = PAUSE_COOLDOWN_MS - (Date.now() - pausedAtRef.current);
-      if (remaining > 0) recheck = setTimeout(handleScroll, remaining);
-      else resume();
+      if (remaining > 0) {
+        recheck = setTimeout(handleScroll, remaining);
+        return;
+      }
+      // At the exact bottom, follow is already restored. Starting an idle chase
+      // would scroll a newly opened Worked disclosure out of view.
+      resume(maxScrollTop - currentScrollTop >= 1);
     };
 
     container.addEventListener("scroll", handleScroll, { passive: true });
@@ -322,10 +292,7 @@ export function useAutoScroll({
         }
       }
       if (!shouldFollow || isPausedRef.current || chaseRafRef.current !== null) return;
-      if (!isAtBottom(container)) {
-        log("ResizeObserver: live tail or viewport changed while following — restarting chase");
-        startChase();
-      }
+      if (!isAtBottom(container)) startChase();
     });
 
     observer.observe(container);
@@ -350,7 +317,6 @@ export function useAutoScroll({
     if (userSendCount === prevSendCountRef.current) return;
     prevSendCountRef.current = userSendCount;
 
-    log("userSendCount changed — human sent a message");
     const container = messagesContainerRef.current;
     if (container) {
       container.scrollTop = container.scrollHeight;
@@ -372,24 +338,9 @@ export function useAutoScroll({
     prevContentCountRef.current = count;
     prevLastContentIdRef.current = lastId;
 
-    if (count <= prevCount) return;
-    if (lastId === prevLastId) {
-      log("message effect: prepend detected, ignoring");
-      return;
-    }
-
-    const delta = count - prevCount;
-    log(
-      `message effect: count ${prevCount}→${count} (delta=${delta}), isPaused=${isPausedRef.current}`
-    );
-
-    if (!isPausedRef.current) {
-      log("message effect: restarting chase");
-      stopChase();
-      startChase();
-    } else {
-      log("message effect: paused — ignoring");
-    }
+    if (count <= prevCount || lastId === prevLastId || isPausedRef.current) return;
+    stopChase();
+    startChase();
   }, [contentCount, lastContentId, startChase, stopChase]);
 
   // ── Cleanup ─────────────────────────────────────────────────────────

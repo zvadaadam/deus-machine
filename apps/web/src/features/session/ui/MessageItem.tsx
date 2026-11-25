@@ -53,7 +53,7 @@ export const MessageItem = memo(function MessageItem({
       <div
         className={cn(
           bubbleClass("user", { previous, next }),
-          "user-bubble bg-user-bubble from-user-bubble to-user-bubble-top ring-user-bubble-border relative ml-auto min-w-0 bg-linear-to-t ring-1 transition-colors ring-inset"
+          "user-bubble bg-user-bubble from-user-bubble to-user-bubble-top ring-user-bubble-border relative ml-auto min-w-0 bg-linear-to-t ring-1 ring-inset"
         )}
       >
         <div className="pointer-events-none absolute top-1.5 right-1.5 z-10 opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">

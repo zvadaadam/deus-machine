@@ -226,7 +226,7 @@ try {
     };
   });
   // The cloud computer's preview address answers, so the frame has a page to show.
-  await page.route("https://*.reach.sandbox.test/**", (route) =>
+  await page.route("https://*-reach.sandbox.test/**", (route) =>
     route.fulfill({ contentType: "text/html", body: "<h1>cloud preview</h1>" })
   );
   const opened = () => page.evaluate(() => window.__opened);
@@ -278,15 +278,68 @@ try {
     "a localhost link opens the cloud computer's preview at port 5173 and its path; the card's external open is the preview's address"
   );
 
+  const tabs = page.getByRole("tablist", { name: "Workspace tabs" });
+  const addTab = page.getByRole("button", { name: "New tab", exact: true });
+  const address = page.getByRole("combobox", { name: "Search files or enter a URL" });
+  await addTab.click();
+  await address.fill("localhost:3000/ready?tab=2#result");
+  await address.press("Enter");
+  await until(
+    "the typed address in the cloud preview",
+    async () =>
+      (await frame.getAttribute("src")) === "https://3000-reach.sandbox.test/ready?tab=2#result"
+  );
+  assert.equal(await tabs.getByRole("tab").count(), 1, "the launcher resolved to the open preview");
+  await frame.contentFrame().getByRole("heading", { name: "cloud preview" }).waitFor();
+  await page.screenshot({ path: path.join(shots, "new-tab-cloud-preview.png") });
+
+  send({
+    type: "workspace.state",
+    data: { status: "running", sandboxId: "sbx_reach", sandboxUrlTemplate: null },
+  });
+  await page.getByText("Waiting for the computer's address").waitFor();
+  await addTab.click();
+  await address.fill("localhost:3000");
+  await address.press("Enter");
+  const notice = page.getByText("That address is on the cloud computer", { exact: true });
+  await notice.hover({ trial: true });
+  await tabs.getByRole("tab", { name: "New tab", selected: true }).waitFor();
+  assert.ok(!(await opened()).some((url) => url.includes("localhost")));
+  await page.screenshot({
+    path: path.join(shots, "new-tab-cloud-no-address.png"),
+    animations: "disabled",
+  });
+  await address.fill("example.com/typed");
+  await address.press("Enter");
+  assert.ok((await opened()).includes("https://example.com/typed"));
+  check(
+    "New Tab opens the cloud computer's port and path, explains a missing address and opens internet links externally"
+  );
+
   // 3. Rule 1: nothing offers this computer's folder or a local workspace from here.
   const url = page.url();
   await page.keyboard.press("Meta+o");
   await pause(300);
   assert.equal(page.url(), url, "⌘O changed nothing");
   assert.equal(context.pages().length, 1, "⌘O opened nothing");
+  await addTab.click();
+  const second = tabs.getByRole("tab").nth(1);
+  const third = tabs.getByRole("tab").nth(2);
+  await second.click();
+  await page.getByRole("button", { name: "Hide workspace", exact: true }).click();
+  await notice.waitFor({ state: "hidden" });
   await page.keyboard.press("Meta+k");
-  const search = page.getByPlaceholder(/command|search/i).first();
-  await search.waitFor();
+  const search = page.getByRole("dialog", { name: "Command Palette" }).getByRole("combobox");
+  await search.hover({ trial: true });
+  await page.keyboard.press("Meta+Digit3");
+  assert.equal(
+    await page.locator("[data-workspace-view]").getAttribute("data-workspace-view"),
+    "chat"
+  );
+  await page.screenshot({
+    path: path.join(shots, "palette-command-3.png"),
+    animations: "disabled",
+  });
   await search.fill("Open in Last Editor");
   await pause(200);
   assert.equal(await page.getByText("Open in Last Editor").count(), 0, "no Open in Last Editor");
@@ -294,6 +347,24 @@ try {
   await pause(200);
   assert.equal(await page.getByText("New Workspace from…").count(), 0, "no New Workspace from…");
   await page.keyboard.press("Escape");
+  await page.getByRole("dialog").waitFor({ state: "detached" });
+  const stripTabs = page.locator('[aria-label="Workspace tabs"] [role="tab"]');
+  assert.equal(await stripTabs.nth(1).getAttribute("aria-selected"), "true");
+  await page.evaluate(() => {
+    const key = new window.KeyboardEvent("keydown", {
+      code: "Digit3",
+      metaKey: true,
+      cancelable: true,
+      bubbles: true,
+    });
+    key.preventDefault();
+    window.dispatchEvent(key);
+  });
+  assert.equal(await stripTabs.nth(1).getAttribute("aria-selected"), "true");
+  await page.keyboard.press("Meta+Digit3");
+  await third.waitFor();
+  assert.equal(await third.getAttribute("aria-selected"), "true");
+  check("⌘3 leaves the palette's hidden workspace alone and selects the third tab after dismissal");
   check("⌘O does nothing visible; the palette has no Open in Last Editor or New Workspace from…");
 
   // An empty `/` shows nothing when there is nothing to list: ask for the local skill by name.

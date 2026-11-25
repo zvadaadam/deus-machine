@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { isTextFieldFocused } from "@/shared/lib/keyboard";
 import { toast } from "sonner";
 import { shallow } from "zustand/shallow";
 import { hashKey, useQueryClient } from "@tanstack/react-query";
@@ -500,17 +501,6 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
   }, [workspaceSessions, openSessionIds, closedTabs]);
 
   // --- Keyboard shortcuts ---
-
-  function isTextFieldFocused(): boolean {
-    const activeElement = document.activeElement as HTMLElement | null;
-    return (
-      !!activeElement &&
-      (activeElement.tagName === "INPUT" ||
-        activeElement.tagName === "TEXTAREA" ||
-        activeElement.isContentEditable ||
-        activeElement.getAttribute("role") === "textbox")
-    );
-  }
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {

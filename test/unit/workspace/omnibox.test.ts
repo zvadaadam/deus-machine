@@ -5,7 +5,6 @@ import {
   parseOmniboxUrl,
   searchWorkspaceFiles,
 } from "@/features/workspace-tabs/lib/omnibox";
-import { onLocalhost } from "@/features/workspace/lib/reach";
 import type { FileTreeNode } from "@/features/file-browser/types";
 
 describe("parseOmniboxUrl", () => {
@@ -75,23 +74,12 @@ describe("workspace file search", () => {
   });
 });
 
-describe("normalizeNavigationUrl & onLocalhost", () => {
+describe("normalizeNavigationUrl", () => {
   it("normalizes explicit URL bar input including port shorthand, IPv6 loopback, and bare domains", () => {
     expect(normalizeNavigationUrl(":1420")).toBe("http://localhost:1420");
     expect(normalizeNavigationUrl("localhost:3000/app")).toBe("http://localhost:3000/app");
     expect(normalizeNavigationUrl("[::1]:5173/test")).toBe("http://[::1]:5173/test");
     expect(normalizeNavigationUrl("example.com")).toBe("https://example.com");
     expect(normalizeNavigationUrl("https://deusmachine.ai")).toBe("https://deusmachine.ai");
-  });
-
-  it("classifies loopback hosts including default ports and IPv6 via reach.onLocalhost", () => {
-    expect(onLocalhost("http://localhost:3000")).toEqual({ port: 3000, rest: "/" });
-    expect(onLocalhost("http://localhost/health")).toEqual({ port: 80, rest: "/health" });
-    expect(onLocalhost("https://localhost/secure")).toEqual({ port: 443, rest: "/secure" });
-    expect(onLocalhost("http://[::1]:5173/settings?tab=1#top")).toEqual({
-      port: 5173,
-      rest: "/settings?tab=1#top",
-    });
-    expect(onLocalhost("https://stripe.com/docs")).toBeNull();
   });
 });

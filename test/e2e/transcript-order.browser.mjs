@@ -667,15 +667,6 @@ async function run() {
             .querySelector('button[aria-label="Scroll to bottom"]')
             .parentElement.classList.contains("opacity-100")
         );
-        await logView.evaluate((pane) => {
-          pane.scrollTop = pane.scrollHeight;
-        });
-        await page.waitForFunction(
-          () =>
-            !globalThis.document
-              .querySelector('button[aria-label="Scroll to bottom"]')
-              .parentElement.classList.contains("opacity-100")
-        );
       }
     );
     await check(
@@ -684,22 +675,34 @@ async function run() {
         const worked = logView
           .locator('[data-message-id="streaming-scroll-reply-1"]')
           .getByRole("button", { name: /^Expand activity, Worked/ });
-        await worked.waitFor();
         const before = await worked.evaluate((btn) => {
-          const pane = globalThis.document.getElementById("chat-messages");
-          return {
-            scrollTop: pane.scrollTop,
-            scrollHeight: pane.scrollHeight,
-            btnTop: btn.getBoundingClientRect().top,
-          };
+          const pane = btn.closest('[role="log"]');
+          const jump = globalThis.document.querySelector(
+            'button[aria-label="Scroll to bottom"]'
+          ).parentElement;
+          // Open Worked when follow resumes, before the next animation frame can run.
+          const resumed = new globalThis.MutationObserver(() => {
+            if (!jump.classList.contains("opacity-0")) return;
+            resumed.disconnect();
+            btn.click();
+          });
+          resumed.observe(jump, { attributeFilter: ["class"] });
+          pane.scrollTop = pane.scrollHeight;
+          return { scrollHeight: pane.scrollHeight, btnTop: btn.getBoundingClientRect().top };
         });
-        await worked.click();
         const collapse = logView
           .locator('[data-message-id="streaming-scroll-reply-1"]')
           .getByRole("button", { name: /^Collapse activity, Worked/ });
         await collapse.waitFor();
-        await page.waitForTimeout(300);
-        const after = await collapse.evaluate((btn) => {
+        await page.waitForFunction(
+          (height) =>
+            globalThis.document.getElementById("chat-messages").scrollHeight > height + 200,
+          before.scrollHeight
+        );
+        const after = await collapse.evaluate(async (btn) => {
+          // Allow the measured expansion and its next chase frame to reach the screen.
+          await new Promise(globalThis.requestAnimationFrame);
+          await new Promise(globalThis.requestAnimationFrame);
           const pane = globalThis.document.getElementById("chat-messages");
           return {
             scrollTop: pane.scrollTop,
@@ -708,10 +711,6 @@ async function run() {
             btnTop: btn.getBoundingClientRect().top,
           };
         });
-        assert.ok(
-          after.scrollHeight > before.scrollHeight + 200,
-          "expanding Worked should grow the transcript"
-        );
         assert.ok(
           after.scrollHeight - (after.scrollTop + after.clientHeight) > 100,
           "opening Worked while following should not chase to the bottom"

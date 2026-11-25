@@ -4,11 +4,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // browser allows a new tab only while it handles the click.
 const mocks = vi.hoisted(() => ({
   call: vi.fn(),
+  openBrowserTab: vi.fn(),
   openExternal: vi.fn(async () => {}),
   openExternalPending: vi.fn(),
   toast: vi.fn(),
 }));
 vi.mock("@/platform/ws", () => ({ call: mocks.call }));
+vi.mock("@/features/workspace/store/workspaceLayoutStore", () => ({
+  workspaceLayoutActions: { openBrowserTab: mocks.openBrowserTab },
+}));
 vi.mock("@/platform/native", () => ({
   native: {
     window: {
@@ -61,10 +65,16 @@ describe("an address clicked in a cloud chat", () => {
     expect(mocks.call).not.toHaveBeenCalled();
   });
 
-  it("asks the preview address for a localhost address, and shows its path in the preview", async () => {
+  it("opens a typed localhost address in the cloud preview in place of its New Tab", async () => {
     mocks.call.mockResolvedValue(TEMPLATE);
-    await openAddressFromChat("ws-1", "http://localhost:5173/dash?a=1", cloud);
+    await openAddressFromChat("ws-1", "http://localhost:5173/dash?a=1", cloud, {
+      replaceTabId: "launcher",
+    });
     expect(mocks.call).toHaveBeenCalledWith(expect.anything(), { workspaceId: "ws-1" });
+    expect(mocks.openBrowserTab).toHaveBeenCalledWith("ws-1", "", {
+      cloud: true,
+      replaceTabId: "launcher",
+    });
     expect(mocks.openExternalPending).not.toHaveBeenCalled();
     expect(useCloudPreviewStore.getState().pending).toMatchObject({
       workspaceId: "ws-1",
