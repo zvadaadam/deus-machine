@@ -57,6 +57,7 @@ vi.mock("../../../src/services/agent/persistence", () => ({
   persistAgentSessionId: mockPersistAgentSessionId,
   persistChanges: mockPersistChanges,
   persistTurn: mockPersistTurn,
+  persistStopStatus: vi.fn(() => true),
   persistSessionError: mockPersistSessionError,
   persistSessionTitle: mockPersistSessionTitle,
   persistSessionWorking: mockPersistSessionWorking,
@@ -122,6 +123,8 @@ import {
   forgetChatTurns,
   holdingTurn,
   refuseTurn,
+  releaseTurn,
+  turnNotices,
 } from "../../../src/services/agent/chat-turn";
 import { createAgentEventHandler } from "../../../src/services/agent/event-handler";
 import { cloudSaveFailures, sessionEvents } from "@shared/api/sessions";
@@ -206,6 +209,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
   beforeEach(() => {
     forgetChatTurns();
+    delete turnNotices.interrupted;
     vi.clearAllMocks();
     outcomes.length = 0;
     mockPersistChanges.mockImplementation(stubPersistChanges as never);
@@ -1115,8 +1119,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
   describe("turn admission mirror", () => {
     it("notifies the open chat when its admitted turn with a user message ends locally", () => {
-      const interrupted = vi.fn(() => ["unread"]);
-      const handler = createAgentEventHandler(interrupted);
+      turnNotices.interrupted = vi.fn(() => ["unread"]);
       claimTurn(SESSION, TURN);
       handler.handle(
         envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
@@ -1124,7 +1127,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       handler.handle(envelope(messageStarted({ role: "user", outputIndex: 0 })));
       handler.handle(envelope(partEvent));
       mockPublish.mockClear();
-      handler.giveUpTurn(SESSION, TURN, "cancelled");
+      releaseTurn(SESSION, TURN, "cancelled");
       expect(mockPersistTurn).toHaveBeenCalledWith(SESSION, {
         turnId: TURN,
         stopReason: "cancelled",
