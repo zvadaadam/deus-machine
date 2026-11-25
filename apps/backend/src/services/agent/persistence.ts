@@ -230,7 +230,7 @@ export interface TurnOutcomeWrite {
 /** Persist a turn and its optional session status atomically, even without messages. */
 export function persistTurn(
   sessionId: string,
-  turn: ConversationTurn,
+  turn: Parameters<typeof turnRecord>[0],
   outcome?: TurnOutcomeWrite,
   providerCredentialSource?: TurnProviderCredentialSource
 ): WriteResult<void> {

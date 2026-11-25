@@ -396,6 +396,7 @@ async function sendMessageOnce(
         throw err;
       }
       if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
+        if (preparing.signal.aborted) agentService.notifyTurnInterrupted(sessionId, turnId, true);
         // Another turn won admission. Keep it working and return the typed refusal.
         console.warn(
           `[CommandHandler] sendMessage rejected, turn already active: session=${sessionId}`
@@ -451,13 +452,17 @@ export async function stopSession(
   /** Who stops it, kept on the turn so a reader can say who did. */
   by: Origin = { kind: "person" }
 ): Promise<{ unconfirmed: boolean }> {
-  agentService.notifyStopAsked(sessionId);
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new NotFoundError("Session not found");
 
   const admission = admitting.get(sessionId);
   const targetTurnId = admission?.turnId ?? agentService.liveTurnId(sessionId);
+  agentService.notifyStopAsked(sessionId, {
+    by,
+    turnId: targetTurnId,
+    endedAt: admission && getTurn(db, sessionId, admission.turnId)?.endedAt,
+  });
   if (admission) {
     admission.preparing.abort(new ConflictError("Stopped before it started."));
     try {
@@ -530,15 +535,15 @@ export async function stopSession(
   return { unconfirmed };
 }
 
-function settleStopped(sessionId: string, goneTurnId?: string): void {
-  if (goneTurnId) agentService.giveUpTurn(sessionId, goneTurnId);
+function settleStopped(sessionId: string, goneTurnId?: string, cause?: "cancelled"): void {
   getDatabase()
     .prepare(
       `UPDATE sessions SET status = 'idle', updated_at = datetime('now')
        WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
     )
     .run(sessionId, ...ACTIVE_TURN_STATUSES);
-  if (goneTurnId) agentService.notifyTurnInterrupted(sessionId, goneTurnId, true);
+  if (goneTurnId && !agentService.giveUpTurn(sessionId, goneTurnId, cause))
+    agentService.notifyTurnInterrupted(sessionId, goneTurnId, true);
   invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
 }
 
@@ -555,7 +560,7 @@ function scheduleCancelWatchdog(
       const live = admitting.get(sessionId)?.turnId ?? held;
       if (live !== undefined && live !== cancelledTurnId) return;
       if (confirmed) {
-        if (held && held === cancelledTurnId) settleStopped(sessionId, held);
+        if (held && held === cancelledTurnId) settleStopped(sessionId, held, "cancelled");
         return;
       }
 

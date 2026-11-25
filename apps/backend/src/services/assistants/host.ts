@@ -299,12 +299,70 @@ const AGENT_NAMES = new Intl.ListFormat("en").format(
 /** What a chat the host could not deliver its first task to says, the reason kept safe. */
 const NOT_DELIVERED = "Its first task could not be delivered.";
 
-function limitNote(id: string) {
-  const { resetsAt, continues } = queuedMessages(id).limit ?? {};
-  let note = "stopped on a usage limit";
-  if (resetsAt !== undefined)
-    note += `, resets ${new Date(resetsAt).toISOString().slice(0, 16).replace("T", " ")} UTC`;
-  return continues ? `${note}, continues by itself` : note;
+function limitNote(limit: sessions.QueuedMessages["limit"]) {
+  if (!limit) return "stopped on a usage limit";
+  const reset =
+    limit.resetsAt === undefined
+      ? "no reset time was reported, the person decides when to resume"
+      : `resets ${new Date(limit.resetsAt).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+  return `stopped on a usage limit, ${reset}, ${limit.continues ? "continues by itself" : "automatic continuation is off"}`;
+}
+
+type QueueSenderName = (origin?: Origin) => string;
+
+function queueSenderNames(origins: (Origin | undefined)[], reader?: Origin): QueueSenderName {
+  const ids = new Set(origins.flatMap((o) => (o?.kind === "session" ? [o.sessionId] : [])));
+  const refs = ids.size
+    ? getDatabase()
+        .prepare<[string], { id: string; ref: string }>(
+          `
+    SELECT s.id, (CASE WHEN EXISTS (
+      SELECT 1 FROM workspaces other WHERE other.kind != 'cloud' AND other.id != w.id
+        AND other.slug = w.slug COLLATE NOCASE
+    ) THEN r.name || '/' ELSE '' END) || w.slug || ':' || s.chat AS ref
+    FROM sessions s JOIN workspaces w ON s.workspace_id = w.id JOIN repositories r ON r.id = w.repository_id
+    WHERE s.id IN (SELECT value FROM json_each(?)) AND w.kind != 'cloud'
+  `
+        )
+        .all(JSON.stringify([...ids]))
+    : [];
+  const names = new Map(refs.map(({ id, ref }) => [id, quoted(ref)]));
+  return (origin) => {
+    if (!origin || origin.kind === "person") return "the person";
+    if (reader && sameOrigin(reader, origin)) return "you";
+    if (origin.kind === "assistant") return quoted(origin.name);
+    return names.get(origin.sessionId) ?? "a chat that is gone";
+  };
+}
+
+function queueHold(queue: sessions.QueuedMessages, senderName: QueueSenderName) {
+  switch (queue.paused) {
+    case "stopped":
+      return queue.stoppedBy
+        ? `held: stopped by ${senderName(queue.stoppedBy)}`
+        : "held: stopped without a recorded Stop; only the person can resume it";
+    case "failed":
+      return "held after an error";
+    case "limit":
+      return `held: ${limitNote(queue.limit)}`;
+    case null:
+      return undefined;
+  }
+}
+
+function queueNote(queue: sessions.QueuedMessages, hold?: string) {
+  if (!queue.items.length) return hold;
+  const counts = { waiting: 0, sending: 0, steering: 0 };
+  for (const row of queue.items) counts[row.state]++;
+  const tally = (n: number, state: string) => n && `${n} message${n === 1 ? "" : "s"} ${state}`;
+  return [
+    tally(counts.waiting, "queued"),
+    tally(counts.sending, "being sent"),
+    tally(counts.steering, "being steered"),
+    hold,
+  ]
+    .filter(Boolean)
+    .join(", ");
 }
 
 export function createDeusHost(): DeusHost {
@@ -381,13 +439,15 @@ export function createDeusHost(): DeusHost {
   function entriesOf(found: readonly Row[]): Entry[] {
     const ended = lastEnded(found.flatMap((r) => (r.session_id ? [r.session_id] : [])));
     const counted = new Map<string, number>();
-    return found.flatMap((row): Entry[] => {
+    const limited = new Set<string>();
+    const entries = found.flatMap((row): Entry[] => {
       const id = row.session_id ?? row.first_session_id;
       if (!id) return [];
       // Its stored number (made in order, never moved); a chat from before numbers counts on.
       const chat = row.chat ?? (counted.get(row.workspace_id) ?? 0) + 1;
       counted.set(row.workspace_id, chat);
       const status = statusOf(row, ended.get(id));
+      if (status === "error" && row.error_category === "usage_limit") limited.add(id);
       // The workspace's title and time stand in only for a first chat with no row yet.
       const title = row.session_id ? row.s_title : row.ws_title;
       const activity = Math.max(
@@ -409,8 +469,6 @@ export function createDeusHost(): DeusHost {
           chat,
           current: row.current_session_id ? row.current_session_id === id : chat === 1,
           status,
-          ...(status === "error" &&
-            row.error_category === "usage_limit" && { note: limitNote(id) }),
           startedBy: readOrigin(row.s_started_by ?? (row.session_id ? null : row.ws_started_by)),
           harness: knownHarness(row.agent_harness),
           ...(title ? { title } : {}),
@@ -420,6 +478,16 @@ export function createDeusHost(): DeusHost {
         },
       ];
     });
+    const queues = entries.map((entry) => ({ entry, queue: queuedMessages(entry.id) }));
+    const senderName = queueSenderNames(queues.map(({ queue }) => queue.stoppedBy));
+    for (const { entry, queue } of queues) {
+      const hold =
+        queueHold(queue, senderName) ??
+        (limited.has(entry.id) ? limitNote(queue.limit) : undefined);
+      const note = queueNote(queue, hold);
+      if (note) entry.note = note;
+    }
+    return entries;
   }
 
   /** Every entry, archived ones too (names resolve over them). */
@@ -431,7 +499,7 @@ export function createDeusHost(): DeusHost {
         id,
         id
       )
-    ).find((e) => e.id === id);
+    ).find((entry) => entry.id === id);
 
   /** Workspaces agents started that are being set up now. */
   const agentSetups = () =>

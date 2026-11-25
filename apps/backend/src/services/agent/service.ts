@@ -19,6 +19,7 @@ import { echoMessageId, WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
 import type {
   ElicitationOutcome,
   ElicitationRequestedEvent,
+  Origin,
   PermissionOutcome,
   PermissionRequestedEvent,
   TurnCancelResult,
@@ -130,16 +131,12 @@ export async function init(): Promise<void> {
       // Replay exhaustion can hide the native terminal entirely. One
       // targeted cancel reconciles it; a late reply cannot settle a successor.
       void (async () => {
-        let confirmed = false;
-        try {
-          const result = await link?.cancelTurn(gap.sessionId, turnId);
-          confirmed =
-            result?.outcome === "cancelled" ||
-            (result?.outcome === "no_active_turn" && !result.activeTurnId);
-        } catch (error) {
+        const result = await link?.cancelTurn(gap.sessionId, turnId).catch((error: unknown) => {
           console.warn("[AgentService] Replay recovery cancel failed:", error);
-        }
-        handler.settleEventGap(gap.sessionId, turnId, confirmed);
+        });
+        const absent = result?.outcome === "no_active_turn";
+        const gone = result?.outcome === "cancelled" || (absent && !result.activeTurnId);
+        handler.settleEventGap(gap.sessionId, turnId, gone, absent ? undefined : "cancelled");
       })();
     },
     onToolRequest: (method, params) => handleToolRequest(method, params),
@@ -310,28 +307,36 @@ export function provideSessionTools(compose: (own: HostToolSource) => HostToolSo
   sessionTools = compose;
 }
 
+export type InterruptionCause = "failure" | "cancelled";
+export type StopAsked = { by: Origin; turnId?: string; endedAt?: number };
 interface TurnWatcher {
   turnEnded(end: TurnEnd): void;
   userEcho(sessionId: string, turnId: string, steerId?: string): void;
-  stopAsked(sessionId: string): void;
-  interrupted(sessionId: string, turnId: string | undefined, gone: boolean): void;
+  stopAsked(sessionId: string, stop: StopAsked): void;
+  interrupted(
+    sessionId: string,
+    turnId: string | undefined,
+    gone: boolean,
+    cause: InterruptionCause
+  ): string[] | undefined;
 }
 let turnWatcher: TurnWatcher | undefined;
 export function provideTurnWatcher(watcher: TurnWatcher): void {
   turnWatcher = watcher;
 }
 
-export function notifyStopAsked(sessionId: string): void {
-  turnWatcher?.stopAsked(sessionId);
+export function notifyStopAsked(sessionId: string, stop: StopAsked): void {
+  turnWatcher?.stopAsked(sessionId, stop);
 }
 
 export function notifyTurnInterrupted(
   sessionId: string,
   turnId: string | undefined,
-  gone: boolean
-): void {
+  gone: boolean,
+  cause: InterruptionCause = "failure"
+) {
   if (gone && turnId) cancelSessionRelays(sessionId, "turn interrupted", turnId);
-  turnWatcher?.interrupted(sessionId, turnId, gone);
+  return turnWatcher?.interrupted(sessionId, turnId, gone, cause);
 }
 
 /**
@@ -345,8 +350,8 @@ export function liveTurnId(sessionId: string): string | undefined {
   return events?.liveTurnId(sessionId);
 }
 
-export function giveUpTurn(sessionId: string, turnId: string): void {
-  events?.giveUpTurn(sessionId, turnId);
+export function giveUpTurn(sessionId: string, turnId: string, cause?: "cancelled") {
+  return events?.giveUpTurn(sessionId, turnId, cause);
 }
 
 /**

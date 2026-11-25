@@ -43,6 +43,7 @@ import { invalidate } from "../query-engine";
 import { openWith, publish } from "../streams";
 import {
   persistChanges,
+  persistTurn,
   persistSessionTitle,
   persistSessionError,
   type TurnOutcomeWrite,
@@ -83,8 +84,8 @@ export interface AgentEventHandler {
   beginTurn(sessionId: string, turnId: string, opts?: { force?: boolean }): boolean;
   /** Release a rejected local claim, only while this turn is still unadmitted. */
   abortTurn(sessionId: string, turnId: string): boolean;
-  /** Release the held turn. Its end can still settle the chat while it is the last accepted turn. */
-  giveUpTurn(sessionId: string, turnId: string): void;
+  /** Record the local end. A late native terminal can still supply its actual outcome. */
+  giveUpTurn(sessionId: string, turnId: string, cause?: "cancelled"): boolean;
   /**
    * The turn this handler currently believes is running, if any — set at
    * admission (or at `turn.started` on the replay path) and cleared at its
@@ -97,7 +98,7 @@ export interface AgentEventHandler {
   /** Mark delivery loss synchronously, before any replay suffix is folded. */
   handleEventGap(gap: SessionEventGap): string | undefined;
   /** Settle only that damaged turn after targeted native reconciliation. */
-  settleEventGap(sessionId: string, turnId: string, confirmed: boolean): void;
+  settleEventGap(sessionId: string, turnId: string, confirmed: boolean, cause?: "cancelled"): void;
   /** Side-channel title notification (deus/*, not a lifecycle event). */
   handleTitle(sessionId: string, title: string): void;
 }
@@ -182,7 +183,12 @@ function pushEnvelope(envelope: DecodedWireEventEnvelope): void {
 
 /** Create the agent event handler: persistence + WS push per lifecycle event. */
 export function createAgentEventHandler(
-  onInterrupted?: (sessionId: string, turnId: string, gone: boolean) => void
+  onInterrupted?: (
+    sessionId: string,
+    turnId: string,
+    gone: boolean,
+    cause?: "cancelled"
+  ) => string[] | undefined
 ): AgentEventHandler {
   const sessions = new Map<string, SessionState>();
   // A client that starts following a chat, or returns to it, first gets the
@@ -258,9 +264,23 @@ export function createAgentEventHandler(
       return sessions.get(sessionId)?.turnId;
     },
 
-    giveUpTurn(sessionId, turnId) {
+    giveUpTurn(sessionId, turnId, cause) {
       const state = sessions.get(sessionId);
-      if (state?.turnId === turnId) state.turnId = undefined;
+      if (state?.turnId !== turnId) return false;
+      state.acceptedTurnId = turnId;
+      state.turnId = undefined;
+      const kept = onInterrupted?.(sessionId, turnId, true, cause);
+      persistAndInvalidate(
+        persistTurn(sessionId, {
+          turnId,
+          endedAt: Date.now(),
+          stopReason: cause ?? "error",
+          undeliveredSteers: kept,
+        }),
+        SESSION_RESOURCES,
+        sessionId
+      );
+      return true;
     },
 
     confirmTurn(sessionId, turnId) {
@@ -300,20 +320,20 @@ export function createAgentEventHandler(
       return turnId;
     },
 
-    settleEventGap(sessionId, turnId, confirmed) {
+    settleEventGap(sessionId, turnId, confirmed, cause) {
       const state = sessions.get(sessionId);
       if (state?.turnId !== turnId || state.deliveryFailure?.turnId !== turnId) return;
       const message =
         state.deliveryFailure.message +
         (confirmed ? "" : " The agent has not confirmed it stopped.");
-      if (confirmed) state.turnId = undefined;
       state.errorReported = true;
       persistAndInvalidate(
         persistSessionError(sessionId, message, "network", confirmed ? "error" : "working"),
         SESSION_RESOURCES,
         sessionId
       );
-      onInterrupted?.(sessionId, turnId, confirmed);
+      if (confirmed) this.giveUpTurn(sessionId, turnId, cause);
+      else onInterrupted?.(sessionId, turnId, false, cause);
     },
 
     handleTitle(sessionId, title) {

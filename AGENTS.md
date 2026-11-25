@@ -228,20 +228,20 @@ Each composer follows `queuedMessages` for the sender, text and picture count in
 `queuedMessage`, puts it in the composer, then calls `removeQueuedMessage`.
 Dragging a waiting row's grip, or using Space and the arrow keys, calls
 `moveQueuedMessage` to put it before another waiting row or last. The sending head
-stays first until its user echo is complete. If its own turn is known to be gone
-first, the head returns to the front and the queue pauses. Unread steers follow and
-return to the front in order if their turn ends unread. After publishing a normal end,
-the backend sends one row from an unpaused queue. Stop pauses the queue at once.
+stays first until its user echo is complete.
+After Stop, nothing waiting runs until Resume. A plain send to an idle chat starts at once.
+An empty Stop or failure hold clears when its turn settles. A usage limit can hold an empty queue.
+The rules above `transition` in `services/agent/queue.ts` say who may resume each hold.
 During local app setup, Stop returns the chat to idle at once, except for an agent's or
 assistant's first task, which ends in an error saying it was not delivered. The person
 keeps their draft, a queue head waits first, and an operator's send is refused
 with “Stopped before it started.” Once the start request reaches the wire, Stop
 waits for its answer (up to 30 seconds) and cancels the turn if it is still live.
-If the engine reports no active turn, the chat settles at once. A confirmed cancel
-withdraws the turn's cards at once and keeps the chat occupied for its final echoes and end.
-After 15 seconds without the end, the watchdog frees the chat and returns unread messages
-to the queue, leaving the turn's outcome to the engine. Rows paused by a stop or failure wait for Resume, which can be pressed before the turn ends.
-A local usage limit pauses even an empty queue. Resume appears only when there are rows. Pressing Continue
+If the engine reports no active turn, the chat settles at once. A confirmed cancel withdraws the cards
+and keeps the chat occupied for final echoes. If no end arrives within 15 seconds of confirmation, the watchdog
+frees the chat, records the local end and returns unread steers to the queue. A late engine end can update the outcome.
+If the cancel is unconfirmed and the turn is still live, the watchdog records a warning and leaves it running.
+Resume appears above held rows, even before the turn ends. At a usage limit, pressing Continue
 before the reported reset schedules a turn one minute after it. The person can enable this for future limits in Settings.
 Pressing Continue after the reset starts the turn at once. While Deus stays open, the first waiting message goes, or “Continue.”
 with the chat's settings. A new send, Resume, Stop, hiding the chat or archiving its workspace clears the schedule.

@@ -124,7 +124,10 @@ export default [
     queue.moveQueuedMessage(sessionId, id, before)
   ),
   handle(api.removeQueuedMessage, ({ sessionId, id }) => queue.removeQueuedMessage(sessionId, id)),
-  handle(api.resumeQueuedMessages, ({ sessionId }) => queue.resumeQueuedMessages(sessionId)),
+  handle(api.resumeQueuedMessages, async ({ sessionId }) => {
+    await queue.resumeQueuedMessages(sessionId);
+    return {};
+  }),
   handle(api.continueAfterLimit, ({ sessionId, on }) => queue.continueAfterLimit(sessionId, on)),
   // A client's stop is the person's.
   handle(api.stopSession, (input) => stopSession(input)),

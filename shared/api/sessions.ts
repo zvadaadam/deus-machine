@@ -75,6 +75,7 @@ export const sendMessage = write({
 
 export type QueuedMessages = {
   paused: "stopped" | "failed" | "limit" | null;
+  stoppedBy?: Origin;
   /** The provider's reset time in epoch milliseconds, when known. */
   limit?: { resetsAt?: number; continues: boolean };
   items: {
