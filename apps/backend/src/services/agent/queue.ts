@@ -45,6 +45,7 @@ type Item = {
   text: string;
   images: number;
   attempt?: Attempt;
+  afterStop?: string;
   /** The turn named by a fresh steer, including one kept without reaching the wire. */
   target?: string;
   steer?: Steer;
@@ -260,10 +261,12 @@ function newQueueItem(
     throw new QueueLimitError("agents");
   if (q.items.length >= MAX_QUEUED_MESSAGES) throw new QueueLimitError("total");
   const input = toEngineInput(message.content);
+  const stopped = !sender && q.pause?.reason === "stopped" ? q.pause.turnId : undefined;
   return {
     message,
     delivery,
     origin: sender,
+    afterStop: stopped && holdingTurn(q.sessionId)?.turnId === stopped ? stopped : undefined,
     text: inputToText(input),
     images: typeof input === "string" ? 0 : input.filter((p) => p.type === "image").length,
   };
@@ -308,17 +311,23 @@ function waitForWinner(q: Queue, { competingTurnId }: ChatBusyError) {
 
 // A busy head waits for the named end, engine-confirmed absence, or the person's Resume.
 async function drain(q: Queue | undefined, retryBusy = false) {
-  if (!q || (q.busyOn && !retryBusy)) return;
-  delete q.busyOn;
-  const head = q.items[0];
+  if (!q) return;
+  if (retryBusy) delete q.busyOn;
   const canStart = !q.pause || (q.pause.reason === "resumed" && q.pause.scope === "turn");
-  if (!canStart || !head || stateOf(head) !== "waiting") return;
+  const stopped = q.pause?.reason === "stopped" && q.pause.turnId;
+  // The person's send after Stop runs when that turn gives up the chat, while earlier rows stay held.
+  const head = stopped
+    ? q.items.find((item) => item.afterStop === stopped && item.attempt?.state !== "returned")
+    : canStart && q.items[0];
+  if (!head || stateOf(head) !== "waiting") return;
+  if (q.busyOn && (!stopped || head.attempt)) return;
   if (!localChat(q.sessionId)) {
     queues.delete(q.sessionId);
     notify([q.sessionId]);
     return;
   }
   if (holdingTurn(q.sessionId)) return;
+  if (head !== q.items[0]) q.items = [head, ...q.items.filter((item) => item !== head)];
   const previous = head.attempt;
   let turnId = head.message.turnId;
   if (previous) turnId = previous.state === "busy" ? previous.turnId : uuidv7();
@@ -700,8 +709,8 @@ export function userEcho(sessionId: string, turnId: string, steerId?: string) {
 }
 
 function recoverAttempt(q: Queue, turnId: string, state: "busy" | "returned" = "returned") {
-  const head = q.items[0];
-  if (head?.attempt?.turnId !== turnId) return false;
+  const head = q.items.find((item) => item.attempt?.turnId === turnId);
+  if (!head?.attempt) return false;
   // A busy reply keeps its retry id even if Stop has already returned the head.
   if (head.attempt.state !== "sending" && state !== "busy") return false;
   head.attempt = { turnId, state };
@@ -737,6 +746,7 @@ turnNotices.queue = (id, event) => {
   const q = queues.get(id) ?? (keepEmpty && localChat(id) ? queueFor(id) : undefined);
   if (!q) return;
   if (event.type === "stop") {
+    for (const item of q.items) delete item.afterStop;
     changed(q, event);
     return;
   }

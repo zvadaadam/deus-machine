@@ -1673,17 +1673,27 @@ describe("messages held for a local chat", () => {
     }
   );
 
-  it("holds a person's message typed after an empty Stop until they resume", async () => {
-    await send("A");
-    await stopped("A");
-    await send("B");
-    end("A", "cancelled");
-    expect(await queue()).toMatchObject({ paused: "stopped", items: [{ id: "B" }] });
-    expect(starts()).toEqual(["A"]);
-    await resumeInWindow();
-    expect(starts()).toEqual(["A", "B"]);
-    expect((await queue()).paused).toBeNull();
-  });
+  it.each(["end", "watchdog", "pending start"])(
+    "starts only the person's post-Stop send when A settles (%s)",
+    async (order) => {
+      vi.useFakeTimers();
+      const wire = order === "pending start" ? pendingStart() : undefined;
+      const active = send("A");
+      await vi.waitFor(() => expect(starts()).toEqual(["A"]));
+      await send("R");
+      const stopping = stopped("A");
+      await sendInOrder("P", "P");
+      expect(starts()).toEqual(["A"]);
+      wire?.resolve();
+      await Promise.all([active, stopping]);
+      if (order === "watchdog") await vi.advanceTimersByTimeAsync(15_000);
+      else end("A", "cancelled");
+      await vi.waitFor(() => expect(starts()).toEqual(["A", "P"]));
+      end("P");
+      expect(await queue()).toMatchObject({ paused: "stopped", items: [waitingRow("R")] });
+      expect(starts()).toEqual(["A", "P"]);
+    }
+  );
 
   it.each(["watchdog", "replay gap"] as const)(
     "retries B after the %s gave up A with an empty queue and the engine was still busy",
@@ -3399,7 +3409,7 @@ describe("the operator's queue and steer contract", () => {
     expect(await ids()).toEqual([]);
   });
 
-  it("holds an agent's steer, its queued message and the person's row after Stop on an empty queue", async () => {
+  it("runs the person's send after Stop and holds both agent messages until Resume", async () => {
     await send("active");
     await stopped("active");
     const operator = createOperator(host);
@@ -3409,7 +3419,8 @@ describe("the operator's queue and steer contract", () => {
     const [first, second] = await ids();
     await send("person");
     end("active", "cancelled");
-    expect(starts()).toEqual(["active"]);
+    await vi.waitFor(() => expect(starts()).toEqual(["active", "person"]));
+    end("person");
     expect(engine.steerTurn).not.toHaveBeenCalled();
     expect(await queue()).toMatchObject({
       paused: "stopped",
@@ -3417,15 +3428,12 @@ describe("the operator's queue and steer contract", () => {
       items: [
         { text: "steer", state: "waiting" },
         { text: "queued", state: "waiting" },
-        waitingRow("person"),
       ],
     });
     await resumeInWindow();
-    expect(starts()).toEqual(["active", first]);
+    expect(starts()).toEqual(["active", "person", first]);
     end(first!);
-    await vi.waitFor(() => expect(starts()).toEqual(["active", first, second]));
-    end(second!);
-    await vi.waitFor(() => expect(starts()).toEqual(["active", first, second, "person"]));
+    await vi.waitFor(() => expect(starts()).toEqual(["active", "person", first, second]));
   });
 
   it("gives one queue position for a repeated id and refuses different contents", async () => {
