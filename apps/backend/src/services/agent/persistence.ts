@@ -262,6 +262,19 @@ export function persistStopStatus(
   }
 }
 
+/** A busy send held the status when its predecessor ended. That end is already on the turn. */
+export function restoreEndedStatus(id: string, turnId: string) {
+  try {
+    const turn = getTurn(getDatabase(), id, turnId);
+    if (turn?.endedAt === undefined) return;
+    if (turn.stopReason !== "error") return persistStopStatus(id);
+    const error = turn.error ?? { message: "Agent turn failed", category: "internal" };
+    return persistSessionError(id, error.message, error.category);
+  } catch (error) {
+    return failed("ended turn status", error);
+  }
+}
+
 /** Persist a turn and its optional session status atomically, even without messages. */
 export function persistTurn(
   sessionId: string,

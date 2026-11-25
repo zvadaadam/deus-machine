@@ -5,6 +5,7 @@ import {
   persistStopCredit,
   persistStopStatus,
   persistTurn,
+  restoreEndedStatus,
   type TurnOutcomeWrite,
 } from "./persistence";
 
@@ -136,8 +137,12 @@ export function releaseTurn(
     if (!chat.last) chats.delete(id);
   }
   if (nativeEnd) return true;
+  if (detail === "busy_after_end" && chat?.last) restoreEndedStatus(id, chat.last.turnId);
   if (end === "refused" && typeof detail !== "object" && !turn?.stops?.size) {
-    if (detail === "busy_after_end") turnNotices.queue?.(id, { type: "available" });
+    if (detail === "busy_after_end") {
+      turnNotices.queue?.(id, { type: "available" });
+      notify(id);
+    }
     return true;
   }
   if (typeof detail === "object") persistSessionError(id, detail.message, detail.category);
@@ -161,15 +166,9 @@ export function releaseTurn(
 /** Free the chat before invalidation. Its next row can start after the window receives this end. */
 export function endTurn({ sessionId, turnId, stopReason }: TurnEndedEvent) {
   const held = releaseTurn(sessionId, turnId, "native");
+  const cancelled = stopReason === "cancelled";
   return (status: NativeEnd["status"], limit?: NativeEnd["limit"]) =>
-    turnNotices.queue?.(sessionId, {
-      type: "end",
-      turnId,
-      cancelled: stopReason === "cancelled",
-      held,
-      status,
-      limit,
-    });
+    turnNotices.queue?.(sessionId, { type: "end", turnId, cancelled, held, status, limit });
 }
 
 export function refuseTurn(id: string, turnId: string, detail?: ErrorInfo | "busy_after_end") {

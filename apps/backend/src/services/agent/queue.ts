@@ -304,8 +304,7 @@ async function drain(q: Queue | undefined) {
   const head = q.items[0];
   const canStart = !q.pause || (q.pause.reason === "resumed" && q.pause.scope === "turn");
   if (!canStart || !head || stateOf(head) !== "waiting") return;
-  const chat = localChat(q.sessionId);
-  if (!chat) {
+  if (!localChat(q.sessionId)) {
     queues.delete(q.sessionId);
     notify([q.sessionId]);
     return;
@@ -716,10 +715,6 @@ function recoverSteers(q: Queue, turnId: string) {
   return kept;
 }
 
-function queueToPause(id: string, keepEmpty: boolean) {
-  return queues.get(id) ?? (keepEmpty && localChat(id) ? queueFor(id) : undefined);
-}
-
 /** A live turn can still echo. Once it is gone, return its unread steers to the queue. */
 turnNotices.queue = (id, event) => {
   if (event.type === "available") {
@@ -728,7 +723,7 @@ turnNotices.queue = (id, event) => {
   }
   const keepEmpty =
     event.type === "stop" || (event.type === "end" ? !!event.limit : event.cause === "cancelled");
-  const q = queueToPause(id, keepEmpty);
+  const q = queues.get(id) ?? (keepEmpty && localChat(id) ? queueFor(id) : undefined);
   if (!q) return;
   if (event.type === "stop") {
     changed(q, event);

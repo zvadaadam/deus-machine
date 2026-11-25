@@ -3,7 +3,7 @@
 // The engine's echo writes the user's message. The caller keeps the prompt until admission.
 
 import { createHash } from "node:crypto";
-import { WireRequestError } from "@zvada/agent-server/client";
+import { refusalData, WireRequestError } from "@zvada/agent-server/client";
 import { WIRE_ERROR_CODES, type AgentInput, type Origin } from "@zvada/agent-server/protocol";
 import type * as api from "@shared/api/sessions";
 import type { ParsedInputOf } from "@shared/api/op";
@@ -362,7 +362,9 @@ async function sendMessageOnce(
       }
       if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
         // The engine's end can reach a waiting row while this strict send still holds the chat.
-        if (lastTurn(sessionId) !== last) refuseTurn(sessionId, turnId, "busy_after_end");
+        const ended = lastTurn(sessionId);
+        if (ended && ended !== last && ended.turnId === refusalData(err, "turnActive")?.turnId)
+          refuseTurn(sessionId, turnId, "busy_after_end");
         else refuseTurn(sessionId, turnId);
         throw new ChatBusyError(
           "The agent is still working — wait for the current turn to finish."
@@ -390,9 +392,7 @@ export async function stopSession(
   /** Who stops it, kept on the turn so a reader can say who did. */
   by: Origin = { kind: "person" }
 ): Promise<{ unconfirmed: boolean }> {
-  const db = getDatabase();
-  const session = getSessionRaw(db, sessionId);
-  if (!session) throw new NotFoundError("Session not found");
+  if (!getSessionRaw(getDatabase(), sessionId)) throw new NotFoundError("Session not found");
 
   // Two concurrent Stops from the same caller still have separate answers.
   by = { ...by };

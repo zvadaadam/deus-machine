@@ -707,6 +707,35 @@ describe("stopping the current turn", () => {
     expect(await ids()).toEqual([]);
   });
 
+  it.each(["end_turn", "error"] as const)(
+    "restores the recorded %s after a strict busy refusal with no successor",
+    async (stopReason) => {
+      await send("A");
+      await outliveStop("A");
+      const wire = pendingStart();
+      const busy = expect(
+        sendMessage({ ...message("B"), turnId: "B" }, fromChat)
+      ).rejects.toMatchObject({ name: "ChatBusyError" });
+      await vi.waitFor(() => expect(starts()).toEqual(["A", "B"]));
+      const error =
+        stopReason === "error"
+          ? ({ category: "internal", message: "A failed" } as const)
+          : undefined;
+      emit({ type: "turn.ended", sessionId, turnId: "A", timestamp: seq, stopReason, error });
+      expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
+      wire.reject(busyReply("A"));
+      await busy;
+      const status = error ? "error" : "idle";
+      expect(await run(api.session, { sessionId })).toMatchObject({
+        status,
+        error_message: error?.message ?? null,
+      });
+      expect(await view()).toMatchObject({ status });
+      expect(lastTurn(sessionId)?.turnId).toBe("A");
+      expect(holdingTurn(sessionId)).toBeUndefined();
+    }
+  );
+
   it("keeps the last pre-wire end until the next turn is released", async () => {
     let previous: string | undefined;
     for (const id of ["A", "B", "C"]) {
