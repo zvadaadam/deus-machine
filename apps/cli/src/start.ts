@@ -15,11 +15,13 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { homedir } from "node:os";
+import {
+  clearInheritedPackagedEnv,
+  defaultDatabasePathForEnv,
+} from "../../../shared/lib/child-env";
 import {
   BACKEND_SHUTDOWN_TIMEOUT_MS,
   DEUS_DB_FILENAME,
-  resolveDefaultDataDir,
   resolveRuntimeStagePaths,
 } from "../../../shared/runtime";
 import {
@@ -87,16 +89,10 @@ export async function start(options: StartOptions): Promise<void> {
   }
 
   // Resolve database
-  const dbPath = resolve(
-    dataDir ??
-      resolveDefaultDataDir({
-        platform: process.platform,
-        homeDir: homedir(),
-        xdgDataHome: process.env.XDG_DATA_HOME,
-        devRoot,
-      }),
-    DEUS_DB_FILENAME
-  );
+  const dbPath =
+    dataDir === undefined
+      ? resolve(defaultDatabasePathForEnv(process.env, devRoot))
+      : resolve(dataDir, DEUS_DB_FILENAME);
   kv("Database", c.dim(dbPath));
   blank();
 
@@ -236,13 +232,15 @@ async function startBackendProcess(opts: {
   onUnexpectedExit: (code: number | null, signal: NodeJS.Signals | null) => void;
 }): Promise<{ process: ChildProcess; backendPort: number } | null> {
   const { backendEntry, backendCwd, env, onUnexpectedExit } = opts;
+  const parentEnv = { ...process.env };
+  clearInheritedPackagedEnv(parentEnv);
 
   return new Promise((resolve) => {
     // The Node that runs this CLI runs the backend.
     const child = spawn(process.execPath, [backendEntry], {
       cwd: backendCwd,
       stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, ...env },
+      env: { ...parentEnv, ...env },
     });
 
     let buffer = "";

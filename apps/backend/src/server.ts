@@ -1,7 +1,7 @@
+import { initDatabase, closeDatabase, DB_PATH } from "./lib/database";
 import * as Sentry from "@sentry/node";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
-import { initDatabase, closeDatabase, DB_PATH } from "./lib/database";
 import { stopProcessGroups } from "@shared/lib/process-groups";
 import { beforeBreadcrumb } from "@shared/lib/sentry-breadcrumb";
 import {
@@ -208,14 +208,20 @@ function shutdown() {
   stopProcessGroups();
   const report = process.exitCode === 1 ? Sentry.close(2000) : undefined;
   void Promise.allSettled([agentService.shutdown(), report]).then(() => {
-    destroyAllSimulators();
-    destroyAllPtySessions();
-    destroyAllWatchers();
-    stopLocalServerDiscovery();
-    disconnectFromRelay();
-    closeAllWsConnections();
     try {
-      closeDatabase();
+      try {
+        destroyAllSimulators();
+        destroyAllPtySessions();
+        destroyAllWatchers();
+        stopLocalServerDiscovery();
+        disconnectFromRelay();
+        closeAllWsConnections();
+      } finally {
+        closeDatabase();
+      }
+    } catch (error) {
+      process.exitCode = 1;
+      console.error("[server] Shutdown failed:", error);
     } finally {
       process.exit();
     }

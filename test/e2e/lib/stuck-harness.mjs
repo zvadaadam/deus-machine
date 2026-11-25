@@ -5,6 +5,8 @@ import { mock } from "node:test";
 import { CodexAppServerAgent } from "@zvada/agent-server/core";
 
 mock.method(CodexAppServerAgent.prototype, "execute", async function* (_input, { cwd, sessionId }) {
+  const helper =
+    'process.on("SIGTERM", () => {}); console.log(process.pid); setInterval(() => {}, 60_000)';
   const native = this.processes.spawn({
     harness: this.harness,
     sessionId,
@@ -12,11 +14,14 @@ mock.method(CodexAppServerAgent.prototype, "execute", async function* (_input, {
     command: process.execPath,
     args: [
       "-e",
-      'process.on("SIGTERM", () => {}); console.log("ready"); setInterval(() => {}, 60_000)',
+      `process.on("SIGTERM", () => {});
+       require("node:child_process").spawn(process.execPath, ["-e", ${JSON.stringify(helper)}], { stdio: "inherit" });
+       setInterval(() => {}, 60_000);`,
     ],
     env: {},
   });
-  await once(native.child.stdout, "data");
+  const [childPid] = await once(native.child.stdout, "data");
   console.log(`[STUCK_AGENT_PID]${native.pid}`);
+  console.log(`[STUCK_CHILD_PID]${String(childPid).trim()}`);
   yield* native.child.stdout; // The child stays silent and keeps the stream open until killed.
 });

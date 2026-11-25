@@ -160,6 +160,7 @@ function scheduleRestart(hooks: BackendSpawnHooks): void {
     void (async () => {
       try {
         await terminateBackend();
+        if (isQuitting) return;
         const { port } = await spawnBackend(hooks);
         process.env.DEUS_BACKEND_PORT = String(port);
 

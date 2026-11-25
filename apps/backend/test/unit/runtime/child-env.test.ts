@@ -1,5 +1,9 @@
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createBackendChildEnv } from "@shared/lib/child-env";
+import { clearInheritedPackagedEnv, createBackendChildEnv } from "@shared/lib/child-env";
+import { resolveDefaultDatabasePath } from "@shared/runtime";
 
 const originalEnv = { ...process.env };
 
@@ -8,6 +12,40 @@ afterEach(() => {
 });
 
 describe("backend child process environment", () => {
+  it("drops dotted and symlinked spellings of the installed database, and keeps a custom file", () => {
+    const home = mkdtempSync(join(tmpdir(), "deus-legacy-env-"));
+    try {
+      const installed = resolveDefaultDatabasePath({
+        platform: process.platform,
+        homeDir: home,
+        xdgDataHome: home,
+      });
+      function fromLegacyShell(path: string) {
+        const env = { HOME: home, XDG_DATA_HOME: home, DEUS_PACKAGED: "1", DATABASE_PATH: path };
+        clearInheritedPackagedEnv(env);
+        return env.DATABASE_PATH;
+      }
+      expect(fromLegacyShell(`${dirname(installed)}/./${basename(installed)}`)).toBeUndefined();
+      mkdirSync(dirname(installed), { recursive: true });
+      writeFileSync(installed, "");
+      const alias = join(home, "alias.db");
+      symlinkSync(installed, alias);
+      expect(fromLegacyShell(alias)).toBeUndefined();
+      const custom = join(home, "custom.db");
+      writeFileSync(custom, "");
+      expect(fromLegacyShell(custom)).toBe(custom);
+      const child = join(home, "custom/subdir");
+      mkdirSync(child, { recursive: true });
+      writeFileSync(join(home, "custom", basename(installed)), "");
+      const link = join(dirname(installed), "link");
+      symlinkSync(child, link);
+      const throughParent = `${link}/../${basename(installed)}`;
+      expect(fromLegacyShell(throughParent)).toBe(throughParent);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("scrubs packaged runtime internals while preserving caller overrides", () => {
     process.env.DEUS_PACKAGED = "1";
     process.env.DEUS_RUNTIME_EXECUTABLE =
