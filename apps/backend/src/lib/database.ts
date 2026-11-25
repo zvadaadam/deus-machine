@@ -39,7 +39,11 @@ function claimDatabase(filename: string): BetterSqlite3.Database {
   const owner = openSqliteDatabase(`${filename}.owner`);
   try {
     // A forced desktop quit can leave its backend finishing shutdown briefly.
-    owner.pragma("busy_timeout = 10000");
+    const timeout =
+      process.env.NODE_ENV === "test" && process.env.DEUS_TEST_DB_OWNER_NO_WAIT === "1"
+        ? 0
+        : 10_000;
+    owner.pragma(`busy_timeout = ${timeout}`);
     owner.exec("BEGIN IMMEDIATE");
     return owner;
   } catch (error) {

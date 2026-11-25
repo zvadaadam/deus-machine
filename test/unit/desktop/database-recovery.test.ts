@@ -49,6 +49,7 @@ beforeEach(() => {
   database = join(directory, "chats.db");
   vi.stubEnv("DEUS_USER_DATA_DIR", directory);
   vi.stubEnv("DATABASE_PATH", database);
+  vi.stubEnv("DEUS_PACKAGED", undefined);
 });
 afterEach(() => {
   vi.unstubAllEnvs();

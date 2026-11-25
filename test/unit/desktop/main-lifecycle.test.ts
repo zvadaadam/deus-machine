@@ -217,7 +217,9 @@ it("asks the person to retry when the database is still owned", async () => {
   await import("../../../apps/desktop/main/index");
   await vi.waitFor(() =>
     expect(mocks.showMessageBox).toHaveBeenCalledWith(
-      expect.objectContaining({ message: "Deus is still closing. Try again." })
+      expect.objectContaining({
+        message: "Another Deus is using this data (still closing, or the deus CLI). Try again.",
+      })
     )
   );
 });

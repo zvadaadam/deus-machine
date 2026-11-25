@@ -14,6 +14,8 @@ beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), "deus-db-owner-"));
   filename = join(directory, "deus.db");
   vi.stubEnv("DATABASE_PATH", filename);
+  vi.stubEnv("NODE_ENV", "test");
+  vi.stubEnv("DEUS_TEST_DB_OWNER_NO_WAIT", "1");
   vi.resetModules();
 });
 
@@ -101,4 +103,4 @@ it("refuses a live owner through a symlink and takes over after a crash", async 
 
   expect(existsSync(`${filename}.owner`)).toBe(true);
   expect((await loadDatabase()).initDatabase().prepare("SELECT 1").pluck().get()).toBe(1);
-}, 25_000);
+});

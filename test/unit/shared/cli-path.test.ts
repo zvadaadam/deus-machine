@@ -1,7 +1,7 @@
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   extendCliPath,
   getBundledCliDirectory,
@@ -9,20 +9,18 @@ import {
   resolveCliExecutable,
 } from "@shared/lib/cli-path";
 
-const originalBundledBinDir = process.env.DEUS_BUNDLED_BIN_DIR;
-const originalResourcesPathEnv = process.env.DEUS_RESOURCES_PATH;
-const originalDeusPackaged = process.env.DEUS_PACKAGED;
 const originalCwd = process.cwd();
 const originalPlatform = process.platform;
 const originalArch = process.arch;
 
+beforeEach(() => {
+  vi.stubEnv("DEUS_PACKAGED", undefined);
+  vi.stubEnv("DEUS_RESOURCES_PATH", undefined);
+  vi.stubEnv("DEUS_BUNDLED_BIN_DIR", undefined);
+});
+
 afterEach(() => {
-  if (originalBundledBinDir === undefined) delete process.env.DEUS_BUNDLED_BIN_DIR;
-  else process.env.DEUS_BUNDLED_BIN_DIR = originalBundledBinDir;
-  if (originalResourcesPathEnv === undefined) delete process.env.DEUS_RESOURCES_PATH;
-  else process.env.DEUS_RESOURCES_PATH = originalResourcesPathEnv;
-  if (originalDeusPackaged === undefined) delete process.env.DEUS_PACKAGED;
-  else process.env.DEUS_PACKAGED = originalDeusPackaged;
+  vi.unstubAllEnvs();
   process.chdir(originalCwd);
   Object.defineProperty(process, "platform", {
     configurable: true,

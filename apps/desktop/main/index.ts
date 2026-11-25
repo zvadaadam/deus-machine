@@ -391,7 +391,7 @@ app.whenReady().then(async () => {
         : {
             message:
               err instanceof DatabaseInUseError
-                ? "Deus is still closing. Try again."
+                ? "Another Deus is using this data (still closing, or the deus CLI). Try again."
                 : "Failed to Start",
             detail: formatStartupFailureDetail(err),
             buttons: ["Show Logs", "OK"],
