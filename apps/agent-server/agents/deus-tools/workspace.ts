@@ -18,12 +18,14 @@ export function createWorkspaceTools(sessionId: string): DeusTool[] {
     // ====================================================================
     tool(
       "GetWorkspaceDiff",
-      "Use this to see what the user is working on, or when they refer to the workspace diff, PR diff or all changes — by default it lists the changed paths since the merge base, including uncommitted changes.",
+      "Use this to see what the user is working on, or when they refer to the workspace diff, PR diff or all changes — by default it lists the changed paths since the merge base, including uncommitted changes. To get one file's unified diff, pass its path relative to the workspace, such as `src/index.ts`.",
       {
         file: z
           .string()
           .optional()
-          .describe("Path relative to the workspace for one file's unified diff."),
+          .describe(
+            "Path relative to the workspace for one file's unified diff, e.g. src/index.ts."
+          ),
         stat: z.boolean().optional().describe("If true, return per-file additions and deletions."),
       },
       async (args) => {

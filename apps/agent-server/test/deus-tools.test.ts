@@ -52,10 +52,14 @@ describe("deusTools", () => {
   it("is one source the engine gives every harness, its arguments described in JSON Schema", async () => {
     expect(server.name).toBe(DEUS_TOOLS_SERVER);
     const diff = server.tools.find((tool) => tool.name === "GetWorkspaceDiff")!;
+    expect(diff.description).toContain("path relative to the workspace, such as `src/index.ts`");
     expect(diff.inputSchema).toMatchObject({
       type: "object",
       properties: {
-        file: { type: "string", description: expect.stringContaining("relative to the workspace") },
+        file: {
+          type: "string",
+          description: expect.stringContaining("relative to the workspace"),
+        },
         stat: { type: "boolean" },
       },
     });
@@ -152,6 +156,21 @@ describe("deusTools", () => {
       });
       expect(tool.description).toContain("lists the changed paths");
       expect(result.content[0].text).toBe("file.ts\nother.ts");
+    });
+
+    it("gets the unified diff for a workspace-relative file path", async () => {
+      const diff = "--- a/src/index.ts\n+++ b/src/index.ts\n@@ -1 +1 @@\n-before\n+after";
+      mockFrontendAPI.requestGetDiff.mockResolvedValue({ diff });
+
+      const tool = getRegisteredTools(server).GetWorkspaceDiff;
+      const result = await tool.handler({ file: "src/index.ts" });
+
+      expect(mockFrontendAPI.requestGetDiff).toHaveBeenCalledWith({
+        sessionId: SESSION_ID,
+        file: "src/index.ts",
+        stat: undefined,
+      });
+      expect(result.content[0].text).toBe(diff);
     });
 
     it("passes stat parameter for stat output", async () => {
