@@ -52,8 +52,9 @@ export function agentReadiness(
 }
 
 export function signedOutStart(answer: AgentAuthAnswer, harness: AgentHarness): string | undefined {
-  if (answer.error !== undefined) return;
+  if (answer.error !== undefined) return undefined;
   const agent = agentReadiness(answer, harness);
   if (agent.state === "signed_out")
     return `start_session: ${HARNESSES[harness].label} is signed out on this computer. Ask the person to ${agent.detail}. Nothing was started. Use list_models to see which agents are ready.`;
+  return undefined;
 }
