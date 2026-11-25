@@ -575,8 +575,25 @@ describe("stopping the current turn", () => {
 
   it("can retry the original send id after a refused start returns its steer", async () => {
     await refuseStartWithKeptSteer();
+    expect(await queue()).toMatchObject({ items: [waitingRow("follow-up")] });
+    expect((await run(api.messages, { sessionId })).turns).toEqual([]);
     await expect(send("A")).resolves.toEqual({ turnId: "A" });
     expect(starts()).toEqual(["A", "A"]);
+  });
+
+  it("retries the same send id after two Stops on a refused start", async () => {
+    const wire = pendingStart();
+    const refused = expect(send("A")).rejects.toThrow("start refused");
+    await vi.waitFor(() => expect(starts()).toEqual(["A"]));
+    const stops = [stop(), stop()];
+    wire.reject(new Error("start refused"));
+    await Promise.all([refused, ...stops]);
+    const before = await run(api.messages, { sessionId });
+
+    await expect(send("A")).resolves.toEqual({ turnId: "A" });
+    expect(starts()).toEqual(["A", "A"]);
+    expect(before.turns).toEqual([]);
+    expect(engine.cancelTurn).not.toHaveBeenCalled();
   });
 
   it.fails("reports a kept steer when the start is refused before any event", async () => {
@@ -789,6 +806,36 @@ describe("stopping the current turn", () => {
     }
   );
 
+  it("restores A's standalone sign-in error after its generic end while B prepares", async () => {
+    await send("A");
+    await outliveStop("A");
+    const release = holdAppSetup();
+    const starting = expect(send("B")).rejects.toThrow("Stopped before it started");
+    const message = "Sign in with a fresh account";
+    emit({ type: "error", sessionId, turnId: "A", timestamp: seq, category: "auth", message });
+    emit({
+      type: "turn.ended",
+      sessionId,
+      turnId: "A",
+      timestamp: seq,
+      stopReason: "error",
+      error: { category: "internal", message: "Agent process exited" },
+    });
+    expect(await run(api.session, { sessionId })).toMatchObject({
+      status: "working",
+      error_message: null,
+      error_category: null,
+    });
+    await stop();
+    release();
+    await starting;
+    expect(await run(api.session, { sessionId })).toMatchObject({
+      status: "error",
+      error_message: message,
+      error_category: "auth",
+    });
+  });
+
   it("restores A's late engine error when B stops in app setup", async () => {
     await send("A");
     await outliveStop("A");
@@ -837,6 +884,36 @@ describe("stopping the current turn", () => {
       error_category: "network",
       error_message: prior.error_message,
     });
+  });
+
+  it("retries the busy head when the engine confirms there is no active turn", async () => {
+    await send("A");
+    await outliveStop("A");
+    engine.startTurn.mockRejectedValueOnce(busyReply("A"));
+    await send("B");
+    const reply = Promise.withResolvers<{ outcome: "no_active_turn" }>();
+    engine.cancelTurn.mockReturnValueOnce(reply.promise);
+    const stopping = stopSession({ sessionId }, fromAssistant);
+    await resumeQueuedMessages(sessionId, fromChat);
+    expect(starts()).toEqual(["A", "B"]);
+    reply.resolve({ outcome: "no_active_turn" });
+    await stopping;
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "B"]));
+    expect(await ids()).toEqual([]);
+  });
+
+  it("retries the busy head on each person's Resume with the original send id", async () => {
+    await send("A");
+    await outliveStop("A");
+    engine.startTurn.mockRejectedValueOnce(busyReply("A"));
+    await send("B");
+    engine.startTurn.mockRejectedValueOnce(busyReply("A"));
+    await resumeInWindow();
+    expect(starts()).toEqual(["A", "B", "B"]);
+    expect(await ids()).toEqual(["B"]);
+    await resumeInWindow();
+    expect(starts()).toEqual(["A", "B", "B", "B"]);
+    expect(await ids()).toEqual([]);
   });
 
   it("keeps a later composer send behind the busy head until the named turn ends", async () => {

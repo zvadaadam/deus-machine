@@ -308,6 +308,39 @@ describeWithDb("stopSession", () => {
     expect(status()).toBe("error");
   });
 
+  it("warns 15 seconds after a failed Stop when the confirmed Stop lost its handler", async () => {
+    vi.spyOn(agentService, "stopSession")
+      .mockResolvedValueOnce({ outcome: "cancelled", turnId: "turn-1" })
+      .mockRejectedValueOnce(new Error("link dropped"));
+    await stopSession({ sessionId: SESSION });
+    await vi.advanceTimersByTimeAsync(5_000);
+    forgetChatTurns(SESSION);
+    await expect(stopSession({ sessionId: SESSION })).resolves.toEqual({ unconfirmed: true });
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(status()).toBe("working");
+    await vi.advanceTimersByTimeAsync(1);
+    expect(
+      db.prepare("SELECT status, error_message FROM sessions WHERE id = ?").get(SESSION)
+    ).toEqual({ status: "error", error_message: "The agent never confirmed the stop request." });
+  });
+
+  it.each(["no_active_turn", "unconfirmed"] as const)(
+    "drops the idle chat entry once a holderless %s Stop settles",
+    async (outcome) => {
+      forgetChatTurns(SESSION);
+      vi.spyOn(agentService, "stopSession").mockResolvedValue(
+        outcome === "unconfirmed" ? { outcome, turnId: "turn-1" } : { outcome }
+      );
+      const writes = vi.spyOn(Map.prototype, "set");
+      const stopping = stopSession({ sessionId: SESSION });
+      const holding = writes.mock.contexts.filter((_, i) => writes.mock.calls[i]?.[0] === SESSION);
+      writes.mockRestore();
+      await stopping;
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(holding.some((map) => map.has(SESSION))).toBe(false);
+    }
+  );
+
   it("warns on an active row when the handler is lost before Stop is asked", async () => {
     forgetChatTurns(SESSION);
     vi.spyOn(agentService, "stopSession").mockRejectedValue(new Error("link dropped"));
