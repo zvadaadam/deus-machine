@@ -585,12 +585,15 @@ export async function stopSession(
 }
 
 function settleStopped(sessionId: string, goneTurnId?: string, cause?: "cancelled"): void {
-  getDatabase()
-    .prepare(
-      `UPDATE sessions SET status = 'idle', updated_at = datetime('now')
-       WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
-    )
-    .run(sessionId, ...ACTIVE_TURN_STATUSES);
+  const starting = startingTurn(sessionId);
+  if (!starting || starting.turnId === goneTurnId) {
+    getDatabase()
+      .prepare(
+        `UPDATE sessions SET status = 'idle', updated_at = datetime('now')
+         WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
+      )
+      .run(sessionId, ...ACTIVE_TURN_STATUSES);
+  }
   if (goneTurnId && !agentService.giveUpTurn(sessionId, goneTurnId, cause))
     agentService.notifyTurnInterrupted(sessionId, goneTurnId, true);
   invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });

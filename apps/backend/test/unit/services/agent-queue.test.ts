@@ -529,18 +529,7 @@ describe("stopping the current turn", () => {
   it.each(["person", "operator"] as const)(
     "O6: the %s stops live A with B in setup and holds the waiting row for A",
     async (who) => {
-      await send("A");
-      emit({
-        type: "error",
-        sessionId,
-        turnId: "A",
-        timestamp: seq,
-        message: "Failed",
-        category: "internal",
-        recoverable: false,
-      });
-      const release = holdAppSetup();
-      const starting = send("B").catch((error: unknown) => error);
+      const { release, starting } = await startBWhileALives();
       await send("later");
       const duringSetup = await view();
       engine.cancelTurn.mockImplementationOnce(async () => {
@@ -566,6 +555,44 @@ describe("stopping the current turn", () => {
       expect(starts()).toEqual(["A", "B"]);
     }
   );
+
+  async function startBWhileALives() {
+    await send("A");
+    emit({
+      type: "error",
+      sessionId,
+      turnId: "A",
+      timestamp: seq,
+      message: "Failed",
+      category: "internal",
+      recoverable: false,
+    });
+    const release = holdAppSetup();
+    const starting = send("B");
+    return { release, starting };
+  }
+
+  it("O6: giving up A leaves B working in setup and its waiting row held", async () => {
+    vi.useFakeTimers();
+    const { release, starting } = await startBWhileALives();
+    await send("later");
+    await stopped("A");
+    await vi.advanceTimersByTimeAsync(15_000);
+    const session = await run(api.session, { sessionId });
+    const reading = await view();
+    const waiting = await queue();
+    release();
+    await starting;
+    expect(session).toMatchObject({ status: "working", error_message: null });
+    expect(reading).toMatchObject({ status: "working", running: "B" });
+    expect(await fact("A")).toMatchObject({ state: "ended", outcome: "cancelled" });
+    expect(waiting).toMatchObject({
+      paused: "stopped",
+      stoppedBy: fromPerson,
+      items: [waitingRow("later")],
+    });
+    expect(starts()).toEqual(["A", "B"]);
+  });
 
   it("keeps only the last pre-wire end until the next admission", async () => {
     let previous: string | undefined;
