@@ -221,6 +221,12 @@ interface RawConnection {
 
 const CONNECTION_COLUMNS = "id, app_id, kind, deus_account_id, label, status, last_error";
 
+export function hasSealedCredentials(): boolean {
+  return !!getDatabase()
+    .prepare("SELECT 1 FROM integration_connections WHERE credential IS NOT NULL LIMIT 1")
+    .get();
+}
+
 function toConnection(row: RawConnection): ConnectionRow {
   return {
     id: row.id,

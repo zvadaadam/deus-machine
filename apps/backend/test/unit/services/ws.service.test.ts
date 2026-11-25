@@ -4,8 +4,10 @@ import {
   closeAll,
   closeAssistantConnections,
   connectedDeviceIds,
+  FrameTooLarge,
   getConnection,
   handleProtocolMessage,
+  sendFrame,
 } from "../../../src/services/ws.service";
 import { ASSISTANT_HOST } from "../../helpers";
 
@@ -16,6 +18,29 @@ beforeEach(() => {
 afterEach(() => {
   closeAll();
   vi.useRealTimers();
+});
+
+describe("sending frames", () => {
+  it("reports a transport refusal and leaves other frames and local sockets alone", () => {
+    const frame = { type: "q:response", id: "answer", data: "ok" } as const;
+    const send = vi.fn().mockImplementationOnce(() => {
+      throw new FrameTooLarge(300);
+    });
+    const virtual = addConnection({ send, close: vi.fn() }, "phone", true);
+    expect(sendFrame(virtual, frame)).toBe("too-large");
+    expect(send).toHaveBeenCalledOnce();
+    expect(sendFrame(virtual, frame)).toBe("sent");
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send).toHaveBeenLastCalledWith(JSON.stringify(frame));
+
+    const local = vi.fn();
+    const localId = addConnection({ send: local, close: vi.fn() }, null);
+    const large = { ...frame, data: "x".repeat(32 * 1024 * 1024) };
+    expect(sendFrame(localId, large)).toBe("sent");
+    expect(local).toHaveBeenCalledOnce();
+    expect(JSON.parse(local.mock.calls[0][0]).data.length).toBe(large.data.length);
+    expect(sendFrame("gone", frame)).toBe("unavailable");
+  });
 });
 
 describe("relayed viewers", () => {

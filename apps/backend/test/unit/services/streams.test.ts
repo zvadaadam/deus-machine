@@ -2,14 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { out } from "@shared/api/op";
 import { resumableStream, stream } from "@shared/api/stream";
+import type { sendFrame as sendWsFrame } from "../../../src/services/ws.service";
 
 const sent = vi.hoisted(() => new Map<string, Frame[]>());
-vi.mock("../../../src/services/ws.service", () => ({
-  getConnection: (id: string) =>
-    sent.has(id)
-      ? { ws: { send: (frame: string) => sent.get(id)!.push(JSON.parse(frame)) } }
-      : undefined,
-}));
+const sendFrame = vi.hoisted(() =>
+  vi.fn((id: string, frame: Frame): ReturnType<typeof sendWsFrame> => {
+    const frames = sent.get(id);
+    if (!frames) return "unavailable";
+    frames.push(frame);
+    return "sent";
+  })
+);
+vi.mock("../../../src/services/ws.service", () => ({ sendFrame }));
 
 import {
   _reset,
@@ -131,6 +135,27 @@ describe("streams", () => {
     const current = connect("current");
     subscribe("current", "s1", events, { sessionId: "a" }, 3);
     expect(heard(current)).toEqual([]);
+  });
+
+  it("resets at the refused event live and in replay, and carries on with the next event", () => {
+    const scope = { sessionId: "a" };
+    const live = connect("live");
+    subscribe("live", "chat", events, scope);
+    sendFrame.mockReturnValueOnce("too-large");
+    publish(events, scope, { n: 1 });
+    publish(events, scope, { n: 2 });
+    const reset = { type: "q:reset", id: "chat", seq: 1 };
+    const next = { type: "q:event", id: "chat", event: "sessionEvents", data: { n: 2 }, seq: 2 };
+    expect(heard(live)).toEqual([reset, next]);
+
+    const replay = connect("replay");
+    sendFrame.mockReturnValueOnce("too-large");
+    subscribe("replay", "chat", events, scope, 0);
+    expect(replay).toEqual([reset, next, { type: "q:subscribed", id: "chat", seq: 2 }]);
+
+    const back = connect("back");
+    subscribe("back", "chat", events, scope, replay[0].seq);
+    expect(heard(back)).toEqual([next]);
   });
 
   it("sends nothing to a subscriber that returns to a scope where nothing happened", () => {

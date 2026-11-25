@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { shallow } from "zustand/shallow";
 import { hashKey, useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/api";
+import { DEFAULT_AGENT_HARNESS } from "@shared/models";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { runtimeForQueryClient } from "@/platform/ws/runtime-client";
 import { getErrorMessage } from "@shared/lib/errors";
@@ -47,7 +48,7 @@ function createClosedTabId(sessionId: string): string {
 
 function createPlaceholderSessionTab(
   sessionId: string,
-  agentHarness: AgentHarness = "claude-code",
+  agentHarness: AgentHarness = DEFAULT_AGENT_HARNESS,
   initialModel?: string
 ): SessionChatTab {
   return {
@@ -383,7 +384,9 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       }
       try {
         const newSession = await createSessionMutation.mutateAsync(workspaceId);
-        const agentHarness = initialModel ? getAgentHarnessForModel(initialModel) : "claude-code";
+        const agentHarness = initialModel
+          ? getAgentHarnessForModel(initialModel)
+          : DEFAULT_AGENT_HARNESS;
         const newTab = createPlaceholderSessionTab(newSession.id, agentHarness, initialModel);
         // The live list may have added it already: one tab, with the person's choice.
         setMainTabs((prevTabs) =>

@@ -42,6 +42,7 @@ describe("SubagentMessageList", () => {
       React.createElement(
         SessionProvider,
         {
+          sessionId: "session-1",
           subagentMessages: new Map(),
           sessionStatus: "idle",
         },
@@ -62,6 +63,7 @@ describe("SubagentMessageList", () => {
       React.createElement(
         SessionProvider,
         {
+          sessionId: "session-1",
           subagentMessages: new Map(),
           sessionStatus: "idle",
         },

@@ -32,7 +32,7 @@ import {
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";
 import { OutputBlock } from "@/components/ui/output-block";
-import { extractImage, extractText, ICON_CLS } from "./shared";
+import { extractImage, extractText, ICON_CLS, renderToolImage } from "./shared";
 import type { ToolRendererProps } from "../../chat-types";
 
 /** Truncate a domain from URL for preview */
@@ -49,8 +49,8 @@ function getDomain(url: string): string {
 // BrowserSnapshot
 // ---------------------------------------------------------------------------
 
-export function BrowserSnapshotToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const text = toolResult ? extractText(toolResult.content) : "";
+export function BrowserSnapshotToolRenderer(props: ToolRendererProps) {
+  const text = extractText(props.toolResult?.content);
   // Extract URL from output header (format: "- Page URL: https://...")
   const urlMatch = text.match(/Page URL:\s*(.+)/);
   const url = urlMatch?.[1]?.trim();
@@ -59,8 +59,7 @@ export function BrowserSnapshotToolRenderer({ toolUse, toolResult }: ToolRendere
     <BaseToolRenderer
       toolName="Browser Snapshot"
       icon={<Eye className={ICON_CLS} />}
-      toolUse={toolUse}
-      toolResult={toolResult}
+      {...props}
       renderSummary={() =>
         url ? (
           <span className="text-muted-foreground truncate font-mono">{getDomain(url)}</span>
@@ -81,16 +80,15 @@ export function BrowserSnapshotToolRenderer({ toolUse, toolResult }: ToolRendere
 // BrowserNavigate
 // ---------------------------------------------------------------------------
 
-export function BrowserNavigateToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { url } = toolUse.input ?? {};
-  const text = toolResult ? extractText(toolResult.content) : "";
+export function BrowserNavigateToolRenderer(props: ToolRendererProps) {
+  const { url } = props.toolUse.input ?? {};
+  const text = extractText(props.toolResult?.content);
 
   return (
     <BaseToolRenderer
       toolName="Browser Navigate"
       icon={<Compass className={ICON_CLS} />}
-      toolUse={toolUse}
-      toolResult={toolResult}
+      {...props}
       renderSummary={() =>
         url ? (
           <span className="text-muted-foreground truncate font-mono">{getDomain(url)}</span>
@@ -111,15 +109,14 @@ export function BrowserNavigateToolRenderer({ toolUse, toolResult }: ToolRendere
 // BrowserNavigateBack
 // ---------------------------------------------------------------------------
 
-export function BrowserNavigateBackToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const text = toolResult ? extractText(toolResult.content) : "";
+export function BrowserNavigateBackToolRenderer(props: ToolRendererProps) {
+  const text = extractText(props.toolResult?.content);
 
   return (
     <BaseToolRenderer
       toolName="Browser Back"
       icon={<ArrowLeft className={ICON_CLS} />}
-      toolUse={toolUse}
-      toolResult={toolResult}
+      {...props}
       renderSummary={() => <span className="text-muted-foreground">Go back</span>}
       renderContent={() => (text ? <OutputBlock>{text}</OutputBlock> : null)}
     />
@@ -130,16 +127,15 @@ export function BrowserNavigateBackToolRenderer({ toolUse, toolResult }: ToolRen
 // BrowserClick
 // ---------------------------------------------------------------------------
 
-export function BrowserClickToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { ref, doubleClick } = toolUse.input ?? {};
-  const text = toolResult ? extractText(toolResult.content) : "";
+export function BrowserClickToolRenderer(props: ToolRendererProps) {
+  const { ref, doubleClick } = props.toolUse.input ?? {};
+  const text = extractText(props.toolResult?.content);
 
   return (
     <BaseToolRenderer
       toolName={doubleClick ? "Browser Double Click" : "Browser Click"}
       icon={<MousePointerClick className={ICON_CLS} />}
-      toolUse={toolUse}
-      toolResult={toolResult}
+      {...props}
       renderSummary={() =>
         ref ? <span className="text-muted-foreground truncate font-mono">{ref}</span> : null
       }
@@ -152,9 +148,9 @@ export function BrowserClickToolRenderer({ toolUse, toolResult }: ToolRendererPr
 // BrowserType
 // ---------------------------------------------------------------------------
 
-export function BrowserTypeToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { ref, text: typedText, submit } = toolUse.input ?? {};
-  const output = toolResult ? extractText(toolResult.content) : "";
+export function BrowserTypeToolRenderer(props: ToolRendererProps) {
+  const { ref, text: typedText, submit } = props.toolUse.input ?? {};
+  const output = extractText(props.toolResult?.content);
   const preview = typedText
     ? typedText.length > 30
       ? `"${typedText.slice(0, 30)}..."`
@@ -165,8 +161,7 @@ export function BrowserTypeToolRenderer({ toolUse, toolResult }: ToolRendererPro
     <BaseToolRenderer
       toolName="Browser Type"
       icon={<Keyboard className={ICON_CLS} />}
-      toolUse={toolUse}
-      toolResult={toolResult}
+      {...props}
       renderSummary={() => (
         <>
           {ref && <span className="text-muted-foreground truncate font-mono">{ref}</span>}
@@ -186,8 +181,8 @@ export function BrowserTypeToolRenderer({ toolUse, toolResult }: ToolRendererPro
 // BrowserPressKey
 // ---------------------------------------------------------------------------
 
-export function BrowserPressKeyToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { key, ctrl, shift, alt, meta } = toolUse.input ?? {};
+export function BrowserPressKeyToolRenderer(props: ToolRendererProps) {
+  const { key, ctrl, shift, alt, meta } = props.toolUse.input ?? {};
   const modifiers = [meta && "⌘", ctrl && "Ctrl", alt && "Alt", shift && "⇧"]
     .filter(Boolean)
     .join("+");
@@ -197,8 +192,7 @@ export function BrowserPressKeyToolRenderer({ toolUse, toolResult }: ToolRendere
     <BaseToolRenderer
       toolName="Browser Press Key"
       icon={<Keyboard className={ICON_CLS} />}
-      toolUse={toolUse}
-      toolResult={toolResult}
+      {...props}
       renderSummary={() =>
         combo ? (
           <span className="bg-muted/60 text-muted-foreground rounded-md px-1.5 py-0.5 font-mono">
@@ -214,16 +208,15 @@ export function BrowserPressKeyToolRenderer({ toolUse, toolResult }: ToolRendere
 // BrowserHover
 // ---------------------------------------------------------------------------
 
-export function BrowserHoverToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { element, ref } = toolUse.input ?? {};
-  const text = toolResult ? extractText(toolResult.content) : "";
+export function BrowserHoverToolRenderer(props: ToolRendererProps) {
+  const { element, ref } = props.toolUse.input ?? {};
+  const text = extractText(props.toolResult?.content);
 
   return (
     <BaseToolRenderer
       toolName="Browser Hover"
       icon={<Hand className={ICON_CLS} />}
-      toolUse={toolUse}
-      toolResult={toolResult}
+      {...props}
       renderSummary={() =>
         element ? (
           <span className="text-muted-foreground truncate">{element}</span>
@@ -240,17 +233,16 @@ export function BrowserHoverToolRenderer({ toolUse, toolResult }: ToolRendererPr
 // BrowserSelectOption
 // ---------------------------------------------------------------------------
 
-export function BrowserSelectOptionToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { element, values } = toolUse.input ?? {};
-  const text = toolResult ? extractText(toolResult.content) : "";
+export function BrowserSelectOptionToolRenderer(props: ToolRendererProps) {
+  const { element, values } = props.toolUse.input ?? {};
+  const text = extractText(props.toolResult?.content);
   const valuesPreview = Array.isArray(values) ? values.join(", ") : "";
 
   return (
     <BaseToolRenderer
       toolName="Browser Select"
       icon={<ListChecks className={ICON_CLS} />}
-      toolUse={toolUse}
-      toolResult={toolResult}
+      {...props}
       renderSummary={() => (
         <>
           {element && <span className="text-muted-foreground truncate">{element}</span>}
@@ -268,9 +260,9 @@ export function BrowserSelectOptionToolRenderer({ toolUse, toolResult }: ToolRen
 // BrowserWaitFor
 // ---------------------------------------------------------------------------
 
-export function BrowserWaitForToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { text: waitText, textGone, time } = toolUse.input ?? {};
-  const output = toolResult ? extractText(toolResult.content) : "";
+export function BrowserWaitForToolRenderer(props: ToolRendererProps) {
+  const { text: waitText, textGone, time } = props.toolUse.input ?? {};
+  const output = extractText(props.toolResult?.content);
   const condition = waitText
     ? `text: "${waitText}"`
     : textGone
@@ -283,8 +275,7 @@ export function BrowserWaitForToolRenderer({ toolUse, toolResult }: ToolRenderer
     <BaseToolRenderer
       toolName="Browser Wait"
       icon={<Clock className={ICON_CLS} />}
-      toolUse={toolUse}
-      toolResult={toolResult}
+      {...props}
       renderSummary={() => <span className="text-muted-foreground truncate">{condition}</span>}
       renderContent={() => (output ? <OutputBlock>{output}</OutputBlock> : null)}
     />
@@ -295,9 +286,9 @@ export function BrowserWaitForToolRenderer({ toolUse, toolResult }: ToolRenderer
 // BrowserEvaluate
 // ---------------------------------------------------------------------------
 
-export function BrowserEvaluateToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { code } = toolUse.input ?? {};
-  const output = toolResult ? extractText(toolResult.content) : "";
+export function BrowserEvaluateToolRenderer(props: ToolRendererProps) {
+  const { code } = props.toolUse.input ?? {};
+  const output = extractText(props.toolResult?.content);
   const codePreview =
     typeof code === "string" ? (code.length > 40 ? code.slice(0, 40) + "..." : code) : "";
 
@@ -305,8 +296,7 @@ export function BrowserEvaluateToolRenderer({ toolUse, toolResult }: ToolRendere
     <BaseToolRenderer
       toolName="Browser Evaluate"
       icon={<Code2 className={ICON_CLS} />}
-      toolUse={toolUse}
-      toolResult={toolResult}
+      {...props}
       renderSummary={() =>
         codePreview ? (
           <span className="text-muted-foreground truncate font-mono">{codePreview}</span>
@@ -336,8 +326,8 @@ export function BrowserEvaluateToolRenderer({ toolUse, toolResult }: ToolRendere
 // BrowserConsoleMessages
 // ---------------------------------------------------------------------------
 
-export function BrowserConsoleMessagesToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const text = toolResult ? extractText(toolResult.content) : "";
+export function BrowserConsoleMessagesToolRenderer(props: ToolRendererProps) {
+  const text = extractText(props.toolResult?.content);
   const countMatch = text.match(/\((\d+)\)/);
   const count = countMatch?.[1];
 
@@ -345,8 +335,7 @@ export function BrowserConsoleMessagesToolRenderer({ toolUse, toolResult }: Tool
     <BaseToolRenderer
       toolName="Browser Console"
       icon={<MessageSquare className={ICON_CLS} />}
-      toolUse={toolUse}
-      toolResult={toolResult}
+      {...props}
       renderSummary={() =>
         count ? <span className="text-muted-foreground">{count} messages</span> : null
       }
@@ -365,29 +354,22 @@ export function BrowserConsoleMessagesToolRenderer({ toolUse, toolResult }: Tool
 // BrowserScreenshot
 // ---------------------------------------------------------------------------
 
-export function BrowserScreenshotToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const image = toolResult ? extractImage(toolResult.content) : null;
-  const text = toolResult ? extractText(screenshotWords(toolResult.content, image !== null)) : "";
+export function BrowserScreenshotToolRenderer(props: ToolRendererProps) {
+  const image = extractImage(props.toolResult?.content);
+  const text = extractText(screenshotWords(props.toolResult?.content, !!image));
 
   return (
     <BaseToolRenderer
       toolName="Browser Screenshot"
       icon={<Camera className={ICON_CLS} />}
-      toolUse={toolUse}
-      toolResult={toolResult}
+      {...props}
       defaultExpanded={!!image}
       renderSummary={() =>
         text ? <span className="text-muted-foreground truncate">{text.slice(0, 60)}</span> : null
       }
       renderContent={() => (
         <div className="space-y-2">
-          {image && (
-            <img
-              src={`data:${image.mediaType};base64,${image.data}`}
-              alt="Browser screenshot"
-              className="border-border/40 max-w-full rounded-lg border shadow-sm"
-            />
-          )}
+          {image && renderToolImage(image, "Browser screenshot")}
           {text && !image && (
             <div className="text-muted-foreground px-2 pb-2 text-xs italic">{text}</div>
           )}
@@ -401,8 +383,8 @@ export function BrowserScreenshotToolRenderer({ toolUse, toolResult }: ToolRende
 // BrowserNetworkRequests
 // ---------------------------------------------------------------------------
 
-export function BrowserNetworkRequestsToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const text = toolResult ? extractText(toolResult.content) : "";
+export function BrowserNetworkRequestsToolRenderer(props: ToolRendererProps) {
+  const text = extractText(props.toolResult?.content);
   const countMatch = text.match(/\((\d+)\)/);
   const count = countMatch?.[1];
 
@@ -410,8 +392,7 @@ export function BrowserNetworkRequestsToolRenderer({ toolUse, toolResult }: Tool
     <BaseToolRenderer
       toolName="Browser Network"
       icon={<Network className={ICON_CLS} />}
-      toolUse={toolUse}
-      toolResult={toolResult}
+      {...props}
       renderSummary={() =>
         count ? <span className="text-muted-foreground">{count} requests</span> : null
       }
@@ -430,17 +411,16 @@ export function BrowserNetworkRequestsToolRenderer({ toolUse, toolResult }: Tool
 // BrowserScroll
 // ---------------------------------------------------------------------------
 
-export function BrowserScrollToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { direction, amount, ref } = toolUse.input ?? {};
-  const text = toolResult ? extractText(toolResult.content) : "";
+export function BrowserScrollToolRenderer(props: ToolRendererProps) {
+  const { direction, amount, ref } = props.toolUse.input ?? {};
+  const text = extractText(props.toolResult?.content);
   const summary = ref ? `→ ${ref}` : `${direction ?? "down"} ${amount ?? 600}px`;
 
   return (
     <BaseToolRenderer
       toolName="Browser Scroll"
       icon={<ArrowDownUp className={ICON_CLS} />}
-      toolUse={toolUse}
-      toolResult={toolResult}
+      {...props}
       renderSummary={() => <span className="text-muted-foreground truncate">{summary}</span>}
       renderContent={() => (text ? <OutputBlock>{text}</OutputBlock> : null)}
     />

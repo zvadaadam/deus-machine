@@ -6,6 +6,7 @@ import type { AgentHarness } from "@shared/enums";
 import { HARNESSES } from "@shared/harnesses";
 import {
   cancelLocalSignIn,
+  installLabel,
   installLocalAgent,
   localSignIn,
   signInLocalAgent,
@@ -29,12 +30,16 @@ function Badge({ state }: { state: LocalAgentState }) {
       </div>
     );
   }
-  if (state.status === "not-installed") {
+  if (
+    state.status === "not-installed" ||
+    state.status === "first-turn" ||
+    state.status === "install-failed"
+  ) {
     return (
-      <div className="text-muted-foreground flex items-center gap-1.5" title={state.error}>
+      <div className="text-muted-foreground flex items-center gap-1.5" title={state.detail}>
         <XCircle className="size-4" />
-        <span className="text-xs font-medium">
-          {state.error ? "Couldn’t install" : "Not installed"}
+        <span className="text-xs font-medium first-letter:uppercase">
+          {state.status === "install-failed" ? "Couldn’t install" : state.detail}
         </span>
       </div>
     );
@@ -77,6 +82,7 @@ export function LocalAgentRow({
   const login = state.status === "signed-out" ? state.login : undefined;
   const loginPage = login?.url ?? login?.codeUrl;
   const signIn = localSignIn(state);
+  const install = installLabel(state);
 
   return (
     <div className="border-border-subtle space-y-3 rounded-lg border p-4">
@@ -90,14 +96,14 @@ export function LocalAgentRow({
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Badge state={state} />
-          {state.status === "not-installed" && (
+          {install && (
             <Button
               variant="outline"
               size="xs"
               disabled={busy}
               onClick={() => run(() => installLocalAgent(harness))}
             >
-              {state.error ? "Try again" : "Install"}
+              {install}
             </Button>
           )}
           {signIn?.kind === "start" && (

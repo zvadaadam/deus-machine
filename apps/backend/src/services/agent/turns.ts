@@ -4,7 +4,7 @@
 
 import { createHash } from "node:crypto";
 import { WireRequestError } from "@zvada/agent-server/client";
-import { WIRE_ERROR_CODES, type Origin } from "@zvada/agent-server/protocol";
+import { WIRE_ERROR_CODES, type AgentInput, type Origin } from "@zvada/agent-server/protocol";
 import type * as api from "@shared/api/sessions";
 import type { ParsedInputOf } from "@shared/api/op";
 import { uuidv7 } from "@shared/lib/uuid";
@@ -17,6 +17,7 @@ import {
   AgentServerDisconnectedError,
   ChatBusyError,
   ConflictError,
+  DifferentTurnMessageError,
   NotFoundError,
   ValidationError,
 } from "../../lib/errors";
@@ -29,6 +30,7 @@ import {
 } from "./persistence";
 import { invalidate } from "../query-engine";
 import * as agentService from "./service";
+import { toEngineInput, withoutImageParts } from "./run-config";
 import {
   startCloudTurn,
   cancelCloudTurn,
@@ -50,22 +52,56 @@ const admissionsOf = new WeakMap<object, Map<string, Admission>>();
 const ADMISSION_KEPT_MS = 10 * 60_000;
 
 /** Stop interrupts app setup. Once turn/start is on the wire, Stop waits for its answer. */
-const admitting = new Map<
-  string,
-  { turnId: string; preparing: AbortController; done: Promise<void> }
->();
+type Starting = {
+  turnId: string;
+  sentAt: number;
+  preparing?: AbortController;
+  done: Promise<void>;
+  stoppedBy?: Origin;
+};
+type SetupEnd = { turnId: string; outcome: "cancelled"; cancelledBy: Origin };
+const localTurns = new Map<string, Starting | SetupEnd>();
 
-/** A retry of an existing turn goes through admission even while its chat is busy. */
-export function knownTurn(sessionId: string, turnId: string): boolean {
-  const db = getDatabase();
-  return (
-    admissionsOf.get(db)?.has(`${sessionId}\0${turnId}`) === true ||
-    !!getTurn(db, sessionId, turnId)
-  );
+function startingTurn(sessionId: string) {
+  const entry = localTurns.get(sessionId);
+  if (!entry || !("done" in entry)) return;
+  if (
+    agentService.liveTurnId(sessionId) === entry.turnId ||
+    !agentService.wasTurnAdmitted(sessionId, entry.turnId)
+  )
+    return entry;
 }
 
-export function differentTurnMessage(): ConflictError {
-  return new ConflictError("A different message was already sent as this turn. Nothing was sent.");
+/** Once app setup has been aborted, the next send can already take its place. */
+export function hasPendingStart(sessionId: string) {
+  const start = startingTurn(sessionId);
+  return !!start && !start.preparing?.signal.aborted;
+}
+
+export function currentTurnId(sessionId: string) {
+  return agentService.liveTurnId(sessionId) ?? startingTurn(sessionId)?.turnId;
+}
+
+export function admittingAt(sessionId: string) {
+  const admission = startingTurn(sessionId);
+  if (admission && admission.turnId === currentTurnId(sessionId)) return admission.sentAt;
+}
+
+export function stoppedBeforeStart(sessionId: string) {
+  const entry = localTurns.get(sessionId);
+  return entry && "cancelledBy" in entry ? entry : undefined;
+}
+
+const STEER_READ = new ConflictError("The agent already read this message.");
+
+export async function withdrawSteerRetry(sessionId: string, turnId: string) {
+  const admission = startingTurn(sessionId);
+  if (admission?.turnId !== turnId) return false;
+  admission.preparing?.abort(STEER_READ);
+  return admission.done.then(
+    () => false,
+    (error) => error === STEER_READ
+  );
 }
 
 export function requireSameHarness(current: string, requested: string): void {
@@ -75,21 +111,89 @@ export function requireSameHarness(current: string, requested: string): void {
     );
 }
 
-/** A turn's request as its echo was stored: its text and its sender. */
-function storedRequest(sessionId: string, turnId: string) {
+/** Compare the content the echo kept, independent of the ids assigned to its parts. */
+function matchesEcho(messageId: string, input: AgentInput, kind: "turn" | "steer") {
+  const stored = getDatabase()
+    .prepare<[string], { data: string }>("SELECT data FROM parts WHERE message_id = ? ORDER BY seq")
+    .all(messageId)
+    .map(({ data }) => JSON.parse(data) as Record<string, unknown>);
+  const received = stored.some((part) => part.type === "image") ? input : withoutImageParts(input);
+  if (typeof received === "string") {
+    if (stored.some((part) => part.type !== "text")) return false;
+    const text = stored.map((part) => part.text).join("");
+    return kind === "turn" ? text.trim() === received.trim() : text === received;
+  }
+  return (
+    received.length === stored.length &&
+    received.every((part, i) => {
+      const echo = stored[i];
+      if (part.type !== echo?.type) return false;
+      if (part.type === "text") return part.text === echo.text;
+      return (
+        part.mimeType === echo.mimeType &&
+        part.data === echo.data &&
+        part.url === echo.url &&
+        (part.type !== "file" || part.filename === echo.filename)
+      );
+    })
+  );
+}
+
+/** A durable read receipt belongs to one turn and sender. A live turn knows the input it took. */
+export function retryReadSteer(
+  { sessionId, turnId, content, agentHarness }: ParsedInputOf<typeof api.steerMessage>,
+  steerId: string,
+  origin?: Origin
+) {
+  const echo = getDatabase()
+    .prepare<
+      [string, string],
+      { id: string; turn_id: string; origin: string | null }
+    >("SELECT id, turn_id, origin FROM messages WHERE session_id = ? AND steer_id = ?")
+    .get(sessionId, steerId);
+  if (!echo) return;
+  if (echo.turn_id !== turnId || echo.origin !== encodeOrigin(origin))
+    throw new DifferentTurnMessageError();
+  const input = toEngineInput(content);
+  if (agentService.liveTurnId(sessionId) === turnId)
+    return agentService.steerTurn(agentHarness, {
+      sessionId,
+      turnId,
+      steerId,
+      input,
+      origin,
+    });
+  if (!matchesEcho(echo.id, input, "steer")) throw new DifferentTurnMessageError();
+  return true;
+}
+
+/** Replay an admission without starting another turn. */
+export function previousSend(
+  input: ParsedInputOf<typeof api.sendMessage>,
+  turnId: string,
+  origin?: Origin
+) {
+  const known = admissionsOf.get(getDatabase())?.get(`${input.sessionId}\0${turnId}`);
+  if (known) {
+    if (known.content !== digest(input.content) || known.origin !== encodeOrigin(origin))
+      throw new DifferentTurnMessageError();
+    return known.done;
+  }
   const db = getDatabase();
-  if (!getTurn(db, sessionId, turnId)) return undefined;
+  if (!getTurn(db, input.sessionId, turnId)) return;
   const echo = db
-    .prepare(
-      "SELECT id, origin FROM messages WHERE session_id = ? AND turn_id = ? AND role = 'user' ORDER BY seq LIMIT 1"
+    .prepare<[string, string], { id: string; origin: string | null; kind: string }>(
+      `SELECT m.id, m.origin, w.kind FROM messages m
+       JOIN sessions s ON s.id = m.session_id JOIN workspaces w ON w.id = s.workspace_id
+       WHERE m.session_id = ? AND m.turn_id = ? AND m.role = 'user' ORDER BY m.seq LIMIT 1`
     )
-    .get(sessionId, turnId) as { id: string; origin: string | null } | undefined;
-  if (!echo) return { content: undefined, origin: undefined };
-  const parts = db
-    .prepare("SELECT data FROM parts WHERE message_id = ? AND type = 'text' ORDER BY seq")
-    .all(echo.id) as { data: string }[];
-  const content = parts.map((p) => (JSON.parse(p.data) as { text?: string }).text ?? "").join("");
-  return { content, origin: echo.origin };
+    .get(input.sessionId, turnId);
+  if (echo) {
+    const received = echo.kind === "cloud" ? input.content : toEngineInput(input.content);
+    if (echo.origin !== encodeOrigin(origin) || !matchesEcho(echo.id, received, "turn"))
+      throw new DifferentTurnMessageError();
+  }
+  return Promise.resolve({ turnId });
 }
 
 /**
@@ -106,26 +210,14 @@ export async function sendMessage(
 ): Promise<{ turnId: string }> {
   const turnId = input.turnId;
   if (!turnId) return sendMessageOnce(input, origin);
+  const previous = previousSend(input, turnId, origin);
+  if (previous) return previous;
   const key = `${input.sessionId}\0${turnId}`;
   // Its text kept as a digest: a send with images would otherwise sit in memory for minutes.
   const request = { content: digest(input.content), origin: encodeOrigin(origin) };
   const db = getDatabase();
   let admissions = admissionsOf.get(db);
   if (!admissions) admissionsOf.set(db, (admissions = new Map()));
-  const known = admissions.get(key);
-  if (known) {
-    if (known.content !== request.content || known.origin !== request.origin)
-      throw differentTurnMessage();
-    return known.done;
-  }
-  const stored = storedRequest(input.sessionId, turnId);
-  if (stored) {
-    const same =
-      stored.content === undefined ||
-      (stored.content.trim() === input.content.trim() && stored.origin === request.origin);
-    if (!same) throw differentTurnMessage();
-    return { turnId };
-  }
   const done = sendMessageOnce(input, origin);
   admissions.set(key, { ...request, done });
   // A send that failed was not admitted: a retry runs anew.
@@ -163,6 +255,8 @@ async function sendMessageOnce(
   // approval and questions park the RUNNING turn while the overlay waits.
   // The wire guard covers the same race during admission.
   if (session?.is_hidden) throw new ConflictError("That chat is archived; it takes no messages.");
+  if (hasPendingStart(sessionId))
+    throw new ChatBusyError("The agent is starting another turn — wait for it to begin.");
   if (session && ACTIVE_TURN_STATUSES.includes(session.status)) {
     throw new ChatBusyError(
       session.status === "working"
@@ -336,21 +430,39 @@ async function sendMessageOnce(
     const done = agentService.startTurn(sessionId, turnId, agentHarness, content, {
       cwd,
       signal: preparing.signal,
+      onWire: () => {
+        admission.preparing = undefined;
+      },
       model,
       thinkingLevel: readThinkingLevel(input.thinkingLevel),
       permissionMode,
       resume: existingAgentSessionId || undefined,
       ...(origin ? { origin } : {}),
     });
-    admitting.set(sessionId, { turnId, preparing, done });
+    const admission: Starting = { turnId, sentAt: Date.parse(sentAt), preparing, done };
+    localTurns.set(sessionId, admission);
     try {
       await done;
     } catch (err) {
-      if (err === preparing.signal.reason) {
-        settleStopped(sessionId, turnId);
+      if (preparing.signal.aborted && err === preparing.signal.reason) {
+        if (currentTurnId(sessionId) !== turnId) {
+          if (admission.stoppedBy) agentService.notifyTurnInterrupted(sessionId, turnId, true);
+        } else if (admission.stoppedBy) {
+          // A turn stopped before the wire ends in memory; it was never in the transcript.
+          localTurns.set(sessionId, {
+            turnId,
+            outcome: "cancelled",
+            cancelledBy: admission.stoppedBy,
+          });
+          settleStopped(sessionId, turnId);
+        } else {
+          localTurns.delete(sessionId);
+          settleStopped(sessionId);
+        }
         throw err;
       }
       if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
+        if (admission.stoppedBy) agentService.notifyTurnInterrupted(sessionId, turnId, true);
         // Another turn won admission. Keep it working and return the typed refusal.
         console.warn(
           `[CommandHandler] sendMessage rejected, turn already active: session=${sessionId}`
@@ -359,15 +471,14 @@ async function sendMessageOnce(
           "The agent is still working — wait for the current turn to finish."
         );
       }
-      // Every other rejection — harness unavailable, shutting down, invalid
-      // params, a transport that died mid-request — means no turn was admitted,
-      // so the session must not be left sitting on "working".
-      if (err instanceof WireRequestError) handleAgentRejection(sessionId, turnId, err.message);
-      else handleAgentError(sessionId, turnId, err);
+      handleAgentError(sessionId, turnId, err);
       throw err;
     } finally {
       // A quick turn can end and start its successor before its admission reply.
-      if (admitting.get(sessionId)?.done === done) admitting.delete(sessionId);
+      if (localTurns.get(sessionId) === admission) {
+        localTurns.delete(sessionId);
+        if (currentTurnId(sessionId) !== turnId) agentService.notifyStartCleared(sessionId);
+      }
     }
   }
 
@@ -406,21 +517,23 @@ export async function stopSession(
   /** Who stops it, kept on the turn so a reader can say who did. */
   by: Origin = { kind: "person" }
 ): Promise<{ unconfirmed: boolean }> {
-  agentService.notifyStopAsked(sessionId);
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new NotFoundError("Session not found");
 
-  const admission = admitting.get(sessionId);
-  const targetTurnId = admission?.turnId ?? agentService.liveTurnId(sessionId);
-  if (admission) {
-    admission.preparing.abort(new ConflictError("Stopped before it started."));
-    try {
-      await admission.done;
-    } catch {
-      return { unconfirmed: false };
-    }
-    if (agentService.liveTurnId(sessionId) !== targetTurnId) return { unconfirmed: false };
+  const targetTurnId = currentTurnId(sessionId);
+  const admission = startingTurn(sessionId);
+  agentService.notifyStopAsked(sessionId, {
+    by,
+    turnId: targetTurnId,
+    endedAt: targetTurnId ? getTurn(db, sessionId, targetTurnId)?.endedAt : undefined,
+  });
+  if (admission && admission.turnId === targetTurnId) {
+    admission.stoppedBy ??= by;
+    admission.preparing?.abort(new ConflictError("Stopped before it started."));
+    // A lost reply can leave the named turn running.
+    await admission.done.catch(() => {});
+    if (currentTurnId(sessionId) !== targetTurnId) return { unconfirmed: false };
   }
   const mine = JSON.stringify(by);
   const key = `${sessionId}\0${targetTurnId}`;
@@ -469,7 +582,7 @@ export async function stopSession(
   }
 
   // The requested turn may have ended and a successor started during the RPC.
-  const live = admitting.get(sessionId)?.turnId ?? agentService.liveTurnId(sessionId);
+  const live = currentTurnId(sessionId);
   if (
     (live !== undefined && live !== targetTurnId) ||
     (result?.outcome === "no_active_turn" && result.activeTurnId !== undefined)
@@ -485,15 +598,18 @@ export async function stopSession(
   return { unconfirmed };
 }
 
-function settleStopped(sessionId: string, goneTurnId?: string): void {
-  if (goneTurnId) agentService.giveUpTurn(sessionId, goneTurnId);
-  getDatabase()
-    .prepare(
-      `UPDATE sessions SET status = 'idle', updated_at = datetime('now')
-       WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
-    )
-    .run(sessionId, ...ACTIVE_TURN_STATUSES);
-  if (goneTurnId) agentService.notifyTurnInterrupted(sessionId, goneTurnId, true);
+function settleStopped(sessionId: string, goneTurnId?: string, cause?: "cancelled"): void {
+  const starting = startingTurn(sessionId);
+  if (!starting || starting.turnId === goneTurnId) {
+    getDatabase()
+      .prepare(
+        `UPDATE sessions SET status = 'idle', updated_at = datetime('now')
+         WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
+      )
+      .run(sessionId, ...ACTIVE_TURN_STATUSES);
+  }
+  if (goneTurnId && !agentService.giveUpTurn(sessionId, goneTurnId, cause))
+    agentService.notifyTurnInterrupted(sessionId, goneTurnId, true);
   invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
 }
 
@@ -506,11 +622,10 @@ function scheduleCancelWatchdog(
     try {
       // A successor may still be preparing its apps. Without either owner the
       // status guard below distinguishes a settled chat from one left active.
-      const held = agentService.liveTurnId(sessionId);
-      const live = admitting.get(sessionId)?.turnId ?? held;
+      const live = currentTurnId(sessionId);
       if (live !== undefined && live !== cancelledTurnId) return;
       if (confirmed) {
-        if (held && held === cancelledTurnId) settleStopped(sessionId, held);
+        if (live) settleStopped(sessionId, live, "cancelled");
         return;
       }
 
@@ -543,20 +658,21 @@ function scheduleCancelWatchdog(
 
 // ---- Helpers ----
 
-function handleAgentRejection(sessionId: string, turnId: string, reason?: string): void {
-  const msg = reason || "Agent rejected the message";
-  console.error(`[CommandHandler] Agent rejected sendMessage for session=${sessionId}: ${msg}`);
-  persistSessionError(sessionId, msg, "internal");
-  const gone = agentService.liveTurnId(sessionId) !== turnId;
-  agentService.notifyTurnInterrupted(sessionId, turnId, gone);
-  invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
-}
-
 function handleAgentError(sessionId: string, turnId: string, err: unknown): void {
-  const errorMsg = err instanceof Error ? err.message : String(err);
-  console.error("[CommandHandler] Failed to forward to agent-server:", errorMsg);
-  persistSessionError(sessionId, `Agent server communication failed: ${errorMsg}`, "internal");
-  const gone = agentService.liveTurnId(sessionId) !== turnId;
-  agentService.notifyTurnInterrupted(sessionId, turnId, gone);
+  // Events can confirm admission even when its reply is lost.
+  if (
+    agentService.wasTurnAdmitted(sessionId, turnId) ||
+    agentService.liveTurnId(sessionId) === turnId
+  )
+    return;
+  const message =
+    err instanceof WireRequestError
+      ? err.message || "Agent rejected the message"
+      : `Agent server communication failed: ${err instanceof Error ? err.message : String(err)}`;
+  console.error(`[CommandHandler] Failed to start turn: session=${sessionId} ${message}`);
+  const current = currentTurnId(sessionId);
+  if (current === undefined || current === turnId)
+    persistSessionError(sessionId, message, "internal");
+  agentService.notifyTurnInterrupted(sessionId, turnId, true);
   invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
 }

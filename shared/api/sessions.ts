@@ -8,6 +8,7 @@ import { resumableStream, stream } from "./stream";
 import type { CloudSaveFailure } from "../cloud-autosave";
 import type { AgentConversationSnapshot } from "../cloud-session-snapshot";
 import type { DecodedWireEventEnvelope } from "../protocol-types";
+import type { Origin } from "@zvada/agent-server/protocol";
 import type { ToolRequestEventData } from "../types/query-protocol";
 
 const sessionId = z.object({ sessionId: z.string().min(1) });
@@ -74,9 +75,16 @@ export const sendMessage = write({
 
 export type QueuedMessages = {
   paused: "stopped" | "failed" | "limit" | null;
+  stoppedBy?: Origin;
   /** The provider's reset time in epoch milliseconds, when known. */
   limit?: { resetsAt?: number; continues: boolean };
-  items: { id: string; text: string; images: number; state: "sending" | "steering" | "waiting" }[];
+  items: {
+    id: string;
+    text: string;
+    images: number;
+    state: "sending" | "steering" | "waiting";
+    origin?: Origin;
+  }[];
 };
 
 /** A local chat's sending head, unread steers and waiting messages, held in this process. */
@@ -103,13 +111,13 @@ const steerTarget = {
 export const steerMessage = write({
   name: "steerMessage",
   input: sendMessage.input.extend(steerTarget),
-  output: out<{ outcome: "steered" | "queued" | "sent" }>(),
+  output: out<{ outcome: "steered" | "queued" | "sent" | "unconfirmed" }>(),
 });
 
 export const steerQueuedMessage = write({
   name: "steerQueuedMessage",
   input: queuedMessageId.extend(steerTarget),
-  output: out<{ outcome: "steered" | "queued" | "gone" }>(),
+  output: out<{ outcome: "steered" | "queued" | "gone" | "unconfirmed" }>(),
 });
 
 /** Move a waiting row before another waiting row, or to the end with `before: null`. */

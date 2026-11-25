@@ -23,8 +23,8 @@ vi.mock("@sentry/node", () => ({ captureException: agent.report }));
 import { handle, Registry } from "../../../src/api/registry";
 import { AppError } from "../../../src/lib/errors";
 import { ASSISTANT_FAILURE } from "../../../src/services/assistants/sentences";
-import { handleFrame, serveOperations } from "../../../src/services/query-engine";
-import { addConnection, closeAll } from "../../../src/services/ws.service";
+import { handleFrame, removeSubs, serveOperations } from "../../../src/services/query-engine";
+import { addConnection, closeAll, FrameTooLarge } from "../../../src/services/ws.service";
 import { ASSISTANT_HOST } from "../../helpers";
 
 const count = live({ name: "count", output: out<number>() });
@@ -192,6 +192,59 @@ describe("an assistant's failures", () => {
 });
 
 describe("a paired device's frames", () => {
+  it("gets a correlated error for an oversized read, subscription or write result", async ({
+    onTestFinished,
+  }) => {
+    const large = "x".repeat(512);
+    const value = live({ name: "value", output: out<string>() });
+    const change = write({ name: "change", output: out<string>() });
+    const apply = vi.fn(() => large);
+    serveOperations(new Registry([handle(value, () => large), handle(change, apply)]));
+    const replies: Record<string, unknown>[] = [];
+    const id = addConnection(
+      {
+        send(raw) {
+          const bytes = Buffer.byteLength(String(raw));
+          if (bytes > 256) throw new FrameTooLarge(bytes);
+          replies.push(JSON.parse(String(raw)));
+        },
+        close: vi.fn(),
+      },
+      "phone",
+      true
+    );
+    onTestFinished(() => removeSubs(id));
+    handleFrame(id, { type: "q:request", id: "read", resource: "value" });
+    handleFrame(id, { type: "q:subscribe", id: "sub", resource: "value" });
+    handleFrame(id, { type: "q:mutate", id: "write", action: "change" });
+    await vi.waitFor(() => expect(replies).toHaveLength(3));
+    const error = { type: "q:error", code: "FRAME_TOO_LARGE" };
+    for (const read of ["read", "sub"]) {
+      expect(replies).toContainEqual({
+        ...error,
+        id: read,
+        message: "The answer is too large to send to this device.",
+      });
+    }
+    expect(replies).toContainEqual({
+      ...error,
+      id: "write",
+      message: "The change was made, but its answer is too large to send to this device.",
+    });
+    expect(apply).toHaveBeenCalledOnce();
+    apply.mockImplementationOnce(() => {
+      throw new AppError(409, large);
+    });
+    handleFrame(id, { type: "q:mutate", id: "rejected", action: "change" });
+    await vi.waitFor(() =>
+      expect(replies.at(-1)).toEqual({
+        ...error,
+        id: "rejected",
+        message: "The answer is too large to send to this device.",
+      })
+    );
+  });
+
   it("subscribe and answer as before", () => {
     const { id, sent } = connect(false);
     handleFrame(id, { type: "q:subscribe", id: "s1", resource: "count" });

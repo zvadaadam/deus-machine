@@ -13,10 +13,13 @@
 // Initialized once at startup in server.ts via agentService.init().
 
 import type { AgentHarness } from "@shared/enums";
+import { WireRequestError } from "@zvada/agent-server/client";
 import type { HostToolSource } from "@zvada/agent-server/core";
+import { echoMessageId, WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
 import type {
   ElicitationOutcome,
   ElicitationRequestedEvent,
+  Origin,
   PermissionOutcome,
   PermissionRequestedEvent,
   TurnCancelResult,
@@ -52,7 +55,11 @@ import { agentDeviceFor } from "../simulator-context";
 import { setupForTurn } from "../project-environment.service";
 import { handleAutomationToolRequest } from "../automations";
 import { getDatabase } from "../../lib/database";
-import { AgentServerDisconnectedError, NotFoundError } from "../../lib/errors";
+import {
+  AgentServerDisconnectedError,
+  DifferentTurnMessageError,
+  NotFoundError,
+} from "../../lib/errors";
 import { requireParam } from "../../lib/query-params";
 
 // ---- Singleton ----
@@ -110,8 +117,11 @@ export async function init(): Promise<void> {
       const end = handler.handle(envelope);
       if (!known) return;
       if (end) turnWatcher?.turnEnded(end);
-      if (event.type === "message.ended")
-        turnWatcher?.userEcho(sessionId, event.turnId, event.messageId);
+      if (event.type === "message.started" && event.role === "user" && event.steerId !== undefined)
+        turnWatcher?.userEcho(sessionId, event.turnId, event.steerId);
+      // The sending head stays until its text is published. A message end carries only ids.
+      if (event.type === "message.ended" && event.messageId === echoMessageId(event.turnId))
+        turnWatcher?.userEcho(sessionId, event.turnId);
       if (event.type === "permission.requested") void answerPermission(event);
       if (event.type === "elicitation.requested") void answerElicitation(event);
     },
@@ -121,16 +131,12 @@ export async function init(): Promise<void> {
       // Replay exhaustion can hide the native terminal entirely. One
       // targeted cancel reconciles it; a late reply cannot settle a successor.
       void (async () => {
-        let confirmed = false;
-        try {
-          const result = await link?.cancelTurn(gap.sessionId, turnId);
-          confirmed =
-            result?.outcome === "cancelled" ||
-            (result?.outcome === "no_active_turn" && !result.activeTurnId);
-        } catch (error) {
+        const result = await link?.cancelTurn(gap.sessionId, turnId).catch((error: unknown) => {
           console.warn("[AgentService] Replay recovery cancel failed:", error);
-        }
-        handler.settleEventGap(gap.sessionId, turnId, confirmed);
+        });
+        const absent = result?.outcome === "no_active_turn";
+        const gone = result?.outcome === "cancelled" || (absent && !result.activeTurnId);
+        handler.settleEventGap(gap.sessionId, turnId, gone, absent ? undefined : "cancelled");
       })();
     },
     onToolRequest: (method, params) => handleToolRequest(method, params),
@@ -170,10 +176,10 @@ export async function startTurn(
   turnId: string,
   agentHarness: AgentHarness,
   prompt: string,
-  options: Omit<DeusTurnOptions, "agentMessages"> & { signal?: AbortSignal }
+  options: Omit<DeusTurnOptions, "agentMessages"> & { signal?: AbortSignal; onWire?(): void }
 ): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
-  const { signal } = options;
+  const { signal, onWire, ...run } = options;
   const stopped = Promise.withResolvers<never>();
   const onAbort = () => stopped.reject(signal?.reason);
   signal?.addEventListener("abort", onAbort);
@@ -187,7 +193,7 @@ export async function startTurn(
   }
   const device = agentDeviceFor(sessionId);
   const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, {
-    ...options,
+    ...run,
     ...apps,
     agentMessages: hasAgentMessages(sessionId),
     setup: setupForTurn(sessionId),
@@ -202,6 +208,7 @@ export async function startTurn(
   // when the session is locally busy (the server will reject with turnActive)
   // — the live turn's state must not be clobbered by a doomed registration.
   const registered = events?.beginTurn(sessionId, turnId) ?? false;
+  onWire?.();
   try {
     await link.startTurn(params);
   } catch (err) {
@@ -220,10 +227,16 @@ function supportsImages(harness: string): boolean {
 
 export async function steerTurn(harness: string, params: TurnSteerParams) {
   if (!link) throw new AgentServerDisconnectedError();
-  return link.engine.steerTurn({
-    ...params,
-    input: supportsImages(harness) ? params.input : withoutImageParts(params.input),
-  });
+  try {
+    return await link.engine.steerTurn({
+      ...params,
+      input: supportsImages(harness) ? params.input : withoutImageParts(params.input),
+    });
+  } catch (error) {
+    if (error instanceof WireRequestError && error.code === WIRE_ERROR_CODES.turnConflict)
+      throw new DifferentTurnMessageError();
+    throw error;
+  }
 }
 
 /**
@@ -289,34 +302,49 @@ export function isConnected(): boolean {
   return link?.isConnected() ?? false;
 }
 
+export function lastOutputAt(sessionId: string) {
+  return events?.lastOutputAt(sessionId);
+}
+
 /** A chat's tools beside the Deus tools: the operator's, registered by services/assistants. */
 let sessionTools: ((own: HostToolSource) => HostToolSource) | undefined;
 export function provideSessionTools(compose: (own: HostToolSource) => HostToolSource): void {
   sessionTools = compose;
 }
 
+export type InterruptionCause = "failure" | "cancelled";
+export type StopAsked = { by: Origin; turnId?: string; endedAt?: number };
 interface TurnWatcher {
   turnEnded(end: TurnEnd): void;
-  userEcho(sessionId: string, turnId: string, messageId: string): void;
-  stopAsked(sessionId: string): void;
-  interrupted(sessionId: string, turnId: string | undefined, gone: boolean): void;
+  startCleared(sessionId: string): void;
+  userEcho(sessionId: string, turnId: string, steerId?: string): void;
+  stopAsked(sessionId: string, stop: StopAsked): void;
+  interrupted(
+    sessionId: string,
+    turnId: string | undefined,
+    gone: boolean,
+    cause: InterruptionCause
+  ): string[] | undefined;
 }
 let turnWatcher: TurnWatcher | undefined;
 export function provideTurnWatcher(watcher: TurnWatcher): void {
   turnWatcher = watcher;
 }
 
-export function notifyStopAsked(sessionId: string): void {
-  turnWatcher?.stopAsked(sessionId);
+export function notifyStopAsked(sessionId: string, stop: StopAsked): void {
+  turnWatcher?.stopAsked(sessionId, stop);
 }
+
+export const notifyStartCleared = (sessionId: string) => turnWatcher?.startCleared(sessionId);
 
 export function notifyTurnInterrupted(
   sessionId: string,
   turnId: string | undefined,
-  gone: boolean
-): void {
+  gone: boolean,
+  cause: InterruptionCause = "failure"
+) {
   if (gone && turnId) cancelSessionRelays(sessionId, "turn interrupted", turnId);
-  turnWatcher?.interrupted(sessionId, turnId, gone);
+  return turnWatcher?.interrupted(sessionId, turnId, gone, cause);
 }
 
 /**
@@ -330,8 +358,12 @@ export function liveTurnId(sessionId: string): string | undefined {
   return events?.liveTurnId(sessionId);
 }
 
-export function giveUpTurn(sessionId: string, turnId: string): void {
-  events?.giveUpTurn(sessionId, turnId);
+export function wasTurnAdmitted(sessionId: string, turnId: string) {
+  return events?.wasTurnAdmitted(sessionId, turnId) ?? false;
+}
+
+export function giveUpTurn(sessionId: string, turnId: string, cause?: "cancelled") {
+  return events?.giveUpTurn(sessionId, turnId, cause);
 }
 
 /**

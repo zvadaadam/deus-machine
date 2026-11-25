@@ -29,7 +29,7 @@ import { getWorkspacesBySessionIds } from "../db";
 import { answerToolRequest } from "./agent";
 import { ASSISTANT_FAILURE, ASSISTANT_TOOLS_ONLY } from "./assistants/sentences";
 import * as streamHub from "./streams";
-import { getConnection } from "./ws.service";
+import { getConnection, sendFrame } from "./ws.service";
 
 type Params = Record<string, unknown>;
 
@@ -119,7 +119,7 @@ export function handleFrame(connectionId: string, msg: Params): void {
   // registry). It follows no live read or stream, and answers no agent's
   // question directly: the operator tools do that on its behalf.
   if ((type === "q:subscribe" || type === "q:tool_response") && callerOf(connectionId).assistant) {
-    sendFrame(connectionId, {
+    sendAnswer(connectionId, {
       type: "q:error",
       id,
       code: "FORBIDDEN",
@@ -135,7 +135,7 @@ export function handleFrame(connectionId: string, msg: Params): void {
       .with("q:unsubscribe", () => handleUnsubscribe(connectionId, requireString(msg.id, "id")))
       .with("q:tool_response", () => handleToolResponse(msg))
       .otherwise(() => {
-        sendFrame(connectionId, {
+        sendAnswer(connectionId, {
           type: "q:error",
           id,
           code: "UNKNOWN_FRAME",
@@ -143,7 +143,7 @@ export function handleFrame(connectionId: string, msg: Params): void {
         });
       });
   } catch (error) {
-    sendFrame(connectionId, {
+    sendAnswer(connectionId, {
       type: "q:error",
       id,
       code: "INVALID_FRAME",
@@ -168,10 +168,10 @@ async function handleRequest(connectionId: string, { id, name, params }: Call): 
   const caller = callerOf(connectionId);
   try {
     const data = await registry().run(name, "read", params, { caller });
-    sendFrame(connectionId, { type: "q:response", id, data });
+    sendAnswer(connectionId, { type: "q:response", id, data });
   } catch (error) {
     const { message } = describeFailure(error, "Query failed", caller);
-    sendFrame(connectionId, { type: "q:error", id, code: "QUERY_ERROR", message });
+    sendAnswer(connectionId, { type: "q:error", id, code: "QUERY_ERROR", message });
   }
 }
 
@@ -179,10 +179,10 @@ async function handleMutate(connectionId: string, { id, name, params }: Call): P
   const caller = callerOf(connectionId);
   try {
     const data = await registry().run(name, "write", params, { caller });
-    sendFrame(connectionId, { type: "q:mutate_result", id, success: true, data });
+    sendAnswer(connectionId, { type: "q:mutate_result", id, success: true, data });
   } catch (error) {
     const { message, status, details } = describeFailure(error, "Mutation failed", caller);
-    sendFrame(connectionId, {
+    sendAnswer(connectionId, {
       type: "q:mutate_result",
       id,
       success: false,
@@ -208,10 +208,10 @@ function handleSubscribe(connectionId: string, { id, name, params }: Call, msg: 
     let connSubs = subs.get(connectionId);
     if (!connSubs) subs.set(connectionId, (connSubs = new Map()));
     connSubs.set(id, { id, resource, params });
-    sendFrame(connectionId, { type: "q:snapshot", id, data });
+    sendAnswer(connectionId, { type: "q:snapshot", id, data });
   } catch (error) {
     const { message } = describeFailure(error, "Subscribe failed");
-    sendFrame(connectionId, { type: "q:error", id, code: "SUBSCRIBE_ERROR", message });
+    sendAnswer(connectionId, { type: "q:error", id, code: "SUBSCRIBE_ERROR", message });
   }
 }
 
@@ -309,7 +309,7 @@ function pushSnapshot(connectionId: string, subId: string, sub: Sub, reads: Map<
     const data = sharedRead(reads, connectionId, [sub.resource, sub.params], () =>
       registry().runLive(sub.resource, sub.params, liveCtx(connectionId))
     );
-    sendFrame(connectionId, { type: "q:snapshot", id: subId, data });
+    sendAnswer(connectionId, { type: "q:snapshot", id: subId, data });
   } catch (error) {
     console.error(`[QueryEngine] Snapshot push failed for ${sub.resource}:`, error);
   }
@@ -337,7 +337,7 @@ function pushWorkspaceDelta(
     }
     if (missing.size) return false;
     const removed = changed.filter((ws) => !shown.has(ws.state)).map((ws) => ws.id);
-    sendFrame(connectionId, {
+    sendAnswer(connectionId, {
       type: "q:delta",
       id: subId,
       upserted: changed.filter((ws) => shown.has(ws.state)).map(toWorkspace),
@@ -367,12 +367,17 @@ function sharedRead<T>(
 
 // ---- Helpers ----
 
-function sendFrame(connectionId: string, frame: QServerFrame): void {
-  try {
-    getConnection(connectionId)?.ws.send(JSON.stringify(frame));
-  } catch {
-    // The connection is closing.
-  }
+function sendAnswer(connectionId: string, frame: QServerFrame): void {
+  if (sendFrame(connectionId, frame) !== "too-large") return;
+  sendFrame(connectionId, {
+    type: "q:error",
+    id: frame.id,
+    code: "FRAME_TOO_LARGE",
+    message:
+      frame.type === "q:mutate_result" && frame.success
+        ? "The change was made, but its answer is too large to send to this device."
+        : "The answer is too large to send to this device.",
+  });
 }
 
 function parseCall(msg: Params, nameField: "resource" | "action"): Call {

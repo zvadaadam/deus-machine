@@ -7,7 +7,6 @@ import type {
   ConversationCompaction,
   ConversationMessage,
   ConversationState,
-  ConversationTurn,
 } from "./protocol-types";
 import {
   isUnknownEvent,
@@ -77,7 +76,7 @@ export function turnProviderCredentialSource(
  * A partial replay keeps facts it omits; an explicit redacted source replaces
  * the previous source as a whole, so private account details cannot linger. */
 export function turnRecord(
-  turn: ConversationTurn,
+  turn: Omit<SessionTurn, "providerCredentialSource">,
   providerCredentialSource?: TurnProviderCredentialSource,
   previous?: SessionTurn
 ): SessionTurn {
@@ -88,6 +87,11 @@ export function turnRecord(
     stopReason: turn.stopReason ?? previous?.stopReason,
     finishReason: turn.finishReason ?? previous?.finishReason,
     error: turn.error ?? previous?.error,
+    // A native terminal can arrive after the host gave up the turn and kept its steers.
+    undeliveredSteers:
+      previous?.undeliveredSteers?.length && turn.undeliveredSteers
+        ? [...new Set([...previous.undeliveredSteers, ...turn.undeliveredSteers])]
+        : (turn.undeliveredSteers ?? previous?.undeliveredSteers),
     execution: turn.execution ?? previous?.execution,
     providerCredentialSource: providerCredentialSource ?? previous?.providerCredentialSource,
     tokens: turn.tokens ?? previous?.tokens,

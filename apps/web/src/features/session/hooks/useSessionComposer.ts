@@ -1,11 +1,14 @@
 import { useStore } from "zustand";
 import { useEffect, useMemo } from "react";
-import { DEFAULT_THINKING_LEVEL, type ThinkingLevel } from "@/shared/agents";
+import type { ThinkingLevel } from "@/shared/agents";
 import {
   composerStore,
   composerTarget,
+  type ComposerTarget,
   emptyComposer,
+  HOME_COMPOSER_ID,
   sessionComposerActions as actions,
+  stagedContent,
 } from "../store/sessionComposerStore";
 
 interface ComposerOptions {
@@ -14,29 +17,17 @@ interface ComposerOptions {
   defaultThinking: ThinkingLevel;
 }
 
-export function useSessionComposer(
-  id: string,
-  { initialModel, initialThinking, defaultThinking }: ComposerOptions = {
-    defaultThinking: DEFAULT_THINKING_LEVEL,
-  }
-) {
-  const store = composerStore();
-  const target = useMemo(() => composerTarget(id, store), [id, store]);
-  const seedThinking = initialThinking ?? defaultThinking;
-  const initial = useMemo(
-    () => emptyComposer(initialModel, seedThinking),
-    [initialModel, seedThinking]
-  );
-  useEffect(() => actions.seedIfAbsent(target, initial), [target, initial]);
-  const state = useStore(store, (s) => s.composers[id] ?? initial);
+const emptyDraft = stagedContent();
 
+function useComposerTarget(id: string) {
+  const store = composerStore();
+  return useMemo(() => composerTarget(id, store), [id, store]);
+}
+
+function useDraftActions(target: ComposerTarget, draft: typeof emptyDraft) {
   const setters = useMemo(
     () => ({
       setDraft: (v: string) => actions.setDraft(target, v),
-      setModel: (v: string, levels: readonly ThinkingLevel[] | undefined) =>
-        actions.setModel(target, v, levels, defaultThinking),
-      setThinkingLevel: (level: ThinkingLevel) => actions.setThinkingLevel(target, level),
-      togglePlanMode: () => actions.togglePlanMode(target),
       addPastedText: (text: string) => actions.addPastedText(target, text),
       removePastedText: (id: string) => actions.removePastedText(target, id),
       addFileMention: (v: Parameters<typeof actions.addFileMention>[1]) =>
@@ -49,8 +40,39 @@ export function useSessionComposer(
       removeImageAttachment: (id: string) => actions.removeImageAttachment(target, id),
       dismissMissingAttachments: () => actions.dismissMissingAttachments(target),
     }),
-    [target, defaultThinking]
+    [target]
   );
 
-  return { ...state, ...setters, clearSent: () => actions.clearSent(target, state) };
+  return { ...setters, clearSent: () => actions.clearSent(target, draft) };
+}
+
+export function useHomeComposer() {
+  const target = useComposerTarget(HOME_COMPOSER_ID);
+  const draft = useStore(target.store, (s) => s.pendingContent[HOME_COMPOSER_ID] ?? emptyDraft);
+  return { ...draft, ...useDraftActions(target, draft) };
+}
+
+export function useSessionComposer(
+  id: string,
+  { initialModel, initialThinking, defaultThinking }: ComposerOptions
+) {
+  const target = useComposerTarget(id);
+  const seedThinking = initialThinking ?? defaultThinking;
+  const initial = useMemo(
+    () => emptyComposer(initialModel, seedThinking),
+    [initialModel, seedThinking]
+  );
+  useEffect(() => actions.seedIfAbsent(target, initial), [target, initial]);
+  const state = useStore(target.store, (s) => s.composers[id] ?? initial);
+  const draftActions = useDraftActions(target, state);
+  const setters = useMemo(
+    () => ({
+      setModel: (v: string, levels: readonly ThinkingLevel[] | undefined) =>
+        actions.setModel(target, v, levels, defaultThinking),
+      setThinkingLevel: (level: ThinkingLevel) => actions.setThinkingLevel(target, level),
+      togglePlanMode: () => actions.togglePlanMode(target),
+    }),
+    [target, defaultThinking]
+  );
+  return { ...state, ...draftActions, ...setters };
 }

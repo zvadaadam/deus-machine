@@ -38,7 +38,7 @@ import { sendMessage as sendStrict } from "../../../src/services/agent/turns";
 import * as cloudDriver from "../../../src/services/agent/cloud/driver";
 import { applyCloudStatus } from "../../../src/services/workspace-lifecycle";
 
-const SESSION = "sess-send";
+let SESSION: string;
 /** A session whose workspace row is gone — the worktree-deleted case. */
 const ORPHAN = "sess-orphan";
 
@@ -87,6 +87,7 @@ describeWithDb("sendMessage", () => {
     };
 
   beforeEach(() => {
+    SESSION = crypto.randomUUID();
     db = createTestDb();
     mockGetDatabase.mockReturnValue(db);
     vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -182,6 +183,7 @@ describeWithDb("sendMessage", () => {
       .spyOn(agentService, "stopSession")
       .mockResolvedValue({ outcome: "no_active_turn" });
     const stopping = run(api.stopSession, { sessionId: SESSION });
+    vi.mocked(agentService.liveTurnId).mockReturnValue(undefined);
     refuse(new WireRequestError(WIRE_ERROR_CODES.shuttingDown, "server is shutting down"));
     await expect(first).rejects.toThrow();
     await expect(stopping).resolves.toEqual({ unconfirmed: false });
@@ -194,7 +196,6 @@ describeWithDb("sendMessage", () => {
     expect(db.prepare("SELECT COUNT(*) AS n FROM turns WHERE turn_id = 'turn-7'").get()).toEqual({
       n: 0,
     });
-    vi.mocked(agentService.liveTurnId).mockReturnValue(undefined);
     await expect(send(SESSION, "turn-7")).resolves.toEqual({ turnId: "turn-7" });
     expect(startTurn).toHaveBeenCalledTimes(2);
   });

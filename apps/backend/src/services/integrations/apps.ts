@@ -4,6 +4,7 @@
 // ("Installed · needs sign-in"). What an account's rows mean is accounts.ts;
 // apps that connect through the Deus account are cloud-apps.ts.
 
+import { isDeepStrictEqual } from "node:util";
 import { getErrorMessage } from "@shared/lib/errors";
 import { ConflictError, NotFoundError, ValidationError } from "../../lib/errors";
 import {
@@ -33,6 +34,7 @@ import {
   updateConnection,
   upsertInstallation,
 } from "./store";
+import { initVault } from "./vault";
 
 // ---------------------------------------------------------------------------
 // Install / remove
@@ -86,6 +88,15 @@ export function setAppEnabled(appId: string, enabled: boolean): void {
 export async function connectApp(input: ConnectAppInput): Promise<ConnectAppResult> {
   const app = requireApp(input.appId);
   const auth = app.auth;
+  const values = input.values ?? {};
+  const fromCli = auth.kind === "bearer" && values.fromCli === "gh" && auth.cliToken === "gh";
+  if (!fromCli && (auth.kind === "bearer" || auth.kind === "header" || auth.kind === "env")) {
+    await initVault("seal");
+    // A custom server can be removed and its id reused while the Keychain answers.
+    if (!isDeepStrictEqual(app, findApp(app.id))) {
+      throw new ConflictError("This app changed while connecting. Connect again.");
+    }
+  }
   const route = signInRoute(app);
   if (route.via === "unavailable") {
     throw new ValidationError(
@@ -130,8 +141,7 @@ export async function connectApp(input: ConnectAppInput): Promise<ConnectAppResu
   if (auth.kind === "managed") throw new ValidationError(`${app.name} has no sign-in of its own`);
 
   // A signed-in CLI: nothing is stored, the CLI supplies the token at each use.
-  const values = input.values ?? {};
-  if (auth.kind === "bearer" && values.fromCli === "gh" && auth.cliToken === "gh") {
+  if (fromCli) {
     const token = await runGh(["auth", "token"], { timeoutMs: 5_000 });
     if (!token.success || !token.stdout) {
       throw new ValidationError(

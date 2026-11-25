@@ -1,17 +1,30 @@
 import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { expect, it, vi } from "vitest";
+import { toast } from "sonner";
+import { beforeEach, expect, it, vi } from "vitest";
 import { api } from "@shared/api";
 import type { AgentAuthAnswer, HarnessAuth } from "@shared/agent-auth";
-import { localSignIn, readLocalAgent } from "@/features/settings/lib/local-agent-login";
+import { agentReadiness } from "@shared/agent-readiness";
+import {
+  installLabel,
+  installLocalAgent,
+  localSignIn,
+  readLocalAgent,
+} from "@/features/settings/lib/local-agent-login";
 import { useAgentAuthEvents } from "@/features/settings/api/settings.queries";
+import { call } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useStream } from "@/shared/hooks/useStream";
 
 vi.mock("@/shared/config/webDirectMode", () => ({ isCloudDirectWebMode: vi.fn() }));
 vi.mock("@/shared/hooks/useStream", () => ({ useStream: vi.fn() }));
+vi.mock("@/platform/ws", () => ({ call: vi.fn() }));
+
+beforeEach(() => {
+  vi.spyOn(toast, "error").mockClear();
+});
 
 const models = [...queryKeys.settings.agentModels, "workspace"];
 function observe(direct = false) {
@@ -25,6 +38,11 @@ function observe(direct = false) {
   }
   renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(Shell)));
   return client;
+}
+
+function failInstall(harness: string, error: string) {
+  const [cli] = vi.mocked(useStream).mock.calls;
+  cli![2]({ harness, phase: "failed", version: "", receivedBytes: 0, error });
 }
 
 it("does not follow either computer stream in the hosted direct lane", () => {
@@ -59,6 +77,86 @@ it("reads workspace models again when installation or sign-in finishes", async (
   auth![2]({ harness: "gemini" });
   await vi.waitFor(() => expect(client.getQueryState(models)?.isInvalidated).toBe(true));
 });
+
+it.each([
+  [
+    "gemini",
+    "The engine refused the install",
+    "Couldn’t install Gemini: The engine refused the install",
+  ],
+  ["codex-app-server", "  ", "Couldn’t install Codex: The install failed."],
+] as const)(
+  "names the agent and install when this window's %s request fails",
+  async (harness, error, message) => {
+    observe();
+    await installLocalAgent(harness);
+    failInstall(harness, error);
+    failInstall(harness, error);
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith(message, {
+      id: `cli-install-${harness}`,
+    });
+  }
+);
+
+it.each([
+  ["1.5.14", { state: "unknown", status: "install-failed" }, "Try again"],
+  [undefined, { state: "not_installed" }, undefined],
+] as const)(
+  "uses the row's version %s for a failure this window didn't request",
+  (version, readiness, action) => {
+    const client = observe();
+    const key = queryKeys.settings.agentAuth;
+    const harness = "gemini";
+    const error = "The CLI cache is unavailable";
+    client.setQueryData<AgentAuthAnswer>(key, {
+      clis: [{ harness, state: "missing", version }],
+      auth: [],
+      logins: [],
+    });
+    failInstall(harness, error);
+    const data = client.getQueryData<AgentAuthAnswer>(key)!;
+    expect(data.clis[0]).toMatchObject({ state: "failed", version, error });
+    expect(agentReadiness(data, harness)).toMatchObject({
+      ...readiness,
+      detail: expect.stringContaining(error),
+    });
+    expect(installLabel(readLocalAgent({ data, isFetching: false, isError: false }, harness))).toBe(
+      action
+    );
+    expect(toast.error).not.toHaveBeenCalled();
+  }
+);
+
+it("leaves other harnesses quiet and clears this window's install when it is ready", async () => {
+  observe();
+  const [cli] = vi.mocked(useStream).mock.calls;
+  await installLocalAgent("gemini");
+  failInstall("codex-app-server", "Download failed");
+  cli![2]({ harness: "gemini", phase: "ready", version: "1", receivedBytes: 0 });
+  failInstall("gemini", "Download failed");
+  expect(toast.error).not.toHaveBeenCalled();
+});
+
+it.each(["progress", "rejection"])(
+  "shows one toast for a rejected install when %s arrives first",
+  async (first) => {
+    observe();
+    const request = Promise.withResolvers<void>();
+    vi.mocked(call).mockReturnValueOnce(request.promise);
+    const installing = installLocalAgent("claude-code");
+    if (first === "progress") failInstall("claude-code", "Download failed");
+    request.reject(new Error("Could not reach the engine"));
+    await installing;
+    if (first === "rejection") failInstall("claude-code", "Download failed");
+    const id = "cli-install-claude-code";
+    const message =
+      first === "progress"
+        ? "Couldn’t install Claude Code: Download failed"
+        : "Could not reach the engine";
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith(message, { id });
+    expect(toast.getToasts().filter((item) => item.id === id)).toMatchObject([{ title: message }]);
+  }
+);
 
 it("discards a cold model read when sign-in finishes, including in a workspace whose picker closed", async () => {
   const client = observe();
@@ -128,7 +226,10 @@ it("checks the newly installed agent's login when Settings reopens and then offe
   const key = queryKeys.settings.agentAuth;
   const claude: HarnessAuth = { harness: "claude-code", state: "signed_in", methods: [] };
   const before: AgentAuthAnswer = {
-    clis: [{ harness: "gemini", state: "missing" }],
+    clis: [
+      { harness: "claude-code", state: "ready" },
+      { harness: "gemini", state: "missing", version: "1.5.14" },
+    ],
     auth: [
       claude,
       { harness: "gemini", state: "unknown", methods: [], error: "The CLI is not installed yet." },
@@ -159,7 +260,10 @@ it("checks the newly installed agent's login when Settings reopens and then offe
     };
     after.resolve({
       ...before,
-      clis: [{ harness: "gemini", state: "ready" }],
+      clis: [
+        { harness: "claude-code", state: "ready" },
+        { harness: "gemini", state: "ready" },
+      ],
       auth: [claude, auth],
     });
     await vi.waitFor(() =>

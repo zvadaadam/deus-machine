@@ -14,12 +14,14 @@
  */
 
 import { Collapse } from "@/components/ui/collapse";
-import { useCallback, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useTranscriptFold } from "@/features/session/lib/openChat";
+import type { KeyboardEvent, ReactNode } from "react";
 import { ChevronRight, X } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
 import type { ToolUseBlock, ToolResultBlock } from "../types";
 import { ToolError } from "./ToolError";
+import { ToolInput, ToolInputSummary } from "./ToolInput";
 
 export interface BaseToolRendererProps {
   // Identity
@@ -45,7 +47,7 @@ export function BaseToolRenderer({
   icon,
   toolUse,
   toolResult,
-  defaultExpanded = false, // Collapsed by default (explicit is better than implicit)
+  defaultExpanded,
   isLoading = false,
   showContentOnError = false,
   children,
@@ -53,23 +55,30 @@ export function BaseToolRenderer({
   renderSummary,
 }: BaseToolRendererProps) {
   const isError = toolResult?.is_error;
+  const missingResult = !toolResult && !isLoading;
 
-  // Errors never auto-expand — agents self-correct and errors are transient.
-  // The X icon swap on the collapsed row is the error signal; users expand when they want details.
-  const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
-  const isExpanded = manualExpanded !== null ? manualExpanded : defaultExpanded;
-  const toggleExpanded = useCallback(() => {
-    setManualExpanded(!isExpanded);
-  }, [isExpanded]);
+  const [isExpanded, toggleExpanded] = useTranscriptFold("tool", toolUse.id, defaultExpanded);
 
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      toggleExpanded();
-    },
-    [toggleExpanded]
-  );
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    toggleExpanded();
+  }
+
+  function details() {
+    if (missingResult) {
+      return (
+        <div className="space-y-3 px-2 pb-2">
+          <ToolInput input={toolUse.input} />
+          <div className="text-muted-foreground text-xs italic">No result recorded</div>
+        </div>
+      );
+    }
+    if (toolResult?.is_error && !showContentOnError)
+      return <ToolError content={toolResult.content} />;
+    return children ?? renderContent?.({ toolUse, toolResult });
+  }
+  const summary = missingResult ? <ToolInputSummary input={toolUse.input} /> : renderSummary?.();
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-0.5">
@@ -132,24 +141,13 @@ export function BaseToolRenderer({
           {/* Header context — stays visible when expanded so users keep orientation.
               Wrapped in a truncating span so the row never wraps: rightmost content
               (e.g. command preview) truncates first, then description. */}
-          {renderSummary && <span className="min-w-0 flex-1 truncate">{renderSummary()}</span>}
+          {summary && <span className="min-w-0 flex-1 truncate">{summary}</span>}
         </div>
       </div>
 
       {/* Expanded content — AnimatePresence for smooth height + opacity transition. */}
       <AnimatePresence initial={false}>
-        {isExpanded && (
-          <Collapse className="mt-0.5 w-full min-w-0">
-            {isError && toolResult && !showContentOnError ? (
-              <ToolError content={toolResult.content} />
-            ) : (
-              <>
-                {children}
-                {!children && renderContent && renderContent({ toolUse, toolResult })}
-              </>
-            )}
-          </Collapse>
-        )}
+        {isExpanded && <Collapse className="mt-0.5 w-full min-w-0">{details()}</Collapse>}
       </AnimatePresence>
     </div>
   );

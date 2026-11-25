@@ -64,11 +64,13 @@ check(
   process.platform === "darwin" ? "xcode-select --install" : "Install gcc/g++ and make."
 );
 
+const gitVersion = out("git", ["--version"]);
+const [gitMajor, gitMinor] = gitVersion?.split(" ")[2]?.split(".").map(Number) ?? [];
 check(
   "required",
-  "git",
-  Boolean(out("git", ["--version"])),
-  out("git", ["--version"]) ?? "not found",
+  "Git 2.30+",
+  gitMajor > 2 || (gitMajor === 2 && gitMinor >= 30),
+  gitVersion ?? "not found",
   "brew install git"
 );
 

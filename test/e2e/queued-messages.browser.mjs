@@ -139,10 +139,16 @@ async function engine() {
     if (command === "end") emit("turn.ended", turn, { stopReason: "end_turn" });
     if (command === "echo" || command === "read") {
       const steer = command === "read" ? steers.at(-1) : null;
-      const { input, sessionId, turnId } = steer ?? turn;
+      const { input, sessionId, turnId, origin } = steer ?? turn;
       const messageId = steer ? steerMessageId(steer.steerId) : echoMessageId(turnId);
       const outputIndex = steer ? 2 : 0;
-      emit("message.started", turn, { messageId, outputIndex, role: "user" });
+      emit("message.started", turn, {
+        messageId,
+        outputIndex,
+        role: "user",
+        steerId: steer?.steerId,
+        origin,
+      });
       const parts = steer
         ? createSteerEchoParts(input, steer.steerId)
         : createUserEchoParts(input, turnId);

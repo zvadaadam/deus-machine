@@ -18,12 +18,14 @@ export function createWorkspaceTools(sessionId: string): DeusTool[] {
     // ====================================================================
     tool(
       "GetWorkspaceDiff",
-      "Use this to see what the user is working on, or when they refer to the workspace diff, PR diff or all changes — by default it lists the changed paths since the merge base, including uncommitted changes.",
+      "Use this to see what the user is working on, or when they refer to the workspace diff, PR diff or all changes — by default it lists the changed paths since the merge base, including uncommitted changes. To get one file's unified diff, pass its path relative to the workspace, such as `src/index.ts`.",
       {
         file: z
           .string()
           .optional()
-          .describe("Path relative to the workspace for one file's unified diff."),
+          .describe(
+            "Path relative to the workspace for one file's unified diff, such as `src/index.ts`."
+          ),
         stat: z.boolean().optional().describe("If true, return per-file additions and deletions."),
       },
       async (args) => {
@@ -55,7 +57,7 @@ export function createWorkspaceTools(sessionId: string): DeusTool[] {
       {
         comments: z.array(
           z.object({
-            file: z.string().describe("The file path to comment on"),
+            file: z.string().describe("Workspace-relative path of the file to comment on."),
             lineNumber: z.number().describe("The line number to comment on"),
             body: z.string().describe("The comment body/content"),
           })

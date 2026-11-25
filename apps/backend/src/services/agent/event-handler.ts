@@ -1,4 +1,4 @@
-import { turnProviderCredentialSource } from "@shared/conversation-rows";
+import { findConversationMessage, turnProviderCredentialSource } from "@shared/conversation-rows";
 // backend/src/services/agent/event-handler.ts
 // The single entry point for agent → backend data flow.
 //
@@ -40,9 +40,10 @@ import type { LiveName } from "@shared/api";
 import { cloudSaveFailures, sessionEvents } from "@shared/api/sessions";
 import { cloudSaveFailure } from "@shared/cloud-autosave";
 import { invalidate } from "../query-engine";
-import { openWith, publish } from "../streams";
+import { openWith, publish, resetSubscribers } from "../streams";
 import {
   persistChanges,
+  persistTurn,
   persistSessionTitle,
   persistSessionError,
   type TurnOutcomeWrite,
@@ -83,8 +84,10 @@ export interface AgentEventHandler {
   beginTurn(sessionId: string, turnId: string, opts?: { force?: boolean }): boolean;
   /** Release a rejected local claim, only while this turn is still unadmitted. */
   abortTurn(sessionId: string, turnId: string): boolean;
-  /** Release the held turn. Its end can still settle the chat while it is the last accepted turn. */
-  giveUpTurn(sessionId: string, turnId: string): void;
+  /** The engine acknowledged this turn or its events reached the fold. */
+  wasTurnAdmitted(sessionId: string, turnId: string): boolean;
+  /** Record the local end. A late native terminal can still supply its actual outcome. */
+  giveUpTurn(sessionId: string, turnId: string, cause?: "cancelled"): boolean;
   /**
    * The turn this handler currently believes is running, if any — set at
    * admission (or at `turn.started` on the replay path) and cleared at its
@@ -92,17 +95,20 @@ export interface AgentEventHandler {
    * which a session STATUS cannot do: two consecutive turns are both "working".
    */
   liveTurnId(sessionId: string): string | undefined;
+  /** The live turn's last event time, excluding the user's echo. */
+  lastOutputAt(sessionId: string): number | undefined;
   /** Records the quick ACK, including turns with no first event yet. */
   confirmTurn(sessionId: string, turnId: string): void;
   /** Mark delivery loss synchronously, before any replay suffix is folded. */
   handleEventGap(gap: SessionEventGap): string | undefined;
   /** Settle only that damaged turn after targeted native reconciliation. */
-  settleEventGap(sessionId: string, turnId: string, confirmed: boolean): void;
+  settleEventGap(sessionId: string, turnId: string, confirmed: boolean, cause?: "cancelled"): void;
   /** Side-channel title notification (deus/*, not a lifecycle event). */
   handleTitle(sessionId: string, title: string): void;
 }
 
 interface SessionState extends SessionFacts {
+  lastOutputAt?: number;
   /** The folded conversation — the source of every row this session writes. */
   conversation: ConversationState;
 }
@@ -182,7 +188,12 @@ function pushEnvelope(envelope: DecodedWireEventEnvelope): void {
 
 /** Create the agent event handler: persistence + WS push per lifecycle event. */
 export function createAgentEventHandler(
-  onInterrupted?: (sessionId: string, turnId: string, gone: boolean) => void
+  onInterrupted?: (
+    sessionId: string,
+    turnId: string,
+    gone: boolean,
+    cause?: "cancelled"
+  ) => string[] | undefined
 ): AgentEventHandler {
   const sessions = new Map<string, SessionState>();
   // A client that starts following a chat, or returns to it, first gets the
@@ -201,6 +212,11 @@ export function createAgentEventHandler(
   };
 
   return {
+    lastOutputAt(sessionId) {
+      const state = sessions.get(sessionId);
+      return state?.turnId ? state.lastOutputAt : undefined;
+    },
+
     hydrateCloudSnapshot(sessionId, snapshot) {
       const state = stateFor(sessionId);
       const pending =
@@ -243,24 +259,49 @@ export function createAgentEventHandler(
 
     abortTurn(sessionId, turnId) {
       const state = sessions.get(sessionId);
-      if (
-        state?.turnId !== turnId ||
-        state.acceptedTurnId === turnId ||
-        state.conversation.turns.some((turn) => turn.turnId === turnId)
-      ) {
-        return false;
-      }
+      if (state?.turnId !== turnId || this.wasTurnAdmitted(sessionId, turnId)) return false;
       state.turnId = undefined;
       return true;
+    },
+
+    wasTurnAdmitted(sessionId, turnId) {
+      const state = sessions.get(sessionId);
+      return (
+        state?.acceptedTurnId === turnId ||
+        !!state?.conversation.turns.some((turn) => turn.turnId === turnId)
+      );
     },
 
     liveTurnId(sessionId) {
       return sessions.get(sessionId)?.turnId;
     },
 
-    giveUpTurn(sessionId, turnId) {
+    giveUpTurn(sessionId, turnId, cause) {
       const state = sessions.get(sessionId);
-      if (state?.turnId === turnId) state.turnId = undefined;
+      if (state?.turnId !== turnId) return false;
+      state.acceptedTurnId = turnId;
+      state.turnId = undefined;
+      const kept = onInterrupted?.(sessionId, turnId, true, cause);
+      const saved = persistTurn(sessionId, {
+        turnId,
+        endedAt: Date.now(),
+        stopReason: cause ?? "error",
+        undeliveredSteers: kept,
+      });
+      if (saved.ok) {
+        invalidate(SESSION_RESOURCES, { sessionIds: [sessionId] });
+        // A stored message anchors the footer. A late engine end can still correct it.
+        if (
+          state.conversation.timeline.some(
+            (entry) => entry.kind === "message" && entry.turnId === turnId
+          )
+        ) {
+          resetSubscribers(sessionEvents, { sessionId });
+          for (const opening of typing.of(sessionId, state.conversation))
+            publish(sessionEvents, { sessionId }, opening, { keep: false });
+        }
+      }
+      return true;
     },
 
     confirmTurn(sessionId, turnId) {
@@ -279,11 +320,7 @@ export function createAgentEventHandler(
       if (!state?.turnId) return;
       // A new send waiting for the reconnect handshake is not an old native
       // turn. Its quick ACK or rejection still owns that admission.
-      if (
-        state.acceptedTurnId !== state.turnId &&
-        !state.conversation.turns.some((turn) => turn.turnId === state.turnId)
-      )
-        return;
+      if (!this.wasTurnAdmitted(gap.sessionId, state.turnId)) return;
       const turnId = state.turnId;
       state.deliveryFailure ??= {
         turnId,
@@ -300,20 +337,20 @@ export function createAgentEventHandler(
       return turnId;
     },
 
-    settleEventGap(sessionId, turnId, confirmed) {
+    settleEventGap(sessionId, turnId, confirmed, cause) {
       const state = sessions.get(sessionId);
       if (state?.turnId !== turnId || state.deliveryFailure?.turnId !== turnId) return;
       const message =
         state.deliveryFailure.message +
         (confirmed ? "" : " The agent has not confirmed it stopped.");
-      if (confirmed) state.turnId = undefined;
       state.errorReported = true;
       persistAndInvalidate(
         persistSessionError(sessionId, message, "network", confirmed ? "error" : "working"),
         SESSION_RESOURCES,
         sessionId
       );
-      onInterrupted?.(sessionId, turnId, confirmed);
+      if (confirmed) this.giveUpTurn(sessionId, turnId, cause);
+      else onInterrupted?.(sessionId, turnId, false, cause);
     },
 
     handleTitle(sessionId, title) {
@@ -338,6 +375,24 @@ export function createAgentEventHandler(
       );
       state.conversation = conversation;
       typing.saw(envelope);
+
+      const stamped = isUnknownEvent(envelope.event) ? envelope.event.raw : envelope.event;
+      const turnId = "turnId" in stamped ? stamped.turnId : undefined;
+      const messageId = "messageId" in stamped ? stamped.messageId : undefined;
+      // On replay, turn.started can be the first the host hears of the live turn.
+      const live = state.turnId
+        ? turnId === undefined || turnId === state.turnId
+        : envelope.event.type === "turn.started";
+      if (
+        live &&
+        envelope.event.type !== "permission.resolved" &&
+        envelope.event.type !== "elicitation.resolved" &&
+        typeof stamped.timestamp === "number" &&
+        (typeof messageId !== "string" ||
+          findConversationMessage(conversation, messageId)?.role !== "user")
+      ) {
+        state.lastOutputAt = stamped.timestamp;
+      }
 
       if (isUnknownEvent(envelope.event)) {
         // Law 6: forward it verbatim. Dropping it would be a hole in the

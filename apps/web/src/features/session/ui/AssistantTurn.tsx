@@ -12,6 +12,7 @@ import { TurnFooter, TurnFooterSlot } from "./TurnFooter";
 import { Square, TriangleAlert } from "lucide-react";
 
 interface AssistantTurnProps {
+  rowId: string;
   view: ChatView;
   messages: Message[];
   turn?: SessionTurn;
@@ -25,6 +26,7 @@ interface AssistantTurnProps {
 }
 
 export const AssistantTurn = memo(function AssistantTurn({
+  rowId,
   messages,
   view,
   turn,
@@ -59,6 +61,7 @@ export const AssistantTurn = memo(function AssistantTurn({
       style={{ contain: "layout style" }}
     >
       <PartsRenderer
+        rowId={rowId}
         parts={parts}
         rows={rows}
         stays={stays}

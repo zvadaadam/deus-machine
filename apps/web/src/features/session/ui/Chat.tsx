@@ -40,7 +40,7 @@ interface ChatProps {
   errorCategory?: string;
   agentMessages?: boolean;
   agentHarness?: string | null;
-  onRetryInNewChat?: () => void;
+  onNewChat?: () => void;
   /** True when there are older messages beyond the loaded window */
   hasOlder?: boolean;
   /** True when a load-older request is in flight */
@@ -78,7 +78,7 @@ export function Chat({
   errorCategory,
   agentHarness,
   agentMessages,
-  onRetryInNewChat,
+  onNewChat,
   hasOlder = false,
   loadingOlder = false,
   onLoadOlder,
@@ -100,7 +100,7 @@ export function Chat({
   const view = chatView(settings);
   const directWeb = isCloudDirectWebMode();
   // A new chat opens a tab through the Mac backend, which the hosted web cannot reach.
-  const retryInNewChat = directWeb ? undefined : onRetryInNewChat;
+  const openNewChat = directWeb ? undefined : onNewChat;
   const active = ACTIVE_TURN_STATUSES.includes(sessionStatus);
   const working = sessionStatus === "working";
 
@@ -368,6 +368,7 @@ export function Chat({
                           ))
                           .with({ type: "assistant" }, (t) => (
                             <AssistantTurn
+                              rowId={String(virtualItem.key)}
                               view={view}
                               messages={t.messages}
                               turn={t.record}
@@ -450,7 +451,7 @@ export function Chat({
                       category={errorCategory}
                       agentHarness={agentHarness}
                       cloud={workspaceKind === "cloud" || directWeb}
-                      onRetryInNewChat={retryInNewChat}
+                      onNewChat={openNewChat}
                     />
                   </m.div>
                 )}

@@ -1,17 +1,13 @@
 import { toast } from "sonner";
-import type { AgentAuthAnswer, AuthLogin, HarnessAuth } from "@shared/agent-auth";
+import type { AgentAuthAnswer, HarnessAuth } from "@shared/agent-auth";
+import { agentReadiness } from "@shared/agent-readiness";
 import type { AgentHarness } from "@shared/enums";
 import { api } from "@shared/api";
 import { openExternalPending } from "@/platform/native/window";
 import { call } from "@/platform/ws";
+import { finishAgentInstall, requestedAgentInstalls } from "./local-agent-installs";
 
-/** A local agent as the engine has it: its CLI, then its login, read from the CLI. */
-export type LocalAgentState =
-  | { status: "checking" | "failed" }
-  | { status: "installing"; version?: string; percent?: number }
-  | { status: "not-installed"; error?: string }
-  | { status: "signed-out"; auth: HarnessAuth; login?: AuthLogin }
-  | { status: "signed-in"; auth: HarnessAuth; account: string };
+export type LocalAgentState = ReturnType<typeof readLocalAgent>;
 
 /** "Claude Max · you@example.com". */
 export function accountLine(auth: HarnessAuth): string {
@@ -22,31 +18,22 @@ export function accountLine(auth: HarnessAuth): string {
 export function readLocalAgent(
   query: { data?: AgentAuthAnswer; isFetching: boolean; isError: boolean },
   harness: AgentHarness
-): LocalAgentState {
-  const answer = query.isError || query.data?.error ? undefined : query.data;
-  // The CLI first: a login read from a CLI not installed yet says nothing.
-  const cli = answer?.clis.find((candidate) => candidate.harness === harness);
-  if (cli?.state === "installing") {
-    return {
-      status: "installing",
-      ...(cli.version && { version: cli.version }),
-      ...(cli.totalBytes &&
-        cli.receivedBytes !== undefined && {
-          percent: Math.floor((cli.receivedBytes / cli.totalBytes) * 100),
-        }),
-    };
+) {
+  const pending = { status: query.isFetching ? "checking" : "failed" } as const;
+  if (query.isError || !query.data || query.data.error !== undefined) return pending;
+  const agent = agentReadiness(query.data, harness);
+  switch (agent.state) {
+    case "ready":
+      return { status: "signed-in", auth: agent.auth, account: accountLine(agent.auth) } as const;
+    case "signed_out": {
+      const login = query.data.logins.find((row) => row.harness === harness);
+      return { status: "signed-out", auth: agent.auth, login } as const;
+    }
+    case "not_installed":
+      return { status: "not-installed", detail: agent.detail } as const;
+    case "unknown":
+      return agent.status === "failed" && query.isFetching ? pending : agent;
   }
-  if (cli?.state === "missing" || cli?.state === "failed") {
-    return { status: "not-installed", ...(cli.error && { error: cli.error }) };
-  }
-  const auth = answer?.auth.find((candidate) => candidate.harness === harness);
-  if (!auth || auth.state === "unknown") {
-    // The CLI can be ready while its first login read is still under way.
-    return { status: query.isFetching ? "checking" : "failed" };
-  }
-  if (auth.state === "signed_in") return { status: "signed-in", auth, account: accountLine(auth) };
-  const login = answer?.logins.find((candidate) => candidate.harness === harness);
-  return { status: "signed-out", auth, ...(login && { login }) };
 }
 
 /** Why a request was refused or failed, for a toast. */
@@ -54,12 +41,18 @@ function reasonOf(error: unknown, otherwise: string): string {
   return (error instanceof Error && error.message) || otherwise;
 }
 
+export function installLabel(state: LocalAgentState) {
+  if (state.status === "first-turn") return "Install";
+  return state.status === "install-failed" ? "Try again" : undefined;
+}
+
 /** Install the selected agent's CLI. */
 export async function installLocalAgent(harness: AgentHarness): Promise<void> {
+  requestedAgentInstalls.add(harness);
   try {
     await call(api.agentPrepareClis, { harness });
   } catch (error) {
-    toast.error(reasonOf(error, "Couldn’t start the install"));
+    finishAgentInstall(harness, reasonOf(error, "Couldn’t start the install"));
   }
 }
 

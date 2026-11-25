@@ -7,7 +7,7 @@
  * Tables: repositories, workspaces, sessions, messages, turns, parts, compactions,
  *         paired_devices, assistants, automations, automation_runs,
  *         extension_installations, integration_connections
- * Indexes: 18
+ * Indexes: 19
  * Triggers: 11 (2 valid project rows, 4 auto-update updated_at, 2 denormalized message_count + auto-seq, 1 chat number, 2 turn end order)
  *
  * The agent-facing tables (messages, turns, parts, compactions) store the
@@ -33,7 +33,7 @@ export const ADDITIVE_COLUMNS: Record<string, Record<string, string>> = {
   workspaces: { started_by: "TEXT", first_session_id: "TEXT", archived_by: "TEXT" },
   sessions: { started_by: "TEXT", chat: "INTEGER", agent_messages: "INTEGER" },
   turns: { cancelled_by: "TEXT", end_seq: "INTEGER" },
-  messages: { origin: "TEXT" },
+  messages: { origin: "TEXT", steer_id: "TEXT" },
 };
 
 export const SCHEMA_SQL = `
@@ -139,7 +139,8 @@ export const SCHEMA_SQL = `
     sent_at TEXT,
     parent_tool_call_id TEXT,
     -- Who sent a user message when not the person, as the engine echoed it (JSON).
-    origin TEXT
+    origin TEXT,
+    steer_id TEXT
   );
 
   -- One record per engine turn, including turns with no assistant output.
@@ -339,7 +340,7 @@ export const SCHEMA_SQL = `
     CHECK ((kind = 'managed') = (deus_account_id IS NOT NULL))
   );
 
-  -- Indexes (18)
+  -- Indexes (19)
   CREATE INDEX IF NOT EXISTS idx_workspaces_repository_id ON workspaces(repository_id);
   CREATE INDEX IF NOT EXISTS idx_workspaces_state ON workspaces(state);
   CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);
@@ -349,6 +350,7 @@ export const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_messages_session_role ON messages(session_id, role, id DESC);
   -- Groups message pages by turn and finds turns with no message rows.
   CREATE INDEX IF NOT EXISTS idx_messages_turn_id ON messages(session_id, turn_id, seq DESC);
+  CREATE INDEX IF NOT EXISTS idx_messages_steer_id ON messages(session_id, steer_id) WHERE steer_id IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_messages_parent_tool_call ON messages(parent_tool_call_id);
   CREATE INDEX IF NOT EXISTS idx_parts_message_id ON parts(message_id, seq);
   CREATE INDEX IF NOT EXISTS idx_parts_session_type ON parts(session_id, type);
