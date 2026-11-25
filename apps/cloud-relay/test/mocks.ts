@@ -33,7 +33,9 @@ export function createMockWebSocket(
     send: vi.fn((data: string) => {
       ws._sentMessages.push(JSON.parse(data));
     }),
-    close: vi.fn(),
+    close: vi.fn(() => {
+      ws.readyState = 2; // CLOSING sockets remain in the hibernation API's inventory.
+    }),
     serializeAttachment: (value: unknown) => {
       ws._attachment = structuredClone(value);
     },
@@ -58,7 +60,7 @@ export interface MockDOStorage {
   get: <T = unknown>(key: string) => Promise<T | undefined>;
   put: (key: string | Record<string, unknown>, value?: unknown) => Promise<void>;
   delete: (key: string | string[]) => Promise<boolean>;
-  list: <T = unknown>(opts?: { prefix?: string }) => Promise<Map<string, T>>;
+  list: <T = unknown>(opts?: { prefix?: string; limit?: number }) => Promise<Map<string, T>>;
   setAlarm: ReturnType<typeof vi.fn>;
   getAlarm: () => Promise<number | null>;
   _data: Map<string, unknown>;
@@ -84,17 +86,19 @@ export function createMockStorage(): MockDOStorage {
 
     delete: vi.fn(async (key: string | string[]): Promise<boolean> => {
       if (Array.isArray(key)) {
+        if (key.length > 128) throw new Error("Durable Object delete accepts at most 128 keys");
         for (const k of key) data.delete(k);
         return true;
       }
       return data.delete(key);
     }),
 
-    list: vi.fn(async <T>(opts?: { prefix?: string }): Promise<Map<string, T>> => {
+    list: vi.fn(async <T>(opts?: { prefix?: string; limit?: number }): Promise<Map<string, T>> => {
       const result = new Map<string, T>();
       for (const [key, value] of data) {
         if (!opts?.prefix || key.startsWith(opts.prefix)) {
           result.set(key, value as T);
+          if (result.size === opts?.limit) break;
         }
       }
       return result;

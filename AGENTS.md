@@ -469,6 +469,8 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   public keys (`RELAY_TICKET_JWKS`), consumes it once, pins the machine to its
   first host's account, and names the verified account on `client_connected` and
   `pair_request`. It has no public status route and holds no minting key.
+  The relay keeps no viewer credential and closes every viewer when a new host
+  tunnel registers, so interactive clients dial again with a fresh ticket.
 - **The Mac** approves each device once (pairing code, or the QR link
   `/s/<machine>#pair=CODE`, whose fragment never reaches a server) and binds the
   grant to the relay-verified account and this machine id
