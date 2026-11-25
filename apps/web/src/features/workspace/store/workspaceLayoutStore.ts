@@ -1,7 +1,7 @@
 /** Per-workspace view, browser-style tabs, and file state. Live terminal processes are never persisted. */
 
 import { create } from "zustand";
-import { createJSONStorage, devtools, persist, type StateStorage } from "zustand/middleware";
+import { devtools, persist, type PersistStorage, type StorageValue } from "zustand/middleware";
 import { deriveTitleFromUrl, isBlankUrl } from "@/features/browser/types";
 import { webviewManager } from "@/features/browser/webview-manager";
 import {
@@ -43,6 +43,11 @@ export interface PendingFileNavigation {
 export interface WorkspaceLayoutState {
   workspaceTabs: WorkspaceTab[];
   activeWorkspaceTabId: string | null;
+  /**
+   * Selected v11 tool preserved until the workspace is opened so ephemeral tools
+   * (Terminal) and kind-dependent tools (cloud Browser) resolve accurately.
+   */
+  migratedActiveTool: ContentTab | null;
   nextTerminalNum: number; // Counter for "Terminal N" naming
   selectedFilePath: string | null;
   pendingFileNavigation: PendingFileNavigation | null;
@@ -57,6 +62,7 @@ export interface WorkspaceLayoutState {
 export const defaultLayout: WorkspaceLayoutState = {
   workspaceTabs: [],
   activeWorkspaceTabId: null,
+  migratedActiveTool: null,
   nextTerminalNum: 1,
   selectedFilePath: null,
   pendingFileNavigation: null,
@@ -69,8 +75,10 @@ export const defaultLayout: WorkspaceLayoutState = {
 };
 
 // ---------------------------------------------------------------------------
-// Persist v11 → v12 typed migration
+// Persist schema validation & v11 → v12 typed migration
 // ---------------------------------------------------------------------------
+
+const WORKSPACE_LAYOUT_STORAGE_VERSION = 12;
 
 interface PersistedBrowserTabV11 {
   id: string;
@@ -116,6 +124,107 @@ function asStringArray(value: unknown): string[] {
     : [];
 }
 
+function asContentTabOrNull(value: unknown): ContentTab | null {
+  return typeof value === "string" && VALID_CONTENT_TABS.has(value as ContentTab)
+    ? (value as ContentTab)
+    : null;
+}
+
+function asPanelMode(value: unknown): WorkspacePanelMode {
+  return typeof value === "string" && VALID_PANEL_MODES.has(value as WorkspacePanelMode)
+    ? (value as WorkspacePanelMode)
+    : defaultLayout.panelMode;
+}
+
+function sanitizeWorkspaceTabV12(raw: unknown): WorkspaceTab | null {
+  if (!isRecord(raw) || typeof raw.id !== "string" || raw.id.length === 0) return null;
+  const kind = raw.kind;
+  if (kind === "new-tab") {
+    return { id: raw.id, kind: "new-tab" };
+  }
+  if (kind === "changes" || kind === "files" || kind === "simulator" || kind === "config") {
+    return { id: raw.id, kind };
+  }
+  if (kind === "file") {
+    if (typeof raw.path !== "string") return null;
+    const normalized = normalizeWorkspaceRelativePath(raw.path);
+    return normalized ? { id: raw.id, kind: "file", path: normalized } : null;
+  }
+  if (kind === "browser") {
+    if (typeof raw.url !== "string") return null;
+    const cloud = raw.cloud === true ? true : undefined;
+    if (!cloud && isBlankUrl(raw.url)) return null;
+    const cleanUrl = isBlankUrl(raw.url) ? "" : raw.url;
+    const title =
+      typeof raw.title === "string" && raw.title.length > 0 && !isBlankUrl(raw.title)
+        ? raw.title
+        : cleanUrl
+          ? deriveTitleFromUrl(cleanUrl)
+          : "Browser";
+    return {
+      id: raw.id,
+      kind: "browser",
+      url: cleanUrl,
+      title,
+      ...(raw.isMobileView === true ? { isMobileView: true } : {}),
+      ...(cloud ? { cloud: true } : {}),
+    };
+  }
+  // Live terminal tabs and unknown tab kinds are never restored from storage.
+  return null;
+}
+
+function sanitizeWorkspaceEntryV12(raw: unknown): WorkspaceLayoutState {
+  if (!isRecord(raw)) return { ...defaultLayout };
+
+  const workspaceTabs: WorkspaceTab[] = [];
+  if (Array.isArray(raw.workspaceTabs)) {
+    const seenIds = new Set<string>();
+    for (const item of raw.workspaceTabs) {
+      const sanitized = sanitizeWorkspaceTabV12(item);
+      if (!sanitized || seenIds.has(sanitized.id)) continue;
+      seenIds.add(sanitized.id);
+      workspaceTabs.push(sanitized);
+    }
+  }
+
+  const rawActiveId = asStringOrNull(raw.activeWorkspaceTabId);
+  const activeWorkspaceTabId =
+    rawActiveId && workspaceTabs.some((t) => t.id === rawActiveId)
+      ? rawActiveId
+      : (workspaceTabs[0]?.id ?? null);
+
+  return {
+    ...defaultLayout,
+    workspaceTabs,
+    activeWorkspaceTabId,
+    migratedActiveTool: asContentTabOrNull(raw.migratedActiveTool),
+    nextTerminalNum: 1,
+    pendingFileNavigation: null,
+    selectedFilePath: asStringOrNull(raw.selectedFilePath),
+    panelMode: asPanelMode(raw.panelMode),
+    fileTreePinned:
+      typeof raw.fileTreePinned === "boolean" ? raw.fileTreePinned : defaultLayout.fileTreePinned,
+    chatTabSessionIds: asStringArray(raw.chatTabSessionIds),
+    activeChatTabSessionId: asStringOrNull(raw.activeChatTabSessionId),
+    knownChatSessionIds: asStringArray(raw.knownChatSessionIds),
+    simulatorUdid: asStringOrNull(raw.simulatorUdid),
+  };
+}
+
+function sanitizeWorkspaceLayoutsV12(persisted: unknown): {
+  layouts: Record<string, WorkspaceLayoutState>;
+} {
+  if (!isRecord(persisted) || !isRecord(persisted.layouts)) {
+    return { layouts: {} };
+  }
+  const layouts: Record<string, WorkspaceLayoutState> = {};
+  for (const [workspaceId, entry] of Object.entries(persisted.layouts)) {
+    layouts[workspaceId] = sanitizeWorkspaceEntryV12(entry);
+  }
+  return { layouts };
+}
+
 function parseBrowserTabsV11(value: unknown): PersistedBrowserTabV11[] {
   if (!Array.isArray(value)) return [];
   const result: PersistedBrowserTabV11[] = [];
@@ -136,16 +245,8 @@ function migrateWorkspaceEntryV11(
   workspaceId: string,
   raw: WorkspaceLayoutV11
 ): WorkspaceLayoutState {
-  const panelMode: WorkspacePanelMode =
-    typeof raw.panelMode === "string" && VALID_PANEL_MODES.has(raw.panelMode as WorkspacePanelMode)
-      ? (raw.panelMode as WorkspacePanelMode)
-      : defaultLayout.panelMode;
-
-  const activeContentTab: ContentTab | null =
-    typeof raw.activeContentTab === "string" &&
-    VALID_CONTENT_TABS.has(raw.activeContentTab as ContentTab)
-      ? (raw.activeContentTab as ContentTab)
-      : null;
+  const panelMode = asPanelMode(raw.panelMode);
+  const activeContentTab = asContentTabOrNull(raw.activeContentTab);
 
   const oldBrowserTabs = parseBrowserTabsV11(raw.browserTabs);
   const oldActiveBrowserId = asStringOrNull(raw.activeBrowserTabId);
@@ -160,6 +261,7 @@ function migrateWorkspaceEntryV11(
 
   const workspaceTabs: WorkspaceTab[] = [];
   let activeWorkspaceTabId: string | null = null;
+  let migratedActiveTool: ContentTab | null = null;
 
   if (
     activeContentTab === "changes" ||
@@ -170,8 +272,25 @@ function migrateWorkspaceEntryV11(
     const activeToolTab = createToolTab(activeContentTab, workspaceId);
     workspaceTabs.push(activeToolTab, ...migratedBrowserTabs);
     activeWorkspaceTabId = activeToolTab.id;
+  } else if (activeContentTab === "terminal") {
+    // Live PTYs are never persisted; keep saved browser tabs and preserve the selected
+    // tool intent so opening the workspace creates and focuses a fresh Terminal tab.
+    workspaceTabs.push(...migratedBrowserTabs);
+    migratedActiveTool = "terminal";
+  } else if (activeContentTab === "browser") {
+    workspaceTabs.push(...migratedBrowserTabs);
+    if (migratedBrowserTabs.length > 0) {
+      const matched =
+        oldActiveBrowserId && migratedBrowserTabs.some((t) => t.id === oldActiveBrowserId)
+          ? oldActiveBrowserId
+          : migratedBrowserTabs[0].id;
+      activeWorkspaceTabId = matched;
+    } else {
+      // Cloud Browser (or a blank local Browser) had no saved URLs in v11 — preserve the
+      // selected tool and resolve cloud vs local Browser once workspace kind is known.
+      migratedActiveTool = "browser";
+    }
   } else {
-    // "browser", "terminal" (ephemeral — never persisted), or absent
     workspaceTabs.push(...migratedBrowserTabs);
     if (migratedBrowserTabs.length > 0) {
       const matched =
@@ -186,6 +305,7 @@ function migrateWorkspaceEntryV11(
     ...defaultLayout,
     workspaceTabs,
     activeWorkspaceTabId,
+    migratedActiveTool,
     nextTerminalNum: 1,
     pendingFileNavigation: null,
     selectedFilePath: asStringOrNull(raw.selectedFilePath),
@@ -199,7 +319,7 @@ function migrateWorkspaceEntryV11(
   };
 }
 
-/** Migrate persisted layout state from v11 into the v12 browser-tab model. */
+/** Migrate persisted layout state from v11 (or sanitize v12) into the v12 browser-tab model. */
 export function migrateWorkspaceLayoutState(
   persisted: unknown,
   version: number
@@ -207,8 +327,12 @@ export function migrateWorkspaceLayoutState(
   if (!isRecord(persisted) || !isRecord(persisted.layouts)) {
     return { layouts: {} };
   }
-  if (version >= 12) {
-    return persisted as { layouts: Record<string, WorkspaceLayoutState> };
+  // Reject unsupported newer versions rather than reinterpreting or overwriting them.
+  if (version > WORKSPACE_LAYOUT_STORAGE_VERSION) {
+    return { layouts: {} };
+  }
+  if (version === WORKSPACE_LAYOUT_STORAGE_VERSION) {
+    return sanitizeWorkspaceLayoutsV12(persisted);
   }
   if (version !== 11) {
     return { layouts: {} };
@@ -223,13 +347,20 @@ export function migrateWorkspaceLayoutState(
 }
 
 // ---------------------------------------------------------------------------
-// Coalesced storage (batches rapid browser URL/title updates into one write)
+// Coalesced persist storage (debounces BEFORE stripping/JSON.stringify + protects newer versions)
 // ---------------------------------------------------------------------------
+
+type PersistedWorkspaceLayoutSlice = { layouts: Record<string, WorkspaceLayoutState> };
 
 const PERSIST_COALESCE_MS = 250;
 
-let pendingWrite: { name: string; value: string } | null = null;
+let pendingWrite: {
+  name: string;
+  value: StorageValue<PersistedWorkspaceLayoutSlice>;
+} | null = null;
 let pendingWriteTimer: ReturnType<typeof setTimeout> | null = null;
+/** Storage keys holding a newer schema version (> 12) that this build must never overwrite. */
+const protectedFutureVersionKeys = new Set<string>();
 
 function getNativeStorage(): Storage | null {
   try {
@@ -239,7 +370,60 @@ function getNativeStorage(): Storage | null {
   }
 }
 
-/** Immediately flush any queued debounced persist write to localStorage. */
+function stripEphemeralLayouts(
+  layouts: Record<string, WorkspaceLayoutState>
+): Record<string, WorkspaceLayoutState> {
+  return Object.fromEntries(
+    Object.entries(layouts).map(([id, layout]) => {
+      const persistedTabs = (
+        Array.isArray(layout.workspaceTabs) ? layout.workspaceTabs : []
+      ).filter((tab) => {
+        if (tab.kind === "terminal") return false;
+        // Keep cloud preview tabs even without a URL; strip blank local browser tabs.
+        if (tab.kind === "browser" && !tab.cloud && isBlankUrl(tab.url)) return false;
+        return true;
+      });
+      const activeStillPresent =
+        layout.activeWorkspaceTabId !== null &&
+        persistedTabs.some((t) => t.id === layout.activeWorkspaceTabId);
+
+      return [
+        id,
+        {
+          ...layout,
+          workspaceTabs: persistedTabs,
+          activeWorkspaceTabId: activeStillPresent
+            ? layout.activeWorkspaceTabId
+            : (persistedTabs[0]?.id ?? null),
+          pendingFileNavigation: null,
+          nextTerminalNum: 1,
+        },
+      ];
+    })
+  );
+}
+
+function writeStorageValueNow(
+  name: string,
+  value: StorageValue<PersistedWorkspaceLayoutSlice>
+): void {
+  if (protectedFutureVersionKeys.has(name)) return;
+  try {
+    const storage = getNativeStorage();
+    if (!storage) return;
+    const serialized = JSON.stringify({
+      version: value.version ?? WORKSPACE_LAYOUT_STORAGE_VERSION,
+      state: {
+        layouts: stripEphemeralLayouts(value.state?.layouts ?? {}),
+      },
+    });
+    storage.setItem(name, serialized);
+  } catch {
+    // Ignore quota / unavailable storage errors
+  }
+}
+
+/** Immediately flush any queued debounced persist write (runs strip + JSON.stringify once). */
 export function flushWorkspaceLayoutStorage(): void {
   if (pendingWriteTimer !== null) {
     clearTimeout(pendingWriteTimer);
@@ -248,11 +432,7 @@ export function flushWorkspaceLayoutStorage(): void {
   if (!pendingWrite) return;
   const { name, value } = pendingWrite;
   pendingWrite = null;
-  try {
-    getNativeStorage()?.setItem(name, value);
-  } catch {
-    // Ignore quota / unavailable storage errors
-  }
+  writeStorageValueNow(name, value);
 }
 
 if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
@@ -260,23 +440,74 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
   window.addEventListener("beforeunload", flushWorkspaceLayoutStorage);
 }
 
-const coalescedStorage: StateStorage = {
+const coalescedPersistStorage: PersistStorage<PersistedWorkspaceLayoutSlice> = {
   getItem: (name) => {
-    if (pendingWrite?.name === name) return pendingWrite.value;
+    if (pendingWrite?.name === name) {
+      return {
+        version: pendingWrite.value.version ?? WORKSPACE_LAYOUT_STORAGE_VERSION,
+        state: { layouts: stripEphemeralLayouts(pendingWrite.value.state?.layouts ?? {}) },
+      };
+    }
+    let raw: string | null = null;
     try {
-      return getNativeStorage()?.getItem(name) ?? null;
+      raw = getNativeStorage()?.getItem(name) ?? null;
     } catch {
       return null;
     }
+    if (!raw) {
+      protectedFutureVersionKeys.delete(name);
+      return null;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      protectedFutureVersionKeys.delete(name);
+      return null;
+    }
+    if (!isRecord(parsed)) {
+      protectedFutureVersionKeys.delete(name);
+      return null;
+    }
+
+    const storedVersion = typeof parsed.version === "number" ? parsed.version : 0;
+    if (storedVersion > WORKSPACE_LAYOUT_STORAGE_VERSION) {
+      // Preserve newer schema bytes untouched on disk; run with clean in-memory defaults.
+      protectedFutureVersionKeys.add(name);
+      if (pendingWrite?.name === name) {
+        pendingWrite = null;
+        if (pendingWriteTimer !== null) {
+          clearTimeout(pendingWriteTimer);
+          pendingWriteTimer = null;
+        }
+      }
+      return {
+        version: WORKSPACE_LAYOUT_STORAGE_VERSION,
+        state: { layouts: {} },
+      };
+    }
+
+    protectedFutureVersionKeys.delete(name);
+
+    if (storedVersion === WORKSPACE_LAYOUT_STORAGE_VERSION) {
+      return {
+        version: WORKSPACE_LAYOUT_STORAGE_VERSION,
+        state: sanitizeWorkspaceLayoutsV12(parsed.state),
+      };
+    }
+
+    // Older versions (e.g. v11) are handed to Zustand's `migrate` callback.
+    return {
+      version: storedVersion,
+      state: parsed.state as PersistedWorkspaceLayoutSlice,
+    };
   },
   setItem: (name, value) => {
+    if (protectedFutureVersionKeys.has(name)) return;
     // In headless/test environments without window, write synchronously.
     if (typeof window === "undefined") {
-      try {
-        getNativeStorage()?.setItem(name, value);
-      } catch {
-        // Ignore unavailable storage
-      }
+      writeStorageValueNow(name, value);
       return;
     }
     pendingWrite = { name, value };
@@ -291,6 +522,7 @@ const coalescedStorage: StateStorage = {
         pendingWriteTimer = null;
       }
     }
+    if (protectedFutureVersionKeys.has(name)) return;
     try {
       getNativeStorage()?.removeItem(name);
     } catch {
@@ -307,7 +539,8 @@ export function resolveWorkspaceTabs(
   activeTabId: string;
   activeTab: WorkspaceTab;
 } {
-  if (layout.workspaceTabs.length === 0) {
+  const tabs = Array.isArray(layout.workspaceTabs) ? layout.workspaceTabs : [];
+  if (tabs.length === 0) {
     return {
       tabs: [DEFAULT_NEW_TAB],
       activeTabId: DEFAULT_NEW_TAB_ID,
@@ -316,10 +549,10 @@ export function resolveWorkspaceTabs(
   }
   const active =
     (layout.activeWorkspaceTabId
-      ? layout.workspaceTabs.find((t) => t.id === layout.activeWorkspaceTabId)
-      : undefined) ?? layout.workspaceTabs[0];
+      ? tabs.find((t) => t.id === layout.activeWorkspaceTabId)
+      : undefined) ?? tabs[0];
   return {
-    tabs: layout.workspaceTabs,
+    tabs,
     activeTabId: active.id,
     activeTab: active,
   };
@@ -420,36 +653,10 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
       }),
       {
         name: "workspace-layout-store",
-        version: 12,
-        storage: createJSONStorage(() => coalescedStorage),
-        partialize: (state) => ({
-          ...state,
-          layouts: Object.fromEntries(
-            Object.entries(state.layouts).map(([id, layout]) => {
-              const persistedTabs = (layout.workspaceTabs ?? []).filter((tab) => {
-                if (tab.kind === "terminal") return false;
-                // Keep cloud preview tabs even without a URL; strip blank local browser tabs.
-                if (tab.kind === "browser" && !tab.cloud && isBlankUrl(tab.url)) return false;
-                return true;
-              });
-              const activeStillPresent =
-                layout.activeWorkspaceTabId !== null &&
-                persistedTabs.some((t) => t.id === layout.activeWorkspaceTabId);
-
-              return [
-                id,
-                {
-                  ...layout,
-                  workspaceTabs: persistedTabs,
-                  activeWorkspaceTabId: activeStillPresent
-                    ? layout.activeWorkspaceTabId
-                    : (persistedTabs[0]?.id ?? null),
-                  pendingFileNavigation: null,
-                  nextTerminalNum: 1,
-                },
-              ];
-            })
-          ),
+        version: WORKSPACE_LAYOUT_STORAGE_VERSION,
+        storage: coalescedPersistStorage,
+        partialize: (state): PersistedWorkspaceLayoutSlice => ({
+          layouts: state.layouts,
         }),
         migrate: (persistedState, version) =>
           migrateWorkspaceLayoutState(persistedState, version) as unknown as WorkspaceLayoutStore,
@@ -502,6 +709,7 @@ export const workspaceLayoutActions = {
     store.setLayout(workspaceId, {
       workspaceTabs: next.tabs,
       activeWorkspaceTabId: next.activeTabId,
+      migratedActiveTool: null,
       ...(options?.reveal !== false ? { panelMode: revealedMode(layout.panelMode) } : {}),
     });
     return next.tabId;
@@ -513,7 +721,7 @@ export const workspaceLayoutActions = {
     const layout = store.getLayout(workspaceId);
     if (tabId === DEFAULT_NEW_TAB_ID && layout.workspaceTabs.length === 0) return;
     if (!layout.workspaceTabs.some((t) => t.id === tabId)) return;
-    store.setLayout(workspaceId, { activeWorkspaceTabId: tabId });
+    store.setLayout(workspaceId, { activeWorkspaceTabId: tabId, migratedActiveTool: null });
   },
 
   /** Close a tab, tearing down native resources (webview / initial command). */
@@ -526,6 +734,7 @@ export const workspaceLayoutActions = {
     store.setLayout(workspaceId, {
       workspaceTabs: next.tabs,
       activeWorkspaceTabId: next.activeTabId,
+      migratedActiveTool: null,
     });
   },
 
@@ -574,6 +783,7 @@ export const workspaceLayoutActions = {
     store.setLayout(workspaceId, {
       workspaceTabs: next.tabs,
       activeWorkspaceTabId: next.activeTabId,
+      migratedActiveTool: null,
       nextTerminalNum: layout.nextTerminalNum + 1,
       ...(options?.reveal !== false ? { panelMode: revealedMode(layout.panelMode) } : {}),
     });
@@ -598,6 +808,7 @@ export const workspaceLayoutActions = {
     store.setLayout(workspaceId, {
       workspaceTabs: next.tabs,
       activeWorkspaceTabId: next.activeTabId,
+      migratedActiveTool: null,
       ...(shouldReveal ? { panelMode: revealedMode(layout.panelMode) } : {}),
     });
     return next.tabId;
@@ -618,6 +829,7 @@ export const workspaceLayoutActions = {
     store.setLayout(workspaceId, {
       workspaceTabs: next.tabs,
       activeWorkspaceTabId: next.activeTabId,
+      migratedActiveTool: null,
       selectedFilePath: normalizedPath,
       ...(options?.reveal !== false ? { panelMode: revealedMode(layout.panelMode) } : {}),
     });
@@ -641,10 +853,26 @@ export const workspaceLayoutActions = {
     store.setLayout(workspaceId, {
       workspaceTabs: next.tabs,
       activeWorkspaceTabId: next.activeTabId,
+      migratedActiveTool: null,
       ...(next.consumedTerminalNum ? { nextTerminalNum: layout.nextTerminalNum + 1 } : {}),
       ...(options?.reveal !== false ? { panelMode: revealedMode(layout.panelMode) } : {}),
     });
     return next.tabId;
+  },
+
+  /**
+   * Resolve a preserved v11 selected tool once the workspace is opened and its
+   * kind (`cloud` vs local) is known, without revealing a hidden panel.
+   */
+  resolveMigratedTool: (workspaceId: string, options: { cloud: boolean }) => {
+    const store = useWorkspaceLayoutStore.getState();
+    const layout = store.getLayout(workspaceId);
+    const tool = layout.migratedActiveTool;
+    if (!tool) return null;
+    return workspaceLayoutActions.openToolTab(workspaceId, tool, {
+      reveal: false,
+      cloud: options.cloud,
+    });
   },
 
   /** Background tab selection — does not reveal a hidden workspace panel. */
@@ -670,6 +898,7 @@ export const workspaceLayoutActions = {
     store.setLayout(workspaceId, {
       workspaceTabs: next.tabs,
       activeWorkspaceTabId: next.activeTabId,
+      migratedActiveTool: null,
       selectedFilePath: normalizedPath,
       panelMode: revealedMode(layout.panelMode),
       pendingFileNavigation: {
@@ -697,6 +926,7 @@ export const workspaceLayoutActions = {
     store.setLayout(workspaceId, {
       workspaceTabs: next.tabs,
       activeWorkspaceTabId: next.activeTabId,
+      migratedActiveTool: null,
       selectedFilePath: normalizedPath,
       panelMode: revealedMode(layout.panelMode),
       pendingFileNavigation: {

@@ -34,6 +34,9 @@ export function useWorkspaceTabsState(workspaceId: string | null) {
   const rawActiveTabId = useWorkspaceLayoutStore((state) =>
     workspaceId ? (state.layouts[workspaceId]?.activeWorkspaceTabId ?? null) : null
   );
+  const migratedActiveTool = useWorkspaceLayoutStore((state) =>
+    workspaceId ? (state.layouts[workspaceId]?.migratedActiveTool ?? null) : null
+  );
 
   const { tabs, activeTabId, activeTab } = useMemo(
     () => resolveWorkspaceTabs({ workspaceTabs: rawTabs, activeWorkspaceTabId: rawActiveTabId }),
@@ -67,6 +70,7 @@ export function useWorkspaceTabsState(workspaceId: string | null) {
     workspaceTabs: tabs,
     activeTabId,
     activeTab,
+    migratedActiveTool,
     selectTab,
     addNewTab,
     closeTab,

@@ -206,6 +206,11 @@ export function Terminal({
           return;
         }
         dead = true;
+        ready = false;
+        if (initialCmdTimer !== null) {
+          clearTimeout(initialCmdTimer);
+          initialCmdTimer = null;
+        }
         if (output.error) xterm.write(`\r\n\x1b[31m${output.error}\x1b[0m\r\n`);
         xterm.write("\r\n\x1b[90mSession ended — press Enter to restart\x1b[0m\r\n");
       });
@@ -219,15 +224,15 @@ export function Terminal({
         ...(cloudWorkspaceId ? { cloudWorkspaceId } : {}),
       })
         .then(() => {
-          if (!disposed && spawnId === ptyId) {
+          if (!disposed && !dead && spawnId === ptyId) {
             ready = true;
             // Auto-run initial command once after shell init settles.
-            // Consumed inside the dispatch callback so pre-dispatch spawn failures
-            // or StrictMode cleanups preserve the command for retry, while remounts
-            // (e.g. returning from Home) never re-run an already-dispatched command.
+            // Consumed inside the dispatch callback so pre-dispatch spawn failures,
+            // early PTY exits, or StrictMode cleanups preserve the command for retry,
+            // while remounts (e.g. returning from Home) never re-run it.
             initialCmdTimer = setTimeout(() => {
               initialCmdTimer = null;
-              if (disposed || spawnId !== ptyId) return;
+              if (disposed || dead || spawnId !== ptyId) return;
               let commandToRun: string | undefined;
               if (initialCommand && !inlineCommandDispatchedRef.current) {
                 inlineCommandDispatchedRef.current = true;

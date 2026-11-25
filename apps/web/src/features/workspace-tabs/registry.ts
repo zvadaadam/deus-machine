@@ -106,15 +106,8 @@ const TOOL_DEFINITIONS: Record<ContentTab, ToolDefinition> = {
   },
 };
 
-/** Display order for the New Tab card grid and collapsed-panel shortcuts. */
-const TOOL_ORDER: readonly ContentTab[] = [
-  "terminal",
-  "browser",
-  "changes",
-  "files",
-  "simulator",
-  "config",
-];
+/** Display order derived directly from `TOOL_DEFINITIONS` so every `ContentTab` is covered. */
+const TOOL_ORDER = Object.keys(TOOL_DEFINITIONS) as ContentTab[];
 
 /** Ordered list of workspace tools derived directly from `TOOL_DEFINITIONS`. */
 export const CONTENT_TABS: ContentTabItem[] = TOOL_ORDER.map((id) => ({
