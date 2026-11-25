@@ -451,6 +451,8 @@ web app (see `test/e2e/README.md`).
 
 ### Remote access (relay)
 
+Use the `deus-remote-lab` skill to exercise remote access and assistants on loopback or reproduce a remote-access report.
+
 Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
 
 - **Deus Cloud** (AGNT `apps/deus-cloud`, `/me/machines`) lists the account's

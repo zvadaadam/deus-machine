@@ -25,7 +25,8 @@ export async function until(predicate, milliseconds = 20_000, label = "condition
     } catch {
       // Not ready yet.
     }
-    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${label}`);
+    if (Date.now() > deadline)
+      throw new DOMException(`Timed out waiting for ${label}`, "TimeoutError");
     await pause(50);
   }
 }
@@ -134,7 +135,7 @@ export function createStack({ root, agnt, directory }) {
       assert.equal(result.status, 0, result.stderr);
       return result.stdout;
     };
-    return { url, sql };
+    return { url, sql, container: name, address: `127.0.0.1:${port}` };
   }
 
   async function keys() {
@@ -300,7 +301,10 @@ export function createStack({ root, agnt, directory }) {
     });
     const port = await new Promise((resolve, reject) => {
       let output = "";
-      const timer = setTimeout(() => reject(new Error(`${name} startup timed out`)), 60_000);
+      const timer = setTimeout(
+        () => reject(new DOMException(`${name} startup timed out`, "TimeoutError")),
+        60_000
+      );
       owned.child.once("exit", (code) => {
         clearTimeout(timer);
         reject(new Error(`${name} exited ${code}`));

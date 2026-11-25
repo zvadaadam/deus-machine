@@ -79,6 +79,7 @@
     "test:e2e:runtime-client": "node --import tsx test/e2e/runtime-client-network.runtime.mjs",
     "test:e2e:workspace-start": "node --import tsx test/e2e/workspace-start.runtime.mjs",
     "test:e2e:workspace-links": "node --import tsx test/e2e/workspace-links.desktop.mjs",
+    "deus-remote-lab": "node --import tsx test/e2e/remote-access/cli.mjs",
     "test:e2e:remote-access": "node --import tsx test/e2e/remote-access/run.mjs",
     "test:e2e:cloud": "node --import tsx test/e2e/cloud/mac-lane.browser.mjs && node --import tsx test/e2e/cloud/direct-lane.browser.mjs && node --import tsx test/e2e/cloud/organizations.runtime.mjs && node --import tsx test/e2e/cloud/organizations.browser.mjs && node --import tsx test/e2e/cloud/cloud-project.browser.mjs && node --import tsx test/e2e/cloud/reach.browser.mjs",
     "test:e2e:assistants": "node --import tsx test/e2e/assistants/run.mjs"

@@ -15,9 +15,19 @@ export async function connectBackend(url, { timeoutMs = 30_000, token } = {}) {
   if (token) socket.once("open", () => socket.send(JSON.stringify({ type: "initialize", token })));
   const waiting = new Map();
   let next = 0;
+  let closed;
 
   await new Promise((resolve, reject) => {
     socket.once("error", reject);
+    socket.once("close", (code) => {
+      closed = new Error(`The backend closed the connection (code ${code}) before answering.`);
+      reject(closed);
+      for (const pending of waiting.values()) {
+        clearTimeout(pending.timer);
+        pending.reject(closed);
+      }
+      waiting.clear();
+    });
     socket.on("message", (raw) => {
       const frame = JSON.parse(String(raw));
       if (frame.type === "connected") return resolve();
@@ -35,6 +45,7 @@ export async function connectBackend(url, { timeoutMs = 30_000, token } = {}) {
   });
 
   function ask(frame, name) {
+    if (closed) return Promise.reject(closed);
     const id = `script_${++next}`;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {

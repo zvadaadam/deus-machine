@@ -21,9 +21,8 @@ function clientId() {
 }
 
 /**
- * `accessSeconds` is the lifetime of the access tokens it issues;
- * `E2E_ISSUER_ACCESS_SECONDS` overrides it (short lifetimes test renewal), and
- * `setAccessSeconds` changes it while running (refresh tokens stay valid).
+ * `accessSeconds` sets the access token lifetime. `E2E_ISSUER_ACCESS_SECONDS`
+ * overrides it so tests can exercise renewal with short-lived tokens.
  */
 /**
  * `port` and `publicUrl` are for a test with a hosted assistant over a public
@@ -195,9 +194,6 @@ export async function startIssuer({ accessSeconds = 3600, port = 0, publicUrl } 
       account = { sub, org };
     },
     mint,
-    setAccessSeconds(seconds) {
-      accessSeconds = seconds;
-    },
     /** A key pair of the same kind that the issuer does not publish: for forged tokens. */
     async foreignKey() {
       return (await generateKeyPair("RS256")).privateKey;
