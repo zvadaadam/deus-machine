@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/react";
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { beforeBreadcrumb } from "@shared/lib/sentry-breadcrumb";
 import { startAnalytics } from "@/platform/analytics";
 import App from "./App";
 import "../global.css";
@@ -19,6 +20,7 @@ Sentry.init({
   environment: import.meta.env.DEV ? "development" : "production",
   release: `deus@${__APP_VERSION__}`,
   sendDefaultPii: true,
+  beforeBreadcrumb,
   enabled: !import.meta.env.DEV,
 });
 

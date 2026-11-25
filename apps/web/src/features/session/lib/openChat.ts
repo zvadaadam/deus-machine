@@ -4,6 +4,7 @@
 // (useChatTabs); the view takes exactly that request, once.
 
 import { create } from "zustand";
+import { useSession } from "../context";
 import { showWorkspace } from "@/features/workspace/lib/openWorkspace";
 import { workspaceLayoutActions } from "@/features/workspace/store";
 
@@ -17,9 +18,30 @@ export interface OpenChatRequest {
 interface OpenChatState {
   /** The chat each workspace's tab view is asked to show, until it takes the request. */
   requested: Record<string, OpenChatRequest>;
+  transcriptFolds: Record<string, boolean | undefined>;
 }
 
-export const useOpenChatStore = create<OpenChatState>(() => ({ requested: {} }));
+export const useOpenChatStore = create<OpenChatState>(() => ({
+  requested: {},
+  transcriptFolds: {},
+}));
+
+export function useTranscriptFold(
+  kind: "worked" | "activity" | "thought" | "agent" | "tool" | "message",
+  id: string | undefined,
+  defaultOpen = false
+) {
+  const { sessionId } = useSession();
+  const key = JSON.stringify([sessionId, kind, id]);
+  const stored = useOpenChatStore((state) => state.transcriptFolds[key]);
+  const expanded = stored ?? defaultOpen;
+  function toggle() {
+    useOpenChatStore.setState(({ transcriptFolds }) => ({
+      transcriptFolds: { ...transcriptFolds, [key]: !expanded },
+    }));
+  }
+  return [expanded, toggle, stored !== undefined] as const;
+}
 
 let next = 0;
 const OPEN_CHAT_REQUEST_MAX_AGE_MS = 10_000;

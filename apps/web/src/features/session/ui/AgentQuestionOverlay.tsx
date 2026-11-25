@@ -16,6 +16,7 @@
 //   - The overlay appears inline above MessageInput, same position as PlanApprovalOverlay.
 
 import { tempo } from "@/shared/lib/tempo";
+import { DEFAULT_AGENT_HARNESS } from "@shared/models";
 import { Collapse } from "@/components/ui/collapse";
 import { useState, useCallback, useMemo, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -219,7 +220,7 @@ export function AgentQuestionOverlay({
           {/* Question text with agent logo */}
           <div className="mb-3 flex items-start gap-2.5">
             {(() => {
-              const Logo = getAgentLogo(agentHarness || "claude-code");
+              const Logo = getAgentLogo(agentHarness || DEFAULT_AGENT_HARNESS);
               return Logo ? <Logo className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /> : null;
             })()}
             <p className="text-foreground min-w-0 text-sm font-medium">

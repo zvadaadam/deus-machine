@@ -1,11 +1,12 @@
-import { createElement } from "react";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RuntimeClient } from "@/platform/ws/runtime-client";
 import { queryClient, setActiveQueryClient } from "@/shared/api/queryClient";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { attachScreenshotToComposer } from "@/features/browser/lib/attachScreenshotToComposer";
-import { useSessionComposer } from "@/features/session/hooks/useSessionComposer";
+import { useHomeComposer, useSessionComposer } from "@/features/session/hooks/useSessionComposer";
 import {
   attachImageFiles,
   composerStore,
@@ -253,7 +254,6 @@ describe("draft storage", () => {
     const home = composerTarget(HOME_COMPOSER_ID, drafts);
     const chat = composerTarget("chat", drafts);
     const longPrompt = "x".repeat(100_000);
-    actions.seedIfAbsent(home, emptyComposer(model, "high"));
     actions.setDraft(home, longPrompt);
     actions.setDraft(chat, "Earlier note");
     expect((await reopen()).getState().pendingContent[HOME_COMPOSER_ID].draft.length).toBe(
@@ -263,7 +263,7 @@ describe("draft storage", () => {
     const paste = longPrompt.repeat(2);
     actions.setDraft(home, paste);
     actions.setDraft(chat, "Latest note");
-    expect(drafts.getState().composers[HOME_COMPOSER_ID].draft).toBe(paste);
+    expect(drafts.getState().pendingContent[HOME_COMPOSER_ID].draft).toBe(paste);
     const restored = (await reopen()).getState().pendingContent;
     expect(restored.chat.draft).toBe("Latest note");
     expect(restored[HOME_COMPOSER_ID]).toMatchObject({ draft: "", missingPastedTexts: 1 });
@@ -297,6 +297,31 @@ describe("draft storage", () => {
     expect(rows.notes.draft).toBe("Edited notes");
     expect(rows.good.draft).toBe("Other chat");
   });
+});
+
+it("reads and edits the Home draft without seeding chat settings", () => {
+  vi.stubGlobal("window", Object.assign(new EventTarget(), { HTMLIFrameElement: class {} }));
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const root = createRoot(Object.assign(new EventTarget(), { nodeType: 9 }) as Document);
+  let home: ReturnType<typeof useHomeComposer>;
+  function HomeDraft() {
+    home = useHomeComposer();
+    return null;
+  }
+  try {
+    actions.setDraft(HOME_COMPOSER_ID, "A draft from before Home opened");
+    act(() => root.render(createElement(HomeDraft)));
+    expect(home!.draft).toBe("A draft from before Home opened");
+    act(() => home.setDraft("Continue here"));
+    expect(store.getState().composers[HOME_COMPOSER_ID]).toBeUndefined();
+    const draft = store.getState().pendingContent[HOME_COMPOSER_ID];
+    expect(draft.draft).toBe("Continue here");
+    expect(draft).not.toHaveProperty("model");
+    expect(draft).not.toHaveProperty("thinkingLevel");
+    expect(draft).not.toHaveProperty("planModeEnabled");
+  } finally {
+    act(() => root.unmount());
+  }
 });
 
 describe("cross-panel staged content", () => {

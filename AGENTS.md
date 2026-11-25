@@ -9,7 +9,7 @@ Design inspiration: Linear, Vercel, Stripe, Perplexity. Dense, pro-consumer aest
 Electron desktop app + React frontend + Node.js backend. Monorepo under `apps/`. The local agent engine runs Claude Code, Codex and Gemini.
 
 - **Package manager: Bun.** Always `bun add`, `bun install`, `bun run`, `bunx`. Never npm or yarn — CI uses `bun install --frozen-lockfile`.
-- **Desktop + Mobile Web:** Primary target is Electron. Web version lives at the root domain (`deusmachine.ai` — the landing worker edge-routes `/` to the landing for new visitors and everything else to the app; `app.deusmachine.ai` stays a working alias (canonical 301 configured at the edge)) and also supports mobile via `MobileLayout`. Don't write `isElectronEnv` conditionals for feature parity.
+- **Desktop + Mobile Web:** Primary target is Electron. The web app runs at `deusmachine.ai` and its alias `app.deusmachine.ai`, with mobile support via `MobileLayout`. At the root domain the landing worker serves the landing page at `/` for new visitors and routes everything else to the app. Don't write `isElectronEnv` conditionals for feature parity.
 - **Key libraries:** `ts-pattern` for discriminated unions (prefer `.exhaustive()`), Zustand for UI state, TanStack Query v5 for server state, Framer Motion for presence/layout animations, Tailwind CSS v4.
 
 ## Running the App
@@ -345,6 +345,7 @@ progress channel: the desktop, the web app and a phone all follow it.
   workspace, from what is on this computer, and records why
   (`init_fetch_issue`: `offline`, `auth` or `failed`). A project with no remote
   named `origin` records `no_origin` and the start line says "No origin to check".
+  `no_origin` needs Git 2.30 or newer. Older Git reports a missing origin as a failed fetch.
 - Once the checkout exists, the first chat can take its message while the project's
   setup script runs. A local turn is told the running command, log and status
   file, or a failure's quoted reason and last log lines. After a repair the
@@ -419,8 +420,7 @@ its text and images go back into that chat's composer, ahead of anything typed t
 since (`session/lib/returnToComposer.ts`, from the fold on both lanes). Nothing is
 resent. The card shows the platform's sentence, not its codes (`shared/lib/send-refusal.ts`);
 a refused AI provider account (reconnect, none, the company's unusable) is category
-`_provider_account`, not an internal error, and its card offers "Open AI Providers"
-instead of "Retry in new chat".
+`_provider_account`, and its card offers "Open AI Providers".
 
 `hasCheckout(workspace)` (it has a chat) says whether there is somewhere to
 work. Without one there is no branch to open a pull request from and nothing
@@ -795,8 +795,9 @@ the catalog can move to a package the day Deus Cloud reads it too.
 - **Credentials.** An account's row says how it is held
   (`integration_connections.kind`): `oauth` and `secret` (a pasted key, a
   local server's variables) keep a credential sealed by `vault.ts` (key in the
-  macOS Keychain, else a 0600 file; found once at startup, and until the
-  Keychain answers nothing is sealed or opened, never a second key made); `cli` stores
+  macOS Keychain, else a 0600 file). Startup reads the key only for saved
+  credentials. The first seal creates a missing key, never a second. Until the
+  Keychain answers, nothing is sealed or opened. `cli` stores
   nothing (the signed-in CLI supplies the token at each use); `managed` is
   held by Deus Cloud. A credential sealed under a lost key opens as null and
   its app asks to connect again.

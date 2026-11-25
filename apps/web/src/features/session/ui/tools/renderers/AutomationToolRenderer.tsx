@@ -79,10 +79,10 @@ function AutomationCard({ automation }: { automation: Automation }) {
   );
 }
 
-export function AutomationToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const input = (toolUse.input ?? {}) as { mode?: string; name?: string };
+export function AutomationToolRenderer(props: ToolRendererProps) {
+  const input = (props.toolUse.input ?? {}) as { mode?: string; name?: string };
   const mode = typeof input.mode === "string" ? input.mode : "create";
-  const output = toolResult ? extractText(toolResult.content) : "";
+  const output = extractText(props.toolResult?.content);
   const payload = output ? parsePayload(output) : null;
 
   const summaryName =
@@ -94,8 +94,7 @@ export function AutomationToolRenderer({ toolUse, toolResult }: ToolRendererProp
     <BaseToolRenderer
       toolName={MODE_LABELS[mode] ?? "Automation"}
       icon={<ClockFading className={ICON_CLS} />}
-      toolUse={toolUse}
-      toolResult={toolResult}
+      {...props}
       renderSummary={() =>
         summaryName ? <span className="text-muted-foreground">{summaryName}</span> : null
       }

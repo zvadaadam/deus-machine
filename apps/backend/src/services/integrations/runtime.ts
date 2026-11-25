@@ -13,6 +13,7 @@ import type { McpServerConfig } from "@zvada/agent-server/protocol";
 import type { AgentHarness } from "@shared/enums";
 import type { CatalogApp } from "@shared/integrations/types";
 import { appServerName } from "@shared/mcp-servers";
+import { DEFAULT_AGENT_HARNESS } from "@shared/models";
 import { getErrorMessage } from "@shared/lib/errors";
 import { cloudHolds } from "./auth/cloud-accounts";
 import { findApp } from "./catalog";
@@ -94,7 +95,9 @@ export function directServer(
 }
 
 /** The MCP servers a local turn on `harness` carries. Never throws. */
-export async function resolveTurnApps(harness: AgentHarness = "claude-code"): Promise<TurnApps> {
+export async function resolveTurnApps(
+  harness: AgentHarness = DEFAULT_AGENT_HARNESS
+): Promise<TurnApps> {
   const result: TurnApps = { servers: {}, skipped: [] };
   let rows: InstallationRow[];
   try {

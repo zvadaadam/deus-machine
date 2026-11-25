@@ -29,6 +29,7 @@ import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import { AgentLink } from "./src/services/agent/client";
 import { hasAgentMessages } from "./src/services/agent/agent-messages";
 import type { AgentHarness } from "@shared/enums";
+import { DEFAULT_AGENT_HARNESS } from "@shared/models";
 import { isUnknownEvent, type AnyLifecycleEvent } from "@shared/protocol-types";
 import { buildTurnStartParams } from "./src/services/agent/run-config";
 import {
@@ -125,7 +126,7 @@ function parseArgs() {
   }
 
   return {
-    agent: opts.agent || "claude-code",
+    agent: opts.agent || DEFAULT_AGENT_HARNESS,
     cwd: opts.cwd || process.cwd(),
     prompt: positional.join(" ") || "Say exactly: HELLO WORLD. No skills or agents.",
     dbOnly,
