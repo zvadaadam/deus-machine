@@ -361,6 +361,10 @@ export function giveUpTurn(sessionId: string, turnId: string, cause?: "cancelled
 /**
  * What the engine asks Deus: a plan is the user's to approve, on the plan card
  * (`exitPlanMode`, as the UI knows it); a tool's approval is allowed.
+export function wasTurnAdmitted(sessionId: string, turnId: string) {
+  return events?.wasTurnAdmitted(sessionId, turnId) ?? false;
+}
+
  */
 async function answerPermission(event: PermissionRequestedEvent): Promise<void> {
   const outcome = isPlanRequest(event.options) ? await askPlan(event) : allowOnce(event.options);

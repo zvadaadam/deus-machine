@@ -84,6 +84,8 @@ export interface AgentEventHandler {
    */
   beginTurn(sessionId: string, turnId: string, opts?: { force?: boolean }): boolean;
   /** Release a rejected local claim, only while this turn is still unadmitted. */
+  /** The engine acknowledged this turn or its events reached the fold. */
+  wasTurnAdmitted(sessionId: string, turnId: string): boolean;
   abortTurn(sessionId: string, turnId: string): boolean;
   /** Record the local end. A late native terminal can still supply its actual outcome. */
   giveUpTurn(sessionId: string, turnId: string, cause?: "cancelled"): boolean;
@@ -258,16 +260,18 @@ export function createAgentEventHandler(
 
     abortTurn(sessionId, turnId) {
       const state = sessions.get(sessionId);
-      if (
-        state?.turnId !== turnId ||
-        state.acceptedTurnId === turnId ||
-        state.conversation.turns.some((turn) => turn.turnId === turnId)
-      ) {
-        return false;
-      }
+      if (state?.turnId !== turnId || this.wasTurnAdmitted(sessionId, turnId)) return false;
       state.turnId = undefined;
       return true;
     },
+    wasTurnAdmitted(sessionId, turnId) {
+      const state = sessions.get(sessionId);
+      return (
+        state?.acceptedTurnId === turnId ||
+        !!state?.conversation.turns.some((turn) => turn.turnId === turnId)
+      );
+    },
+
 
     liveTurnId(sessionId) {
       return sessions.get(sessionId)?.turnId;
@@ -312,11 +316,7 @@ export function createAgentEventHandler(
       if (!state?.turnId) return;
       // A new send waiting for the reconnect handshake is not an old native
       // turn. Its quick ACK or rejection still owns that admission.
-      if (
-        state.acceptedTurnId !== state.turnId &&
-        !state.conversation.turns.some((turn) => turn.turnId === state.turnId)
-      )
-        return;
+      if (!this.wasTurnAdmitted(gap.sessionId, state.turnId)) return;
       const turnId = state.turnId;
       state.deliveryFailure ??= {
         turnId,

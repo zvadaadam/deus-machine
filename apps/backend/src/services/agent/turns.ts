@@ -64,7 +64,12 @@ const localTurns = new Map<string, Starting | SetupEnd>();
 
 function startingTurn(sessionId: string) {
   const entry = localTurns.get(sessionId);
-  return entry && "preparing" in entry ? entry : undefined;
+  if (!entry || !("done" in entry)) return;
+  if (
+    agentService.liveTurnId(sessionId) === entry.turnId ||
+    !agentService.wasTurnAdmitted(sessionId, entry.turnId)
+  )
+    return entry;
 }
 
 export function currentTurnId(sessionId: string) {
@@ -638,7 +643,11 @@ function scheduleCancelWatchdog(
 
 function handleAgentError(sessionId: string, turnId: string, err: unknown): void {
   // Events can confirm admission even when its reply is lost.
-  if (agentService.liveTurnId(sessionId) === turnId) return;
+  if (
+    agentService.wasTurnAdmitted(sessionId, turnId) ||
+    agentService.liveTurnId(sessionId) === turnId
+  )
+    return;
   const message =
     err instanceof WireRequestError
       ? err.message || "Agent rejected the message"

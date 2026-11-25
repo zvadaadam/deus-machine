@@ -204,6 +204,7 @@ function makeHandler() {
     hydrateCloudSnapshot: vi.fn(),
     beginTurn: vi.fn(() => true),
     abortTurn: vi.fn(() => true),
+    wasTurnAdmitted: vi.fn(() => false),
     giveUpTurn: vi.fn(),
     confirmTurn: vi.fn(),
     handleEventGap: vi.fn(),

@@ -427,6 +427,31 @@ describe("stopping the current turn", () => {
     expect(await view()).toMatchObject({ running: starts()[0], status: "working" });
   });
 
+  it("O4: an ended turn is settled and cannot be stopped while its lost start reply is pending", async () => {
+    const wire = pendingStart();
+    const lost = expect(send("A")).rejects.toThrow("A lost its start reply");
+    await vi.waitFor(() => expect(starts()).toEqual(["A"]));
+    emit({ type: "turn.started", sessionId, turnId: "A", timestamp: seq });
+    reply("A", "Finished.");
+    end("A");
+    try {
+      expect(await fact("A")).toMatchObject({ state: "ended", outcome: "done" });
+      const reading = await view();
+      expect(reading.status).toBe("idle");
+      expect(reading.running).toBeUndefined();
+      expect(await stopFromChat()).toContain('"checkout:1": nothing was running');
+    } finally {
+      wire.reject(new Error("A lost its start reply"));
+      await lost;
+    }
+    expect(engine.cancelTurn).not.toHaveBeenCalled();
+    expect(await run(api.session, { sessionId })).toMatchObject({
+      status: "idle",
+      error_message: null,
+    });
+    expect(await queue()).toEqual({ paused: null, items: [] });
+  });
+
   it("O4: A's lost start reply leaves B working in app setup and stoppable", async () => {
     const wire = pendingStart();
     const lost = expect(send("A")).rejects.toThrow("late reply");
@@ -1468,7 +1493,7 @@ describe("messages held for a local chat", () => {
       expect(await ids()).toEqual([]);
     });
 
-    it("pauses on another turn's admission failure and keeps the head until its echo", async () => {
+    it("drains both rows when the predecessor ends before its lost start reply", async () => {
       const wire = pendingStart();
       const predecessor = send("A");
       await vi.waitFor(() => expect(starts()).toEqual(["A"]));
@@ -1490,10 +1515,13 @@ describe("messages held for a local chat", () => {
       emit({ type: "turn.started", sessionId, turnId: "B", timestamp: seq });
       echo("B");
       expect(duringSetup).toMatchObject({
-        paused: "failed",
+        paused: null,
         items: [{ id: "B", state: "sending" }, waitingRow("C")],
       });
-      expect(await queue()).toMatchObject({ paused: "failed", items: [{ id: "C" }] });
+      expect(await queue()).toMatchObject({ paused: null, items: [{ id: "C" }] });
+      end("B");
+      await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "C"]));
+      expect(await queue()).toEqual({ paused: null, items: [] });
     });
   });
 

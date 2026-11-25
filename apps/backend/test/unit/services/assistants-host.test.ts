@@ -64,6 +64,7 @@ vi.mock("@sentry/node", () => ({ captureException: vi.fn() }));
 vi.mock("../../../src/services/agent/service", () => ({
   lastOutputAt: () => undefined,
   liveTurnId: (sessionId: string) => state.live.get(sessionId),
+  wasTurnAdmitted: () => false,
   provideSessionTools: () => {},
   provideTurnWatcher: vi.fn(),
   isConnected: () => false,
