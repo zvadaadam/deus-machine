@@ -1,4 +1,4 @@
-import { turnProviderCredentialSource } from "@shared/conversation-rows";
+import { findConversationMessage, turnProviderCredentialSource } from "@shared/conversation-rows";
 // backend/src/services/agent/event-handler.ts
 // The single entry point for agent → backend data flow.
 //
@@ -93,6 +93,8 @@ export interface AgentEventHandler {
    * which a session STATUS cannot do: two consecutive turns are both "working".
    */
   liveTurnId(sessionId: string): string | undefined;
+  /** The live turn's last event time, excluding the user's echo. */
+  lastOutputAt(sessionId: string): number | undefined;
   /** Records the quick ACK, including turns with no first event yet. */
   confirmTurn(sessionId: string, turnId: string): void;
   /** Mark delivery loss synchronously, before any replay suffix is folded. */
@@ -104,6 +106,7 @@ export interface AgentEventHandler {
 }
 
 interface SessionState extends SessionFacts {
+  lastOutputAt?: number;
   /** The folded conversation — the source of every row this session writes. */
   conversation: ConversationState;
 }
@@ -207,6 +210,11 @@ export function createAgentEventHandler(
   };
 
   return {
+    lastOutputAt(sessionId) {
+      const state = sessions.get(sessionId);
+      return state?.turnId ? state.lastOutputAt : undefined;
+    },
+
     hydrateCloudSnapshot(sessionId, snapshot) {
       const state = stateFor(sessionId);
       const pending =
@@ -358,6 +366,22 @@ export function createAgentEventHandler(
       );
       state.conversation = conversation;
       typing.saw(envelope);
+
+      const stamped = isUnknownEvent(envelope.event) ? envelope.event.raw : envelope.event;
+      const turnId = "turnId" in stamped ? stamped.turnId : undefined;
+      const messageId = "messageId" in stamped ? stamped.messageId : undefined;
+      // On replay, turn.started can be the first the host hears of the live turn.
+      const live = state.turnId
+        ? turnId === undefined || turnId === state.turnId
+        : envelope.event.type === "turn.started";
+      if (
+        live &&
+        typeof stamped.timestamp === "number" &&
+        (typeof messageId !== "string" ||
+          findConversationMessage(conversation, messageId)?.role !== "user")
+      ) {
+        state.lastOutputAt = stamped.timestamp;
+      }
 
       if (isUnknownEvent(envelope.event)) {
         // Law 6: forward it verbatim. Dropping it would be a hole in the

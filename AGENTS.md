@@ -559,7 +559,9 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   not listed); a workspace being set up is its first chat under the id minted
   with it (`first_session_id`). Who started each workspace, chat and message
   is kept (`started_by`, `messages.origin`), and the agent reading a message
-  is told who sent it. On a working chat, `send_message` steers the turn it saw by
+  is told who sent it. `list_sessions` dates a working chat by its last agent event, or
+  its send until one arrives. Other chats use their last prompt or turn end, whichever is later.
+  On a working chat, `send_message` steers the turn it saw by
   default. If the turn ends before reading the message, it goes first in the queue.
   A kept steer runs only as its own turn, even with `send_now`. The host finds read
   steers in `messages.steer_id` and kept ones in `turns.outcome.undeliveredSteers`.

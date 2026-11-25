@@ -301,6 +301,10 @@ export function isConnected(): boolean {
   return link?.isConnected() ?? false;
 }
 
+export function lastOutputAt(sessionId: string) {
+  return events?.lastOutputAt(sessionId);
+}
+
 /** A chat's tools beside the Deus tools: the operator's, registered by services/assistants. */
 let sessionTools: ((own: HostToolSource) => HostToolSource) | undefined;
 export function provideSessionTools(compose: (own: HostToolSource) => HostToolSource): void {

@@ -92,10 +92,17 @@ import {
   DifferentTurnMessageError,
 } from "../../lib/errors";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
+import { lastOutputAt } from "../agent/service";
 import { QueueLimitError, queuedMessages, enqueueMessage, steerMessage } from "../agent/queue";
 import { answer as answerToolRequest, pendingFor } from "../agent/tool-relay";
 import { continuedSettings, startSettings, type TurnSettings } from "../agent/turn-settings";
-import { currentTurnId, sendMessage, stoppedBeforeStart, stopSession } from "../agent/turns";
+import {
+  admittingAt,
+  currentTurnId,
+  sendMessage,
+  stoppedBeforeStart,
+  stopSession,
+} from "../agent/turns";
 import { invalidate, onInvalidate, runAsThisComputer as run } from "../query-engine";
 import { getServerName } from "../server-name";
 import { assertMayWrite, refusalFor, storedAccess } from "./access";
@@ -173,7 +180,6 @@ interface Row {
   s_error: string | null;
   error_category: string | null;
   message_count: number | null;
-  s_updated_at: string | null;
 }
 
 const ROWS = `
@@ -182,7 +188,7 @@ const ROWS = `
     r.id AS repository_id, r.name AS repo_name, r.root_path,
     s.id AS session_id, s.status AS s_status, s.title AS s_title, s.agent_harness,
     s.started_by AS s_started_by, s.last_user_message_at, s.is_hidden, s.chat,
-    s.error_message AS s_error, s.error_category, s.message_count, s.updated_at AS s_updated_at
+    s.error_message AS s_error, s.error_category, s.message_count
   FROM workspaces w JOIN repositories r ON r.id = w.repository_id
   LEFT JOIN sessions s ON s.workspace_id = w.id
   WHERE w.kind != 'cloud'`;
@@ -428,7 +434,7 @@ export function createDeusHost(): DeusHost {
   }
 
   /** Each chat's last ended turn, in one read. */
-  function lastEnded(ids: readonly string[], includeReceipts = false): Map<string, TurnEnded> {
+  function lastEnded(ids: readonly string[], includeReceipts = false) {
     const found = getDatabase()
       .prepare(
         `SELECT session_id, turn_id, outcome, cancelled_by, MAX(ended_at) AS ended_at FROM turns
@@ -437,22 +443,21 @@ export function createDeusHost(): DeusHost {
       .all(JSON.stringify(ids)) as {
       session_id: string;
       turn_id: string;
+      ended_at: number;
       outcome: string | null;
       cancelled_by: string | null;
     }[];
     return new Map(
       found.map((t) => {
         const outcome = savedOutcome(t.outcome);
-        return [
-          t.session_id,
-          {
-            turnId: t.turn_id,
-            ...endedOf(t, outcome),
-            ...(includeReceipts && {
-              steers: steerReceipts(t.session_id, t.turn_id, outcome.undeliveredSteers),
-            }),
-          },
-        ];
+        const turn: TurnEnded = {
+          turnId: t.turn_id,
+          ...endedOf(t, outcome),
+          ...(includeReceipts && {
+            steers: steerReceipts(t.session_id, t.turn_id, outcome.undeliveredSteers),
+          }),
+        };
+        return [t.session_id, { turn, at: t.ended_at }];
       })
     );
   }
@@ -480,14 +485,16 @@ export function createDeusHost(): DeusHost {
       // Its stored number (made in order, never moved); a chat from before numbers counts on.
       const chat = row.chat ?? (counted.get(row.workspace_id) ?? 0) + 1;
       counted.set(row.workspace_id, chat);
-      const status = statusOf(row, ended.get(id));
+      const last = ended.get(id);
+      const status = statusOf(row, last?.turn);
       if (status === "error" && row.error_category === "usage_limit") limited.add(id);
       // The workspace's title and time stand in only for a first chat with no row yet.
       const title = row.session_id ? row.s_title : row.ws_title;
-      const activity = Math.max(
-        epochMs(row.last_user_message_at) ?? 0,
-        epochMs(row.session_id ? row.s_updated_at : row.ws_updated_at) ?? 0
-      );
+      const sent = epochMs(row.session_id ? row.last_user_message_at : row.ws_updated_at);
+      const activity =
+        status === "working"
+          ? (lastOutputAt(id) ?? admittingAt(id) ?? sent)
+          : Math.max(sent ?? 0, last?.at ?? 0);
       const root = computeWorkspacePath({ root_path: row.root_path, slug: row.slug });
       // Why: a failed start, or a first task that could not be delivered (no messages yet).
       const error = !row.session_id
@@ -812,7 +819,7 @@ export function createDeusHost(): DeusHost {
           })),
       ];
       const running = currentTurnId(sessionId);
-      const last = lastEnded([sessionId], true).get(sessionId);
+      const last = lastEnded([sessionId], true).get(sessionId)?.turn;
       const turns: ViewTurn[] = facts.map((fact) => {
         const outcome = savedOutcome(fact.outcome);
         const how = fact.turn_id === running || !fact.ended_at ? undefined : endedOf(fact, outcome);

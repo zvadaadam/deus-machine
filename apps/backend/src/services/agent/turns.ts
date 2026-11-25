@@ -54,6 +54,7 @@ const ADMISSION_KEPT_MS = 10 * 60_000;
 /** Stop interrupts app setup. Once turn/start is on the wire, Stop waits for its answer. */
 type Starting = {
   turnId: string;
+  sentAt: number;
   preparing: AbortController;
   done: Promise<void>;
   stoppedBy?: Origin;
@@ -68,6 +69,11 @@ function startingTurn(sessionId: string) {
 
 export function currentTurnId(sessionId: string) {
   return agentService.liveTurnId(sessionId) ?? startingTurn(sessionId)?.turnId;
+}
+
+export function admittingAt(sessionId: string) {
+  const admission = startingTurn(sessionId);
+  if (admission && admission.turnId === currentTurnId(sessionId)) return admission.sentAt;
 }
 
 export function stoppedBeforeStart(sessionId: string) {
@@ -443,7 +449,7 @@ async function sendMessageOnce(
       resume: existingAgentSessionId || undefined,
       ...(origin ? { origin } : {}),
     });
-    const admission: Starting = { turnId, preparing, done };
+    const admission: Starting = { turnId, sentAt: Date.parse(sentAt), preparing, done };
     admitting.set(sessionId, admission);
     try {
       await done;

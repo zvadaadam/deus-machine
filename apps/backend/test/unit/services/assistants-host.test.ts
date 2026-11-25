@@ -62,6 +62,7 @@ vi.mock("../../../src/services/query-engine", () => ({
 vi.mock("../../../src/services/server-name", () => ({ getServerName: () => "Proof Mac" }));
 vi.mock("@sentry/node", () => ({ captureException: vi.fn() }));
 vi.mock("../../../src/services/agent/service", () => ({
+  lastOutputAt: () => undefined,
   liveTurnId: (sessionId: string) => state.live.get(sessionId),
   provideSessionTools: () => {},
   provideTurnWatcher: vi.fn(),
@@ -79,6 +80,7 @@ vi.mock("../../../src/services/agent/tool-relay", () => ({
   isPrompt: (method: string) => method === "askUserQuestion" || method === "exitPlanMode",
 }));
 vi.mock("../../../src/services/agent/turns", () => ({
+  admittingAt: () => undefined,
   currentTurnId: (sessionId: string) => state.live.get(sessionId),
   stoppedBeforeStart: () => undefined,
   sendMessage: async (input: Record<string, unknown>, origin?: unknown) => {
@@ -1361,7 +1363,7 @@ describe("each commit re-reads what it depends on, with no await before its writ
 });
 
 describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12, H15, H17)", () => {
-  it("dates equally old prompts by the latest assistant message; parts within a message have no clock", async () => {
+  it("dates equally old prompts by their last turn end when the chats are idle", async () => {
     const host = createDeusHost();
     const promptTime = new Date(Date.now() - 12 * 60_000).toISOString();
     const insert = state.db.prepare(
@@ -1369,7 +1371,7 @@ describe("the first task's hand-off, numbers, and what a view shows (H7, H8, H12
     );
     insert.run("silent", 2, promptTime, promptTime);
     insert.run("busy", 3, promptTime, promptTime);
-    message("busy", "answer", "assistant", "A recent reply.");
+    endTurn("busy", "answer", "end_turn");
     const entries = await host.list(LEAD as never, {});
     const ageOf = (id: string) => entries.find((e) => e.id === id)!.lastActivityAt!;
     expect(ageOf("silent")).toBe(Date.parse(promptTime));
@@ -1954,9 +1956,10 @@ describe("the acceptance pass (F5, F7, F8, F9, F10)", () => {
       )
       .run();
     state.db.prepare("UPDATE sessions SET title = 'OLD-B2' WHERE id = 's-second'").run();
-    state.db.prepare("DROP TRIGGER update_sessions_updated_at").run();
     state.db
-      .prepare("UPDATE sessions SET updated_at = '2020-01-01 00:00:00' WHERE id = 's-lead'")
+      .prepare(
+        "UPDATE sessions SET last_user_message_at = '2020-01-01 00:00:00' WHERE id = 's-lead'"
+      )
       .run();
     const first = (await host.list(LOCAL_CALLER as never, {})).find((e) => e.id === "s-lead")!;
     expect(first.title).toBeUndefined();

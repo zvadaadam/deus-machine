@@ -209,6 +209,7 @@ function makeHandler() {
     handleEventGap: vi.fn(),
     settleEventGap: vi.fn(),
     liveTurnId: vi.fn(() => undefined as string | undefined),
+    lastOutputAt: vi.fn(),
     handleTitle: vi.fn(),
   };
 }

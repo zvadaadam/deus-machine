@@ -3,14 +3,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createOperator, type StartInput } from "@zvada/agent-server/operator";
 import type { AgentAuthAnswer } from "@shared/agent-auth";
 import { agentAuth } from "@shared/api/settings";
+import type { AnyLifecycleEvent } from "@shared/protocol-types";
 import { SCHEMA_SQL } from "@shared/schema";
 import { handle, LOCAL_CALLER, Registry } from "../../../src/api/registry";
 import { ChatBusyError } from "../../../src/lib/errors";
+import type { AgentLinkOptions } from "../../../src/services/agent/client";
+import * as agent from "../../../src/services/agent/service";
 import * as turns from "../../../src/services/agent/turns";
 import { createDeusHost } from "../../../src/services/assistants/host";
 import { invalidate, serveOperations } from "../../../src/services/query-engine";
 
 vi.mock("../../../src/lib/database", () => ({ getDatabase: () => db, DB_PATH: ":memory:" }));
+const openLink = vi.hoisted(() => vi.fn<(options: AgentLinkOptions) => unknown>());
+vi.mock("../../../src/services/agent/client", () => ({ AgentLink: { open: openLink } }));
+vi.mock("../../../src/services/pr-snapshot.service", () => ({
+  refreshPrSnapshotForSession: vi.fn(),
+}));
 vi.mock("../../../src/services/workspace-checkout", () => ({
   pickWorkspaceName: async () => ({ slug: "new", branchName: "lab/new" }),
   initializeWorkspace: async () => {},
@@ -172,4 +180,162 @@ describe("a first task that cannot be delivered", () => {
       expect(send).not.toHaveBeenCalled();
     }
   );
+});
+
+describe("a chat's last activity", () => {
+  const now = Date.UTC(2026, 0, 15, 12);
+  const prompt = now - 12 * 60_000;
+  let seq: number;
+  let host: ReturnType<typeof createDeusHost>;
+
+  beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    seq = 0;
+    openLink.mockReset().mockResolvedValue({
+      getAgents: () => [],
+      isConnected: () => true,
+      engine: { onAuthUpdated: () => () => {}, onCliProgress: () => () => {} },
+      close: vi.fn(),
+    });
+    await agent.init();
+    host = createDeusHost();
+  });
+  afterEach(() => agent.shutdown());
+
+  function prompted(id: string) {
+    db.prepare(
+      "INSERT INTO sessions (id, workspace_id, title, status, last_user_message_at) VALUES (?, 'w', ?, 'working', ?)"
+    ).run(id, id, new Date(prompt).toISOString());
+  }
+
+  function emit(event: AnyLifecycleEvent & { sessionId: string }) {
+    const envelope =
+      event.type === "message.part.delta" ? { seq, live: true as const } : { seq: ++seq };
+    openLink.mock.calls[0]![0].onEnvelope({ sessionId: event.sessionId, event, ...envelope });
+  }
+
+  const activity = async (id: string) =>
+    (await host.list(caller, {})).find((entry) => entry.id === id)?.lastActivityAt;
+
+  it("lists equally old prompts as 12m ago for a silent turn and 5s ago for one starting a tool", async () => {
+    prompted("silent");
+    prompted("busy");
+    const sessionId = "busy";
+    const turn = { sessionId, turnId: "b" };
+    const timestamp = now - 5_000;
+    emit({ ...turn, type: "turn.started", timestamp: prompt });
+    emit({
+      ...turn,
+      type: "message.part",
+      messageId: "reply",
+      outputIndex: 1,
+      partIndex: 0,
+      timestamp,
+      part: {
+        type: "tool",
+        id: "tool",
+        messageId: "reply",
+        sessionId,
+        toolName: "Bash",
+        toolCallId: "build",
+        state: { status: "in_progress", input: {}, time: { start: timestamp } },
+      },
+    });
+    const list = await createOperator(host).call("list_sessions", {}, caller);
+    expect(list).toMatch(/working[^\n]*"silent"[^\n]*12m ago/);
+    expect(list).toMatch(/working[^\n]*"busy"[^\n]*5s ago/);
+    expect(readAuth).not.toHaveBeenCalled();
+  });
+
+  it("dates streaming output by its delta and ignores a steer's whole user echo and a late event for an older turn", async () => {
+    prompted("busy");
+    const turn = { sessionId: "busy", turnId: "b" };
+    const message = { ...turn, messageId: "reply", outputIndex: 1, partIndex: 0 };
+    emit({ ...turn, type: "turn.started", timestamp: prompt });
+    emit({
+      ...message,
+      type: "message.part",
+      timestamp: now - 30_000,
+      part: {
+        type: "text",
+        id: "p",
+        text: "",
+        state: "streaming",
+        sessionId: "busy",
+        messageId: "reply",
+      },
+    });
+    emit({
+      ...message,
+      type: "message.part.delta",
+      partId: "p",
+      delta: { type: "text", text: "still working" },
+      timestamp: now - 5_000,
+    });
+    const echo = { ...turn, messageId: "steer", outputIndex: 2 };
+    emit({ ...echo, type: "message.started", role: "user", steerId: "s", timestamp: now - 3_000 });
+    emit({
+      ...echo,
+      type: "message.part",
+      partIndex: 0,
+      timestamp: now - 2_000,
+      part: {
+        type: "text",
+        id: "e",
+        text: "Also this",
+        state: "done",
+        sessionId: "busy",
+        messageId: "steer",
+      },
+    });
+    emit({ ...echo, type: "message.ended", timestamp: now - 1_000 });
+    emit({ ...turn, turnId: "older", type: "message.ended", messageId: "old", timestamp: now });
+    expect(await activity("busy")).toBe(now - 5_000);
+  });
+
+  it("uses the timestamp on a new kind of event from the live turn", async () => {
+    prompted("new-event");
+    const turn = { sessionId: "new-event", turnId: "t" };
+    emit({ ...turn, type: "turn.started", timestamp: prompt });
+    emit({
+      sessionId: turn.sessionId,
+      type: "future.event",
+      raw: { ...turn, timestamp: now - 3_000 },
+    });
+    expect(await activity("new-event")).toBe(now - 3_000);
+  });
+
+  it("dates an idle chat by its latest prompt or turn end and a pending admission by its send", async () => {
+    prompted("changing");
+    const turn = { sessionId: "changing", turnId: "old" };
+    emit({ ...turn, type: "turn.started", timestamp: prompt });
+    emit({ ...turn, type: "turn.ended", stopReason: "end_turn", timestamp: now - 60_000 });
+    expect.soft(await activity("changing")).toBe(now - 60_000);
+    db.prepare("UPDATE sessions SET last_user_message_at = ? WHERE id = ?").run(
+      new Date(now - 30_000).toISOString(),
+      "changing"
+    );
+    expect.soft(await activity("changing")).toBe(now - 30_000);
+
+    const apps = Promise.withResolvers<void>();
+    vi.spyOn(agent, "startTurn").mockReturnValueOnce(apps.promise);
+    const sending = turns.sendMessage({
+      sessionId: "changing",
+      turnId: "new",
+      content: "Again",
+      agentHarness: "claude-code",
+      model: "opus",
+    });
+    try {
+      vi.setSystemTime(now + 10_000);
+      expect.soft(await activity("changing")).toBe(now);
+      // A different turn can still be live while this send is in setup.
+      vi.spyOn(agent, "liveTurnId").mockReturnValue("other");
+      expect(await activity("changing")).toBe(now - 30_000);
+    } finally {
+      apps.resolve();
+      await sending;
+    }
+  });
 });
