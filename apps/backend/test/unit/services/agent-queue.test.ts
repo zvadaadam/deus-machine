@@ -1384,7 +1384,7 @@ describe("messages held for a local chat", () => {
       timestamp: seq,
       cost: 0.25,
     });
-    expect(await run(api.session, { sessionId })).toMatchObject({ status: "idle" });
+    expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
     expect((await queue()).paused).toBeNull();
     expect((await run(api.messages, { sessionId })).turns).toContainEqual(
       expect.objectContaining({ turnId: "A", startedAt, cost: 0.25 })
