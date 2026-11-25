@@ -396,6 +396,33 @@ describe("stopping the current turn", () => {
     expect(engine.cancelTurn).not.toHaveBeenCalled();
   });
 
+  it("list_sessions names the assistant that stopped the last turn", async () => {
+    await send("A");
+    await stopped("A", fromAssistant);
+    end("A", "cancelled");
+
+    expect(await operator.call("list_sessions", {}, windowCaller)).toMatch(
+      /checkout:1\s+stopped by assistant "Reviewer"/
+    );
+  });
+
+  it("list_sessions names the chat that stopped app setup after an earlier Stop", async () => {
+    db.exec("INSERT INTO sessions (id, workspace_id) VALUES ('lead', 'w')");
+    await send("previous");
+    await stopped("previous", fromPerson);
+    end("previous", "cancelled");
+
+    const release = holdAppSetup();
+    const starting = expect(send("A")).rejects.toThrow("Stopped before it started.");
+    await stopFromChat();
+    release();
+    await starting;
+
+    expect(await operator.call("list_sessions", {}, windowCaller)).toMatch(
+      /checkout:1\s+stopped by "checkout:2"/
+    );
+  });
+
   it("read_session names the chat that stopped setup after the previous turn and advances the cursor", async () => {
     db.exec("INSERT INTO sessions (id, workspace_id) VALUES ('lead', 'w'), ('reader', 'w')");
     const reader = { ...chatCaller, sessionId: "reader" };

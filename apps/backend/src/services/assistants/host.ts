@@ -456,7 +456,7 @@ export function createDeusHost(): DeusHost {
     );
   }
 
-  function statusOf(row: Row, ended?: TurnEnded): SessionStatus {
+  function statusOf(row: Row, stopped: boolean): SessionStatus {
     const id = row.session_id;
     if (row.state === "archived" || row.is_hidden) return "archived";
     if (!id) return row.state === "error" ? "error" : "setting_up";
@@ -464,7 +464,7 @@ export function createDeusHost(): DeusHost {
     if (pendingFor(id).some((request) => waitingOf(request))) return "needs_input";
     if (holdingTurn(id)) return "working";
     if (row.s_status === "error") return "error";
-    return setupStop(id) || ended?.outcome === "cancelled" ? "stopped" : "idle";
+    return stopped ? "stopped" : "idle";
   }
 
   /** The entries the rows make: each workspace's chats by their number, its first before its row exists. */
@@ -479,7 +479,9 @@ export function createDeusHost(): DeusHost {
       const chat = row.chat ?? (counted.get(row.workspace_id) ?? 0) + 1;
       counted.set(row.workspace_id, chat);
       const last = ended.get(id);
-      const status = statusOf(row, last?.turn);
+      const stoppedInSetup = setupStop(id);
+      const status = statusOf(row, !!stoppedInSetup || last?.turn.outcome === "cancelled");
+      const cancelledBy = stoppedInSetup?.by ?? last?.turn.cancelledBy;
       if (status === "error" && row.error_category === "usage_limit") limited.add(id);
       // The workspace's title and time stand in only for a first chat with no row yet.
       const title = row.session_id ? row.s_title : row.ws_title;
@@ -504,6 +506,7 @@ export function createDeusHost(): DeusHost {
           chat,
           current: row.current_session_id ? row.current_session_id === id : chat === 1,
           status,
+          ...(status === "stopped" && cancelledBy ? { cancelledBy } : {}),
           startedBy: readOrigin(row.s_started_by ?? (row.session_id ? null : row.ws_started_by)),
           harness: knownHarness(row.agent_harness),
           ...(title ? { title } : {}),
