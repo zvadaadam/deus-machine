@@ -15,6 +15,8 @@ const child = spawn(
     stdio: 'inherit',
     env: {
       ...process.env,
+      // This bootstrap serves checkouts only, including dev:web and dev:backend.
+      DEUS_DEV_ROOT: path.join(__dirname, '../..'),
       // Point tsx at the backend tsconfig so @shared/* path aliases resolve
       TSX_TSCONFIG_PATH: path.join(__dirname, 'tsconfig.json'),
     },

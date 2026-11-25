@@ -8,6 +8,7 @@ export interface RuntimePathOptions {
   platform: NodeJS.Platform;
   homeDir: string;
   xdgDataHome?: string;
+  devRoot?: string;
 }
 
 export interface RuntimeStagePaths {
@@ -22,6 +23,8 @@ export interface RuntimeStagePaths {
 }
 
 export function resolveDefaultDataDir(options: RuntimePathOptions): string {
+  if (options.devRoot) return path.join(options.devRoot, "database");
+
   if (options.platform === "darwin") {
     return path.posix.join(options.homeDir, "Library", "Application Support", DEUS_APP_ID);
   }

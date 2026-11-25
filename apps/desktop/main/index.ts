@@ -13,6 +13,7 @@
  */
 
 import { app, BrowserWindow, ipcMain, session, shell, type IpcMainInvokeEvent } from "electron";
+import { mkdirSync } from "node:fs";
 import { join } from "path";
 import { homedir } from "os";
 import { is } from "@electron-toolkit/utils";
@@ -60,13 +61,17 @@ import { resolveDefaultDataDir } from "../../../shared/runtime";
 // DEUS_USER_DATA_DIR isolates a whole app instance (dev parallel instances,
 // e2e runs) WITHOUT overriding HOME — a HOME override breaks macOS Keychain
 // resolution and with it safeStorage, which the credential vault requires.
+const userDataOverride = process.env.DEUS_USER_DATA_DIR;
+const devRoot = app.isPackaged || userDataOverride ? undefined : app.getAppPath();
 const canonicalUserDataPath =
-  process.env.DEUS_USER_DATA_DIR ||
+  userDataOverride ||
   resolveDefaultDataDir({
     platform: process.platform,
     homeDir: process.env.HOME || homedir(),
     xdgDataHome: process.env.XDG_DATA_HOME,
+    devRoot,
   });
+if (devRoot) mkdirSync(canonicalUserDataPath, { recursive: true });
 app.setPath("userData", canonicalUserDataPath);
 
 if (!app.requestSingleInstanceLock()) {
