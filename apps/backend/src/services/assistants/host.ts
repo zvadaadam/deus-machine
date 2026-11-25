@@ -616,6 +616,7 @@ export function createDeusHost(): DeusHost {
     settings: TurnSettings
   ) {
     const first = firsts.get(sessionId);
+    if (first) first.claimed = true;
     try {
       mayTouch(caller, sessionId);
       if (input.title) {
@@ -630,7 +631,6 @@ export function createDeusHost(): DeusHost {
           "UPDATE workspaces SET title = ? WHERE first_session_id = ? AND title IS NULL"
         ).run(input.title, sessionId);
       }
-      if (first) first.claimed = true;
       await sendMessage(
         { sessionId, content: input.message, turnId: input.turnId, ...settings },
         input.origin

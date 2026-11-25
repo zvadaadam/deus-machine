@@ -362,7 +362,8 @@ async function sendMessageOnce(
       }
       if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
         // The engine's end can reach a waiting row while this strict send still holds the chat.
-        refuseTurn(sessionId, turnId, lastTurn(sessionId) !== last ? "busy_after_end" : undefined);
+        if (lastTurn(sessionId) !== last) refuseTurn(sessionId, turnId, "busy_after_end");
+        else refuseTurn(sessionId, turnId);
         throw new ChatBusyError(
           "The agent is still working — wait for the current turn to finish."
         );
