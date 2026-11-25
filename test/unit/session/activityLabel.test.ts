@@ -1,4 +1,6 @@
 import { expect, it } from "vitest";
+import { TELL_USER } from "@shared/agent-message";
+import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
 import type { Part, ToolPart } from "@shared/protocol-types";
 import { activityLabel } from "@/features/session/ui/utils/activityLabel";
 
@@ -91,4 +93,19 @@ it("labels a work run while its trailing native words stream", () => {
     state: "streaming",
   };
   expect(activityLabel([tool("Read", done), text], true)).toBe("Typing… · 1 tool call");
+});
+
+it("labels an in-flight tell_user call as Typing… instead of raw tool name", () => {
+  const pendingSend = tool(
+    `mcp__${DEUS_TOOLS_SERVER}__${TELL_USER}`,
+    { status: "pending", partialInput: '{"message":"Checking' },
+    { mcp: { server: DEUS_TOOLS_SERVER, tool: TELL_USER } }
+  );
+  const runningSend = tool(
+    `mcp__${DEUS_TOOLS_SERVER}__${TELL_USER}`,
+    { ...running, input: { message: "Checking" } },
+    { mcp: { server: DEUS_TOOLS_SERVER, tool: TELL_USER } }
+  );
+  expect(activityLabel([pendingSend], true)).toBe("Typing… · 1 tool call");
+  expect(activityLabel([runningSend], true)).toBe("Typing… · 1 tool call");
 });

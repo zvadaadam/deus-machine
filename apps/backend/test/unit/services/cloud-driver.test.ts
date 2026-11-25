@@ -204,11 +204,13 @@ function makeHandler() {
     hydrateCloudSnapshot: vi.fn(),
     beginTurn: vi.fn(() => true),
     abortTurn: vi.fn(() => true),
+    wasTurnAdmitted: vi.fn(() => false),
     giveUpTurn: vi.fn(),
     confirmTurn: vi.fn(),
     handleEventGap: vi.fn(),
     settleEventGap: vi.fn(),
     liveTurnId: vi.fn(() => undefined as string | undefined),
+    lastOutputAt: vi.fn(),
     handleTitle: vi.fn(),
   };
 }

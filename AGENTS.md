@@ -235,11 +235,17 @@ The rules above `transition` in `services/agent/queue.ts` say who may resume eac
 During local app setup, Stop returns the chat to idle at once, except for an agent's or
 assistant's first task, which ends in an error saying it was not delivered. The person
 keeps their draft, a queue head waits first, and an operator's send is refused
-with “Stopped before it started.” Once the start request reaches the wire, Stop
+with “Stopped before it started.” `turn()` reports that send cancelled, and by whom,
+until the chat's next admission or a restart. The transcript does not show it.
+Once the start request reaches the wire, Stop
 waits for its answer (up to 30 seconds) and cancels the turn if it is still live.
+If the start reply is lost after the turn's events arrive, the chat keeps working
+and its queue advances at the turn's end.
 If the engine reports no active turn, the chat settles at once. A confirmed cancel withdraws the cards
 and keeps the chat occupied for final echoes. If no end arrives within 15 seconds of confirmation, the watchdog
-frees the chat, records the local end and returns unread steers to the queue. A late engine end can update the outcome.
+frees the chat, records the local end and returns unread steers to the queue. Windows following the chat
+reread it if that turn has a message. A late engine end can update the outcome.
+A late read removes its recovered steer and withdraws the retry if it is still in app setup.
 If the cancel is unconfirmed and the turn is still live, the watchdog records a warning and leaves it running.
 Resume appears above held rows, even before the turn ends. At a usage limit, pressing Continue
 before the reported reset schedules a turn one minute after it. The person can enable this for future limits in Settings.
@@ -564,13 +570,15 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   not listed); a workspace being set up is its first chat under the id minted
   with it (`first_session_id`). Who started each workspace, chat and message
   is kept (`started_by`, `messages.origin`), and the agent reading a message
-  is told who sent it. On a working chat, `send_message` steers the turn it saw by
+  is told who sent it. `list_sessions` dates a working chat by its last agent event, or
+  its send until one arrives. Other chats use their last prompt or turn end, whichever is later.
+  On a working chat, `send_message` steers the turn it saw by
   default. If the turn ends before reading the message, it goes first in the queue.
   A kept steer runs only as its own turn, even with `send_now`. The host finds read
   steers in `messages.steer_id` and kept ones in `turns.outcome.undeliveredSteers`.
   For a new workspace, `start` holds the first task until its chat is ready and sends
-  it as the turn the package minted. A stop drops it. If setup takes over 30 minutes,
-  the chat says its first task could not be delivered. At its commit, in one synchronous step, the host refuses
+  it as the turn the package minted. A stop drops it. If setup takes over 30 minutes
+  or the first send fails, the chat says so unless another turn took it. At its commit, in one synchronous step, the host refuses
   (`Refused`): a start by an archived chat or into an archived workspace; a
   fourth agent-started local workspace while three are starting or running setup.
   It also refuses an archive whose members are still starting, still working
@@ -580,14 +588,15 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   read leaves it out, the current chat moves to the newest visible one, it
   takes no message and stops counting against its starter). A chat the person
   started is closed by the person; archive its workspace instead.
-  Archiving a workspace is the app's. A stop is of one turn, and records who
-  stopped it (`turns.cancelled_by`, the first stop that takes effect). Each
+  A workspace archive records the caller, including a calling chat's name. The first Stop that takes effect
+  records who stopped the turn, in memory only during app setup and in `turns.cancelled_by` once on the wire. Each
   host mutation re-reads what it depends on in the same synchronous step as
   its write (`mayStart`, `mayTouch`, `mayArchive`; a workspace's archive
   inside the app's archive queue). A chat's number is stored when it is
   made (`sessions.chat`, a trigger) and never moves. `list_models` shows each local agent's
   readiness beside its models using the same CLI and login check as Settings → AI Providers,
-  onboarding and `deus status` (`shared/agent-readiness.ts`). A follow-up uses the chat's
+  onboarding and `deus status` (`shared/agent-readiness.ts`). `start_session` gives the chosen agent's
+  check 3 seconds and refuses a reported sign-out before making a workspace or chat. A follow-up uses the chat's
   recorded model as its composer would (`turn-settings.ts`). Without a recorded model, the host
   uses the agent's default in the engine catalog (which can differ from the composer's
   account default because a send does not wait for a model list) or refuses the

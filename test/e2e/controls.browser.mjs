@@ -62,7 +62,7 @@ function App() {
 // Layout and copy feedback use their own page so the reference controls keep their layout.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
-import { ContentTabBar } from "@/app/layouts/ContentTabBar";
+import { WorkspaceTabBar } from "@/features/workspace-tabs";
 import { CopyButton } from "@/features/session/ui/tools/components/CopyButton";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -73,10 +73,32 @@ import { SettingsSidebar } from "@/features/settings/ui/SettingsSidebar";
 const client = new QueryClient();
 client.setQueryData(queryKeys.settings.all, {});
 function NoJumps() {
- const [tab, setTab] = useState("changes"), [pending, setPending] = useState(false);
+ const [tabs, setTabs] = useState([
+   { id: "t-changes", kind: "changes" as const },
+   { id: "t-files", kind: "files" as const },
+ ]);
+ const [activeTabId, setActiveTabId] = useState("t-changes");
+ const [pending, setPending] = useState(false);
  return <QueryClientProvider client={client}><TooltipProvider>
-   <ContentTabBar activeTab={tab} onTabChange={setTab} visibility={{}} />
-   <output data-testid="panel">{tab}</output>
+   <WorkspaceTabBar
+     tabs={tabs}
+     activeTabId={activeTabId}
+     onTabSelect={setActiveTabId}
+     onTabClose={(id) => setTabs((prev) => prev.filter((t) => t.id !== id))}
+     onTabAdd={() => {}}
+     onTabReorder={(draggedId, targetId) =>
+       setTabs((prev) => {
+         const from = prev.findIndex((t) => t.id === draggedId);
+         const to = prev.findIndex((t) => t.id === targetId);
+         if (from === -1 || to === -1) return prev;
+         const next = [...prev];
+         const [moved] = next.splice(from, 1);
+         next.splice(to, 0, moved);
+         return next;
+       })
+     }
+   />
+   <output data-testid="panel">{tabs.find((t) => t.id === activeTabId)?.kind}</output>
    <Tabs defaultValue="Pull Requests"><TabsList aria-label="References">
      {["Pull Requests", "Branches", "Tags", "History"].map(label =>
        <TabsTrigger key={label} value={label}><Link2/>{label}</TabsTrigger>)}
@@ -496,13 +518,12 @@ try {
     const sample = await browser.newPage({ reducedMotion, permissions: ["clipboard-write"] });
     await sample.clock.install();
     await sample.goto(url + "#no-jumps");
-    const strip = sample.getByRole("tablist", { name: "Content panel" });
+    const strip = sample.getByRole("tablist", { name: "Workspace tabs" });
     const files = strip.getByRole("tab", { name: "Files" });
     const panel = sample.getByTestId("panel");
     const timeline = await sample.context().newCDPSession(sample);
     // Hold the CSS timeline while input and React continue normally.
     await timeline.send("Animation.setPlaybackRate", { playbackRate: 0 });
-    const initialWidth = (await files.boundingBox()).width;
     await files.evaluate((tab) => {
       const selected = new MutationObserver(() => {
         tab.dataset.panelAtSelection = document.querySelector('[data-testid="panel"]').textContent;
@@ -512,36 +533,7 @@ try {
     });
     await files.click();
     await expect(files).toHaveAttribute("data-panel-at-selection", "files");
-    if (reducedMotion === "no-preference") {
-      await expect
-        .poll(() =>
-          files.evaluate((tab) =>
-            tab.getAnimations({ subtree: true }).map((a) => a.transitionProperty)
-          )
-        )
-        .toContain("grid-template-columns");
-    }
-    const travel = await files.evaluate((tab) => {
-      const width = () => tab.getBoundingClientRect().width;
-      const move = tab
-        .getAnimations({ subtree: true })
-        .find((a) => a.transitionProperty === "grid-template-columns");
-      let middle = null;
-      if (move) {
-        move.pause();
-        move.currentTime = move.effect.getTiming().duration / 2;
-        middle = width();
-        move.finish();
-      }
-      return { middle, end: width() };
-    });
-    assert(travel.end > initialWidth);
-    if (reducedMotion === "reduce") assert.equal(travel.middle, null, "Reduced motion snaps");
-    else
-      assert(
-        initialWidth < travel.middle && travel.middle < travel.end,
-        "The tab grows between its endpoints"
-      );
+    await expect(panel).toHaveText("files");
 
     const references = sample.getByRole("tablist", { name: "References" }).getByRole("tab");
     const fourth = await references.nth(3).boundingBox();
@@ -603,27 +595,9 @@ try {
     await timeline.send("Animation.setPlaybackRate", { playbackRate: 1 });
 
     const changes = strip.getByRole("tab", { name: "Changes" });
-    await changes.evaluate((button) => button.click());
-    await expect(changes).toHaveAttribute("aria-selected", "true");
-    await changes.hover();
-    await sample.clock.runFor(700);
-    await expect(changes).not.toHaveAttribute("aria-describedby", /.+/);
-    // Keep the pointer in the panel. Moving it to Files can dismiss the stale tooltip.
-    await panel.hover();
-    await files.evaluate((button) => button.click());
-    await strip.getByRole("tab", { name: "Files", selected: true }).waitFor();
-    await sample.clock.runFor(700);
-    await expect(sample.locator('[data-slot="tooltip-content"]:visible')).toHaveCount(0);
-
-    await changes.hover();
-    const hint = sample.getByRole("tooltip", { name: "Changes" });
-    await hint.waitFor();
-    await expect(changes).toHaveAttribute("aria-describedby", await hint.getAttribute("id"));
     await changes.click();
-    await hint.waitFor({ state: "detached" });
-    await panel.hover();
-    await files.hover();
-    await sample.getByRole("tooltip", { name: "Files" }).waitFor();
+    await expect(changes).toHaveAttribute("aria-selected", "true");
+    await expect(panel).toHaveText("changes");
     await sample.close();
   }
   console.log(

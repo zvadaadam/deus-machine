@@ -17,7 +17,7 @@ import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 
 import { useWorkingDuration } from "@/shared/hooks";
 import { useAutoScroll } from "../hooks";
-import { measureElement, useVirtualizer } from "@tanstack/react-virtual";
+import { useTranscriptVirtualizer } from "../hooks/useTranscriptVirtualizer";
 import { useCallback, useMemo, useRef, useEffect, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { CircularPixelGrid } from "./CircularPixelGrid";
@@ -204,8 +204,20 @@ export function Chat({
     [timeline]
   );
 
-  const { showScrollButton, handleScrollToBottomClick } = useAutoScroll({
-    running: !!agentMessages && active && !!openTurnId,
+  const liveTailIndex =
+    active && openTurnId
+      ? timeline.findLastIndex(
+          (row) => row.type === "assistant" && row.turnId === openTurnId && !row.ended
+        )
+      : -1;
+  const {
+    showScrollButton,
+    handleScrollToBottomClick,
+    transcriptRef,
+    liveTailRef,
+    preserveScrollPosition,
+  } = useAutoScroll({
+    running: active && !!openTurnId,
     // New messages can extend an existing turn; empty outcomes can add an
     // item without a message. Track both, independently of stable React keys.
     contentCount: messages.length + timeline.length,
@@ -223,25 +235,14 @@ export function Chat({
   }
   if (!showScrollButton && deferredTurns.size) setDeferredTurns(new Set());
 
-  const list = useRef<HTMLDivElement>(null);
-  const virtualizer = useVirtualizer({
+  const { list, listHeight, items, measure, loadOlder } = useTranscriptVirtualizer({
+    paneRef: messagesContainerRef,
     count: timeline.length,
-    getScrollElement: () => messagesContainerRef.current,
+    firstSeq: messages[0]?.seq,
     estimateSize,
-    overscan: 8,
     getItemKey,
-    measureElement: (element, entry, instance) => {
-      // Keep initial estimate corrections. Only followers track growth inside the visible turn.
-      instance.shouldAdjustScrollPositionOnItemSizeChange = entry
-        ? (item, delta, v) => {
-            // resizeItem scrolls before it records the new size. Give that scroll its measured range.
-            if (list.current) list.current.style.height = `${v.getTotalSize() + delta}px`;
-            const edge = delta > 0 && !showScrollButton ? item.start : item.end;
-            return edge <= (v.scrollOffset ?? 0);
-          }
-        : undefined;
-      return measureElement(element, entry, instance);
-    },
+    preserveScrollPosition,
+    onLoadOlder,
   });
 
   const progressSlot = (
@@ -277,14 +278,14 @@ export function Chat({
           />
         ) : (
           <>
-            <div className="flex min-h-0 min-w-0 flex-col pb-32">
+            <div ref={transcriptRef} className="flex min-h-0 min-w-0 flex-col pb-32">
               {/* Load-older button — shown at the top when there are older messages */}
               {hasOlder && (
                 <div className="flex h-10 items-center justify-center">
                   <button
                     type="button"
                     className="control-interaction text-muted-foreground hover:text-foreground bg-muted/50 hover:bg-muted flex items-center gap-2 rounded-full px-3 py-1.5 text-sm"
-                    onClick={onLoadOlder}
+                    onClick={loadOlder}
                     disabled={loadingOlder}
                   >
                     {loadingOlder ? (
@@ -304,13 +305,13 @@ export function Chat({
               <div
                 ref={list}
                 style={{
-                  height: virtualizer.getTotalSize(),
+                  height: listHeight,
                   width: "100%",
                   position: "relative",
                   overflowAnchor: "none", // TanStack already corrects the scroll position.
                 }}
               >
-                {virtualizer.getVirtualItems().map((virtualItem) => {
+                {items.map((virtualItem) => {
                   const turnIndex = virtualItem.index;
                   const turn = timeline[turnIndex];
                   if (!turn) return null;
@@ -340,7 +341,7 @@ export function Chat({
                   return (
                     <div
                       key={virtualItem.key}
-                      ref={virtualizer.measureElement}
+                      ref={measure}
                       data-index={virtualItem.index}
                       data-message-id={messageId}
                       style={{
@@ -352,6 +353,7 @@ export function Chat({
                       }}
                     >
                       <div
+                        ref={turnIndex === liveTailIndex ? liveTailRef : undefined}
                         className={cn(
                           spacingClass,
                           "chat-turn-wrapper min-w-0",

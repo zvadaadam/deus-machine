@@ -29,6 +29,7 @@
 // caller can change what the package's preflight read. A session's own calls
 // act as this computer.
 
+import { setTimeout as delay } from "node:timers/promises";
 import {
   OperatorError,
   Refused,
@@ -53,7 +54,7 @@ import {
 } from "@zvada/agent-server/operator";
 import type { Origin } from "@zvada/agent-server/protocol";
 import { withSentText } from "@shared/agent-message";
-import { agentReadiness } from "@shared/agent-readiness";
+import { agentReadiness, signedOutStart } from "@shared/agent-readiness";
 import type { AnyOp, InputOf, OutputOf } from "@shared/api/op";
 import * as sessions from "@shared/api/sessions";
 import { agentAuth, agentModels } from "@shared/api/settings";
@@ -91,11 +92,17 @@ import {
   DifferentTurnMessageError,
 } from "../../lib/errors";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
-import { liveTurnId } from "../agent/service";
+import { getLocalAgents, lastOutputAt } from "../agent/service";
 import { QueueLimitError, queuedMessages, enqueueMessage, steerMessage } from "../agent/queue";
 import { answer as answerToolRequest, pendingFor } from "../agent/tool-relay";
 import { continuedSettings, startSettings, type TurnSettings } from "../agent/turn-settings";
-import { sendMessage, stopSession } from "../agent/turns";
+import {
+  admittingAt,
+  currentTurnId,
+  sendMessage,
+  stoppedBeforeStart,
+  stopSession,
+} from "../agent/turns";
 import { invalidate, onInvalidate, runAsThisComputer as run } from "../query-engine";
 import { getServerName } from "../server-name";
 import { assertMayWrite, refusalFor, storedAccess } from "./access";
@@ -123,6 +130,14 @@ const originOf = (caller: Who): Origin =>
     : caller.speaksAs === "person"
       ? PERSON
       : { kind: "assistant", id: caller.id, name: caller.name ?? caller.id };
+
+function namedOrigin(caller: Who, entries: () => Entry[]): Origin {
+  const by = originOf(caller);
+  if (by.kind !== "session") return by;
+  const all = entries();
+  const own = all.find((entry) => entry.id === by.sessionId);
+  return own ? { ...by, name: refOf(own, all) } : by;
+}
 
 function readOrigin(text: string | null | undefined): Origin {
   if (!text) return PERSON;
@@ -165,7 +180,6 @@ interface Row {
   s_error: string | null;
   error_category: string | null;
   message_count: number | null;
-  s_updated_at: string | null;
 }
 
 const ROWS = `
@@ -174,7 +188,7 @@ const ROWS = `
     r.id AS repository_id, r.name AS repo_name, r.root_path,
     s.id AS session_id, s.status AS s_status, s.title AS s_title, s.agent_harness,
     s.started_by AS s_started_by, s.last_user_message_at, s.is_hidden, s.chat,
-    s.error_message AS s_error, s.error_category, s.message_count, s.updated_at AS s_updated_at
+    s.error_message AS s_error, s.error_category, s.message_count
   FROM workspaces w JOIN repositories r ON r.id = w.repository_id
   LEFT JOIN sessions s ON s.workspace_id = w.id
   WHERE w.kind != 'cloud'`;
@@ -217,7 +231,7 @@ function endedOf(
   };
 }
 
-/** A first task the host holds for a workspace being set up; `sending` once it is handed to the engine. */
+/** A first task the host holds while its workspace is being set up. */
 interface Held {
   caller: Who;
   workspaceId: string;
@@ -226,7 +240,6 @@ interface Held {
   unwatch: () => void;
   /** When it was held: one held past SETUP_LIMIT_MS is not sent. */
   since: number;
-  sending?: Promise<void>;
 }
 
 /** A turn's facts, as its row has them. */
@@ -420,7 +433,7 @@ export function createDeusHost(): DeusHost {
   }
 
   /** Each chat's last ended turn, in one read. */
-  function lastEnded(ids: readonly string[], includeReceipts = false): Map<string, TurnEnded> {
+  function lastEnded(ids: readonly string[], includeReceipts = false) {
     const found = getDatabase()
       .prepare(
         `SELECT session_id, turn_id, outcome, cancelled_by, MAX(ended_at) AS ended_at FROM turns
@@ -429,22 +442,21 @@ export function createDeusHost(): DeusHost {
       .all(JSON.stringify(ids)) as {
       session_id: string;
       turn_id: string;
+      ended_at: number;
       outcome: string | null;
       cancelled_by: string | null;
     }[];
     return new Map(
       found.map((t) => {
         const outcome = savedOutcome(t.outcome);
-        return [
-          t.session_id,
-          {
-            turnId: t.turn_id,
-            ...endedOf(t, outcome),
-            ...(includeReceipts && {
-              steers: steerReceipts(t.session_id, t.turn_id, outcome.undeliveredSteers),
-            }),
-          },
-        ];
+        const turn: TurnEnded = {
+          turnId: t.turn_id,
+          ...endedOf(t, outcome),
+          ...(includeReceipts && {
+            steers: steerReceipts(t.session_id, t.turn_id, outcome.undeliveredSteers),
+          }),
+        };
+        return [t.session_id, { turn, at: t.ended_at }];
       })
     );
   }
@@ -453,11 +465,12 @@ export function createDeusHost(): DeusHost {
     const id = row.session_id;
     if (row.state === "archived" || row.is_hidden) return "archived";
     if (!id) return row.state === "error" ? "error" : "setting_up";
-    if (firsts.has(id)) return "setting_up";
+    const current = currentTurnId(id);
+    if (firsts.has(id) && !current) return "setting_up";
     if (pendingFor(id).some((request) => waitingOf(request))) return "needs_input";
-    if (ACTIVE_TURN_STATUSES.includes(row.s_status ?? "") || liveTurnId(id)) return "working";
+    if (ACTIVE_TURN_STATUSES.includes(row.s_status ?? "") || current) return "working";
     if (row.s_status === "error") return "error";
-    return ended?.outcome === "cancelled" ? "stopped" : "idle";
+    return stoppedBeforeStart(id) || ended?.outcome === "cancelled" ? "stopped" : "idle";
   }
 
   /** The entries the rows make: each workspace's chats by their number, its first before its row exists. */
@@ -471,14 +484,16 @@ export function createDeusHost(): DeusHost {
       // Its stored number (made in order, never moved); a chat from before numbers counts on.
       const chat = row.chat ?? (counted.get(row.workspace_id) ?? 0) + 1;
       counted.set(row.workspace_id, chat);
-      const status = statusOf(row, ended.get(id));
+      const last = ended.get(id);
+      const status = statusOf(row, last?.turn);
       if (status === "error" && row.error_category === "usage_limit") limited.add(id);
       // The workspace's title and time stand in only for a first chat with no row yet.
       const title = row.session_id ? row.s_title : row.ws_title;
-      const activity = Math.max(
-        epochMs(row.last_user_message_at) ?? 0,
-        epochMs(row.session_id ? row.s_updated_at : row.ws_updated_at) ?? 0
-      );
+      const sent = epochMs(row.session_id ? row.last_user_message_at : row.ws_updated_at);
+      const activity =
+        status === "working"
+          ? (lastOutputAt(id) ?? admittingAt(id) ?? sent)
+          : Math.max(sent ?? 0, last?.at ?? 0);
       const root = computeWorkspacePath({ root_path: row.root_path, slug: row.slug });
       // Why: a failed start, or a first task that could not be delivered (no messages yet).
       const error = !row.session_id
@@ -625,18 +640,21 @@ export function createDeusHost(): DeusHost {
       );
     } catch (error) {
       const said = appRefusal(error);
-      undelivered(sessionId, said instanceof OperatorError ? refusalSentence(said) : "");
+      const why = said instanceof OperatorError ? refusalSentence(said) : "";
+      undelivered(sessionId, input.turnId, why);
       throw said;
     }
   }
 
-  /** The chat's first task was not delivered: its error says so, and why. */
-  function undelivered(sessionId: string, why: string) {
+  /** A competing turn owns the chat even before its first message or while still in app setup. */
+  function undelivered(sessionId: string, turnId: string, why: string) {
     getDatabase()
       .prepare(
-        "UPDATE sessions SET status = 'error', error_message = ? WHERE id = ? AND message_count = 0"
+        `UPDATE sessions SET status = 'error', error_message = ? WHERE id = ? AND message_count = 0
+         AND status NOT IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})
+         AND NOT EXISTS (SELECT 1 FROM turns WHERE session_id = sessions.id AND turn_id != ?)`
       )
-      .run(`${NOT_DELIVERED}${why ? ` ${why}` : ""}`, sessionId);
+      .run(`${NOT_DELIVERED}${why ? ` ${why}` : ""}`, sessionId, ...ACTIVE_TURN_STATUSES, turnId);
     invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
   }
 
@@ -647,7 +665,7 @@ export function createDeusHost(): DeusHost {
 
   /**
    * Hold the first task until its chat is ready. A failed, archived or over-age
-   * start drops it. During engine admission a stop waits and uses the minted id.
+   * start drops it. Stop aborts app setup at once and waits for a start already on the wire.
    */
   function hold(sessionId: string, held: Omit<Held, "unwatch" | "since">) {
     const stop = onInvalidate((resources) => {
@@ -656,7 +674,7 @@ export function createDeusHost(): DeusHost {
     const entry: Held = { ...held, since: Date.now(), unwatch: stop };
     firsts.set(sessionId, entry);
     function look() {
-      if (firsts.get(sessionId) !== entry || entry.sending) return;
+      if (firsts.get(sessionId) !== entry) return;
       const w = getDatabase()
         .prepare("SELECT state, current_session_id FROM workspaces WHERE id = ?")
         .get(held.workspaceId) as { state: string; current_session_id: string | null } | undefined;
@@ -664,11 +682,11 @@ export function createDeusHost(): DeusHost {
       else if (w.state === "ready" && w.current_session_id === sessionId) {
         if (Date.now() - entry.since > SETUP_LIMIT_MS) {
           drop(sessionId);
-          undelivered(sessionId, "Setup took longer than 30 minutes.");
+          undelivered(sessionId, held.input.turnId, "Setup took longer than 30 minutes.");
           return;
         }
         entry.unwatch();
-        entry.sending = sendFirst(held.caller, sessionId, held.input, held.settings)
+        void sendFirst(held.caller, sessionId, held.input, held.settings)
           .catch(() => {})
           .finally(() => {
             firsts.delete(sessionId);
@@ -683,11 +701,11 @@ export function createDeusHost(): DeusHost {
 
   /** The chat's turn ended or not, read again at each change, for a stop to confirm. */
   async function ended(sessionId: string, turnId: string): Promise<boolean> {
-    if (liveTurnId(sessionId) !== turnId) return true;
+    if (currentTurnId(sessionId) !== turnId) return true;
     return new Promise<boolean>((resolve) => {
       const timer = setTimeout(() => finish(false), STOP_WAIT_MS);
       const stop = onInvalidate(() => {
-        if (liveTurnId(sessionId) !== turnId) finish(true);
+        if (currentTurnId(sessionId) !== turnId) finish(true);
       });
       function finish(done: boolean) {
         clearTimeout(timer);
@@ -699,16 +717,9 @@ export function createDeusHost(): DeusHost {
 
   /** Stop this turn, by whoever asks, and confirm its end. */
   async function stopTurn(caller: Who, sessionId: string, turnId: string): Promise<CancelOutcome> {
-    if (liveTurnId(sessionId) !== turnId) return "not_running";
+    if (currentTurnId(sessionId) !== turnId) return "not_running";
     mayTouch(caller, sessionId);
-    // Named like a send's sender, so every reader sees who stopped it, not an id.
-    let by = originOf(caller);
-    if (by.kind === "session") {
-      const all = everything();
-      const own = all.find((e) => e.id === (by as { sessionId: string }).sessionId);
-      if (own) by = { ...by, name: refOf(own, all) };
-    }
-    const { unconfirmed } = await stopSession({ sessionId }, by);
+    const { unconfirmed } = await stopSession({ sessionId }, namedOrigin(caller, everything));
     if (unconfirmed) return "unconfirmed";
     return (await ended(sessionId, turnId)) ? "stopped" : "unconfirmed";
   }
@@ -747,7 +758,7 @@ export function createDeusHost(): DeusHost {
           "unsupported",
           `send_message: this chat's agent ${JSON.stringify(session.agent_harness)} does not run here. Nothing was sent.`
         );
-      if (firsts.has(sessionId))
+      if (firsts.has(sessionId) && !currentTurnId(sessionId))
         throw new Refused({ code: "busy", detail: "This chat is being set up." });
       const { turns } = await run(sessions.messages, { sessionId, limit: 50 });
       const settings = continuedSettings(harness, turns);
@@ -783,8 +794,8 @@ export function createDeusHost(): DeusHost {
       if (!getSessionRaw(db, sessionId))
         return { status: entry.status, note: entry.note, turns: [], waiting: [] };
       // The cursor is where the read ended: the last message of a turn that has ended (a
-      // turn still running is read again, whole, next time), and the last turn end it saw.
-      const after = options.after === undefined ? undefined : /^(\d+)\.(\d+)$/.exec(options.after);
+      // running turn is read again whole), the last stored end and any setup stop's turn id.
+      const after = options.after?.match(/^(\d+)\.(\d+)(?:\.(.+))?$/s);
       if (options.after !== undefined && !after)
         throw new OperatorError("stale_cursor", "That cursor is not this host's.");
       const rows = after
@@ -806,8 +817,11 @@ export function createDeusHost(): DeusHost {
             cancelled_by: null,
           })),
       ];
-      const running = liveTurnId(sessionId);
-      const last = lastEnded([sessionId], true).get(sessionId);
+      const running = currentTurnId(sessionId);
+      const stopped = stoppedBeforeStart(sessionId);
+      const last = stopped
+        ? { ...stopped, steers: {} }
+        : lastEnded([sessionId], true).get(sessionId)?.turn;
       const turns: ViewTurn[] = facts.map((fact) => {
         const outcome = savedOutcome(fact.outcome);
         const how = fact.turn_id === running || !fact.ended_at ? undefined : endedOf(fact, outcome);
@@ -827,6 +841,9 @@ export function createDeusHost(): DeusHost {
             })),
         };
       });
+      const stoppedId = stopped?.turnId;
+      if (stopped && after?.[3] !== stoppedId && !turns.some((t) => t.turnId === stoppedId))
+        turns.push({ ...stopped, messages: [] });
       const read = rows.at(-1)?.seq ?? (after ? Number(after[1]) : 0);
       // Not past the first message of a turn that has not ended: its messages still change.
       const open = (
@@ -849,7 +866,7 @@ export function createDeusHost(): DeusHost {
         note: entry.note,
         turns,
         waiting: pendingFor(sessionId).flatMap((request) => waitingOf(request) ?? []),
-        cursor: `${seq}.${endMark ?? 0}` as never,
+        cursor: `${seq}.${endMark ?? 0}${stoppedId ? `.${stoppedId}` : ""}` as never,
         ...(running ? { running } : {}),
         ...(last ? { lastEnded: last } : {}),
         // A read with a cursor continues from it: what precedes the page was read already.
@@ -860,8 +877,11 @@ export function createDeusHost(): DeusHost {
     },
 
     async turn(_caller, sessionId, turnId): Promise<TurnFact> {
-      if (liveTurnId(sessionId) === turnId)
+      if (currentTurnId(sessionId) === turnId)
         return { state: "running", steers: steerReceipts(sessionId, turnId) };
+      const stopped = stoppedBeforeStart(sessionId);
+      if (stopped?.turnId === turnId)
+        return { state: "ended", outcome: stopped.outcome, cancelledBy: stopped.cancelledBy };
       const row = getDatabase()
         .prepare(
           "SELECT ended_at, outcome, cancelled_by FROM turns WHERE session_id = ? AND turn_id = ?"
@@ -918,6 +938,13 @@ export function createDeusHost(): DeusHost {
             "invalid_input",
             `start_session: agent: ${JSON.stringify(input.harness)} does not run here; the agents are ${AGENT_NAMES}. Nothing was started.`
           );
+        // A cold CLI check can take seconds. Only a known sign-out refuses a start.
+        const status = await Promise.race([
+          Promise.resolve().then(() => getLocalAgents().status(harness)),
+          delay(3_000, undefined, { ref: false }),
+        ]).catch(() => undefined);
+        const refusal = status && signedOutStart(status, harness);
+        if (refusal) throw new OperatorError("unsupported", refusal);
         const settings = await startSettings(harness, input);
         if (input.workspace) {
           const workspaceId = input.workspace.id;
@@ -952,11 +979,7 @@ export function createDeusHost(): DeusHost {
         if (turnId) return stopTurn(caller, sessionId, turnId);
         const held = firsts.get(sessionId);
         if (!held) return "not_running";
-        if (held.sending) {
-          // Being handed to the engine: wait for its admission, then stop it by its minted id.
-          await held.sending;
-          return stopTurn(caller, sessionId, held.input.turnId);
-        }
+        if (currentTurnId(sessionId)) return stopTurn(caller, sessionId, held.input.turnId);
         assertMayWrite(appCaller(caller));
         drop(sessionId);
         return "first_task_dropped";
@@ -996,7 +1019,7 @@ export function createDeusHost(): DeusHost {
           await archiveWorkspace(
             target.id,
             () => mayArchive(caller, members(), everything()),
-            originOf(caller)
+            namedOrigin(caller, everything)
           );
           return {
             note: `Its branch${w.git_branch ? ` ${JSON.stringify(w.git_branch)}` : ""} and changes are kept.`,

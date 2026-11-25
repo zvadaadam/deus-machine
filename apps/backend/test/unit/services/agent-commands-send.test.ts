@@ -183,6 +183,7 @@ describeWithDb("sendMessage", () => {
       .spyOn(agentService, "stopSession")
       .mockResolvedValue({ outcome: "no_active_turn" });
     const stopping = run(api.stopSession, { sessionId: SESSION });
+    vi.mocked(agentService.liveTurnId).mockReturnValue(undefined);
     refuse(new WireRequestError(WIRE_ERROR_CODES.shuttingDown, "server is shutting down"));
     await expect(first).rejects.toThrow();
     await expect(stopping).resolves.toEqual({ unconfirmed: false });
@@ -195,7 +196,6 @@ describeWithDb("sendMessage", () => {
     expect(db.prepare("SELECT COUNT(*) AS n FROM turns WHERE turn_id = 'turn-7'").get()).toEqual({
       n: 0,
     });
-    vi.mocked(agentService.liveTurnId).mockReturnValue(undefined);
     await expect(send(SESSION, "turn-7")).resolves.toEqual({ turnId: "turn-7" });
     expect(startTurn).toHaveBeenCalledTimes(2);
   });

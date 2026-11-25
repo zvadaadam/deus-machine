@@ -21,6 +21,7 @@ export const groups = {
     "bun test/e2e/provider-accounts.browser.mjs",
     "bun test/e2e/model-picker.browser.mjs",
     "node test/e2e/query-protocol-hmr.browser.mjs",
+    "node test/e2e/chat-scroll.browser.mjs",
   ],
   journeys: [
     "bun run native:node",
