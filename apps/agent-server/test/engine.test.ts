@@ -32,7 +32,7 @@ it.each([false, true])(
       NODE_PATH: "/fixture/installed/modules",
       BUN_OPTIONS: "--no-env-file",
     };
-    const shellEnv = set
+    const shellEnv: Record<string, string> = set
       ? {
           NODE_ENV: "development",
           PORT: "4321",
