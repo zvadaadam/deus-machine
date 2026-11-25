@@ -121,6 +121,7 @@ import {
   admitTurn,
   claimTurn,
   forgetChatTurns,
+  lastTurn,
   holdingTurn,
   refuseTurn,
   releaseTurn,
@@ -1107,6 +1108,24 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       handler.handle(envelope(turnEnded({ stopReason: "cancelled", timestamp: T + 2 })));
       expect(lastOutcome()).toBeUndefined();
       expect(holdingTurn(SESSION)?.turnId).toBe("browser-turn");
+    });
+
+    it("admits a platform start after a snapshot terminal stamped by a faster desktop clock", () => {
+      restore({ currentTurnId: TURN });
+      // The driver synthesizes this envelope from a metadata-only terminal on reconnect.
+      handler.handle(envelope(turnEnded({ timestamp: T + 60_000 })));
+      mockPersistSessionWorking.mockClear();
+      handler.handle(
+        envelope({ type: "turn.started", sessionId: SESSION, turnId: "next", timestamp: T })
+      );
+      expect(holdingTurn(SESSION)?.turnId).toBe("next");
+      expect(mockPersistSessionWorking).toHaveBeenCalledExactlyOnceWith(SESSION);
+    });
+
+    it("leaves a quiet snapshot release open to a later native end", () => {
+      restore({ currentTurnId: TURN });
+      restore({ currentTurnId: null });
+      expect(lastTurn(SESSION)).toMatchObject({ turnId: TURN, nativeEnd: false });
     });
 
     it("keeps our pending send when the snapshot has not seen it yet", () => {

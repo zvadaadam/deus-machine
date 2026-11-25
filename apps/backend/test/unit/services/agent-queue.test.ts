@@ -757,6 +757,110 @@ describe("stopping the current turn", () => {
     }
   );
 
+  it("restores A's late engine error when B stops in app setup", async () => {
+    await send("A");
+    await outliveStop("A");
+    const release = holdAppSetup();
+    const stopped = expect(send("B")).rejects.toThrow("Stopped before it started");
+    emit({
+      type: "turn.ended",
+      sessionId,
+      turnId: "A",
+      timestamp: seq,
+      stopReason: "error",
+      error: { category: "auth", message: "Sign in to continue." },
+    });
+    expect(await run(api.session, { sessionId })).toMatchObject({
+      status: "working",
+      error_message: null,
+    });
+    await stop();
+    release();
+    await stopped;
+    expect(await run(api.session, { sessionId })).toMatchObject({
+      status: "error",
+      error_message: "Sign in to continue.",
+      error_category: "auth",
+    });
+    expect(await fact("B")).toMatchObject({ state: "ended", outcome: "cancelled" });
+  });
+
+  it("restores A's replay failure when its successful terminal beats B's busy answer", async () => {
+    await send("A");
+    engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "A" });
+    gap("replay_failed");
+    await vi.waitFor(() => expect(holdingTurn(sessionId)).toBeUndefined());
+    const prior = (await run(api.session, { sessionId }))!;
+    expect(prior.error_category).toBe("network");
+    const wire = pendingStart();
+    const refused = expect(sendMessage({ ...message("B"), turnId: "B" })).rejects.toThrow(
+      /working/
+    );
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "B"]));
+    end("A");
+    wire.reject(busyReply("A"));
+    await refused;
+    expect(await run(api.session, { sessionId })).toMatchObject({
+      status: "error",
+      error_category: "network",
+      error_message: prior.error_message,
+    });
+  });
+
+  it("keeps a later composer send behind the busy head until the named turn ends", async () => {
+    await send("A");
+    await outliveStop("A");
+    engine.startTurn.mockRejectedValueOnce(busyReply("A"));
+    await expect(send("B")).resolves.toEqual({ turnId: "B", queued: true });
+    await expect(send("C")).resolves.toEqual({ turnId: "C", queued: true });
+    expect(starts()).toEqual(["A", "B"]);
+    expect(await ids()).toEqual(["B", "C"]);
+    end("A");
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "B"]));
+    end("B");
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "B", "C"]));
+  });
+
+  it("waits for the winner named by busy even when a different late end beats the reply", async () => {
+    await send("A");
+    await outliveStop("A");
+    const wire = pendingStart();
+    const sending = send("B");
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "B"]));
+    end("A");
+    wire.reject(busyReply("winner"));
+    await sending;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(starts()).toEqual(["A", "B"]);
+    emit({ type: "turn.started", sessionId, turnId: "winner", timestamp: seq });
+    end("winner");
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "B"]));
+  });
+
+  it("stores a local end before the queue can claim its next turn", async () => {
+    vi.useFakeTimers();
+    await sendInOrder("A", "B");
+    await stopped("A");
+    await resumeInWindow();
+    const stored = vi.fn(() =>
+      db
+        .prepare("SELECT ended_at FROM turns WHERE session_id = ? AND turn_id = 'A'")
+        .pluck()
+        .get(sessionId)
+    );
+    const unwatch = onInvalidate(() => {
+      if (holdingTurn(sessionId)?.turnId === "B") stored();
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(starts()).toEqual(["A", "B"]);
+      expect(stored).toHaveBeenCalled();
+      expect(stored.mock.results[0]!.value).toEqual(expect.any(Number));
+    } finally {
+      unwatch();
+    }
+  });
+
   it("keeps the last pre-wire end until the next turn is released", async () => {
     let previous: string | undefined;
     for (const id of ["A", "B", "C"]) {
@@ -1393,6 +1497,37 @@ describe("messages held for a local chat", () => {
       expect(await ids()).toEqual([]);
       end("B");
       expect(await run(api.session, { sessionId })).toMatchObject({ status: "idle" });
+    }
+  );
+
+  it.each(["watchdog", "replay gap"] as const)(
+    "keeps the %s settlement after a busy send and an unconfirmed Stop without a holder",
+    async (settlement) => {
+      vi.useFakeTimers();
+      await send("A");
+      engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "A" });
+      if (settlement === "watchdog") {
+        await stop();
+        await vi.advanceTimersByTimeAsync(15_000);
+      } else {
+        gap("replay_failed");
+        await vi.advanceTimersByTimeAsync(0);
+      }
+      const { status, error_message, error_category } = (await run(api.session, { sessionId }))!;
+      expect(status).toBe(settlement === "watchdog" ? "idle" : "error");
+      engine.startTurn.mockRejectedValueOnce(busyReply("A"));
+      await expect(send("B")).resolves.toEqual({ turnId: "B", queued: true });
+      expect(holdingTurn(sessionId)).toBeUndefined();
+
+      engine.cancelTurn.mockRejectedValueOnce(new Error("link dropped"));
+      await expect(stop()).resolves.toEqual({ unconfirmed: true });
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(await run(api.session, { sessionId })).toMatchObject({
+        status,
+        error_message,
+        error_category,
+      });
+      expect(await queue()).toMatchObject({ paused: "stopped", items: [waitingRow("B")] });
     }
   );
 

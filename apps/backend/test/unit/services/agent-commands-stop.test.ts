@@ -304,6 +304,29 @@ describeWithDb("stopSession", () => {
     expect(status()).toBe("error");
   });
 
+  it("warns on an active row when the handler is lost before Stop is asked", async () => {
+    forgetChatTurns(SESSION);
+    vi.spyOn(agentService, "stopSession").mockRejectedValue(new Error("link dropped"));
+    await expect(stopSession({ sessionId: SESSION })).resolves.toEqual({ unconfirmed: true });
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(
+      db.prepare("SELECT status, error_message FROM sessions WHERE id = ?").get(SESSION)
+    ).toEqual({
+      status: "error",
+      error_message: "The agent never confirmed the stop request.",
+    });
+  });
+
+  it("disarms a detached Stop deadline on full teardown", async () => {
+    vi.spyOn(agentService, "stopSession").mockRejectedValue(new Error("link dropped"));
+    await stopSession({ sessionId: SESSION });
+    forgetChatTurns(SESSION);
+    await agentService.shutdown();
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(status()).toBe("working");
+  });
+
   it("keeps a failed wire call unconfirmed until its target turn settles", async () => {
     vi.spyOn(agentService, "stopSession").mockRejectedValue(new Error("socket closed"));
 
