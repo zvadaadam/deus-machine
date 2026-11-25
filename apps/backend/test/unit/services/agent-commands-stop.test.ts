@@ -111,7 +111,7 @@ describeWithDb("stopSession", () => {
       .mockResolvedValueOnce({ outcome: "cancelled", turnId: "turn-1" });
     const early = stopSession({ sessionId: SESSION }, { kind: "session", sessionId: "lead" });
     await stopSession({ sessionId: SESSION });
-    releaseTurn(SESSION, "turn-1", "native");
+    releaseTurn(SESSION, "turn-1", { type: "native" });
     const credit = () =>
       db
         .prepare<
@@ -151,13 +151,13 @@ describeWithDb("stopSession", () => {
     await vi.advanceTimersByTimeAsync(5_000);
     expect(status()).toBe("working");
     expect(vi.getTimerCount()).toBe(1);
-    releaseTurn(SESSION, "turn-1", "native");
+    releaseTurn(SESSION, "turn-1", { type: "native" });
     expect(vi.getTimerCount()).toBe(0);
   });
 
   it("goes idle when the confirmed turn has already ended", async () => {
     vi.spyOn(agentService, "stopSession").mockImplementation(async () => {
-      releaseTurn(SESSION, "turn-1", "native");
+      releaseTurn(SESSION, "turn-1", { type: "native" });
       return { outcome: "cancelled", turnId: "turn-1" };
     });
 
@@ -167,7 +167,7 @@ describeWithDb("stopSession", () => {
   });
 
   it("goes idle when there was no active turn to cancel", async () => {
-    releaseTurn(SESSION, "turn-1", "native");
+    releaseTurn(SESSION, "turn-1", { type: "native" });
     vi.spyOn(agentService, "stopSession").mockResolvedValue({ outcome: "no_active_turn" });
 
     await stopSession({ sessionId: SESSION });
@@ -266,7 +266,7 @@ describeWithDb("stopSession", () => {
       await stopSession({ sessionId: SESSION });
 
       // turn-1 ends, turn-2 is admitted, and the session is working again.
-      releaseTurn(SESSION, "turn-1", "native");
+      releaseTurn(SESSION, "turn-1", { type: "native" });
       admitTurn(SESSION, "turn-2", "start");
       db.prepare(`UPDATE sessions SET status = ? WHERE id = ?`).run(successorStatus, SESSION);
 
@@ -357,7 +357,7 @@ describeWithDb("stopSession", () => {
     "does not let a delayed %s reply change a successor turn",
     async (outcome) => {
       vi.spyOn(agentService, "stopSession").mockImplementation(async () => {
-        releaseTurn(SESSION, "turn-1", "native");
+        releaseTurn(SESSION, "turn-1", { type: "native" });
         admitTurn(SESSION, "turn-2", "start");
         return { outcome, turnId: "turn-1" };
       });
@@ -375,7 +375,7 @@ describeWithDb("stopSession", () => {
 
   it("captures the watchdog's target before an unconfirmed reply", async () => {
     vi.spyOn(agentService, "stopSession").mockImplementation(async () => {
-      releaseTurn(SESSION, "turn-1", "native");
+      releaseTurn(SESSION, "turn-1", { type: "native" });
       return { outcome: "unconfirmed", turnId: "turn-1" };
     });
     await stopSession({ sessionId: SESSION });
