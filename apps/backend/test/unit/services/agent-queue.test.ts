@@ -672,32 +672,19 @@ describe("stopping the current turn", () => {
     expect(starts()).toEqual(["A", "B"]);
   });
 
-  it("drains a resumed row when the pending operator start is refused after the stopped turn ends", async () => {
+  it("refuses the operator before the wire and drains the resumed row when the stopped turn ends", async () => {
     await sendInOrder("A", "C");
     await stopped("A");
     expect(await queue()).toMatchObject({ paused: "stopped", items: [waitingRow("C")] });
-    emit({
-      type: "error",
-      sessionId,
-      turnId: "A",
-      timestamp: seq,
-      message: "Failed",
-      category: "internal",
-      recoverable: false,
-    });
-    const wire = pendingStart();
-    const refused = expect(
+    fatalError("A");
+    await expect(
       host.send(chatCaller, sessionId, { turnId: "B", message: "Message B", origin: fromChat })
     ).rejects.toMatchObject({ refusal: { code: "busy" } });
-    await vi.waitFor(() => expect(starts()).toEqual(["A", "B"]));
     await resumeInWindow();
-    end("A", "cancelled");
-    expect(await run(api.session, { sessionId })).toMatchObject({ status: "idle" });
+    expect(starts()).toEqual(["A"]);
     expect(await queue()).toMatchObject({ paused: null, items: [waitingRow("C")] });
-
-    wire.reject(busyReply("A"));
-    await refused;
-    await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "C"]));
+    end("A", "cancelled");
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "C"]));
     expect(await queue()).toEqual({ paused: null, items: [] });
   });
 
