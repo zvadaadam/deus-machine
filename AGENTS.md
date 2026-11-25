@@ -230,7 +230,8 @@ Dragging a waiting row's grip, or using Space and the arrow keys, calls
 `moveQueuedMessage` to put it before another waiting row or last. The sending head
 stays first until its user echo is complete.
 A fatal error leaves the local turn holding its chat until it ends. A message the person sends then queues and waits for Resume after the failed end.
-After Stop, nothing waiting runs until Resume. A plain send to an idle chat starts at once.
+A plain send joins an open queue behind its waiting messages. After Stop, waiting messages
+stay held until Resume. A fresh send can still start an idle chat while its queue is held.
 An empty Stop or failure hold clears when its turn settles. A usage limit can hold an empty queue.
 The rules above `transition` in `services/agent/queue.ts` say who may resume each hold.
 During local app setup, Stop returns the chat to idle at once, except for an agent's or

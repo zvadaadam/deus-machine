@@ -391,9 +391,10 @@ export async function sendOrQueue(input: Input) {
   const queued = { turnId: message.turnId, queued: true as const };
   if (alreadyQueued(message)) return queued;
   const last = lastTurn(sessionId);
-  const admission = holdingTurn(sessionId)
-    ? previousSend(message, message.turnId)
-    : sendMessage(message);
+  const queue = queues.get(sessionId);
+  const behind = queue && !hold(queue) && queue.items.some((item) => stateOf(item) === "waiting");
+  const admission =
+    behind || holdingTurn(sessionId) ? previousSend(message, message.turnId) : sendMessage(message);
   if (admission) {
     try {
       return await admission;
@@ -404,7 +405,7 @@ export async function sendOrQueue(input: Input) {
       if (alreadyQueued(message)) return queued;
     }
   }
-  append(message, undefined, chat, !admission || lastTurn(sessionId) !== last);
+  append(message, undefined, chat, !behind && (!admission || lastTurn(sessionId) !== last));
   return queued;
 }
 
