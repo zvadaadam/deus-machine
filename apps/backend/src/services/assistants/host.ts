@@ -124,6 +124,14 @@ const originOf = (caller: Who): Origin =>
       ? PERSON
       : { kind: "assistant", id: caller.id, name: caller.name ?? caller.id };
 
+function namedOrigin(caller: Who, entries: () => Entry[]): Origin {
+  const by = originOf(caller);
+  if (by.kind !== "session") return by;
+  const all = entries();
+  const own = all.find((entry) => entry.id === by.sessionId);
+  return own ? { ...by, name: refOf(own, all) } : by;
+}
+
 function readOrigin(text: string | null | undefined): Origin {
   if (!text) return PERSON;
   try {
@@ -705,14 +713,7 @@ export function createDeusHost(): DeusHost {
   async function stopTurn(caller: Who, sessionId: string, turnId: string): Promise<CancelOutcome> {
     if (currentTurnId(sessionId) !== turnId) return "not_running";
     mayTouch(caller, sessionId);
-    // Named like a send's sender, so every reader sees who stopped it, not an id.
-    let by = originOf(caller);
-    if (by.kind === "session") {
-      const all = everything();
-      const own = all.find((e) => e.id === (by as { sessionId: string }).sessionId);
-      if (own) by = { ...by, name: refOf(own, all) };
-    }
-    const { unconfirmed } = await stopSession({ sessionId }, by);
+    const { unconfirmed } = await stopSession({ sessionId }, namedOrigin(caller, everything));
     if (unconfirmed) return "unconfirmed";
     return (await ended(sessionId, turnId)) ? "stopped" : "unconfirmed";
   }
@@ -1008,7 +1009,7 @@ export function createDeusHost(): DeusHost {
           await archiveWorkspace(
             target.id,
             () => mayArchive(caller, members(), everything()),
-            originOf(caller)
+            namedOrigin(caller, everything)
           );
           return {
             note: `Its branch${w.git_branch ? ` ${JSON.stringify(w.git_branch)}` : ""} and changes are kept.`,

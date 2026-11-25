@@ -1266,7 +1266,7 @@ describe("each commit re-reads what it depends on, with no await before its writ
         .get();
       expect(archived).toEqual({
         state: "archived",
-        archived_by: JSON.stringify(by),
+        archived_by: JSON.stringify(kind === "chat" ? { ...by, name: "lead:1" } : by),
         archived_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2} /),
       });
     }

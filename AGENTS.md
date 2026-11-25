@@ -574,7 +574,7 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   read leaves it out, the current chat moves to the newest visible one, it
   takes no message and stops counting against its starter). A chat the person
   started is closed by the person; archive its workspace instead.
-  Archiving a workspace is the app's. A stop is of one turn, and records who
+  A workspace archive records the caller, including a calling chat's name. A stop is of one turn, and records who
   stopped it (`turns.cancelled_by`, the first stop that takes effect). Each
   host mutation re-reads what it depends on in the same synchronous step as
   its write (`mayStart`, `mayTouch`, `mayArchive`; a workspace's archive
