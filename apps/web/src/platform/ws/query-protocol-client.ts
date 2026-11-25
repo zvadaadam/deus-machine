@@ -127,6 +127,17 @@ export function selectRuntime(serverId?: string): RuntimeClient {
     }
   );
   active = client;
+  if (typeof document !== "undefined") {
+    const wakeWhenVisible = () => {
+      if (document.visibilityState === "visible") client.wake();
+    };
+    window.addEventListener("online", client.wake);
+    document.addEventListener("visibilitychange", wakeWhenVisible);
+    client.onDispose(() => {
+      window.removeEventListener("online", client.wake);
+      document.removeEventListener("visibilitychange", wakeWhenVisible);
+    });
+  }
   setActiveQueryClient(client.queryClient);
   // The disposed client dropped its listeners; the app-wide ones move to this one.
   for (const entry of follows) entry.stop = entry.start(client);
