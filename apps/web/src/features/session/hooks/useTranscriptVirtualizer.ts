@@ -31,6 +31,7 @@ export function useTranscriptVirtualizer({
   firstSeq,
   estimateSize,
   getItemKey,
+  isChasing,
   preserveScrollPosition,
   onLoadOlder,
 }: {
@@ -39,6 +40,7 @@ export function useTranscriptVirtualizer({
   firstSeq: number | undefined;
   estimateSize: (index: number) => number;
   getItemKey: (index: number) => VirtualItem["key"];
+  isChasing: () => boolean;
   preserveScrollPosition: (restore: () => void) => void;
   onLoadOlder?: () => void;
 }) {
@@ -122,7 +124,8 @@ export function useTranscriptVirtualizer({
         const pane = instance.scrollElement;
         const content = list.current;
         if (!pane || !content || (anchor.current && anchorIndex >= 0)) return false;
-        if (content.offsetTop + item.end + delta > pane.scrollTop) return false;
+        if (isChasing()) return false;
+        if (content.offsetTop + item.end > pane.scrollTop) return false;
         // TanStack applies the correction before it publishes the new measured size.
         content.style.height = `${instance.getTotalSize() + delta}px`;
         return true;

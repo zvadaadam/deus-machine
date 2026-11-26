@@ -175,6 +175,18 @@ function rowOffset(id) {
   });
 }
 
+async function growRowPastTop(id, height) {
+  const crossing = await page.locator(`[data-message-id="${id}"]`).evaluate((row, height) => {
+    const viewportTop = row.closest("#chat-messages").getBoundingClientRect().top;
+    const oldEnd = row.getBoundingClientRect().bottom - viewportTop;
+    const spacer = globalThis.document.createElement("div");
+    spacer.style.height = `${height}px`;
+    row.firstElementChild.append(spacer);
+    return { oldEnd, newEnd: row.getBoundingClientRect().bottom - viewportTop };
+  }, height);
+  assert.ok(crossing.oldEnd <= 0 && crossing.newEnd > 0, JSON.stringify(crossing));
+}
+
 test("gentle upward movement pauses an active chase", async () => {
   await renderPane({ count: 1, height: 900 });
   await waitAtBottom("#pane");
@@ -275,6 +287,43 @@ test("live growth follows after a loading placeholder with the same message coun
   await waitAtBottom("#pane");
   await page.locator("#tail").evaluate((tail) => (tail.style.height = "1200px"));
   await waitAtBottom("#pane");
+});
+
+test("a row expanding above a parked reader keeps the first visible row in place", async () => {
+  await renderChat({ messages: history(1, 8) }, 300);
+  await waitAtBottom();
+  const pane = page.locator("#chat-messages");
+  await pane.locator('[data-message-id="user-5"]').evaluate((row) => {
+    const pane = row.closest("#chat-messages");
+    pane.scrollTop += row.getBoundingClientRect().top - pane.getBoundingClientRect().top + 8;
+  });
+  await waitFrames(18);
+  const before = await rowOffset("user-5");
+  assert.ok(
+    Math.abs(before + 8) <= 2,
+    `expected the first visible row 8 px above the edge, got ${before}`
+  );
+  assert.equal((await scrollPosition()).paused, true);
+
+  await growRowPastTop("reply-4", 160);
+  await waitFrames(18);
+  const after = await rowOffset("user-5");
+  assert.ok(Math.abs(after - before) <= 2, `first visible row moved from ${before} to ${after}`);
+});
+
+test("a reader at the bottom stays there when a row above grows after the chase idles", async () => {
+  await renderChat(liveUpdates(1), 300);
+  await waitAtBottom();
+  const before = await scrollPosition();
+  assert.equal(before.top, before.bottom);
+  assert.equal(before.paused, false);
+
+  await growRowPastTop("reply-4", 800);
+  await waitFrames(18);
+  const after = await scrollPosition();
+  assert.equal(after.bottom - before.bottom, 800);
+  assert.equal(after.top, after.bottom, "stay at the painted bottom after the row grows");
+  assert.equal(after.paused, false);
 });
 
 test("prepending with a concurrent append preserves the row through delayed measurement", async () => {

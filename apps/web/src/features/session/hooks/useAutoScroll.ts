@@ -349,6 +349,7 @@ export function useAutoScroll({
 
   return {
     showScrollButton,
+    isChasing: () => chaseRafRef.current !== null,
     stopChase,
     handleScrollToBottomClick: scrollToBottom,
     transcriptRef: setTranscriptNode,
