@@ -63,7 +63,7 @@ export function WorkspaceContentPane({
 
   const experimentalSettings = useSettings().data;
 
-  // Filter open tabs by current visibility gates (e.g. if Simulator is toggled off)
+  // Filter open tabs by current visibility gates
   const visibleWorkspaceTabs = useMemo(() => {
     const filtered = workspaceTabs.filter((tab) =>
       isWorkspaceTabVisible(tab, experimentalSettings, visibility)

@@ -103,51 +103,37 @@ In full access (`bypass_permissions`), the engine starts `agy` with `--dangerous
 Commands can use the network, commit in the worktree and write outside it. Switching into or out
 of full access restarts `agy` and resumes the conversation.
 
-### How agents drive a simulator (agent-device)
+### How agents use devices
 
-Agents drive iOS Simulators and Android emulators with the
-[`agent-device`](https://github.com/callstack/agent-device) CLI, which Deus
-ships: no skill, nothing to install, no tools of Deus's own.
+The Device tab streams iOS Simulators and Android emulators over WebRTC on an
+Apple silicon Mac in the desktop app or `dev:web`. Settings → Devices reads
+`deviceSupport` for the local runtime, Xcode and Android SDK and follows
+`deviceSetup` for installation progress. Opening the tab installs the pinned
+hub beside the database. The backend owns one loopback process and stops it
+three minutes after the last viewer leaves. A cloud workspace's Device tab
+shows the EAS viewer through the backend. Hosted web is chat-only.
 
-- **It ships.** `agent-device` is a dependency pinned exactly in `package.json`.
-  `scripts/runtime/agent-clis.ts` stages its package as `agent-device-package/`
-  beside the other CLIs and an `agent-device` launcher script that runs it with
-  the `deus-runtime` beside it (`BUN_BE_BUN=1`), or `bun` in a checkout's staged
-  folder. The npm CLI ships neither it nor the Simulator tab's engine. The bundled folder is first on PATH in the installed app, and the engine
-  puts it first in `dev` and `dev:web` (`agents/core/bundled-clis.ts`).
-- **Xcode.** At engine start on macOS, the backend gives the process (so every
-  agent and terminal) the developer directory the Simulator tab uses
-  (`simulatorEnv`), where none is named and `xcode-select` names the Command
-  Line Tools (`AgentLink.open` in `services/agent/client.ts`).
-- **The briefing.** Every harness's instructions carry a few lines on how to use
-  it (`AGENT_DEVICE` in `services/agent/workspace-context.ts`) and the Simulator
-  tab's device (`--udid`); `agent-device help <topic>` has the rest, versioned
-  with the CLI.
-- **Sessions.** Every turn sets `AGENT_DEVICE_SESSION` to the workspace's id
-  (`agentDeviceFor` in `services/simulator-context.ts`), so all chats of a
-  workspace share one agent-device session, as they share its Simulator tab. A
-  session holds its device until `close`, which leaves the app on screen and
-  the runner warm (the next `open` takes ~2 s, not the first build's ~50 s);
-  an unclosed one keeps it from other workspaces, and agent-device's daemon
-  outlives Deus while one is open, until 30 idle minutes end it
-  (`AGENT_DEVICE_SESSION_IDLE_TIMEOUT_MS`, set in `AgentLink.open`; a
-  recording counts as activity; the daemon reads it when it starts).
-- **Its own daemon.** `AgentLink.open` also sets `AGENT_DEVICE_STATE_DIR` to
-  `agent-device/` beside the database, so Deus's agent-device runs its own
-  daemon: a client refuses a daemon of any other version, newer or older ("The
-  running daemon cannot serve this client"; an older busy one "was not
-  replaced"), and a person's own agent-device is whatever version they
-  installed. Device claims, runner leases and the runner build cache stay in
-  `~/.agent-device`, shared, so two daemons refuse and hand over a simulator
-  between them.
-- **Recording.** A simulator recording (`recording_start` with target
-  `simulator`) is agent-device's `record start --hide-touches --scope device`
-  in the workspace's session (`packages/screen-studio/src/capture/simulator.ts`),
-  of the device the Simulator tab shows unless the agent names another (the
-  recording tools ask the backend, `agentDevice`). On stop, its gesture
-  telemetry becomes the recording's actions, which the edit zooms to and cuts
-  around. The agent's `agent-device close` ends the recording early;
-  `recording_stop` still returns it.
+- **Agents.** Deus ships the pinned `agent-device` CLI on the agents' PATH,
+  including on Intel Macs. `scripts/runtime/agent-clis.ts` stages the package
+  and its launcher, which runs it with `BUN_BE_BUN=1` and the bundled
+  `deus-runtime`, or Bun in a staged checkout. The npm CLI omits the bundled
+  agent-device and the local live view.
+- **Xcode.** Agents and the hub use the same `simulatorEnv` in
+  `services/device-hub/xcode-env.ts`. It respects `DEVELOPER_DIR` and finds
+  Xcode when `xcode-select` points at the Command Line Tools.
+- **Selection.** The visible Device tab follows its workspace and device.
+  `agentDeviceFor` gives the turn the iOS UDID or Android serial in that
+  subscription. Every harness gets the device in its briefing and
+  `AGENT_DEVICE_SESSION` set to the workspace ID. `agent-device help <topic>`
+  describes the CLI shipped with the app.
+- **Daemon.** `AgentLink.open` sets `AGENT_DEVICE_STATE_DIR` beside the
+  database and an idle timeout of 30 minutes. Device claims, runner leases and
+  the build cache are shared in `~/.agent-device`. Closing a session releases
+  the device and leaves the app on screen. A recording counts as activity.
+- **Recording.** `recording_start` with target `simulator` records the
+  selected iOS device or the one named by the agent. The recording and its
+  gestures come from the workspace's agent-device session. `recording_stop`
+  returns the result even if the agent closed the session first.
 
 ### WebSocket Query Protocol
 
@@ -156,7 +142,7 @@ Single WS connection (`/ws`) using `q:` prefixed JSON frames:
 | Frame                                    | Purpose                                                                                                    |
 | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `q:request` / `q:response`               | A read, answered once (`diffStats`, `messages`)                                                            |
-| `q:subscribe` / `q:snapshot` / `q:delta` | A live read, sent again on change (`workspaces`, `sessions`, `settings`, `relayStatus`)                     |
+| `q:subscribe` / `q:snapshot` / `q:delta` | A live read, sent again on change (`workspaces`, `sessions`, `settings`, `relayStatus`)                    |
 | `q:subscribe` / `q:event` / `q:reset`    | A stream of events, sent only to the connections following it (a chat's agent events, a terminal's output) |
 | `q:mutate` / `q:mutate_result`           | A write, never sent twice (archiveWorkspace, sendMessage, steerMessage, stopSession)                       |
 | `q:tool_response`                        | The answer to something an agent asked this client                                                         |
@@ -776,8 +762,8 @@ If the cloud computer cannot show the file, the chat says so.
 its Browser tab. On the web or a phone, the click opens a tab while Deus asks the host for the
 file's address. HTML previews need a direct connection. The `file-preview` route refuses a cloud
 workspace. `tabsFor` in `features/workspace-tabs/registry.ts` decides which tabs each workspace
-has. A cloud workspace's Browser and Simulator run on its computer and ignore this computer's
-settings. "New workspace from a pull request or
+has. In a cloud workspace connected through a backend, Browser and Device run on the cloud
+computer regardless of this computer’s settings. "New workspace from a pull request or
 branch" is local (`offersNewFromBranch`). The sidebar row and the place menu read every
 visible chat's activity (`placeActivity` in the menu). A waiting chat or an unseen reply can
 mark the row while another chat's working grid runs. A failed setup has its own mark.

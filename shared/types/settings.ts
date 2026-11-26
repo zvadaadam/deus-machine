@@ -10,7 +10,6 @@ export const PublicSettings = z
     /** A new chat starts at a level every offered model supports. */
     default_thinking_level: z.enum(["low", "medium", "high"]),
     continue_after_usage_limit: z.boolean(),
-    experimental_simulator: z.boolean(),
     experimental_browser: z.boolean(),
     remote_access_enabled: z.boolean(),
     /** Keep the plugged-in computer awake for a connected device. On by default. */
@@ -27,6 +26,7 @@ export type SettingsSection =
   | "general"
   | "github"
   | "browser"
+  | "devices"
   | "ai"
   | "cloud"
   | "environment"

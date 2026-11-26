@@ -14,13 +14,11 @@ const external = [
   "ws",
   // Sentry uses native crash-reporter hooks.
   "@sentry/node",
-  // The Claude SDK resolves its platform package at runtime. Device-use and
-  // its canvas load native code.
+  // The Claude SDK resolves its platform package at runtime. Canvas loads native code.
   "@anthropic-ai/claude-agent-sdk",
   "@napi-rs/canvas",
   "@napi-rs/canvas-darwin-arm64",
   "@napi-rs/canvas-darwin-x64",
-  "device-use",
 ];
 
 const IMPORT_META_URL = "__deusBundleUrl";

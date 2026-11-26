@@ -215,3 +215,11 @@ export interface AppEventMap {
 
 /** Union of all known app event names */
 export type AppEventName = keyof AppEventMap;
+
+/** The platform's verdict on one cloud device verb, verbatim: a failed verb is a result, not an error. */
+export interface CloudSimulatorExecResult {
+  success: boolean;
+  exitCode: number;
+  output: string;
+  error?: string;
+}

@@ -214,11 +214,8 @@ setToolResponseInterceptor((requestId, result, error) => {
 const REFETCH_DEBOUNCE_MS = 250;
 
 // ---- Device frames ----------------------------------------------------------
-// The platform's simulator.* frames have no fold surface; the Simulator tab
-// reads them from the cloud simulator store, which the Mac lane feeds from the
-// host's `cloudSimulatorEvents`. Publish them on that stream here so the SAME
-// store serves this lane. Web-direct rows are keyed by the session (the adapter's workspace
-// IS the session), hence workspaceId = sessionId.
+// Publish the platform’s device events on the same stream as the Mac backend.
+// A web-direct workspace is keyed by its session id.
 const SIMULATOR_FRAME_KINDS = new Map<string, CloudSimulatorEventKind>([
   ["simulator.status", "status"],
   ["simulator.screenshot", "screenshot"],

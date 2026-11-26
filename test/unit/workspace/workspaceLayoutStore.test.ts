@@ -34,16 +34,27 @@ describe("workspaceLayoutStore", () => {
     expect(resolved.activeTab).toEqual({ id: DEFAULT_NEW_TAB_ID, kind: "new-tab" });
   });
 
-  it("resets v12 layouts before the next workspace write", async () => {
+  it("remembers the chosen device with its workspace across a reload", async () => {
+    const deviceChoice = { key: "android:Pixel", started: true };
+    workspaceLayoutActions.setLayout("first", { deviceChoice });
+    const saved = storage.setItem.mock.lastCall![1];
+    workspaceLayoutActions.resetAll();
+    storage.getItem.mockReturnValueOnce(saved);
+    await useWorkspaceLayoutStore.persist.rehydrate();
+    expect(workspaceLayoutActions.getLayout("first").deviceChoice).toEqual(deviceChoice);
+    expect(workspaceLayoutActions.getLayout("second").deviceChoice).toBeNull();
+  });
+
+  it.each([12, 13])("resets v%i layouts before the next workspace write", async (version) => {
     workspaceLayoutActions.openFileTab("open", "before.md");
     storage.setItem.mockClear();
     storage.getItem.mockReturnValueOnce(
       JSON.stringify({
-        version: 12,
+        version,
         state: {
           layouts: {
             a: {
-              workspaceTabs: [{ id: "changes", kind: "changes" }, null],
+              workspaceTabs: [{ id: "old-device", kind: "simulator" }, null],
               activeWorkspaceTabId: "gone",
             },
             b: { workspaceTabs: { broken: true } },
@@ -53,14 +64,16 @@ describe("workspaceLayoutStore", () => {
     );
     await useWorkspaceLayoutStore.persist.rehydrate();
     expect(storage.setItem.mock.calls.map(([name, value]) => [name, JSON.parse(value)])).toEqual([
-      ["workspace-layout-store", { state: { layouts: {} }, version: 13 }],
+      ["workspace-layout-store", { state: { layouts: {} }, version: 14 }],
     ]);
     expect(useWorkspaceLayoutStore.getState().layouts).toEqual({});
     workspaceLayoutActions.openFileTab("a", "README.md");
+    workspaceLayoutActions.openToolTab("a", "device");
     const saved = JSON.parse(storage.setItem.mock.lastCall![1]);
-    expect(saved.version).toBe(13);
+    expect(saved.version).toBe(14);
     expect(saved.state.layouts.a.workspaceTabs).toEqual([
       { id: expect.any(String), kind: "file", path: "README.md" },
+      { id: expect.any(String), kind: "device" },
     ]);
   });
 

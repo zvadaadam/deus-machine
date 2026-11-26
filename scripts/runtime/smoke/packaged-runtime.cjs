@@ -1,8 +1,6 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { execFile, spawnSync } = require("node:child_process");
-const { promisify } = require("node:util");
 const { BUNDLED_CLIS } = require("../electron-builder-after-pack.cjs");
 const { ENGINE_STARTED, assertEngineStarted } = require("./engine-ready.cjs");
 const {
@@ -57,46 +55,11 @@ function readBackendPort(output) {
   return Number(match[1]);
 }
 
-function isCliAvailable(command) {
-  const result = spawnSync("sh", ["-c", `command -v ${JSON.stringify(command)}`], {
-    stdio: "ignore",
-    timeout: 2_000,
-  });
-  return result.status === 0;
-}
-
 async function smokeBackendCommands(port) {
-  if (process.platform !== "darwin") {
-    console.log("[runtime-smoke] packaged backend simulator command smoke skipped off macOS");
-    return;
-  }
-  if (!isCliAvailable("xcrun")) {
-    console.log(
-      "[runtime-smoke] packaged backend simulator command smoke skipped: xcrun unavailable"
-    );
-    return;
-  }
-
-  // The first simctl call on a fresh machine starts CoreSimulator, which can outlast the backend's
-  // 30 s. Where simctl itself does not answer, the backend's answer says nothing about the app.
-  try {
-    await promisify(execFile)("xcrun", ["simctl", "list", "devices", "-j"], {
-      timeout: 120_000,
-      maxBuffer: 64 * 1024 * 1024,
-    });
-  } catch (error) {
-    console.log(
-      `[runtime-smoke] packaged backend simulator command smoke skipped: simctl does not answer on this machine (${error.signal ?? error.code})`
-    );
-    return;
-  }
-  const answer = await readFromBackend(port, "simListDevices", {}, 45_000);
-  if (!Array.isArray(answer?.devices)) {
-    throw new Error(`simListDevices returned unexpected payload: ${JSON.stringify(answer)}`);
-  }
-  console.log(
-    `[runtime-smoke] packaged backend simulator q:request listed ${answer.devices.length} devices`
-  );
+  const support = await readFromBackend(port, "deviceSupport", {}, 30_000);
+  const expected = process.platform === "darwin" && process.arch === "arm64";
+  if ((support.liveView === "available") !== expected)
+    throw new Error("Unexpected packaged device support: " + support.liveView);
 }
 
 async function smokeBackend(runtimeBin, binDir) {

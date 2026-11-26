@@ -6,7 +6,6 @@ const root = path.resolve(__dirname, "../../../apps/web/src");
 const exceptions: Record<string, RegExp> = {
   "global.css":
     /shimmer 2s ease-in-out infinite|subtle-spin 2s linear infinite|tool-shimmer 2s linear infinite/g, // Initialization, spinner, pending tool.
-  "features/simulator/ui/SimulatorPanel.tsx": /animate-\[build-shimmer_[^\]]+_infinite\]/g, // Simulator build.
   "features/auth/ui/PairGatePage.tsx":
     /animate-\[pair-pulse_[^\]]+_infinite\]|type: "spring", stiffness: 300, damping: 20/g, // Waiting dots and the pairing success mark's overshoot.
   "features/connection/ui/ServerOfflinePage.tsx": /animate-\[waiting-dot_[^\]]+_infinite\]/g, // Waiting for a computer.

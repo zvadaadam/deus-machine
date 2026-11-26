@@ -306,7 +306,7 @@ below). If a third surface appears, revisit that.
 
 Boards `21` and `22` hold the surfaces that only ever appear as one state and so can't be
 components: every content tab's idle state (Files select/scanning/empty, Terminal with no
-tabs, Browser scanning / local-server list / nothing found, the Simulator device well, the
+tabs, Browser scanning / local-server list / nothing found, the Device panel, the
 Agent config rail), plus the FileViewer, `WorkspaceStatusDashboard`,
 the palette's workspace page, the AI-provider popover and the four update states.
 Board `22` also holds the Run app / environment settings controls and the cloud
@@ -565,9 +565,7 @@ screenshot of the app at rest:
   composer's own pill chrome is the whole overlay.
 - **Inspect prompt** — clicking an element with the picker opens a floating composer
   anchored to it, carrying the element as a `primary/8` chip.
-- **Simulator** — `DeviceFrame` with real device geometry (iPhone 17 Pro is 1206 × 2622
-  native), a header floating 10px above the screen so it never eats the device bounds, and
-  the heaviest shadow in the app: `0 24px 80px` at `foreground/12` plus a 1px ring.
+- **Device** — the local panel groups devices by platform in one picker, alongside Start, Home and Screenshot. Cloud workspaces connected through the backend embed the EAS viewer.
 
 ### Light mode
 
@@ -703,7 +701,7 @@ font-medium` text). Step 1, "Give your assistant this prompt", holds the prompt 
   240px panel in from the right; pinning switches to a resizable 75 / 25 split with the
   diff still on the **left**. Both states are drawn on board `18`.
 - **The content tab bar overflows.** `ALWAYS_PRIMARY_TAB_IDS` is
-  `changes · files · terminal · browser`, plus whatever tab is active. Design, Simulator
+  `changes · files · terminal · browser`, plus whatever tab is active. Design, Device
   and Agent live behind the `⋯` menu unless selected. Primary order follows
   `CONTENT_TABS`, so an active Design tab sits between Terminal and Browser.
 - **`PRActions` is `#N` first, then state.** The PR number link comes before the status

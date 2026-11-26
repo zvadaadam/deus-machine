@@ -19,6 +19,8 @@ import {
 import { match } from "ts-pattern";
 import type { Settings } from "@shared/types/settings";
 import { capabilities, type CapabilityName } from "@/platform/capabilities";
+import { localDeviceRenderer } from "@/features/device/useDeviceSupport";
+import { getDeploymentMode } from "@/shared/config/backend.config";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { deriveTitleFromUrl, isBlankUrl } from "@/features/browser/types";
 import { basenameOfPath, type ContentTab, type WorkspaceTab, type WorkspaceTabKind } from "./types";
@@ -26,16 +28,16 @@ import { basenameOfPath, type ContentTab, type WorkspaceTab, type WorkspaceTabKi
 export interface ContentTabVisibility {
   /** The selected workspace runs in the cloud. */
   cloud?: boolean;
-  /** This computer can serve the local simulator (simctl capability + flag). */
-  simulatorAvailable?: boolean;
+  /** This backend can install and stream local devices. */
+  deviceAvailable?: boolean;
 }
 
 /** The visibility input for a workspace: the one place a tab reads local or cloud. */
 export function tabsFor(
   workspace: { kind: string } | null | undefined,
-  simulatorAvailable = false
+  deviceAvailable = false
 ): ContentTabVisibility {
-  return { cloud: workspace?.kind === "cloud", simulatorAvailable };
+  return { cloud: workspace?.kind === "cloud", deviceAvailable };
 }
 
 export interface ToolDefinition {
@@ -47,8 +49,7 @@ export interface ToolDefinition {
   visibilityKey?: keyof Settings;
   /** Platform capability that must be true. Absent = always available. */
   capabilityGate?: CapabilityName;
-  /** Simulator tab needs a device to show: this Mac's local simulator. */
-  requiresSimulator?: boolean;
+  requiresDeviceView?: boolean;
   /** The gates above are this computer's own panel's: a cloud workspace's tab
    *  is served by the cloud computer and always shows. */
   localGates?: boolean;
@@ -89,14 +90,13 @@ const TOOL_DEFINITIONS: Record<ContentTab, ToolDefinition> = {
     keywords: ["explorer", "tree", "code", "folder", "browse"],
     icon: FolderOpen,
   },
-  simulator: {
-    label: "Simulator",
-    description: "Preview iOS & mobile apps",
-    keywords: ["ios", "iphone", "device", "mobile", "xcode"],
-    icon: Smartphone,
-    requiresSimulator: true,
-    visibilityKey: "experimental_simulator",
+  device: {
+    label: "Device",
+    description: "View and control an iOS or Android device",
+    keywords: ["ios", "android", "simulator", "emulator", "phone"],
+    requiresDeviceView: true,
     localGates: true,
+    icon: Smartphone,
   },
   config: {
     label: "Agent",
@@ -123,7 +123,7 @@ export const TAB_KIND_ICONS: Record<WorkspaceTabKind, typeof GitBranch> = {
   browser: TOOL_DEFINITIONS.browser.icon,
   changes: TOOL_DEFINITIONS.changes.icon,
   files: TOOL_DEFINITIONS.files.icon,
-  simulator: TOOL_DEFINITIONS.simulator.icon,
+  device: TOOL_DEFINITIONS.device.icon,
   config: TOOL_DEFINITIONS.config.icon,
 };
 
@@ -141,7 +141,7 @@ export function getWorkspaceTabTitle(tab: WorkspaceTab): string {
     .with(
       { kind: "changes" },
       { kind: "files" },
-      { kind: "simulator" },
+      { kind: "device" },
       { kind: "config" },
       ({ kind }) => TOOL_DEFINITIONS[kind].label
     )
@@ -159,7 +159,11 @@ export function isTabVisible(
   if (!item) return false;
   if (item.localGates && visibility.cloud === true) return true;
   if (item.capabilityGate && !capabilities[item.capabilityGate]) return false;
-  if (item.requiresSimulator && visibility.simulatorAvailable !== true) return false;
+  if (
+    item.requiresDeviceView &&
+    !(visibility.deviceAvailable && localDeviceRenderer(getDeploymentMode()))
+  )
+    return false;
   if (item.visibilityKey) return settings?.[item.visibilityKey] === true;
   return true;
 }

@@ -8,3 +8,4 @@ export { EnvironmentSection } from "./EnvironmentSection";
 export { SlackSection } from "./SlackSection";
 export { ExperimentalSection } from "./ExperimentalSection";
 export { AccessSection } from "./AccessSection";
+export { DevicesSection } from "./DevicesSection";

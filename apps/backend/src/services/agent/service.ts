@@ -51,7 +51,7 @@ import {
 } from "./persistence";
 import { invalidate } from "../query-engine";
 import { openWith } from "../streams";
-import { agentDeviceFor } from "../simulator-context";
+import { agentDeviceFor } from "../device-hub";
 import { setupForTurn } from "../project-environment.service";
 import { handleAutomationToolRequest } from "../automations";
 import { getDatabase } from "../../lib/database";
@@ -190,7 +190,7 @@ export async function startTurn(
     agentMessages: hasAgentMessages(sessionId),
     setup: setupForTurn(sessionId),
     agentDeviceSession: device.session,
-    simulator: device.udid ? { udid: device.udid } : null,
+    device: device.target,
     // Negotiated at the handshake, not guessed from a harness list.
     supportsImages: supportsImages(agentHarness),
   });
@@ -365,7 +365,10 @@ async function handleToolRequest(
     return handleAutomationToolRequest(params);
   }
   // A simulator recording joins the workspace's agent-device session.
-  if (method === "agentDevice") return agentDeviceFor(requireParam(params, "sessionId", method));
+  if (method === "agentDevice") {
+    const { session, target } = agentDeviceFor(requireParam(params, "sessionId", method));
+    return { session, udid: target?.platform === "ios" ? target.id : null };
+  }
 
   const sessionId = requireParam(params, "sessionId", method);
   const turnId = holdingTurn(sessionId)?.turnId;

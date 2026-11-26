@@ -175,7 +175,7 @@ import { unarchiveWorkspace } from "../../../src/services/workspace-archive.serv
 import { persistSessionBackToWorking } from "../../../src/services/agent/persistence";
 import { cloudPreviewChanges } from "@shared/api/browser";
 import { sessionEvents } from "@shared/api/sessions";
-import { cloudSimulatorEvents } from "@shared/api/simulator";
+import { cloudSimulatorEvents } from "@shared/api/cloud-device";
 import { cloudEnvironment, cloudIdentity } from "@shared/api/workspaces";
 import type { CloudSimulatorEvent } from "@shared/events";
 import { published } from "../../helpers";
@@ -2598,7 +2598,7 @@ describe("cloud simulator cache — round six (every platform, ordered REST, reg
     expect(connectCount).toBe(0);
     // No socket (this backend restarted): the REST answer is what it is, but
     // the next transition must have a channel to arrive on — nothing else
-    // reopens it on mobile, where the Simulator tab may be the only reader.
+    // reopens it on mobile, where the Device tab may be the only reader.
     shutdownCloudDriver();
     initCloudDriver(handler);
     connectCount = 0;

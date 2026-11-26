@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, resolve } from "node:path";
 import packageJson from "../../package.json";
@@ -10,7 +10,6 @@ import { configureBackendEnv } from "../backend/runtime-env";
 
 const VERSION = packageJson.version;
 const RUNTIME_NAME = "deus-runtime";
-const REQUIRED_SIMULATOR_HELPERS = ["simbridge", "siminspector.dylib"] as const;
 
 type RuntimeCommand = "backend" | "self-test";
 
@@ -73,16 +72,6 @@ function resolveRuntimeLayout() {
       : process.execPath;
   const bundledBinDir = dirname(executablePath);
   return { executablePath, bundledBinDir, resourcesPath: dirname(bundledBinDir) };
-}
-
-function inspectSimulatorHelper(
-  resourcesPath: string,
-  name: (typeof REQUIRED_SIMULATOR_HELPERS)[number]
-) {
-  const filePath = join(resourcesPath, "simulator", name);
-  const exists = existsSync(filePath);
-  const executable = exists ? (statSync(filePath).mode & 0o111) !== 0 : false;
-  return { path: filePath, exists, executable };
 }
 
 /** What the runtime loads from outside itself, each as the backend does: a
@@ -203,38 +192,19 @@ function configureRuntimeEnv(command: RuntimeCommand, dataDir?: string): void {
   }
 }
 
-/** A macOS app bundle ships the simulator helpers; a Linux package has none. */
-function isMacAppBundle(resourcesPath: string): boolean {
-  return (
-    process.platform === "darwin" &&
-    basename(resourcesPath) === "Resources" &&
-    basename(dirname(resourcesPath)) === "Contents"
-  );
-}
-
 async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
   configureBackendEnv(() => configureRuntimeEnv(command, dataDir));
 
   if (command === "self-test") {
     const layout = resolveRuntimeLayout();
-    const simulatorHelpers = Object.fromEntries(
-      REQUIRED_SIMULATOR_HELPERS.map((name) => [
-        name,
-        inspectSimulatorHelper(layout.resourcesPath, name),
-      ])
-    );
-    const requireSimulatorHelpers = isMacAppBundle(layout.resourcesPath);
     const checks = await inspectRuntimeChecks();
     const sqlite = await inspectSqliteContract();
-    const missingSimulatorHelpers = Object.entries(simulatorHelpers)
-      .filter(([, result]) => requireSimulatorHelpers && (!result.exists || !result.executable))
-      .map(([name]) => name);
     const failedChecks = Object.entries(checks)
       .filter(([, result]) => !result.ok)
       .map(([name]) => name);
     console.log(
       JSON.stringify({
-        ok: missingSimulatorHelpers.length === 0 && failedChecks.length === 0 && sqlite.ok,
+        ok: failedChecks.length === 0 && sqlite.ok,
         version: VERSION,
         executable: layout.executablePath,
         execPath: process.execPath,
@@ -245,15 +215,12 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
         nodeEnv: process.env["NODE_ENV"] ?? "",
         pathEnv: process.env.PATH ?? "",
         runtimeKey: getRuntimeKey(),
-        simulatorHelpers,
         checks,
         sqlite,
-        requireSimulatorHelpers,
-        missingSimulatorHelpers,
         failedChecks,
       })
     );
-    if (missingSimulatorHelpers.length > 0 || failedChecks.length > 0 || !sqlite.ok) {
+    if (failedChecks.length > 0 || !sqlite.ok) {
       process.exit(1);
     }
     return;

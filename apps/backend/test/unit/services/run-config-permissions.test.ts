@@ -15,6 +15,19 @@ it.each(LOCAL_HARNESSES)(
   }
 );
 
+it.each([
+  ["ios", "0123-4567", "--udid"],
+  ["android", "emulator-5556", "--serial"],
+] as const)("briefs the agent on the Device tab's %s selection", (platform, id, flag) => {
+  const turn = buildTurnStartParams("chat", "turn", "codex-app-server", "Look at this", {
+    ...workspace,
+    device: { platform, id },
+  });
+  expect(turn.config.systemPromptAppend).toContain(
+    `Device tab shows ${id}. Pass \`${flag} ${id}\``
+  );
+});
+
 describe.each(LOCAL_HARNESSES)("%s local permission policy", (harness) => {
   it.each([undefined, "native-session"])(
     "uses full access when the composer omits the mode (resume: %s)",
@@ -41,14 +54,14 @@ describe.each(LOCAL_HARNESSES)("%s local permission policy", (harness) => {
   });
 });
 
-describe.each(LOCAL_HARNESSES)("%s and the Simulator tab", (harness) => {
+describe.each(LOCAL_HARNESSES)("%s and the Device tab", (harness) => {
   it("names the tab's device to the agent, and nothing without one", () => {
-    const simulator = { udid: "5E4E0C2F-7025-4AAE-86D4-75A9BCD7AF06" };
+    const device = { platform: "ios" as const, id: "5E4E0C2F-7025-4AAE-86D4-75A9BCD7AF06" };
     const shown = buildTurnStartParams("session", "turn", harness, "Check it", {
       ...workspace,
-      simulator,
+      device,
     });
-    expect(shown.config.systemPromptAppend).toContain(`--udid ${simulator.udid}`);
+    expect(shown.config.systemPromptAppend).toContain(`--udid ${device.id}`);
     const none = buildTurnStartParams("session", "turn", harness, "Check it", workspace);
     expect(none.config.systemPromptAppend).not.toContain("--udid");
   });

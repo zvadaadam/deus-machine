@@ -2,11 +2,10 @@
  * MobileLayout -- single-panel mobile layout with bottom tab bar.
  *
  * Replaces the desktop ResizablePanelGroup on screens < 768px.
- * Two views: Chat (full-width ChatArea) and Code (full-width ChangesDiffViewer).
- * Chat is the default -- "AI chat as a first-class citizen".
+ * Chat opens first. The tab bar shows Code and any available Device panel.
  */
 
-import { useState, useCallback, useMemo } from "react";
+import { lazy, Suspense, useState, useCallback, useMemo } from "react";
 import { localFolder } from "@/features/workspace/lib/reach";
 import type { CloudPresence } from "@/features/workspace/lib/cloudPresence";
 import type { Dispatch, SetStateAction } from "react";
@@ -16,9 +15,9 @@ import { workspaceLayoutActions } from "@/features/workspace/store";
 import { useFileChanges } from "@/features/workspace";
 import { ChangesView } from "@/features/workspace/ui/ChangesView";
 import { CloudSandboxGate } from "@/features/workspace/ui/CloudSandboxGate";
-import { CloudSimulatorPanel } from "@/features/simulator/cloud/CloudSimulatorPanel";
-import { useCloudSimulatorStore } from "@/features/simulator/cloud/cloudSimulatorStore";
-import { isTabVisible, tabsFor } from "@/features/workspace-tabs/registry";
+import { CloudDevicePanel } from "@/features/device/cloud";
+import { useDeviceActive } from "@/features/device/useDeviceActive";
+import { isTabVisible, type ContentTabVisibility } from "@/features/workspace-tabs/registry";
 import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
 import type { Workspace } from "@/shared/types";
@@ -33,7 +32,10 @@ import type { MobileTab } from "./MobileTabBar";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { MobilePRHeaderAction, MobilePRStatusBar } from "./MobilePRBar";
 
+const DevicePanel = lazy(() => import("@/features/device/DevicePanel"));
+
 interface MobileLayoutProps {
+  visibility: ContentTabVisibility;
   workspace: Workspace;
   sendAgentMessageHandler: ((text: string) => Promise<void>) | null;
   handleSendAgentMessage: (text: string) => void;
@@ -62,6 +64,7 @@ export function MobileLayout({
   setSendAgentMessageHandler,
   isWatched,
   environmentTasks,
+  visibility,
   onRunTask,
   onStatusChange,
   cloudPresence,
@@ -74,27 +77,11 @@ export function MobileLayout({
 }: MobileLayoutProps) {
   const [activeTab, setActiveTab] = useState<MobileTab>("chat");
 
-  // Web-direct is chat-only on mobile too: the Code tab's diff traffic reads
-  // the Mac backend, which the direct lane doesn't have — so the tab bar and
-  // Code panel don't mount and the diff query never fires.
-  // Web-direct has no tools to show; neither has a workspace that failed to start.
   const chatOnly = isCloudDirectWebMode() || failedToStart(workspace);
-
-  // A cloud computer hosts a device in the platform — billable, so a phone
-  // must be able to see and stop it. Web-direct has no Mac backend to relay
-  // the device commands through, so it stays chat-only. The phone layout has
-  // no local simulator, so only the cloud's shows.
-  const cloudSimulator = !chatOnly && isTabVisible("simulator", undefined, tabsFor(workspace));
+  const showDevice = !chatOnly && isTabVisible("device", undefined, visibility);
   const cloudStage = cloudGateStage(workspace);
-  const simulatorLive = useCloudSimulatorStore(
-    (s) => s.byWorkspace[workspace.id]?.status === "ready"
-  );
-  // The layout outlives a workspace switch: a Simulator tab left selected on
-  // a cloud computer must not leave a local workspace with no panel showing.
-  // Chat-only is the chat, whatever was picked before (a start that failed
-  // while its Code tab was open).
-  const tab: MobileTab =
-    chatOnly || (!cloudSimulator && activeTab === "simulator") ? "chat" : activeTab;
+  const deviceLive = useDeviceActive(workspace.id);
+  const tab = chatOnly || (activeTab === "device" && !showDevice) ? "chat" : activeTab;
 
   // File changes -- always queried for the badge count on the code tab,
   // and used by ChangesDiffViewer when the code tab is active.
@@ -185,35 +172,35 @@ export function MobileLayout({
         </div>
       )}
 
-      {/* Hosted simulator — the same gate/panel pair the desktop Simulator tab
-          renders; hidden (not unmounted) like the other panels. */}
-      {cloudSimulator && (
+      {showDevice && (workspace.kind === "cloud" || tab === "device") && (
         <div
-          className={cn("min-h-0 flex-1 overflow-hidden", tab !== "simulator" && "hidden")}
-          id="mobile-panel-simulator"
+          className={cn("min-h-0 flex-1 overflow-hidden", tab !== "device" && "hidden")}
+          id="mobile-panel-device"
           role="tabpanel"
-          aria-labelledby="mobile-tab-simulator"
+          aria-labelledby="mobile-tab-device"
         >
-          {cloudStage ? (
+          {workspace.kind !== "cloud" ? (
+            <Suspense fallback={null}>
+              <DevicePanel
+                key={workspace.id}
+                workspaceId={workspace.id}
+                defaultSession={workspace.current_session_id ?? null}
+              />
+            </Suspense>
+          ) : cloudStage ? (
             <CloudSandboxGate workspaceId={workspace.id} stage={cloudStage} />
           ) : (
-            <CloudSimulatorPanel
-              key={workspace.id}
-              workspace={workspace}
-              visible={tab === "simulator"}
-            />
+            <CloudDevicePanel key={workspace.id} workspace={workspace} visible={tab === "device"} />
           )}
         </div>
       )}
-
-      {/* Bottom tab bar — a one-tab bar is noise, so chat-only drops it */}
       {!chatOnly && (
         <MobileTabBar
           activeTab={tab}
           onTabChange={setActiveTab}
           fileChangesCount={fileChanges.length}
-          showSimulator={cloudSimulator}
-          simulatorLive={simulatorLive}
+          showDevice={showDevice}
+          deviceLive={deviceLive}
         />
       )}
     </div>

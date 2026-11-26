@@ -18,6 +18,7 @@ import {
   GeneralSection,
   GitHubSection,
   BrowserSection,
+  DevicesSection,
   AISection,
   CloudSection,
   EnvironmentSection,
@@ -87,6 +88,7 @@ export function SettingsPage() {
       .with("general", () => <GeneralSection {...sectionProps} theme={theme} setTheme={setTheme} />)
       .with("github", () => <GitHubSection />)
       .with("browser", () => <BrowserSection />)
+      .with("devices", () => <DevicesSection />)
       .with("ai", () => <AISection {...sectionProps} cloudOnly={cloudOnly} />)
       .with("cloud", () => <CloudSection />)
       .with("environment", () => <EnvironmentSection />)

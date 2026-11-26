@@ -2,6 +2,7 @@
 // The instructions a local chat receives about Deus, its worktree and its project.
 
 import * as path from "path";
+import type { HubDevice } from "@shared/types/device-hub";
 import { OPERATOR_GUIDANCE, quote } from "@zvada/agent-server/operator";
 import { TELL_USER } from "@shared/agent-message";
 import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
@@ -18,9 +19,12 @@ export function getProjectName(cwd: string): string {
   return path.basename(cwd.substring(0, idx));
 }
 
-/** The device a workspace's Simulator tab shows: its UDID only, since a device's name is text a person or an agent chose. */
-export interface Simulator {
-  udid: string;
+export type WorkspaceDevice = Pick<HubDevice, "platform" | "id">;
+
+function deviceInstructions(device?: WorkspaceDevice | null) {
+  if (!device) return "";
+  const flag = device.platform === "ios" ? "--udid" : "--serial";
+  return `This workspace's Device tab shows ${device.id}. Pass \`${flag} ${device.id}\` to agent-device so the person sees what you do.\n`;
 }
 
 export type WorkspaceSetup =
@@ -68,7 +72,7 @@ Until you finish, the person sees only what you send with the \`${TELL_USER}\` t
  */
 export function buildWorkspaceContext(
   cwd?: string,
-  simulator?: Simulator | null,
+  device?: WorkspaceDevice | null,
   setup?: WorkspaceSetup | null
 ): string {
   if (!cwd) return "";
@@ -82,9 +86,7 @@ export function buildWorkspaceContext(
     setupInstructions(setup) +
     `A built-in browser is available for testing UI changes.\n` +
     AGENT_DEVICE +
-    (simulator
-      ? `This workspace's Simulator tab shows the simulator ${simulator.udid}: pass \`--udid ${simulator.udid}\` to agent-device so the person sees what you do.\n`
-      : "") +
+    deviceInstructions(device) +
     // The session tools every chat here has (services/assistants: withSessionTools).
     `${OPERATOR_GUIDANCE}\n` +
     "For this computer's workspaces, read a `deus://workspace?id=<workspace id>&session=<chat id>` link with `read_session`. Pass its `session` value as `session`.\n" +

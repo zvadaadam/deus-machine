@@ -1409,7 +1409,7 @@ function currentCloudSessionRow(workspaceId: string): {
     | undefined;
   if (!row) throw new NotFoundError(`Workspace not found: ${workspaceId}`);
   if (row.kind !== "cloud")
-    throw new ValidationError("Hosted simulators run in cloud workspaces only");
+    throw new ValidationError("Hosted devices run in cloud workspaces only");
   if (!row.session_id) {
     throw new ConflictError("This cloud workspace has no session to reach its sandbox through");
   }

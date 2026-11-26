@@ -10,6 +10,8 @@ import repoHandlers from "../../../src/api/repos";
 import sessionHandlers from "../../../src/api/sessions";
 import { Registry } from "../../../src/api/registry";
 import workspaceHandlers from "../../../src/api/workspaces";
+import { deviceHub } from "../../../src/services/device-hub";
+import { DeviceHub } from "../../../src/services/device-hub/manager";
 import * as ownership from "../../../src/services/agent/chat-turn";
 import { sendMessage } from "../../../src/services/agent/turns";
 import * as agentEvents from "../../../src/services/agent/event-handler";
@@ -206,6 +208,32 @@ describe("agentService.startTurn", () => {
     } finally {
       removeSubs(connection);
       removeConnection(connection);
+    }
+  });
+
+  it("names the live device on a turn and drops it when the view is gone", async () => {
+    const hub = new DeviceHub({ directory: "/unused", changed: () => {}, setupChanged: () => {} });
+    hub.status = { phase: "ready", instance: "hub" };
+    hub.endpoint = { origin: "http://127.0.0.1", token: "fixture" };
+    vi.spyOn(deviceHub, "displayedDevice").mockImplementation((workspace) =>
+      hub.displayedDevice(workspace)
+    );
+    const view = { workspaceId: "w", platform: "android", deviceId: "emulator-5556" } as const;
+    const leave = hub.follow({ ...view, displayedInstance: "hub" });
+    try {
+      mockLinkStartTurn.mockResolvedValue({});
+      await start();
+      leave();
+      hub.follow({ ...view, displayedInstance: null });
+      await agentService.startTurn(SESSION, "next", "claude-code", "Check again", {
+        cwd: "/tmp/work",
+      });
+      const [shown, gone] = mockLinkStartTurn.mock.calls;
+      expect(shown![0].config.systemPromptAppend).toContain("--serial emulator-5556");
+      expect(gone![0].config.systemPromptAppend).not.toContain("Device tab shows");
+      expect(gone![0].config.systemPromptAppend).not.toContain("emulator-5556");
+    } finally {
+      await hub.shutdown();
     }
   });
 

@@ -1,0 +1,7 @@
+{
+  "name": "deus-device-hub",
+  "private": true,
+  "dependencies": {
+    "expo-device-hub": "0.26.1"
+  }
+}

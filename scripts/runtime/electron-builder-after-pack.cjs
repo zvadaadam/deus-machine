@@ -1,11 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
-const {
-  DEVICE_USE_HELPER_NAMES,
-  assertNoBuildLocalInstallName,
-  packagedSimulatorDir,
-} = require("./lib/device-use-payloads.cjs");
 const { readLockedPackage, verifyIntegrity } = require("./lib/locked-package.cjs");
 
 const ARCH_BY_BUILDER_VALUE = new Map([
@@ -130,8 +125,7 @@ function ensureCanvasRuntimePackage(context) {
  * every executable is there and built for its target (the x64 app is packaged
  * on an arm64 runner), Codex is the version the engine runs (the engine runs
  * whatever it is handed) with its aliases inside its package, deus-runtime
- * links only system libraries, and the simulator helpers carry both
- * architectures.
+ * links only system libraries.
  */
 function verifyPackagedLayout(context) {
   const runtimeKey = `${context.electronPlatformName}-${ARCH_BY_BUILDER_VALUE.get(context.arch)}`;
@@ -205,20 +199,6 @@ function verifyPackagedLayout(context) {
     if (foreignLibraries.length > 0) {
       throw new Error(`Packaged deus-runtime links outside macOS: ${foreignLibraries.join(", ")}`);
     }
-    const simulatorDir = packagedSimulatorDir(resourcesDir);
-    for (const name of Object.values(DEVICE_USE_HELPER_NAMES)) {
-      // One architecture a call: the lipo of macOS 27 reads a second one as a file.
-      for (const lipoArch of ["arm64", "x86_64"]) {
-        execFileSync("lipo", [path.join(simulatorDir, name), "-verify_arch", lipoArch], {
-          stdio: ["ignore", "ignore", "pipe"],
-        });
-      }
-    }
-    assertNoBuildLocalInstallName(
-      path.join(simulatorDir, DEVICE_USE_HELPER_NAMES.siminspector),
-      PROJECT_ROOT,
-      "Packaged siminspector"
-    );
   }
   console.log(`[runtime] packaged ${runtimeKey} layout verified`);
 }

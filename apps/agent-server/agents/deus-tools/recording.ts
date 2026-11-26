@@ -7,7 +7,7 @@
 // A browser recording watches the page's own input. A simulator recording is
 // agent-device's, in the workspace's agent-device session (every turn's
 // commands carry it as AGENT_DEVICE_SESSION), so its telemetry holds the
-// agent's touches; it records the workspace's Simulator tab device unless the
+// agent's touches; it records the workspace's Device tab device unless the
 // agent names another.
 
 import { randomBytes } from "crypto";

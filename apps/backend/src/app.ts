@@ -26,6 +26,9 @@ import slackRoutes from "./routes/slack";
 import authRoutes from "./routes/remote-auth";
 import filesRoutes from "./routes/files";
 import integrationRoutes from "./routes/integrations";
+import { deviceHubRoutes } from "./services/device-hub/proxy";
+import { deviceHub } from "./services/device-hub";
+
 export function createApp() {
   serveOperations(registry);
   const app = new Hono();
@@ -54,6 +57,10 @@ export function createApp() {
   app.route("/api", computeUsageRoutes);
   app.route("/api", filesRoutes);
   app.route("/api", integrationRoutes);
+  app.route(
+    "/",
+    deviceHubRoutes(() => deviceHub.endpoint, upgradeWebSocket)
+  );
 
   // The tunnel's state, for the `deus` CLI and scripts on this computer. The
   // app itself asks the `relayStatus` operation.

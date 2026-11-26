@@ -137,13 +137,6 @@ function installIconResolver() {
   };
 }
 
-function prepareDeviceUsePayloads() {
-  execFileSync("bun", ["run", "prepare:device-use", "--force"], {
-    cwd: PROJECT_ROOT,
-    stdio: "inherit",
-  });
-}
-
 async function main() {
   assertHostPlatform();
   // A local or PR dir build is ad hoc: never sign with a keychain's Developer ID.
@@ -151,7 +144,6 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   installElectronDist();
   assertElectronDistArch(options.arch);
-  prepareDeviceUsePayloads();
   installIconResolver();
 
   const { Arch, Platform, build } = require("electron-builder");

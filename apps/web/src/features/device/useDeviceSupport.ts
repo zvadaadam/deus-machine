@@ -1,0 +1,21 @@
+import { useQuery } from "@tanstack/react-query";
+import type { DeviceSupport } from "@shared/types/device-hub";
+import { deviceSupport } from "@shared/api/device-hub";
+import { call } from "@/platform/ws";
+import { getDeploymentMode, type DeploymentMode } from "@/shared/config/backend.config";
+
+export function localDeviceRenderer(mode: DeploymentMode) {
+  return mode === "electron" || mode === "web-dev";
+}
+
+export function useDeviceSupport({ enabled = true } = {}) {
+  const mode = getDeploymentMode();
+  return useQuery({
+    queryKey: ["deviceSupport"],
+    queryFn: () => call(deviceSupport),
+    enabled: enabled && mode !== "web-direct",
+    staleTime: 60_000,
+    refetchOnMount: "always",
+    select: (data): DeviceSupport => (localDeviceRenderer(mode) ? data : { liveView: "remote" }),
+  });
+}

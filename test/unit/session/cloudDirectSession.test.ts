@@ -17,7 +17,7 @@ import type { ToolRequestEvent } from "@shared/api/sessions";
 import {
   cloudSimulatorActions,
   useCloudSimulatorStore,
-} from "@/features/simulator/cloud/cloudSimulatorStore";
+} from "@/features/device/cloud/cloudSimulatorStore";
 
 // Exercise the hook's actual frame routing; only React mounting and the socket
 // are replaced. The transcript fold, query cache, simulator store and the

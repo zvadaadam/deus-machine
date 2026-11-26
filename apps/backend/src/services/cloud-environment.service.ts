@@ -106,7 +106,7 @@ export async function getCloudEnvironmentInfo(
 
 /**
  * Enable hosted devices on a saved environment (a partial config merge on
- * the platform). Every cloud workspace shows a Simulator tab, and enabling
+ * the platform). Every cloud workspace shows a Device tab, and enabling
  * costs nothing until a device starts — but an environment saved before
  * devices existed cannot honour the tab, and a workspace's recipe is
  * captured when it is created: the upgrade has to precede the create.

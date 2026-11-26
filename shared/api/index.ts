@@ -12,13 +12,14 @@ import { isStream, type AnyStream } from "./stream";
 import * as assistants from "./assistants";
 import * as automations from "./automations";
 import * as browser from "./browser";
+import * as deviceHub from "./device-hub";
 import * as devices from "./devices";
 import * as files from "./files";
 import * as integrations from "./integrations";
 import * as repos from "./repos";
 import * as sessions from "./sessions";
 import * as settings from "./settings";
-import * as simulator from "./simulator";
+import * as cloudDevice from "./cloud-device";
 import * as terminal from "./terminal";
 import * as workspaces from "./workspaces";
 
@@ -26,13 +27,14 @@ export const api = {
   ...assistants,
   ...automations,
   ...browser,
+  ...deviceHub,
   ...devices,
   ...files,
   ...integrations,
   ...repos,
   ...sessions,
   ...settings,
-  ...simulator,
+  ...cloudDevice,
   ...terminal,
   ...workspaces,
 };

@@ -21,6 +21,20 @@ let DB_PATH = requestedPath;
 
 let dbInstance: BetterSqlite3.Database | null = null;
 let dbOwner: BetterSqlite3.Database | undefined;
+let databaseFile: string | undefined;
+
+function canonicalDatabaseFile(): string {
+  if (databaseFile) return databaseFile;
+  if (requestedPath === ":memory:") return requestedPath;
+  const directory = path.dirname(requestedPath);
+  fs.mkdirSync(directory, { recursive: true });
+  DB_PATH = path.join(fs.realpathSync.native(directory), path.basename(requestedPath));
+  const entry = fs.lstatSync(DB_PATH, { throwIfNoEntry: false });
+  // After Start Fresh a filename symlink can remain. SQLite creates its missing target.
+  if (entry?.isSymbolicLink() && !fs.existsSync(DB_PATH)) openSqliteDatabase(DB_PATH).close();
+  databaseFile = entry ? fs.realpathSync.native(DB_PATH) : DB_PATH;
+  return databaseFile;
+}
 
 function claimDatabase(filename: string): BetterSqlite3.Database {
   // Keep a write transaction on a stable sidecar for the life of the connection.
@@ -126,16 +140,8 @@ function initDatabase(): BetterSqlite3.Database {
   let filename = requestedPath;
   console.log("Opening database:", filename);
   try {
-    if (filename !== ":memory:") {
-      const directory = path.dirname(filename);
-      fs.mkdirSync(directory, { recursive: true });
-      DB_PATH = path.join(fs.realpathSync.native(directory), path.basename(filename));
-      const entry = fs.lstatSync(DB_PATH, { throwIfNoEntry: false });
-      // After Start Fresh a filename symlink can remain. SQLite creates its missing target.
-      if (entry?.isSymbolicLink() && !fs.existsSync(DB_PATH)) openSqliteDatabase(DB_PATH).close();
-      filename = entry ? fs.realpathSync.native(DB_PATH) : DB_PATH;
-      dbOwner = claimDatabase(filename);
-    }
+    filename = canonicalDatabaseFile();
+    if (filename !== ":memory:") dbOwner = claimDatabase(filename);
     dbInstance = openSqliteDatabase(filename);
     dbInstance.pragma("journal_mode = WAL");
     dbInstance.pragma("foreign_keys = ON");
@@ -203,6 +209,7 @@ function closeDatabaseHandles(): void {
   dbInstance = null;
   dbOwner?.close();
   dbOwner = undefined;
+  databaseFile = undefined;
 }
 
 function closeDatabase(): void {
@@ -215,4 +222,4 @@ function closeDatabase(): void {
   }
 }
 
-export { initDatabase, getDatabase, closeDatabase, DB_PATH };
+export { initDatabase, getDatabase, closeDatabase, canonicalDatabaseFile, DB_PATH };

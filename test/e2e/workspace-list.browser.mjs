@@ -18,6 +18,7 @@ const evidence = path.join(root, ".context/workspace-list");
 await mkdir(evidence, { recursive: true });
 const directory = await mkdtemp(path.join(evidence, "run-"));
 const database = path.join(directory, "deus.db");
+const releaseDeviceInstall = path.join(directory, "release-device-install");
 const stack = createStack({ root, directory });
 const spawnToken = crypto.randomUUID();
 let backend, db, server, browser, host, baseUrl, local, remote, offline, upstream;
@@ -71,6 +72,8 @@ async function startBackend(port = "0") {
       DEUS_USER_DATA_DIR: directory,
       TMPDIR: directory,
       DEUS_BUNDLED_BIN_DIR: path.join(root, "test/e2e/fixtures/github"),
+      DEUS_RUNTIME_EXECUTABLE: path.join(root, "apps/backend/test/fixtures/device-hub-runtime.mjs"),
+      DEUS_TEST_DEVICE_INSTALL_GATE: releaseDeviceInstall,
       DEUS_TEST_MERGED_HEAD: path.join(directory, "merged-head"),
     },
   });
@@ -152,6 +155,31 @@ async function openWorkspaceTool(page, name) {
   await newTabView.getByRole("button", { name, exact: true }).click();
   await existing.waitFor();
 }
+
+test(
+  "open Settings follows device setup started in another window",
+  {
+    skip: process.platform !== "darwin" || process.arch !== "arm64",
+  },
+  async (t) => {
+    const settings = await tab(t);
+    const viewer = await tab(t);
+    const ws = await start(local, "Device setup");
+    await settings.goto(`${baseUrl}/settings`);
+    await settings.getByRole("button", { name: "Devices", exact: true }).click();
+    const row = settings.getByRole("heading", { name: "Device tab", exact: true }).locator("../..");
+    await row.getByText("Sets up the first time you open it", { exact: true }).waitFor();
+    assert.deepEqual(await backend.read("deviceSetup"), { setup: "new", error: null });
+
+    await viewer.goto(`${baseUrl}/w/${ws.id}`);
+    await openWorkspaceTool(viewer, "Device");
+    await viewer.getByText("Setting up devices…", { exact: true }).waitFor();
+    await row.getByText("Setting up devices…", { exact: true }).waitFor();
+    await writeFile(releaseDeviceInstall, "");
+    await row.getByText("Ready", { exact: true }).waitFor();
+    await viewer.getByRole("button", { name: "Choose device" }).waitFor();
+  }
+);
 
 test("a linked chat leaves the saved tab unread and shows its background work", async (t) => {
   const page = await tab(t);
@@ -602,10 +630,11 @@ for (const failureFirst of [false, true]) {
       failureFirst ? "archive-refusal" : "delete-refusal",
       failureFirst ? local.root_path : undefined
     );
+    const other = await makeProject(failureFirst ? "archive-witness" : "delete-witness");
     const source = failureFirst ? "main" : "missing";
-    const a = await start(failureFirst ? project : local, "A", source);
-    const b = await start(failureFirst ? local : project, "B", source);
-    const c = await start(local, "Witness");
+    const a = await start(failureFirst ? project : other, "A", source);
+    const b = await start(failureFirst ? other : project, "B", source);
+    const c = await start(other, "Witness");
     const saved = await start(project, "Already archived");
     await backend.write("archiveWorkspace", { workspaceId: saved.id });
 
@@ -645,12 +674,6 @@ for (const failureFirst of [false, true]) {
 
     // Unrelated session deltas arrive while A is pending. All one-shot reads reach the host.
     let refuseA;
-    let simulatorStops = 0;
-    const simulatorSession = {
-      phase: "streaming",
-      udid: "fixture",
-      stream: { url: "about:blank", hid_available: true },
-    };
     await page.routeWebSocket(
       (url) => url.pathname === "/ws",
       (route) => {
@@ -660,7 +683,6 @@ for (const failureFirst of [false, true]) {
         route.onMessage((raw) => {
           const f = JSON.parse(String(raw));
           if (f.resource === "workspaces") groups.add(f.id);
-          if (f.action === "simStop") simulatorStops++;
           if (
             f.type === "q:mutate" &&
             f.params.workspaceId === a.id &&
@@ -709,15 +731,6 @@ for (const failureFirst of [false, true]) {
     };
     if (failureFirst) {
       const button = page.getByRole("button", { name: "Archive", exact: true });
-      await page.evaluate(
-        async ([id, session]) => {
-          const { simulatorStoreActions } = await import(
-            `${window.location.origin}/src/features/simulator/store.ts`
-          );
-          simulatorStoreActions.setSession(id, session);
-        },
-        [a.id, simulatorSession]
-      );
       await button.click();
     } else await remove(a);
     await until(() => !!refuseA);
@@ -755,23 +768,6 @@ for (const failureFirst of [false, true]) {
     await page.getByText("Workspace not found", { exact: true }).waitFor();
     await row(page, a).waitFor();
     if (failureFirst) {
-      assert.deepEqual(
-        await page.evaluate(
-          async ([id, otherId, udid]) => {
-            const { simulatorStoreActions } = await import(
-              `${window.location.origin}/src/features/simulator/store.ts`
-            );
-            return [
-              simulatorStoreActions.getSession(id),
-              simulatorStoreActions.getWorkspaceByUdid(udid, otherId),
-            ];
-          },
-          [a.id, b.id, simulatorSession.udid]
-        ),
-        [simulatorSession, a.id],
-        "a refused archive keeps the stream and its device claim"
-      );
-      assert.equal(simulatorStops, 0);
       assert.equal((await backend.read("workspace", { workspaceId: b.id })).state, "ready");
       // Mark the real read so the assertion waits until its answer is on screen.
       db.prepare("UPDATE workspaces SET title = 'Witness read' WHERE id = ?").run(c.id);
@@ -792,78 +788,6 @@ for (const failureFirst of [false, true]) {
     assert.deepEqual(await projectState(), [1, failureFirst ? [a.id] : []]);
   });
 }
-
-test("a confirmed archive frees the simulator for another workspace", async (t) => {
-  const page = await tab(t);
-  const a = await start(remote, "Archive while streaming");
-  const b = await start(local, "Next simulator workspace");
-  await writeFile(path.join(directory, "merged-head"), a.git_branch);
-  const device = {
-    udid: "fixture",
-    name: "iPhone",
-    device_type: "iPhone",
-    runtime: "iOS",
-    state: "Shutdown",
-    is_available: true,
-  };
-  const reads = {
-    settings: { ...(await backend.read("settings")), experimental_simulator: true },
-    simulatorCapabilities: { available: true, unavailableReason: null },
-    simListDevices: { devices: [device] },
-  };
-  const starts = [];
-  // A single simulated device keeps Start on the real panel without booting a simulator on the host.
-  await page.routeWebSocket(/\/ws$/, (route) => {
-    const host = route.connectToServer();
-    const send = (frame) => route.send(JSON.stringify(frame));
-    const subscribers = new Map();
-    route.onMessage((raw) => {
-      const f = JSON.parse(String(raw));
-      if (f.type === "q:request" && Object.hasOwn(reads, f.resource))
-        return send({ type: "q:response", id: f.id, data: reads[f.resource] });
-      if (f.type === "q:subscribe" && f.resource === "settings")
-        return send({ type: "q:snapshot", id: f.id, data: reads.settings });
-      if (f.type === "q:subscribe" && f.resource === "simulatorEvents")
-        subscribers.set(f.params.workspaceId, f.id);
-      if (f.action === "simStart") {
-        starts.push([f.params.workspaceId, f.params.udid]);
-        send({ type: "q:mutate_result", id: f.id, success: true });
-        return send({
-          type: "q:event",
-          event: "simulatorEvents",
-          id: subscribers.get(f.params.workspaceId),
-          data: { type: "streamReady", url: "about:blank", hidAvailable: true },
-        });
-      }
-      host.send(raw);
-    });
-  });
-  const startSimulator = async () => {
-    await openWorkspaceTool(page, "Simulator");
-    await page.getByRole("button", { name: "Start Simulator", exact: true }).click();
-    const status = page
-      .getByLabel("Simulator streaming")
-      .or(
-        page.getByText("That simulator is already in use by another workspace.", { exact: true })
-      );
-    await status.waitFor();
-    assert.equal(
-      await status.getAttribute("aria-label"),
-      "Simulator streaming",
-      await status.textContent()
-    );
-  };
-  await page.goto(`${baseUrl}/w/${a.id}`);
-  await startSimulator();
-  await page.getByRole("button", { name: "Archive", exact: true }).click();
-  await page.getByText("Workspace archived", { exact: true }).waitFor();
-  await row(page, b).click();
-  await startSimulator();
-  assert.deepEqual(starts, [
-    [a.id, device.udid],
-    [b.id, device.udid],
-  ]);
-});
 
 for (const loseReply of [false, true]) {
   test(

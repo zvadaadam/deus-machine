@@ -13,11 +13,8 @@ import { notifyDevicesChanged } from "./services/remote-auth.service";
 import { reconcileRelay, disconnectFromRelay } from "./services/relay.service";
 import * as agentService from "./services/agent";
 import { destroyAllPtySessions } from "./services/pty.service";
+import { deviceHub } from "./services/device-hub";
 import { destroyAllWatchers } from "./services/fs-watcher.service";
-import {
-  reconcile as reconcileSimulators,
-  destroyAll as destroyAllSimulators,
-} from "./services/simulator-context";
 import { invalidate } from "./services/query-engine";
 import {
   setRefreshListener as setLocalServerRefreshListener,
@@ -51,6 +48,7 @@ Sentry.init({
 
 // Initialize database
 const db = initDatabase();
+void deviceHub.initializeSetup();
 // Assistants unused for a month are forgotten (also whenever the list is read).
 forgetUnusedAssistants();
 deleteEmptyUnnamedProjects();
@@ -147,10 +145,6 @@ async function onListening(port: number): Promise<void> {
     notifyDevicesChanged();
   });
 
-  // Discover booted simulators on startup (fire-and-forget).
-  // Restores awareness of running simulators after a backend restart.
-  void reconcileSimulators();
-
   // Periodic localhost dev-server discovery. Probes a curated port list
   // every 60s; the refresh listener pushes a fresh snapshot to all
   // `localServers` WS subscribers each time a sweep completes.
@@ -207,29 +201,34 @@ function shutdown() {
   // First, so a checkout or a setup script stops while the rest shuts down.
   stopProcessGroups();
   const report = process.exitCode === 1 ? Sentry.close(2000) : undefined;
-  void Promise.allSettled([agentService.shutdown(), report]).then(([engine]) => {
-    try {
+  void Promise.allSettled([agentService.shutdown(), deviceHub.shutdown(), report]).then(
+    ([engine, devices]) => {
       try {
-        if (engine.status === "rejected") {
-          process.exitCode = 1;
-          console.error("[server] Engine shutdown failed:", engine.reason);
+        try {
+          if (engine.status === "rejected") {
+            process.exitCode = 1;
+            console.error("[server] Engine shutdown failed:", engine.reason);
+          }
+          if (devices.status === "rejected") {
+            process.exitCode = 1;
+            console.error("[server] Device shutdown failed:", devices.reason);
+          }
+          destroyAllPtySessions();
+          destroyAllWatchers();
+          stopLocalServerDiscovery();
+          disconnectFromRelay();
+          closeAllWsConnections();
+        } finally {
+          closeDatabase();
         }
-        destroyAllSimulators();
-        destroyAllPtySessions();
-        destroyAllWatchers();
-        stopLocalServerDiscovery();
-        disconnectFromRelay();
-        closeAllWsConnections();
+      } catch (error) {
+        process.exitCode = 1;
+        console.error("[server] Shutdown failed:", error);
       } finally {
-        closeDatabase();
+        process.exit();
       }
-    } catch (error) {
-      process.exitCode = 1;
-      console.error("[server] Shutdown failed:", error);
-    } finally {
-      process.exit();
     }
-  });
+  );
 }
 
 process.on("SIGINT", shutdown);

@@ -95,7 +95,7 @@ export const HostRpc = {
   requestGetTerminalOutput(r: GetTerminalOutputRequest): Promise<GetTerminalOutputResponse> {
     return requestHost("getTerminalOutput", r, DATA_QUERY_TIMEOUT_MS);
   },
-  /** The agent-device session a chat's workspace drives, and its Simulator tab's device. */
+  /** The agent-device session a chat's workspace drives, and its Device tab's device. */
   requestAgentDevice(r: { sessionId: string }): Promise<{ session: string; udid: string | null }> {
     return requestHost("agentDevice", r, DATA_QUERY_TIMEOUT_MS);
   },

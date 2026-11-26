@@ -35,7 +35,7 @@ tabs when expanded. Expand/Restore controls
 how much space visible content uses. In Changes, it shares the existing All changes
 / Review Changes row. It remains at that row's right edge after expansion. The
 other tools use the trailing end of their existing action toolbar. Files, Terminal,
-Browser, Simulator, Apps and Agent use the same control. Loading, failure and cloud
+Browser, Device, Apps and Agent use the same control. Loading, failure and cloud
 startup states keep it available. Cached native panels stay mounted but hidden
 beneath cloud gates, including their controls.
 
@@ -73,9 +73,9 @@ not claimed.
 
 ## Tool access
 
-List every available tool directly: Changes, Files, Terminal, Browser, Simulator,
+List every available tool directly: Changes, Files, Terminal, Browser, Device,
 Apps and Agent. There is no More menu in the shortcut list or tool tabs. Use the
-existing `content-tabs.ts` registry and availability rules. Environment remains a
+availability rules in the [workspace tab registry](../apps/web/src/features/workspace-tabs/registry.ts). Environment remains a
 link to settings for this repository, not another content tab.
 
 Opening a file from chat can reveal its tool. Incoming agent events update content

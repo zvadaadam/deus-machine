@@ -41,6 +41,7 @@ export interface PendingFileNavigation {
 export interface WorkspaceLayoutState {
   workspaceTabs: WorkspaceTab[];
   activeWorkspaceTabId: string | null;
+  deviceChoice: { key: string; started: boolean } | null;
   nextTerminalNum: number; // Counter for "Terminal N" naming
   selectedFilePath: string | null;
   pendingFileNavigation: PendingFileNavigation | null;
@@ -49,12 +50,12 @@ export interface WorkspaceLayoutState {
   chatTabSessionIds: string[]; // Ordered session IDs for open chat tabs
   activeChatTabSessionId: string | null; // Which chat tab is active
   knownChatSessionIds: string[]; // The chats the tab view knew when it last saved
-  simulatorUdid: string | null; // Last-used simulator UDID for this workspace
 }
 
 export const defaultLayout: WorkspaceLayoutState = {
   workspaceTabs: [],
   activeWorkspaceTabId: null,
+  deviceChoice: null,
   nextTerminalNum: 1,
   selectedFilePath: null,
   pendingFileNavigation: null,
@@ -63,7 +64,6 @@ export const defaultLayout: WorkspaceLayoutState = {
   chatTabSessionIds: [],
   activeChatTabSessionId: null,
   knownChatSessionIds: [],
-  simulatorUdid: null,
 };
 
 function stripEphemeralLayouts(
@@ -141,7 +141,6 @@ interface WorkspaceLayoutStore {
   setSelectedFilePath: (workspaceId: string, path: string | null) => void;
   setPendingFileNavigation: (workspaceId: string, navigation: PendingFileNavigation | null) => void;
   setPanelMode: (workspaceId: string, mode: WorkspacePanelMode) => void;
-  setSimulatorUdid: (workspaceId: string, udid: string | null) => void;
   setChatTabState: (
     workspaceId: string,
     sessionIds: string[],
@@ -191,8 +190,6 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
             activeChatTabSessionId: activeSessionId,
             ...(knownSessionIds ? { knownChatSessionIds: knownSessionIds } : {}),
           }),
-        setSimulatorUdid: (workspaceId, udid) =>
-          get().setLayout(workspaceId, { simulatorUdid: udid }),
 
         clearWorkspaceLayout: (workspaceId) => {
           const existing = get().layouts[workspaceId];
@@ -213,7 +210,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
       }),
       {
         name: "workspace-layout-store",
-        version: 13,
+        version: 14,
         partialize: (state) => ({ layouts: stripEphemeralLayouts(state.layouts) }),
         // Pre-launch: obsolete layout preferences fall back to defaults; history lives in the DB.
         migrate: () => ({ layouts: {} }),
@@ -252,8 +249,6 @@ export const workspaceLayoutActions = {
     useWorkspaceLayoutStore
       .getState()
       .setChatTabState(workspaceId, sessionIds, activeSessionId, knownSessionIds),
-  setSimulatorUdid: (workspaceId: string, udid: string | null) =>
-    useWorkspaceLayoutStore.getState().setSimulatorUdid(workspaceId, udid),
   clearWorkspaceLayout: (workspaceId: string) =>
     useWorkspaceLayoutStore.getState().clearWorkspaceLayout(workspaceId),
   resetAll: () => useWorkspaceLayoutStore.getState().resetAll(),

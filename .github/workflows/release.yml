@@ -240,7 +240,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       # afterPack checked each app's layout (every executable built for its
-      # architecture, the simulator helpers universal) and afterSign the
+      # architecture) and afterSign the
       # runtime's signature; this checks what notarization decides, for both.
       - name: Verify macOS artifacts
         run: |

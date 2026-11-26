@@ -11,7 +11,7 @@ import type { ThinkingLevel } from "@/shared/agents";
 import { HomeView, type Repository } from "@/features/repository";
 import { useWorkspacePanelMode } from "@/features/workspace";
 import { useFileWatcher } from "@/features/file-browser/hooks/useFileWatcher";
-import { useSimulatorCapabilities } from "@/features/simulator";
+import { useDeviceSupport } from "@/features/device/useDeviceSupport";
 import { workspaceLayoutActions } from "@/features/workspace/store";
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
@@ -83,7 +83,7 @@ interface MainContentProps {
 const toolOpenedEvent = {
   terminal: "terminal_opened",
   browser: "browser_opened",
-  simulator: "simulator_opened",
+  device: "device_opened",
   changes: "diff_viewed",
   files: "files_opened",
   config: null,
@@ -114,17 +114,13 @@ export function MainContent({
   const { panelMode, setPanelMode } = useWorkspacePanelMode(selectedWorkspaceId);
 
   const experimentalSettings = useSettings().data;
-  const simulatorCapabilities = useSimulatorCapabilities({
-    enabled: experimentalSettings?.experimental_simulator === true,
-  });
-  const simulatorAvailable =
-    experimentalSettings?.experimental_simulator === true &&
-    simulatorCapabilities.data.available === true;
-  // A cloud workspace's tabs are its computer's, whatever this one's settings say.
+  const deviceAvailable =
+    useDeviceSupport({ enabled: selectedWorkspace?.kind !== "cloud" }).data?.liveView ===
+    "available";
   const workspaceKind = selectedWorkspace?.kind;
   const tabVisibility = useMemo(
-    () => tabsFor(workspaceKind ? { kind: workspaceKind } : null, simulatorAvailable),
-    [workspaceKind, simulatorAvailable]
+    () => tabsFor(workspaceKind ? { kind: workspaceKind } : null, deviceAvailable),
+    [workspaceKind, deviceAvailable]
   );
 
   const visibleTools = useMemo(
@@ -250,6 +246,7 @@ export function MainContent({
         {selectedWorkspace ? (
           isMobile ? (
             <MobileLayout
+              visibility={tabVisibility}
               key={selectedWorkspace.id}
               workspace={selectedWorkspace}
               sendAgentMessageHandler={sendAgentMessageHandler}

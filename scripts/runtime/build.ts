@@ -18,12 +18,6 @@ function prepareGhCli(): void {
 try {
   console.log("Staging shared runtime...\n");
   stageRuntime();
-  // deus-runtime compiles the Simulator tab's engine bundle in: build it from
-  // source here, since install keeps whatever dist/engine.js a checkout had.
-  execFileSync("bun", ["run", "build:ts"], {
-    cwd: path.join(projectRoot, "packages/device-use"),
-    stdio: "inherit",
-  });
   buildDeusRuntime();
   await prepareAgentClis();
   prepareGhCli();
