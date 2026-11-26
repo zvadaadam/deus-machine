@@ -20,7 +20,7 @@ import {
   getSnapshot,
   type ElementBox,
 } from "./agent-browser-client";
-import { type DeusTool, tool } from "./tool";
+import { type DeusTool, tool } from "@shared/host-tool";
 
 // ============================================================================
 // Snapshot file-based fallback constants

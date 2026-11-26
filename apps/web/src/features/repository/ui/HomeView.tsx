@@ -20,6 +20,7 @@ import { PastedImageCard } from "@/features/session/ui/PastedImageCard";
 import type { Repository } from "../types";
 import { tempo } from "@/shared/lib/tempo";
 import { CloudToggle, BranchPickerButton } from "./composer/ComposerControls";
+import { CoordinatorToggle } from "./composer/CoordinatorToggle";
 import { RepoPicker } from "./composer/RepoPicker";
 import { useNewChatSelection } from "./composer/useNewChatSelection";
 import { useComposerLocation } from "./composer/useComposerLocation";
@@ -84,7 +85,8 @@ interface HomeViewProps {
     /** The thinking level picked here; absent for a model with no thinking control. */
     thinkingLevel?: ThinkingLevel,
     /** In the cloud, the organization it starts in (the composer's). */
-    organizationId?: string | null
+    organizationId?: string | null,
+    role?: "coordinator"
   ) => Promise<boolean>;
   onOpenProject?: () => void;
   onCloneRepository?: () => void;
@@ -139,6 +141,7 @@ export function HomeView({
     clearSent,
   } = useHomeComposer();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [coordinator, setCoordinator] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handlePaste = async (e: React.ClipboardEvent) => {
@@ -292,7 +295,8 @@ export function HomeView({
         selectedBranch ?? undefined,
         location,
         selection.sentThinkingLevel,
-        cloudOrganizationId
+        cloudOrganizationId,
+        ...(location === "local" && coordinator ? ["coordinator" as const] : [])
       );
       if (!started) return;
       clearSent();
@@ -310,6 +314,7 @@ export function HomeView({
     selectedBranch,
     location,
     cloudOrganizationId,
+    coordinator,
     onSendMessage,
     clearSent,
   ]);
@@ -488,19 +493,29 @@ export function HomeView({
 
             {/* Bottom toolbar — model picker (left) + send button (right) */}
             <div className="flex items-center justify-between px-1.5 pt-0.5 pb-2">
-              <ModelPicker
-                model={selection.model}
-                agentHarness={selection.agentHarness}
-                lists={selection.lists}
-                gateways={selection.gateways}
-                thinkingLevel={selection.thinkingLevel}
-                preferredThinking={selection.preferredThinking}
-                defaultThinking={selection.defaultThinking}
-                hasMessages={false}
-                onModelChange={selection.setModel}
-                onThinkingLevelChange={selection.setThinkingLevel}
-                side="bottom"
-              />
+              <div className="flex min-w-0 items-center">
+                <ModelPicker
+                  model={selection.model}
+                  agentHarness={selection.agentHarness}
+                  lists={selection.lists}
+                  gateways={selection.gateways}
+                  thinkingLevel={selection.thinkingLevel}
+                  preferredThinking={selection.preferredThinking}
+                  defaultThinking={selection.defaultThinking}
+                  hasMessages={false}
+                  onModelChange={selection.setModel}
+                  onThinkingLevelChange={selection.setThinkingLevel}
+                  side="bottom"
+                />
+
+                {hasRepos && (
+                  <CoordinatorToggle
+                    cloud={location === "cloud"}
+                    enabled={location === "local" && coordinator}
+                    onToggle={() => setCoordinator((on) => !on)}
+                  />
+                )}
+              </div>
 
               {/* Send button */}
               <button

@@ -115,6 +115,15 @@ export default [
     invalidate(["workspaces"]);
     return { previousTitle: workspace.title };
   }),
+  handle(api.makeCoordinator, ({ workspaceId }) => {
+    const result = getDatabase()
+      .prepare(
+        "UPDATE workspaces SET role = 'coordinator' WHERE id = ? AND kind = 'worktree' AND state = 'ready'"
+      )
+      .run(workspaceId);
+    if (!result.changes) throw new ConflictError("Choose a ready workspace on this computer.");
+    invalidate(["workspaces", "sessions", "session"]);
+  }),
   handle(api.updateWorkspaceStatus, ({ workspaceId, status }) => {
     setWorkspaceStatus(workspaceId, status);
     invalidate(["workspaces"]);

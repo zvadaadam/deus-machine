@@ -240,14 +240,16 @@ export function MainLayout() {
       branch?: string,
       location?: "local" | "cloud",
       thinkingLevel?: ThinkingLevel,
-      organizationId?: string | null
+      organizationId?: string | null,
+      role?: "coordinator"
     ) => {
       try {
         const workspace = await welcomeCreateMutation.mutateAsync(
-          branch || location
+          branch || location || role
             ? {
                 repositoryId: repoId,
                 source_branch: branch,
+                ...(role && { role }),
                 location,
                 // A cloud workspace starts in the organization the composer names.
                 ...(location === "cloud" && organizationId

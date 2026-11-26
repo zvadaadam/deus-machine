@@ -16,7 +16,7 @@ import { join } from "path";
 import { createAgentTools } from "../../../../packages/screen-studio/src/index";
 import { getElementBox, getRecordingTarget } from "./agent-browser-client";
 import { HostRpc } from "../../host-link";
-import { type DeusTool, tool } from "./tool";
+import { type DeusTool, tool } from "@shared/host-tool";
 
 /** Under tmpdir: the backend's /files/stream only serves media from there. */
 const RECORDINGS_DIR = join(tmpdir(), "deus-recordings");

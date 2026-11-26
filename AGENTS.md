@@ -303,6 +303,10 @@ After rechecking the recorded path and counts, `workspace-lifecycle.ts` unlinks 
 the project, its workspaces, chats and boards. The folder, checkouts and Git branches stay on disk.
 Startup also clears automation links before deleting empty-named projects with no workspaces.
 
+Only the person can make a local workspace a coordinator, with the flag on Home or “Make coordinator” in its row menu.
+A chat pins its board tools at its first ask. A conversation already started keeps its tools, and the promotion explains that new chats coordinate and opens the workspace with its New chat action. Archiving the workspace hides its boards from the sidebar.
+Their links still open for reading. Restoring the workspace brings the boards back. Removing its project deletes them.
+
 A workspace is created in one place: Home, whose composer sends the first
 message with it. Everything that wants one goes there through
 `openNewWorkspace({ repoId?, draft? })` (`features/workspace/lib/newWorkspace.ts`):

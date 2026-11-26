@@ -36,6 +36,7 @@ import { track } from "@/platform/analytics";
 import type { SetupStatus } from "@/shared/types";
 import type { WorkspaceKind, WorkspaceStatus } from "@shared/enums";
 import type { ProjectTask } from "@shared/types/project-environment";
+import { CoordinatorMark } from "./CoordinatorRole";
 import { HeaderRunButton } from "./HeaderRunButton";
 import { SetupLogDialog } from "./SetupLogDialog";
 import { useSetupActions } from "../hooks/useSetupActions";
@@ -51,6 +52,7 @@ interface WorkspaceHeaderProps {
   repositoryId: string;
   trailingActions?: ReactNode;
   title?: string;
+  coordinator?: boolean;
   repositoryName?: string;
   branch?: string;
   /** The workspace's folder on this computer (`localFolder`): the Open button opens it. */
@@ -85,6 +87,7 @@ export function WorkspaceHeader({
   repositoryId,
   trailingActions,
   title,
+  coordinator,
   repositoryName,
   branch,
   workspacePath,
@@ -162,6 +165,7 @@ export function WorkspaceHeader({
           </span>
         )}
 
+        {coordinator && <CoordinatorMark />}
         {kind === "cloud" &&
           (cloudPending ? (
             <span className="text-text-muted border-border-secondary mr-0.5 flex flex-shrink-0 items-center gap-1 rounded-full border border-dashed px-1.5 py-px text-[11px] font-medium">

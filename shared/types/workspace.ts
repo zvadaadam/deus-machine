@@ -29,6 +29,7 @@ export interface WorkspaceChat {
  * Represents a git worktree-based development workspace
  */
 export interface Workspace {
+  role?: "coordinator" | null;
   id: string;
   repository_id: string;
   slug: string;

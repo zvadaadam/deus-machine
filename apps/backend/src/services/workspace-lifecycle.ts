@@ -33,6 +33,7 @@ interface StartBranches {
 
 type LocalStart = StartBranches &
   Pick<WorkspaceRow, "title" | "pr_url" | "pr_number"> & {
+    role?: "coordinator" | null;
     git_source_branch: string;
     first_session_id: string;
     started_by: string | null;
@@ -44,8 +45,8 @@ export function insertLocalWorkspace(row: LocalStart): void {
   db.prepare(
     `INSERT INTO workspaces (
        id, repository_id, slug, title, git_branch, git_source_branch,
-       git_target_branch, pr_url, pr_number, state, first_session_id, started_by, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'initializing', ?, ?, datetime('now'))`
+       git_target_branch, pr_url, pr_number, state, first_session_id, started_by, role, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'initializing', ?, ?, ?, datetime('now'))`
   ).run(
     row.id,
     row.repository_id,
@@ -57,7 +58,8 @@ export function insertLocalWorkspace(row: LocalStart): void {
     row.pr_url,
     row.pr_number,
     row.first_session_id,
-    row.started_by
+    row.started_by,
+    row.role ?? null
   );
 }
 

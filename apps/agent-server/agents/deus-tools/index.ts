@@ -14,7 +14,7 @@ import { createWorkspaceTools } from "./workspace";
 import { createBrowserTools } from "./browser";
 import { createAutomationTools } from "./automations";
 import { createRecordingTools } from "./recording";
-import { tool } from "./tool";
+import { tool } from "@shared/host-tool";
 
 const tellUser = tool(
   TELL_USER,

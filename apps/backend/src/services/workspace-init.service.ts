@@ -37,6 +37,7 @@ export async function createWorkspace(
   // Cloud: the row now, the sandbox in the background. Progress arrives as
   // workspace.state events through the cloud driver.
   if (input.location === "cloud") {
+    if (input.role) throw new ValidationError("Coordinators run on this computer.");
     if (!getRepositoryById(getDatabase(), input.repository_id))
       throw new NotFoundError("Repository not found");
     // Signed out is a state the person can fix, not a server fault.
@@ -52,7 +53,7 @@ export async function createWorkspace(
     });
   }
 
-  const { workspaceId } = await createLocalWorkspace(input);
+  const { workspaceId } = await createLocalWorkspace(input, { role: input.role });
   return { workspaceId };
 }
 
@@ -61,8 +62,10 @@ export async function createWorkspace(
  * The operator's admission check counts setups immediately before the insert.
  */
 export async function createLocalWorkspace(
-  input: Omit<CreateWorkspaceInput, "location" | "organization_id">,
-  options: { startedBy?: Origin; admit?: () => void } = {}
+  input: Omit<CreateWorkspaceInput, "location" | "organization_id" | "role">,
+  options:
+    | { startedBy?: Origin; admit?: () => void; role?: never }
+    | { role?: "coordinator"; startedBy?: never; admit?: never } = {}
 ): Promise<{ workspaceId: string; firstSessionId: string }> {
   const repo = getRepositoryById(getDatabase(), input.repository_id);
   if (!repo) throw new NotFoundError("Repository not found");
@@ -90,6 +93,7 @@ export async function createLocalWorkspace(
     pr_number: input.pr_number || null,
     first_session_id: firstSessionId,
     started_by: encodeOrigin(options.startedBy),
+    role: options.role ?? null,
   });
   void initializeWorkspace({
     workspaceId,

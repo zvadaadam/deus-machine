@@ -1239,6 +1239,62 @@ describe("through MCP and as a chat's own tools", () => {
     expect(state.sent).toEqual([]);
   });
 
+  it("a coordinator in Plan can read its board and the package refuses every board write", async () => {
+    const base = { name: "deus", tools: [], call: vi.fn() };
+    const ordinary = new Set(
+      sessionTools("s-lead")
+        .compose(base)
+        .tools.map((tool) => tool.name)
+    );
+    state.db.exec("UPDATE workspaces SET role = 'coordinator' WHERE id = 'w-lead'");
+    insertChat("s-board", "w-lead");
+    const source = sessionTools("s-board").compose(base);
+    const boards = source.tools.filter((tool) => !ordinary.has(tool.name));
+    const caller = {
+      sessionId: "s-board",
+      harness: "claude-code",
+      turnId: "t",
+      permissionMode: "plan",
+    } as const;
+    const signal = new AbortController().signal;
+    const made = await source.call(
+      "create_board",
+      { name: "Release desk" },
+      { ...caller, permissionMode: "bypass_permissions" },
+      signal
+    );
+    expect(made.isError).toBeFalsy();
+    const read = await source.call("read_board", {}, caller, signal);
+    expect(read.isError).toBeFalsy();
+    expect(JSON.stringify(read.content)).toContain("Release desk");
+    expect(boards.filter((tool) => tool.annotations?.readOnly).map((tool) => tool.name)).toEqual([
+      "read_board",
+    ]);
+    const writes = boards.filter((tool) => !tool.annotations?.readOnly);
+    expect(writes.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(["create_board", "post_to_board"])
+    );
+    for (const tool of writes) {
+      expect(await source.call(tool.name, {}, caller, signal)).toMatchObject({
+        isError: true,
+        content: [{ text: expect.stringContaining("refused (read_only)") }],
+      });
+    }
+  });
+
+  it.each(["list_sessions", "post_to_board"])("refuses a base tool colliding with %s", (name) => {
+    state.db.exec("UPDATE workspaces SET role='coordinator' WHERE id='w-lead'");
+    insertChat("new-coordinator", "w-lead");
+    const assembly = sessionTools("new-coordinator");
+    expect(() =>
+      assembly.compose({
+        name: "base",
+        tools: [{ name, description: "base tool", inputSchema: { type: "object" } }],
+        call: vi.fn(),
+      })
+    ).toThrow(`Duplicate chat tool: ${name}`);
+  });
+
   it("a chat's tools are the operator's beside the Deus tools, each run by its own", async () => {
     const own = {
       name: "deus",

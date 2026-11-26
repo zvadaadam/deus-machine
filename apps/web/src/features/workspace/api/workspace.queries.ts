@@ -292,6 +292,7 @@ type CreateWorkspaceParams =
       /** With `location: "cloud"`, the organization it starts in (the backend's default when absent). */
       organization_id?: string;
       source_branch?: string;
+      role?: "coordinator";
       pr_number?: number;
       pr_url?: string;
       pr_title?: string;

@@ -66,7 +66,7 @@ function withWorkspaceChats(db: Database.Database, rows: WorkspaceResult[]) {
  */
 const WORKSPACE_ROW_COLUMNS = `
     w.id, w.repository_id, w.slug, w.title, w.git_branch,
-    w.git_target_branch, w.kind, w.provider_workspace_id, w.organization_id,
+    w.git_target_branch, w.role, w.kind, w.provider_workspace_id, w.organization_id,
     w.state, w.status, w.current_session_id,
     ${START_RECOVERABLE_COLUMN},
     w.pr_url, w.pr_number,

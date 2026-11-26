@@ -1,9 +1,10 @@
 import type { HostToolSource } from "@zvada/agent-server/core";
 import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
 import { operatorTools } from "./assistants/operator";
+import { boardSource } from "./boards/tools";
 
-export function sessionTools(_sessionId: string) {
-  const operator = operatorTools();
+export function sessionTools(sessionId: string) {
+  const operator = operatorTools(boardSource(sessionId));
   return {
     instructions: operator.instructions ?? "",
     compose(base: HostToolSource): HostToolSource {

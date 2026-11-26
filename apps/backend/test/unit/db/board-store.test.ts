@@ -3,6 +3,8 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { SCHEMA_SQL } from "@shared/schema";
+import { createChat } from "../../../src/db";
+import { boardSource } from "../../../src/services/boards/tools";
 import * as store from "../../../src/services/boards/store";
 
 let db: Database.Database;
@@ -98,4 +100,56 @@ it("keeps the board and subject when the chat is archived and selects its newest
   db.exec("DELETE FROM repositories");
   expect(() => store.getBoard(id)).toThrow(/does not exist/);
   expect(db.prepare("SELECT count(*) AS n FROM board_messages").get()).toEqual({ n: 0 });
+});
+
+it("pins the chat’s board tools on first use and keeps a resumed conversation ordinary after promotion", () => {
+  db.exec("UPDATE workspaces SET role=NULL WHERE id='w'");
+  const used = createChat(db, "w", {});
+  const empty = createChat(db, "w", {});
+  const resumed = createChat(db, "w", {});
+  db.prepare("UPDATE sessions SET agent_session_id='native' WHERE id=?").run(resumed);
+  expect(boardSource(used)).toBeUndefined();
+  db.exec("UPDATE workspaces SET role='coordinator' WHERE id='w'");
+  expect(boardSource(used)).toBeUndefined();
+  expect(boardSource(resumed)).toBeUndefined();
+  expect(boardSource(empty)).toBeDefined();
+  expect(boardSource(createChat(db, "w", {}))).toBeDefined();
+});
+
+it("shares tools across coordinator chats and checks ownership and archive at call time", async () => {
+  const call = (id: string, name: string, args: Record<string, unknown>) =>
+    boardSource(id)!.call(
+      name,
+      args,
+      {
+        sessionId: id,
+        turnId: "turn",
+        harness: "claude-code",
+        permissionMode: "bypass_permissions",
+      },
+      new AbortController().signal
+    );
+  expect(boardSource("s")).toBeDefined();
+  const first = createChat(db, "w", {}),
+    sibling = createChat(db, "w", {});
+  await call(first, "create_board", { name: "Release" });
+  const board = store.boardForChat(first);
+  await call(sibling, "post_to_board", { board, body: "Ready" });
+  expect(store.getPost(board, 1).body).toBe("Ready");
+  db.exec(
+    "INSERT INTO workspaces (id,repository_id,slug,role,state) VALUES ('other','r','other','coordinator','ready')"
+  );
+  const other = createChat(db, "other", {});
+  await expect(call(other, "read_board", { board })).rejects.toThrow(/does not coordinate/);
+  const source = boardSource(sibling)!;
+  db.exec("UPDATE workspaces SET state = 'archived' WHERE id = 'w'");
+  await expect(
+    source.call(
+      "read_board",
+      { board },
+      { sessionId: sibling, turnId: "t", harness: "claude-code", permissionMode: "plan" },
+      new AbortController().signal
+    )
+  ).rejects.toThrow("The coordinator workspace is archived.");
+  expect(boardSource(sibling)).toBeUndefined();
 });

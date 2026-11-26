@@ -220,31 +220,35 @@ describe("createWorkspace", () => {
     expect(mockInvalidate).toHaveBeenCalledWith(["workspaces"]);
   });
 
-  it("creates the row in initializing state, with the branch it starts from", async () => {
-    mockStmt.get.mockReturnValueOnce(MOCK_REPO);
+  it.each([undefined, "coordinator"] as const)(
+    "creates the initializing row with its branch and requested role %s",
+    async (role) => {
+      mockStmt.get.mockReturnValueOnce(MOCK_REPO);
 
-    await create({ repository_id: "repo-001", source_branch: "develop" });
+      await create({ repository_id: "repo-001", source_branch: "develop", role });
 
-    const insert = mockDb.prepare.mock.calls
-      .map(([sql]) => String(sql))
-      .find((sql) => sql.includes("INSERT INTO workspaces"));
-    expect(insert).toContain("'initializing'");
-    // id, repository, slug, title, branch, source branch, target branch, PR url, PR number,
-    // the first chat's id (minted now), who started it (none: the person)
-    expect(mockStmt.run).toHaveBeenCalledWith(
-      "ws-test-uuid",
-      "repo-001",
-      "europa",
-      null,
-      "testuser/europa",
-      "develop",
-      "main",
-      null,
-      null,
-      "ws-test-uuid",
-      null
-    );
-  });
+      const insert = mockDb.prepare.mock.calls
+        .map(([sql]) => String(sql))
+        .find((sql) => sql.includes("INSERT INTO workspaces"));
+      expect(insert).toContain("'initializing'");
+      // id, repository, slug, title, branch, source branch, target branch, PR url, PR number,
+      // the first chat's id, who started it (the person), and the chosen role.
+      expect(mockStmt.run).toHaveBeenCalledWith(
+        "ws-test-uuid",
+        "repo-001",
+        "europa",
+        null,
+        "testuser/europa",
+        "develop",
+        "main",
+        null,
+        null,
+        "ws-test-uuid",
+        null,
+        role ?? null
+      );
+    }
+  );
 
   it("does no slow git work itself: fetching and the worktree belong to the pipeline", async () => {
     mockStmt.get.mockReturnValueOnce(MOCK_REPO);
