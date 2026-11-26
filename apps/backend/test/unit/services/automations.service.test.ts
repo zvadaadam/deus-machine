@@ -1146,16 +1146,19 @@ describeWithDb("openAutomationRun", () => {
     "reuses the newest %s workspace on the computer for a new chat",
     async (state) => {
       const insert = db.prepare(
-        `INSERT INTO workspaces (id, repository_id, slug, provider_workspace_id, state, updated_at)
-       VALUES (?, 'r1', ?, 'agnt-ws-1', ?, ?)`
+        `INSERT INTO workspaces (id, repository_id, slug, provider_workspace_id, state, updated_at, organization_id)
+       VALUES (?, 'r1', ?, 'agnt-ws-1', ?, ?, ?)`
       );
-      insert.run("oldest", "oldest", state, "2026-01-01");
-      insert.run("newest", "newest", state, "2026-01-02");
-      if (state === "ready") insert.run("archived", "archived", "archived", "2026-01-03");
-      const { workspaceId } = await openAutomationRun("run-1");
+      const organization = state === "archived" ? "original" : null;
+      insert.run("oldest", "oldest", state, "2026-01-01", null);
+      insert.run("newest", "newest", state, "2026-01-02", organization);
+      if (state === "ready") insert.run("archived", "archived", "archived", "2026-01-03", null);
+      const { workspaceId, sessionId } = await openAutomationRun("run-1");
       expect(workspaceId).toBe("newest");
-      expect(db.prepare("SELECT state FROM workspaces WHERE id = ?").get(workspaceId)).toEqual({
+      expect(db.prepare("SELECT * FROM workspaces WHERE id = ?").get(workspaceId)).toMatchObject({
         state: "ready",
+        current_session_id: sessionId,
+        organization_id: organization ?? "org-1",
       });
     }
   );

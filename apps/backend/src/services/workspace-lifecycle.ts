@@ -8,8 +8,13 @@ import type { RepoRemovalConfirmation } from "@shared/api/repos";
 import { sessionEvents } from "@shared/api/sessions";
 import type { InitFetchIssue, SetupStatus } from "@shared/enums";
 import { CLOUD_PROJECT_REMOVAL_REASON } from "@shared/types/repository";
-import { uuidv7 } from "@shared/lib/uuid";
-import { getWorkspaceRaw, START_RECOVERABLE, type WorkspaceRow } from "../db";
+import {
+  createChat,
+  getWorkspaceRaw,
+  selectChat,
+  START_RECOVERABLE,
+  type WorkspaceRow,
+} from "../db";
 import { getDatabase } from "../lib/database";
 import { ConflictError, NotFoundError } from "../lib/errors";
 import { invalidate } from "./query-engine";
@@ -131,13 +136,14 @@ export function finishLocalStart(workspaceId: string, token: AbortSignal): boole
       | { first_session_id: string | null; started_by: string | null }
       | undefined;
     if (!row) return false;
-    const sessionId = row.first_session_id ?? uuidv7();
+    const sessionId = createChat(db, workspaceId, {
+      id: row.first_session_id,
+      startedBy: row.started_by,
+      select: true,
+    });
     db.prepare(
-      "INSERT INTO sessions (id, workspace_id, status, started_by, updated_at) VALUES (?, ?, 'idle', ?, datetime('now'))"
-    ).run(sessionId, workspaceId, row.started_by);
-    db.prepare(
-      "UPDATE workspaces SET state = 'ready', init_stage = 'done', current_session_id = ?, first_session_id = ? WHERE id = ?"
-    ).run(sessionId, sessionId, workspaceId);
+      "UPDATE workspaces SET state = 'ready', init_stage = 'done', first_session_id = ? WHERE id = ?"
+    ).run(sessionId, workspaceId);
     return true;
   })();
 }
@@ -445,21 +451,16 @@ export function attachCloudChat(
   token: AbortSignal
 ): string | null {
   if (!ownsAttempt(id, token)) return null;
-  const sessionId = uuidv7();
   const db = getDatabase();
-  const attached = db.transaction(() => {
+  const sessionId = db.transaction(() => {
     const updated = db
       .prepare(
-        "UPDATE workspaces SET current_session_id = ?, init_stage = 'provisioning sandbox' WHERE id = ? AND state = 'initializing'"
+        "UPDATE workspaces SET init_stage = 'provisioning sandbox' WHERE id = ? AND state = 'initializing'"
       )
-      .run(sessionId, id);
-    if (!updated.changes) return false;
-    db.prepare(
-      "INSERT INTO sessions (id, workspace_id, provider_session_id, status, updated_at) VALUES (?, ?, ?, 'idle', datetime('now'))"
-    ).run(sessionId, id, providerSessionId);
-    return true;
+      .run(id);
+    return updated.changes ? createChat(db, id, { providerSessionId, select: true }) : null;
   })();
-  if (!attached) return null;
+  if (!sessionId) return null;
   invalidate([...WORKSPACE_RESOURCES], {});
   return sessionId;
 }
@@ -648,12 +649,8 @@ export function rollbackCloudRestore(workspaceId: string): void {
  *  Both membership and selection belong to the workspace list. */
 export function reviveAdoptedWorkspace(workspaceId: string, sessionId: string): void {
   const revived = markAdoptedWorkspaceReady(workspaceId);
-  const selected = getDatabase()
-    .prepare(
-      "UPDATE workspaces SET current_session_id = ?, updated_at = datetime('now') WHERE id = ? AND current_session_id IS NOT ?"
-    )
-    .run(sessionId, workspaceId, sessionId);
-  if (revived || selected.changes) invalidate(["workspaces"]);
+  const selected = selectChat(getDatabase(), workspaceId, sessionId);
+  if (revived || selected) invalidate(["workspaces"]);
 }
 
 /** reviveAdoptedWorkspace publishes after selecting the chat. */
@@ -688,17 +685,16 @@ export function insertAdoptedWorkspace(
   );
 }
 
-/** openAutomationRun publishes the chat pointer with the rest of the adoption after transcript backfill. */
 export function attachAdoptedSession(
   workspaceId: string,
   sessionId: string,
   organizationId: string | null
 ): void {
-  getDatabase()
-    .prepare(
-      "UPDATE workspaces SET current_session_id = ?, organization_id = COALESCE(organization_id, ?), updated_at = datetime('now') WHERE id = ?"
-    )
-    .run(sessionId, organizationId, workspaceId);
+  const db = getDatabase();
+  selectChat(db, workspaceId, sessionId);
+  db.prepare(
+    "UPDATE workspaces SET organization_id = COALESCE(organization_id, ?) WHERE id = ?"
+  ).run(organizationId, workspaceId);
 }
 
 /** The integration CLI seeds its private database without publishing a live read. */

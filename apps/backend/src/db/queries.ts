@@ -5,6 +5,8 @@
  * Route handlers call these functions instead of inline SQL.
  */
 import type Database from "better-sqlite3";
+import { uuidv7 } from "@shared/lib/uuid";
+import { DEFAULT_AGENT_HARNESS } from "@shared/models";
 import type { ArchivedWorkspace, WorkspaceChat } from "@shared/types/workspace";
 import {
   ReportedOriginSchema,
@@ -171,6 +173,38 @@ export function getWorkspacesBySessionIds(db: Database.Database, sessionIds: str
 }
 
 // ─── Session Queries ─────────────────────────────────────────
+
+export function selectChat(db: Database.Database, workspaceId: string, sessionId: string): boolean {
+  return (
+    db
+      .prepare(
+        "UPDATE workspaces SET current_session_id = ? WHERE id = ? AND current_session_id IS NOT ?"
+      )
+      .run(sessionId, workspaceId, sessionId).changes > 0
+  );
+}
+
+/** Insert the chat and, when requested, select it in the caller's transaction. */
+export function createChat(
+  db: Database.Database,
+  workspaceId: string,
+  options: {
+    id?: string | null;
+    harness?: string;
+    providerSessionId?: string;
+    startedBy?: string | null;
+    select?: boolean;
+  }
+): string {
+  const { harness = DEFAULT_AGENT_HARNESS, providerSessionId = null, startedBy = null } = options;
+  const id = options.id ?? uuidv7();
+  db.prepare(
+    `INSERT INTO sessions (id, workspace_id, agent_harness, provider_session_id, started_by)
+     VALUES (?, ?, ?, ?, ?)`
+  ).run(id, workspaceId, harness, providerSessionId, startedBy);
+  if (options.select) selectChat(db, workspaceId, id);
+  return id;
+}
 
 /** Read SQLite flags as booleans. A chat whose agent hasn't asked about messages reads false. */
 function coerceSessionBooleans<T extends SessionRow>(row: T): T {
