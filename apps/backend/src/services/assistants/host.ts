@@ -318,15 +318,15 @@ function limitNote(limit: sessions.QueuedMessages["limit"]) {
 
 type QueueSenderName = (origin?: Origin) => string;
 
-function queueSenderNames(entries: () => Entry[], reader?: Origin): QueueSenderName {
-  let all: Entry[] | undefined;
+function queueSenderNames(references: () => Map<string, string>, reader?: Origin): QueueSenderName {
+  let refs: Map<string, string> | undefined;
   return (origin) => {
     if (!origin || origin.kind === "person") return "the person";
     if (reader && sameOrigin(reader, origin)) return "you";
     if (origin.kind === "assistant") return quoted(origin.name);
-    all ??= entries();
-    const entry = all.find((e) => e.id === origin.sessionId);
-    return entry ? quoted(refOf(entry, all)) : "a chat that is gone";
+    refs ??= references();
+    const name = refs.get(origin.sessionId);
+    return name ? quoted(name) : "a chat that is gone";
   };
 }
 
@@ -453,9 +453,9 @@ export function createDeusHost(): DeusHost {
   function entriesOf(found: readonly Row[]): Entry[] {
     const ended = lastEnded(found.flatMap((r) => (r.session_id ? [r.session_id] : [])));
     const counted = new Map<string, number>();
-    return found.map((row): Entry => {
-      // A read for names alone can see a workspace before its first chat has an id.
-      const id = row.session_id ?? row.first_session_id ?? row.workspace_id;
+    return found.flatMap((row): Entry[] => {
+      const id = row.session_id ?? row.first_session_id;
+      if (!id) return [];
       // Its stored number (made in order, never moved); a chat from before numbers counts on.
       const chat = row.chat ?? (counted.get(row.workspace_id) ?? 0) + 1;
       counted.set(row.workspace_id, chat);
@@ -478,41 +478,75 @@ export function createDeusHost(): DeusHost {
         : status === "error" && !row.message_count
           ? row.s_error
           : null;
-      return {
-        id,
-        project: { id: row.repository_id, name: row.repo_name },
-        workspace: { id: row.workspace_id, name: row.slug },
-        chat,
-        current: row.current_session_id ? row.current_session_id === id : chat === 1,
-        status,
-        ...(status === "stopped" && cancelledBy ? { cancelledBy } : {}),
-        startedBy: readOrigin(row.s_started_by ?? (row.session_id ? null : row.ws_started_by)),
-        harness: knownHarness(row.agent_harness),
-        ...(title ? { title } : {}),
-        ...(activity ? { lastActivityAt: activity } : {}),
-        ...(status === "error" && error ? { error: homeRelative(error, "diagnostic") } : {}),
-        ...(root ? { root } : {}),
-        ...(status === "error" &&
-          row.error_category === "usage_limit" && { note: limitNote(queuedMessages(id).limit) }),
-      };
+      return [
+        {
+          id,
+          project: { id: row.repository_id, name: row.repo_name },
+          workspace: { id: row.workspace_id, name: row.slug },
+          chat,
+          current: row.current_session_id ? row.current_session_id === id : chat === 1,
+          status,
+          ...(status === "stopped" && cancelledBy ? { cancelledBy } : {}),
+          startedBy: readOrigin(row.s_started_by ?? (row.session_id ? null : row.ws_started_by)),
+          harness: knownHarness(row.agent_harness),
+          ...(title ? { title } : {}),
+          ...(activity ? { lastActivityAt: activity } : {}),
+          ...(status === "error" && error ? { error: homeRelative(error, "diagnostic") } : {}),
+          ...(root ? { root } : {}),
+          ...(status === "error" &&
+            row.error_category === "usage_limit" && { note: limitNote(queuedMessages(id).limit) }),
+        },
+      ];
     });
   }
 
-  function senderEntries(origins: (Origin | undefined)[]) {
-    // refOf needs each sender's chats and one representative of each other workspace.
-    const ids = origins.flatMap((o) => (o?.kind === "session" ? [o.sessionId] : []));
-    return entriesOf(
+  function senderRefs(origins: (Origin | undefined)[], listed?: Entry[]) {
+    const ids = new Set(origins.flatMap((o) => (o?.kind === "session" ? [o.sessionId] : [])));
+    const refs = (named: Entry[], all: Entry[]) =>
+      new Map(named.map((entry) => [entry.id, refOf(entry, all)]));
+    if (listed)
+      return refs(
+        listed.filter((entry) => ids.has(entry.id)),
+        listed
+      );
+
+    // A chat from before stored numbers needs its siblings to compute its place.
+    const from = "SELECT value FROM json_each(@ids)";
+    const named = entriesOf(
       readRows(
-        `AND (w.id IN (SELECT workspace_id FROM sessions WHERE id IN (SELECT value FROM json_each(?)))
-         OR s.id IS (SELECT id FROM sessions WHERE workspace_id = w.id ORDER BY chat, id LIMIT 1))`,
-        JSON.stringify(ids)
+        `AND (s.id IN (${from}) OR w.id IN (
+         SELECT workspace_id FROM sessions WHERE chat IS NULL AND id IN (${from})))`,
+        { ids: JSON.stringify([...ids]) }
       )
+    ).filter((entry) => ids.has(entry.id));
+    const names = new Set(named.map((entry) => entry.workspace.name.toLowerCase()));
+    if (!names.size) return new Map<string, string>();
+
+    // SQLite folds ASCII. Read only possible spellings, then compare them as refOf does.
+    const candidates = getDatabase()
+      .prepare<string, { id: string; slug: string }>(
+        `SELECT id, slug FROM workspaces WHERE kind != 'cloud' AND
+       (slug COLLATE NOCASE IN (SELECT value FROM json_each(?)) OR length(slug) != length(CAST(slug AS BLOB)))`
+      )
+      .all(JSON.stringify([...names]));
+    const peers = candidates.filter(
+      ({ id, slug }) =>
+        names.has(slug.toLowerCase()) && !named.some((entry) => entry.workspace.id === id)
     );
+    if (!peers.length) return refs(named, named);
+    const rows = readRows(
+      `AND w.id IN (SELECT value FROM json_each(?)) AND s.id IS
+       (SELECT id FROM sessions WHERE workspace_id = w.id ORDER BY chat, id LIMIT 1)`,
+      JSON.stringify(peers.map(({ id }) => id))
+    );
+    // An unopened namesake counts for refOf, but cannot be looked up as a sender.
+    for (const row of rows) row.first_session_id ??= row.workspace_id;
+    return refs(named, [...named, ...entriesOf(rows)]);
   }
 
   function withQueueNote(entry: Entry, all?: Entry[]) {
     const queue = queuedMessages(entry.id);
-    const name = queueSenderNames(() => all ?? senderEntries([queue.stoppedBy]));
+    const name = queueSenderNames(() => senderRefs([queue.stoppedBy], all));
     const note = queueNote(queue, queueHold(queue, name) ?? entry.note);
     if (note) entry.note = note;
     return entry;
@@ -763,7 +797,7 @@ export function createDeusHost(): DeusHost {
       const queue = queuedMessages(id);
       const by = originOf(caller);
       const names = queueSenderNames(
-        () => senderEntries([queue.stoppedBy, ...queue.items.map((row) => row.origin)]),
+        () => senderRefs([queue.stoppedBy, ...queue.items.map((row) => row.origin)]),
         by
       );
       return queueView(queue, by, names);

@@ -22,7 +22,7 @@ import {
 import * as api from "@shared/api/sessions";
 import { findConversationMessage } from "@shared/conversation-rows";
 import { SCHEMA_SQL } from "@shared/schema";
-import { reportInterruption, holdingTurn, lastTurn } from "../../../src/services/agent/chat-turn";
+import * as chatTurns from "../../../src/services/agent/chat-turn";
 import * as agent from "../../../src/services/agent/service";
 import * as cloud from "../../../src/services/agent/cloud/driver";
 import {
@@ -75,6 +75,7 @@ vi.mock("../../../src/services/pr-snapshot.service", () => ({
 }));
 
 const { answer, clearAll, pendingFor } = toolRelay;
+const { reportInterruption, holdingTurn, lastTurn } = chatTurns;
 const run = operations(sessionHandlers);
 let db: Database.Database;
 let sessionId: string;
@@ -3727,16 +3728,30 @@ describe("operating another chat's queue", () => {
 
   it("resolves a view's queue senders without opening unrelated workspace entries", async () => {
     db.exec(`
-      INSERT INTO sessions (id, workspace_id, chat) VALUES ('peer', 'w', 3);
-      INSERT INTO workspaces (id, repository_id, slug, state) VALUES ('unrelated','r','other','ready');
+      INSERT INTO repositories (id, name, root_path) VALUES ('other-project', 'Other project', '/tmp/other');
+      INSERT INTO workspaces (id, repository_id, slug, state) VALUES
+        ('source','r','review','ready'), ('unrelated','other-project','other','ready');
+      INSERT INTO sessions (id, workspace_id, chat) VALUES ('sibling','source',1), ('peer','source',3);
     `);
     await send("active");
     await task("row");
     await stopped("active", { kind: "session", sessionId: "peer" });
     end("active", "cancelled");
     const host = createDeusHost();
-    expect((await host.view(windowCaller, sessionId, { last: 1 })).note).toContain(
-      'stopped by "checkout:3"'
+    const projected = vi.spyOn(chatTurns, "setupStop");
+    try {
+      expect((await host.view(windowCaller, sessionId, { last: 1 })).note).toContain(
+        'stopped by "review:3"'
+      );
+      expect(new Set(projected.mock.calls.map(([id]) => id))).toEqual(new Set([sessionId, "peer"]));
+    } finally {
+      projected.mockRestore();
+    }
+    db.prepare("UPDATE workspaces SET slug = 'REVIEW' WHERE id = 'unrelated'").run();
+    const view = host.queueView(windowCaller, sessionId);
+    expect(view.hold).toBe('held: stopped by "repo/review:3"');
+    expect(view.senderName({ kind: "session", sessionId: "unrelated" })).toBe(
+      "a chat that is gone"
     );
     expect(
       db.prepare("SELECT first_session_id FROM workspaces WHERE id = 'unrelated'").pluck().get()
