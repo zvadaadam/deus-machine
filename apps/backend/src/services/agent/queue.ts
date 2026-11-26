@@ -68,11 +68,11 @@ interface Queue {
  * After a Stop or interruption, the turn takes no more steers and only its usage limit marks rows again.
  * A cancellation credits its first Stop, and one without a stopper leaves held rows for the person.
  * The person's Stop takes priority, and the first agent Stop replaces a failure or limit.
- * Only a limit can hold an empty queue, and clearing it releases its rows.
- * A later send goes ahead of held rows, but an agent or assistant joins a standing hold.
+ * All marked rows share one hold, and only a limit can hold an empty queue.
+ * A person's send follows the last unheld row or leads the waiting rows if all are held, while an agent or assistant joins a standing hold.
  * A fresh steer may enter another turn, and an agent’s fallback row joins the hold.
  * A held row may move but cannot steer into a turn or block an unheld row.
- * Resume clears every mark, and agents may resume failures, agent Stops and limits after a reported reset.
+ * Resume and clearing a limit both release every marked row, and agents may resume failures, agent Stops and limits after a reported reset.
  */
 function markRows(q: Queue, turnId?: string) {
   if (turnId !== undefined) q.answered = turnId;
@@ -246,6 +246,7 @@ async function drain(q: Queue | undefined, retryBusy = false) {
     return;
   }
   if (holdingTurn(q.sessionId)) return;
+  if (head !== q.items[0]) q.items = [head, ...q.items.filter((row) => row !== head)];
   const previous = head.sentAs;
   let turnId = head.message.turnId;
   if (previous) turnId = previous.reuse ? previous.turnId : uuidv7();
@@ -279,12 +280,10 @@ function alreadyQueued({ sessionId, turnId, content }: Message, origin?: Origin)
 }
 
 function appendRow(q: Queue, item: Row) {
-  const firstHeld = item.held
-    ? -1
-    : q.items.findIndex((row) => row.held && row.state !== "sending");
-  if (firstHeld < 0) return q.items.push(item);
-  q.items.splice(firstHeld, 0, item);
-  return firstHeld + 1;
+  if (item.held) return q.items.push(item);
+  const at = q.items.findLastIndex((row) => !row.held || row.state === "sending") + 1;
+  q.items.splice(at, 0, item);
+  return at + 1;
 }
 
 function append(message: Message, origin: Origin | undefined, chat: LocalChat, start = true) {

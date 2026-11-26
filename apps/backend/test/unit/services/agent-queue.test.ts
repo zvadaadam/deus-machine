@@ -4133,15 +4133,25 @@ describe("operating another chat's queue", () => {
     await vi.waitFor(() => expect(starts()).toEqual(["active", "later"]));
   });
 
-  it("runs the unheld send even after a held row is dragged above it", async () => {
+  it("runs unheld sends in arrival order after a held row is dragged above the first", async () => {
     await sendInOrder("A", "held");
     await stopped("A");
     await send("later");
     expect(await ids()).toEqual(["later", "held"]);
     expect(await move("held", "later")).toEqual({ moved: true });
-    expect(await ids()).toEqual(["held", "later"]);
+    await send("last");
+    expect(await ids()).toEqual(["held", "later", "last"]);
+    engine.startTurn.mockResolvedValueOnce(undefined);
     end("A", "cancelled");
     await vi.waitFor(() => expect(starts()).toEqual(["A", "later"]));
+    expect((await queue()).items).toMatchObject([
+      { id: "later", state: "sending" },
+      waitingRow("held"),
+      waitingRow("last"),
+    ]);
+    echo("later");
+    end("later");
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "later", "last"]));
     expect(await queue()).toMatchObject({ paused: "stopped", items: [waitingRow("held")] });
   });
 

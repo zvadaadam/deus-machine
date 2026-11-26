@@ -220,11 +220,11 @@ Only the end of the turn holding the chat can hold the queue, unless another end
 After a Stop or interruption, the turn takes no more steers and only its usage limit marks rows again.
 A cancellation credits its first Stop, and one without a stopper leaves held rows for the person.
 The person’s Stop takes priority, and the first agent Stop replaces a failure or usage limit.
-Only a usage limit holds an empty queue, and clearing it releases its rows.
-A later send goes ahead of held rows, but an agent or assistant joins a standing hold.
+All marked rows share one hold, and only a usage limit can hold an empty queue.
+A person’s send follows the last unheld row or leads the waiting rows if all are held, while an agent or assistant joins a standing hold.
 A fresh steer may enter another turn, and an agent’s fallback row joins the hold.
 A held row may move but cannot steer into a turn or block an unheld row.
-Resume clears every mark, and agents may resume failures, agent Stops and limits after a reported reset.
+Resume and clearing a limit both release every marked row, and agents may resume failures, agent Stops and limits after a reported reset.
 During local app setup, Stop returns the chat to idle at once, except for an agent's or
 assistant's first task, which ends in an error saying it was not delivered. The person
 keeps their draft, a queue head waits first, and an operator's send is refused
