@@ -312,6 +312,7 @@ function unlinkAndDeleteProject(repoId: string): void {
          OR session_id IN (SELECT id FROM sessions WHERE workspace_id IN removed_workspaces)`
   ).run(repoId);
   db.prepare("UPDATE automations SET repository_id = NULL WHERE repository_id = ?").run(repoId);
+  // The project owns its workspaces, which own their chats and boards.
   db.prepare("DELETE FROM repositories WHERE id = ?").run(repoId);
 }
 

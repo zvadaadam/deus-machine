@@ -300,7 +300,7 @@ workspaces once their chats settle. When all are archived and one is cloud, hove
 explains why the project must stay.
 The confirmation says when the project's folder is gone.
 After rechecking the recorded path and counts, `workspace-lifecycle.ts` unlinks local automations and deletes
-the project, its workspaces and chats. The folder, checkouts and Git branches stay on disk.
+the project, its workspaces, chats and boards. The folder, checkouts and Git branches stay on disk.
 Startup also clears automation links before deleting empty-named projects with no workspaces.
 
 A workspace is created in one place: Home, whose composer sends the first
@@ -922,7 +922,7 @@ The backend adds the loopback names to both `NO_PROXY` and `no_proxy` for itself
 
 ## Database
 
-Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 13 tables: `repositories`, `workspaces`, `sessions`, `messages`, `turns`, `parts`, `compactions`, `paired_devices`, `assistants`, `automations`, `automation_runs`, `extension_installations`, `integration_connections`.
+Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. The 15 tables in `shared/schema.ts` are `repositories`, `workspaces`, `sessions`, `messages`, `turns`, `parts`, `compactions`, `paired_devices`, `assistants`, `automations`, `automation_runs`, `extension_installations`, `integration_connections`, `boards` and `board_messages`.
 
 - The backend source and a checkout's `deus start` default to `.deus-dev/deus.db`. The dev desktop and `dev:web` pass a nonempty `DATABASE_PATH` through as written. Relative paths start in the backend's working directory. When that path matches the installed default in a legacy `DEUS_PACKAGED=1` shell, the dev launcher or source backend drops the override and logs why. The packaged runtime sets its installed default before loading the backend. The dev desktop keeps its Electron profile in `.deus-dev`, so each new worktree starts signed out.
 - Before it uses the database, each backend takes a SQLite write lock on the `.owner` sidecar. It waits up to twenty seconds so the previous backend can drain a stuck turn and stop its agent processes after a force-quit. The OS releases the lock on exit, including a crash.

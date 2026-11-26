@@ -5,9 +5,9 @@
  * All statements are idempotent (IF NOT EXISTS).
  *
  * Tables: repositories, workspaces, sessions, messages, turns, parts, compactions,
- *         paired_devices, assistants, automations, automation_runs,
+ *         boards, board_messages, paired_devices, assistants, automations, automation_runs,
  *         extension_installations, integration_connections
- * Indexes: 19
+ * Indexes: 21
  * Triggers: 11 (2 valid project rows, 4 auto-update updated_at, 2 denormalized message_count + auto-seq, 1 chat number, 2 turn end order)
  *
  * The agent-facing tables (messages, turns, parts, compactions) store the
@@ -28,10 +28,18 @@ export const PRELAUNCH_SCHEMA_MISMATCH =
 export const PRELAUNCH_SCHEMA_RESET_HINT =
   "This database uses an older pre-launch schema. To start fresh and keep your old chats, run `deus start --data-dir /path/to/a/new/folder`. If you run the backend directly, set DATABASE_PATH to a fresh file.";
 
+const workspaceRoleColumn = "TEXT CHECK (role IS NULL OR role = 'coordinator')";
+
 /** Columns ALTERed into an existing database that lacks them (each is in SCHEMA_SQL too). */
 export const ADDITIVE_COLUMNS: Record<string, Record<string, string>> = {
-  workspaces: { started_by: "TEXT", first_session_id: "TEXT", archived_by: "TEXT" },
+  workspaces: {
+    role: workspaceRoleColumn,
+    started_by: "TEXT",
+    first_session_id: "TEXT",
+    archived_by: "TEXT",
+  },
   sessions: {
+    board_tools: "INTEGER CHECK (board_tools IN (0, 1))",
     gateway_revision: "TEXT",
     started_by: "TEXT",
     chat: "INTEGER",
@@ -89,6 +97,7 @@ export const SCHEMA_SQL = `
     -- NULL when fetched or when the source branch exists only locally.
     init_fetch_issue TEXT,
     kind TEXT NOT NULL DEFAULT 'worktree',
+    role ${workspaceRoleColumn},
     provider_workspace_id TEXT,
     last_inline_mint_at INTEGER,
     -- The cloud organization a cloud workspace runs in (NULL for local, or not yet known).
@@ -109,6 +118,8 @@ export const SCHEMA_SQL = `
     agent_session_id TEXT,
     -- Whether the agent can message the person. NULL until its first ask.
     agent_messages INTEGER,
+    -- Whether this conversation started with its workspace’s board tools.
+    board_tools INTEGER CHECK (board_tools IN (0, 1)),
     gateway_revision TEXT,
     provider_session_id TEXT,
     title TEXT,
@@ -126,6 +137,42 @@ export const SCHEMA_SQL = `
     chat INTEGER,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  -- A board belongs to its workspace. Its UUID7 carries its creation time.
+  CREATE TABLE IF NOT EXISTS boards (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    delivery_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+    -- The sequence counter and the newest post on the board.
+    last_seq INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_boards_workspace ON boards(workspace_id);
+
+  CREATE TABLE IF NOT EXISTS board_messages (
+    -- A person's post id is also the id of the turn that delivers it.
+    id TEXT PRIMARY KEY NOT NULL,
+    board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    -- Unlike messages.seq (a trigger), savePost assigns seq in its transaction: a root needs it at insert.
+    seq INTEGER NOT NULL CHECK (seq > 0),
+    thread_seq INTEGER,
+    author_kind TEXT NOT NULL CHECK (author_kind IN ('person', 'bot')),
+    about_workspace_id TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    reply_count INTEGER NOT NULL DEFAULT 0,
+    -- On a root, its newest reply or the root itself.
+    last_seq INTEGER,
+    -- Each person's post keeps the chat it was sent to when the board's recipient changes.
+    delivery_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+    delivery_refusal TEXT,
+    UNIQUE(board_id, seq),
+    FOREIGN KEY(board_id, thread_seq) REFERENCES board_messages(board_id, seq),
+    CHECK ((thread_seq IS NULL AND last_seq IS NOT NULL AND last_seq >= seq) OR
+           (thread_seq IS NOT NULL AND thread_seq < seq AND last_seq IS NULL)),
+    CHECK (author_kind = 'person' OR (delivery_session_id IS NULL AND delivery_refusal IS NULL))
+  );
+  CREATE INDEX IF NOT EXISTS idx_board_replies ON board_messages(board_id, thread_seq, seq);
 
   -- Chat messages within sessions (id = UUID7, embeds created_at; append-only, no updated_at)
   -- seq is a per-session monotonic integer for reliable cursor pagination.
