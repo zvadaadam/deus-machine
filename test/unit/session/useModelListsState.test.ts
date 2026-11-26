@@ -7,10 +7,13 @@ const state = vi.hoisted(() => ({
   local: undefined as unknown,
   cloud: undefined as unknown,
   gateway: undefined as GatewayCatalog | undefined,
+  readingGateways: false,
 }));
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: state.local }) }));
 vi.mock("@/shared/hooks/useGateways", () => ({
-  useGateways: () => ({ data: state.gateway ? [state.gateway] : [] }),
+  useGateways: () => ({
+    data: state.readingGateways ? undefined : state.gateway ? [state.gateway] : [],
+  }),
 }));
 vi.mock("@/shared/hooks/useCloudModels", () => ({ useCloudModels: () => ({ data: state.cloud }) }));
 vi.mock("@/platform/ws", () => ({ call: vi.fn() }));
@@ -104,6 +107,26 @@ describe("the harnesses a picker offers", () => {
       picked: undefined,
       unavailable: undefined,
     });
+  });
+
+  it.each([
+    [true, "Reading gateways…"],
+    [false, "This gateway model is no longer available."],
+  ] as const)("keeps Home's unavailable gateway pick (list pending %s)", (pending, unavailable) => {
+    const picked = "gateway:codex-app-server:gone:work:one";
+    state.readingGateways = pending;
+    try {
+      const choice = useChatModel({ cloud: false, picked });
+      expect(choice).toMatchObject({
+        agentHarness: "codex-app-server",
+        picked,
+        model: picked,
+        unavailable,
+      });
+      expect(useChatModel({ cloud: true, picked }).model).not.toBe(picked);
+    } finally {
+      state.readingGateways = false;
+    }
   });
 
   it("Home resolves its saved local pick and the cloud default without changing the preference", () => {

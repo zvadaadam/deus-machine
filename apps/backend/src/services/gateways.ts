@@ -86,7 +86,7 @@ function reportGatewayProblem(generation: string, error: GatewayError) {
 function gatewayAddress(raw: string, preset: GatewayKind, source: "input" | "stored") {
   const mode = GATEWAY_PRESETS[preset].transport;
   const authority = /^(https?):\/\/([^/?#]+)(?:\/[^?#]*)?$/i.exec(raw);
-  if (!authority || /[\s\\]/.test(raw) || !URL.canParse(raw))
+  if (!authority || /[\s\\]|%(?![a-f\d]{2})/i.test(raw) || !URL.canParse(raw))
     throw new ValidationError("Enter a gateway base URL without a query or fragment.");
   const url = new URL(raw);
   const local = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d{1,5})?$/i.test(authority[2]!);
@@ -124,7 +124,7 @@ export async function connectGateway(input: ParsedInputOf<typeof api.connectGate
   if (!input.clientKey && previous?.address !== address)
     throw new ValidationError("Enter the client key for this address.");
   const clientKey = input.clientKey ?? previous?.clientKey;
-  if (!clientKey || address.includes(clientKey))
+  if (!clientKey || address.includes(clientKey) || decodeURIComponent(address).includes(clientKey))
     throw new ValidationError("Enter the API key in its own field.");
   const same = previous && formats.join() === previous.formats.join();
   const connection = { address, clientKey, preset, formats };

@@ -65,8 +65,8 @@ export const gatewayCredential: CredentialSource = async (request, signal) => {
       holdingTurn(sessionId) !== holder
     )
       throw new GatewayError("The gateway credential does not belong to this turn.");
-    requireGeneration(gateway.binding.revision);
   }
+  requireGeneration(gateway.binding.revision);
   signal?.throwIfAborted();
   return { type: "api_key", ...gateway.delivery, binding: gateway.binding };
 };

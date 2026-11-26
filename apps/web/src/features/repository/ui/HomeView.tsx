@@ -264,7 +264,8 @@ export function HomeView({
 
   // ── Send ────────────────────────────────────────────────────────
   const hasContent = message.trim().length > 0 || attachments.length > 0;
-  const canSend = hasContent && !!selectedRepoId && !!selection.model && !isSubmitting;
+  const canSend =
+    hasContent && !!selectedRepoId && !!selection.model && !selection.unavailable && !isSubmitting;
 
   // A project that runs only in the cloud, where the cloud cannot be used now.
   const sendBlock = cloudOnlySendBlock({

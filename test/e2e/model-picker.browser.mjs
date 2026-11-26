@@ -399,6 +399,13 @@ try {
   await chat.open();
   await tab(rail, "CLIProxyAPI").click();
   await chat.menu.getByText("No chat models available.").waitFor();
+  await search().focus();
+  await key("ArrowDown");
+  await checkFocus(chat.menu.getByRole("menuitem", { name: "Open AI Providers" }));
+  await search().press("Enter");
+  await chat.closed();
+  await chat.open();
+  await tab(rail, "CLIProxyAPI").click();
   assert.equal(await agents().getByRole("tab").count(), 0);
   await tab(rail, "Your subscriptions").click();
   await row("Opus 5.5").waitFor();

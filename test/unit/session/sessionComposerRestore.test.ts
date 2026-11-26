@@ -10,17 +10,32 @@ import type { SessionTurn } from "@shared/types/session";
 
 const state = vi.hoisted(() => ({
   hasSession: true,
+  optimistic: false,
   turns: undefined as SessionTurn[] | undefined,
   error: null as Error | null,
   input: vi.fn(),
   actions: vi.fn(() => ({})),
   retry: vi.fn(),
 }));
-vi.mock("@/shared/hooks/useGateways", () => ({ useGateways: () => ({ data: [] }) }));
+vi.mock("@/shared/hooks/useGateways", () => ({
+  useGateways: () => ({
+    data: state.optimistic
+      ? [
+          {
+            preset: "custom",
+            ref: "source",
+            generation: "rev",
+            formats: ["responses"],
+            models: [{ id: "fixture", label: "Fixture", provider: "openai" }],
+          },
+        ]
+      : [],
+  }),
+}));
 vi.mock("@/features/session/api/session.queries", () => ({
   useSessionWithMessages: () => ({
     session: state.hasSession ? { id: "session", agent_harness: "codex-app-server" } : undefined,
-    messages: [],
+    messages: state.optimistic ? [{ seq: 0, role: "user", turn_id: "pending" }] : [],
     sessionStatus: "idle",
     loading: false,
     turns: state.turns,
@@ -59,6 +74,7 @@ const history: SessionTurn[] = [
 
 beforeEach(() => {
   state.hasSession = true;
+  state.optimistic = false;
   state.turns = undefined;
   state.error = null;
   client.clear();
@@ -145,6 +161,17 @@ describe("composer history restoration", () => {
     expect(state.actions).toHaveBeenLastCalledWith(
       expect.objectContaining({ model: undefined, workspaceKind: "cloud" })
     );
+  });
+
+  it("keeps the first gateway send on the chip while only its optimistic echo exists", () => {
+    state.optimistic = true;
+    state.turns = [];
+    const picked = "gateway:codex-app-server:rev:fixture";
+    render(picked, "worktree");
+    expect(state.input.mock.lastCall?.[0]).toMatchObject({
+      hasMessages: true,
+      selection: { picked, model: picked, unavailable: undefined },
+    });
   });
 
   it("honors an explicit new-chat choice before history exists", () => {

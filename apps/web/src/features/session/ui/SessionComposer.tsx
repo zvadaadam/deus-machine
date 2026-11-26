@@ -109,16 +109,14 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
       : defaultThinking;
 
     const pickedModel = useStore(composerStore(), (s) => s.composers[sessionId]?.model);
-    const hasMessages = chatHasStarted({
-      ...session,
-      message_count: messages.length || session?.message_count,
-    });
+    const started = chatHasStarted(session ?? {});
+    const hasMessages = started || messages.length > 0;
     const selection = useChatModel({
       cloud: workspaceKind === "cloud",
       workspaceId,
       harness: session?.agent_harness,
       turns,
-      gatewayGeneration: hasMessages ? (session?.gateway_generation ?? null) : undefined,
+      gatewayGeneration: started ? (session?.gateway_generation ?? null) : undefined,
       picked: pickedModel ?? initialModel,
     });
     const { agentHarness } = selection;
@@ -132,7 +130,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     const { sendMessage, stopSession, compactConversation, createPR, sending } = useSessionActions({
       sessionId,
       steerTurnId,
-      model: needsHistory ? undefined : selection.model,
+      model: needsHistory || selection.unavailable ? undefined : selection.model,
       gatewayModel: selection.gatewayModel,
       workspaceId: workspaceId ?? undefined,
       workspaceKind,

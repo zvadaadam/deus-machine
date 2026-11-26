@@ -484,6 +484,46 @@ it("delivers the binding of the admitted chat to each harness", async () => {
   }
 }, 30000);
 
+it("refuses the first credential handoff when its gateway was disconnected after admission", async () => {
+  const sessionId = chat(),
+    turnId = "first",
+    generation = await connectHere();
+  claimTurn(
+    sessionId,
+    turnId,
+    undefined,
+    undefined,
+    await prepared("claude-code", { model, generation })
+  );
+  await run(api.disconnectGateway, { generation });
+  await expect(gatewayCredential({ sessionId, turnId, harness: "claude-code" })).rejects.toThrow(
+    /connection changed/
+  );
+});
+
+it.each(["%73ynthetic-fixture", "bad%"])(
+  "rejects a Custom address containing an encoded key or malformed escape (%s)",
+  async (path) => {
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new Error("unexpected network request"));
+    try {
+      await expect(
+        run(api.connectGateway, {
+          preset: "custom",
+          address: "https://fixture.invalid/" + path,
+          clientKey: "synthetic-fixture",
+          generation: null,
+          formats: ["responses"],
+        })
+      ).rejects.toThrow();
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      fetch.mockRestore();
+    }
+  }
+);
+
 it("renews only the current turn's credential and generation", async () => {
   const sessionId = chat(),
     generation = await connectHere();

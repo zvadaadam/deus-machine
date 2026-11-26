@@ -892,6 +892,7 @@ through `services/gateways.ts`, one read at a time per revision. A turn checks t
 `services/agent/event-facts.ts` uses typed engine errors for `usage_limit` and `_gateway`. Keep unknown `scope` values unknown,
 use the validated `retryAt` for Continue, and use `reason` for credential refusal. Never match gateway error text.
 `mergeProxyExclusions` in `shared/lib/child-env.ts` preserves loopback at backend start and when the login shell is merged, so gateway and engine relay traffic stays direct.
+The backend adds the loopback names to both `NO_PROXY` and `no_proxy` for itself and everything it starts, terminals included.
 `fromThisComputer` in `api/gateways.ts` limits changes to this computer, including its window. Paired devices and assistants can read the public list.
 `test/e2e/model-picker.browser.mjs` covers the gateway rail, agent tabs, model list and thinking column.
 

@@ -74,15 +74,17 @@ export function useChatModel({
       ? { ...model, thinking: gatewayThinking(gateway, model, runner) }
       : undefined;
   }
+  const localGatewayPick = selection?.gatewayGeneration && !scope.cloud;
+  const pickedModel = localGatewayPick
+    ? findGatewayModel(selection.gatewayGeneration, selection.harness, selection.model)
+    : undefined;
+  const sameRoute =
+    gatewayGeneration === undefined ||
+    (selection?.harness === harness && (selection.gatewayGeneration ?? null) === gatewayGeneration);
   const eligible =
     selection &&
-    (!selection.gatewayGeneration ||
-      (!scope.cloud &&
-        (gatewayGeneration === selection.gatewayGeneration ||
-          findGatewayModel(selection.gatewayGeneration, selection.harness, selection.model)))) &&
-    (gatewayGeneration === undefined ||
-      (selection.harness === harness &&
-        (selection.gatewayGeneration ?? null) === gatewayGeneration)) &&
+    (!selection.gatewayGeneration || !scope.cloud) &&
+    (sameRoute || (localGatewayPick && !pickedModel)) &&
     state.lists.some((list) => list.harness === selection.harness);
   const agentHarness = eligible ? selection.harness : harness;
   const generation = eligible ? selection.gatewayGeneration : gatewayGeneration;
@@ -90,8 +92,15 @@ export function useChatModel({
     ? selection.model
     : modelForSession(harness, turns, gatewayGeneration ? [] : state.lists);
   const model = id && modelValue(agentHarness, id, generation);
-  const gatewayModel = findGatewayModel(generation, agentHarness, id);
+  const gatewayModel = eligible ? pickedModel : findGatewayModel(generation, agentHarness, id);
   const latest = latestTurnExecution(harness, turns);
+  let unavailable;
+  if (generation && !gatewayModel)
+    unavailable = state.gateways
+      ? "This gateway model is no longer available."
+      : "Reading gateways…";
+  else if (!id)
+    unavailable = emptyModelList(state.lists.find((list) => list.harness === agentHarness)).message;
   return {
     ...state,
     agentHarness,
@@ -105,12 +114,7 @@ export function useChatModel({
       id && !generation
         ? modelThinkingLevels(state.lists, agentHarness, id)
         : (gatewayModel?.thinking?.levels ?? []),
-    unavailable:
-      generation && !gatewayModel
-        ? "This gateway model is no longer available."
-        : id
-          ? undefined
-          : emptyModelList(state.lists.find((list) => list.harness === agentHarness)).message,
+    unavailable,
   };
 }
 

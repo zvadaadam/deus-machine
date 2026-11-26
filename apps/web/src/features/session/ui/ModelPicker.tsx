@@ -193,7 +193,7 @@ export function ModelPicker({
     );
     if (key === "Enter" && target.matches("input")) {
       event.preventDefault();
-      stops.find((el) => el.hasAttribute("data-model"))?.click();
+      stops.find((el) => el.matches("[data-model], [data-open-providers]"))?.click();
       return;
     }
     const firstModel = key === "ArrowUp" && target === list.querySelector("[data-model]");
@@ -454,7 +454,11 @@ export function ModelPicker({
                       {empty.message}
                     </DropdownMenuLabel>
                     {empty.openSettings && (
-                      <DropdownMenuItem onSelect={uiActions.openAISettings}>
+                      <DropdownMenuItem
+                        data-picker-stop={connected}
+                        data-open-providers
+                        onSelect={uiActions.openAISettings}
+                      >
                         Open AI Providers
                       </DropdownMenuItem>
                     )}
