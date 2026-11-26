@@ -229,7 +229,9 @@ describe("agentService.startTurn", () => {
         cwd: "/tmp/work",
       });
       const [shown, gone] = mockLinkStartTurn.mock.calls;
-      expect(shown![0].config.systemPromptAppend).toContain("--serial emulator-5556");
+      expect(shown![0].config.systemPromptAppend).toContain(
+        "--platform android --serial emulator-5556"
+      );
       expect(gone![0].config.systemPromptAppend).not.toContain("Device tab shows");
       expect(gone![0].config.systemPromptAppend).not.toContain("emulator-5556");
     } finally {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { mutationOptions, useMutation, useQuery } from "@tanstack/react-query";
 import * as api from "@shared/api/device-hub";
 import { deviceIdentity, type HubDevice } from "@shared/types/device-hub";
 import {
@@ -8,7 +8,7 @@ import {
 } from "@/features/workspace/store/workspaceLayoutStore";
 import { getBaseURL } from "@/shared/config/api.config";
 import { call } from "@/platform/ws";
-import { deviceKey } from "./devices";
+import { canClearMissingDevice, deviceKey, needsRecoveryPoll } from "./devices";
 
 const recoveryMs = 30_000;
 
@@ -19,30 +19,8 @@ export type Attachment = {
   baseUrl: string;
 };
 
-export function useDeviceSelection(
-  workspaceId: string,
-  instance: string,
-  attached: Attachment | null,
-  onAttach: (attachment: Attachment | null) => void
-) {
-  const choice = useWorkspaceLayoutStore((state) => state.layouts[workspaceId]?.deviceChoice);
-  const id = choice?.key;
-  const [deadline, setDeadline] = useState(() =>
-    choice?.started ? Date.now() + recoveryMs : null
-  );
-  const recoverUntil = choice?.started ? deadline : null;
-  const list = useQuery({
-    queryKey: ["deviceHubDevices", instance],
-    queryFn: () => call(api.deviceHubDevices),
-    refetchOnMount: "always",
-    retry: false,
-    refetchInterval: (q) => {
-      if (!recoverUntil || Date.now() >= recoverUntil) return false;
-      const device = q.state.data?.devices.find((d) => deviceKey(d) === id);
-      return q.state.error || (device && !device.booted) ? 2500 : false;
-    },
-  });
-  const start = useMutation({
+export function startDeviceOptions(workspaceId: string, instance: string) {
+  return mutationOptions({
     mutationFn: async ({ device, boot }: { device: HubDevice; boot: boolean }) => {
       const [connected, apiBase] = await Promise.all([
         call(
@@ -60,7 +38,40 @@ export function useDeviceSelection(
         baseUrl: apiBase + "/device-hub/vendor/" + vendor,
       };
     },
+    onSuccess({ workspaceId, device }) {
+      const choice = workspaceLayoutActions.getLayout(workspaceId).deviceChoice;
+      if (choice?.key === deviceKey(device) && !choice.started) {
+        workspaceLayoutActions.setLayout(workspaceId, {
+          deviceChoice: { ...choice, started: true },
+        });
+      }
+    },
   });
+}
+
+export function useDeviceSelection(
+  workspaceId: string,
+  instance: string,
+  attached: Attachment | null,
+  onAttach: (attachment: Attachment | null) => void
+) {
+  const choice = useWorkspaceLayoutStore((state) => state.layouts[workspaceId]?.deviceChoice);
+  const id = choice?.key;
+  // On return, a previous Start may still be pending. Starting here clears "restore".
+  const [deadline, setDeadline] = useState<number | "restore" | null>("restore");
+  if (deadline === "restore" && choice?.started) setDeadline(() => Date.now() + recoveryMs);
+  const recoverUntil = choice?.started && typeof deadline === "number" ? deadline : null;
+  const list = useQuery({
+    queryKey: ["deviceHubDevices", instance],
+    queryFn: () => call(api.deviceHubDevices),
+    refetchOnMount: "always",
+    retry: false,
+    refetchInterval: ({ state: { data, error } }) => {
+      if (!id || !recoverUntil || Date.now() >= recoverUntil) return false;
+      return error || (data && needsRecoveryPoll(id, data)) ? 2500 : false;
+    },
+  });
+  const start = useMutation(startDeviceOptions(workspaceId, instance));
   const { mutate, reset } = start;
   const { refetch } = list;
   const attach = useCallback(
@@ -68,12 +79,7 @@ export function useDeviceSelection(
       mutate(
         { device, boot },
         {
-          onSuccess(connection) {
-            workspaceLayoutActions.setLayout(workspaceId, {
-              deviceChoice: { key: deviceKey(connection.device), started: true },
-            });
-            onAttach(connection);
-          },
+          onSuccess: onAttach,
           onSettled() {
             setDeadline(null);
             void refetch();
@@ -81,7 +87,7 @@ export function useDeviceSelection(
         }
       );
     },
-    [mutate, onAttach, refetch, workspaceId]
+    [mutate, onAttach, refetch]
   );
   const choose = useCallback(
     (key: string | null) => {
@@ -116,13 +122,14 @@ export function useDeviceSelection(
   useEffect(() => {
     if (!list.isSuccess || !list.isFetchedAfterMount || !id) return;
     if (!selected) {
-      choose(null);
+      if (canClearMissingDevice(id, list.data)) choose(null);
     } else if (recoverUntil && Date.now() < recoverUntil && selected.booted && start.isIdle) {
       attach(selected, false);
     }
   }, [
     attach,
     id,
+    list.data,
     list.isSuccess,
     list.isFetchedAfterMount,
     recoverUntil,

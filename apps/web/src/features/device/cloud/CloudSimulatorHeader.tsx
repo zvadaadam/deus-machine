@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { Camera, ExternalLink, Home, Link2, Loader2, Play, Square } from "lucide-react";
 import { CopyIcon } from "@/components/ui/copy-icon";
 import { match } from "ts-pattern";
@@ -20,7 +19,6 @@ function phaseLabel(phase: CloudSimPhase): string {
 
 interface CloudSimulatorHeaderProps {
   device: CloudSimDevice;
-  toolbarAction?: ReactNode;
   phase: CloudSimPhase;
   onStart: () => void;
   onStop: () => void;
@@ -38,7 +36,6 @@ interface CloudSimulatorHeaderProps {
 
 export function CloudSimulatorHeader({
   device,
-  toolbarAction,
   phase,
   onStart,
   onStop,
@@ -180,7 +177,6 @@ export function CloudSimulatorHeader({
           </TooltipContent>
         </Tooltip>
       </div>
-      {toolbarAction}
     </div>
   );
 }

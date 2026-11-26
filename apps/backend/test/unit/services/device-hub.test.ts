@@ -12,7 +12,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { hubManifest, hubVersion } from "../../../src/services/device-hub/support";
 import { cliPath, installPath } from "../../../src/services/device-hub/storage";
@@ -21,7 +21,7 @@ import type { DeviceSetup, HubStatus } from "@shared/types/device-hub";
 
 vi.mock("../../../src/services/device-hub/support", async (original) => ({
   ...(await original<typeof import("../../../src/services/device-hub/support")>()),
-  deviceToolchains: async () => ({ installer: true }),
+  deviceToolchains: async () => ({ installer: true, androidSdk: "/fixture/Android SDK" }),
   liveViewSupport: () => "available",
 }));
 const { bootIdentity } = vi.hoisted(() => ({ bootIdentity: vi.fn(async () => 123) }));
@@ -100,6 +100,21 @@ describe("Device Hub lifecycle", () => {
     await wait("ready");
     expect(phases.filter((s) => s.phase === "installing")).toHaveLength(1);
     expect(await readFile(await state("pid"), "utf8")).not.toBe(pid);
+  });
+
+  it("starts the hub with the detected Android SDK in its environment and first on PATH", async () => {
+    vi.stubEnv("ANDROID_HOME", "/stale/home");
+    vi.stubEnv("ANDROID_SDK_ROOT", "/stale/sdk");
+    hub.follow(view);
+    await wait("ready");
+    const root = "/fixture/Android SDK";
+    expect(JSON.parse(await readFile(await state("android-env.json"), "utf8"))).toEqual({
+      ANDROID_HOME: root,
+      ANDROID_SDK_ROOT: root,
+      PATH: [join(root, "platform-tools"), join(root, "emulator"), process.env.PATH].join(
+        delimiter
+      ),
+    });
   });
 
   it("names the most recently shown device and releases it when the viewer disconnects", async () => {
@@ -292,10 +307,10 @@ describe("Device Hub lifecycle", () => {
     await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow());
   });
 
-  it("keeps running when macOS refuses to signal part of the hub's group", async () => {
-    // macOS signals the group members it may and still answers EPERM for the rest.
+  it("finishes an idle stop when macOS reports EPERM for unreaped hub processes", async () => {
     const kill = process.kill.bind(process);
     const refused = vi.spyOn(process, "kill").mockImplementation((pid, signal) => {
+      // Deliver the signal so the live fixture can exit.
       const sent = kill(pid, signal);
       if (pid < 0 && signal !== 0) {
         throw Object.assign(new Error("kill EPERM"), { code: "EPERM", syscall: "kill" });
