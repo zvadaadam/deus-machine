@@ -20,7 +20,10 @@ vi.mock("../../../src/services/agent/cloud/config", async () =>
 vi.mock("../../../src/services/cloud-environment.service", () => ({
   getCloudEnvironmentInfo: mocks.saved,
 }));
-import { initializeWorkspace } from "../../../src/services/workspace-checkout";
+import {
+  excludeExistingWorkspaceContext,
+  initializeWorkspace,
+} from "../../../src/services/workspace-checkout";
 import { setupFile } from "../../../src/services/setup-status";
 import {
   readLocalProjectEnvironment,
@@ -514,10 +517,20 @@ describe("workspace folders in the repository's git status", () => {
     expect(() => git("check-ignore", "-q", ".deus/environment.json")).toThrow();
   });
 
-  it("leaves the exclude file alone when the repository already ignores .deus", async () => {
-    const before = readExclude();
-    await initialize();
-
-    expect(readExclude()).toBe(before);
+  it("keeps context private in an existing linked worktree even when branches differ", async () => {
+    const directory = await initialize();
+    git("config", "core.excludesFile", "/dev/null");
+    expect(readExclude()).toContain("/.context/");
+    fs.writeFileSync(excludeFile(), "# existing exclude\n");
+    fs.appendFileSync(path.join(root, ".gitignore"), "\n.context/\n");
+    fs.mkdirSync(path.join(directory, ".context"));
+    fs.writeFileSync(path.join(directory, ".context/report.md"), "local notes");
+    expect(git("-C", directory, "status", "--porcelain")).toContain(".context/");
+    await excludeExistingWorkspaceContext();
+    expect(git("-C", directory, "status", "--porcelain")).toBe("");
+    const updated = readExclude();
+    expect(updated).toContain("# existing exclude");
+    await excludeExistingWorkspaceContext();
+    expect(readExclude()).toBe(updated);
   });
 });

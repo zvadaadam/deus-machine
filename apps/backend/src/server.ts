@@ -25,6 +25,7 @@ import { initAutomations } from "./services/automations";
 import { refreshCloudOrganizations } from "./services/cloud-settings.service";
 import { forgetUnusedAssistants } from "./services/assistants";
 import { startIntegrations } from "./services/integrations";
+import { excludeExistingWorkspaceContext } from "./services/workspace-checkout";
 import { failInterruptedWorkspaces } from "./services/workspace-init.service";
 import { deleteEmptyUnnamedProjects } from "./services/workspace-lifecycle";
 import { stopWhenStdinEnds } from "./lib/parent-stdin";
@@ -52,6 +53,7 @@ void deviceHub.initializeSetup();
 // Assistants unused for a month are forgotten (also whenever the list is read).
 forgetUnusedAssistants();
 deleteEmptyUnnamedProjects();
+void excludeExistingWorkspaceContext();
 
 // Workspaces the previous process was still starting when it stopped.
 void failInterruptedWorkspaces()
