@@ -1,6 +1,13 @@
 import { useState } from "react";
-import { CheckCircle2, ExternalLink, Loader2, XCircle } from "lucide-react";
+import { ChevronDown, Ellipsis, Cpu } from "lucide-react";
+import { getAgentLogo } from "@/assets/agents";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { openExternal } from "@/platform/native/window";
 import type { AgentHarness } from "@shared/enums";
 import { HARNESSES } from "@shared/harnesses";
@@ -14,58 +21,29 @@ import {
   type LocalAgentState,
 } from "../../lib/local-agent-login";
 import { LoginCodeForm } from "./LoginCodeForm";
-
-function Badge({ state }: { state: LocalAgentState }) {
-  if (state.status === "checking") {
-    return <Loader2 className="text-muted-foreground size-4 animate-spin" />;
+import { ProviderRow, StatusDot } from "./ProviderRow";
+function statusLabel(state: LocalAgentState) {
+  switch (state.status) {
+    case "signed-in":
+      return "Signed in";
+    case "installing":
+      return (
+        ["Installing", state.version].filter(Boolean).join(" ") +
+        (state.percent === undefined ? "…" : " · " + state.percent + "%")
+      );
+    case "checking":
+      return "Checking…";
+    case "failed":
+      return "Unavailable";
+    case "first-turn":
+    case "not-installed":
+      return "Not installed";
+    case "install-failed":
+      return "Install failed";
+    case "signed-out":
+      return state.login ? "Waiting for sign-in…" : "Not signed in";
   }
-  if (state.status === "installing") {
-    return (
-      <div className="text-muted-foreground flex items-center gap-1.5">
-        <Loader2 className="size-4 animate-spin" />
-        <span className="text-xs font-medium">
-          Installing{state.version ? ` ${state.version}` : ""}
-          {state.percent !== undefined ? ` · ${state.percent}%` : "…"}
-        </span>
-      </div>
-    );
-  }
-  if (
-    state.status === "not-installed" ||
-    state.status === "first-turn" ||
-    state.status === "install-failed"
-  ) {
-    return (
-      <div className="text-muted-foreground flex items-center gap-1.5" title={state.detail}>
-        <XCircle className="size-4" />
-        <span className="text-xs font-medium first-letter:uppercase">
-          {state.status === "install-failed" ? "Couldn’t install" : state.detail}
-        </span>
-      </div>
-    );
-  }
-  if (state.status === "failed") {
-    return <span className="text-muted-foreground text-xs font-medium">Status unavailable</span>;
-  }
-  if (state.status === "signed-in") {
-    return (
-      <div className="text-accent-green flex items-center gap-1.5">
-        <CheckCircle2 className="size-4" />
-        <span className="text-xs font-medium">Connected</span>
-      </div>
-    );
-  }
-  return (
-    <div className="text-muted-foreground flex items-center gap-1.5">
-      <XCircle className="size-4" />
-      <span className="text-xs font-medium">
-        {state.status === "signed-out" && state.login ? "Waiting for sign-in…" : "Not connected"}
-      </span>
-    </div>
-  );
 }
-
-/** A local agent: its login on this computer, and the sign-in the engine runs through its CLI. */
 export function LocalAgentRow({
   harness,
   state,
@@ -74,83 +52,100 @@ export function LocalAgentRow({
   state: LocalAgentState;
 }) {
   const [busy, setBusy] = useState(false);
-  const { label, vendor } = HARNESSES[harness];
+  const Logo = getAgentLogo(harness) ?? Cpu;
   const run = (action: () => Promise<void>) => {
     setBusy(true);
     void action().finally(() => setBusy(false));
   };
+  const connected = state.status === "signed-in";
   const login = state.status === "signed-out" ? state.login : undefined;
-  const loginPage = login?.url ?? login?.codeUrl;
-  const signIn = localSignIn(state);
+  const detail = connected
+    ? state.account
+    : "detail" in state && state.status !== "installing"
+      ? state.detail
+      : HARNESSES[harness].vendor;
+  const status = statusLabel(state);
+  const auth = localSignIn(state);
   const install = installLabel(state);
-
+  const url = login?.url ?? login?.codeUrl;
+  const menu = (connected && state.auth.source === "login") || !!login;
   return (
-    <div className="border-border-subtle space-y-3 rounded-lg border p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium">{label}</p>
-          <p className="text-muted-foreground text-sm">{vendor}</p>
-          {state.status === "signed-in" && (
-            <p className="text-muted-foreground mt-0.5 text-xs">{state.account}</p>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <Badge state={state} />
-          {install && (
+    <div>
+      <ProviderRow
+        icon={<Logo className="size-5" />}
+        name={HARNESSES[harness].label}
+        detail={
+          (state.status === "failed" || state.status === "install-failed") &&
+          "detail" in state &&
+          state.detail ? (
+            <details className="group">
+              <summary className="focus-visible:ring-ring flex cursor-pointer items-center gap-1 rounded-sm focus-visible:ring-2">
+                <span className="truncate group-open:hidden">{state.detail}</span>
+                <span className="hidden group-open:inline">Recovery details</span>
+                <ChevronDown className="size-3 shrink-0 group-open:rotate-180" aria-hidden="true" />
+              </summary>
+              <p className="mt-1">{state.detail}</p>
+            </details>
+          ) : (
+            detail
+          )
+        }
+        status={<StatusDot tone={connected ? "ready" : "neutral"}>{status}</StatusDot>}
+        action={
+          install ? (
             <Button
               variant="outline"
               size="xs"
+              className="pointer-coarse:min-h-11"
               disabled={busy}
               onClick={() => run(() => installLocalAgent(harness))}
             >
               {install}
             </Button>
-          )}
-          {signIn?.kind === "start" && (
+          ) : auth?.kind === "start" ? (
             <Button
-              variant="outline"
               size="xs"
+              className="pointer-coarse:min-h-11"
+              variant="outline"
               disabled={busy}
-              onClick={() => run(() => signInLocalAgent(harness, signIn.auth))}
+              onClick={() => run(() => signInLocalAgent(harness, auth.auth))}
             >
               Sign in
             </Button>
-          )}
-          {loginPage && (
-            <Button
-              variant="outline"
-              size="xs"
-              className="gap-1.5"
-              onClick={() => void openExternal(loginPage)}
-            >
-              Open sign-in page
-              <ExternalLink className="size-3" />
-            </Button>
-          )}
-          {login && (
-            <Button
-              variant="ghost"
-              size="xs"
-              disabled={busy}
-              onClick={() => run(() => cancelLocalSignIn(login.loginId))}
-            >
-              Cancel
-            </Button>
-          )}
-          {/* The CLI signs out only a login of its own, not one from the environment. */}
-          {state.status === "signed-in" && state.auth.source === "login" && (
-            <Button
-              variant="ghost"
-              size="xs"
-              disabled={busy}
-              onClick={() => run(() => signOutLocalAgent(harness))}
-            >
-              Sign out
-            </Button>
-          )}
-        </div>
-      </div>
-      {signIn?.kind === "code" && <LoginCodeForm loginId={signIn.loginId} />}
+          ) : menu ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  aria-label={HARNESSES[harness].label + " options"}
+                  className="size-8 pointer-coarse:size-11"
+                >
+                  <Ellipsis className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {url && (
+                  <DropdownMenuItem onSelect={() => void openExternal(url)}>
+                    Open sign-in page
+                  </DropdownMenuItem>
+                )}
+                {login && (
+                  <DropdownMenuItem onSelect={() => run(() => cancelLocalSignIn(login.loginId))}>
+                    Cancel sign-in
+                  </DropdownMenuItem>
+                )}
+                {connected && (
+                  <DropdownMenuItem onSelect={() => run(() => signOutLocalAgent(harness))}>
+                    Sign out
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : undefined
+        }
+      />
+      {auth?.kind === "code" && <LoginCodeForm loginId={auth.loginId} />}
     </div>
   );
 }

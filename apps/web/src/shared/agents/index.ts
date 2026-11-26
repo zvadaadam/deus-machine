@@ -39,18 +39,11 @@ export function getAgentLabel(agentHarness: string): string {
 /** The picker value a stored one names today; undefined when it names no harness Deus runs. */
 export function resolveModelSelection(model: string): string | undefined {
   const parsed = parseModelValue(model);
-  return parsed && modelValue(parsed.harness, parsed.model);
+  return parsed && modelValue(parsed.harness, parsed.model, parsed.gatewayGeneration);
 }
 
 export function getAgentHarnessForModel(model: string): AgentHarness {
   return parseModelValue(model)?.harness ?? DEFAULT_AGENT_HARNESS;
-}
-
-/** The model id a picker value sends to the engine. Throws on a value that names no harness. */
-export function getModelId(model: string): string {
-  const parsed = parseModelValue(model);
-  if (!parsed) throw new Error(`[agents] "${model}" names no harness and model`);
-  return parsed.model;
 }
 
 /** Reopen on the last recorded thinking level; a chat with none uses `fallback`. */
@@ -60,4 +53,15 @@ export function getThinkingForSession(
   fallback: ThinkingLevel
 ): ThinkingLevel {
   return continuedThinkingLevel(latestTurnExecution(agentHarness, turns)) ?? fallback;
+}
+
+/** The normal send contract carries the raw model and the optional connection identity. */
+export function turnSelection(value: string) {
+  const pick = parseModelValue(value);
+  if (!pick) throw new Error("Choose an agent and model.");
+  return {
+    agentHarness: pick.harness,
+    model: pick.model,
+    ...(pick.gatewayGeneration && { gatewayGeneration: pick.gatewayGeneration }),
+  };
 }
