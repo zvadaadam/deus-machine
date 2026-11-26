@@ -1,9 +1,7 @@
 /**
  * useChatTabs — manages chat tab lifecycle with persistence across workspace switches.
  *
- * Tab order and active tab are persisted in workspaceLayoutStore (localStorage).
- * Full tab metadata (agentHarness, hasStarted, title and sequence) is reconstructed from session
- * records fetched via useWorkspaceSessions.
+ * The layout saves tab order and selection. The workspace's live sessions supply the titles.
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
@@ -92,14 +90,10 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
   const { data: workspaceSessions, dataUpdatedAt: sessionsReadAt } =
     useWorkspaceSessions(workspaceId);
 
-  // Build session lookup map
-  const sessionMap = useMemo(() => {
-    const map = new Map<string, Session>();
-    if (workspaceSessions) {
-      for (const s of workspaceSessions) map.set(s.id, s);
-    }
-    return map;
-  }, [workspaceSessions]);
+  const sessionMap = useMemo(
+    () => new Map(workspaceSessions?.map((session) => [session.id, session])),
+    [workspaceSessions]
+  );
 
   // --- Hydrate initial state from localStorage + session data ---
 
@@ -253,7 +247,14 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
   // --- A request to show one chat (openChat), taken when mounted or already mounted ---
 
   const requested = useOpenChatStore((state) => state.requested[workspaceId]);
-  const activeTab = mainTabs.find((tab) => tab.id === activeMainTabId);
+  const tabs = useMemo(() => {
+    const named = mainTabs.map((tab) => {
+      const title = isSessionChatTab(tab) && sessionMap.get(tab.sessionId)?.title;
+      return title ? { ...tab, title } : tab;
+    });
+    return shallow(named, mainTabs) ? mainTabs : named;
+  }, [mainTabs, sessionMap]);
+  const activeTab = tabs.find((tab) => tab.id === activeMainTabId);
   const activeTabSessionId = getChatTabSessionId(activeTab);
   useEffect(() => {
     if (!requested || !hydrated || !workspaceSessions) return;
@@ -424,7 +425,6 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       kind: "session",
       id: newId,
       sessionId: closedTab.sessionId,
-      title: closedTab.title,
       sequence,
       agentHarness,
       hasStarted: closedTab.hasStarted,
@@ -491,7 +491,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
   }, []);
 
   const handleTabReorder = useCallback((reorderedTabs: ChatTab[]) => {
-    setMainTabs(reorderedTabs);
+    setMainTabs(reorderedTabs.map(({ title: _title, ...tab }) => tab));
   }, []);
 
   // --- Derived state ---
@@ -506,13 +506,13 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       .sort((a, b) => (order.get(a.id) ?? order.size) - (order.get(b.id) ?? order.size))
       .map((session) => {
         const closed = closedTabs[order.get(session.id) ?? closedTabs.length];
-        if (
+        const tab =
           closed &&
           (!chatHasStarted(session) ||
             (closed.hasStarted && closed.agentHarness === session.agent_harness))
-        )
-          return { ...closed, title: session.title };
-        return { ...sessionToTab(session, sequences.get(session.id) ?? 1), closedAt: 0 };
+            ? closed
+            : { ...sessionToTab(session, sequences.get(session.id) ?? 1), closedAt: 0 };
+        return { ...tab, title: session.title };
       });
   }, [workspaceSessions, openSessionIds, closedTabs]);
 
@@ -563,7 +563,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
   ]);
 
   return {
-    tabs: mainTabs,
+    tabs,
     activeTabId: activeMainTabId,
     activeTab,
     shownSessionId,

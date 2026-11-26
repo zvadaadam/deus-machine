@@ -1,4 +1,4 @@
-import { act, createElement, startTransition } from "react";
+import { act, createElement, startTransition, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RuntimeClient } from "@/platform/ws/runtime-client";
 import { queryKeys } from "@/shared/api/queryKeys";
@@ -410,11 +410,12 @@ it.each(["w", "elsewhere"])(
 it("can reopen a visible chat whose tab was closed before the workspace remounted", () => {
   workspaceLayoutActions.setChatTabState("w", ["a"], "a", ["a", "b", "c"]);
   act(() => root.render(createElement(Tabs)));
-  readList(["a", "b", "c"]);
+  act(() => useList.setState({ data: [chat("a"), { ...chat("b"), title: "Review" }, chat("c")] }));
   const closed = view.closedTabs.find((tab) => tab.sessionId === "b");
-  expect(closed).toBeDefined();
+  expect(chatTabLabel(closed!)).toBe("Review");
   act(() => view.handleTabRestore(closed!));
   expect(view.activeTabId).toBe("tab-b");
+  expect(chatTabLabel(view.activeTab!)).toBe("Review");
   act(() => view.handleTabClose("tab-b"));
   expect(view.closedTabs.map((tab) => tab.sessionId)).toEqual(["b", "c"]);
   readList(["a", "c"]);
@@ -464,6 +465,51 @@ it("hydrates a saved tab with its live title and follows renames while the tab i
   expect(chatTabLabel(view.activeTab!)).toBe("Named while closed");
   rename(null);
   expect(chatTabLabel(view.activeTab!)).toBe("Claude Code #2");
+});
+
+it("keeps each started chat's number when its live title arrives, changes and clears", () => {
+  workspaceLayoutActions.setChatTabState("w", ["a", "b"], "a");
+  act(() => root.render(createElement(Tabs)));
+  readList(["a", "b"]);
+  const [a, b, c] = ["a", "b", "c"].map(chat);
+  const second = view.tabs[1];
+  act(() => useList.setState({ data: [{ ...a, title: "First pass" }, b] }));
+  expect(view.tabs.map(chatTabLabel)).toEqual(["First pass", "Claude Code #2"]);
+  act(() => useList.setState({ data: [{ ...a, title: "Reviewed" }, b, c] }));
+  expect(view.tabs.map(chatTabLabel)).toEqual(["Reviewed", "Claude Code #2", "Claude Code #3"]);
+  act(() => useList.setState({ data: [{ ...a, title: null }, b, c] }));
+  expect(view.tabs.map(chatTabLabel)).toEqual([
+    "Claude Code #1",
+    "Claude Code #2",
+    "Claude Code #3",
+  ]);
+  expect(view.tabs[1]).toBe(second);
+});
+
+it.each(["close", "reorder"])("keeps a live rename batched with a tab %s", (action) => {
+  function Workspace() {
+    const sessions = useList((state) => state.data);
+    // The child queues its reconciliation first. The user's tab action joins that batch.
+    useEffect(() => {
+      if (sessions?.[0].title !== "Reviewed") return;
+      if (action === "close") view.handleTabClose("tab-b");
+      else view.handleTabReorder([...view.tabs].reverse());
+    }, [sessions]);
+    return createElement(Tabs);
+  }
+  const ids = ["a", "b"];
+  workspaceLayoutActions.setChatTabState("w", ids, "a", ids);
+  useList.setState({ data: [{ ...chat("a"), title: "First draft" }, chat("b")] });
+  act(() => root.render(createElement(Workspace)));
+  expect(chatTabLabel(view.activeTab!)).toBe("First draft");
+  act(() => useList.setState({ data: [{ ...chat("a"), title: "Reviewed" }, chat("b")] }));
+  expect(view.tabs.map((tab) => tab.id)).toEqual(
+    action === "close" ? ["tab-a"] : ["tab-b", "tab-a"]
+  );
+  expect(chatTabLabel(view.activeTab!)).toBe("Reviewed");
+  expect(view.tabs.map(chatTabLabel)).toContain("Reviewed");
+  readList(ids);
+  expect(chatTabLabel(view.activeTab!)).toBe("Claude Code #1");
 });
 
 it("reopens a chat that started elsewhere with its live agent and label", () => {

@@ -26,7 +26,7 @@ export interface ClosedSessionTab extends BaseChatTab {
 }
 
 export function chatTabLabel({ title, sequence, agentHarness }: BaseChatTab): string {
-  return title || (sequence ? `${getAgentLabel(agentHarness)} #${sequence}` : "New chat");
+  return title?.trim() || (sequence ? `${getAgentLabel(agentHarness)} #${sequence}` : "New chat");
 }
 
 export function isSessionChatTab(tab: ChatTab | null | undefined): tab is SessionChatTab {

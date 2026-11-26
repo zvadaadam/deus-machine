@@ -88,31 +88,13 @@ describe("tabs that follow the live chat list (H9, H21)", () => {
 
   it("shows a title before the first message and uses New chat while unnamed", () => {
     expect(chatTabLabel(createPendingTab())).toBe("New chat");
-    const draft = chat("draft", 0);
-    expect(chatTabLabel(sessionToTab(draft, 1))).toBe("New chat");
-    expect(chatTabLabel(sessionToTab({ ...draft, title: "Review" }, 1))).toBe("Review");
+    const draft = sessionToTab(chat("draft", 0), 1);
+    expect(chatTabLabel(draft)).toBe("New chat");
+    expect(chatTabLabel({ ...draft, title: "  Review  " })).toBe("Review");
   });
 
-  it("keeps each started chat's number when its live title arrives, changes and clears", () => {
-    const [a, b, c] = ["a", "b", "c"].map((id) => chat(id));
-    const current = { tabs: [sessionToTab(a, 1), sessionToTab(b, 2)], closed: [] };
-    const seen = new Set(["a", "b"]);
-    const named = reconcileLive(current, [{ ...a, title: "First pass" }, b], seen);
-    expect(named.tabs.map(chatTabLabel)).toEqual(["First pass", "Claude Code #2"]);
-    const renamed = reconcileLive(named, [{ ...a, title: "Reviewed" }, b, c], seen);
-    expect(renamed.tabs.map(chatTabLabel)).toEqual([
-      "Reviewed",
-      "Claude Code #2",
-      "Claude Code #3",
-    ]);
-    seen.add("c");
-    const cleared = reconcileLive(renamed, [{ ...a, title: null }, b, c], seen);
-    expect(cleared.tabs.map(chatTabLabel)).toEqual([
-      "Claude Code #1",
-      "Claude Code #2",
-      "Claude Code #3",
-    ]);
-    expect(cleared.tabs[1]).toBe(current.tabs[1]);
+  it("uses the numbered label for a legacy title containing only spaces", () => {
+    expect(chatTabLabel({ ...sessionToTab(chat("a"), 2), title: "   " })).toBe("Claude Code #2");
   });
 });
 

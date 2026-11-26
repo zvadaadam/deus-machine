@@ -41,7 +41,6 @@ export function sessionToTab(session: Session, sequence: number): SessionChatTab
     kind: "session",
     id: `tab-${session.id}`,
     sessionId: session.id,
-    title: session.title,
     sequence: hasStarted ? sequence : undefined,
     agentHarness: session.agent_harness,
     hasStarted,
@@ -107,10 +106,6 @@ export function reconcileLive(
   tabs = [...tabs];
   tabs.forEach((tab, i) => {
     const session = isSessionChatTab(tab) ? live.get(tab.sessionId) : undefined;
-    if (session && tab.title !== session.title) {
-      tabs[i] = { ...tab, title: session.title };
-      changed = true;
-    }
     if (
       !session ||
       !chatHasStarted(session) ||
@@ -119,7 +114,7 @@ export function reconcileLive(
       return;
     changed = true;
     tabs[i] = {
-      ...tabs[i],
+      ...tab,
       hasStarted: true,
       initialModel: undefined,
       agentHarness: session.agent_harness,

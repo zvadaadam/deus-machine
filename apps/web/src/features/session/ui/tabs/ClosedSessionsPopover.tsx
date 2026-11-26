@@ -52,24 +52,30 @@ export function ClosedSessionsPopover({ closedTabs, onTabRestore }: ClosedSessio
       <PopoverContent align="end" sideOffset={6} className="w-56 p-1">
         <p className="text-text-muted px-2 py-1.5 text-xs font-medium">Recently closed</p>
         <div className="max-h-48 overflow-y-auto">
-          {closedTabs.map((closedTab) => (
-            <button
-              key={closedTab.id}
-              type="button"
-              onClick={() => {
-                onTabRestore(closedTab);
-                setOpen(false);
-              }}
-              className={cn(
-                "control-interaction flex w-full items-center gap-2 rounded-lg px-2 py-1.5",
-                "text-text-secondary text-left text-base",
-                "hover:bg-bg-raised"
-              )}
-            >
-              {getClosedTabIcon(closedTab.agentHarness)}
-              <span className="min-w-0 flex-1 truncate">{chatTabLabel(closedTab)}</span>
-            </button>
-          ))}
+          {closedTabs.map((closedTab) => {
+            const label = chatTabLabel(closedTab);
+            return (
+              <Tooltip key={closedTab.id} delayDuration={300}>
+                <TooltipTrigger
+                  type="button"
+                  onClick={() => {
+                    onTabRestore(closedTab);
+                    setOpen(false);
+                  }}
+                  className="control-interaction text-text-secondary hover:bg-bg-raised flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-base"
+                >
+                  {getClosedTabIcon(closedTab.agentHarness)}
+                  <span className="min-w-0 flex-1 truncate">{label}</span>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="left"
+                  className="max-w-[min(20rem,var(--radix-tooltip-content-available-width))] wrap-anywhere"
+                >
+                  {label}
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
         </div>
       </PopoverContent>
     </Popover>
