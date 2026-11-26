@@ -159,8 +159,8 @@ it("opens a gateway chat on its source and agent, and leaves an unknown effort o
     ref: "cliproxyapi",
     preset: "cliproxyapi" as const,
     formats: ["responses" as const],
-    generation: "gen",
-    address: "http://localhost",
+    revision: "gen",
+    baseUrl: "http://localhost",
     models: [
       {
         id: "internal-astra",
@@ -201,15 +201,15 @@ it("opens a gateway chat on its source and agent, and leaves an unknown effort o
 
 it("opens the matching gateway on a shared model id and presents its only runner as a label", () => {
   const catalog = {
-    address: "https://openrouter.ai/api",
+    baseUrl: "https://openrouter.ai/api",
     formats: ["responses" as const],
     models: [
       { id: "one", label: "Shared", provider: "openai", runner: "codex-app-server" as const },
     ],
   };
   const gateways = [
-    { ...catalog, ref: "router", preset: "openrouter" as const, generation: "rev-a" },
-    { ...catalog, ref: "office", preset: "custom" as const, generation: "rev-b" },
+    { ...catalog, ref: "router", preset: "openrouter" as const, revision: "rev-a" },
+    { ...catalog, ref: "office", preset: "custom" as const, revision: "rev-b" },
   ];
   const html = renderToStaticMarkup(
     createElement(
@@ -247,9 +247,9 @@ it("lets a person reach a source beyond the rail and see the search field's keyb
         gateways: [
           {
             ref: "gateway",
-            generation: "rev",
+            revision: "rev",
             preset: "custom",
-            address: "http://localhost",
+            baseUrl: "http://localhost",
             formats: ["responses", "messages"],
             models: [{ id: "hello", label: "Hello", provider: "" }],
           },

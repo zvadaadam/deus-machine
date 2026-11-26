@@ -4,7 +4,7 @@ import {
   GATEWAY_PRESETS,
   GATEWAY_FORMATS,
   type GatewayCatalog,
-  type GatewayKind,
+  type GatewayPreset,
   type GatewayStatus,
   type GatewayProblem,
 } from "@shared/gateways";
@@ -18,12 +18,12 @@ import { invalidate } from "./query-engine";
 // Only the public catalog is read by windows. The key is sealed with its destination.
 interface Saved {
   ref: string;
-  preset: GatewayKind;
-  generation: string;
+  preset: GatewayPreset;
+  revision: string;
   credential: string;
 }
 interface GatewayConnection extends GatewayCatalog {
-  clientKey: string;
+  apiKey: string;
 }
 
 const problems = new Map<string, GatewayProblem>();
@@ -37,28 +37,28 @@ function commit(rows: Saved[]) {
   invalidate(["gateways"]);
 }
 
-type Snapshot = Omit<GatewayConnection, "generation" | "ref" | "preset">;
+type Snapshot = Omit<GatewayConnection, "revision" | "ref" | "preset">;
 
 export function gatewayStatuses(): GatewayStatus[] {
-  return saved().map(({ generation, ref, preset, credential }) => {
+  return saved().map(({ revision, ref, preset, credential }) => {
     const snapshot = open<Snapshot>(credential);
     return {
       ref,
       preset,
-      generation,
-      address: snapshot?.address ?? "",
+      revision,
+      baseUrl: snapshot?.baseUrl ?? "",
       models: snapshot?.models ?? [],
       formats: snapshot?.formats ?? GATEWAY_PRESETS[preset].formats,
       problem: snapshot
-        ? problems.get(generation)
+        ? problems.get(revision)
         : new GatewayError(vaultProblem() ?? "Reconnect this gateway to unlock its saved key.")
             .details,
     };
   });
 }
 
-export function requireGeneration(generation: string) {
-  const row = saved().find((g) => g.generation === generation);
+export function requireRevision(revision: string) {
+  const row = saved().find((g) => g.revision === revision);
   if (!row)
     throw new GatewayError(
       "The gateway connection changed. Open a new chat to choose its current connection.",
@@ -67,29 +67,29 @@ export function requireGeneration(generation: string) {
   return row;
 }
 
-export async function connectionFor(generation: string): Promise<GatewayConnection> {
+export async function connectionFor(revision: string): Promise<GatewayConnection> {
   await initVault();
-  const { ref, preset, credential } = requireGeneration(generation);
+  const { ref, preset, credential } = requireRevision(revision);
   const snapshot = open<Snapshot>(credential);
   if (!snapshot)
     throw new GatewayError(vaultProblem() ?? "Reconnect this gateway in AI Providers.");
-  gatewayAddress(snapshot.address, preset, "stored");
-  return { ...snapshot, ref, preset, generation };
+  gatewayBaseUrl(snapshot.baseUrl, preset, "stored");
+  return { ...snapshot, ref, preset, revision };
 }
 
-function reportGatewayProblem(generation: string, error: GatewayError) {
-  if (!saved().some((row) => row.generation === generation)) return;
-  problems.set(generation, error.details);
+function reportGatewayProblem(revision: string, error: GatewayError) {
+  if (!saved().some((row) => row.revision === revision)) return;
+  problems.set(revision, error.details);
   invalidate(["gateways"]);
 }
 
-const INVALID_ADDRESS = "Enter a gateway base URL without a query or fragment.";
+const INVALID_BASE_URL = "Enter a gateway base URL without a query or fragment.";
 
-function gatewayAddress(raw: string, preset: GatewayKind, source: "input" | "stored") {
+function gatewayBaseUrl(raw: string, preset: GatewayPreset, source: "input" | "stored") {
   const mode = GATEWAY_PRESETS[preset].transport;
   const authority = /^(https?):\/\/([^/?#]+)(?:\/[^?#]*)?$/i.exec(raw);
   if (!authority || /[\s\\]|%(?![a-f\d]{2})/i.test(raw) || !URL.canParse(raw))
-    throw new ValidationError(INVALID_ADDRESS);
+    throw new ValidationError(INVALID_BASE_URL);
   const url = new URL(raw);
   const local = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d{1,5})?$/i.test(authority[2]!);
   if (url.username || url.password || authority[2]!.includes("@"))
@@ -97,23 +97,22 @@ function gatewayAddress(raw: string, preset: GatewayKind, source: "input" | "sto
   if (mode === "loopback" && (!local || url.pathname !== "/"))
     throw new ValidationError("Use a loopback address on 127.0.0.1, localhost or [::1].");
   if (url.protocol === "http:" && (!local || mode === "https"))
-    throw new ValidationError("Use HTTPS for this gateway address.");
-  const address =
+    throw new ValidationError("Use HTTPS for this base URL.");
+  const baseUrl =
     source === "stored" ? raw : url.origin + url.pathname.replace(/\/+$/, "").replace(/\/v1$/, "");
-  if (preset === "openrouter" && address !== GATEWAY_PRESETS.openrouter.address)
-    throw new ValidationError("Use the official OpenRouter address.");
-  return address;
+  if (preset === "openrouter" && baseUrl !== GATEWAY_PRESETS.openrouter.baseUrl)
+    throw new ValidationError("Use the official OpenRouter base URL.");
+  return baseUrl;
 }
 
 export async function connectGateway(input: ParsedInputOf<typeof api.connectGateway>) {
   const { preset } = input;
   const spec = GATEWAY_PRESETS[preset];
-  const address = gatewayAddress(input.address, preset, "input");
-  const existing = input.generation ? requireGeneration(input.generation) : undefined;
+  const baseUrl = gatewayBaseUrl(input.baseUrl, preset, "input");
+  const existing = input.revision ? requireRevision(input.revision) : undefined;
   if (existing && existing.preset !== preset)
     throw new ValidationError("Choose the saved gateway to edit.");
-  const previous =
-    existing && !input.clientKey ? await connectionFor(existing.generation) : undefined;
+  const previous = existing && !input.apiKey ? await connectionFor(existing.revision) : undefined;
   const chosen =
     input.formats ??
     previous?.formats ??
@@ -123,38 +122,38 @@ export async function connectGateway(input: ParsedInputOf<typeof api.connectGate
     ? spec.formats
     : GATEWAY_FORMATS.filter((f) => chosen.includes(f));
   if (!formats.length) throw new ValidationError("Choose at least one API format.");
-  if (!input.clientKey && previous?.address !== address)
-    throw new ValidationError("Enter the client key for this address.");
-  const clientKey = input.clientKey ?? previous?.clientKey;
+  if (!input.apiKey && previous?.baseUrl !== baseUrl)
+    throw new ValidationError("Enter the API key for this base URL.");
+  const apiKey = input.apiKey ?? previous?.apiKey;
   let decoded: string;
   try {
-    decoded = decodeURIComponent(address);
+    decoded = decodeURIComponent(baseUrl);
   } catch {
-    throw new ValidationError(INVALID_ADDRESS);
+    throw new ValidationError(INVALID_BASE_URL);
   }
-  if (!clientKey || address.includes(clientKey) || decoded.includes(clientKey))
+  if (!apiKey || baseUrl.includes(apiKey) || decoded.includes(apiKey))
     throw new ValidationError("Enter the API key in its own field.");
   const same = previous && formats.join() === previous.formats.join();
-  const connection = { address, clientKey, preset, formats };
+  const connection = { baseUrl, apiKey, preset, formats };
   const signal = AbortSignal.timeout(5000);
   try {
     await verifyGatewayKey(connection, signal);
   } catch (error) {
-    if (same && error instanceof GatewayError) reportGatewayProblem(previous.generation, error);
+    if (same && error instanceof GatewayError) reportGatewayProblem(previous.revision, error);
     throw error;
   }
-  if (same) return refreshGateway(previous.generation, signal);
-  const generation = randomUUID();
+  if (same) return refreshGateway(previous.revision, signal);
+  const revision = randomUUID();
   const models = await checkCatalog(connection, signal);
   await initVault("seal");
-  const current = input.generation ? requireGeneration(input.generation) : undefined;
+  const current = input.revision ? requireRevision(input.revision) : undefined;
   const rows = saved();
   if (
     rows.some(
       (row) =>
         row.ref !== current?.ref &&
         row.preset === preset &&
-        open<Snapshot>(row.credential)?.address === address
+        open<Snapshot>(row.credential)?.baseUrl === baseUrl
     )
   )
     throw new ValidationError("This gateway is already connected. Edit its saved connection.");
@@ -162,42 +161,42 @@ export async function connectGateway(input: ParsedInputOf<typeof api.connectGate
   const row: Saved = {
     ref,
     preset,
-    generation,
-    credential: seal({ address, clientKey, models, formats }),
+    revision,
+    credential: seal({ baseUrl, apiKey, models, formats }),
   };
-  if (current) problems.delete(current.generation);
+  if (current) problems.delete(current.revision);
   commit(current ? rows.map((g) => (g.ref === ref ? row : g)) : [...rows, row]);
 }
 
-export function disconnectGateway(generation: string) {
-  const row = requireGeneration(generation);
-  problems.delete(generation);
+export function disconnectGateway(revision: string) {
+  const row = requireRevision(revision);
+  problems.delete(revision);
   commit(saved().filter((g) => g.ref !== row.ref));
 }
 
-export function refreshGateway(generation: string, signal?: AbortSignal) {
-  const pending = refreshes.get(generation);
+export function refreshGateway(revision: string, signal?: AbortSignal) {
+  const pending = refreshes.get(revision);
   if (pending) return pending;
-  const refresh = refreshCatalog(generation, signal).finally(() => refreshes.delete(generation));
-  refreshes.set(generation, refresh);
+  const refresh = refreshCatalog(revision, signal).finally(() => refreshes.delete(revision));
+  refreshes.set(revision, refresh);
   return refresh;
 }
 
-async function refreshCatalog(generation: string, signal?: AbortSignal) {
-  const { address, clientKey, preset, formats } = await connectionFor(generation);
+async function refreshCatalog(revision: string, signal?: AbortSignal) {
+  const { baseUrl, apiKey, preset, formats } = await connectionFor(revision);
   let models;
   try {
-    models = await checkCatalog({ address, clientKey, preset, formats }, signal);
+    models = await checkCatalog({ baseUrl, apiKey, preset, formats }, signal);
   } catch (error) {
-    if (error instanceof GatewayError) reportGatewayProblem(generation, error);
+    if (error instanceof GatewayError) reportGatewayProblem(revision, error);
     throw error;
   }
-  requireGeneration(generation);
-  problems.delete(generation);
+  requireRevision(revision);
+  problems.delete(revision);
   commit(
     saved().map((row) =>
-      row.generation === generation
-        ? { ...row, credential: seal({ address, clientKey, formats, models }) }
+      row.revision === revision
+        ? { ...row, credential: seal({ baseUrl, apiKey, formats, models }) }
         : row
     )
   );

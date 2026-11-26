@@ -39,7 +39,7 @@ export function getAgentLabel(agentHarness: string): string {
 /** The picker value a stored one names today; undefined when it names no harness Deus runs. */
 export function resolveModelSelection(model: string): string | undefined {
   const parsed = parseModelValue(model);
-  return parsed && modelValue(parsed.harness, parsed.model, parsed.gatewayGeneration);
+  return parsed && modelValue(parsed.harness, parsed.model, parsed.gatewayRevision);
 }
 
 export function getAgentHarnessForModel(model: string): AgentHarness {
@@ -62,6 +62,6 @@ export function turnSelection(value: string) {
   return {
     agentHarness: pick.harness,
     model: pick.model,
-    ...(pick.gatewayGeneration && { gatewayGeneration: pick.gatewayGeneration }),
+    ...(pick.gatewayRevision && { gatewayRevision: pick.gatewayRevision }),
   };
 }

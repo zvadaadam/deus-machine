@@ -32,7 +32,7 @@ import {
 import { isUnknownEvent } from "@shared/protocol-types";
 import { hasAgentMessages } from "./agent-messages";
 import { prepareGatewayTurn } from "./gateway-turn";
-import { requireGeneration } from "../gateways";
+import { requireRevision } from "../gateways";
 import { holdingTurn, wireTurn, forgetChatTurns, connectTurnNotices } from "./chat-turn";
 import { onTurnNotice, recoverSteers, userEcho } from "./queue";
 import { AgentLink } from "./client";
@@ -210,7 +210,7 @@ export async function startTurn(
   });
   // Wire before the request: the engine can publish the first event in the same tick as its answer.
   if (gateway) {
-    requireGeneration(gateway.binding.revision);
+    requireRevision(gateway.binding.revision);
     params.config.retryPolicy = "failFast";
   }
   wireTurn(sessionId, turnId);

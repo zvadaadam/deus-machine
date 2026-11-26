@@ -22,11 +22,11 @@ if (process.argv[2] === "backend") {
   const { resolveLogin } = await import(
     new URL("../../src/core/agents/credentials.ts", import.meta.resolve("@zvada/agent-server/core"))
   );
-  const { address, key } = JSON.parse(await Bun.stdin.text());
+  const { baseUrl, key } = JSON.parse(await Bun.stdin.text());
   assert.equal((await fetch("http://positive-control.invalid/test")).status, 204);
   await checkCatalog({
-    address,
-    clientKey: key,
+    baseUrl,
+    apiKey: key,
     preset: "custom",
     formats: ["messages", "responses"],
   });
@@ -45,7 +45,7 @@ if (process.argv[2] === "backend") {
         credentials: () => ({
           type: "api_key",
           apiKey: key,
-          baseUrl: address + (format === "responses" ? "/v1" : ""),
+          baseUrl: baseUrl + (format === "responses" ? "/v1" : ""),
           binding: { ref: "fixture", revision: "1", format },
         }),
       });
@@ -108,7 +108,7 @@ if (process.argv[2] === "backend") {
         },
         stdio: ["pipe", "inherit", "inherit"],
       });
-      child.stdin.end(JSON.stringify({ address: gateway.url.origin, key }));
+      child.stdin.end(JSON.stringify({ baseUrl: gateway.url.origin, key }));
       assert.equal((await once(child, "exit"))[0], 0);
     }
     assert.equal(unexpected.length, 0);

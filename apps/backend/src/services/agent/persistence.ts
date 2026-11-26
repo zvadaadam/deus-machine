@@ -260,7 +260,7 @@ export function persistStopStatus(id: string, status: "idle" | "error" | null = 
 /** Persist a turn and its optional session status atomically, even without messages. */
 export function persistTurn(
   sessionId: string,
-  turn: Parameters<typeof turnRecord>[0] & { cancelledBy?: Origin; gatewayGeneration?: string },
+  turn: Parameters<typeof turnRecord>[0] & { cancelledBy?: Origin; gatewayRevision?: string },
   outcome?: TurnOutcomeWrite,
   providerCredentialSource?: TurnProviderCredentialSource
 ): WriteResult<void> {
@@ -270,10 +270,10 @@ export function persistTurn(
       const prior = getTurn(db, sessionId, turn.turnId);
       const record = turnRecord(turn, providerCredentialSource, prior);
       saveTurn(db, sessionId, { ...record, cancelledBy: turn.cancelledBy });
-      if (!prior && turn.gatewayGeneration)
+      if (!prior && turn.gatewayRevision)
         db.prepare(
-          "UPDATE sessions SET gateway_generation = ? WHERE id = ? AND gateway_generation IS NULL"
-        ).run(turn.gatewayGeneration, sessionId);
+          "UPDATE sessions SET gateway_revision = ? WHERE id = ? AND gateway_revision IS NULL"
+        ).run(turn.gatewayRevision, sessionId);
       if (outcome) writeStatus(sessionId, terminalStatus(outcome));
     })();
     return { ok: true, value: undefined };
@@ -626,7 +626,7 @@ export function persistChanges(
             {
               ...turn,
               cancelledBy,
-              gatewayGeneration: binding?.turnId === turn.turnId ? binding.revision : undefined,
+              gatewayRevision: binding?.turnId === turn.turnId ? binding.revision : undefined,
             },
             turn.status === "ended" ? outcomeFor(turn) : undefined,
             providerCredentialSource

@@ -218,7 +218,7 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
       undeliveredSteers: kept,
       ...(turn.gateway && {
         execution: gatewayExecution(turn.gateway),
-        gatewayGeneration: turn.gateway.binding.revision,
+        gatewayRevision: turn.gateway.binding.revision,
       }),
     });
     if (saved.ok) turnNotices().stored(id, turnId);

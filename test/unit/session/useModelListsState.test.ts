@@ -134,7 +134,7 @@ describe("the harnesses a picker offers", () => {
     const choice = useChatModel({
       cloud: false,
       harness,
-      gatewayGeneration: null,
+      gatewayRevision: null,
       turns: [{ turnId: "one", execution: { harness, model: "native-model" } }],
       picked: "gateway:codex-app-server:gone:other-model",
     });
@@ -188,7 +188,7 @@ describe("the harnesses a picker offers", () => {
 });
 
 it("offers the same raw id over distinct local routes, and keeps the raw owner separate from its fallback label", () => {
-  const generation = crypto.randomUUID();
+  const revision = crypto.randomUUID();
   const harness = "codex-app-server";
   const id = "test:model";
   const native = state.local;
@@ -205,8 +205,8 @@ it("offers the same raw id over distinct local routes, and keeps the raw owner s
     ref: "fixture-gateway",
     preset: "cliproxyapi",
     formats: ["messages", "responses"],
-    address: "http://localhost",
-    generation,
+    baseUrl: "http://localhost",
+    revision,
     models: [
       {
         id,
@@ -221,13 +221,13 @@ it("offers the same raw id over distinct local routes, and keeps the raw owner s
     const local = useChatModel({
       cloud: false,
       harness,
-      gatewayGeneration: generation,
+      gatewayRevision: revision,
       turns: [{ turnId: "one", execution: { harness, model: id } }],
     });
     const view = modelPickerView(local.lists, local.model, "", local.gateways);
     expect(view.selected).toMatchObject({
       label: "test:model",
-      gatewayGeneration: generation,
+      gatewayRevision: revision,
     });
     expect(local.gatewayModel?.provider).toBe("");
     const routes = view.groups.flatMap((group) =>
@@ -237,7 +237,7 @@ it("offers the same raw id over distinct local routes, and keeps the raw owner s
     );
     expect(routes).toEqual([
       ["subscriptions", harness, `${harness}:${id}`],
-      ["fixture-gateway", harness, `gateway:${harness}:${generation}:${id}`],
+      ["fixture-gateway", harness, `gateway:${harness}:${revision}:${id}`],
     ]);
     expect(local.thinkingLevels).toEqual(["medium", "high"]);
     expect(useChatModel({ cloud: true }).gateways).toBeUndefined();

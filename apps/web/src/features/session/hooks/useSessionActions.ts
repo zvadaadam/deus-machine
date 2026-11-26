@@ -73,7 +73,7 @@ export function useSessionActions({
           ...selection,
           permissionMode:
             composer.planModeEnabled && canPlan(agentHarness, workspaceKind) ? "plan" : undefined,
-          thinkingLevel: selection.gatewayGeneration
+          thinkingLevel: selection.gatewayRevision
             ? gatewayEffort(gatewayModel, composer.thinkingLevel)
             : composer.thinkingLevel,
         });

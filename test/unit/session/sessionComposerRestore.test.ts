@@ -24,7 +24,7 @@ vi.mock("@/shared/hooks/useGateways", () => ({
           {
             preset: "custom",
             ref: "source",
-            generation: "rev",
+            revision: "rev",
             formats: ["responses"],
             models: [{ id: "fixture", label: "Fixture", provider: "openai" }],
           },

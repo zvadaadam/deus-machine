@@ -217,7 +217,7 @@ export type SendMessageVariables = {
   content: string;
   model: string;
   agentHarness: AgentHarness;
-  gatewayGeneration?: string;
+  gatewayRevision?: string;
   permissionMode?: string;
   /** Cloud turns require a level. A local gateway model may expose no effort control. */
   thinkingLevel?: string;
@@ -238,7 +238,7 @@ export function useSendMessage() {
       // which falls through to onError's rollback. No credential rides the wire —
       // agnt resolves the org key at dispatch.
       const direct = getDirectSession(sessionId, queryClient);
-      if (direct && input.gatewayGeneration) throw new Error("Gateways run on this computer.");
+      if (direct && input.gatewayRevision) throw new Error("Gateways run on this computer.");
       if (direct && mode !== "steer") {
         if (!thinkingLevel) throw new Error("Choose a thinking level for this cloud chat.");
         direct.sendMessage(content, turnId, { model, agentHarness, thinkingLevel });

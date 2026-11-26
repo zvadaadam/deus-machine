@@ -8,12 +8,12 @@ import type { AgentHarness } from "./enums";
 
 export const GATEWAY_FORMATS = ["messages", "responses"] as const;
 export type GatewayFormat = (typeof GATEWAY_FORMATS)[number];
-export const GATEWAY_KINDS = ["openrouter", "cliproxyapi", "custom"] as const;
-export type GatewayKind = (typeof GATEWAY_KINDS)[number];
+export const GATEWAY_PRESET_IDS = ["openrouter", "cliproxyapi", "custom"] as const;
+export type GatewayPreset = (typeof GATEWAY_PRESET_IDS)[number];
 
 interface Preset {
   label: string;
-  address: string;
+  baseUrl: string;
   transport: "https" | "loopback" | "any";
   formats: readonly GatewayFormat[];
   catalog: "described" | "codex-client" | "standard";
@@ -21,10 +21,10 @@ interface Preset {
   rules?: { warning: string; links: readonly (readonly [string, string])[] };
 }
 
-export const GATEWAY_PRESETS: Record<GatewayKind, Preset> = {
+export const GATEWAY_PRESETS: Record<GatewayPreset, Preset> = {
   openrouter: {
     label: "OpenRouter",
-    address: "https://openrouter.ai/api",
+    baseUrl: "https://openrouter.ai/api",
     transport: "https",
     formats: GATEWAY_FORMATS,
     keyPath: "/v1/key",
@@ -32,7 +32,7 @@ export const GATEWAY_PRESETS: Record<GatewayKind, Preset> = {
   },
   cliproxyapi: {
     label: "CLIProxyAPI",
-    address: "http://127.0.0.1:8317",
+    baseUrl: "http://127.0.0.1:8317",
     transport: "loopback",
     formats: GATEWAY_FORMATS,
     catalog: "codex-client",
@@ -46,7 +46,7 @@ export const GATEWAY_PRESETS: Record<GatewayKind, Preset> = {
       ],
     },
   },
-  custom: { label: "Custom", address: "", transport: "any", catalog: "standard", formats: [] },
+  custom: { label: "Custom", baseUrl: "", transport: "any", catalog: "standard", formats: [] },
 };
 
 export interface GatewayModel {
@@ -69,11 +69,11 @@ export function gatewayEffort(
 }
 
 export interface GatewayCatalog {
-  generation: string;
-  address: string;
+  revision: string;
+  baseUrl: string;
   models: GatewayModel[];
   ref: string;
-  preset: GatewayKind;
+  preset: GatewayPreset;
   formats: readonly GatewayFormat[];
 }
 
@@ -111,35 +111,29 @@ export function gatewayThinking(
 }
 
 export function gatewayLabel(
-  gateway: Pick<GatewayCatalog, "preset" | "address">,
+  gateway: Pick<GatewayCatalog, "preset" | "baseUrl">,
   gateways: readonly GatewayCatalog[]
 ) {
   const name = GATEWAY_PRESETS[gateway.preset].label;
   if (
-    !gateway.address ||
+    !gateway.baseUrl ||
     (gateway.preset !== "custom" && gateways.filter((g) => g.preset === gateway.preset).length < 2)
   )
     return name;
-  const url = new URL(gateway.address);
+  const url = new URL(gateway.baseUrl);
   return name + " · " + url.host + (url.pathname === "/" ? "" : url.pathname);
 }
 
 export type GatewayProblem = {
-  kind:
-    | "unreachable"
-    | "client_key"
-    | "catalog"
-    | "configuration"
-    | "no_route"
-    | "connection_changed";
+  kind: "unreachable" | "api_key" | "catalog" | "configuration" | "no_route" | "connection_changed";
   message: string;
 };
 export function chatHasStarted(chat: {
   message_count?: number;
   last_user_message_at?: string | null;
-  gateway_generation?: string | null;
+  gateway_revision?: string | null;
 }) {
-  return !!(chat.message_count || chat.last_user_message_at || chat.gateway_generation);
+  return !!(chat.message_count || chat.last_user_message_at || chat.gateway_revision);
 }
 
 const providers = new Map<string, { label: string; logo?: AgentHarness }>([

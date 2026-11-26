@@ -217,8 +217,8 @@ describe("what a model picker shows", () => {
       ref: "custom",
       preset: "custom",
       formats: ["responses", "messages"],
-      generation: "rev",
-      address: "http://localhost",
+      revision: "rev",
+      baseUrl: "http://localhost",
       models: [
         { id: "alias", label: "Alias", provider: "" },
         { id: "responses", label: "Responses only", provider: "", formats: ["responses"] },
@@ -267,8 +267,8 @@ describe("what a model picker shows", () => {
       ref: "fixture-gateway",
       preset: "cliproxyapi",
       formats: ["responses", "messages"],
-      generation: "revision",
-      address: "http://localhost",
+      revision: "revision",
+      baseUrl: "http://localhost",
       models: [
         {
           id: "internal:one",
@@ -282,7 +282,7 @@ describe("what a model picker shows", () => {
         { id: "unclassified", label: "unclassified", provider: "unknown" },
       ],
     };
-    const selected = modelValue("codex-app-server", "internal:one", gateway.generation);
+    const selected = modelValue("codex-app-server", "internal:one", gateway.revision);
     const view = modelPickerView(lists, selected, "", [gateway]);
     const tabs = view.groups.filter((g) => g.source === gateway.ref);
     expect(
@@ -301,7 +301,7 @@ describe("what a model picker shows", () => {
       view.groups
         .filter((g) => g.source === "subscriptions")
         .flatMap((g) => g.options)
-        .some((o) => o.gatewayGeneration)
+        .some((o) => o.gatewayRevision)
     ).toBe(false);
     for (const query of ["FRIEND", "nal:one", "OpenAI"]) {
       const filtered = modelPickerView(lists, selected, query, [gateway]);
@@ -378,6 +378,6 @@ it("round-trips the gateway revision and the full model id", () => {
   expect(parseModelValue(value)).toEqual({
     harness: "codex-app-server",
     model: "vendor/model:variant",
-    gatewayGeneration: "edition",
+    gatewayRevision: "edition",
   });
 });

@@ -19,7 +19,7 @@ import { readCloudTurnSelection, type CloudTurnSelection } from "@shared/cloud-m
 import { canPlan, HARNESSES } from "@shared/harnesses";
 import { ACTIVE_TURN_STATUSES } from "@shared/enums";
 import { chatHasStarted } from "@shared/gateways";
-import { requireGeneration } from "../gateways";
+import { requireRevision } from "../gateways";
 import { getDatabase } from "../../lib/database";
 import {
   AgentServerDisconnectedError,
@@ -78,15 +78,13 @@ export async function withdrawSteerRetry(sessionId: string, turnId: string) {
 
 export function requireChatRoute(
   sessionId: string,
-  generation: string | undefined,
+  requestedRevision: string | undefined,
   chat = getSessionRaw(getDatabase(), sessionId)
 ) {
   if (!chat) return;
   const holder = holdingTurn(sessionId);
-  const revision = holder
-    ? holder.gateway?.binding.revision
-    : (chat.gateway_generation ?? undefined);
-  if (revision === generation) return;
+  const revision = holder ? holder.gateway?.binding.revision : (chat.gateway_revision ?? undefined);
+  if (revision === requestedRevision) return;
   // An accepted native turn can lose its first echo and start acknowledgement.
   if (
     holder ||
@@ -258,16 +256,15 @@ async function sendMessageOnce(
         : "The agent is still working — wait for the current turn to finish."
     );
   }
-  if (session) requireChatRoute(sessionId, input.gatewayGeneration, session);
-  if (isCloud && input.gatewayGeneration)
-    throw new ValidationError("Gateways run on this computer.");
+  if (session) requireChatRoute(sessionId, input.gatewayRevision, session);
+  if (isCloud && input.gatewayRevision) throw new ValidationError("Gateways run on this computer.");
   let gateway;
-  if (input.gatewayGeneration) {
+  if (input.gatewayRevision) {
     if (!takesHeldCredential(agentHarness))
       throw new GatewayError("Gateways run Claude Code and Codex on this computer.", "no_route");
-    const { ref, generation } = requireGeneration(input.gatewayGeneration);
+    const { ref, revision } = requireRevision(input.gatewayRevision);
     gateway = {
-      binding: { ref, revision: generation, format: credentialFormat(agentHarness) },
+      binding: { ref, revision, format: credentialFormat(agentHarness) },
       execution: { harness: agentHarness, model },
     };
   }

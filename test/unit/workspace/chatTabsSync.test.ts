@@ -125,7 +125,7 @@ describe("an open-chat request (H22)", () => {
 
 it.each([
   { message_count: 1 },
-  { message_count: 0, gateway_generation: "bound" },
+  { message_count: 0, gateway_revision: "bound" },
   { message_count: 0, last_user_message_at: "2026-11-26 08:00:00" },
 ])(
   "follows the first admitted harness even after a native Claude placeholder was marked started ($message_count messages)",

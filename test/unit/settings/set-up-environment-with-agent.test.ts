@@ -108,9 +108,9 @@ describe("environment setup provider readiness", () => {
       [
         {
           ref: "fixture",
-          generation: "revision",
+          revision: "revision",
           preset: "custom",
-          address: "https://gateway.example",
+          baseUrl: "https://gateway.example",
           formats: ["messages"],
           models: [{ id: "vendor/model-v2", provider: "vendor", label: "Studio Model" }],
         },

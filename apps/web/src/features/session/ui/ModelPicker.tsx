@@ -99,8 +99,8 @@ export function ModelPicker({
     [lists, model, search, connected, gateways, previousLabel]
   );
   if (!agentHarness) return null;
-  const selectedGateway = gateways.find((g) => g.generation === selected?.gatewayGeneration);
-  const selectedSource = selected?.gatewayGeneration
+  const selectedGateway = gateways.find((g) => g.revision === selected?.gatewayRevision);
+  const selectedSource = selected?.gatewayRevision
     ? (selectedGateway?.ref ?? previousGateway?.ref)
     : "subscriptions";
   const requestedSource = source ?? selectedSource;
@@ -127,22 +127,21 @@ export function ModelPicker({
   const levels = preview?.thinking?.levels;
   const changesRoute = (option: PickerOption) =>
     hasMessages &&
-    (option.agentHarness !== agentHarness ||
-      option.gatewayGeneration !== selected?.gatewayGeneration);
+    (option.agentHarness !== agentHarness || option.gatewayRevision !== selected?.gatewayRevision);
   let chatNotice: string | undefined;
   if (
     !connected &&
     hasMessages &&
-    (selected?.gatewayGeneration || shown?.agentHarness !== agentHarness)
+    (selected?.gatewayRevision || shown?.agentHarness !== agentHarness)
   ) {
-    chatNotice = selected?.gatewayGeneration ? "Open in new chat" : "Opens a new chat";
+    chatNotice = selected?.gatewayRevision ? "Open in new chat" : "Opens a new chat";
     if (!onOpenNewTab) chatNotice = "This chat keeps its agent";
   }
   const label = selected?.label ?? model ?? getAgentLabel(agentHarness);
   const currentEffort = selected?.thinking?.levels.length
     ? thinkingLevelLabel(thinkingLevel)
     : undefined;
-  const chipHint = selected?.gatewayGeneration
+  const chipHint = selected?.gatewayRevision
     ? (selectedGateway
         ? gatewayLabel(selectedGateway, gateways)
         : (previousGateway?.label ?? "Gateway")) +
@@ -154,7 +153,7 @@ export function ModelPicker({
     if (option.value === selected?.value) return thinkingLevel;
     if (!option.thinking?.levels.length) return undefined;
     const requested = changesRoute(option) ? undefined : (preferredThinking ?? undefined);
-    return option.gatewayGeneration
+    return option.gatewayRevision
       ? gatewayEffort(option, requested)
       : fitThinkingLevel(requested ?? defaultThinking, option.thinking.levels, defaultThinking);
   }
@@ -164,7 +163,7 @@ export function ModelPicker({
     else if (option.value !== selected?.value)
       onModelChange?.(
         option,
-        option.gatewayGeneration ? (level ?? levelFor(option) ?? "off") : level
+        option.gatewayRevision ? (level ?? levelFor(option) ?? "off") : level
       );
     else if (level !== undefined) onThinkingLevelChange(level);
   }
@@ -222,7 +221,7 @@ export function ModelPicker({
       }
       className="text-text-secondary data-[state=open]:bg-accent gap-1.5 px-2 text-sm focus-visible:ring-1 has-[>svg]:px-2"
     >
-      {selected?.gatewayGeneration ? (
+      {selected?.gatewayRevision ? (
         <GatewayLogo className="size-3.5" preset={selectedGateway?.preset ?? "custom"} />
       ) : (
         <AgentLogo agent={agentHarness} />
@@ -239,7 +238,7 @@ export function ModelPicker({
         if (!open) browse();
       }}
     >
-      {selected?.gatewayGeneration ? (
+      {selected?.gatewayRevision ? (
         <Tooltip>
           <DropdownMenuTrigger asChild>
             <TooltipTrigger asChild>{trigger}</TooltipTrigger>
@@ -517,7 +516,7 @@ export function ModelPicker({
               )}
             >
               <DropdownMenuGlide />
-              {(!connected || (preview && (!preview.gatewayGeneration || !!levels?.length))) && (
+              {(!connected || (preview && (!preview.gatewayRevision || !!levels?.length))) && (
                 <DropdownMenuLabel className="text-text-muted text-xs font-normal">
                   Thinking
                 </DropdownMenuLabel>

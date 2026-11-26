@@ -116,7 +116,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
       workspaceId,
       harness: session?.agent_harness,
       turns,
-      gatewayGeneration: started ? (session?.gateway_generation ?? null) : undefined,
+      gatewayRevision: started ? (session?.gateway_revision ?? null) : undefined,
       picked: pickedModel ?? initialModel,
     });
     const { agentHarness } = selection;

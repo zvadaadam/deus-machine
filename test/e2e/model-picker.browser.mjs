@@ -25,7 +25,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GatewaysSection } from "@/features/settings/ui/sections/GatewaysSection";
 import type { ThinkingLevel } from "@shared/protocol";
 import "@/global.css";
-const gateway = { ref:"fixture-gateway",preset:"cliproxyapi",formats:["messages","responses"],generation:"revision", address:"http://localhost", models:[
+const gateway = { ref:"fixture-gateway",preset:"cliproxyapi",formats:["messages","responses"],revision:"revision", baseUrl:"http://localhost", models:[
   {id:"work:one",label:"GPT 6.2 Astra",provider:"openai",runner:"codex-app-server",thinking:{levels:["medium","high"],default:"medium"}},
   {id:"same-family",label:"GPT Terra",provider:"openai",runner:"codex-app-server"},
   {id:"claude-a",label:"Claude Sonnet",provider:"anthropic",runner:"claude-code",thinking:{levels:["low","high"],default:"high"}},
@@ -33,14 +33,14 @@ const gateway = { ref:"fixture-gateway",preset:"cliproxyapi",formats:["messages"
 ]};
 const levelsOf = (value: string) => {
   const pick=parseModelValue(value);
-  if(pick?.gatewayGeneration) return gateway.models.find(m=>m.id===pick.model)?.thinking?.levels ?? [];
+  if(pick?.gatewayRevision) return gateway.models.find(m=>m.id===pick.model)?.thinking?.levels ?? [];
   const { harness, model } = parseModelValue(value)!;
   return modelThinkingLevels(CATALOG_MODEL_LISTS, harness, model);
 };
 const client=new QueryClient();
 function App() {
   const params = new URLSearchParams(location.search);
-  if(params.has("settings")) return <QueryClientProvider client={client}><GatewaysSection gateways={[gateway,...(params.has("two")?[{...gateway,ref:"router",preset:"openrouter",generation:"router",address:"https://openrouter.ai/api"}]:[])]} local={true} checking={false} recheck={async()=>{window.catalogReads=(window.catalogReads??0)+1;}}/></QueryClientProvider>;
+  if(params.has("settings")) return <QueryClientProvider client={client}><GatewaysSection gateways={[gateway,...(params.has("two")?[{...gateway,ref:"router",preset:"openrouter",revision:"router",baseUrl:"https://openrouter.ai/api"}]:[])]} local={true} checking={false} recheck={async()=>{window.catalogReads=(window.catalogReads??0)+1;}}/></QueryClientProvider>;
   const [model, setModel] = useState(params.get("model")!);
   const [level, setLevel] = useState(params.get("level") as ThinkingLevel);
   const [opened, setOpened] = useState("");
@@ -54,12 +54,12 @@ function App() {
   const levels = levelsOf(model);
   const offered = params.has("empty") ? [] : gateway.models.filter(m=>!params.has("codexOnly") || m.runner === "codex-app-server");
   if (params.has("mixed")) offered.push({id:"kimi:one",label:"Kimi K3",provider:"kimi",runner:"claude-code"});
-  const extra = params.has("many") ? Array.from({length:16},(_,i)=>({...gateway,preset:"custom",ref:"extra-"+i,generation:"extra-"+i,address:"https://gateway-"+i+".example",models:offered})):[];
+  const extra = params.has("many") ? Array.from({length:16},(_,i)=>({...gateway,preset:"custom",ref:"extra-"+i,revision:"extra-"+i,baseUrl:"https://gateway-"+i+".example",models:offered})):[];
   return <main className="bg-background text-foreground flex min-h-screen flex-col justify-end p-4">
     <output data-model={model} data-level={level} data-opened={opened} data-opened-level={openedLevel} />
-    <ModelPicker model={model} agentHarness={parseModelValue(model)!.harness} lists={CATALOG_MODEL_LISTS} gateways={connected?[{...gateway,models:offered},...extra,...(params.has("two")?[{...gateway,ref:"router",generation:"other",preset:"openrouter",models:offered}]:[])]:[]}
+    <ModelPicker model={model} agentHarness={parseModelValue(model)!.harness} lists={CATALOG_MODEL_LISTS} gateways={connected?[{...gateway,models:offered},...extra,...(params.has("two")?[{...gateway,ref:"router",revision:"other",preset:"openrouter",models:offered}]:[])]:[]}
       thinkingLevel={fitThinkingLevel(level, levels, "high")}
-      previousGateway={params.has("started") && parseModelValue(model)?.gatewayGeneration ? {ref:gateway.ref,label:"CLIProxyAPI"} : undefined}
+      previousGateway={params.has("started") && parseModelValue(model)?.gatewayRevision ? {ref:gateway.ref,label:"CLIProxyAPI"} : undefined}
       hasMessages={params.has("started")}
       onModelChange={({value}, effort) => { setModel(value); setLevel((current) => effort ?? fitThinkingLevel(current, levelsOf(value), "high")); }}
       onThinkingLevelChange={setLevel} onOpenNewTab={(value, level) => { setOpened(value ?? ""); setOpenedLevel(level ?? ""); }} />

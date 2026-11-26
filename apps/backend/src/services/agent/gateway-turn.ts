@@ -6,7 +6,7 @@ import { gatewayLabel, gatewayEffort, gatewaySupports, gatewayThinking } from "@
 import { getSessionRaw } from "../../db";
 import { getDatabase } from "../../lib/database";
 import { GatewayError } from "../../lib/errors";
-import { connectionFor, requireGeneration } from "../gateways";
+import { connectionFor, requireRevision } from "../gateways";
 import {
   holdingTurn,
   gatewayExecution,
@@ -36,10 +36,8 @@ export async function prepareGatewayTurn(
     { thinking: gatewayThinking(connection, model, execution.harness) },
     level
   );
-  turn.delivery = {
-    apiKey: connection.clientKey,
-    baseUrl: connection.address + (binding.format === "responses" ? "/v1" : ""),
-  };
+  const endpointUrl = connection.baseUrl + (binding.format === "responses" ? "/v1" : "");
+  turn.delivery = { apiKey: connection.apiKey, baseUrl: endpointUrl };
 }
 
 export const gatewayCredential: CredentialSource = async (request, signal) => {
@@ -48,7 +46,7 @@ export const gatewayCredential: CredentialSource = async (request, signal) => {
   const holder = holdingTurn(sessionId);
   const gateway = holder?.gateway;
   if (!gateway) {
-    if (request.rejectedSha256 || getSessionRaw(getDatabase(), sessionId)?.gateway_generation)
+    if (request.rejectedSha256 || getSessionRaw(getDatabase(), sessionId)?.gateway_revision)
       throw new GatewayError("The gateway turn is no longer active.");
     return;
   }
@@ -66,7 +64,7 @@ export const gatewayCredential: CredentialSource = async (request, signal) => {
     )
       throw new GatewayError("The gateway credential does not belong to this turn.");
   }
-  requireGeneration(gateway.binding.revision);
+  requireRevision(gateway.binding.revision);
   signal?.throwIfAborted();
   return { type: "api_key", ...gateway.delivery, binding: gateway.binding };
 };

@@ -3,10 +3,10 @@ import { Ellipsis, Plus } from "lucide-react";
 import { api } from "@shared/api";
 import {
   GATEWAY_PRESETS,
-  GATEWAY_KINDS,
+  GATEWAY_PRESET_IDS,
   gatewayLabel,
   type GatewayFormat,
-  type GatewayKind,
+  type GatewayPreset,
   type GatewayStatus,
 } from "@shared/gateways";
 import { getErrorMessage } from "@shared/lib/errors";
@@ -37,7 +37,7 @@ import { StatusDot } from "./ProviderRow";
 function ProviderRules({
   rules,
 }: {
-  rules: NonNullable<(typeof GATEWAY_PRESETS)[GatewayKind]["rules"]>;
+  rules: NonNullable<(typeof GATEWAY_PRESETS)[GatewayPreset]["rules"]>;
 }) {
   return (
     <div data-gateway-details="" className="text-text-secondary space-y-1 text-xs">
@@ -77,7 +77,7 @@ export function GatewaysSection({
   recheck: (gateway: GatewayStatus) => Promise<void>;
   checking: boolean;
 }) {
-  const [editing, setEditing] = useState<{ preset: GatewayKind; gateway?: GatewayStatus }>();
+  const [editing, setEditing] = useState<{ preset: GatewayPreset; gateway?: GatewayStatus }>();
   const [formats, setFormats] = useState<readonly GatewayFormat[]>([]);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
@@ -86,7 +86,7 @@ export function GatewaysSection({
     dialogTrigger.current = event.currentTarget;
   }
   const triggerEvents = { onFocus: rememberTrigger, onPointerDown: rememberTrigger };
-  function edit(preset: GatewayKind, gateway?: GatewayStatus) {
+  function edit(preset: GatewayPreset, gateway?: GatewayStatus) {
     setFormats(gateway?.formats ?? GATEWAY_PRESETS[preset].formats);
     setProblem("");
     setEditing({ preset, gateway });
@@ -95,24 +95,24 @@ export function GatewaysSection({
     event.preventDefault();
     if (!editing || !local || busy) return;
     const fields = new FormData(event.currentTarget);
-    const key = fields.get("key");
+    const apiKey = fields.get("apiKey");
     const spec = GATEWAY_PRESETS[editing.preset];
     const base = new URL(
-      (spec.transport === "loopback" && editing.gateway?.address) ||
-        spec.address ||
+      (spec.transport === "loopback" && editing.gateway?.baseUrl) ||
+        spec.baseUrl ||
         "http://localhost"
     );
     if (spec.transport === "loopback") base.port = String(fields.get("port"));
-    const address = spec.transport === "any" ? fields.get("address") : base.href;
-    if (typeof address !== "string" || typeof key !== "string") return;
+    const baseUrl = spec.transport === "any" ? fields.get("baseUrl") : base.href;
+    if (typeof baseUrl !== "string" || typeof apiKey !== "string") return;
     setBusy(true);
     setProblem("");
     try {
       await call(api.connectGateway, {
         preset: editing.preset,
-        address,
-        generation: editing.gateway?.generation ?? null,
-        clientKey: key || undefined,
+        baseUrl,
+        revision: editing.gateway?.revision ?? null,
+        apiKey: apiKey || undefined,
         formats: [...formats],
       });
       setEditing(undefined);
@@ -136,7 +136,7 @@ export function GatewaysSection({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {GATEWAY_KINDS.map((preset) => (
+              {GATEWAY_PRESET_IDS.map((preset) => (
                 <DropdownMenuItem key={preset} onSelect={() => edit(preset)}>
                   <GatewayLogo preset={preset} className="size-4" />
                   {GATEWAY_PRESETS[preset].label}
@@ -188,7 +188,7 @@ export function GatewaysSection({
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onSelect={() =>
-                      void call(api.disconnectGateway, { generation: g.generation }).catch((e) =>
+                      void call(api.disconnectGateway, { revision: g.revision }).catch((e) =>
                         setProblem(getErrorMessage(e))
                       )
                     }
@@ -205,7 +205,7 @@ export function GatewaysSection({
               className="border-border-subtle border-t pb-2 first-of-type:border-t-0"
             >
               <GatewayDisclosure
-                key={g.generation}
+                key={g.revision}
                 connection={g}
                 onOpen={local ? retry : undefined}
                 row={{
@@ -213,10 +213,10 @@ export function GatewaysSection({
                   name: (
                     <>
                       {name}
-                      {g.address && name === preset.label && (
+                      {g.baseUrl && name === preset.label && (
                         <span className="text-text-secondary font-normal">
                           {" "}
-                          · {new URL(g.address).host}
+                          · {new URL(g.baseUrl).host}
                         </span>
                       )}
                     </>
@@ -277,14 +277,14 @@ export function GatewaysSection({
             <form onSubmit={save} onChange={() => setProblem("")} className="grid gap-4">
               {spec.transport === "any" ? (
                 <div className="grid gap-1.5">
-                  <Label htmlFor="gateway-address">Base URL</Label>
+                  <Label htmlFor="gateway-base-url">Base URL</Label>
                   <Input
-                    id="gateway-address"
+                    id="gateway-base-url"
                     type="url"
                     required
-                    name="address"
+                    name="baseUrl"
                     defaultValue={
-                      editing.gateway?.address ? editing.gateway.address + "/v1" : spec.address
+                      editing.gateway?.baseUrl ? editing.gateway.baseUrl + "/v1" : spec.baseUrl
                     }
                     disabled={busy}
                     placeholder="https://gateway.example/v1"
@@ -302,26 +302,24 @@ export function GatewaysSection({
                     required
                     disabled={busy}
                     defaultValue={
-                      new URL(editing.gateway?.address || spec.address).port ||
-                      (editing.gateway?.address.startsWith("https:") ? 443 : 80)
+                      new URL(editing.gateway?.baseUrl || spec.baseUrl).port ||
+                      (editing.gateway?.baseUrl.startsWith("https:") ? 443 : 80)
                     }
                   />
                 </div>
               ) : (
-                <p className="text-text-secondary text-sm">{spec.address}</p>
+                <p className="text-text-secondary text-sm">{spec.baseUrl}</p>
               )}
               <div className="grid gap-1.5">
-                <Label htmlFor="gateway-key">
-                  {spec.transport === "loopback" ? "Client key" : "API key"}
-                </Label>
+                <Label htmlFor="gateway-api-key">API key</Label>
                 <Input
-                  id="gateway-key"
-                  name="key"
+                  id="gateway-api-key"
+                  name="apiKey"
                   type="password"
                   autoComplete="off"
                   required={!editing.gateway}
                   readOnly={busy}
-                  placeholder={editing.gateway ? "Keep saved key" : undefined}
+                  placeholder={editing.gateway ? "Keep saved API key" : undefined}
                 />
               </div>
               {!spec.formats.length && (

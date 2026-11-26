@@ -464,7 +464,7 @@ it("reopens a chat that started elsewhere with its live agent and label", () => 
           ...chat("b"),
           agent_harness: "codex-app-server",
           message_count: 0,
-          gateway_generation: "bound",
+          gateway_revision: "bound",
         },
       ],
     })
@@ -479,7 +479,7 @@ it("counts a bound chat with a missing echo when numbering reopened and arriving
   const bound = (id: string): Session => ({
     ...chat(id),
     message_count: 0,
-    gateway_generation: "bound",
+    gateway_revision: "bound",
   });
   workspaceLayoutActions.setChatTabState("w", ["a", "b", "c"], "b");
   act(() => root.render(createElement(Tabs)));

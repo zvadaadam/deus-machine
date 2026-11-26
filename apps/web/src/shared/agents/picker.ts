@@ -37,7 +37,7 @@ export interface PickerOption {
   label: string;
   description?: string;
   agentHarness: AgentHarness;
-  gatewayGeneration?: string;
+  gatewayRevision?: string;
   thinking?: ModelDescriptor["thinking"];
   heading?: { label: string; provider: string };
   unavailable?: boolean;
@@ -71,7 +71,7 @@ export function modelPickerView(
 ) {
   const current = model ? parseModelValue(model) : undefined;
   const selectedValue =
-    current && modelValue(current.harness, current.model, current.gatewayGeneration);
+    current && modelValue(current.harness, current.model, current.gatewayRevision);
   const query = search.trim().toLowerCase();
   let selected: PickerOption | undefined;
   const groups = lists.flatMap((list): PickerGroup[] => {
@@ -88,7 +88,7 @@ export function modelPickerView(
       })
     );
     const empty = options.length ? undefined : emptyModelList(list);
-    if (current && !current.gatewayGeneration && current.harness === harness) {
+    if (current && !current.gatewayRevision && current.harness === harness) {
       selected = options.find((o) => o.id === current.model);
       if (!selected) {
         const known = findModel(lists, harness, current.model);
@@ -134,11 +134,11 @@ export function modelPickerView(
           const thinking = gatewayThinking(gateway, row, agentHarness);
           const option: PickerOption = {
             id,
-            value: modelValue(agentHarness, id, gateway.generation),
+            value: modelValue(agentHarness, id, gateway.revision),
             label,
             thinking,
             agentHarness,
-            gatewayGeneration: gateway.generation,
+            gatewayRevision: gateway.revision,
           };
           if (option.value === selectedValue) selected = option;
           if (![label, id, provider, rawProvider].some((s) => s.toLowerCase().includes(query)))
@@ -157,14 +157,14 @@ export function modelPickerView(
       });
     }
   }
-  if (current && current.gatewayGeneration && !selected) {
+  if (current && current.gatewayRevision && !selected) {
     selected = {
       id: current.model,
-      value: modelValue(current.harness, current.model, current.gatewayGeneration),
+      value: modelValue(current.harness, current.model, current.gatewayRevision),
       label: previousLabel || current.model,
       agentHarness: current.harness,
       unavailable: true,
-      gatewayGeneration: current.gatewayGeneration,
+      gatewayRevision: current.gatewayRevision,
     };
   }
   return { groups, selected };

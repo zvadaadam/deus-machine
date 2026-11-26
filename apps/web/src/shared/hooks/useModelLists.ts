@@ -46,13 +46,13 @@ export function useChatModel({
   picked,
   harness: storedHarness = DEFAULT_AGENT_HARNESS,
   turns = [],
-  gatewayGeneration,
+  gatewayRevision,
   ...scope
 }: ModelScope & {
   picked?: string;
   harness?: string;
   turns?: readonly SessionTurn[];
-  gatewayGeneration?: string | null;
+  gatewayRevision?: string | null;
 }): ChatModelSelection {
   const state = useModelListsState(scope);
   const harness = knownHarness(storedHarness);
@@ -64,20 +64,20 @@ export function useChatModel({
     };
   const selection = picked ? parseModelValue(picked) : undefined;
   const sameRoute =
-    gatewayGeneration === undefined ||
-    (selection?.harness === harness && (selection.gatewayGeneration ?? null) === gatewayGeneration);
+    gatewayRevision === undefined ||
+    (selection?.harness === harness && (selection.gatewayRevision ?? null) === gatewayRevision);
   const eligible =
     selection &&
-    (!selection.gatewayGeneration || !scope.cloud) &&
+    (!selection.gatewayRevision || !scope.cloud) &&
     sameRoute &&
     state.lists.some((list) => list.harness === selection.harness);
   const agentHarness = eligible ? selection.harness : harness;
-  const generation = eligible ? selection.gatewayGeneration : gatewayGeneration;
+  const revision = eligible ? selection.gatewayRevision : gatewayRevision;
   const id = eligible
     ? selection.model
-    : modelForSession(harness, turns, gatewayGeneration ? [] : state.lists);
-  const model = id && modelValue(agentHarness, id, generation);
-  const gateway = generation ? state.gateways?.find((g) => g.generation === generation) : undefined;
+    : modelForSession(harness, turns, gatewayRevision ? [] : state.lists);
+  const model = id && modelValue(agentHarness, id, revision);
+  const gateway = revision ? state.gateways?.find((g) => g.revision === revision) : undefined;
   const listed = gateway?.models.find(
     (m) => m.id === id && gatewaySupports(gateway, m, agentHarness)
   );
@@ -87,7 +87,7 @@ export function useChatModel({
       : undefined;
   const latest = latestTurnExecution(harness, turns);
   let unavailable;
-  if (generation && !gatewayModel)
+  if (revision && !gatewayModel)
     unavailable = state.gateways
       ? "This gateway model is no longer available."
       : "Reading gateways…";
@@ -98,12 +98,12 @@ export function useChatModel({
     agentHarness,
     gatewayModel,
     previousGateway:
-      generation && latest?.via ? { label: latest.via, ref: latest.gatewayRef } : undefined,
-    previousLabel: generation && latest?.model === id ? latest?.modelLabel : undefined,
+      revision && latest?.via ? { label: latest.via, ref: latest.gatewayRef } : undefined,
+    previousLabel: revision && latest?.model === id ? latest?.modelLabel : undefined,
     model,
     picked: eligible ? model : undefined,
     thinkingLevels:
-      id && !generation
+      id && !revision
         ? modelThinkingLevels(state.lists, agentHarness, id)
         : (gatewayModel?.thinking?.levels ?? []),
     unavailable,

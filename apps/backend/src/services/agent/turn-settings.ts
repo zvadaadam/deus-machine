@@ -27,7 +27,7 @@ export interface TurnSettings {
   agentHarness: AgentHarness;
   model: string;
   thinkingLevel: ThinkingLevel;
-  gatewayGeneration?: string;
+  gatewayRevision?: string;
 }
 
 function defaultThinking() {
@@ -99,13 +99,13 @@ export function continuedSettings(
 ): TurnSettings {
   // The operator does not pass its cutoff, so a send falls back to the catalog, the only list that needs no read.
   const gateway = holdingTurn(sessionId)?.gateway;
-  const gatewayGeneration =
-    gateway?.binding.revision ?? getSessionRaw(getDatabase(), sessionId)?.gateway_generation;
+  const gatewayRevision =
+    gateway?.binding.revision ?? getSessionRaw(getDatabase(), sessionId)?.gateway_revision;
   const latest = latestTurnExecution(harness, turns);
   const model =
     gateway?.execution.model ??
     latest?.model ??
-    (gatewayGeneration ? undefined : defaultModelId(CATALOG_MODEL_LISTS, harness));
+    (gatewayRevision ? undefined : defaultModelId(CATALOG_MODEL_LISTS, harness));
   if (!model)
     throw new OperatorError(
       "unsupported",
@@ -114,7 +114,7 @@ export function continuedSettings(
   return {
     agentHarness: harness,
     model,
-    ...(gatewayGeneration && { gatewayGeneration }),
+    ...(gatewayRevision && { gatewayRevision }),
     thinkingLevel: continuedThinkingLevel(latest) ?? defaultThinking(),
   };
 }

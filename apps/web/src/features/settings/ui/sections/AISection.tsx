@@ -38,7 +38,7 @@ export function AISection({
   const recheck = async (connection: GatewayStatus) => {
     setChecking((n) => n + 1);
     try {
-      await call(api.refreshGateway, { generation: connection.generation });
+      await call(api.refreshGateway, { revision: connection.revision });
     } finally {
       setChecking((n) => n - 1);
     }

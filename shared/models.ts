@@ -200,11 +200,9 @@ export function defaultModelId(
 export function modelValue(
   harness: AgentHarness,
   model: string,
-  gatewayGeneration?: string | null
+  gatewayRevision?: string | null
 ): string {
-  return gatewayGeneration
-    ? `gateway:${harness}:${gatewayGeneration}:${model}`
-    : `${harness}:${model}`;
+  return gatewayRevision ? `gateway:${harness}:${gatewayRevision}:${model}` : `${harness}:${model}`;
 }
 
 /**
@@ -214,15 +212,13 @@ export function modelValue(
  */
 export function parseModelValue(
   value: string
-): { harness: AgentHarness; model: string; gatewayGeneration?: string } | undefined {
+): { harness: AgentHarness; model: string; gatewayRevision?: string } | undefined {
   const text = value.trim();
   if (text.startsWith("gateway:")) {
-    const [, id, gatewayGeneration, ...parts] = text.split(":");
+    const [, id, gatewayRevision, ...parts] = text.split(":");
     const harness = knownHarness(id);
     const model = parts.join(":");
-    return harness && gatewayGeneration && model
-      ? { harness, model, gatewayGeneration }
-      : undefined;
+    return harness && gatewayRevision && model ? { harness, model, gatewayRevision } : undefined;
   }
   const colon = text.indexOf(":");
   if (colon <= 0 || colon === text.length - 1) return undefined;

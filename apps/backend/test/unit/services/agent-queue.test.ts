@@ -349,33 +349,33 @@ afterEach(async () => {
   vi.resetAllMocks();
 });
 
-function mockGateway(generation: string) {
-  vi.spyOn(gateways, "requireGeneration").mockReturnValue({
+function mockGateway(revision: string) {
+  vi.spyOn(gateways, "requireRevision").mockReturnValue({
     ref: "fixture",
     preset: "cliproxyapi",
-    generation,
+    revision,
     credential: "sealed-fixture",
   });
   return vi.spyOn(gatewayTurn, "prepareGatewayTurn").mockResolvedValue(undefined);
 }
 
 it("writes the route with the first durable turn record, including a retry after a rolled back insert", async () => {
-  const generation = crypto.randomUUID(),
+  const revision = crypto.randomUUID(),
     turnId = "test-binding";
-  mockGateway(generation);
-  const revision = () =>
-    db.prepare("SELECT gateway_generation FROM sessions WHERE id=?").pluck().get(sessionId);
+  mockGateway(revision);
+  const storedRevision = () =>
+    db.prepare("SELECT gateway_revision FROM sessions WHERE id=?").pluck().get(sessionId);
   engine.startTurn.mockResolvedValueOnce();
-  await run(api.sendMessage, { ...message(turnId), turnId, gatewayGeneration: generation });
-  expect(revision()).toBeNull();
+  await run(api.sendMessage, { ...message(turnId), turnId, gatewayRevision: revision });
+  expect(storedRevision()).toBeNull();
   db.exec(
     "CREATE TEMP TRIGGER reject_turn BEFORE INSERT ON turns BEGIN SELECT RAISE(ABORT,'fixture failure'); END"
   );
   emit({ type: "turn.started", sessionId, turnId, timestamp: seq });
-  expect(revision()).toBeNull();
+  expect(storedRevision()).toBeNull();
   db.exec("DROP TRIGGER reject_turn");
   emit({ type: "turn.ended", sessionId, turnId, timestamp: seq, stopReason: "end_turn" });
-  expect(revision()).toBe(generation);
+  expect(storedRevision()).toBe(revision);
   expect(db.prepare("SELECT COUNT(*) FROM turns WHERE session_id=?").pluck().get(sessionId)).toBe(
     1
   );
@@ -388,13 +388,13 @@ it.each([
 ] as const)(
   "uses gateway key recovery only for its own refusal (%s, %s)",
   async (bound, reason, expected) => {
-    const generation = crypto.randomUUID(),
+    const revision = crypto.randomUUID(),
       turnId = "auth";
-    if (bound) mockGateway(generation);
+    if (bound) mockGateway(revision);
     await run(api.sendMessage, {
       ...message(turnId),
       turnId,
-      ...(bound && { gatewayGeneration: generation }),
+      ...(bound && { gatewayRevision: revision }),
     });
     emit({
       type: "turn.ended",
@@ -411,9 +411,9 @@ it.each([
 );
 
 it("shows the refused gateway connection reason on the waiting row", async () => {
-  const generation = crypto.randomUUID();
+  const revision = crypto.randomUUID();
   enqueueMessage(
-    { ...message("held"), turnId: "held", gatewayGeneration: generation },
+    { ...message("held"), turnId: "held", gatewayRevision: revision },
     { kind: "assistant", id: "assistant", name: "Assistant" }
   );
   await vi.waitFor(async () =>
@@ -425,13 +425,13 @@ it("shows the refused gateway connection reason on the waiting row", async () =>
 });
 
 it("keeps a queued gateway row editable when the native successor refuses its steer", async () => {
-  const generation = crypto.randomUUID();
-  const prep = mockGateway(generation).mockImplementationOnce(() => new Promise<never>(() => {}));
+  const revision = crypto.randomUUID();
+  const prep = mockGateway(revision).mockImplementationOnce(() => new Promise<never>(() => {}));
   const first = expect(
-    run(api.sendMessage, { ...message("first"), turnId: "first", gatewayGeneration: generation })
+    run(api.sendMessage, { ...message("first"), turnId: "first", gatewayRevision: revision })
   ).rejects.toThrow();
   await vi.waitFor(() => expect(prep).toHaveBeenCalled());
-  await run(api.sendMessage, { ...message("old"), turnId: "old", gatewayGeneration: generation });
+  await run(api.sendMessage, { ...message("old"), turnId: "old", gatewayRevision: revision });
   await stop();
   await first;
   await send("native");
@@ -446,9 +446,9 @@ it("keeps a queued gateway row editable when the native successor refuses its st
 it.each(["gap", "watchdog"])(
   "releases the gateway credential at %s settlement and reconciles its late end",
   async (settlement) => {
-    const generation = crypto.randomUUID();
+    const revision = crypto.randomUUID();
     const delivery = { apiKey: "test-only", baseUrl: "http://localhost/v1" };
-    mockGateway(generation).mockImplementationOnce(async (turn) => {
+    mockGateway(revision).mockImplementationOnce(async (turn) => {
       turn.delivery = delivery;
     });
     const turnId = "active";
@@ -457,7 +457,7 @@ it.each(["gap", "watchdog"])(
       ...message("active"),
       model: "custom:model",
       turnId,
-      gatewayGeneration: generation,
+      gatewayRevision: revision,
     });
     await expect(gatewayTurn.gatewayCredential(request)).resolves.toMatchObject(delivery);
     if (settlement === "gap") gap("server_restarted");
@@ -4754,9 +4754,9 @@ describe("continuing a chat after a usage limit", () => {
     "uses a gateway deadline only within seven days (%s)",
     async (offset) => {
       const turnId = "A",
-        generation = crypto.randomUUID();
-      mockGateway(generation);
-      await run(api.sendMessage, { ...message(turnId), turnId, gatewayGeneration: generation });
+        revision = crypto.randomUUID();
+      mockGateway(revision);
+      await run(api.sendMessage, { ...message(turnId), turnId, gatewayRevision: revision });
       const retryAt = resetsAt + offset;
       const error = {
         category: "rate_limit",
@@ -4846,13 +4846,13 @@ describe("continuing a chat after a usage limit", () => {
   ])(
     "a person's untimed Resume continues the chat (gateway $gateway, waiting $waiting)",
     async ({ gateway, waiting }) => {
-      const generation = gateway ? crypto.randomUUID() : undefined;
-      if (generation) mockGateway(generation);
+      const revision = gateway ? crypto.randomUUID() : undefined;
+      if (revision) mockGateway(revision);
       const selected = (id: string) =>
         run(api.sendMessage, {
           ...message(id),
           turnId: id,
-          gatewayGeneration: generation,
+          gatewayRevision: revision,
         });
       await selected("active");
       if (waiting) await selected("later");

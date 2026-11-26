@@ -190,7 +190,7 @@ function checkQueueRoute(chat: LocalChat, input: Input) {
   // The first turn binds the harness before its user echo increments the message count.
   if (chat.message_count > 0 || holdingTurn(input.sessionId))
     requireSameHarness(chat.agent_harness, input.agentHarness);
-  requireChatRoute(input.sessionId, input.gatewayGeneration);
+  requireChatRoute(input.sessionId, input.gatewayRevision);
 }
 
 function newRow(q: Queue, message: Message, origin: Origin | undefined, ownTurn: boolean): Row {

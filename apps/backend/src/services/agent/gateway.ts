@@ -171,25 +171,25 @@ function describeModel(
   };
 }
 
-type CatalogConnection = Pick<GatewayCatalog, "address" | "preset" | "formats"> & {
-  clientKey: string;
+type CatalogConnection = Pick<GatewayCatalog, "baseUrl" | "preset" | "formats"> & {
+  apiKey: string;
 };
 
 async function request(connection: CatalogConnection, path: string, signal: AbortSignal) {
-  const { address, clientKey } = connection;
+  const { baseUrl, apiKey } = connection;
   const spec = GATEWAY_PRESETS[connection.preset];
   const name = spec.label;
-  const headers = { Authorization: "Bearer " + clientKey };
+  const headers = { Authorization: "Bearer " + apiKey };
   let response: Response;
   try {
-    response = await fetch(address + path, { headers, redirect: "manual", signal });
+    response = await fetch(baseUrl + path, { headers, redirect: "manual", signal });
   } catch {
-    throw new GatewayError(`Nothing answers at this address. Is ${name} running?`, "unreachable");
+    throw new GatewayError(`Nothing answers at this base URL. Is ${name} running?`, "unreachable");
   }
   if (response.ok) return response;
   await response.body?.cancel().catch(() => {});
   if (response.status === 401 || response.status === 403)
-    throw new GatewayError(name + " rejected the client key.", "client_key");
+    throw new GatewayError(name + " rejected the API key.", "api_key");
   throw new GatewayError(
     `${name} could not ${path === spec.keyPath ? "verify the API key" : "list its models"} (HTTP ${response.status}).`,
     "catalog"
@@ -205,7 +205,7 @@ export async function verifyGatewayKey(connection: CatalogConnection, signal: Ab
       await readGatewayJson(auth, 64 * 1024)
     );
   } catch {
-    throw new GatewayError(label + " could not verify the API key.", "client_key");
+    throw new GatewayError(label + " could not verify the API key.", "api_key");
   }
 }
 
@@ -241,7 +241,7 @@ export async function checkCatalog(
     const rows = new Map<string, GatewayModel>();
     for (const item of data) {
       const row = describeModel(item, connection.formats, spec.catalog, rich.get(item.id));
-      if ([row.id, row.provider, row.label].some((value) => value?.includes(connection.clientKey)))
+      if ([row.id, row.provider, row.label].some((value) => value?.includes(connection.apiKey)))
         throw new Error();
       rows.set(row.id, row);
     }

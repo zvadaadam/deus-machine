@@ -32,7 +32,7 @@ export const PRELAUNCH_SCHEMA_RESET_HINT =
 export const ADDITIVE_COLUMNS: Record<string, Record<string, string>> = {
   workspaces: { started_by: "TEXT", first_session_id: "TEXT", archived_by: "TEXT" },
   sessions: {
-    gateway_generation: "TEXT",
+    gateway_revision: "TEXT",
     started_by: "TEXT",
     chat: "INTEGER",
     agent_messages: "INTEGER",
@@ -109,7 +109,7 @@ export const SCHEMA_SQL = `
     agent_session_id TEXT,
     -- Whether the agent can message the person. NULL until its first ask.
     agent_messages INTEGER,
-    gateway_generation TEXT,
+    gateway_revision TEXT,
     provider_session_id TEXT,
     title TEXT,
     status TEXT NOT NULL DEFAULT 'idle',

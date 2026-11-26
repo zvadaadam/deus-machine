@@ -53,7 +53,7 @@ const run = operations(gatewayHandlers);
 const key = randomBytes(24).toString("hex");
 const model = "custom:model";
 const codexModel = "gpt-6.2-astra";
-let address: string;
+let baseUrl: string;
 let inferenceStatus: number | "unreachable" = 200;
 let probes = 0;
 let requests = 0;
@@ -110,33 +110,33 @@ const chat = () => {
   db.prepare("INSERT INTO sessions (id,workspace_id) VALUES (?, 'w')").run(id);
   return id;
 };
-const send = (sessionId: string, generation?: string) =>
+const send = (sessionId: string, revision?: string) =>
   sendMessage({
     sessionId,
     turnId: crypto.randomUUID(),
     content: "local fixture",
     model,
     agentHarness: "claude-code",
-    gatewayGeneration: generation,
+    gatewayRevision: revision,
   });
 const stored = (id: string) =>
-  db.prepare("SELECT gateway_generation FROM sessions WHERE id=?").pluck().get(id);
+  db.prepare("SELECT gateway_revision FROM sessions WHERE id=?").pluck().get(id);
 const spawned = async () => JSON.parse(await readFile(join(dir, "spawn.json"), "utf8"));
 
 async function prepared(
   harness: "claude-code" | "codex-app-server",
   pick: {
-    generation: string;
+    revision: string;
     model: string;
     thinkingLevel?: Parameters<typeof prepareGatewayTurn>[1];
   }
 ) {
-  const { requireGeneration } = await import("../../../src/services/gateways");
-  const ref = requireGeneration(pick.generation).ref;
+  const { requireRevision } = await import("../../../src/services/gateways");
+  const ref = requireRevision(pick.revision).ref;
   const turn: Parameters<typeof prepareGatewayTurn>[0] = {
     binding: {
       ref,
-      revision: pick.generation,
+      revision: pick.revision,
       format: harness === "claude-code" ? "messages" : "responses",
     },
     execution: { model: pick.model, harness },
@@ -148,11 +148,11 @@ async function prepared(
 async function connectHere() {
   await run(api.connectGateway, {
     preset: "cliproxyapi",
-    address,
-    clientKey: key,
-    generation: null,
+    baseUrl,
+    apiKey: key,
+    revision: null,
   });
-  return (await run(api.gateways))[0]!.generation;
+  return (await run(api.gateways))[0]!.revision;
 }
 
 function mockCatalogRead(base: string) {
@@ -165,8 +165,8 @@ function mockCatalogRead(base: string) {
 }
 
 afterEach(async () => {
-  for (const { generation } of await run(api.gateways))
-    await run(api.disconnectGateway, { generation });
+  for (const { revision } of await run(api.gateways))
+    await run(api.disconnectGateway, { revision });
 });
 
 beforeAll(async () => {
@@ -254,7 +254,7 @@ createInterface({input:process.stdin}).on("line", async line => {
   await new Promise<void>((resolve) => gateway.listen(0, "127.0.0.1", resolve));
   const bound = gateway.address();
   if (!bound || typeof bound === "string") throw Error("missing test listener");
-  address = "http://127.0.0.1:" + bound.port;
+  baseUrl = "http://127.0.0.1:" + bound.port;
   await service.init();
 });
 
@@ -268,7 +268,7 @@ afterAll(async () => {
 });
 
 it("accepts a loopback gateway with a fresh identity and keeps the key out of reads", async () => {
-  const input = { preset: "cliproxyapi" as const, address, clientKey: key, generation: null };
+  const input = { preset: "cliproxyapi" as const, baseUrl, apiKey: key, revision: null };
   const loopback = "Use a loopback address on 127.0.0.1, localhost or [::1].";
   for (const [bad, reason] of [
     ["http://127.1", loopback],
@@ -276,10 +276,10 @@ it("accepts a loopback gateway with a fresh identity and keeps the key out of re
     ["http://localhost/f", loopback],
     ["http://10.0.0.2", loopback],
   ] as const)
-    await expect(run(api.connectGateway, { ...input, address: bad })).rejects.toThrow(reason);
+    await expect(run(api.connectGateway, { ...input, baseUrl: bad })).rejects.toThrow(reason);
   const beforeReads = probes;
-  await expect(run(api.connectGateway, { ...input, clientKey: "refused" })).rejects.toThrow(
-    "rejected the client key"
+  await expect(run(api.connectGateway, { ...input, apiKey: "refused" })).rejects.toThrow(
+    "rejected the API key"
   );
   expect(await run(api.gateways)).toEqual([]);
   await run(api.connectGateway, input);
@@ -319,14 +319,14 @@ it.each(["refused", "stopped"])(
   "a first send %s before admission leaves the same chat native",
   async (mode) => {
     const id = chat(),
-      generation = await connectHere(),
+      revision = await connectHere(),
       before = requests;
     if (mode === "stopped") {
       const apps = await import("../../../src/services/integrations");
       const wait = Promise.withResolvers<Awaited<ReturnType<typeof apps.resolveTurnApps>>>();
       const pendingApps = vi.spyOn(apps, "resolveTurnApps").mockReturnValueOnce(wait.promise);
       try {
-        const pending = expect(send(id, generation)).rejects.toThrow();
+        const pending = expect(send(id, revision)).rejects.toThrow();
         await vi.waitFor(() => expect(holdingTurn(id)?.phase).toBe("preparing"));
         await stopSession({ sessionId: id });
         await pending;
@@ -341,7 +341,7 @@ it.each(["refused", "stopped"])(
           content: "local fixture",
           model: "missing",
           agentHarness: "claude-code",
-          gatewayGeneration: generation,
+          gatewayRevision: revision,
         })
       ).rejects.toThrow(/route/);
     }
@@ -356,20 +356,20 @@ it.each([401, 429, "unreachable"] as const)(
   "an admitted first %s stays on its gateway and a fresh native chat makes zero gateway requests",
   async (failure) => {
     const id = chat(),
-      generation = await connectHere(),
+      revision = await connectHere(),
       catalogReads = probes;
     inferenceStatus = failure;
     try {
-      await send(id, generation);
+      await send(id, revision);
       await vi.waitFor(() => expect(holdingTurn(id)).toBeUndefined(), { timeout: 15000 });
-      expect(stored(id)).toBe(generation);
+      expect(stored(id)).toBe(revision);
       expect(probes).toBe(catalogReads);
       expect(queuedMessages(id).paused).toBe(failure === 429 ? "limit" : null);
       await expect(send(id)).rejects.toThrow(/different provider/);
       await expectNativeOnly(chat());
       inferenceStatus = 200;
       const before = authorizedInference;
-      await send(id, generation);
+      await send(id, revision);
       await vi.waitFor(() => expect(authorizedInference).toBeGreaterThan(before), {
         timeout: 15000,
       });
@@ -382,14 +382,14 @@ it.each([401, 429, "unreachable"] as const)(
 
 it("refreshes discovery after a modelUnavailable end and leaves successful admission independent of discovery", async () => {
   const id = chat(),
-    generation = await connectHere(),
+    revision = await connectHere(),
     before = probes;
   inferenceStatus = 404;
   try {
-    await send(id, generation);
+    await send(id, revision);
     await vi.waitFor(() => expect(holdingTurn(id)).toBeUndefined(), { timeout: 15000 });
     await vi.waitFor(() => expect(probes).toBe(before + 1));
-    expect(stored(id)).toBe(generation);
+    expect(stored(id)).toBe(revision);
   } finally {
     inferenceStatus = 200;
   }
@@ -397,22 +397,22 @@ it("refreshes discovery after a modelUnavailable end and leaves successful admis
 
 it("keeps a recorded native turn on its subscription even when its first echo and acknowledgement were lost", async () => {
   const id = chat(),
-    generation = await connectHere();
+    revision = await connectHere();
   db.prepare(
     "INSERT INTO turns (session_id, turn_id, started_at, ended_at) VALUES (?, 'native', 1, 2)"
   ).run(id);
   const before = requests;
-  await expect(send(id, generation)).rejects.toThrow("different provider");
+  await expect(send(id, revision)).rejects.toThrow("different provider");
   expect(requests).toBe(before);
   expect(stored(id)).toBeNull();
 });
 
 it("delivers a gateway Claude credential through the engine listener and caps only that child's retries", async () => {
   const id = chat(),
-    generation = await connectHere();
+    revision = await connectHere();
   await rm(join(dir, "spawn.json"), { force: true });
   const before = authorizedInference;
-  await send(id, generation);
+  await send(id, revision);
   await vi.waitFor(
     async () =>
       expect(await spawned()).toEqual({
@@ -424,21 +424,21 @@ it("delivers a gateway Claude credential through the engine listener and caps on
     { timeout: 15000 }
   );
   expect(authorizedInference).toBeGreaterThan(before);
-  expect(stored(id)).toContain(generation);
+  expect(stored(id)).toContain(revision);
   await vi.waitFor(() => expect(holdingTurn(id)).toBeUndefined());
   await expect(send(id)).rejects.toThrow("different provider");
 }, 30000);
 
 it("gives Codex a loopback provider and placeholder through thread/start on its own home", async () => {
   const sessionId = chat(),
-    generation = await connectHere(),
+    revision = await connectHere(),
     before = authorizedInference;
   await sendMessage({
     sessionId,
     content: "local fixture",
     model: codexModel,
     agentHarness: "codex-app-server",
-    gatewayGeneration: generation,
+    gatewayRevision: revision,
   });
   await vi.waitFor(
     async () => {
@@ -456,7 +456,7 @@ it("gives Codex a loopback provider and placeholder through thread/start on its 
 }, 30000);
 
 it("delivers the binding of the admitted chat to each harness", async () => {
-  const generation = await connectHere();
+  const revision = await connectHere();
   for (const [harness, format, id] of [
     ["codex-app-server", "responses", codexModel],
     ["claude-code", "messages", model],
@@ -468,7 +468,7 @@ it("delivers the binding of the admitted chat to each harness", async () => {
       turnId,
       agentHarness: harness,
       model: id,
-      gatewayGeneration: generation,
+      gatewayRevision: revision,
       content: "fixture",
     });
     const source = vi.mocked(gatewayTurn.gatewayCredential);
@@ -479,7 +479,7 @@ it("delivers the binding of the admitted chat to each harness", async () => {
       );
       const credential = await source.mock.results[index]?.value;
       const revision = stored(sessionId);
-      const connection = (await run(api.gateways)).find((g) => g.generation === revision);
+      const connection = (await run(api.gateways)).find((g) => g.revision === revision);
       expect(connection).toBeDefined();
       expect(credential?.binding).toEqual({ ref: connection!.ref, revision, format });
     });
@@ -489,15 +489,15 @@ it("delivers the binding of the admitted chat to each harness", async () => {
 it("refuses the first credential handoff when its gateway was disconnected after admission", async () => {
   const sessionId = chat(),
     turnId = "first",
-    generation = await connectHere();
+    revision = await connectHere();
   claimTurn(
     sessionId,
     turnId,
     undefined,
     undefined,
-    await prepared("claude-code", { model, generation })
+    await prepared("claude-code", { model, revision })
   );
-  await run(api.disconnectGateway, { generation });
+  await run(api.disconnectGateway, { revision });
   await expect(gatewayCredential({ sessionId, turnId, harness: "claude-code" })).rejects.toThrow(
     /connection changed/
   );
@@ -513,9 +513,9 @@ it.each(["%73ynthetic-fixture", "bad%", "%FF"])(
       await expect(
         run(api.connectGateway, {
           preset: "custom",
-          address: "https://fixture.invalid/" + path,
-          clientKey: "synthetic-fixture",
-          generation: null,
+          baseUrl: "https://fixture.invalid/" + path,
+          apiKey: "synthetic-fixture",
+          revision: null,
           formats: ["responses"],
         })
       ).rejects.toThrow(ValidationError);
@@ -526,9 +526,9 @@ it.each(["%73ynthetic-fixture", "bad%", "%FF"])(
   }
 );
 
-it("renews only the current turn's credential and generation", async () => {
+it("renews only the current turn's credential and revision", async () => {
   const sessionId = chat(),
-    generation = await connectHere();
+    revision = await connectHere();
   const turnId = "rekey",
     request = { sessionId, turnId, harness: "claude-code" as const };
   claimTurn(
@@ -536,7 +536,7 @@ it("renews only the current turn's credential and generation", async () => {
     turnId,
     undefined,
     undefined,
-    await prepared("claude-code", { model, generation })
+    await prepared("claude-code", { model, revision })
   );
   expect(
     (await gatewayCredential({ sessionId, harness: request.harness, purpose: "models" }))?.type
@@ -544,9 +544,9 @@ it("renews only the current turn's credential and generation", async () => {
   const digest = createHash("sha256").update(key).digest("hex");
   await expect(gatewayCredential({ ...request, rejectedSha256: digest })).resolves.toMatchObject({
     type: "api_key",
-    baseUrl: address,
+    baseUrl,
   });
-  await run(api.disconnectGateway, { generation });
+  await run(api.disconnectGateway, { revision });
   await expect(gatewayCredential({ ...request, rejectedSha256: digest })).rejects.toThrow(
     "connection changed"
   );
@@ -557,8 +557,8 @@ it("renews only the current turn's credential and generation", async () => {
 it("keeps a terminal bare 429 when an earlier error only reported the CLI exit", async () => {
   const sessionId = chat(),
     turnId = crypto.randomUUID(),
-    generation = await connectHere();
-  const gateway = await prepared("codex-app-server", { generation, model: codexModel });
+    revision = await connectHere();
+  const gateway = await prepared("codex-app-server", { revision, model: codexModel });
   gatewayTurnEvent(
     {
       sessionId,
@@ -587,18 +587,18 @@ it("keeps a terminal bare 429 when an earlier error only reported the CLI exit",
   expect(end.event).toMatchObject({ type: "turn.ended", error });
 });
 
-it("reports a rejected client key even when cancelling the 401 response body fails", async () => {
+it("reports a rejected API key even when cancelling the 401 response body fails", async () => {
   const body = new ReadableStream({ cancel: () => Promise.reject(new Error("stream closed")) });
   const fetcher = vi
     .spyOn(globalThis, "fetch")
     .mockResolvedValueOnce(new Response(body, { status: 401 }));
   try {
     await expect(
-      checkCatalog({ preset: "cliproxyapi", address, clientKey: key, formats: ["messages"] })
+      checkCatalog({ preset: "cliproxyapi", baseUrl, apiKey: key, formats: ["messages"] })
     ).rejects.toMatchObject({
       constructor: GatewayError,
-      message: "CLIProxyAPI rejected the client key.",
-      details: { kind: "client_key" },
+      message: "CLIProxyAPI rejected the API key.",
+      details: { kind: "api_key" },
     });
   } finally {
     fetcher.mockRestore();
@@ -612,14 +612,14 @@ it.each(["openrouter", "custom"] as const)(
       "HTTP 429, unknown provider for model, all accounts cooling (reset after 2m): ";
     const connection = {
       preset,
-      address: "https://gateway.example/api",
-      clientKey: key,
+      baseUrl: "https://gateway.example/api",
+      apiKey: key,
       formats: ["messages"] as const,
     };
     const fetcher = vi.spyOn(globalThis, "fetch");
     try {
       for (const [status, kind] of [
-        [403, "client_key"],
+        [403, "api_key"],
         [429, "catalog"],
         [502, "catalog"],
       ] as const) {
@@ -692,20 +692,20 @@ it("joins published ids to the pinned client catalog, leaves unknowns in Setting
     expect(models[5]?.runner).toBeUndefined();
     await expect(
       prepared("claude-code", {
-        generation: revision,
+        revision,
         model: "gpt-6.2-astra",
       })
     ).rejects.toThrow();
     await expect(
       prepared("codex-app-server", {
-        generation: revision,
+        revision,
         model: "gpt-lookalike",
       })
     ).rejects.toThrow();
     expect(
       (
         await prepared("codex-app-server", {
-          generation: revision,
+          revision,
           model: "gpt-6.2-astra",
           thinkingLevel: "ultra",
         })
@@ -714,7 +714,7 @@ it("joins published ids to the pinned client catalog, leaves unknowns in Setting
     expect(
       (
         await prepared("codex-app-server", {
-          generation: revision,
+          revision,
           model: "vendor:vision",
           thinkingLevel: "high",
         })
@@ -731,20 +731,20 @@ it.each([
   ["cliproxyapi", "https://remote.example", /loopback/],
 ] as const)(
   "validates a previously sealed %s destination before delivering a key",
-  async (preset, address, error) => {
+  async (preset, baseUrl, error) => {
     const { initVault, seal } = await import("../../../src/services/integrations/vault");
     const { saveSetting } = await import("../../../src/services/settings.service");
     const { connectionFor } = await import("../../../src/services/gateways");
     await initVault("seal");
-    const credential = seal({ address, clientKey: key, formats: ["responses"], models: [] });
-    const generation = crypto.randomUUID();
-    saveSetting("gateways", [{ ref: crypto.randomUUID(), generation, preset, credential }]);
+    const credential = seal({ baseUrl, apiKey: key, formats: ["responses"], models: [] });
+    const revision = crypto.randomUUID();
+    saveSetting("gateways", [{ ref: crypto.randomUUID(), revision, preset, credential }]);
     const fetcher = vi
       .spyOn(globalThis, "fetch")
       .mockRejectedValue(new Error("No outbound requests"));
     try {
-      await expect(connectionFor(generation)).rejects.toThrow(error);
-      await expect(run(api.refreshGateway, { generation })).rejects.toThrow(error);
+      await expect(connectionFor(revision)).rejects.toThrow(error);
+      await expect(run(api.refreshGateway, { revision })).rejects.toThrow(error);
       expect(fetcher).not.toHaveBeenCalled();
     } finally {
       fetcher.mockRestore();
@@ -817,13 +817,13 @@ it("seals independent gateways, validates the OpenRouter key, and binds the requ
   });
   const managed = {
     preset: "openrouter" as const,
-    address: "https://openrouter.ai/api/v1",
-    generation: null,
-    clientKey: key,
+    baseUrl: "https://openrouter.ai/api/v1",
+    revision: null,
+    apiKey: key,
   };
   try {
     const original = await connectHere();
-    await expect(run(api.connectGateway, { ...managed, clientKey: "rejected" })).rejects.toThrow(
+    await expect(run(api.connectGateway, { ...managed, apiKey: "rejected" })).rejects.toThrow(
       /key/i
     );
     fetch.mockResolvedValueOnce(new Response("Public landing page"));
@@ -831,8 +831,8 @@ it("seals independent gateways, validates the OpenRouter key, and binds the requ
     const privateKey = {
       ...managed,
       preset: "custom" as const,
-      address: "https://gateway.example/team/v1",
-      clientKey: customKey,
+      baseUrl: "https://gateway.example/team/v1",
+      apiKey: customKey,
       formats: ["responses" as const],
     };
     await expect(run(api.connectGateway, { ...privateKey, formats: [] })).rejects.toThrow();
@@ -864,22 +864,22 @@ it("seals independent gateways, validates the OpenRouter key, and binds the requ
     expect(requests.some((p) => p.includes("client_version"))).toBe(false);
     rejectSavedKey = true;
     await expect(
-      run(api.connectGateway, { ...managed, generation: router.generation, clientKey: undefined })
-    ).rejects.toThrow("rejected the client key");
+      run(api.connectGateway, { ...managed, revision: router.revision, apiKey: undefined })
+    ).rejects.toThrow("rejected the API key");
     rejectSavedKey = false;
     await expect(
       run(api.connectGateway, {
         ...privateKey,
-        address: "https://elsewhere.example",
-        generation: custom.generation,
-        clientKey: undefined,
+        baseUrl: "https://elsewhere.example",
+        revision: custom.revision,
+        apiKey: undefined,
       })
     ).rejects.toThrow(/key/i);
-    expect((await connectionFor(custom.generation)).clientKey).toBe(customKey);
+    expect((await connectionFor(custom.revision)).apiKey).toBe(customKey);
     const sid = chat(),
       tid = crypto.randomUUID();
     const turn = await prepared("claude-code", {
-      generation: router.generation,
+      revision: router.revision,
       model: "anthropic/example",
     });
     claimTurn(sid, tid, undefined, undefined, turn);
@@ -889,7 +889,7 @@ it("seals independent gateways, validates the OpenRouter key, and binds the requ
         await gatewayCredential({ sessionId: sid, turnId: tid, harness: "claude-code" })
       ).toMatchObject({ type: "api_key", apiKey: key, baseUrl: "https://openrouter.ai/api" });
       const codex = await prepared("codex-app-server", {
-        generation: custom.generation,
+        revision: custom.revision,
         model: "openai/example",
       });
       const secondId = chat();
@@ -901,26 +901,26 @@ it("seals independent gateways, validates the OpenRouter key, and binds the requ
       });
       expect(credential).toMatchObject({
         baseUrl: "https://gateway.example/team/v1",
-        binding: { ref: custom.ref, revision: custom.generation, format: "responses" },
+        binding: { ref: custom.ref, revision: custom.revision, format: "responses" },
       });
       await expect(
         prepared("claude-code", {
-          generation: custom.generation,
+          revision: custom.revision,
           model: "anthropic/example",
         })
       ).rejects.toThrow(/route/i);
       await run(api.connectGateway, {
         ...privateKey,
         formats: ["messages"],
-        generation: custom.generation,
-        clientKey: undefined,
+        revision: custom.revision,
+        apiKey: undefined,
       });
-      await expect(connectionFor(custom.generation)).rejects.toThrow(/changed/i);
-      expect((await run(api.gateways)).find((g) => g.ref === custom.ref)?.generation).not.toBe(
-        custom.generation
+      await expect(connectionFor(custom.revision)).rejects.toThrow(/changed/i);
+      expect((await run(api.gateways)).find((g) => g.ref === custom.ref)?.revision).not.toBe(
+        custom.revision
       );
-      expect((await connectionFor(original)).address).toBe(address);
-      expect((await connectionFor(router.generation)).clientKey).toBe(key);
+      expect((await connectionFor(original)).baseUrl).toBe(baseUrl);
+      expect((await connectionFor(router.revision)).apiKey).toBe(key);
     } finally {
       forgetChatTurns(sid);
     }
@@ -934,10 +934,10 @@ it("validates a gateway destination and a request from this computer before touc
   try {
     const input = {
       preset: "custom" as const,
-      address: "https://gateway.example/api",
+      baseUrl: "https://gateway.example/api",
       formats: ["messages" as const],
-      clientKey: key,
-      generation: null,
+      apiKey: key,
+      revision: null,
     };
     for (const caller of [
       { ...LOCAL_CALLER, relayed: true },
@@ -947,10 +947,10 @@ it("validates a gateway destination and a request from this computer before touc
       const remote = operations(gatewayHandlers, caller);
       await expect(remote(api.connectGateway, input)).rejects.toMatchObject({ statusCode: 403 });
       await expect(
-        remote(api.disconnectGateway, { generation: crypto.randomUUID() })
+        remote(api.disconnectGateway, { revision: crypto.randomUUID() })
       ).rejects.toMatchObject({ statusCode: 403 });
     }
-    for (const address of [
+    for (const baseUrl of [
       "http://example.org",
       "http://127.1",
       "http://localhost.example",
@@ -959,16 +959,16 @@ it("validates a gateway destination and a request from this computer before touc
       "https://gateway.example/#frag",
       "file:///tmp/key",
     ])
-      await expect(run(api.connectGateway, { ...input, address })).rejects.toThrow();
+      await expect(run(api.connectGateway, { ...input, baseUrl })).rejects.toThrow();
     await expect(
       run(api.connectGateway, {
         ...input,
         preset: "cliproxyapi",
-        address: "https://gateway.example",
+        baseUrl: "https://gateway.example",
       })
     ).rejects.toThrow();
     await expect(
-      run(api.connectGateway, { ...input, preset: "openrouter", address: "http://localhost" })
+      run(api.connectGateway, { ...input, preset: "openrouter", baseUrl: "http://localhost" })
     ).rejects.toThrow();
     await expect(run(api.connectGateway, { ...input, preset: "openrouter" })).rejects.toThrow(
       /OpenRouter/
@@ -1003,9 +1003,9 @@ it("uses published capabilities for OpenRouter even when an id is in the harness
   try {
     await run(api.connectGateway, {
       preset: "openrouter",
-      address: "https://openrouter.ai/api",
-      clientKey: key,
-      generation: null,
+      baseUrl: "https://openrouter.ai/api",
+      apiKey: key,
+      revision: null,
     });
     const [router] = await run(api.gateways);
     expect(router!.models[0]?.runner).toBeUndefined();
@@ -1018,17 +1018,17 @@ it("uses published capabilities for OpenRouter even when an id is in the harness
 
 it("lets this computer replace an unreadable saved key without reusing its revision", async () => {
   const { saveSetting } = await import("../../../src/services/settings.service");
-  const generation = crypto.randomUUID();
+  const revision = crypto.randomUUID();
   const ref = crypto.randomUUID();
-  saveSetting("gateways", [{ ref, preset: "cliproxyapi", generation, credential: "unreadable" }]);
+  saveSetting("gateways", [{ ref, preset: "cliproxyapi", revision, credential: "unreadable" }]);
   expect((await run(api.gateways))[0]?.problem).toBeDefined();
   await expect(
-    run(api.connectGateway, { preset: "cliproxyapi", address, generation })
+    run(api.connectGateway, { preset: "cliproxyapi", baseUrl, revision })
   ).rejects.toThrow();
-  await run(api.connectGateway, { preset: "cliproxyapi", address, clientKey: key, generation });
+  await run(api.connectGateway, { preset: "cliproxyapi", baseUrl, apiKey: key, revision });
   const [restored] = await run(api.gateways);
-  expect(restored).toMatchObject({ ref, preset: "cliproxyapi", address });
-  expect(restored?.generation).not.toBe(generation);
+  expect(restored).toMatchObject({ ref, preset: "cliproxyapi", baseUrl });
+  expect(restored?.revision).not.toBe(revision);
   expect(restored?.problem).toBeUndefined();
 });
 
@@ -1056,13 +1056,13 @@ it("keeps the canonical Custom path and honors explicit catalog restrictions in 
   try {
     await run(api.connectGateway, {
       preset: "custom",
-      address: address + "/nested/v1/v1/",
+      baseUrl: baseUrl + "/nested/v1/v1/",
       formats: ["messages", "responses"],
-      clientKey: key,
-      generation: null,
+      apiKey: key,
+      revision: null,
     });
     const gateway = (await run(api.gateways))[0]!;
-    expect((await connectionFor(gateway.generation)).address).toBe(address + "/nested/v1");
+    expect((await connectionFor(gateway.revision)).baseUrl).toBe(baseUrl + "/nested/v1");
     expect(gateway.models.map((m) => m.id)).toEqual(data.map((m) => m.id));
     for (const harness of ["claude-code", "codex-app-server"] as const) {
       const eligible = [
@@ -1074,7 +1074,7 @@ it("keeps the canonical Custom path and honors explicit catalog restrictions in 
         gateway.models.filter((m) => gatewaySupports(gateway, m, harness)).map((m) => m.id)
       ).toEqual(eligible);
       for (const { id } of data) {
-        const turn = prepared(harness, { generation: gateway.generation, model: id });
+        const turn = prepared(harness, { revision: gateway.revision, model: id });
         if (eligible.includes(id))
           await expect(turn).resolves.toMatchObject({ execution: { model: id, harness } });
         else await expect(turn).rejects.toThrow(/no chat route/);
@@ -1089,22 +1089,22 @@ it("keeps the canonical Custom path and honors explicit catalog restrictions in 
 it("shares a pending gateway catalog refresh and reads again after failure or success", async () => {
   await run(api.connectGateway, {
     preset: "custom",
-    address,
-    clientKey: key,
+    baseUrl,
+    apiKey: key,
     formats: ["responses"],
-    generation: null,
+    revision: null,
   });
-  const { generation } = (await run(api.gateways))[0]!;
+  const { revision } = (await run(api.gateways))[0]!;
   const waiting = Promise.withResolvers<void>();
-  const fetcher = mockCatalogRead(address).mockImplementation(async () => {
+  const fetcher = mockCatalogRead(baseUrl).mockImplementation(async () => {
     await waiting.promise;
     return new Response(null, { status: 503 });
   });
-  const refresh = () => run(api.refreshGateway, { generation });
+  const refresh = () => run(api.refreshGateway, { revision });
   const readers = Promise.allSettled([
     refresh(),
     refresh(),
-    run(api.connectGateway, { preset: "custom", address, generation }),
+    run(api.connectGateway, { preset: "custom", baseUrl, revision }),
   ]);
   try {
     await vi.waitFor(() => expect(fetcher).toHaveBeenCalled());
@@ -1127,33 +1127,33 @@ it("shares a pending gateway catalog refresh and reads again after failure or su
 it("refreshes an edited gateway while its previous revision still has a read in flight", async () => {
   const input = {
     preset: "custom" as const,
-    address,
-    clientKey: key,
+    baseUrl,
+    apiKey: key,
     formats: ["responses" as const],
-    generation: null,
+    revision: null,
   };
   await run(api.connectGateway, input);
   const old = (await run(api.gateways))[0]!;
   const waiting = Promise.withResolvers<void>();
-  const fetcher = mockCatalogRead(address).mockImplementation(async () =>
+  const fetcher = mockCatalogRead(baseUrl).mockImplementation(async () =>
     Response.json({ data: [{ id: "current" }] })
   );
   fetcher.mockImplementationOnce(async () => {
     await waiting.promise;
     return Response.json({ data: [{ id: "old" }] });
   });
-  const oldRead = run(api.refreshGateway, { generation: old.generation });
+  const oldRead = run(api.refreshGateway, { revision: old.revision });
   try {
     await vi.waitFor(() => expect(fetcher).toHaveBeenCalled());
     await run(api.connectGateway, {
       ...input,
-      generation: old.generation,
-      clientKey: randomBytes(24).toString("hex"),
+      revision: old.revision,
+      apiKey: randomBytes(24).toString("hex"),
     });
     const current = (await run(api.gateways))[0]!;
     expect(current.ref).toBe(old.ref);
-    expect(current.generation).not.toBe(old.generation);
-    await run(api.refreshGateway, { generation: current.generation });
+    expect(current.revision).not.toBe(old.revision);
+    await run(api.refreshGateway, { revision: current.revision });
   } finally {
     waiting.resolve();
   }

@@ -16,10 +16,10 @@ export default [
   handle(api.connectGateway, fromThisComputer(gateways.connectGateway)),
   handle(
     api.disconnectGateway,
-    fromThisComputer(({ generation }) => gateways.disconnectGateway(generation))
+    fromThisComputer(({ revision }) => gateways.disconnectGateway(revision))
   ),
   handle(
     api.refreshGateway,
-    fromThisComputer(({ generation }) => gateways.refreshGateway(generation))
+    fromThisComputer(({ revision }) => gateways.refreshGateway(revision))
   ),
 ];
