@@ -1,3 +1,4 @@
+import { wireTestTurnNotices } from "../../../apps/backend/test/fixtures/turn-notices";
 import Database from "better-sqlite3";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -145,6 +146,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
   let ui: AgentStreamContext;
   async function connect() {
     handler = createAgentEventHandler();
+    wireTestTurnNotices({ stored: handler.turnStored });
     initCloudDriver(handler);
     await ensureCloudSession(SESSION);
   }

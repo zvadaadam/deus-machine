@@ -215,12 +215,16 @@ Each composer follows `queuedMessages` for the sender, text and picture count in
 Dragging a waiting row's grip, or using Space and the arrow keys, calls
 `moveQueuedMessage` to put it before another waiting row or last. The sending head
 stays first until its user echo is complete.
-A fatal error leaves the local turn holding its chat until it ends. A message the person sends then queues and waits for Resume after the failed end.
-A plain send joins an open queue behind its waiting messages. After Stop, waiting messages
-stay held until Resume. A fresh send can still start an idle chat while its queue is held.
-A message the person sends after Stop starts its own turn when the stopped turn ends or Deus gives it up.
-An empty Stop or failure hold clears when its turn settles. A usage limit can hold an empty queue.
-The rules above `transition` in `services/agent/queue.ts` say who may resume each hold.
+A Stop, an interruption or the holding turn’s failed or cancelled end marks the rows already queued.
+Only the end of the turn holding the chat can hold the queue, unless another end returns a row still waiting for its echo.
+After a Stop or interruption, the turn takes no more steers and only its usage limit marks rows again.
+A cancellation credits its first Stop, and one without a stopper leaves held rows for the person.
+All marked rows share one hold, with the person's Stop taking priority and the first agent Stop replacing a failure or limit.
+Only a limit can hold an empty queue, and a turn that was stopped or interrupted waits for the person's Continue at a usage limit.
+A person’s send follows the last unheld row or leads the waiting rows if all are held, while an agent or assistant joins a standing hold.
+A fresh steer may enter another turn, and an agent’s fallback row joins the hold.
+A held row may move but cannot steer into a turn or block an unheld row.
+Resume and clearing a limit both release every marked row, and agents may resume failures, agent Stops and limits after a reported reset.
 During local app setup, Stop returns the chat to idle at once, except for an agent's or
 assistant's first task, which ends in an error saying it was not delivered. The person
 keeps their draft, a queue head waits first, and an operator's send is refused
@@ -236,7 +240,7 @@ frees the chat, records the local end and returns unread steers to the queue. Wi
 reread it if that turn has a message. A late engine end can update the outcome.
 A late read removes its recovered steer and withdraws the retry if it is still in app setup.
 If the cancel is unconfirmed and the turn is still live, the watchdog records a warning and leaves it running.
-Resume appears above held rows, even before the turn ends. At a usage limit, pressing Continue
+Resume appears above held rows, even before the turn ends, and while a waiting send needs a competing turn to end. At a usage limit, pressing Continue
 before the reported reset schedules a turn one minute after it. The person can enable this for future limits in Settings.
 Pressing Continue after the reset starts the turn at once. While Deus stays open, the first waiting message goes, or “Continue.”
 with the chat's settings. A new send, Resume, Stop, hiding the chat or archiving its workspace clears the schedule.

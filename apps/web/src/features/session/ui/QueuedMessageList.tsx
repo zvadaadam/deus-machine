@@ -171,7 +171,7 @@ function QueuedRow({
                           aria-label="Send to current turn"
                           onClick={(e) => {
                             if (e.detail > 1) return;
-                            return call(api.steerQueuedMessage, { sessionId, id, turnId }).catch(
+                            call(api.steerQueuedMessage, { sessionId, id, turnId }).catch(
                               showError
                             );
                           }}

@@ -559,10 +559,12 @@ async function run() {
       0,
       "A painted frame lost both row and bubble"
     );
-    assert.deepEqual(await release(), { outcome: "queued" });
+    assert.deepEqual(await release(), {});
     await shows([D, C]);
-    assert.deepEqual(await release(), { outcome: "queued" });
+    assert.equal((await queue()).items.find((item) => item.text === D)?.state, "waiting");
+    assert.deepEqual(await release(), {});
     await shows([note, D, C]);
+    assert.equal((await queue()).items.find((item) => item.text === note)?.state, "waiting");
     assert.deepEqual(await drive("state"), { starts: [A, B], steers: [{ turnId, input: extra }] });
     for (const text of [note, D, C]) {
       await drive("end");

@@ -67,6 +67,7 @@ import { AgentServerDisconnectedError } from "../../src/lib/errors";
 import { publish } from "../../src/services/streams";
 import * as queries from "../../src/db";
 import { handleFrame, invalidate, runAsThisComputer } from "../../src/services/query-engine";
+import * as agentService from "../../src/services/agent/service";
 import { saveSetting } from "../../src/services/settings.service";
 
 // ---- Constants ----
@@ -229,6 +230,7 @@ beforeAll(async () => {
   testDb.exec(SCHEMA_SQL);
   seedTestData();
 
+  await agentService.init({ agentless: true });
   const created = createApp();
   await new Promise<void>((resolve) => {
     server = serve({ fetch: created.app.fetch, port: 0, hostname: "127.0.0.1" }, (info) => {
@@ -253,7 +255,8 @@ beforeEach(() => {
     .run(SESS_ID);
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await agentService.shutdown();
   closeAllWs();
   server?.close();
   testDb.close();

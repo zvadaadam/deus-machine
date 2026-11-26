@@ -122,11 +122,7 @@ async function onListening(port: number): Promise<void> {
   // Customize: app sign-ins return here, and agents reach apps through its gateway.
   void startIntegrations(port);
 
-  if (!allowAgentless) {
-    await agentService.init();
-  } else {
-    console.warn("[server] Starting in explicit agentless mode (AGENT_ALLOW_AGENTLESS=true)");
-  }
+  await agentService.init({ agentless: allowAgentless });
 
   // CRITICAL: Machine-readable port output for Electron main process and dev.
   // Emitted after the engine starts so launchers see a fully wired runtime.

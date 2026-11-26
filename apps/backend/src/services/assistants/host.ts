@@ -93,6 +93,7 @@ import {
 } from "../../lib/errors";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
 import { holdingTurn, setupStop } from "../agent/chat-turn";
+import { persistUndeliveredFirstTask } from "../agent/persistence";
 import { getLocalAgents } from "../agent/service";
 import { QueueLimitError, queuedMessages, enqueueMessage, steerMessage } from "../agent/queue";
 import { answer as answerToolRequest, pendingFor } from "../agent/tool-relay";
@@ -304,9 +305,6 @@ export function formatFileChange(change: FileChange): string {
 const AGENT_NAMES = new Intl.ListFormat("en").format(
   Object.entries(HARNESSES).map(([id, { label }]) => `${JSON.stringify(id)} (${label})`)
 );
-
-/** What a chat the host could not deliver its first task to says, the reason kept safe. */
-const NOT_DELIVERED = "Its first task could not be delivered.";
 
 function limitNote(limit: sessions.QueuedMessages["limit"]) {
   if (!limit) return "stopped on a usage limit";
@@ -655,13 +653,9 @@ export function createDeusHost(): DeusHost {
   /** A competing turn owns the chat even before its first message or while still in app setup. */
   function undelivered(sessionId: string, turnId: string, why: string) {
     if (holdingTurn(sessionId)) return;
-    getDatabase()
-      .prepare(
-        `UPDATE sessions SET status = 'error', error_message = ? WHERE id = ? AND message_count = 0
-         AND NOT EXISTS (SELECT 1 FROM turns WHERE session_id = sessions.id AND turn_id != ?)`
-      )
-      .run(`${NOT_DELIVERED}${why ? ` ${why}` : ""}`, sessionId, turnId);
-    invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
+    const message = `Its first task could not be delivered.${why ? ` ${why}` : ""}`;
+    if (persistUndeliveredFirstTask(sessionId, turnId, message))
+      invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
   }
 
   function drop(sessionId: string) {

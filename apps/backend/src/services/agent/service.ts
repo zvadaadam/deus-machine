@@ -1,16 +1,13 @@
-// backend/src/services/agent/service.ts
-// Composition root for agent-server communication.
+// Composition root for agent-server communication, initialized once at startup by server.ts.
 //
-// Wires AgentLink to the event handler for persistence and WS push, and relays
-// the live turn's questions and plans.
+//   turns and queue → service
+//                       ├── client         (AgentLink to the in-process engine)
+//                       ├── event-handler  (persistence and WebSocket events)
+//                       ├── queue          (turn notices and user echoes)
+//                       ├── run-config     (turn parameters)
+//                       └── tool-relay     (questions and plans for the window)
 //
-//   queue → turns → service (this file)
-//                     ├── client         (AgentLink: the in-process engine)
-//                     ├── event-handler  (persistence and WS push)
-//                     ├── run-config     (turn params assembly)
-//                     └── tool-relay     (frontend RPC relay)
-//
-// Initialized once at startup in server.ts via agentService.init().
+// init connects the four turn notices when it creates the event handler, including on an agentless host.
 
 import type { AgentHarness } from "@shared/enums";
 import { WireRequestError } from "@zvada/agent-server/client";
@@ -34,7 +31,8 @@ import {
 } from "@shared/agent-asks";
 import { isUnknownEvent } from "@shared/protocol-types";
 import { hasAgentMessages } from "./agent-messages";
-import { holdingTurn, wireTurn, forgetChatTurns, turnNotices } from "./chat-turn";
+import { holdingTurn, wireTurn, forgetChatTurns, connectTurnNotices } from "./chat-turn";
+import { onTurnNotice, recoverSteers, userEcho } from "./queue";
 import { AgentLink } from "./client";
 import { LocalAgents } from "./local-agents";
 import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
@@ -69,9 +67,21 @@ let localAgents: LocalAgents | null = null;
 let events: AgentEventHandler | null = null;
 
 /** Start the engine and connect the event handler to it. Call once at startup. */
-export async function init(): Promise<void> {
+export async function init({ agentless = false } = {}): Promise<void> {
   if (link || events) {
     console.warn("[AgentService] Already initialized, skipping");
+    return;
+  }
+  const handler = createAgentEventHandler();
+  connectTurnNotices({
+    queue: onTurnNotice,
+    recover: recoverSteers,
+    withdrawCards: (id, turnId) => cancelSessionRelays(id, "turn interrupted", turnId),
+    stored: handler.turnStored,
+  });
+  events = handler;
+  if (agentless) {
+    console.warn("[AgentService] Starting in explicit agentless mode (AGENT_ALLOW_AGENTLESS=true)");
     return;
   }
   // Before the engine can admit a turn: none of the turns the database still
@@ -87,9 +97,6 @@ export async function init(): Promise<void> {
     console.log(`[AgentService] Settled ${settled.value.length} chat(s) a restart interrupted`);
     invalidate(["workspaces", "sessions", "session"], { sessionIds: settled.value });
   }
-  turnNotices.withdrawCards = (id, turnId) => cancelSessionRelays(id, "turn interrupted", turnId);
-  const handler = createAgentEventHandler();
-  events = handler;
   // A client that starts following a chat while its agent waits on a question
   // or a plan (a window opened late, a phone) is shown it at once; one that
   // follows every chat (a window's card host) is shown every chat's.
@@ -107,8 +114,6 @@ export async function init(): Promise<void> {
   // Cloud sessions feed the SAME handler — one fold, one persistence path,
   // two transports.
   initCloudDriver(handler);
-  // The queue sends through this service. Connect its echo reader once both modules are ready.
-  const { userEcho } = await import("./queue");
 
   link = await AgentLink.open({
     onEnvelope: (envelope) => {

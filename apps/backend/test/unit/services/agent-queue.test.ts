@@ -22,12 +22,13 @@ import {
 import * as api from "@shared/api/sessions";
 import { findConversationMessage } from "@shared/conversation-rows";
 import { SCHEMA_SQL } from "@shared/schema";
-import { reportInterruption, holdingTurn, lastTurn } from "../../../src/services/agent/chat-turn";
+import * as chatTurns from "../../../src/services/agent/chat-turn";
 import * as agent from "../../../src/services/agent/service";
 import * as cloud from "../../../src/services/agent/cloud/driver";
 import {
   QueueLimitError,
   enqueueMessage,
+  queuedMessages,
   resumeQueuedMessages,
   steerMessage,
   steerQueuedMessage,
@@ -44,7 +45,7 @@ import {
 } from "../../../src/services/query-engine";
 import { subscribe } from "../../../src/services/streams";
 import { addConnection, closeAll } from "../../../src/services/ws.service";
-import { createDeusHost } from "../../../src/services/assistants/host";
+import { createDeusHost, queueView } from "../../../src/services/assistants/host";
 import * as workspaceInit from "../../../src/services/workspace-init.service";
 import { answerMcp, withSessionTools } from "../../../src/services/assistants/operator";
 import * as access from "../../../src/services/assistants/access";
@@ -73,6 +74,7 @@ vi.mock("../../../src/services/pr-snapshot.service", () => ({
 }));
 
 const { answer, clearAll, pendingFor } = toolRelay;
+const { reportInterruption, holdingTurn, lastTurn } = chatTurns;
 const run = operations(sessionHandlers);
 let db: Database.Database;
 let sessionId: string;
@@ -580,7 +582,7 @@ describe("stopping the current turn", () => {
     expect(await fact("A")).toMatchObject({ state: "ended", steers: { "follow-up": "read" } });
   });
 
-  async function refuseStartWithKeptSteer() {
+  it("keeps a refused start unknown and its unread steer in read_queue, then retries the send id", async () => {
     const wire = pendingStart();
     const refused = expect(send("A")).rejects.toThrow("start refused");
     await vi.waitFor(() => expect(starts()).toEqual(["A"]));
@@ -589,10 +591,8 @@ describe("stopping the current turn", () => {
     ).resolves.toEqual({ outcome: "steered" });
     wire.reject(new WireRequestError(WIRE_ERROR_CODES.internalError, "start refused"));
     await refused;
-  }
-
-  it("can retry the original send id after a refused start returns its steer", async () => {
-    await refuseStartWithKeptSteer();
+    expect(await fact("A")).toEqual({ state: "unknown" });
+    expect(await queueTool("read_queue")).toContain('· message "follow-up"');
     expect(wireTurnId()).toBeUndefined();
     expect(lastTurn(sessionId)).toBeUndefined();
     expect(await queue()).toMatchObject({ items: [waitingRow("follow-up")] });
@@ -614,13 +614,6 @@ describe("stopping the current turn", () => {
     expect(starts()).toEqual(["A", "A"]);
     expect(before.turns).toEqual([]);
     expect(engine.cancelTurn).not.toHaveBeenCalled();
-  });
-
-  describe("a start refused before any event", () => {
-    beforeEach(refuseStartWithKeptSteer);
-    it.fails("reports the kept steer in turn()", async () => {
-      expect(await fact("A")).toMatchObject({ state: "ended", steers: { "follow-up": "queued" } });
-    });
   });
 
   it("O4: A's lost start reply leaves B working in app setup and stoppable", async () => {
@@ -912,20 +905,24 @@ describe("stopping the current turn", () => {
     });
   });
 
-  it("retries the busy head when the engine confirms there is no active turn", async () => {
+  it("retries the busy head when a pending Stop finds the engine idle after another agent's busy Resume", async () => {
     await send("A");
     await outliveStop("A");
     engine.startTurn.mockRejectedValueOnce(busyReply("A"));
     await send("B");
-    const reply = Promise.withResolvers<{ outcome: "no_active_turn" }>();
+    expect(starts()).toEqual(["A", "B"]);
+    const reply = Promise.withResolvers<TurnCancelResult>();
     engine.cancelTurn.mockReturnValueOnce(reply.promise);
     const stopping = stopSession({ sessionId }, fromAssistant);
+    expect(engine.cancelTurn).toHaveBeenLastCalledWith(sessionId, undefined);
+    engine.startTurn.mockRejectedValueOnce(busyReply("A"));
     await resumeQueuedMessages(sessionId, fromChat);
-    expect(starts()).toEqual(["A", "B"]);
+    expect(starts()).toEqual(["A", "B", "B"]);
+    expect(await queue()).toMatchObject({ paused: "failed", items: [waitingRow("B")] });
     reply.resolve({ outcome: "no_active_turn" });
     await stopping;
-    await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "B"]));
-    expect(await ids()).toEqual([]);
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "B", "B"]));
+    expect(await queue()).toEqual({ paused: null, items: [] });
   });
 
   it.each(["stopped in setup", "refused on the wire"] as const)(
@@ -952,27 +949,44 @@ describe("stopping the current turn", () => {
       wire?.reject(new Error("start refused"));
       release?.();
       await Promise.all([sending, stopping]);
+      expect(starts().filter((id) => id === "B")).toHaveLength(1);
+      engine.startTurn.mockRejectedValueOnce(busyReply("A"));
       await resumeQueuedMessages(sessionId, fromChat);
       expect(await ids()).toEqual(["B"]);
-      expect(starts().filter((id) => id === "B")).toHaveLength(1);
+      expect(starts().filter((id) => id === "B")).toHaveLength(2);
       end("A");
-      await vi.waitFor(() => expect(starts().filter((id) => id === "B")).toHaveLength(2));
+      await vi.waitFor(() => expect(starts().filter((id) => id === "B")).toHaveLength(3));
     }
   );
 
-  it("retries the busy head on each person's Resume with the original send id", async () => {
-    await send("A");
-    await outliveStop("A");
-    engine.startTurn.mockRejectedValueOnce(busyReply("A"));
-    await send("B");
-    engine.startTurn.mockRejectedValueOnce(busyReply("A"));
-    await resumeInWindow();
-    expect(starts()).toEqual(["A", "B", "B"]);
-    expect(await ids()).toEqual(["B"]);
-    await resumeInWindow();
-    expect(starts()).toEqual(["A", "B", "B", "B"]);
-    expect(await ids()).toEqual([]);
-  });
+  it.each(["person", "agent"])(
+    "shows Resume and retries the busy head on each %s Resume with the original send id",
+    async (who) => {
+      await send("A");
+      await outliveStop("A");
+      engine.startTurn.mockRejectedValueOnce(busyReply("A"));
+      await send("B");
+      expect(await queue()).toMatchObject({ paused: "failed", items: [waitingRow("B")] });
+      const resume = () =>
+        who === "person" ? resumeInWindow() : resumeQueuedMessages(sessionId, fromChat);
+      const published: (string | null)[] = [];
+      const unwatch = onInvalidate((names) => {
+        if (names.includes("queuedMessages")) published.push(queuedMessages(sessionId).paused);
+      });
+      engine.startTurn.mockRejectedValueOnce(busyReply("A"));
+      try {
+        await resume();
+        expect(published.at(-1)).toBe("failed");
+      } finally {
+        unwatch();
+      }
+      expect(starts()).toEqual(["A", "B", "B"]);
+      expect(await ids()).toEqual(["B"]);
+      await resume();
+      expect(starts()).toEqual(["A", "B", "B", "B"]);
+      expect(await queue()).toEqual({ paused: null, items: [] });
+    }
+  );
 
   it("keeps a later composer send behind the busy head until the named turn ends", async () => {
     await send("A");
@@ -1261,7 +1275,7 @@ describe("messages held for a local chat", () => {
           : () => run(api.steerMessage, { ...message("follow-up"), turnId });
       end("A");
       await vi.waitFor(() => expect(wireTurnId()).toBe("B"));
-      await expect(request()).resolves.toEqual({ outcome: "queued" });
+      await expect(request()).resolves.toEqual({});
       expect(engine.steerTurn).not.toHaveBeenCalled();
       expect((await queue()).items).toMatchObject([
         { text: "Message follow-up", state: "waiting" },
@@ -2230,8 +2244,8 @@ describe("messages held for a local chat", () => {
       // The engine can replay the terminal after the gap gave up live ownership.
       expect(wireTurnId()).toBeUndefined();
       end("head", "cancelled");
-      expect(await queue()).toMatchObject({ ...recovered, paused: "stopped" });
-      expect(await queue()).not.toHaveProperty("stoppedBy");
+      expect(await queue()).toMatchObject(recovered);
+      expect(await resumeQueuedMessages(sessionId, fromChat)).toMatchObject({ outcome: "resumed" });
     }
   );
 
@@ -2246,7 +2260,7 @@ describe("messages held for a local chat", () => {
         turnId: "picture",
         content: JSON.stringify([picture]),
       });
-      await expect(steerRow("picture")).resolves.toEqual({ outcome: "steered" });
+      await steerRow("picture");
       const attempt = lastSteerId();
       expect(attempt).not.toBe("picture");
       expect(engine.steerTurn).toHaveBeenCalledWith({
@@ -2281,8 +2295,8 @@ describe("messages held for a local chat", () => {
     const [rowId] = await ids();
     echo("first", lastSteerId());
     reply.reject(new Error("connection closed"));
-    await expect(receipt).resolves.toEqual({ outcome: "steered" });
-    await expect(steerRow(rowId!)).resolves.toEqual({ outcome: "gone" });
+    await receipt;
+    await steerRow(rowId!);
     expect(engine.steerTurn).toHaveBeenCalledOnce();
     end("first");
     expect(await ids()).toEqual([]);
@@ -2292,7 +2306,7 @@ describe("messages held for a local chat", () => {
   it("a steer echoed after its RPC timed out never runs a second time", async () => {
     await send("first");
     engine.steerTurn.mockRejectedValueOnce(new Error("timed out"));
-    await expect(steer("a")).resolves.toEqual({ outcome: "unconfirmed" });
+    await steer("a");
     expect((await queue()).items).toMatchObject([{ text: "Message a", state: "steering" }]);
     echo("first", lastSteerId());
     expect(await ids()).toEqual([]);
@@ -2306,7 +2320,7 @@ describe("messages held for a local chat", () => {
     async (reason) => {
       await sendInOrder("first", "waiting");
       engine.steerTurn.mockRejectedValueOnce(new Error("timed out"));
-      await expect(steer("a")).resolves.toEqual({ outcome: "unconfirmed" });
+      await steer("a");
       const rows = (await queue()).items;
       expect(rows).toMatchObject([{ text: "Message a", state: "steering" }, { id: "waiting" }]);
       const rowId = rows[0]!.id;
@@ -2333,7 +2347,7 @@ describe("messages held for a local chat", () => {
       const firstAttempt = lastSteerId();
       end("first", "cancelled", [firstAttempt]);
       await send("fresh");
-      await expect(steerRow("row")).resolves.toEqual({ outcome: "queued" });
+      await steerRow("row");
       if (read) echo("first", firstAttempt);
       expect((await queue()).items).toMatchObject(read ? [] : [waitingRow("row")]);
       end("fresh");
@@ -2354,7 +2368,7 @@ describe("messages held for a local chat", () => {
     expect(await remove(queued.turnId)).toEqual({ removed: true });
     expect(await read(queued.turnId)).toEqual({ content: null });
     expect(await remove(queued.turnId)).toEqual({ removed: false });
-    expect(await steerRow(queued.turnId)).toEqual({ outcome: "gone" });
+    await steerRow(queued.turnId);
     end("first");
     expect(starts()).toEqual(["first"]);
   });
@@ -2364,7 +2378,7 @@ describe("messages held for a local chat", () => {
     async (outcome) => {
       await sendInOrder("first", "waiting");
       engine.steerTurn.mockResolvedValue({ outcome });
-      await expect(steer("a")).resolves.toEqual({ outcome: "queued" });
+      await steer("a");
       const rows = (await queue()).items;
       expect(rows).toMatchObject([{ text: "Message a", state: "waiting" }, { id: "waiting" }]);
       end("first");
@@ -2375,7 +2389,7 @@ describe("messages held for a local chat", () => {
   it("sends a steer as its own turn if the working chat has just gone idle", async () => {
     await send("first");
     end("first");
-    await expect(steer("a")).resolves.toEqual({ outcome: "sent" });
+    await steer("a");
     expect(engine.steerTurn).not.toHaveBeenCalled();
     expect(engine.startTurn.mock.calls.map(([turn]) => turn.input)).toEqual([
       "Message first",
@@ -2400,8 +2414,8 @@ describe("messages held for a local chat", () => {
     async (status) => {
       await sendInOrder("first", "a", "b");
       db.prepare("UPDATE sessions SET status = ? WHERE id = ?").run(status, sessionId);
-      await expect(steer("c")).resolves.toEqual({ outcome: "queued" });
-      await expect(steerRow("b")).resolves.toEqual({ outcome: "queued" });
+      await steer("c");
+      await steerRow("b");
       expect(engine.steerTurn).not.toHaveBeenCalled();
       expect((await queue()).items).toMatchObject([
         { id: "a" },
@@ -2656,7 +2670,7 @@ describe("messages held for a local chat", () => {
     await expect(enqueueMessage({ ...message("a"), turnId: "a" }, fromChat)).resolves.toEqual({
       position: 3,
     });
-    await expect(steerRow("d")).resolves.toEqual({ outcome: "steered" });
+    await steerRow("d");
     const readSteer = engine.steerTurn.mock.lastCall![0];
     expect(readSteer.origin).toEqual(fromChat);
     echo("first", readSteer.steerId, readSteer.input, readSteer.origin);
@@ -2703,10 +2717,14 @@ describe("messages held for a local chat", () => {
     expect((await queue()).items).toEqual(rows);
 
     await expect(send("waiting-0")).resolves.toEqual({ turnId: "waiting-0", queued: true });
-    await expect(steerRow("waiting-0")).resolves.toEqual({ outcome: "steered" });
+    await steerRow("waiting-0");
     echo("head");
     await send("last");
-    end("head", "cancelled");
+    end(
+      "head",
+      "cancelled",
+      engine.steerTurn.mock.calls.map(([p]) => p.steerId!)
+    );
     expect(await ids()).toEqual([rows[1]!.id, ...waiting, "last"]);
     await expect(send("manual")).resolves.toEqual({ turnId: "manual" });
   });
@@ -2757,7 +2775,7 @@ describe("messages held for a local chat", () => {
       else end("first");
       await vi.waitFor(async () =>
         expect(await queue()).toMatchObject({
-          paused: failure === "failed" ? "failed" : null,
+          paused: "failed",
           items: [waitingRow("a"), waitingRow("b")],
         })
       );
@@ -2854,6 +2872,22 @@ describe("messages held for a local chat", () => {
       expect(starts()).toEqual(["first"]);
     }
   );
+
+  it("keeps the restored workspace's new queue when an archived steer's conflict arrives", async () => {
+    await send("T");
+    const reply = pendingSteer();
+    const conflict = expect(steer("old")).rejects.toThrow("A different message was already sent");
+    db.exec("UPDATE workspaces SET state = 'archived' WHERE id = 'w'");
+    invalidate(["workspaces", "sessions"]);
+    db.exec("UPDATE workspaces SET state = 'ready' WHERE id = 'w'");
+    invalidate(["workspaces", "sessions"]);
+    await send("new");
+    reply.reject(new WireRequestError(WIRE_ERROR_CODES.turnConflict, "different input"));
+    await conflict;
+    expect(await ids()).toEqual(["new"]);
+    end("T");
+    await vi.waitFor(() => expect(starts()).toEqual(["T", "new"]));
+  });
 
   it("publishes the old end before admitting the next turn and pushes the queue to both windows", async () => {
     await send("first");
@@ -3409,31 +3443,38 @@ describe("the operator's queue and steer contract", () => {
     expect(await ids()).toEqual([]);
   });
 
-  it("runs the person's send after Stop and holds both agent messages until Resume", async () => {
+  it("runs the agent's steer, its queued message and the person's send in arrival order after an empty Stop", async () => {
     await send("active");
     await stopped("active");
-    const operator = createOperator(host);
-    const args = { session: sessionId, wait: 0 };
-    await operator.call("send_message", { ...args, message: "steer" }, caller);
-    await operator.call("send_message", { ...args, message: "queued", when: "queue" }, caller);
-    const [first, second] = await ids();
+    await steer();
+    await enqueue("queued");
+    await send("person");
+    expect(await ids()).toEqual(["given", "queued", "person"]);
+    expect(engine.steerTurn).not.toHaveBeenCalled();
+    end("active", "cancelled");
+    await vi.waitFor(() => expect(wireTurnId()).toBe("given"));
+    end("given");
+    await vi.waitFor(() => expect(wireTurnId()).toBe("queued"));
+    end("queued");
+    await vi.waitFor(() => expect(starts()).toEqual(["active", "given", "queued", "person"]));
+  });
+
+  it("runs later person sends while both agent messages stay with an earlier held row", async () => {
+    await sendInOrder("active", "held");
+    await stopped("active");
+    await steer();
+    await enqueue("queued");
     await send("person");
     end("active", "cancelled");
-    await vi.waitFor(() => expect(starts()).toEqual(["active", "person"]));
+    await vi.waitFor(() => expect(wireTurnId()).toBe("person"));
+    await send("next");
     end("person");
-    expect(engine.steerTurn).not.toHaveBeenCalled();
-    expect(await queue()).toMatchObject({
-      paused: "stopped",
-      stoppedBy: fromPerson,
-      items: [
-        { text: "steer", state: "waiting" },
-        { text: "queued", state: "waiting" },
-      ],
-    });
+    await vi.waitFor(() => expect(starts()).toEqual(["active", "person", "next"]));
+    end("next");
+    expect(await queue()).toMatchObject({ paused: "stopped", stoppedBy: fromPerson });
+    expect(await ids()).toEqual(["given", "held", "queued"]);
     await resumeInWindow();
-    expect(starts()).toEqual(["active", "person", first]);
-    end(first!);
-    await vi.waitFor(() => expect(starts()).toEqual(["active", "person", first, second]));
+    expect(wireTurnId()).toBe("given");
   });
 
   it("gives one queue position for a repeated id and refuses different contents", async () => {
@@ -3662,16 +3703,30 @@ describe("operating another chat's queue", () => {
 
   it("resolves a view's queue senders without opening unrelated workspace entries", async () => {
     db.exec(`
-      INSERT INTO sessions (id, workspace_id, chat) VALUES ('peer', 'w', 3);
-      INSERT INTO workspaces (id, repository_id, slug, state) VALUES ('unrelated','r','other','ready');
+      INSERT INTO repositories (id, name, root_path) VALUES ('other-project', 'Other project', '/tmp/other');
+      INSERT INTO workspaces (id, repository_id, slug, state) VALUES
+        ('source','r','review','ready'), ('unrelated','other-project','other','ready');
+      INSERT INTO sessions (id, workspace_id, chat) VALUES ('sibling','source',1), ('peer','source',3);
     `);
     await send("active");
     await task("row");
     await stopped("active", { kind: "session", sessionId: "peer" });
     end("active", "cancelled");
     const host = createDeusHost();
-    expect((await host.view(windowCaller, sessionId, { last: 1 })).note).toContain(
-      'stopped by "checkout:3"'
+    const projected = vi.spyOn(chatTurns, "setupStop");
+    try {
+      expect((await host.view(windowCaller, sessionId, { last: 1 })).note).toContain(
+        'stopped by "review:3"'
+      );
+      expect(new Set(projected.mock.calls.map(([id]) => id))).toEqual(new Set([sessionId]));
+    } finally {
+      projected.mockRestore();
+    }
+    db.prepare("UPDATE workspaces SET slug = 'REVIEW' WHERE id = 'unrelated'").run();
+    const view = queueView(windowCaller, sessionId);
+    expect(view.hold).toBe('held: stopped by "repo/review:3"');
+    expect(view.senderName({ kind: "session", sessionId: "unrelated" })).toBe(
+      "a chat that is gone"
     );
     expect(
       db.prepare("SELECT first_session_id FROM workspaces WHERE id = 'unrelated'").pluck().get()
@@ -3879,7 +3934,13 @@ describe("operating another chat's queue", () => {
       await expect(steerMessage({ ...message("S"), turnId }, fromChat, "S")).resolves.toEqual({
         outcome: "queued",
       });
-      if (why !== "stopped") await stop();
+      if (why === "stopped") {
+        end("A", "cancelled");
+        await vi.waitFor(() => expect(starts()).toEqual(["A", "S"]));
+        expect(engine.steerTurn).not.toHaveBeenCalled();
+        return;
+      }
+      await stop();
       end("A", "cancelled");
       await send("B");
       await resumeInWindow();
@@ -3974,6 +4035,17 @@ describe("operating another chat's queue", () => {
     expect(await queueTool("read_queue")).toContain('held: stopped by "Reviewer"');
   });
 
+  it("keeps the first agent's Stop when a second agent stops a successor", async () => {
+    await sendInOrder("A", "held");
+    await stopped("A", fromChat);
+    end("A", "cancelled");
+    await send("B");
+    await stopped("B", fromAssistant);
+    end("B", "cancelled");
+    expect((await queue()).stoppedBy).toEqual(fromChat);
+    expect(await resumeQueuedMessages(sessionId, fromAssistant)).toMatchObject({ turnId: "held" });
+  });
+
   it("records who stopped the chat during app setup", async () => {
     const release = holdAppSetup();
     const interrupted = expect(send("starting")).rejects.toThrow("Stopped before it started");
@@ -4054,28 +4126,43 @@ describe("operating another chat's queue", () => {
     expect(starts()).toEqual(["active"]);
   });
 
-  it.each([false, true])(
-    "holds an empty queue through Stop until its turn settles (last row removed: %s)",
-    async (removeLast) => {
-      await send("active");
-      if (removeLast) await send("last");
-      await stopped("active");
-      if (removeLast) await remove("last");
-      expect(await queue()).toEqual({
-        paused: "stopped",
-        stoppedBy: fromPerson,
-        items: [],
-      });
-      await task("later");
-      end("active", "cancelled");
-      expect(await queue()).toMatchObject({
-        paused: "stopped",
-        stoppedBy: fromPerson,
-        items: [{ id: "later" }],
-      });
-      expect(starts()).toEqual(["active"]);
-    }
-  );
+  it("releases the hold when its last row is removed while the turn is still ending", async () => {
+    await sendInOrder("active", "last");
+    await stopped("active");
+    await remove("last");
+    expect(await queue()).toEqual({ paused: null, items: [] });
+    await task("later");
+    end("active", "cancelled");
+    await vi.waitFor(() => expect(starts()).toEqual(["active", "later"]));
+  });
+
+  it("runs unheld sends in arrival order after a held row is dragged above the first", async () => {
+    await sendInOrder("A", "held");
+    await stopped("A");
+    await send("later");
+    expect(await ids()).toEqual(["later", "held"]);
+    expect(await move("held", "later")).toEqual({ moved: true });
+    await send("last");
+    expect(await ids()).toEqual(["held", "later", "last"]);
+    engine.startTurn.mockResolvedValueOnce(undefined);
+    end("A", "cancelled");
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "later"]));
+    expect((await queue()).items).toMatchObject([
+      { id: "later", state: "sending" },
+      waitingRow("held"),
+      waitingRow("last"),
+    ]);
+    const [started, ...parts] = echoFrames("later", message("later").content);
+    emit(started!);
+    expect(await queueTool("read_queue")).toContain(
+      '1. sending · from the person · "Message later"'
+    );
+    for (const frame of parts) emit(frame);
+    expect(await ids()).toEqual(["held", "last"]);
+    end("later");
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "later", "last"]));
+    expect(await queue()).toMatchObject({ paused: "stopped", items: [waitingRow("held")] });
+  });
 
   it.each(["operator send", "remove head", "resume head"] as const)(
     "settles the Stop on a busy start (%s)",
@@ -4119,60 +4206,22 @@ describe("operating another chat's queue", () => {
     }
   );
 
-  it("can resume an empty Stop before its turn ends", async () => {
+  it("steers an agent’s fresh message into the person’s successor and keeps the earlier Stop if it fails", async () => {
     await send("active");
-    await stopped("active");
-    expect(await queue()).toEqual({ paused: "stopped", stoppedBy: fromPerson, items: [] });
-    await resumeInWindow();
-    end("active", "cancelled");
-    expect(await queue()).toEqual({ paused: null, items: [] });
-  });
-
-  it.each(["Stop", "failure"] as const)(
-    "shows an empty %s until its turn settles, then drains the next turn’s rows",
-    async (cause) => {
-      await send("A");
-      if (cause === "Stop") await stopped("A");
-      else {
-        await task("last");
-        engine.cancelTurn.mockResolvedValueOnce({
-          outcome: "no_active_turn",
-          activeTurnId: "other",
-        });
-        gap("replay_failed");
-        await vi.waitFor(async () => expect((await queue()).paused).toBe("failed"));
-        await remove("last");
-      }
-      const hold = cause === "Stop" ? "held: stopped by the person" : "held after an error";
-      const host = createDeusHost();
-      const list = () => createOperator(host).call("list_sessions", {}, windowCaller);
-      expect(await list()).toContain(hold);
-      expect((await host.view(windowCaller, sessionId, { last: 1 })).note).toBe(hold);
-      expect(await queueTool("read_queue")).toContain(hold);
-      end("A", cause === "Stop" ? "cancelled" : "error");
-      expect(await queue()).toEqual({ paused: null, items: [] });
-      expect(await list()).not.toContain("held");
-      await sendInOrder("B", "R");
-      end("B");
-      expect((await queue()).items).toMatchObject([{ id: "R", state: "sending" }]);
-      await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "R"]));
-    }
-  );
-
-  it("keeps the person's Stop when their independently started successor fails with person rows waiting", async () => {
-    await send("active");
-    await stopped("active");
     await task("agent-row");
+    await stopped("active");
     end("active", "cancelled");
     await sendInOrder("successor", "person-row");
-    await expect(steer("for successor")).resolves.toEqual({ outcome: "steered" });
-    echo("successor", lastSteerId());
+    await expect(
+      steerMessage({ ...message("steer"), turnId: "successor" }, fromChat, "steer")
+    ).resolves.toEqual({ outcome: "steered" });
+    echo("successor", "steer", message("steer").content, fromChat);
     end("successor", "error");
-    expect(await ids()).toEqual(["agent-row", "person-row"]);
+    expect(await ids()).toEqual(["person-row", "agent-row"]);
     expect(await queueTool("resume")).toMatch(/refused \(person_only\)/);
     expect(starts()).toEqual(["active", "successor"]);
     await resumeInWindow();
-    expect(starts()).toEqual(["active", "successor", "agent-row"]);
+    expect(starts()).toEqual(["active", "successor", "person-row"]);
   });
 
   it.each(["Stop", "failure", "cancel"] as const)(
@@ -4233,43 +4282,13 @@ describe("operating another chat's queue", () => {
     }
   );
 
-  it("takes the person's Resume after an agent resumes a live replay failure and waits for the end", async () => {
-    await failLiveReplay();
-    expect(await run(api.session, { sessionId })).toMatchObject({ status: "working" });
-    expect(await resumeQueuedMessages(sessionId, fromChat)).toMatchObject({ outcome: "resumed" });
-    expect(await resumeQueuedMessages(sessionId)).toMatchObject({ outcome: "resumed" });
-    expect(await queue()).toMatchObject({ paused: null, items: [waitingRow("R")] });
-    expect(starts()).toEqual(["A"]);
-    end("A");
-    await vi.waitFor(() => expect(starts()).toEqual(["A", "R"]));
-    expect(await queue()).toEqual({ paused: null, items: [] });
-  });
-
-  it("honors a person's Resume after an agent resumes an unconfirmed replay gap with a live engine error", async () => {
-    await failLiveReplay();
-    emit({
-      type: "error",
-      sessionId,
-      turnId: "A",
-      timestamp: seq,
-      category: "internal",
-      message: "Engine failed",
-      recoverable: false,
-    });
-    await resumeQueuedMessages(sessionId, fromChat);
-    expect(await queueTool("read_queue")).toContain("The queue is open.");
-    expect(await queueTool("resume")).toBe("There is nothing to resume.");
-    expect(await resumeQueuedMessages(sessionId)).toMatchObject({ outcome: "resumed" });
-    end("A", "cancelled");
-    await vi.waitFor(() => expect(starts()).toEqual(["A", "R"]));
-    expect(await queue()).toEqual({ paused: null, items: [] });
-  });
-
   it.each(["end_turn", "error", "server_restarted"] as const)(
-    "drains after an agent resumes an unconfirmed replay gap and the live turn settles with %s",
+    "answers later Resumes as open and drains when the interrupted turn settles with %s",
     async (reason) => {
       await failLiveReplay();
       expect(await resumeQueuedMessages(sessionId, fromChat)).toMatchObject({ outcome: "resumed" });
+      expect(await resumeQueuedMessages(sessionId, fromAssistant)).toEqual({ outcome: "open" });
+      expect(await resumeQueuedMessages(sessionId)).toEqual({ outcome: "open" });
       expect(starts()).toEqual(["A"]);
       if (reason === "server_restarted") gap(reason);
       else end("A", reason);
@@ -4279,37 +4298,64 @@ describe("operating another chat's queue", () => {
   );
 
   it.each(["native terminal", "unconfirmed replay cancel"] as const)(
-    "holds the row for the person after an agent resumes an unconfirmed replay gap (%s)",
+    "keeps the agent's Resume in force when the live turn is cancelled (%s)",
     async (cancel) => {
       await failLiveReplay();
-      expect((await queue()).paused).toBe("failed");
-      expect(wireTurnId()).toBe("A");
-      const releaseApps = holdAppSetup();
-      const resumed = resumeQueuedMessages(sessionId, fromChat);
+      expect(await resumeQueuedMessages(sessionId, fromChat)).toMatchObject({ outcome: "resumed" });
       if (cancel === "unconfirmed replay cancel") {
         engine.cancelTurn.mockResolvedValueOnce({ outcome: "unconfirmed", turnId: "A" });
         gap("replay_failed");
-        await vi.waitFor(async () => expect((await queue()).paused).toBe("stopped"));
-        expect(await resumeQueuedMessages(sessionId, fromAssistant)).toEqual({
-          outcome: "person_only",
-        });
+        await new Promise<void>((resolve) => setImmediate(resolve));
       }
       end("A", "cancelled");
-      releaseApps();
-      expect(await resumed).toMatchObject({ outcome: "resumed", turnId: undefined });
-      expect(await queue()).toMatchObject({
-        paused: "stopped",
-        items: [waitingRow("R")],
-      });
-      expect(await queue()).not.toHaveProperty("stoppedBy");
-      expect(await resumeQueuedMessages(sessionId, fromAssistant)).toEqual({
-        outcome: "person_only",
-      });
-      expect(starts()).toEqual(["A"]);
-      await resumeInWindow();
-      expect(starts()).toEqual(["A", "R"]);
+      await vi.waitFor(() => expect(starts()).toEqual(["A", "R"]));
     }
   );
+
+  it("queues a steer into a turn that already reported a failure", async () => {
+    await failLiveReplay();
+    await steer("follow-up");
+    expect(engine.steerTurn).not.toHaveBeenCalled();
+    const [id] = await ids();
+    end("A", "error");
+    await vi.waitFor(() => expect(starts()).toEqual(["A", id]));
+    expect(await ids()).toEqual(["R"]);
+  });
+
+  it.each(["failure", "cancelled"] as const)(
+    "runs messages arriving after a live %s on an empty queue",
+    async (cause) => {
+      await send("A");
+      engine.cancelTurn.mockResolvedValueOnce(
+        cause === "failure"
+          ? { outcome: "no_active_turn", activeTurnId: "other" }
+          : { outcome: "unconfirmed", turnId: "A" }
+      );
+      gap("replay_failed");
+      await vi.waitFor(async () =>
+        expect(await run(api.session, { sessionId })).toMatchObject({ error_category: "network" })
+      );
+      await task("agent");
+      await send("person");
+      end("A", cause === "failure" ? "error" : "cancelled");
+      await vi.waitFor(() => expect(wireTurnId()).toBe("agent"));
+      end("agent");
+      await vi.waitFor(() => expect(starts()).toEqual(["A", "agent", "person"]));
+    }
+  );
+
+  it("queues a steer aimed at the stopped turn after the person's Resume until that turn ends", async () => {
+    await sendInOrder("T", "waiting");
+    await stopped("T");
+    await resumeInWindow();
+    expect(wireTurnId()).toBe("T");
+    await steer("follow-up");
+    const [next] = (await queue()).items;
+    expect(next).toMatchObject({ state: "waiting", text: "Message follow-up" });
+    expect(engine.steerTurn).not.toHaveBeenCalled();
+    end("T", "cancelled");
+    await vi.waitFor(() => expect(starts()).toEqual(["T", next!.id]));
+  });
 
   it("honors an agent's Resume of an attributed Stop while its turn is still ending", async () => {
     await sendInOrder("A", "R");
@@ -4378,16 +4424,17 @@ describe("operating another chat's queue", () => {
         expect(await run(api.session, { sessionId })).toMatchObject({ error_category: "network" })
       );
       expect(wireTurnId()).toBe("B");
-      expect(await steer("aimed at B")).toEqual({ outcome: "queued" });
+      await steer("aimed at B");
       expect(engine.steerTurn).not.toHaveBeenCalled();
       expect(await queueTool("resume")).toMatch(/refused \(person_only\)/);
       if (who === "person") expect((await queue()).stoppedBy).toEqual(fromPerson);
       else expect(await queue()).not.toHaveProperty("stoppedBy");
       await resumeInWindow();
-      expect(await steer("after Resume")).toEqual({ outcome: "steered" });
-      const id = lastSteerId();
-      expect(engine.steerTurn).toHaveBeenCalledOnce();
-      end("B", "cancelled", [id]);
+      await steer("after Resume");
+      const [{ id, text }] = (await queue()).items;
+      expect(text).toBe("Message after Resume");
+      expect(engine.steerTurn).not.toHaveBeenCalled();
+      end("B", "cancelled");
       await vi.waitFor(() => expect(starts()).toEqual(["A", "B", id]));
       expect((await queue()).paused).toBeNull();
     }
@@ -4850,6 +4897,32 @@ describe("continuing a chat after a usage limit", () => {
     }
   );
 
+  it("holds a post-Stop send when the stopped turn ends at a usage limit", async () => {
+    await sendInOrder("A", "held");
+    await stopped("A");
+    await send("later");
+    fail();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(starts()).toEqual(["A"]);
+    expect(await ids()).toEqual(["later", "held"]);
+    await resumeInWindow();
+    expect(wireTurnId()).toBe("later");
+  });
+
+  it("keeps a scheduled limit through a failure until an agent's Stop cancels it", async () => {
+    await limited();
+    await choose(true);
+    await enqueueMessage({ ...message("held"), turnId: "held" }, fromChat);
+    reportInterruption(sessionId, undefined, true);
+    expect((await queue()).limit).toEqual({ resetsAt, continues: true });
+    engine.cancelTurn.mockResolvedValueOnce({ outcome: "no_active_turn" });
+    await stopSession({ sessionId }, fromAssistant);
+    expect(await queue()).toMatchObject({ paused: "stopped", stoppedBy: fromAssistant });
+    expect((await queue()).limit).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(5 * minute);
+    expect(starts()).toEqual(["A"]);
+  });
+
   it("drains waiting rows when a later turn succeeds", async () => {
     await sendInOrder("A", "waiting");
     windows([{ id: "five_hour", status: "limited", resetsAt }]);
@@ -4888,8 +4961,43 @@ describe("continuing a chat after a usage limit", () => {
     }
   );
 
+  it("waits for the person's Continue when a stopped turn hits a usage limit with an empty queue", async () => {
+    preference(true);
+    await send("A");
+    await stopped("A");
+    windows([{ id: "primary", usedPercent: 100, resetsAt }], "limited");
+    fail();
+    expect(await queue()).toEqual({
+      items: [],
+      paused: "limit",
+      limit: { resetsAt, continues: false },
+    });
+    await vi.advanceTimersByTimeAsync(resetsAt - now + minute);
+    expect(starts()).toEqual(["A"]);
+    await choose(true);
+    expect(engine.startTurn.mock.lastCall![0].input).toBe("Continue.");
+    expect(starts()).toHaveLength(2);
+  });
+
+  it("keeps an empty queue waiting at a usage limit after the Stop RPC rejects", async () => {
+    preference(true);
+    await send("A");
+    engine.cancelTurn.mockRejectedValueOnce(new Error("Lost Stop reply"));
+    await expect(stop()).resolves.toEqual({ unconfirmed: true });
+    expect(wireTurnId()).toBe("A");
+    windows([{ id: "primary", usedPercent: 100, resetsAt }], "limited");
+    fail();
+    await vi.advanceTimersByTimeAsync(resetsAt - now + minute);
+    expect(starts()).toEqual(["A"]);
+    expect(await queue()).toEqual({
+      items: [],
+      paused: "limit",
+      limit: { resetsAt, continues: false },
+    });
+  });
+
   it.each([false, true])(
-    "honors Stop and an optional Resume (%s) if the same turn then reports a limit",
+    "waits at a stopped turn's usage limit when Stop held a row (resumed before the end: %s)",
     async (resume) => {
       preference(true);
       await sendInOrder("A", "waiting");
@@ -4898,10 +5006,13 @@ describe("continuing a chat after a usage limit", () => {
       if (resume) await resumeInWindow();
       fail();
       expect((await queue()).paused).toBe(resume ? "limit" : "stopped");
-      expect(starts()).toEqual(["A"]);
+      if (resume) expect((await queue()).limit).toEqual({ resetsAt, continues: false });
       await vi.advanceTimersByTimeAsync(5 * minute);
-      expect((await queue()).paused).toBe(resume ? null : "stopped");
-      expect(starts()).toEqual(resume ? ["A", "waiting"] : ["A"]);
+      expect(starts()).toEqual(["A"]);
+      expect(await ids()).toEqual(["waiting"]);
+      if (resume) await choose(true);
+      else await resumeInWindow();
+      expect(starts()).toEqual(["A", "waiting"]);
     }
   );
 

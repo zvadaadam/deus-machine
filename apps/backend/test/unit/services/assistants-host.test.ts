@@ -149,6 +149,7 @@ import { createDeusHost } from "../../../src/services/assistants/host";
 import { getSetting } from "../../../src/services/settings.service";
 import { _resetOperator, withSessionTools } from "../../../src/services/assistants/operator";
 import { READ_ONLY } from "../../../src/services/assistants/sentences";
+import { wireTestTurnNotices } from "../../fixtures/turn-notices";
 import { assistantCaller, operations } from "../../helpers";
 
 const LEAD = { kind: "session", sessionId: "s-lead" } as const;
@@ -234,6 +235,7 @@ const changed = (sessionIds?: string[]) => {
 };
 
 beforeEach(() => {
+  wireTestTurnNotices();
   state.db = new Database(":memory:");
   state.db.exec(SCHEMA_SQL);
   state.db

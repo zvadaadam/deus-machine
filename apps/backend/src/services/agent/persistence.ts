@@ -319,6 +319,22 @@ export function persistSessionStatus(id: string, ...state: SessionProjection): W
   }
 }
 
+/** A first task can fail after a different turn has already used the chat. */
+export function persistUndeliveredFirstTask(id: string, turnId: string, message: string) {
+  try {
+    getDatabase()
+      .prepare(
+        `UPDATE sessions SET status = 'error', error_message = ? WHERE id = ? AND message_count = 0
+       AND NOT EXISTS (SELECT 1 FROM turns WHERE session_id = sessions.id AND turn_id != ?)`
+      )
+      .run(message, id, turnId);
+    return true;
+  } catch (error) {
+    failed("undelivered first task", error);
+    return false;
+  }
+}
+
 /** Only an admitted send orders the sidebar and protects a prompted checkout from cleanup. */
 export function persistLastUserMessageAt(sessionId: string, sentAt: string): WriteResult<void> {
   const db = getDatabase();

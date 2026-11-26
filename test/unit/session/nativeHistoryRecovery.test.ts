@@ -1,3 +1,4 @@
+import { wireTestTurnNotices } from "../../../apps/backend/test/fixtures/turn-notices";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
@@ -94,6 +95,7 @@ describe("native replay through the published engine, SQLite and desktop fold", 
       INSERT INTO sessions (id, workspace_id, agent_harness) VALUES ('${SESSION}', 'workspace', 'claude-code');`);
     database.mockReturnValue(db);
     handler = createAgentEventHandler();
+    wireTestTurnNotices({ stored: handler.turnStored });
     ui = {
       queryClient: new QueryClient(),
       activeSessionId: SESSION,

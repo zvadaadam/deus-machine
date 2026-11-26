@@ -159,7 +159,9 @@ function pushEnvelope(envelope: DecodedWireEventEnvelope): void {
 // ---- Factory ----
 
 /** Create the agent event handler: persistence + WS push per lifecycle event. */
-export function createAgentEventHandler(): AgentEventHandler {
+export function createAgentEventHandler(): AgentEventHandler & {
+  turnStored(sessionId: string, turnId: string): void;
+} {
   const sessions = new Map<string, SessionState>();
   // A client that starts following a chat, or returns to it, first gets the
   // reply still being typed as it stands (see ./open-parts).
@@ -167,15 +169,6 @@ export function createAgentEventHandler(): AgentEventHandler {
   openWith(sessionEvents, ({ sessionId }) =>
     typing.of(sessionId, sessions.get(sessionId)?.conversation)
   );
-
-  turnNotices.stored = (sessionId, turnId) => {
-    const conversation = sessions.get(sessionId)?.conversation;
-    // A message anchors the local footer. Reopen streaming parts after the window rereads it.
-    if (!conversation?.timeline.some((e) => e.kind === "message" && e.turnId === turnId)) return;
-    resetSubscribers(sessionEvents, { sessionId });
-    for (const part of typing.of(sessionId, conversation))
-      publish(sessionEvents, { sessionId }, part, { keep: false });
-  };
 
   const stateFor = (sessionId: string): SessionState => {
     const existing = sessions.get(sessionId);
@@ -186,6 +179,15 @@ export function createAgentEventHandler(): AgentEventHandler {
   };
 
   return {
+    turnStored(sessionId, turnId) {
+      const conversation = sessions.get(sessionId)?.conversation;
+      // A message anchors the local footer. Reopen streaming parts after the window rereads it.
+      if (!conversation?.timeline.some((e) => e.kind === "message" && e.turnId === turnId)) return;
+      resetSubscribers(sessionEvents, { sessionId });
+      for (const part of typing.of(sessionId, conversation))
+        publish(sessionEvents, { sessionId }, part, { keep: false });
+    },
+
     hydrateCloudSnapshot(sessionId, snapshot) {
       const state = stateFor(sessionId);
       const turn = holdingTurn(sessionId);
@@ -246,7 +248,7 @@ export function createAgentEventHandler(): AgentEventHandler {
           type: cause ?? "gone",
           error: { message, category: "network" },
         });
-        if (absent) turnNotices.queue?.(sessionId, { type: "engine_idle" });
+        if (absent) turnNotices().queue(sessionId, { type: "engine_idle" });
         return;
       }
       const warning = message + " The agent has not confirmed it stopped.";
@@ -254,7 +256,7 @@ export function createAgentEventHandler(): AgentEventHandler {
         persistSessionStatus(sessionId, "working", warning, "network"),
         sessionId
       );
-      reportInterruption(sessionId, turnId, false, cause);
+      reportInterruption(sessionId, turnId, false, cause, firstStop(turn));
     },
 
     handleTitle(sessionId, title) {
@@ -347,6 +349,7 @@ export function createAgentEventHandler(): AgentEventHandler {
       const event = envelope.event;
       const isDelta = event.type === "message.part.delta";
       const held = event.type === "turn.ended" && holder?.turnId === event.turnId;
+      const by = held ? firstStop(holder) : undefined;
       let outcome: TurnOutcomeWrite | undefined;
       const writes = isDelta
         ? []
@@ -359,14 +362,14 @@ export function createAgentEventHandler(): AgentEventHandler {
               return deferred ? undefined : outcome;
             },
             turnProviderCredentialSource(event),
-            held ? firstStop(holder) : undefined
+            by
           );
 
       let ended: NativeEnd | undefined;
       if (event.type === "turn.ended") {
         const { turnId } = event;
         const cancelled = event.stopReason === "cancelled";
-        ended = { type: "end", turnId, cancelled, held, outcome };
+        ended = { type: "end", turnId, cancelled, held, outcome, by };
         if (
           (held || deferred) &&
           outcome?.status === "error" &&
@@ -434,7 +437,7 @@ export function createAgentEventHandler(): AgentEventHandler {
         .otherwise(() => {});
 
       if (!NOT_PUSHED.has(envelope.event.type)) pushEnvelope(envelope);
-      if (ended) turnNotices.queue?.(sessionId, ended);
+      if (ended) turnNotices().queue(sessionId, ended);
     },
   };
 }

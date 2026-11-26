@@ -1,3 +1,4 @@
+import { wireTestTurnNotices } from "../../fixtures/turn-notices";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -49,6 +50,7 @@ beforeEach(() => {
   _reset();
   forgetChatTurns();
   events = createAgentEventHandler();
+  wireTestTurnNotices({ stored: events.turnStored });
   db = new Database(":memory:");
   db.pragma("foreign_keys = ON");
   db.exec(SCHEMA_SQL);
