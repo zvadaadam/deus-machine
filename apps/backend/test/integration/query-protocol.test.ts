@@ -67,7 +67,7 @@ import { AgentServerDisconnectedError } from "../../src/lib/errors";
 import { publish } from "../../src/services/streams";
 import * as queries from "../../src/db";
 import { handleFrame, invalidate, runAsThisComputer } from "../../src/services/query-engine";
-import { restoreCloudSnapshot } from "../../src/services/agent/cloud/snapshot";
+import { saveSetting } from "../../src/services/settings.service";
 
 // ---- Constants ----
 
@@ -493,6 +493,66 @@ describe("q:subscribe → initial q:snapshot", () => {
 });
 
 describe("q:subscribe → live q:snapshot push", () => {
+  it("sends the live read before a save in the same tick pushes a newer value", async () => {
+    saveSetting("chat_view", "bubbles");
+    const { ws, connectionId } = await connectAndAuth();
+    try {
+      await sendAndReceive(
+        ws,
+        { type: "q:subscribe", id: "view", resource: "settings" },
+        "q:snapshot"
+      );
+      const received: string[] = [];
+      const reads = ["q:response", "q:snapshot"].map((type) =>
+        waitForMessage(ws, type).then((frame) => received.push(frame.data.chat_view))
+      );
+      handleFrame(connectionId, { type: "q:request", id: "read", resource: "settings" });
+      handleFrame(connectionId, {
+        type: "q:mutate",
+        id: "save",
+        action: "saveSetting",
+        params: { key: "chat_view", value: "full" },
+      });
+      await Promise.all(reads);
+      expect(received).toEqual(["bubbles", "full"]);
+    } finally {
+      ws.close();
+    }
+  });
+
+  it("pushes public preferences to both subscribed connections after either writes", async () => {
+    saveSetting("anthropic_api_key", "legacy-a");
+    saveSetting("openai_api_key", "legacy-b");
+    saveSetting("chat_view", "bubbles");
+    const clients = await Promise.all([connectAndAuth(), connectAndAuth()]);
+    try {
+      for (const { ws } of clients) {
+        const first = await sendAndReceive(
+          ws,
+          { type: "q:subscribe", id: "view", resource: "settings" },
+          "q:snapshot"
+        );
+        expect(first.data).toEqual({ chat_view: "bubbles" });
+      }
+      const updates = clients.map(({ ws }) => waitForMessage(ws, "q:snapshot"));
+      const write = sendAndReceive(
+        clients[0].ws,
+        {
+          type: "q:mutate",
+          id: "save",
+          action: "saveSetting",
+          params: { key: "chat_view", value: "full" },
+        },
+        "q:mutate_result"
+      );
+      const [ack, ...pushed] = await Promise.all([write, ...updates]);
+      expect(ack.success).toBe(true);
+      for (const snapshot of pushed) expect(snapshot.data).toEqual({ chat_view: "full" });
+    } finally {
+      for (const { ws } of clients) ws.close();
+    }
+  });
+
   it("pushes updated snapshot when invalidate() is called", async () => {
     const { ws } = await connectAndAuth();
     try {

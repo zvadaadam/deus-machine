@@ -14,8 +14,6 @@ const exceptions: Record<string, RegExp> = {
     /animate-\[reasoning-pulse_[^\]]+_infinite_alternate\]/g, // Live reasoning.
   "features/browser/ui/BrowserTab.tsx":
     /animate-\[browser-loading(?:-complete)?_[^\]]+_forwards\]/g, // Navigation progress.
-  "features/session/ui/tools/renderers/RecordingToolRenderers.tsx":
-    /transition-\[width\] duration-75 ease-linear/g, // Elapsed video time.
 };
 const utility =
   /\b(?:duration-[\w[(]|ease-(?!move\b)[\w[(]|transition-all\b)|(?:animate-\[|\[[\w-]*(?:duration|delay):)[^\]]*\d(?:ms|s)(?=[^a-z])/;

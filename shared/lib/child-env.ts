@@ -41,22 +41,14 @@ export function defaultDatabasePathForEnv(env: NodeJS.ProcessEnv, devRoot?: stri
   });
 }
 
-export function prepareDevBackendEnv(env: NodeJS.ProcessEnv, backendCwd: string): void {
-  const override = env.DATABASE_PATH;
-  const legacyShell = env.DEUS_PACKAGED === "1";
-  if (legacyShell) clearBackendChildEnv(env);
-  if (!override) return;
-
-  const filename = override.trim() || ":memory:";
-  const database = filename === ":memory:" ? filename : resolve(backendCwd, filename);
-  if (legacyShell && database === resolve(defaultDatabasePathForEnv(env))) {
-    console.warn("Dropped inherited DATABASE_PATH because it matches the installed database path.");
-    return;
-  }
-  env.DATABASE_PATH = database;
-}
-
 /** Older installed versions passed their own runtime settings to agent shells. */
-export function clearInheritedPackagedEnv(env: NodeJS.ProcessEnv): void {
-  if (env.DEUS_PACKAGED === "1") prepareDevBackendEnv(env, process.cwd());
+export function clearInheritedPackagedEnv(env: NodeJS.ProcessEnv, cwd = process.cwd()): void {
+  if (env.DEUS_PACKAGED !== "1") return;
+  const filename = env.DATABASE_PATH && (env.DATABASE_PATH.trim() || ":memory:");
+  clearBackendChildEnv(env);
+  if (!filename) return;
+  const database = filename === ":memory:" ? filename : resolve(cwd, filename);
+  if (database === resolve(defaultDatabasePathForEnv(env)))
+    console.warn("Dropped inherited DATABASE_PATH because it matches the installed database path.");
+  else env.DATABASE_PATH = database;
 }

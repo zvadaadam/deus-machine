@@ -5,10 +5,9 @@ import { AgentServerDisconnectedError } from "../../../src/lib/errors";
 import { operations } from "../../helpers";
 
 vi.mock("../../../src/services/settings.service", () => ({
-  getAllSettings: vi.fn(() => ({ theme: "dark", lang: "en" })),
+  getAllSettings: vi.fn(() => ({ chat_view: "bubbles" })),
   saveSetting: vi.fn(),
   getSetting: vi.fn(() => null),
-  PRIVATE_SETTINGS: new Set(["relay_machines"]),
 }));
 
 // What follows from turning remote access on or off.
@@ -99,24 +98,27 @@ beforeEach(() => {
 
 describe("settings", () => {
   it("answers this computer's preferences", async () => {
-    expect(await run(api.settings)).toEqual({ theme: "dark", lang: "en" });
+    expect(await run(api.settings)).toEqual({ chat_view: "bubbles" });
     expect(getAllSettings).toHaveBeenCalled();
   });
 });
 
 describe("saveSetting", () => {
   it("stores the value under its key", async () => {
-    await run(api.saveSetting, { key: "theme", value: "light" });
-    expect(saveSetting).toHaveBeenCalledWith("theme", "light");
+    await run(api.saveSetting, { key: "chat_view", value: "full" });
+    expect(saveSetting).toHaveBeenCalledWith("chat_view", "full");
   });
 
-  it("refuses to write this computer's machine secrets", async () => {
-    await expect(run(api.saveSetting, { key: "relay_machines", value: {} })).rejects.toMatchObject({
-      statusCode: 400,
-      message: "relay_machines is not a setting",
-    });
-    expect(saveSetting).not.toHaveBeenCalled();
-  });
+  it.each(["relay_machines", "anthropic_api_key", "openai_api_key", "theme", "future_key"])(
+    "refuses a write to %s",
+    async (key) => {
+      await expect(run(api.saveSetting, { key, value: "sample" })).rejects.toMatchObject({
+        statusCode: 400,
+        message: `${key} is not a setting`,
+      });
+      expect(saveSetting).not.toHaveBeenCalled();
+    }
+  );
 
   it("requires a key", async () => {
     await expect(run(api.saveSetting, { value: "light" } as never)).rejects.toMatchObject({
@@ -152,7 +154,7 @@ describe("saveSetting", () => {
   });
 
   it("does nothing more for any other preference", async () => {
-    await run(api.saveSetting, { key: "theme", value: "light" });
+    await run(api.saveSetting, { key: "chat_view", value: "full" });
     for (const effect of Object.values(remote)) expect(effect).not.toHaveBeenCalled();
   });
 });

@@ -4,6 +4,7 @@ import { readAgentAuth } from "../api/settings";
 import { CloudCredentialsBody, parseBody } from "../lib/schemas";
 import { cloudOrg, setCloudRuntimeCredentials } from "../services/agent/cloud/config";
 import { reconcileRelay } from "../services/relay.service";
+import { invalidate } from "../services/query-engine";
 import {
   getCloudSettingsStatus,
   saveCloudGithubToken,
@@ -68,6 +69,7 @@ app.post("/settings/cloud/credentials", async (c) => {
   setCloudRuntimeCredentials(body);
   // Remote access belongs to the signed-in account: follow sign-in, sign-out and switches.
   reconcileRelay();
+  invalidate(["assistants"]);
   // So do the apps the account connected through Deus Cloud.
   void reconcileCloudAccounts();
   // Credentials arriving is the moment the automations cache can first (or

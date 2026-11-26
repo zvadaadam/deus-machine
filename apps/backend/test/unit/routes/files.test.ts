@@ -23,29 +23,19 @@ vi.mock("../../../src/db", () => ({
   getWorkspaceForMiddleware: vi.fn(),
 }));
 
-const { mockExistsSync, mockRealpathSync, mockStatSync, mockCreateReadStream } = vi.hoisted(() => ({
-  mockExistsSync: vi.fn(() => true),
-  mockRealpathSync: vi.fn((p: string) => p),
-  mockStatSync: vi.fn(() => ({ isFile: (): boolean => true, size: 7 })),
+const { realpath, stat, mockCreateReadStream } = vi.hoisted(() => ({
+  realpath: vi.fn(async (p: string) => p),
+  stat: vi.fn(async () => ({ isFile: (): boolean => true, size: 7 })),
   mockCreateReadStream: vi.fn(),
 }));
-
-vi.mock("fs", async (importOriginal) => {
-  const actual = (await importOriginal()) as any;
-  return {
-    ...actual,
-    default: {
-      ...actual.default,
-      existsSync: mockExistsSync,
-      realpathSync: mockRealpathSync,
-      statSync: mockStatSync,
-      createReadStream: mockCreateReadStream,
-    },
-    existsSync: mockExistsSync,
-    realpathSync: mockRealpathSync,
-    statSync: mockStatSync,
-    createReadStream: mockCreateReadStream,
-  };
+vi.mock("node:fs/promises", async (original) => ({
+  ...(await original<typeof import("node:fs/promises")>()),
+  realpath,
+  stat,
+}));
+vi.mock("fs", async (original) => {
+  const actual = await original<typeof import("fs")>();
+  return { ...actual, default: { ...actual, createReadStream: mockCreateReadStream } };
 });
 
 import filesRoutes from "../../../src/routes/files";
@@ -56,9 +46,8 @@ app.onError(errorHandler);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockExistsSync.mockReturnValue(true);
-  mockRealpathSync.mockImplementation((p: string) => p);
-  mockStatSync.mockReturnValue({ isFile: () => true, size: 7 });
+  realpath.mockImplementation(async (p) => p);
+  stat.mockResolvedValue({ isFile: () => true, size: 7 });
   mockCreateReadStream.mockReturnValue(Readable.from(Buffer.from("preview")));
 });
 
@@ -76,7 +65,7 @@ describe("GET /workspaces/:id/file-preview", () => {
   });
 
   it("checks a preview directory before its extension, and a recording extension before its stat", async () => {
-    mockStatSync.mockReturnValue({ isFile: () => false, size: 0 });
+    stat.mockResolvedValue({ isFile: () => false, size: 0 });
     const directory = await app.request("/workspaces/ws-123/file-preview?path=assets");
     expect(directory.status).toBe(400);
     expect(await directory.json()).toEqual({ error: "Not a file" });
@@ -126,7 +115,7 @@ describe("GET /workspaces/:id/file-preview", () => {
     const res = await app.request("/workspaces/ws-cloud/file-preview?path=index.html");
     expect(res.status).toBe(400);
     expect(JSON.stringify(await res.json())).toContain("not on this computer");
-    expect(mockExistsSync).not.toHaveBeenCalled();
+    expect(realpath).not.toHaveBeenCalled();
     expect(mockCreateReadStream).not.toHaveBeenCalled();
   });
 
@@ -139,9 +128,7 @@ describe("GET /workspaces/:id/file-preview", () => {
 
 describe("file containment and recording ranges", () => {
   it("refuses a preview symlink whose target leaves the workspace", async () => {
-    mockRealpathSync.mockImplementation((p) =>
-      p.endsWith("/alias.png") ? "/other/private.png" : p
-    );
+    realpath.mockImplementation(async (p) => (p.endsWith("/alias.png") ? "/other/private.png" : p));
     const res = await app.request("/workspaces/ws-123/file-preview?path=alias.png");
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "Invalid file path" });
@@ -155,6 +142,24 @@ describe("file containment and recording ranges", () => {
   });
 
   const url = "/files/stream?path=/tmp/movie.mp4";
+
+  it("serves another file while a preview's metadata is pending", async () => {
+    const pending = Promise.withResolvers<Awaited<ReturnType<typeof stat>>>();
+    stat.mockReturnValueOnce(pending.promise);
+    const preview = app.request("/workspaces/ws-123/file-preview?path=..notes.png", {
+      method: "HEAD",
+    });
+    await vi.waitFor(() => expect(stat).toHaveBeenCalledOnce());
+    expect((await app.request(url, { method: "HEAD" })).status).toBe(200);
+    pending.resolve({ isFile: () => true, size: 1 });
+    expect((await preview).status).toBe(200);
+  });
+
+  it.each(["notbytes=2-4", "bytes=2-4,6-"])("serves the full file for %s", async (range) => {
+    const response = await app.request(url, { headers: { range } });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-length")).toBe("7");
+  });
 
   it.each([
     { range: "bytes=2-4", start: 2, end: 4 },

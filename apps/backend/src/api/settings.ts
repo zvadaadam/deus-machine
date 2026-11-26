@@ -5,6 +5,7 @@ import { ConnectionClosedError } from "@zvada/agent-server/client";
 import { match } from "ts-pattern";
 import * as api from "@shared/api/settings";
 import type { ParsedInputOf } from "@shared/api/op";
+import { isPublicSetting } from "@shared/types/settings";
 import type { AgentAuthAnswer } from "@shared/agent-auth";
 import type { AgentConfigBySection, AgentConfigSection } from "@shared/types/agent-config";
 import { getWorkspaceForMiddleware } from "../db";
@@ -36,13 +37,13 @@ import {
 } from "../services/agent-config.service";
 import { syncKeepAwake } from "../services/keep-awake.service";
 import { reconcileRelay } from "../services/relay.service";
-import { getAllSettings, PRIVATE_SETTINGS, saveSetting } from "../services/settings.service";
+import { getAllSettings, saveSetting } from "../services/settings.service";
 import { disconnectDirectDevices } from "../services/ws.service";
 import { handle } from "./registry";
 
 /** Store one preference and do what follows from it. */
 function writeSetting(key: string, value: unknown): void {
-  if (PRIVATE_SETTINGS.has(key)) throw new ValidationError(`${key} is not a setting`);
+  if (!isPublicSetting(key)) throw new ValidationError(`${key} is not a setting`);
   saveSetting(key, value);
 
   if (key === "remote_access_enabled") {

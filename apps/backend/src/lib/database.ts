@@ -14,20 +14,13 @@ import {
 import { isMissingSchemaObject, openSqliteDatabase } from "./sqlite";
 
 configureBackendEnv();
-const DB_PATH = process.env.DATABASE_PATH
+const requestedPath = process.env.DATABASE_PATH
   ? process.env.DATABASE_PATH.trim() || ":memory:"
   : defaultDatabasePathForEnv(process.env, path.resolve(import.meta.dirname, "../../../.."));
+let DB_PATH = requestedPath;
 
 let dbInstance: BetterSqlite3.Database | null = null;
 let dbOwner: BetterSqlite3.Database | undefined;
-
-function canonicalDatabaseFile(filename: string): string {
-  const directory = path.dirname(filename);
-  fs.mkdirSync(directory, { recursive: true });
-  return fs.lstatSync(filename, { throwIfNoEntry: false })
-    ? fs.realpathSync.native(filename)
-    : path.join(fs.realpathSync.native(directory), path.basename(filename));
-}
 
 function claimDatabase(filename: string): BetterSqlite3.Database {
   // Keep a write transaction on a stable sidecar for the life of the connection.
@@ -129,15 +122,20 @@ class PrelaunchSchemaError extends Error {
 }
 
 function initDatabase(): BetterSqlite3.Database {
-  if (dbInstance) {
-    return dbInstance;
-  }
-
-  console.log("Opening database:", DB_PATH);
-
+  if (dbInstance) return dbInstance;
+  let filename = requestedPath;
+  console.log("Opening database:", filename);
   try {
-    const filename = DB_PATH === ":memory:" ? DB_PATH : canonicalDatabaseFile(DB_PATH);
-    if (filename !== ":memory:") dbOwner = claimDatabase(filename);
+    if (filename !== ":memory:") {
+      const directory = path.dirname(filename);
+      fs.mkdirSync(directory, { recursive: true });
+      DB_PATH = path.join(fs.realpathSync.native(directory), path.basename(filename));
+      const entry = fs.lstatSync(DB_PATH, { throwIfNoEntry: false });
+      // After Start Fresh a filename symlink can remain. SQLite creates its missing target.
+      if (entry?.isSymbolicLink() && !fs.existsSync(DB_PATH)) openSqliteDatabase(DB_PATH).close();
+      filename = entry ? fs.realpathSync.native(DB_PATH) : DB_PATH;
+      dbOwner = claimDatabase(filename);
+    }
     dbInstance = openSqliteDatabase(filename);
     dbInstance.pragma("journal_mode = WAL");
     dbInstance.pragma("foreign_keys = ON");
@@ -184,8 +182,10 @@ function initDatabase(): BetterSqlite3.Database {
   } catch (error) {
     closeDatabaseHandles();
     // A whole stderr line after rollback and close, independent of how Node or Bun prints an Error.
-    if (error instanceof PrelaunchSchemaError) console.error(PRELAUNCH_SCHEMA_MISMATCH);
-    if (error instanceof DatabaseInUseError) console.error(DATABASE_IN_USE);
+    if (error instanceof PrelaunchSchemaError)
+      console.error(JSON.stringify([PRELAUNCH_SCHEMA_MISMATCH, filename]));
+    if (error instanceof DatabaseInUseError)
+      console.error(JSON.stringify([DATABASE_IN_USE, filename]));
     console.error("Failed to open database:", error);
     throw error;
   }

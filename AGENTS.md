@@ -9,7 +9,7 @@ Design inspiration: Linear, Vercel, Stripe, Perplexity. Dense, pro-consumer aest
 Electron desktop app + React frontend + Node.js backend. Monorepo under `apps/`. The local agent engine runs Claude Code, Codex and Gemini.
 
 - **Package manager: Bun.** Always `bun add`, `bun install`, `bun run`, `bunx`. Never npm or yarn — CI uses `bun install --frozen-lockfile`.
-- **Desktop + Mobile Web:** Primary target is Electron. The web app runs at `deusmachine.ai` and its alias `app.deusmachine.ai`, with mobile support via `MobileLayout`. At the root domain the landing worker serves the landing page at `/` for new visitors and routes everything else to the app. Don't write `isElectronEnv` conditionals for feature parity.
+- **Desktop + Mobile Web:** Primary target is Electron. The web app runs at `deusmachine.ai` and its alias `app.deusmachine.ai`, with mobile support via `MobileLayout`. At the root domain the landing worker serves the landing page at `/` for new visitors and routes everything else to the app. Each device keeps its theme in localStorage. Don't write `isElectronEnv` conditionals for feature parity.
 - **Key libraries:** `ts-pattern` for discriminated unions (prefer `.exhaustive()`), Zustand for UI state, TanStack Query v5 for server state, Framer Motion for presence/layout animations, Tailwind CSS v4.
 
 ## Running the App
@@ -155,8 +155,8 @@ Single WS connection (`/ws`) using `q:` prefixed JSON frames:
 
 | Frame                                    | Purpose                                                                                                    |
 | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `q:request` / `q:response`               | A read, answered once (`diffStats`, `settings`)                                                            |
-| `q:subscribe` / `q:snapshot` / `q:delta` | A live read: its value, sent again whenever it changes (workspaces, sessions)                              |
+| `q:request` / `q:response`               | A read, answered once (`diffStats`, `messages`)                                                            |
+| `q:subscribe` / `q:snapshot` / `q:delta` | A live read, sent again on change (`workspaces`, `sessions`, `settings`, `relayStatus`)                     |
 | `q:subscribe` / `q:event` / `q:reset`    | A stream of events, sent only to the connections following it (a chat's agent events, a terminal's output) |
 | `q:mutate` / `q:mutate_result`           | A write, never sent twice (archiveWorkspace, sendMessage, steerMessage, stopSession)                       |
 | `q:tool_response`                        | The answer to something an agent asked this client                                                         |
@@ -525,8 +525,8 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   Deus Cloud (`GET /me/assistants/<clientId>`, never blocking admission; a
   failed lookup is tried again on a later contact, at most every five
   minutes); a URL-shaped client id's host stands on its own. The `assistants`
-  live read is pushed only when something a person sees changes (a first
-  contact, access, a name or host learned); `last_seen_at` is written at most
+  live read is pushed on credential handoff, first contact, a change of access,
+  or learning a name or host. The host writes `last_seen_at` at most
   once a minute. A connection ends at its token's `exp` (plus the 30s clock
   tolerance) and lives at most 200s whatever its traffic (Deus Cloud opens one
   per request); pings extend neither. That end is the caller's `endsAt`
@@ -768,8 +768,9 @@ agent gets none of this computer's) offer nothing without one. So a project skil
 hook or MCP server added in the Agent tab is a change in the workspace's branch, and the
 tab says so. Rule 2 (`openAddress` and `openFile`) covers chat links, chat files and
 addresses typed in New Tab. In the cloud an internet address opens in the person's browser.
-A localhost address opens at its port in the cloud preview, or says "That address is on the
-cloud computer". A chat file opens in its own File tab, or in Changes when requested.
+A localhost address opens at its port in the cloud preview, which waits for the computer's
+address. An external link can be retried once the address arrives. A chat file opens in its
+own File tab, or in Changes when requested.
 If the cloud computer cannot show the file, the chat says so.
 `session/lib/openFromChat.ts` carries out the rule. For a local file preview, the desktop opens
 its Browser tab. On the web or a phone, the click opens a tab while Deus asks the host for the
@@ -904,15 +905,15 @@ the catalog can move to a package the day Deus Cloud reads it too.
 
 Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 13 tables: `repositories`, `workspaces`, `sessions`, `messages`, `turns`, `parts`, `compactions`, `paired_devices`, `assistants`, `automations`, `automation_runs`, `extension_installations`, `integration_connections`.
 
-- The backend source and a checkout's `deus start` default to `.deus-dev/deus.db`. The dev desktop and `dev:web` resolve `DATABASE_PATH` from the backend's working directory. When that path matches the installed default in a legacy `DEUS_PACKAGED=1` shell, the dev launcher or source backend drops the override and logs why. The packaged runtime sets its installed default before loading the backend. The dev desktop keeps its Electron profile in `.deus-dev`, so each new worktree starts signed out.
-- Before it opens the database, each backend takes a SQLite write lock on the `.owner` sidecar. It waits up to twenty seconds so the previous backend can drain a stuck turn and stop its agent processes after a force-quit. The OS releases the lock on exit, including a crash.
+- The backend source and a checkout's `deus start` default to `.deus-dev/deus.db`. The dev desktop and `dev:web` pass a nonempty `DATABASE_PATH` through as written. Relative paths start in the backend's working directory. When that path matches the installed default in a legacy `DEUS_PACKAGED=1` shell, the dev launcher or source backend drops the override and logs why. The packaged runtime sets its installed default before loading the backend. The dev desktop keeps its Electron profile in `.deus-dev`, so each new worktree starts signed out.
+- Before it uses the database, each backend takes a SQLite write lock on the `.owner` sidecar. It waits up to twenty seconds so the previous backend can drain a stuck turn and stop its agent processes after a force-quit. The OS releases the lock on exit, including a crash.
 - `repositories.root_path` is nullable (a project not on this computer).
 - Turn accounting, execution, provider account snapshots and outcomes belong to `turns`, keyed by `(session_id, turn_id)`. Messages contain transcript content only.
 - Only the backend writes to DB
 - All indexes/triggers defined in `shared/schema.ts`
 - Use `sessions.last_user_message_at` instead of correlated subqueries
 - No N+1 queries — batch or denormalize
-- Column changes, pre-launch (now): `shared/schema.ts` is the whole schema, not a migration replay. To add a column, put it in `SCHEMA_SQL` and, if existing databases should keep working, in `ADDITIVE_COLUMNS` (nullable or defaulted); anything else is a reset. At startup the backend compares the database with a fresh copy of `SCHEMA_SQL` (a missing column, a NOT NULL that differs, a leftover column an insert would fail on) and stops on a mismatch. After the backend exits, the desktop offers **Start Fresh**, which moves the database and its SQLite side files to a dated name beside the original. The installed app reopens. Under `bun run dev`, Deus quits and logs how to start it again. The CLI prints `PRELAUNCH_SCHEMA_RESET_HINT` with its fresh data directory option.
+- Column changes, pre-launch (now): `shared/schema.ts` is the whole schema, not a migration replay. To add a column, put it in `SCHEMA_SQL` and, if existing databases should keep working, in `ADDITIVE_COLUMNS` (nullable or defaulted); anything else is a reset. At startup the backend compares the database with a fresh copy of `SCHEMA_SQL` (a missing column, a NOT NULL that differs, a leftover column an insert would fail on) and stops on a mismatch. After the backend exits, the desktop offers **Start Fresh**, which moves the file the backend opened and its SQLite side files to a dated name beside it. The installed app reopens. Under `bun run dev`, Deus quits and logs how to start it again. The CLI prints `PRELAUNCH_SCHEMA_RESET_HINT` with its fresh data directory option.
 - Column changes, post-launch: the above stops applying. Deprecate by renaming with a `DEPRECATED_` prefix, never drop.
 
 ## Releases

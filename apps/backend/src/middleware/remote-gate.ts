@@ -2,11 +2,11 @@
 // Rejects non-localhost requests when remote access is disabled.
 
 import { createMiddleware } from "hono/factory";
-import { getAllSettings } from "../services/settings.service";
+import { getSetting } from "../services/settings.service";
 import { isLocalhost, getClientIp } from "../lib/network";
 
 function isRemoteEnabled(): boolean {
-  const enabled = getAllSettings().remote_access_enabled;
+  const enabled = getSetting("remote_access_enabled");
   return enabled === true || enabled === "true";
 }
 

@@ -126,6 +126,13 @@ describe("a workspace that started", () => {
     expect(warnings(start)).toEqual([]);
   });
 
+  it("shows the generic fetch warning for an issue reported by a newer host", () => {
+    const row = JSON.parse(JSON.stringify({ ...ready, init_fetch_issue: "remote_busy" }));
+    expect(warnings(workspaceStart(row))).toEqual([
+      { message: "We couldn’t get the latest changes, so this copy may be out of date." },
+    ]);
+  });
+
   it("warns that it may be behind when the remote could not be fetched, and says why", () => {
     const start = workspaceStart({ ...ready, init_fetch_issue: "offline" });
     expect(labels(start)[0]).toBe("warning: Copy may be out of date");

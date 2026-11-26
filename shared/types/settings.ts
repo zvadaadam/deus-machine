@@ -1,56 +1,27 @@
-/**
- * Settings-related TypeScript type definitions
- * Types for application configuration and preferences
- */
+import { z } from "zod";
 
-/**
- * Application settings
- * User preferences and configuration options
- */
-export interface Settings {
-  // General
-  theme?: "light" | "dark" | "system";
-  diff_view_mode?: string;
-  /** Read the agent's messages with the work folded (the default) or see the full run. */
-  chat_view?: "bubbles" | "full";
-  /** Give new local chats a tool to message the person while they work. On by default. */
-  agent_messages?: boolean;
+/** Preferences a client may read or write on this computer. */
+export const PublicSettings = z
+  .object({
+    diff_view_mode: z.string(),
+    chat_view: z.enum(["bubbles", "full"]),
+    agent_messages: z.boolean(),
+    onboarding_completed: z.boolean(),
+    /** A new chat starts at a level every offered model supports. */
+    default_thinking_level: z.enum(["low", "medium", "high"]),
+    continue_after_usage_limit: z.boolean(),
+    experimental_simulator: z.boolean(),
+    experimental_browser: z.boolean(),
+    remote_access_enabled: z.boolean(),
+    /** Keep the plugged-in computer awake for a connected device. On by default. */
+    remote_keep_awake: z.boolean(),
+    server_name: z.string(),
+  })
+  .partial();
 
-  // Onboarding
-  onboarding_completed?: boolean;
+export type Settings = z.infer<typeof PublicSettings>;
+export const isPublicSetting = (key: string) => Object.hasOwn(PublicSettings.shape, key);
 
-  // AI — Claude
-  anthropic_api_key?: string;
-  /**
-   * Default thinking effort for new sessions and model switches (engine
-   * vocabulary). `xhigh` is intentionally excluded — not all models support
-   * it, so the global default needs to be a level every model can honor.
-   * Per-model upgrades happen by the user cycling the indicator.
-   */
-  default_thinking_level?: "low" | "medium" | "high";
-  /** Continue local chats when their usage limit resets. Off unless enabled. */
-  continue_after_usage_limit?: boolean;
-
-  // AI — Codex
-  openai_api_key?: string;
-
-  // Experimental (default: false when absent — opt-in for new users)
-  experimental_simulator?: boolean;
-  experimental_browser?: boolean;
-
-  // Remote Access
-  remote_access_enabled?: boolean;
-  /** Keep the computer awake while a device is connected and it's plugged in (default on). */
-  remote_keep_awake?: boolean;
-}
-
-// Config item types (MCPServer, Command, Agent) moved to shared/types/agent-config.ts
-// as McpServerItem, CommandItem, AgentItem — canonical types shared by frontend + backend.
-
-/**
- * Settings section identifiers
- * Used for navigation in settings UI
- */
 export type SettingsSection =
   | "account"
   | "general"

@@ -70,7 +70,8 @@ export class RelayFileStreams {
   ): Promise<void> {
     let descriptor: FileHandle | undefined;
     try {
-      const file = resolveBrowserFile(entry.source);
+      const file = await resolveBrowserFile(entry.source);
+      if (this.reads.get(read.id) !== read) return;
       if (file.realPath !== entry.realPath || file.type !== entry.type)
         throw new Error("File changed");
       descriptor = await open(
@@ -88,7 +89,11 @@ export class RelayFileStreams {
       )
         throw new Error("File changed");
       const range = fileRange(stat.size, frame.method === "GET" ? frame.range : undefined);
-      if (range.status === 416) throw new Error("Range not satisfiable");
+      if (range.status === 416) {
+        this.reply({ type: "file_head", streamId: read.id, status: 416, headers: range.headers });
+        this.release(read);
+        return;
+      }
       this.reply({
         type: "file_head",
         streamId: read.id,

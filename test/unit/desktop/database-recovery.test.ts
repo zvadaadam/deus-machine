@@ -1,17 +1,22 @@
 import { spawnSync } from "node:child_process";
 import { EventEmitter, once } from "node:events";
 import {
+  existsSync,
+  lstatSync,
   mkdtempSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, relative, resolve } from "node:path";
 import { PassThrough } from "node:stream";
+import Database from "better-sqlite3";
 import { app } from "electron";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
@@ -103,7 +108,8 @@ function expectWebDatabase(override: string, expected: string) {
 
 it("offers recovery only for the failed child's own whole stderr line and uses its database path", async () => {
   const ordinary = "Backend exited before starting (code=1, signal=null)";
-  const mismatch = await failedChild("", PRELAUNCH_SCHEMA_MISMATCH, 1);
+  const signal = JSON.stringify([PRELAUNCH_SCHEMA_MISMATCH, database]);
+  const mismatch = await failedChild("", signal, 1);
   expect(mismatch).toBeInstanceOf(OutdatedDatabaseError);
   expect(mismatch).toHaveProperty("databasePath", database);
   expect(databaseRecoveryMessage(join(directory, "chats-2026-11-20.db"))).toEqual({
@@ -112,15 +118,9 @@ it("offers recovery only for the failed child's own whole stderr line and uses i
       "An older version saved this data. Start Fresh keeps it in chats-2026-11-20.db and reopens Deus with no projects, workspaces, or chats.",
     buttons: ["Show Logs", "Quit", "Start Fresh"],
   });
-  expect(await failedChild(PRELAUNCH_SCHEMA_MISMATCH + "\n", "database is locked", 1)).toEqual(
-    new Error(ordinary)
-  );
-  expect(await failedChild("", "some other error: " + PRELAUNCH_SCHEMA_MISMATCH, 1)).toEqual(
-    new Error(ordinary)
-  );
-  expect(await failedChild("", PRELAUNCH_SCHEMA_MISMATCH, 0)).not.toBeInstanceOf(
-    OutdatedDatabaseError
-  );
+  expect(await failedChild(signal + "\n", "database is locked", 1)).toEqual(new Error(ordinary));
+  expect(await failedChild("", "some other error: " + signal, 1)).toEqual(new Error(ordinary));
+  expect(await failedChild("", signal, 0)).not.toBeInstanceOf(OutdatedDatabaseError);
 });
 
 it.each([true, false])(
@@ -131,7 +131,8 @@ it.each([true, false])(
     const override = installed ? installedDatabase : database;
     vi.stubEnv("DATABASE_PATH", override);
     expectWebDatabase(override, installed ? "<unset>" : database);
-    const error = await failedChild("", DATABASE_IN_USE, 1);
+    const selected = installed ? join(directory, "deus.db") : database;
+    const error = await failedChild("", JSON.stringify([DATABASE_IN_USE, selected]), 1);
     const env = spawn.mock.lastCall![2].env;
     expect(env.DATABASE_PATH).toBe(installed ? join(directory, "deus.db") : database);
     expect(env.DEUS_PACKAGED).toBeUndefined();
@@ -141,15 +142,102 @@ it.each([true, false])(
 );
 
 it.each(["", " "])(
-  "resolves a relative database path from the child's working directory (padding %j)",
+  "passes a relative override intact and reports contention from the child's directory (padding %j)",
   async (padding) => {
-    vi.stubEnv("DATABASE_PATH", `${padding}chats.db${padding}`);
-    const mismatch = await failedChild("", PRELAUNCH_SCHEMA_MISMATCH, 1);
-    const { cwd, env } = spawn.mock.lastCall![2];
-    expect(env.DATABASE_PATH).toBe(join(cwd, "chats.db"));
-    expect(mismatch).toHaveProperty("databasePath", env.DATABASE_PATH);
+    const override = `${padding}link/../chats.db${padding}`;
+    vi.stubEnv("DATABASE_PATH", override);
+    expectWebDatabase(override, override);
+    const failure = await failedChild("", JSON.stringify([DATABASE_IN_USE, database]), 1);
+    const { env } = spawn.mock.lastCall![2];
+    expect(env.DATABASE_PATH).toBe(override);
+    expect(failure).toEqual(new DatabaseInUseError(database));
   }
 );
+
+it.each(["link/..", "filename symlink"])(
+  "sets the old database aside and reopens through the same %s",
+  async (kind) => {
+    const target = join(directory, "other");
+    mkdirSync(join(target, "nested"), { recursive: true });
+    const physical = join(target, 'old "chats".db');
+    const sibling = join(directory, basename(physical));
+    writeFileSync(sibling, "other chats");
+    const link = join(directory, "link");
+    symlinkSync(kind === "link/.." ? join(target, "nested") : physical, link);
+    const override = kind === "link/.." ? `${link}/../${basename(physical)}` : link;
+    vi.stubEnv("DATABASE_PATH", override);
+    expectWebDatabase(override, override);
+
+    const old = new Database(physical);
+    old.exec("CREATE TABLE repositories (legacy TEXT NOT NULL)");
+    old.close();
+    vi.resetModules();
+    const backend = await import("../../../apps/backend/src/lib/database");
+    const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(backend.initDatabase).toThrow(PRELAUNCH_SCHEMA_MISMATCH);
+      const signal = JSON.stringify([PRELAUNCH_SCHEMA_MISMATCH, physical]);
+      expect(stderr).toHaveBeenCalledWith(signal);
+      const error = await failedChild("", signal, 1);
+      if (!(error instanceof OutdatedDatabaseError)) throw error;
+      expect(error.databasePath).toBe(physical);
+      const { env } = spawn.mock.lastCall![2];
+      expect(env.DATABASE_PATH).toBe(override);
+      const backup = datedBackupPath(error.databasePath);
+      startFresh(error.databasePath, backup, "http://localhost:5173");
+      expect(existsSync(physical)).toBe(false);
+      expect(lstatSync(link).isSymbolicLink()).toBe(true);
+      const saved = new Database(backup, { readonly: true });
+      try {
+        expect(
+          saved.prepare("SELECT name FROM pragma_table_info('repositories')").pluck().all()
+        ).toEqual(["legacy"]);
+      } finally {
+        saved.close();
+      }
+      const [runtime, ...flags] = kind === "link/.." ? [process.execPath, "--import=tsx"] : ["bun"];
+      const restart = spawnSync(
+        runtime,
+        [
+          ...flags,
+          "-e",
+          `import { initDatabase, closeDatabase } from "./src/lib/database";
+           const count = initDatabase().prepare("SELECT COUNT(*) AS n FROM workspaces").get();
+           console.log("workspaces=" + count.n);
+           closeDatabase();`,
+        ],
+        { cwd: webBackendCwd, env, encoding: "utf8", timeout: 10_000 }
+      );
+      expect(restart.status, restart.stderr).toBe(0);
+      expect(restart.stdout).toContain("workspaces=0\n");
+      expect(realpathSync.native(override)).toBe(physical);
+      expect(existsSync(`${physical}.owner`)).toBe(true);
+      expect(existsSync(`${link}.owner`)).toBe(false);
+      expect(readFileSync(sibling, "utf8")).toBe("other chats");
+    } finally {
+      backend.closeDatabase();
+      stderr.mockRestore();
+    }
+  }
+);
+
+it("uses the file the child opened even when the alias now names another database", async () => {
+  const alias = join(directory, "alias.db");
+  const other = join(directory, "other.db");
+  writeFileSync(database, "old chats");
+  writeFileSync(other, "other chats");
+  symlinkSync(database, alias);
+  vi.stubEnv("DATABASE_PATH", alias);
+  const signal = JSON.stringify([PRELAUNCH_SCHEMA_MISMATCH, realpathSync.native(alias)]);
+  unlinkSync(alias);
+  symlinkSync(other, alias);
+  const error = await failedChild("", signal, 1);
+  if (!(error instanceof OutdatedDatabaseError)) throw error;
+  const backup = datedBackupPath(error.databasePath);
+  startFresh(error.databasePath, backup, "http://localhost:5173");
+  expect(readFileSync(backup, "utf8")).toBe("old chats");
+  expect(readFileSync(alias, "utf8")).toBe("other chats");
+});
 
 it("drops a legacy relative override that names the installed file only from the backend cwd", async () => {
   vi.stubEnv("DEUS_PACKAGED", "1");
@@ -164,7 +252,11 @@ it("drops a legacy relative override that names the installed file only from the
     expect(resolve(webPath)).not.toBe(installedDatabase);
     expectWebDatabase(webPath, "<unset>");
     vi.stubEnv("DATABASE_PATH", desktopPath);
-    const mismatch = await failedChild("", PRELAUNCH_SCHEMA_MISMATCH, 1);
+    const mismatch = await failedChild(
+      "",
+      JSON.stringify([PRELAUNCH_SCHEMA_MISMATCH, join(directory, "deus.db")]),
+      1
+    );
     const childDatabase = spawn.mock.lastCall![2].env.DATABASE_PATH;
     expect(childDatabase).toBe(join(directory, "deus.db"));
     expect(mismatch).toHaveProperty("databasePath", childDatabase);
@@ -173,12 +265,24 @@ it("drops a legacy relative override that names the installed file only from the
   }
 });
 
+it("uses the selected Electron profile when DATABASE_PATH is empty", async () => {
+  vi.stubEnv("DATABASE_PATH", "");
+  await failedChild("", "", 1);
+  expect(spawn.mock.lastCall![2].env.DATABASE_PATH).toBe(join(directory, "deus.db"));
+});
+
 it.each([":memory:", "   "])(
   "keeps SQLite's temporary database %j off disk and offers no file recovery",
   async (name) => {
     vi.stubEnv("DATABASE_PATH", name);
-    const failure = await failedChild("", PRELAUNCH_SCHEMA_MISMATCH, 1);
-    expect(spawn.mock.lastCall![2].env.DATABASE_PATH).toBe(":memory:");
+    const failure = await failedChild(
+      "",
+      JSON.stringify([PRELAUNCH_SCHEMA_MISMATCH, ":memory:"]),
+      1
+    );
+    vi.resetModules();
+    expect((await import("../../../apps/backend/src/lib/database")).DB_PATH).toBe(":memory:");
+    expect(spawn.mock.lastCall![2].env.DATABASE_PATH).toBe(name);
     expect(failure).not.toBeInstanceOf(OutdatedDatabaseError);
   }
 );

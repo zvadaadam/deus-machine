@@ -821,6 +821,8 @@ test("a confirmed archive frees the simulator for another workspace", async (t) 
       const f = JSON.parse(String(raw));
       if (f.type === "q:request" && Object.hasOwn(reads, f.resource))
         return send({ type: "q:response", id: f.id, data: reads[f.resource] });
+      if (f.type === "q:subscribe" && f.resource === "settings")
+        return send({ type: "q:snapshot", id: f.id, data: reads.settings });
       if (f.type === "q:subscribe" && f.resource === "simulatorEvents")
         subscribers.set(f.params.workspaceId, f.id);
       if (f.action === "simStart") {

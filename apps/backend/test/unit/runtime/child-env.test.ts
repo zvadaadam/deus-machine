@@ -1,7 +1,7 @@
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createBackendChildEnv, prepareDevBackendEnv } from "@shared/lib/child-env";
+import { clearInheritedPackagedEnv, createBackendChildEnv } from "@shared/lib/child-env";
 import { resolveDefaultDatabasePath } from "@shared/runtime";
 
 const originalEnv = { ...process.env };
@@ -25,11 +25,13 @@ describe("backend child process environment", () => {
     ["1", `${dirname(installed)}/./${basename(installed)}`, undefined],
     ["1", relativeInstalled, undefined],
     ["1", "custom.db", join(backendCwd, "custom.db")],
-    [undefined, relativeInstalled, installed],
-  ])("resolves DATABASE_PATH with DEUS_PACKAGED=%s and path %s", (packaged, value, expected) => {
+    [undefined, relativeInstalled, relativeInstalled],
+    [undefined, "link/../deus.db", "link/../deus.db"],
+    [undefined, " custom.db ", " custom.db "],
+  ])("handles DATABASE_PATH with DEUS_PACKAGED=%s and path %s", (packaged, value, expected) => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const env = { HOME: home, XDG_DATA_HOME: home, DEUS_PACKAGED: packaged, DATABASE_PATH: value };
-    prepareDevBackendEnv(env, backendCwd);
+    clearInheritedPackagedEnv(env, backendCwd);
     expect(env.DATABASE_PATH).toBe(expected);
     if (expected === undefined) {
       expect(warn).toHaveBeenCalledExactlyOnceWith(

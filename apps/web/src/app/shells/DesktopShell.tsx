@@ -7,13 +7,14 @@
  * This is the Electron-only code path. Web mode uses TanStack Router instead.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
+import { AnimatePresence } from "framer-motion";
 import { ErrorBoundary } from "react-error-boundary";
 import { MainLayout } from "../layouts/MainLayout";
 import { DashboardError } from "@/shared/components";
 import { createBoundaryErrorHandler } from "@/shared/utils/errorReporting";
 import { OnboardingOverlay } from "@/features/onboarding";
-import { useSettings } from "@/features/settings";
+import { useAgentAuthEvents, useSettings } from "@/features/settings";
 import { reportTheme } from "@/platform/analytics";
 import { useTheme } from "../providers/ThemeProvider";
 import { useAuth, PairGatePage } from "@/features/auth";
@@ -35,7 +36,6 @@ export function DesktopShell({ reset }: { reset: () => void }) {
   const settingsQuery = useSettings();
   const { preference } = useTheme();
   useEffect(() => reportTheme(preference), [preference]);
-  const windowShownRef = useRef(false);
 
   // Request OS notification permission once on mount
   useEffect(() => {
@@ -46,6 +46,7 @@ export function DesktopShell({ reset }: { reset: () => void }) {
   useGlobalSessionNotifications();
   useOpenWorkspaceLink(auth.hasDeviceGrant && !!settingsQuery.data?.onboarding_completed);
   useAgentEvents();
+  useAgentAuthEvents();
 
   // Global listener: backend restart -> update cached port + force WS reconnect
   useBackendRestart();
@@ -78,16 +79,11 @@ export function DesktopShell({ reset }: { reset: () => void }) {
     showOnboarding,
   ]);
 
-  // Show the main window whenever we transition OUT of onboarding.
+  // Onboarding reveals the window itself and restores its chrome when the fade finishes.
   useEffect(() => {
-    if (settingsQuery.isLoading) return;
-    if (showOnboarding) {
-      windowShownRef.current = false;
-      return;
+    if (!settingsQuery.isLoading && !showOnboarding && !native.window.hasRevealedWindow()) {
+      native.window.show().catch(console.error);
     }
-    if (windowShownRef.current) return;
-    native.window.show().catch(console.error);
-    windowShownRef.current = true;
   }, [settingsQuery.isLoading, showOnboarding]);
 
   // Remote browser auth gate: show pairing page if not authenticated
@@ -103,9 +99,8 @@ export function DesktopShell({ reset }: { reset: () => void }) {
 
   return (
     <UpdateProvider value={autoUpdate}>
-      {showOnboarding ? (
-        <OnboardingOverlay />
-      ) : (
+      <AnimatePresence initial={false}>{showOnboarding && <OnboardingOverlay />}</AnimatePresence>
+      {!showOnboarding && (
         <ErrorBoundary
           FallbackComponent={DashboardError}
           onReset={reset}

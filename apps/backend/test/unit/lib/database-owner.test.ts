@@ -1,6 +1,15 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { resolveDefaultDatabasePath } from "@shared/runtime";
@@ -65,6 +74,22 @@ it.each(["unset", "installed", "custom"])(
     }
   }
 );
+
+it("keeps preferences beside the database reached through link/..", async () => {
+  const selected = join(directory, "selected");
+  const nested = join(selected, "nested");
+  mkdirSync(nested, { recursive: true });
+  symlinkSync(nested, join(directory, "link"), "dir");
+  vi.stubEnv("DATABASE_PATH", `${directory}/link/../deus.db`);
+  (await loadDatabase()).initDatabase();
+  const { saveSetting } = await import("../../../src/services/settings.service");
+  saveSetting("chat_view", "full");
+  expect(existsSync(join(selected, "deus.db"))).toBe(true);
+  expect(JSON.parse(readFileSync(join(selected, "preferences.json"), "utf8"))).toEqual({
+    chat_view: "full",
+  });
+  expect(existsSync(join(directory, "preferences.json"))).toBe(false);
+});
 
 it("refuses a live owner through a symlink and takes over after a crash", async () => {
   writeFileSync(filename, "");

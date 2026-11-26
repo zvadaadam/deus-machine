@@ -12,10 +12,21 @@ const files = vi.hoisted(() => ({
   listTopFiles: vi.fn(),
   fuzzySearchFiles: vi.fn(),
 }));
-vi.mock("../../../src/services/files.service", () => files);
-const relay = vi.hoisted(() => ({ serverId: "0123456789abcdef", relayUrl: "wss://relay.test" }));
+vi.mock("../../../src/services/files.service", async (original) => ({
+  ...(await original<typeof import("../../../src/services/files.service")>()),
+  ...files,
+}));
+const relay = vi.hoisted(() => ({
+  serverId: "0123456789abcdef",
+  relayUrl: "wss://relay.test",
+  devices: new Set<string>(),
+}));
 vi.mock("../../../src/services/relay.service", () => ({
   getRelayStatus: () => relay,
+}));
+vi.mock("../../../src/services/ws.service", async (original) => ({
+  ...(await original<typeof import("../../../src/services/ws.service")>()),
+  connectedDeviceIds: () => relay.devices,
 }));
 
 vi.mock("../../../src/middleware/workspace-loader", () => ({
@@ -33,24 +44,12 @@ vi.mock("../../../src/services/agent/cloud/driver", () => ({
 vi.mock("../../../src/lib/database", () => ({ getDatabase: vi.fn() }));
 vi.mock("../../../src/db", () => ({ getWorkspaceForMiddleware: vi.fn() }));
 
-const { mockExistsSync, mockRealpathSync } = vi.hoisted(() => ({
-  mockExistsSync: vi.fn(() => true),
-  mockRealpathSync: vi.fn((p: string) => p),
+const { realpath } = vi.hoisted(() => ({ realpath: vi.fn(async (p: string) => p) }));
+vi.mock("node:fs/promises", async (original) => ({
+  ...(await original<typeof import("node:fs/promises")>()),
+  realpath,
+  stat: async () => ({ isFile: () => true, size: 7, dev: 1, ino: 2 }),
 }));
-vi.mock("fs", async (importOriginal) => {
-  const actual = (await importOriginal()) as any;
-  return {
-    ...actual,
-    default: {
-      ...actual.default,
-      existsSync: mockExistsSync,
-      realpathSync: mockRealpathSync,
-      statSync: () => ({ isFile: () => true, size: 7, dev: 1, ino: 2 }),
-    },
-    existsSync: mockExistsSync,
-    realpathSync: mockRealpathSync,
-  };
-});
 
 import fileHandlers from "../../../src/api/files";
 
@@ -60,9 +59,9 @@ const WORKSPACE_PATH = "/repos/myrepo/.deus/test-ws";
 
 beforeEach(() => {
   relay.relayUrl = "wss://relay.test";
+  relay.devices = new Set(["phone", "tablet"]);
   vi.clearAllMocks();
-  mockExistsSync.mockReturnValue(true);
-  mockRealpathSync.mockImplementation((p: string) => p);
+  realpath.mockImplementation(async (p) => p);
 });
 
 describe("workspaceFiles", () => {
@@ -126,7 +125,7 @@ describe("fileContent", () => {
   });
 
   it("rejects symlink escapes outside the workspace", async () => {
-    mockRealpathSync.mockImplementation((p: string) =>
+    realpath.mockImplementation(async (p) =>
       p === `${WORKSPACE_PATH}/src/link.txt` ? "/etc/passwd" : p
     );
 
@@ -137,7 +136,7 @@ describe("fileContent", () => {
   });
 
   it("reports a missing file", async () => {
-    mockExistsSync.mockReturnValue(false);
+    realpath.mockRejectedValueOnce(new Error("missing"));
 
     await expect(run(api.fileContent, { ...workspace, path: "gone.ts" })).rejects.toMatchObject({
       statusCode: 400,
@@ -186,6 +185,17 @@ describe("fileSearch", () => {
 });
 
 describe("fileUrl", () => {
+  it("drops a file URL request when its device disconnects during the disk lookup", async () => {
+    const pending = Promise.withResolvers<string>();
+    realpath.mockReturnValueOnce(pending.promise);
+    const relayed = operations(fileHandlers, { relayed: true, deviceId: "phone", assistant: null });
+    const result = relayed(api.fileUrl, { kind: "preview", ...workspace, path: "a.png" });
+    await vi.waitFor(() => expect(realpath).toHaveBeenCalled());
+    relay.devices.delete("phone");
+    pending.resolve(WORKSPACE_PATH);
+    await expect(result).rejects.toMatchObject({ statusCode: 403 });
+  });
+
   it.each([
     ["ws://staging-relay.test:8787", "http://staging-relay.test:8787"],
     ["https://relay.test", "https://relay.test"],

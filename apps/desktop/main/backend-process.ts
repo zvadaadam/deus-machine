@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "child_process";
 import { pushCloudCredentialsToBackend, setBackendAuthToken } from "./deus-cloud-provision";
 import { existsSync, statSync, writeFileSync } from "fs";
-import { delimiter, join } from "path";
+import { delimiter, isAbsolute, join } from "path";
 import { createInterface } from "node:readline";
 import { app, BrowserWindow } from "electron";
 import crypto from "crypto";
@@ -13,7 +13,7 @@ import {
   PACKAGED_SYSTEM_PATHS,
 } from "../../../shared/runtime";
 import { extendCliPath, getDevStagedCliDirectory } from "../../../shared/lib/cli-path";
-import { createBackendChildEnv, prepareDevBackendEnv } from "../../../shared/lib/child-env";
+import { clearInheritedPackagedEnv, createBackendChildEnv } from "../../../shared/lib/child-env";
 import { handleKeepAwakeLine, setKeepAwakeWanted } from "./keep-awake";
 import { getLaunchPath } from "./shell-env";
 import { rendererOrigin } from "./app-protocol";
@@ -190,11 +190,9 @@ export async function spawnBackend(hooks: BackendSpawnHooks = {}): Promise<{ por
     );
   }
   const childEnv = app.isPackaged ? createBackendChildEnv() : { ...process.env };
-  if (!app.isPackaged) prepareDevBackendEnv(childEnv, runtime.backendCwd);
-  const dbPath = childEnv.DATABASE_PATH || join(app.getPath("userData"), DEUS_DB_FILENAME);
-
+  if (!app.isPackaged) clearInheritedPackagedEnv(childEnv, runtime.backendCwd);
   const sharedEnv: NodeJS.ProcessEnv = {
-    DATABASE_PATH: dbPath,
+    DATABASE_PATH: childEnv.DATABASE_PATH || join(app.getPath("userData"), DEUS_DB_FILENAME),
     PATH: buildRuntimePath(runtime),
     ...(runtime.resourcesPath
       ? { DEUS_PACKAGED: "1", DEUS_RESOURCES_PATH: runtime.resourcesPath }
@@ -291,12 +289,21 @@ export async function spawnBackend(hooks: BackendSpawnHooks = {}): Promise<{ por
       }
     });
 
-    let databaseFailure: "schema" | "owned" | undefined;
+    let dbError: Error | undefined;
     createInterface({ input: child.stderr }).on("line", (line: string) => {
       const trimmed = line.trim();
       if (!trimmed) return;
-      if (line === PRELAUNCH_SCHEMA_MISMATCH) databaseFailure = "schema";
-      if (line === DATABASE_IN_USE) databaseFailure = "owned";
+      if (line.startsWith('["')) {
+        try {
+          const [reason, file] = JSON.parse(line);
+          if (typeof file === "string" && isAbsolute(file)) {
+            if (reason === PRELAUNCH_SCHEMA_MISMATCH) dbError = new OutdatedDatabaseError(file);
+            if (reason === DATABASE_IN_USE) dbError = new DatabaseInUseError(file);
+          }
+        } catch {
+          /* Ordinary stderr. */
+        }
+      }
       hooks.onStderrLine?.("backend", trimmed);
       if (!hooks.onStderrLine) console.error("[backend:stderr]", trimmed);
     });
@@ -313,13 +320,7 @@ export async function spawnBackend(hooks: BackendSpawnHooks = {}): Promise<{ por
         const error = new Error(`Backend exited before starting (code=${code}, signal=${signal})`);
         exitedBeforeStart = error;
         // exit can precede the last stderr lines. An inherited pipe still has the startup deadline.
-        child.once("close", () => {
-          if (code && dbPath !== ":memory:") {
-            if (databaseFailure === "schema") return fail(new OutdatedDatabaseError(dbPath));
-            if (databaseFailure === "owned") return fail(new DatabaseInUseError(dbPath));
-          }
-          fail(error);
-        });
+        child.once("close", () => fail(code && dbError ? dbError : error));
         return;
       }
       if (!isQuitting) scheduleRestart(hooks);

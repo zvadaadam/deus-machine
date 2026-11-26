@@ -33,7 +33,7 @@ interface PrSnapshotRow {
 
 /**
  * Persist the PR lifecycle snapshot + auto-progress workflow status.
- * Writes (and invalidates the workspaces resource) only when something changed.
+ * Writes and invalidates on the first conclusive check or a changed snapshot.
  *
  * pr_url/pr_number are deliberately preserved on a conclusive no-PR result:
  * workspaces created from the GitHub PR picker store them before the branch
@@ -49,10 +49,10 @@ export function applyPrStatusSideEffects(workspaceId: string, result: PrStatusRe
   const db = getDatabase();
   const current = db
     .prepare(
-      `SELECT pr_url, pr_number, pr_state, pr_is_draft, pr_review_status, pr_has_conflicts, pr_ci_status
+      `SELECT pr_url, pr_number, pr_state, pr_is_draft, pr_review_status, pr_has_conflicts, pr_ci_status, pr_checked_at
        FROM workspaces WHERE id = ?`
     )
-    .get(workspaceId) as PrSnapshotRow | undefined;
+    .get(workspaceId) as (PrSnapshotRow & { pr_checked_at: string | null }) | undefined;
   if (!current) return;
 
   const next: PrSnapshotRow = result.has_pr
@@ -79,7 +79,7 @@ export function applyPrStatusSideEffects(workspaceId: string, result: PrStatusRe
   const changed = (Object.keys(next) as (keyof PrSnapshotRow)[]).some(
     (key) => next[key] !== current[key]
   );
-  if (changed) {
+  if (changed || current.pr_checked_at === null) {
     db.prepare(
       `UPDATE workspaces SET
          pr_url = ?, pr_number = ?, pr_state = ?, pr_is_draft = ?,

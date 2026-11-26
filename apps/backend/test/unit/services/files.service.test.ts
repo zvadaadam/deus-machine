@@ -141,7 +141,7 @@ it("ranks file mentions by depth or query and honours the limit", async () => {
   expect(await fuzzySearchFiles(root, "zzzz")).toEqual([]);
 });
 
-it("reads text and declines binary content", () => {
-  expect(readTextFile(write("file.ts", "hello world\n"))).toBe("hello world\n");
-  expect(readTextFile(write("image.png", Buffer.from([65, 0, 65])))).toBeNull();
+it("reads text and declines binary content", async () => {
+  expect(await readTextFile(write("file.ts", "hello world\n"))).toBe("hello world\n");
+  expect(await readTextFile(write("image.png", Buffer.from([65, 0, 65])))).toBeNull();
 });

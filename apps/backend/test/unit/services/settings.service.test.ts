@@ -9,6 +9,8 @@ const mockFs = vi.hoisted(() => ({
 }));
 
 vi.mock("fs", () => ({ default: mockFs }));
+const { invalidate } = vi.hoisted(() => ({ invalidate: vi.fn() }));
+vi.mock("../../../src/services/query-engine", () => ({ invalidate }));
 
 vi.mock("../../../src/lib/database", () => ({
   DB_PATH: "/tmp/test-deus/deus.db",
@@ -38,10 +40,10 @@ describe("getAllSettings", () => {
   it("returns parsed settings when file exists", () => {
     mockFs.existsSync.mockReturnValue(true);
     mockFs.readFileSync.mockReturnValue(
-      JSON.stringify({ theme: "dark", onboarding_completed: true })
+      JSON.stringify({ chat_view: "full", onboarding_completed: true })
     );
     const result = getAllSettings();
-    expect(result).toEqual({ theme: "dark", onboarding_completed: true });
+    expect(result).toEqual({ chat_view: "full", onboarding_completed: true });
   });
 
   it("returns empty object when file contains invalid JSON", () => {
@@ -55,42 +57,43 @@ describe("getAllSettings", () => {
 
   it("returns raw object on Zod validation failure (graceful fallback)", () => {
     mockFs.existsSync.mockReturnValue(true);
-    mockFs.readFileSync.mockReturnValue(JSON.stringify({ theme: 123 }));
+    mockFs.readFileSync.mockReturnValue(JSON.stringify({ chat_view: 123 }));
     const result = getAllSettings();
-    expect(result).toEqual({ theme: 123 });
+    expect(result).toEqual({ chat_view: 123 });
   });
 
-  it("preserves unknown keys via passthrough (forward compat)", () => {
+  it("returns only public preferences from a file with unknown keys", () => {
     mockFs.existsSync.mockReturnValue(true);
-    mockFs.readFileSync.mockReturnValue(JSON.stringify({ theme: "dark", future_key: "value" }));
+    mockFs.readFileSync.mockReturnValue(JSON.stringify({ chat_view: "full", future_key: "value" }));
     const result = getAllSettings();
-    expect(result.theme).toBe("dark");
-    expect(result.future_key).toBe("value");
+    expect(result).toEqual({ chat_view: "full" });
   });
 });
 
 describe("saveSetting", () => {
   it("reads existing file, merges key, and writes atomically", () => {
     mockFs.existsSync.mockReturnValue(true);
-    mockFs.readFileSync.mockReturnValue(JSON.stringify({ theme: "dark" }));
+    mockFs.readFileSync.mockReturnValue(JSON.stringify({ chat_view: "full" }));
 
-    saveSetting("user_name", "Alice");
+    saveSetting("server_name", "Studio");
 
     expect(mockFs.writeFileSync).toHaveBeenCalledWith(
       EXPECTED_TMP_PATH,
-      JSON.stringify({ theme: "dark", user_name: "Alice" }, null, 2)
+      JSON.stringify({ chat_view: "full", server_name: "Studio" }, null, 2)
     );
     expect(mockFs.renameSync).toHaveBeenCalledWith(EXPECTED_TMP_PATH, EXPECTED_PREFS_PATH);
+    expect(invalidate).toHaveBeenCalledExactlyOnceWith(["settings", "relayStatus"]);
   });
 
   it("overwrites existing key", () => {
     mockFs.existsSync.mockReturnValue(true);
-    mockFs.readFileSync.mockReturnValue(JSON.stringify({ theme: "light" }));
+    mockFs.readFileSync.mockReturnValue(JSON.stringify({ chat_view: "bubbles" }));
 
-    saveSetting("theme", "dark");
+    saveSetting("chat_view", "full");
 
     const written = JSON.parse(mockFs.writeFileSync.mock.calls[0][1]);
-    expect(written.theme).toBe("dark");
+    expect(written.chat_view).toBe("full");
+    expect(invalidate).toHaveBeenCalledExactlyOnceWith(["settings"]);
   });
 
   it("creates directory if missing", () => {
@@ -98,30 +101,43 @@ describe("saveSetting", () => {
     // Second existsSync call: directory doesn't exist
     mockFs.existsSync.mockReturnValue(false);
 
-    saveSetting("theme", "dark");
+    saveSetting("chat_view", "full");
 
     expect(mockFs.mkdirSync).toHaveBeenCalledWith("/tmp/test-deus", { recursive: true });
   });
 
   it("preserves existing keys on partial update", () => {
     mockFs.existsSync.mockReturnValue(true);
-    mockFs.readFileSync.mockReturnValue(JSON.stringify({ theme: "light", user_name: "alice" }));
+    mockFs.readFileSync.mockReturnValue(
+      JSON.stringify({ chat_view: "bubbles", user_name: "alice" })
+    );
 
     saveSetting("onboarding_completed", true);
 
     const written = JSON.parse(mockFs.writeFileSync.mock.calls[0][1]);
-    expect(written.theme).toBe("light");
+    expect(written.chat_view).toBe("bubbles");
     expect(written.user_name).toBe("alice");
     expect(written.onboarding_completed).toBe(true);
   });
 });
 
 describe("private settings", () => {
-  it("keeps machine secrets out of the settings API", () => {
+  it("publishes a renamed server to settings and relay followers, and keeps private writes quiet", () => {
+    saveSetting("server_name", "Studio");
+    saveSetting("relay_machines", {});
+    expect(invalidate).toHaveBeenCalledExactlyOnceWith(["settings", "relayStatus"]);
+  });
+
+  it("keeps stored provider keys and machine secrets out of the settings API", () => {
     mockFs.existsSync.mockReturnValue(true);
     mockFs.readFileSync.mockReturnValue(
-      JSON.stringify({ theme: "dark", relay_machines: { user_a: { secret: "s" } } })
+      JSON.stringify({
+        chat_view: "bubbles",
+        anthropic_api_key: "old-a",
+        openai_api_key: "old-b",
+        relay_machines: { user_a: { secret: "s" } },
+      })
     );
-    expect(getAllSettings()).toEqual({ theme: "dark" });
+    expect(getAllSettings()).toEqual({ chat_view: "bubbles" });
   });
 });

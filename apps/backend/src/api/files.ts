@@ -5,6 +5,7 @@ import { AppError, ValidationError } from "../lib/errors";
 import { loadWorkspace } from "../middleware/workspace-loader";
 import { resolveBrowserFile } from "../services/browser-files";
 import { getRelayStatus } from "../services/relay.service";
+import { connectedDeviceIds } from "../services/ws.service";
 import { fileHandles } from "../services/relay-file-handles";
 import { watchWorkspace } from "../services/fs-watcher.service";
 import { resolveNode } from "../services/node/driver";
@@ -27,7 +28,7 @@ onFollow(api.fileChanges, ({ workspaceId }) => {
 openWith(api.fileChanges, () => [null]);
 
 export default [
-  handle(api.fileUrl, (input, { caller }) => {
+  handle(api.fileUrl, async (input, { caller }) => {
     if (!caller.relayed) {
       const route =
         input.kind === "recording"
@@ -37,7 +38,9 @@ export default [
     }
     const { serverId, relayUrl } = getRelayStatus();
     if (!caller.deviceId || !serverId) throw new AppError(403, "A paired device is required.");
-    const file = resolveBrowserFile(input);
+    const file = await resolveBrowserFile(input);
+    if (!connectedDeviceIds().has(caller.deviceId))
+      throw new AppError(403, "Device disconnected while opening the file.");
     if (file.type.startsWith("text/html"))
       throw new ValidationError("HTML previews are available only on a direct connection.");
     const handle = fileHandles.issue(caller.deviceId, file);

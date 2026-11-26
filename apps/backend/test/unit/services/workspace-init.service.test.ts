@@ -4,6 +4,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { Writable } from "node:stream";
 import Database from "better-sqlite3";
+import { SCHEMA_SQL } from "@shared/schema";
 import type { ProjectEnvironment } from "@deus-hq/api";
 
 const mocks = vi.hoisted(() => ({
@@ -82,10 +83,15 @@ beforeEach(() => {
   mocks.cloud.mockReturnValue(null);
   mocks.saved.mockReset();
   mocks.db = new Database(":memory:");
-  mocks.db.exec(
-    "CREATE TABLE workspaces (id TEXT PRIMARY KEY, slug TEXT, git_branch TEXT, init_stage TEXT, init_fetch_issue TEXT, setup_status TEXT DEFAULT 'none', error_message TEXT, error_detail TEXT, state TEXT DEFAULT 'initializing', current_session_id TEXT, first_session_id TEXT, started_by TEXT); CREATE TABLE sessions (id TEXT, workspace_id TEXT, status TEXT, started_by TEXT, updated_at TEXT)"
-  );
-  mocks.db.prepare("INSERT INTO workspaces (id) VALUES (?)").run(workspaceId);
+  mocks.db.exec(SCHEMA_SQL);
+  mocks.db
+    .prepare("INSERT INTO repositories (id, name, root_path) VALUES ('r', 'repo', ?)")
+    .run(root);
+  mocks.db
+    .prepare(
+      "INSERT INTO workspaces (id, repository_id, slug, state) VALUES (?, 'r', 'workspace', 'initializing')"
+    )
+    .run(workspaceId);
 });
 afterEach(() => {
   vi.unstubAllEnvs();

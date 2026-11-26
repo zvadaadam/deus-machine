@@ -104,9 +104,7 @@ function onLocalhost(url: string): { port: number; rest: string } | null {
 }
 
 /**
- * Whether rule 2 needs the cloud computer's preview address to decide this
- * address: only a cloud chat's address on localhost does. Anything else is
- * decided, and opened, in the click itself.
+ * An external click on the cloud computer's localhost needs its preview address.
  */
 export function needsPreviewAddress(url: string, place: Pick<ChatPlace, "cloud">): boolean {
   return place.cloud && onLocalhost(url) !== null;
@@ -124,12 +122,17 @@ export function openAddress(url: string, place: ChatPlace, external = false): Ch
   }
   const local = onLocalhost(url);
   if (!local) return { to: "external", url };
+  if (!external && !place.previewTab) return { to: "say", message: CLOUD_LOCALHOST };
+  if (place.previewTemplate === undefined) {
+    if (!external) return { to: "cloud-preview", ...local };
+    return {
+      to: "say",
+      message: "The cloud preview address isn't known yet. Try again in a moment.",
+    };
+  }
   const preview = resolveCloudPreviewUrl(place.previewTemplate, local.port, local.rest);
   if (!preview) return { to: "say", message: CLOUD_LOCALHOST };
-  if (external) return { to: "external", url: preview };
-  return place.previewTab
-    ? { to: "cloud-preview", port: local.port, rest: local.rest }
-    : { to: "say", message: CLOUD_LOCALHOST };
+  return external ? { to: "external", url: preview } : { to: "cloud-preview", ...local };
 }
 
 export type FileHow = "preview" | "files" | "changes" | "default-app" | "finder";

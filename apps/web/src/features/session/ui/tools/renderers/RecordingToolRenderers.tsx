@@ -190,7 +190,7 @@ export function RecordingStopToolRenderer({ toolUse, toolResult, isLoading }: To
         <DialogContent
           showCloseButton={false}
           aria-describedby={undefined}
-          overlayClassName="bg-black/80 backdrop-blur-sm"
+          overlayClassName="bg-neutral-900/80 backdrop-blur-sm"
           className="border-border/40 flex max-h-[85vh] w-[90vw] flex-col gap-0 overflow-hidden rounded-xl p-0 shadow-2xl sm:max-w-5xl"
         >
           <DialogTitle className="sr-only">Recording player</DialogTitle>
@@ -255,12 +255,12 @@ function RecordingCard({
           <div
             className={cn(
               "flex h-14 w-14 items-center justify-center rounded-full",
-              "bg-black/50 shadow-lg backdrop-blur-md",
+              "bg-neutral-900/65 shadow-lg backdrop-blur-md",
               "transition-[scale,background-color]",
-              "group-hover:bg-black/60 motion-safe:group-hover:scale-110"
+              "group-hover:bg-neutral-900/80 motion-safe:group-hover:scale-110"
             )}
           >
-            <Play className="ml-1 h-6 w-6 fill-white text-white" />
+            <Play className="ml-1 h-6 w-6 fill-current text-neutral-50" />
           </div>
         </div>
 
@@ -313,7 +313,8 @@ function RecordingPlayer({
   const thumbnail = useFileUrl("recording", thumbnailPath);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
+  const seeking = useRef(false);
+  const [{ currentTime, seek }, setPlayhead] = useState({ currentTime: 0, seek: false });
 
   const totalDuration = duration ?? 0;
   const hasChapters = chapters.length > 0;
@@ -322,6 +323,7 @@ function RecordingPlayer({
   const seekTo = useCallback(
     (time: number) => {
       if (!videoRef.current) return;
+      seeking.current = true;
       videoRef.current.currentTime = time;
       if (!playing) videoRef.current.play().catch(() => {});
     },
@@ -337,7 +339,7 @@ function RecordingPlayer({
   return (
     <>
       <DialogClose
-        className="control-interaction absolute top-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white/80 backdrop-blur-sm hover:bg-black/60 hover:text-white"
+        className="control-interaction absolute top-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-neutral-900/65 text-neutral-50 backdrop-blur-sm hover:bg-neutral-900/80"
         aria-label="Close player"
       >
         <X className="h-4 w-4" />
@@ -347,7 +349,7 @@ function RecordingPlayer({
         {/* Video panel */}
         <div className="flex min-w-0 shrink-0 flex-col md:flex-1">
           <div
-            className="relative w-full cursor-pointer bg-black"
+            className="relative w-full cursor-pointer bg-neutral-900"
             style={{ aspectRatio: "16 / 9" }}
             onClick={handlePlayPause}
           >
@@ -368,7 +370,8 @@ function RecordingPlayer({
                 }}
                 onTimeUpdate={(e) => {
                   video.onProgress(e.currentTarget);
-                  setCurrentTime(e.currentTarget.currentTime);
+                  setPlayhead({ currentTime: e.currentTarget.currentTime, seek: seeking.current });
+                  seeking.current = false;
                 }}
                 preload="auto"
               />
@@ -376,7 +379,7 @@ function RecordingPlayer({
 
             {video.failed ? (
               <p
-                className="absolute inset-0 grid place-items-center px-4 text-center text-sm text-white"
+                className="absolute inset-0 grid place-items-center px-4 text-center text-sm text-neutral-50"
                 role="alert"
               >
                 This recording can&#39;t be played right now.
@@ -388,11 +391,11 @@ function RecordingPlayer({
                   playing ? "opacity-0 hover:opacity-100" : "opacity-100"
                 )}
               >
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-neutral-900/65 backdrop-blur-sm">
                   {playing ? (
-                    <Pause className="h-6 w-6 fill-white text-white" />
+                    <Pause className="h-6 w-6 fill-current text-neutral-50" />
                   ) : (
-                    <Play className="ml-1 h-6 w-6 fill-white text-white" />
+                    <Play className="ml-1 h-6 w-6 fill-current text-neutral-50" />
                   )}
                 </div>
               </div>
@@ -400,7 +403,7 @@ function RecordingPlayer({
 
             {/* Time */}
             {totalDuration > 0 && !video.failed && (
-              <div className="absolute right-3 bottom-3 rounded bg-black/70 px-2 py-1 text-xs font-medium text-white">
+              <div className="absolute right-3 bottom-3 rounded bg-neutral-900/75 px-2 py-1 text-xs font-medium text-neutral-50">
                 {formatTime(currentTime)} / {formatTime(totalDuration)}
               </div>
             )}
@@ -411,6 +414,7 @@ function RecordingPlayer({
             <ProgressBar
               duration={totalDuration}
               currentTime={currentTime}
+              seek={seek}
               chapters={chapters}
               onSeek={seekTo}
             />
@@ -490,15 +494,18 @@ function RecordingPlayer({
 function ProgressBar({
   duration,
   currentTime,
+  seek,
   chapters,
   onSeek,
 }: {
   duration: number;
   currentTime: number;
+  seek: boolean;
   chapters: MappedChapter[];
   onSeek: (time: number) => void;
 }) {
   const barRef = useRef<HTMLDivElement>(null);
+  const fill = cn("bg-primary absolute inset-y-0 left-0", seek && "ease-move transition-[width]");
 
   const handleClick = (e: React.MouseEvent) => {
     if (!barRef.current) return;
@@ -515,10 +522,7 @@ function ProgressBar({
         className="bg-muted/50 group relative h-1.5 cursor-pointer transition-[height] hover:h-2.5"
         onClick={handleClick}
       >
-        <div
-          className="bg-primary absolute inset-y-0 left-0 transition-[width] duration-75 ease-linear"
-          style={{ width: `${progress}%` }}
-        />
+        <div className={fill} style={{ width: `${progress}%` }} />
       </div>
     );
   }
@@ -550,10 +554,7 @@ function ProgressBar({
             className="bg-muted-foreground/20 relative h-full overflow-hidden"
             style={{ width: `${segWidth}%` }}
           >
-            <div
-              className="bg-primary absolute inset-y-0 left-0 transition-[width] duration-75 ease-linear"
-              style={{ width: `${progress}%` }}
-            />
+            <div className={fill} style={{ width: `${progress}%` }} />
           </div>
         );
       })}

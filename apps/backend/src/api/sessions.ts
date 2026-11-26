@@ -1,11 +1,11 @@
 /** Answers the operations in `shared/api/sessions.ts`. */
 
 import * as api from "@shared/api/sessions";
-import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../lib/database";
 import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 import {
   attachParts,
+  createChat,
   getCompactions,
   getMessages,
   getSessionById,
@@ -97,15 +97,7 @@ export default [
     ) {
       throw new ConflictError("This workspace has not started yet, so it has no chats.");
     }
-    const sessionId = uuidv7();
-    db.transaction(() => {
-      db.prepare(
-        "INSERT INTO sessions (id, workspace_id, status, updated_at) VALUES (?, ?, 'idle', datetime('now'))"
-      ).run(sessionId, workspaceId);
-      db.prepare(
-        "UPDATE workspaces SET current_session_id = ?, updated_at = datetime('now') WHERE id = ?"
-      ).run(sessionId, workspaceId);
-    })();
+    const sessionId = db.transaction(() => createChat(db, workspaceId, { select: true }))();
     invalidate(["workspaces", "sessions"]);
     return getSessionRaw(db, sessionId)!;
   }),

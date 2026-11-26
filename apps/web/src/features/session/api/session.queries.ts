@@ -13,7 +13,6 @@ import { createOptimisticUserMessage, dropOptimisticMessage } from "../lib/optim
 import { willQueueMessage } from "../lib/queuedMessages";
 import { returnContentToComposer } from "../lib/returnToComposer";
 import { composerStore } from "../store/sessionComposerStore";
-import { patchWorkspaceSessionStatus } from "../lib/agentEventFold";
 import {
   useIsDirectSession,
   isDirectSessionCached,
@@ -293,14 +292,12 @@ export function useSendMessage() {
         });
       });
 
-      const previousStatus = patchWorkspaceSessionStatus(queryClient, sessionId, "working");
-      return { turnId, previousStatus };
+      return { turnId };
     },
 
     onSuccess: (result, { sessionId }, optimistic) => {
       if (!result?.queued || !optimistic) return;
       dropOptimisticMessage(queryClient, sessionId, optimistic.turnId);
-      void queryClient.invalidateQueries({ queryKey: ["workspaces", "by-repo"] });
     },
 
     onError: (error, { sessionId }, optimistic) => {
@@ -318,16 +315,7 @@ export function useSendMessage() {
       ) {
         emitSendAttemptFailed();
       }
-      if (optimistic) {
-        dropOptimisticMessage(queryClient, sessionId, optimistic.turnId);
-        const directFailure =
-          kind === undefined &&
-          (!!getDirectSession(sessionId, queryClient) ||
-            isDirectSessionCached(queryClient, sessionId));
-        if ((kind === "unavailable" || directFailure) && optimistic.previousStatus)
-          patchWorkspaceSessionStatus(queryClient, sessionId, optimistic.previousStatus, "working");
-      }
-      void queryClient.invalidateQueries({ queryKey: ["workspaces", "by-repo"] });
+      if (optimistic) dropOptimisticMessage(queryClient, sessionId, optimistic.turnId);
     },
 
     onSettled: async (_, error, variables) => {

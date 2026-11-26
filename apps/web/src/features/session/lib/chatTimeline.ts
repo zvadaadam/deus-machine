@@ -208,7 +208,7 @@ function groupTurns(
       messages: slice,
       ended: group.turnId !== openTurnId,
       footerGroups: !continues && group.turnId !== openTurnId ? (earlier ?? [slice]) : undefined,
-      afterUserId: earlier ? user?.id : undefined,
+      afterUserId: user?.turn_id === group.turnId ? user.id : undefined,
       isStreaming: false,
       startedAt,
     });
@@ -235,7 +235,7 @@ function groupTurns(
       messages: [],
       ended,
       footerGroups: ended ? (earlier ?? [[]]) : undefined,
-      afterUserId: earlier && lastUser?.type === "user" ? lastUser.message.id : undefined,
+      afterUserId: lastUser?.type === "user" ? lastUser.message.id : undefined,
       isStreaming: false,
       startedAt: turnStartedAt(rendered, record),
     });
