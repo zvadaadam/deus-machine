@@ -1,2 +1,1 @@
-export { useRecentProjects, useCompleteOnboarding } from "./onboarding.queries";
-export { OnboardingService } from "./onboarding.service";
+export { useRecentProjects } from "./onboarding.queries";

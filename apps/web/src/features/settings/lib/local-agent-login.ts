@@ -4,8 +4,9 @@ import { agentReadiness } from "@shared/agent-readiness";
 import type { AgentHarness } from "@shared/enums";
 import { api } from "@shared/api";
 import { openExternalPending } from "@/platform/native/window";
+import { queryClient } from "@/shared/api/queryClient";
 import { call } from "@/platform/ws";
-import { finishAgentInstall, requestedAgentInstalls } from "./local-agent-installs";
+import { requestAgentInstall } from "./local-agent-installs";
 
 export type LocalAgentState = ReturnType<typeof readLocalAgent>;
 
@@ -48,11 +49,11 @@ export function installLabel(state: LocalAgentState) {
 
 /** Install the selected agent's CLI. */
 export async function installLocalAgent(harness: AgentHarness): Promise<void> {
-  requestedAgentInstalls.add(harness);
+  const finish = requestAgentInstall(queryClient, harness);
   try {
     await call(api.agentPrepareClis, { harness });
   } catch (error) {
-    finishAgentInstall(harness, reasonOf(error, "Couldn’t start the install"));
+    finish(reasonOf(error, "Couldn’t start the install"));
   }
 }
 

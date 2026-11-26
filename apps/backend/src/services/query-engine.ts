@@ -167,7 +167,11 @@ interface Call {
 async function handleRequest(connectionId: string, { id, name, params }: Call): Promise<void> {
   const caller = callerOf(connectionId);
   try {
-    const data = await registry().run(name, "read", params, { caller });
+    const ops = registry();
+    // Send a live value in this tick, before a later write can push a newer snapshot.
+    const data = ops.find(name)?.live
+      ? ops.runLive(name, params, { caller })
+      : await ops.run(name, "read", params, { caller });
     sendAnswer(connectionId, { type: "q:response", id, data });
   } catch (error) {
     const { message } = describeFailure(error, "Query failed", caller);

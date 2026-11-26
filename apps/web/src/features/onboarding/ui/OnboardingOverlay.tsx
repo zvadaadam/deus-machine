@@ -1,8 +1,8 @@
-import { useState, useCallback, useEffect, useRef } from "react";
-import { useSettings } from "@/features/settings/api/settings.queries";
+import { useState, useEffect, useRef } from "react";
+import { m } from "framer-motion";
 import { native } from "@/platform";
-import { tempo } from "@/shared/lib/tempo";
 import { cn } from "@/shared/lib/utils";
+import { tempo } from "@/shared/lib/tempo";
 import { track } from "@/platform/analytics";
 import { StepIndicator } from "./components/StepIndicator";
 import { WelcomeStep } from "./steps/WelcomeStep";
@@ -27,17 +27,15 @@ const STEP_NAMES = [
 
 /** Full-screen onboarding view — dark, grain-textured, CLI-inspired. */
 export function OnboardingOverlay() {
-  const { refetch } = useSettings();
-
   const [currentStep, setCurrentStep] = useState<OnboardingStep>(0);
   const [direction, setDirection] = useState<1 | -1>(1);
   const [phase, setPhase] = useState<"enter" | "exit">();
-  const [exiting, setExiting] = useState(false);
   const onboardingStartRef = useRef(0);
 
   useEffect(() => {
     onboardingStartRef.current = Date.now();
     native.window.enterOnboarding().catch(console.error);
+    return () => void native.window.exitOnboarding().catch(console.error);
   }, []);
 
   const trackedRef = useRef(false);
@@ -46,12 +44,6 @@ export function OnboardingOverlay() {
     trackedRef.current = true;
     track("onboarding_started");
   }, []);
-
-  useEffect(() => {
-    if (!exiting) return;
-    const timer = setTimeout(() => void refetch(), tempo.slow.exit.duration * 1000);
-    return () => clearTimeout(timer);
-  }, [exiting, refetch]);
 
   function changeStep(by: 1 | -1) {
     if (phase === "exit") return;
@@ -72,20 +64,17 @@ export function OnboardingOverlay() {
   const goForward = () => changeStep(1);
   const goBack = () => changeStep(-1);
 
-  const handleComplete = useCallback(() => {
-    if (exiting) return;
+  function handleComplete() {
     track("onboarding_completed", { duration_ms: Date.now() - onboardingStartRef.current });
-    native.window.exitOnboarding().catch(console.error);
-    setExiting(true);
-  }, [exiting]);
+  }
 
   return (
-    <div
-      className={cn(
-        "fixed inset-0 flex items-center justify-center",
-        exiting && "tempo-slow-exit opacity-0 transition-opacity"
-      )}
+    <m.div
+      className="fixed inset-0 flex items-center justify-center"
       style={{ zIndex: 9999 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, transition: tempo.slow.exit }}
+      transition={tempo.slow}
     >
       {/* Background: black → dark gray gradient (bottom up) */}
       <div
@@ -101,9 +90,8 @@ export function OnboardingOverlay() {
       {/* Content */}
       <div
         className={cn(
-          "relative z-10 w-full max-w-[560px] px-10",
-          currentStep === 0 ? "h-[80vh]" : "",
-          !exiting && "animate-[onboarding-card-enter_var(--tempo-slow)_var(--tempo-ease)]"
+          "relative z-10 w-full max-w-[560px] animate-[onboarding-card-enter_var(--tempo-slow)_var(--tempo-ease)] px-10",
+          currentStep === 0 && "h-[80vh]"
         )}
       >
         {currentStep !== 0 && (
@@ -132,6 +120,6 @@ export function OnboardingOverlay() {
           {currentStep === 5 && <DeusStep onBack={goBack} onComplete={handleComplete} />}
         </div>
       </div>
-    </div>
+    </m.div>
   );
 }

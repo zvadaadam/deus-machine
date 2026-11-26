@@ -19,7 +19,7 @@ import { useGlobalSessionNotifications } from "@/features/session/hooks/useGloba
 import { useAgentEvents } from "@/features/session/hooks/useAgentEvents";
 import { useQueryProtocol } from "@/shared/hooks/useQueryProtocol";
 import { useBackendRestart } from "@/shared/hooks/useBackendRestart";
-import { useSettings } from "@/features/settings";
+import { useAgentAuthEvents, useSettings } from "@/features/settings";
 import { reportTheme } from "@/platform/analytics";
 import { useTheme } from "../providers/ThemeProvider";
 import {
@@ -130,6 +130,7 @@ function ServerContent() {
   // Global listeners -- same as DesktopShell
   useGlobalSessionNotifications();
   useAgentEvents();
+  useAgentAuthEvents();
 
   useBackendRestart();
 

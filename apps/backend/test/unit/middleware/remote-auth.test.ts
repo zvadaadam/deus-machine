@@ -14,10 +14,10 @@ vi.mock("../../../src/services/remote-auth.service", () => ({
 }));
 
 // Mock settings service for remote-gate
-const mockGetAllSettings = vi.fn<(...args: any[]) => any>(() => ({}));
+const mockGetSetting = vi.fn<(key: string) => unknown>();
 
 vi.mock("../../../src/services/settings.service", () => ({
-  getAllSettings: () => mockGetAllSettings(),
+  getSetting: (key: string) => mockGetSetting(key),
 }));
 
 import { authMiddleware } from "../../../src/middleware/remote-auth";
@@ -134,7 +134,7 @@ describe("remoteGateMiddleware", () => {
   const app = createTestApp(remoteGateMiddleware);
 
   it("passes localhost when remote is disabled", async () => {
-    mockGetAllSettings.mockReturnValue({ remote_access_enabled: false });
+    mockGetSetting.mockReturnValue(false);
     const res = await app.request("/api/workspaces", {
       headers: { "x-forwarded-for": "127.0.0.1" },
     });
@@ -142,7 +142,7 @@ describe("remoteGateMiddleware", () => {
   });
 
   it("rejects remote IP when remote is disabled", async () => {
-    mockGetAllSettings.mockReturnValue({ remote_access_enabled: false });
+    mockGetSetting.mockReturnValue(false);
     const res = await app.request("/api/workspaces", {
       headers: { "x-forwarded-for": "192.168.1.50" },
     });
@@ -151,11 +151,12 @@ describe("remoteGateMiddleware", () => {
     expect(body.error).toBe("Remote access is not enabled");
   });
 
-  it("passes remote IP when remote is enabled", async () => {
-    mockGetAllSettings.mockReturnValue({ remote_access_enabled: true });
+  it.each([true, "true"])("passes remote IP when remote access is %j", async (enabled) => {
+    mockGetSetting.mockReturnValue(enabled);
     const res = await app.request("/api/workspaces", {
       headers: { "x-forwarded-for": "192.168.1.50" },
     });
     expect(res.status).toBe(200);
+    expect(mockGetSetting).toHaveBeenCalledWith("remote_access_enabled");
   });
 });

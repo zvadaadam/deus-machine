@@ -1,14 +1,13 @@
 import { toast } from "sonner";
+import { useMutation } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 import { native } from "@/platform";
 import { getErrorMessage } from "@shared/lib/errors";
 import { api } from "@shared/api";
-import { call } from "@/platform/ws";
-import { queryClient } from "@/shared/api/queryClient";
-import { queryKeys } from "@/shared/api/queryKeys";
+import { getRuntimeClient } from "@/platform/ws";
+import type { RuntimeClient } from "@/platform/ws/runtime-client";
 import { openNewWorkspace } from "@/features/workspace/lib/newWorkspace";
-import { useCompleteOnboarding } from "../../api";
 import { classifyCloneConflict, isMatchingGitHubRepo } from "../../lib/deus-import";
 
 interface DeusStepProps {
@@ -32,7 +31,7 @@ function getUnexpectedRepoMessage(targetPath: string): string {
   return `${targetPath} already contains a different repository. Remove it or add Deus manually from the sidebar.`;
 }
 
-async function resolveExistingRepoId(targetPath: string): Promise<string | null> {
+async function resolveExistingRepoId(call: RuntimeClient["call"], targetPath: string) {
   try {
     const repos = await call(api.repos);
     return repos.find((repo) => repo.root_path === targetPath)?.id ?? null;
@@ -41,16 +40,8 @@ async function resolveExistingRepoId(targetPath: string): Promise<string | null>
   }
 }
 
-/**
- * Fire-and-forget: clone repo, register in DB, invalidate queries.
- *
- * Runs independently of React component lifecycle -- safe to call then unmount.
- * Uses only singletons: the runtime client, queryClient, toast.
- * On success the repo appears in the sidebar via query invalidation, and the
- * toast offers to start a workspace in it (on Home, where every workspace
- * starts). On failure the shared desktop Toaster tells the user what happened.
- */
-async function cloneAndRegisterInBackground() {
+/** The requested clone continues on its original computer after onboarding unmounts. */
+async function cloneAndRegisterInBackground({ call }: RuntimeClient) {
   try {
     const home = await native.dialog.getHomeDir();
     const target = `${home}/Developer/${REPO.name}`;
@@ -103,7 +94,7 @@ async function cloneAndRegisterInBackground() {
       }
 
       if (conflictKind === "already_cloned") {
-        repoId = await resolveExistingRepoId(repoRoot);
+        repoId = await resolveExistingRepoId(call, repoRoot);
         if (!repoId) {
           console.warn("[Deus] Repo already existed but no matching repo ID was found:", repoRoot);
         }
@@ -113,8 +104,6 @@ async function cloneAndRegisterInBackground() {
         return;
       }
     }
-
-    queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
 
     // This runs in the background, after onboarding: offer Home rather than take the screen.
     const project = repoId;
@@ -130,16 +119,14 @@ async function cloneAndRegisterInBackground() {
 }
 
 export function DeusStep({ onBack, onComplete }: DeusStepProps) {
-  const completeMutation = useCompleteOnboarding();
-
-  function finish(clone: boolean) {
-    completeMutation.mutate(undefined, {
-      onSuccess: () => {
-        if (clone) void cloneAndRegisterInBackground();
-        onComplete();
-      },
-    });
-  }
+  const completeMutation = useMutation({
+    mutationFn: async (clone: boolean) => {
+      const runtime = getRuntimeClient();
+      await runtime.call(api.saveSetting, { key: "onboarding_completed", value: true });
+      if (clone) void cloneAndRegisterInBackground(runtime);
+      onComplete();
+    },
+  });
 
   return (
     <div className="flex w-full max-w-md flex-col gap-6">
@@ -191,7 +178,7 @@ export function DeusStep({ onBack, onComplete }: DeusStepProps) {
         <div className="flex-1" />
 
         <button
-          onClick={() => finish(false)}
+          onClick={() => completeMutation.mutate(false)}
           disabled={completeMutation.isPending}
           className="control-interaction bg-onboarding-foreground/10 text-onboarding-foreground/70 hover:bg-onboarding-foreground/15 hover:text-onboarding-foreground rounded-lg px-6 py-2.5 text-sm font-normal"
         >
@@ -199,7 +186,7 @@ export function DeusStep({ onBack, onComplete }: DeusStepProps) {
         </button>
 
         <button
-          onClick={() => finish(true)}
+          onClick={() => completeMutation.mutate(true)}
           disabled={completeMutation.isPending}
           className="control-interaction bg-onboarding-foreground text-onboarding-contrast hover:bg-onboarding-foreground/90 active:bg-onboarding-foreground/80 rounded-lg px-6 py-2.5 text-sm font-medium"
         >

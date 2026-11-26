@@ -3,30 +3,38 @@
  * TanStack Query hooks for settings management
  */
 
-import { useQuery, useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
-import { produce } from "immer";
+import {
+  useQuery,
+  useMutation,
+  useMutationState,
+  useQueryClient,
+  type QueryKey,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { AgentAuthAnswer, HarnessCliProgress } from "@shared/agent-auth";
 import { api } from "@shared/api";
+import type { InputOf } from "@shared/api/op";
+import type { Settings } from "@shared/types/settings";
 import { call } from "@/platform/ws";
-import { getAgentLabel } from "@/shared/agents";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
+import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 import { useStream } from "@/shared/hooks/useStream";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { track } from "@/platform/analytics";
-import { finishAgentInstall } from "../lib/local-agent-installs";
-import type { Settings } from "../types";
+import { reconcileAgentInstalls, reportInstallProgress } from "../lib/local-agent-installs";
 import { DEFAULT_THINKING_LEVEL } from "@shared/models";
 import { readThinkingLevel, type ThinkingLevel } from "@shared/protocol";
 
-/**
- * Fetch all settings
- */
 export function useSettings() {
+  useQuerySubscription(api.settings, {
+    queryKey: queryKeys.settings.all,
+    enabled: !isCloudDirectWebMode(),
+  });
   return useQuery({
     queryKey: queryKeys.settings.all,
     queryFn: () => call(api.settings),
-    staleTime: 30000, // Cache for 30s (settings change less frequently)
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -98,20 +106,14 @@ export function useAgentAuthEvents(): void {
       queryClient.setQueryData<AgentAuthAnswer>(queryKeys.settings.agentAuth, (answer) =>
         answer ? withProgress(answer, progress) : answer
       );
-      if (progress.phase === "ready") {
-        finishAgentInstall(progress.harness);
-        readLoginAndModels();
-      }
-      if (progress.phase === "failed") {
-        const reason = progress.error?.trim() || "The install failed.";
-        finishAgentInstall(
-          progress.harness,
-          `Couldn’t install ${getAgentLabel(progress.harness)}: ${reason}`
-        );
-        void readAgain(queryKeys.settings.agentAuth);
-      }
+      reportInstallProgress(queryClient, progress.harness, progress.phase, progress.error);
+      if (progress.phase === "ready") readLoginAndModels();
+      if (progress.phase === "failed") void readAgain(queryKeys.settings.agentAuth);
     },
-    readLoginAndModels
+    () => {
+      readLoginAndModels();
+      return reconcileAgentInstalls(queryClient);
+    }
   );
   useStream(
     api.agentAuthChanges,
@@ -126,55 +128,32 @@ export function useAgentAuthEvents(): void {
   );
 }
 
-/**
- * Update settings mutation with optimistic update
- */
+type SettingWrite = InputOf<typeof api.saveSetting> & { key: keyof Settings };
+
 export function useUpdateSettings() {
-  const queryClient = useQueryClient();
-
   return useMutation({
-    // One key at a time: the settings page saves each control as it changes.
-    mutationFn: (settings: Partial<Settings>) => {
-      const [key, value] = Object.entries(settings)[0];
-      return call(api.saveSetting, { key, value });
-    },
-
-    // Optimistic update: Apply settings immediately
-    onMutate: async (newSettings: Partial<Settings>) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.settings.all, exact: true });
-
-      const previousSettings = queryClient.getQueryData<Settings>(queryKeys.settings.all);
-
-      queryClient.setQueryData<Settings>(queryKeys.settings.all, (old) => {
-        if (!old) return old;
-        return produce(old, (draft) => {
-          Object.assign(draft, newSettings);
-        });
+    mutationKey: [api.saveSetting.name],
+    mutationFn: async (setting: SettingWrite) => {
+      await call(api.saveSetting, setting);
+      const { key, value } = setting;
+      track("setting_changed", {
+        key,
+        value: key === "chat_view" || key === "diff_view_mode" ? String(value) : undefined,
       });
-
-      return { previousSettings };
-    },
-
-    onError: (_err, _newSettings, context) => {
-      if (context?.previousSettings) {
-        queryClient.setQueryData(queryKeys.settings.all, context.previousSettings);
-      }
-    },
-
-    onSuccess: (_data, newSettings) => {
-      // Track each changed key. Only include value for safe enum-type settings
-      // (theme and view choices). Never log API keys or free-text inputs.
-      const SAFE_VALUE_KEYS = new Set(["theme", "diff_view_mode", "chat_view"]);
-      for (const key of Object.keys(newSettings)) {
-        const value = SAFE_VALUE_KEYS.has(key)
-          ? String((newSettings as Record<string, unknown>)[key])
-          : undefined;
-        track("setting_changed", { key, value });
-      }
-    },
-
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.settings.all, exact: true });
     },
   });
+}
+
+/** Saves arrive here in submission order. A settled choice also clears an older pending one. */
+export function useEditableSettings() {
+  const { data, isLoading } = useSettings();
+  const saves = useMutationState({ filters: { mutationKey: [api.saveSetting.name] } });
+  const pending: Settings = {};
+  for (const { variables, status } of saves) {
+    if (!variables) continue;
+    const { key, value } = variables as SettingWrite;
+    if (status === "pending") Object.assign(pending, { [key]: value });
+    else delete pending[key];
+  }
+  return { settings: { ...data, ...pending }, isLoading };
 }

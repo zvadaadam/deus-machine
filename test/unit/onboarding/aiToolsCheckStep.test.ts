@@ -11,7 +11,6 @@ const auth = vi.hoisted(() => ({
 }));
 vi.mock("@/features/settings/api/settings.queries", () => ({
   useAgentAuth: () => ({ ...auth, refetch: vi.fn() }),
-  useAgentAuthEvents: () => {},
 }));
 
 const browser = { id: "claudeai", kind: "browser", label: "Claude", credential: "subscription" };
