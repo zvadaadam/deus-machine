@@ -33,6 +33,13 @@ import { cloudOnlyReason, cloudOnlySendBlock } from "../lib/cloudControl";
 import { useRepoBranches } from "@/features/workspace/api";
 import { toast } from "sonner";
 
+const HOME_PANE =
+  "flex h-full min-h-0 flex-1 flex-col items-center overflow-y-auto [container-type:size]";
+// 112px is half the measured 223.6px empty heading-and-composer block.
+// A fixed offset keeps the heading in place as the composer grows.
+const HOME_HEADING =
+  "enter-step text-text-primary mt-[max(24px,calc(45cqh-112px))] w-full max-w-[720px] px-4 text-center text-2xl font-medium tracking-tight [--enter-y:8px] sm:px-6";
+
 // ── Persistence ─────────────────────────────────────────────────────
 const LAST_REPO_KEY = "deus:welcome-last-repo";
 
@@ -364,11 +371,8 @@ export function HomeView({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col items-center overflow-y-auto pt-[14svh] sm:pt-[18svh]">
-      <h1
-        key={hasRepos ? "has-repos" : "zero-repos"}
-        className="enter-step text-text-primary mb-6 w-full max-w-[720px] px-4 text-center text-2xl font-medium tracking-tight [--enter-y:8px] sm:px-6"
-      >
+    <div className={HOME_PANE}>
+      <h1 key={hasRepos ? "has-repos" : "zero-repos"} className={cn(HOME_HEADING, "mb-6")}>
         {hasRepos ? "What are we building?" : "Start with a project"}
       </h1>
 
@@ -660,11 +664,8 @@ function CloudSessionsHome({
   const state = loading ? "loading" : hasSessions ? "sessions" : error ? "error" : "empty";
   const [title, subtitle] = CLOUD_HOME_COPY[state];
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col items-center overflow-y-auto pt-[14svh] sm:pt-[18svh]">
-      <h1
-        key={state}
-        className="enter-step text-text-primary mb-2 w-full max-w-[720px] px-4 text-center text-2xl font-medium tracking-tight [--enter-y:8px] sm:px-6"
-      >
+    <div className={HOME_PANE}>
+      <h1 key={state} className={cn(HOME_HEADING, "mb-2")}>
         {title}
       </h1>
       <p className="enter-step text-text-muted mb-8 w-full max-w-[560px] px-4 text-center text-sm [--enter-y:8px] [--step:1] sm:px-6">
