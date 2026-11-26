@@ -12,6 +12,7 @@ it.each([
   ["1", "Codex Max", true],
   ["8317", "Codex Max", true],
   ["gpt-5.5-codex-m", "Codex Max", true],
+  ["short-key", "short-key", false],
   ["fixture-key-1234", "Model fixture-key-1234", false],
 ] as const)(
   "checks the base URL and model catalog for a reflected key (%s)",
