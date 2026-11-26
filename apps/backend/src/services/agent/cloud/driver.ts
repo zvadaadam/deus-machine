@@ -969,14 +969,15 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     row.provider_session_id = created.id;
   }
 
-  // Stamp the harness on EVERY connect, not just the lazy-create branch: the
-  // workspace pipeline pre-creates the provider session (before any harness is
-  // known) and stores its id, so that branch is skipped for a workspace's
-  // first session — and `createSession` converging on an existing row keeps
-  // its metadata anyway. Idempotent and best-effort; discovery merely degrades
-  // to its claude default if it's lost.
+  // A pre-created or reused twin may be missing these facts. Read the title
+  // after linking: a rename during creation could not reach the twin yet.
   if (org) {
-    void pushCloudSessionMetadata(row.provider_session_id, { harness: row.agent_harness }, org);
+    const title = getSessionRaw(db, deusSessionId)?.title;
+    void pushCloudSessionMetadata(
+      row.provider_session_id,
+      { harness: row.agent_harness, ...(title && { title }) },
+      org
+    );
   }
   // Opening this socket can be what wakes a paused sandbox — and a sandbox
   // the provider has discarded meanwhile comes back through a fresh clone,
@@ -1127,11 +1128,6 @@ export function pushCloudSessionFacts(
   const config = cloudOrgOf(row);
   if (!config) return;
   void pushCloudSessionMetadata(row.provider_session_id, metadata, config);
-}
-
-/** Mirror a deus session's title onto its cloud twin. */
-export function pushCloudSessionTitle(deusSessionId: string, title: string): void {
-  pushCloudSessionFacts(deusSessionId, { title });
 }
 
 // ---- Turn API (mirrors the local agentService surface) ----

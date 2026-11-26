@@ -31,6 +31,7 @@ import type {
   UnknownPart,
 } from "@zvada/agent-server/protocol";
 import { getTurn, saveTurn } from "../../db/turns";
+import { setInitialTitles } from "../../db/queries";
 import { isUnknownPart } from "@shared/protocol-types";
 import { getDatabase } from "../../lib/database";
 import { getErrorMessage } from "@shared/lib/errors";
@@ -492,22 +493,9 @@ export function persistAgentSessionId(
   }
 }
 
-/** Update session title and auto-set workspace title if not already set. */
 export function persistSessionTitle(sessionId: string, title: string): WriteResult<void> {
-  const db = getDatabase();
   try {
-    db.transaction(() => {
-      // Set once, like the workspace's below: a title given at the start is not replaced by the summary.
-      db.prepare(
-        `UPDATE sessions SET title = ?, updated_at = datetime('now') WHERE id = ? AND title IS NULL`
-      ).run(title, sessionId);
-      // Auto-set workspace title only if not already set (preserves PR titles and user renames)
-      db.prepare(
-        `UPDATE workspaces SET title = ?
-         WHERE id = (SELECT workspace_id FROM sessions WHERE id = ?)
-         AND title IS NULL`
-      ).run(title, sessionId);
-    })();
+    setInitialTitles(getDatabase(), sessionId, title, "summary");
     return { ok: true, value: undefined };
   } catch (error) {
     return failed("session title", error);

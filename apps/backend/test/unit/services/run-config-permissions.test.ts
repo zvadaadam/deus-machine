@@ -6,9 +6,12 @@ import { buildTurnStartParams } from "../../../src/services/agent/run-config";
 const workspace = { cwd: "/workspace", agentMessages: false };
 
 it.each(LOCAL_HARNESSES)(
-  "briefs %s on reading chat links for this computer's workspaces",
+  "briefs %s on renaming its own chat and workspace and reading chat links",
   (harness) => {
     const { config } = buildTurnStartParams("chat", "turn", harness, "Read this chat", workspace);
+    expect(config.systemPromptAppend).toContain(
+      "You may use `rename` on your own chat and its workspace."
+    );
     expect(config.systemPromptAppend).toContain(
       "For this computer's workspaces, read a `deus://workspace?id=<workspace id>&session=<chat id>` link with `read_session`. Pass its `session` value as `session`.\nWithout `session`, pass the link's `id` value as `session` to read the workspace's current chat."
     );

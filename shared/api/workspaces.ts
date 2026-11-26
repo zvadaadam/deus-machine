@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { WorkspaceStatusSchema } from "../enums";
+import { TitleSchema } from "../title";
 import type { GhCliStatus, PRStatus } from "../types/github";
 import type { ProjectEnvironmentResponse, TaskRunResponse } from "../types/project-environment";
 import type {
@@ -128,8 +129,8 @@ export const archiveWorkspace = write({
 
 export const updateWorkspaceTitle = write({
   name: "updateWorkspaceTitle",
-  input: workspaceId.extend({ title: z.string() }),
-  output: out<void>(),
+  input: workspaceId.extend({ title: TitleSchema }),
+  output: out<{ previousTitle: string | null }>(),
 });
 
 export const updateWorkspaceStatus = write({

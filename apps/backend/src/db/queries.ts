@@ -7,6 +7,7 @@
 import type Database from "better-sqlite3";
 import { uuidv7 } from "@shared/lib/uuid";
 import { DEFAULT_AGENT_HARNESS } from "@shared/models";
+import { toTitle } from "@shared/title";
 import type { ArchivedWorkspace, WorkspaceChat } from "@shared/types/workspace";
 import {
   ReportedOriginSchema,
@@ -204,6 +205,40 @@ export function createChat(
   ).run(id, workspaceId, harness, providerSessionId, startedBy);
   if (options.select) selectChat(db, workspaceId, id);
   return id;
+}
+
+export function rename(
+  db: Database.Database,
+  table: "sessions" | "workspaces",
+  id: string,
+  title: string
+) {
+  const update =
+    table === "sessions"
+      ? db.prepare("UPDATE sessions SET title = ? WHERE id = ?")
+      : db.prepare("UPDATE workspaces SET title = ? WHERE id = ?");
+  update.run(title, id);
+}
+
+/** A start title belongs to the workspace only for its first chat. */
+export function setInitialTitles(
+  db: Database.Database,
+  sessionId: string,
+  text: string,
+  source: "start" | "summary"
+) {
+  const title = toTitle(text);
+  if (!title) return;
+  db.transaction(() => {
+    db.prepare("UPDATE sessions SET title = ? WHERE id = ? AND title IS NULL").run(
+      title,
+      sessionId
+    );
+    db.prepare(
+      `UPDATE workspaces SET title = @title WHERE id = (SELECT workspace_id FROM sessions WHERE id = @sessionId)
+       AND title IS NULL AND (@source = 'summary' OR first_session_id = @sessionId)`
+    ).run({ title, sessionId, source });
+  })();
 }
 
 /** Read SQLite flags as booleans. A chat whose agent hasn't asked about messages reads false. */

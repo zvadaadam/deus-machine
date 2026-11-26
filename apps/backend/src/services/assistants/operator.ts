@@ -33,10 +33,13 @@ import {
   type Operator,
 } from "@zvada/agent-server/operator";
 import type { HostToolSource } from "@zvada/agent-server/core";
+import { updateSessionTitle } from "@shared/api/sessions";
 import * as workspaces from "@shared/api/workspaces";
 import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
+import { TitleSchema } from "@shared/title";
 import type { Caller } from "../../api/registry";
 import { sameOrigin } from "../../db";
+import { NotFoundError } from "../../lib/errors";
 import { removeQueuedMessage, resumeQueuedMessages, steerQueuedMessage } from "../agent/queue";
 import { holdingTurn } from "../agent/chat-turn";
 import { provideSessionTools } from "../agent/service";
@@ -67,13 +70,56 @@ const SERVER_VERSION = "2.0.0";
 const normal = (file: string) =>
   path.posix.normalize(file.replace(/\\/g, "/")).replace(/^\.\//, "");
 
-const sessionArg = z
-  .string()
-  .trim()
-  .min(1, "must not be empty or only spaces")
-  .describe("The session, as list_sessions prints it");
+const words = z.string().trim().min(1, "must not be empty or only spaces");
+const sessionArg = words.describe("The session, as list_sessions prints it");
 
 function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
+  const renameInput = {
+    session: words.optional().describe("A chat, as list_sessions prints it (workspace:N)"),
+    workspace: words
+      .optional()
+      .describe("A workspace, by the name list_sessions prints after `workspace`"),
+    name: TitleSchema.describe("The new name: one line, at most 120 characters"),
+  };
+  const rename = tool<typeof renameInput, Caller>({
+    name: "rename",
+    title: "Rename",
+    description:
+      "Rename a chat or a workspace. This is the name the person sees in Deus. Give exactly one of session or workspace. You may rename yourself and your own workspace, for example to show where your work stands. Rename another chat or workspace only if you started it or were asked to. A reference does not change: workspace:N stays the same after a rename.",
+    input: renameInput,
+    effect: "write",
+    run: ({ session, workspace, name }, caller) =>
+      refusing(async () => {
+        const ref = session ?? workspace;
+        if (!ref || (session && workspace))
+          throw refuse.invalidInput(
+            "rename",
+            "session",
+            "give exactly one of session or workspace"
+          );
+        const entry = await operator().find(caller, ref);
+        const write = workspace
+          ? host.act(caller, workspaces.updateWorkspaceTitle, {
+              workspaceId: entry.workspace.id,
+              title: name,
+            })
+          : host.act(caller, updateSessionTitle, { sessionId: entry.id, title: name });
+        const { previousTitle } = await write.catch((error: unknown) => {
+          if (session && entry.status === "setting_up" && error instanceof NotFoundError)
+            throw new OperatorError(
+              "busy",
+              `${json(ref)} is being set up, so nothing was renamed.`,
+              { next: callHint("wait_for_sessions", { sessions: [ref] }) }
+            );
+          throw error;
+        });
+        const target = workspace ? `workspace ${quoted(entry.workspace.name)}` : quoted(ref);
+        return previousTitle
+          ? `Renamed ${target}: ${quoted(previousTitle)} → ${quoted(name)}.`
+          : `Named ${target}: ${quoted(name)}.`;
+      }),
+  });
+
   async function otherQueue(caller: Who, session: string) {
     const { id } = await operator().find(caller, session);
     if (caller.kind === "session" && id === caller.sessionId) throw refuse.self("session");
@@ -303,7 +349,14 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
     },
   });
 
-  return [readChanges, readQueueTool, manageQueueTool, addProjectTool(host), sendFeedbackTool];
+  return [
+    readChanges,
+    readQueueTool,
+    manageQueueTool,
+    rename,
+    addProjectTool(host),
+    sendFeedbackTool,
+  ];
 }
 
 let operator: Operator<Caller> | null = null;

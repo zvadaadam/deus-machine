@@ -318,6 +318,7 @@ It starts the local job in `workspace-checkout.ts`. The lifecycle owner
 and writes `state`,
 `init_stage`, `setup_status`, `init_fetch_issue`, `error_message` and `error_detail`.
 The owner also records `archived_at` and `archived_by` when a workspace is archived.
+A rename is refused on an archived chat or workspace. A summary or start title names only an unnamed chat or workspace, archived or not, so a rename always stands.
 `workspace-lifecycle-fence.test.ts` checks the owner's imports and checks backend
 SQL and the integration CLI for lifecycle writes. Each local start has an
 in-memory attempt token. Archiving aborts that checkout and waits for its git
@@ -555,7 +556,8 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   `start_session`, `send_message`, `answer_request`, `stop_sessions` and
   `archive`, their words, waits, rules and limits; Deus is their host
   (`services/assistants/host.ts`) and adds `read_queue`, `manage_queue`, `read_changes`,
-  `add_project` and `send_feedback` (a report about Deus itself to the Deus team's Hivenet board,
+  `rename` for a chat or workspace, `add_project` and `send_feedback` (a report about Deus
+  itself to the Deus team's Hivenet board,
   `services/assistants/feedback.ts`: the report alone,
   `consent.telemetry: false`). The registry refuses project removal as an assistant operation.
   Neither the assistant nor the chat tool list offers it.
@@ -630,8 +632,8 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
 - **Chats operate chats.** Every local chat has the same tools as its own
   (`withSessionTools` in `operator.ts`, registered with the agent service and
   handed to the engine with the Deus tools in one source): the chat itself is
-  the caller, plan mode reads only, a chat cannot act on itself, and depth,
-  chats per starter and starts per minute are limited. The turn's
+  the caller and plan mode reads only. Of the writes that target a chat, only
+  `rename` can target the caller. Depth, chats per starter and starts per minute are limited. The turn's
   instructions carry the package's `OPERATOR_GUIDANCE`. For this computer's `deus://workspace`
   links, give `read_session` the link's `session` value as `session`. Without it, pass the link's `id`
   as `session` to read the workspace's current chat (`workspace-context.ts`). "Sent from"

@@ -370,8 +370,8 @@ takes about 13 seconds with the Postgres image pulled. It checks, in order:
   registers, signs in and connects; it is offered exactly the package's ten
   tools (`whoami`, `list_sessions`, `read_session`, `wait_for_sessions`,
   `list_models`, `start_session`, `send_message`, `answer_request`,
-  `stop_sessions`, `archive`) and Deus's `read_changes`, `add_project` and
-  `send_feedback`, with `readOnlyHint` on the six that read, `destructiveHint`
+  `stop_sessions`, `archive`) and Deus's `read_changes`, `read_queue`, `manage_queue`,
+  `rename`, `add_project` and `send_feedback`, with `readOnlyHint` on the seven that read, `destructiveHint`
   on `stop_sessions` and `archive`, and `openWorldHint` on `add_project` and
   `send_feedback`.
 - Pending: every call (a read, `whoami`, `send_feedback`, a write) is refused

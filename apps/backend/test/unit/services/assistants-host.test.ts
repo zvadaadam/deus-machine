@@ -133,6 +133,8 @@ vi.mock("../../../src/services/assistants/store", () => ({
 
 import { LOCAL_CALLER, type Caller } from "../../../src/api/registry";
 import handlers from "../../../src/api/assistants";
+import sessionHandlers from "../../../src/api/sessions";
+import workspaceHandlers from "../../../src/api/workspaces";
 import * as api from "@shared/api/assistants";
 import * as turns from "../../../src/services/agent/turns";
 import {
@@ -146,6 +148,7 @@ import { hasAgentMessages } from "../../../src/services/agent/agent-messages";
 import { buildTurnStartParams } from "../../../src/services/agent/run-config";
 import { deleteFailedWorkspace } from "../../../src/services/workspace-lifecycle";
 import { createDeusHost } from "../../../src/services/assistants/host";
+import * as access from "../../../src/services/assistants/access";
 import { getSetting } from "../../../src/services/settings.service";
 import { _resetOperator, withSessionTools } from "../../../src/services/assistants/operator";
 import { READ_ONLY } from "../../../src/services/assistants/sentences";
@@ -814,6 +817,134 @@ describe("through MCP and as a chat's own tools", () => {
     );
     return { text: reply.result.content[0].text as string, isError: reply.result.isError === true };
   };
+
+  describe("rename", () => {
+    const chatCaller = {
+      ...LEAD,
+      harness: "claude-code",
+      turnId: "t",
+      permissionMode: "bypass_permissions",
+    } as const;
+    beforeEach(() => {
+      for (const { op, run } of [...sessionHandlers, ...workspaceHandlers]) {
+        if (op.name === "updateSessionTitle" || op.name === "updateWorkspaceTitle")
+          state.ops[op.name] = (input) => run(input, { caller: LOCAL_CALLER });
+      }
+    });
+    const rename = (target: { workspace?: string; session?: string }, name: string) =>
+      call(assistantCaller(), "rename", { ...target, name });
+
+    it("names another chat and workspace, then quotes their old and new names", async () => {
+      insertChat("s-other", "w-lead");
+      expect(await rename({ session: "lead:2" }, '  Review "A"  ')).toEqual({
+        isError: false,
+        text: 'Named "lead:2": "Review \\"A\\"".',
+      });
+      expect(await rename({ session: "lead:2" }, "Ready")).toEqual({
+        isError: false,
+        text: 'Renamed "lead:2": "Review \\"A\\"" → "Ready".',
+      });
+      expect(await rename({ workspace: "lead" }, "In review")).toEqual({
+        isError: false,
+        text: 'Named workspace "lead": "In review".',
+      });
+      expect(await rename({ workspace: "lead" }, "Merged")).toEqual({
+        isError: false,
+        text: 'Renamed workspace "lead": "In review" → "Merged".',
+      });
+      expect((await call(assistantCaller(), "list_sessions", {})).text).toContain('"Ready"');
+      expect(
+        state.db.prepare("SELECT title FROM workspaces WHERE slug = 'lead'").pluck().get()
+      ).toBe("Merged");
+    });
+
+    it("lets a chat rename itself and its own workspace, and refuses both in plan mode", async () => {
+      const source = withSessionTools(deusTools("s-lead"));
+      const signal = new AbortController().signal;
+      for (const target of [{ session: "lead:1" }, { workspace: "lead" }]) {
+        const invoke = (permissionMode: "plan" | "bypass_permissions") =>
+          source.call(
+            "rename",
+            { ...target, name: "Self" },
+            { ...chatCaller, permissionMode },
+            signal
+          );
+        const refused = await invoke("plan");
+        expect(refused).toMatchObject({
+          isError: true,
+          content: [{ text: expect.stringContaining("refused (read_only)") }],
+        });
+        const named = await invoke("bypass_permissions");
+        const label = target.session ? '"lead:1"' : 'workspace "lead"';
+        expect(named.content[0]).toMatchObject({ text: `Named ${label}: "Self".` });
+      }
+    });
+
+    it("renames a workspace during setup and keeps that name when the first task arrives", async () => {
+      const host = createDeusHost();
+      const entry = await host.start!(chatCaller, startInput({ title: "Start title" }));
+      expect(await rename({ session: "new1:1" }, "Too soon")).toEqual({
+        isError: true,
+        text: 'refused (busy): "new1:1" is being set up, so nothing was renamed.\n  -> wait_for_sessions(sessions: ["new1:1"])',
+      });
+      expect(await rename({ workspace: "new1" }, "Building")).toEqual({
+        isError: false,
+        text: 'Named workspace "new1": "Building".',
+      });
+      ready(entry);
+      await vi.waitFor(() => expect(state.sent).toHaveLength(1));
+      expect(
+        state.db
+          .prepare("SELECT title FROM workspaces WHERE id = ?")
+          .pluck()
+          .get(entry.workspace.id)
+      ).toBe("Building");
+      expect(
+        state.db.prepare("SELECT title FROM sessions WHERE id = ?").pluck().get(entry.id)
+      ).toBe("Start title");
+    });
+
+    it.each([{}, { session: "lead:1", workspace: "lead" }])(
+      "requires exactly one reference (%j)",
+      async (target) => {
+        expect(await rename(target, "New")).toMatchObject({
+          isError: true,
+          text: expect.stringMatching(/refused \(invalid_input\).*exactly one/),
+        });
+      }
+    );
+
+    it("refuses a multiline name and a read-only assistant", async () => {
+      expect(await rename({ session: "lead:1" }, "one\ntwo")).toMatchObject({
+        isError: true,
+        text: expect.stringContaining("refused (invalid_input)"),
+      });
+      expect(
+        await call(assistantCaller("read"), "rename", { workspace: "lead", name: "New" })
+      ).toMatchObject({
+        isError: true,
+        text: expect.stringContaining(READ_ONLY),
+      });
+      expect(
+        state.db.prepare("SELECT title FROM workspaces WHERE id = 'w-lead'").pluck().get()
+      ).toBeNull();
+    });
+
+    it("checks the assistant's current access again at the write", async () => {
+      const assertMayWrite = access.assertMayWrite;
+      vi.spyOn(access, "assertMayWrite").mockImplementationOnce((caller) => {
+        state.stored.claude = "read";
+        assertMayWrite(caller);
+      });
+      expect(await rename({ session: "lead:1" }, "Too late")).toMatchObject({
+        isError: true,
+        text: expect.stringContaining(READ_ONLY),
+      });
+      expect(
+        state.db.prepare("SELECT title FROM sessions WHERE id = 's-lead'").pluck().get()
+      ).toBeNull();
+    });
+  });
 
   it("shows the home-relative folder when a workspace fails to start and keeps the stored error", async () => {
     const folder = join(homedir(), "Developer", "shop");
@@ -1941,6 +2072,16 @@ describe("the acceptance pass (F5, F7, F8, F9, F10)", () => {
     ready(plain);
     persistSessionTitle(plain.id, "Auto summary");
     expect(titles(plain.id)).toEqual({ chat: "Auto summary", workspace: "Auto summary" });
+  });
+
+  it("delivers the first task without naming either row when the title's first line is blank", async () => {
+    const entry = await createDeusHost().start!(
+      LEAD as never,
+      startInput({ title: " \nSecond line" })
+    );
+    ready(entry);
+    await vi.waitFor(() => expect(state.sent).toHaveLength(1));
+    expect(titles(entry.id)).toEqual({ chat: null, workspace: null });
   });
 
   it("F5: a titled chat started in an existing untitled workspace does not rename the workspace", async () => {
