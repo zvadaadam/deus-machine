@@ -14,6 +14,7 @@ import {
   getWorkspaceById,
   getWorkspaceRaw,
   getWorkspacesByRepo,
+  rename,
 } from "../db";
 import { ensureCloudSession } from "../services/agent/cloud/driver";
 import {
@@ -108,7 +109,7 @@ export default [
   handle(api.updateWorkspaceTitle, ({ workspaceId, title }) => {
     const db = getDatabase();
     if (!getWorkspaceRaw(db, workspaceId)) throw new NotFoundError("Workspace not found");
-    db.prepare("UPDATE workspaces SET title = ? WHERE id = ?").run(title, workspaceId);
+    rename(db, "workspaces", workspaceId, title);
     invalidate(["workspaces"]);
   }),
   handle(api.updateWorkspaceStatus, ({ workspaceId, status }) => {
