@@ -3,8 +3,6 @@
  * private repo the Deus GitHub App doesn't cover yet. One click opens GitHub's
  * App-install page; the composer's `useCloudRepoAccess` re-checks on return and
  * continues into cloud automatically once access is granted.
- *
- * Design: DS/GrantRepositoryAccessModal (deus.pen 6x band).
  */
 import { useState } from "react";
 import { Github } from "lucide-react";
