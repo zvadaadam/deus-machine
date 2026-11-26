@@ -6,13 +6,13 @@ import { gatewayLabel, gatewayEffort, gatewaySupports, gatewayThinking } from "@
 import { getSessionRaw } from "../../db";
 import { getDatabase } from "../../lib/database";
 import { GatewayError } from "../../lib/errors";
-import { connectionFor, requireRevision } from "../gateways";
+import { connectionFor, requireRevision } from "./connections";
 import {
   holdingTurn,
   gatewayExecution,
   type GatewayAttribution,
   type GatewayTurn,
-} from "./chat-turn";
+} from "../agent/chat-turn";
 
 export async function prepareGatewayTurn(
   turn: GatewayTurn,
@@ -32,10 +32,7 @@ export async function prepareGatewayTurn(
   signal?.throwIfAborted();
   execution.via = name;
   execution.modelLabel = model.label;
-  turn.thinkingLevel = gatewayEffort(
-    { thinking: gatewayThinking(connection, model, execution.harness) },
-    level
-  );
+  turn.thinkingLevel = gatewayEffort(gatewayThinking(model, execution.harness), level);
   const endpointUrl = connection.baseUrl + (binding.format === "responses" ? "/v1" : "");
   turn.delivery = { apiKey: connection.apiKey, baseUrl: endpointUrl };
 }

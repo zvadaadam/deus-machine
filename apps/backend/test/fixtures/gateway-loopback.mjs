@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { spawn } from "node:child_process";
 import { configureBackendEnv } from "../../runtime-env.ts";
-import { checkCatalog } from "../../src/services/agent/gateway.ts";
+import { checkCatalog } from "../../src/services/gateways/catalog.ts";
 
 // Run with Bun. A fresh backend process inherits the proxy, as the installed app does.
 if (process.argv[2] === "backend") {

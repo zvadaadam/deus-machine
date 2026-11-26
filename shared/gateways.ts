@@ -1,8 +1,4 @@
-import {
-  CATALOG_MODELS,
-  credentialFormat,
-  takesHeldCredential,
-} from "@zvada/agent-server/protocol";
+import { credentialFormat, takesHeldCredential } from "@zvada/agent-server/protocol";
 import type { ModelDescriptor, ThinkingLevel } from "@zvada/agent-server/protocol";
 import type { AgentHarness } from "./enums";
 
@@ -56,14 +52,13 @@ export interface GatewayModel {
   runner?: "claude-code" | "codex-app-server";
   formats?: readonly GatewayFormat[];
   excluded?: "hidden" | "non_chat";
-  thinking?: ModelDescriptor["thinking"];
+  thinkingByFormat?: Partial<Record<GatewayFormat, ModelDescriptor["thinking"]>>;
 }
 
 export function gatewayEffort(
-  model: Pick<GatewayModel, "thinking"> | undefined,
+  thinking: ModelDescriptor["thinking"] | undefined,
   requested?: ThinkingLevel
 ) {
-  const thinking = model?.thinking;
   if (requested && thinking?.levels.includes(requested)) return requested;
   return thinking?.default ?? thinking?.levels[0];
 }
@@ -95,18 +90,9 @@ export function gatewaySupports(
   );
 }
 
-export function gatewayThinking(
-  gateway: GatewayCatalog,
-  model: GatewayModel,
-  harness: AgentHarness
-) {
-  if (gateway.preset !== "custom" || !model.thinking) return model.thinking;
-  const supported = CATALOG_MODELS.filter((m) => m.harness === harness).flatMap(
-    (m) => m.thinking.levels
-  );
-  const levels = model.thinking.levels.filter((level) => supported.includes(level));
-  return levels.length
-    ? { levels, default: levels.find((level) => level === model.thinking?.default) }
+export function gatewayThinking(model: GatewayModel | undefined, harness: AgentHarness) {
+  return takesHeldCredential(harness)
+    ? model?.thinkingByFormat?.[credentialFormat(harness)]
     : undefined;
 }
 
@@ -128,29 +114,3 @@ export type GatewayProblem = {
   kind: "unreachable" | "api_key" | "catalog" | "configuration" | "no_route" | "connection_changed";
   message: string;
 };
-export function chatHasStarted(chat: {
-  message_count?: number;
-  last_user_message_at?: string | null;
-  gateway_revision?: string | null;
-}) {
-  return !!(chat.message_count || chat.last_user_message_at || chat.gateway_revision);
-}
-
-const providers = new Map<string, { label: string; logo?: AgentHarness }>([
-  ["anthropic", { label: "Anthropic", logo: "claude-code" }],
-  ["claude", { label: "Claude", logo: "claude-code" }],
-  ["openai", { label: "OpenAI", logo: "codex-app-server" }],
-  ["codex", { label: "Codex", logo: "codex-app-server" }],
-  ["google", { label: "Google", logo: "gemini" }],
-  ["gemini", { label: "Gemini", logo: "gemini" }],
-  ["antigravity", { label: "Antigravity", logo: "gemini" }],
-  ["xai", { label: "xAI" }],
-  ["kimi", { label: "Kimi" }],
-  ["copilot", { label: "GitHub Copilot" }],
-  ["devin", { label: "Devin" }],
-  ["meta", { label: "Meta" }],
-]);
-
-export function gatewayProvider(provider: string) {
-  return providers.get(provider.toLowerCase()) ?? { label: provider.trim() || "Other" };
-}

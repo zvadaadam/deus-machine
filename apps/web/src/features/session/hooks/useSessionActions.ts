@@ -1,7 +1,8 @@
 import { OpError } from "@/platform/ws/runtime-client";
 /** Send and steer use the model and settings shown in this chat's composer. */
 
-import { gatewayEffort, type GatewayModel } from "@shared/gateways";
+import type { ModelDescriptor } from "@shared/models";
+import { gatewayEffort } from "@shared/gateways";
 import type { WorkspaceKind } from "@shared/enums";
 import { canPlan } from "@shared/harnesses";
 import { useCallback } from "react";
@@ -17,7 +18,7 @@ interface UseSessionActionsProps {
   sessionId: string;
   steerTurnId?: string;
   model?: string;
-  gatewayModel?: GatewayModel;
+  gatewayThinking?: ModelDescriptor["thinking"];
   workspaceId?: string;
   workspaceKind?: WorkspaceKind | null;
   /** Branch PR prompts target (defaults to "main"). */
@@ -43,7 +44,7 @@ export function useSessionActions({
   sessionId,
   steerTurnId,
   model,
-  gatewayModel,
+  gatewayThinking,
   workspaceId,
   workspaceKind,
   targetBranch = "main",
@@ -74,7 +75,7 @@ export function useSessionActions({
           permissionMode:
             composer.planModeEnabled && canPlan(agentHarness, workspaceKind) ? "plan" : undefined,
           thinkingLevel: selection.gatewayRevision
-            ? gatewayEffort(gatewayModel, composer.thinkingLevel)
+            ? gatewayEffort(gatewayThinking, composer.thinkingLevel)
             : composer.thinkingLevel,
         });
       } catch (error) {
@@ -104,7 +105,7 @@ export function useSessionActions({
       sessionId,
       steerTurnId,
       model,
-      gatewayModel,
+      gatewayThinking,
       workspaceKind,
       sendMessageMutation,
       onMessageSent,

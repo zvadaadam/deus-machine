@@ -18,8 +18,8 @@ import { readPermissionMode, readThinkingLevel } from "@shared/protocol";
 import { readCloudTurnSelection, type CloudTurnSelection } from "@shared/cloud-models";
 import { canPlan, HARNESSES } from "@shared/harnesses";
 import { ACTIVE_TURN_STATUSES } from "@shared/enums";
-import { chatHasStarted } from "@shared/gateways";
-import { requireRevision } from "../gateways";
+import { chatHasStarted } from "@shared/session";
+import { requireRevision } from "../gateways/connections";
 import { getDatabase } from "../../lib/database";
 import {
   AgentServerDisconnectedError,

@@ -275,7 +275,7 @@ describe("what a model picker shows", () => {
           label: "Friendly",
           provider: "openai",
           runner: "codex-app-server",
-          thinking: { levels: ["high"] },
+          thinkingByFormat: { responses: { levels: ["high"] } },
         },
         { id: "claude-a", label: "Sonnet", provider: "anthropic", runner: "claude-code" },
         { id: "other", label: "Kimi K3", provider: "kimi", runner: "claude-code" },

@@ -1,6 +1,6 @@
 import * as api from "@shared/api/gateways";
 import { AppError } from "../lib/errors";
-import * as gateways from "../services/gateways";
+import * as gateways from "../services/gateways/connections";
 import { handle, type Ctx } from "./registry";
 
 function fromThisComputer<Input, Result>(run: (input: Input) => Result) {

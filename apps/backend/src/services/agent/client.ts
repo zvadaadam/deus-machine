@@ -25,7 +25,7 @@ import {
 } from "../../../../agent-server";
 import { DB_PATH } from "../../lib/database";
 import { simulatorEnv } from "../device-hub/xcode-env";
-import { gatewayCredential } from "./gateway-turn";
+import { gatewayCredential } from "../gateways/turn";
 import { hasAgentMessages } from "./agent-messages";
 
 // ============================================================================

@@ -23,8 +23,8 @@ import * as api from "@shared/api/sessions";
 import { findConversationMessage } from "@shared/conversation-rows";
 import { SCHEMA_SQL } from "@shared/schema";
 import * as chatTurns from "../../../src/services/agent/chat-turn";
-import * as gatewayTurn from "../../../src/services/agent/gateway-turn";
-import * as gateways from "../../../src/services/gateways";
+import * as gatewayTurn from "../../../src/services/gateways/turn";
+import * as gateways from "../../../src/services/gateways/connections";
 import * as agent from "../../../src/services/agent/service";
 import * as cloud from "../../../src/services/agent/cloud/driver";
 import {

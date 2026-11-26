@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { checkCatalog, verifyGatewayKey } from "./agent/gateway";
+import { checkCatalog, verifyGatewayKey } from "./catalog";
 import {
   GATEWAY_PRESETS,
   GATEWAY_FORMATS,
@@ -10,10 +10,10 @@ import {
 } from "@shared/gateways";
 import type * as api from "@shared/api/gateways";
 import type { ParsedInputOf } from "@shared/api/op";
-import { GatewayError, ValidationError } from "../lib/errors";
-import { initVault, open, seal, vaultProblem } from "./integrations/vault";
-import { getSetting, saveSetting } from "./settings.service";
-import { invalidate } from "./query-engine";
+import { GatewayError, ValidationError } from "../../lib/errors";
+import { initVault, open, seal, vaultProblem } from "../integrations/vault";
+import { getSetting, saveSetting } from "../settings.service";
+import { invalidate } from "../query-engine";
 
 // Only the public catalog is read by windows. The key is sealed with its destination.
 interface Saved {

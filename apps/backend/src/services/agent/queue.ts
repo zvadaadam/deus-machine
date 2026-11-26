@@ -1,3 +1,4 @@
+import { chatHasStarted } from "@shared/session";
 import { agentOrigin, inputToText, type Origin } from "@zvada/agent-server/protocol";
 import type * as api from "@shared/api/sessions";
 import type { ParsedInputOf } from "@shared/api/op";
@@ -188,7 +189,7 @@ function queueFor(sessionId: string): Queue {
 
 function checkQueueRoute(chat: LocalChat, input: Input) {
   // The first turn binds the harness before its user echo increments the message count.
-  if (chat.message_count > 0 || holdingTurn(input.sessionId))
+  if (chatHasStarted(chat) || holdingTurn(input.sessionId))
     requireSameHarness(chat.agent_harness, input.agentHarness);
   requireChatRoute(input.sessionId, input.gatewayRevision);
 }

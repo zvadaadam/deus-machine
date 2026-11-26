@@ -1,9 +1,5 @@
-import {
-  gatewayProvider,
-  gatewaySupports,
-  gatewayThinking,
-  type GatewayCatalog,
-} from "@shared/gateways";
+import { gatewayProvider } from "./gateway-provider";
+import { gatewaySupports, gatewayThinking, type GatewayCatalog } from "@shared/gateways";
 import {
   findModel,
   modelLabel,
@@ -131,7 +127,7 @@ export function modelPickerView(
         let heading = providers.length > 1;
         for (const row of rows) {
           const { id, label, provider: rawProvider } = row;
-          const thinking = gatewayThinking(gateway, row, agentHarness);
+          const thinking = gatewayThinking(row, agentHarness);
           const option: PickerOption = {
             id,
             value: modelValue(agentHarness, id, gateway.revision),

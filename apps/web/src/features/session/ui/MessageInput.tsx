@@ -373,7 +373,7 @@ export function MessageInput({
   const fitTo =
     model && agentHarness && listIsLive(agentHarness) ? selection.thinkingLevels : undefined;
   const shownThinking = selection.gatewayModel
-    ? (gatewayEffort(selection.gatewayModel, thinkingLevel) ?? "off")
+    ? (gatewayEffort(selection.gatewayThinking, thinkingLevel) ?? "off")
     : composerThinking(thinkingLevel, fitTo, defaultThinking);
   const live = !!selection.gatewayModel || fitTo !== undefined;
   const { setThinkingLevel } = composer;

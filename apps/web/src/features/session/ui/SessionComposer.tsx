@@ -1,5 +1,5 @@
 import type { OpenChatWithModel } from "@/shared/agents/picker";
-import { chatHasStarted } from "@shared/gateways";
+import { chatHasStarted } from "@shared/session";
 import { forwardRef, useEffect, useImperativeHandle, type ReactNode } from "react";
 import type { WorkspaceKind } from "@shared/enums";
 import { useStore } from "zustand";
@@ -131,7 +131,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
       sessionId,
       steerTurnId,
       model: needsHistory || selection.unavailable ? undefined : selection.model,
-      gatewayModel: selection.gatewayModel,
+      gatewayThinking: selection.gatewayThinking,
       workspaceId: workspaceId ?? undefined,
       workspaceKind,
       targetBranch: targetBranch ?? "main",

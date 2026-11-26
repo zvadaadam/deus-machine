@@ -11,6 +11,7 @@ import { queryKeys } from "@/shared/api/queryKeys";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { emptyModelList, type PickerModelList } from "@/shared/agents/picker";
 import {
+  type ModelDescriptor,
   CATALOG_MODEL_LISTS,
   DEFAULT_AGENT_HARNESS,
   modelForSession,
@@ -35,6 +36,7 @@ export interface ChatModelSelection extends ModelListsState {
   model?: string;
   picked?: string;
   gatewayModel?: GatewayModel;
+  gatewayThinking?: ModelDescriptor["thinking"];
   previousLabel?: string;
   previousGateway?: { ref?: string; label: string };
   thinkingLevels: readonly ThinkingLevel[];
@@ -78,13 +80,10 @@ export function useChatModel({
     : modelForSession(harness, turns, gatewayRevision ? [] : state.lists);
   const model = id && modelValue(agentHarness, id, revision);
   const gateway = revision ? state.gateways?.find((g) => g.revision === revision) : undefined;
-  const listed = gateway?.models.find(
+  const gatewayModel = gateway?.models.find(
     (m) => m.id === id && gatewaySupports(gateway, m, agentHarness)
   );
-  const gatewayModel =
-    gateway && listed
-      ? { ...listed, thinking: gatewayThinking(gateway, listed, agentHarness) }
-      : undefined;
+  const thinking = gatewayThinking(gatewayModel, agentHarness);
   const latest = latestTurnExecution(harness, turns);
   let unavailable;
   if (revision && !gatewayModel)
@@ -97,6 +96,7 @@ export function useChatModel({
     ...state,
     agentHarness,
     gatewayModel,
+    gatewayThinking: thinking,
     previousGateway:
       revision && latest?.via ? { label: latest.via, ref: latest.gatewayRef } : undefined,
     previousLabel: revision && latest?.model === id ? latest?.modelLabel : undefined,
@@ -105,7 +105,7 @@ export function useChatModel({
     thinkingLevels:
       id && !revision
         ? modelThinkingLevels(state.lists, agentHarness, id)
-        : (gatewayModel?.thinking?.levels ?? []),
+        : (thinking?.levels ?? []),
     unavailable,
   };
 }

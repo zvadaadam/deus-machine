@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { shallow } from "zustand/shallow";
 import { hashKey, useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/api";
-import { chatHasStarted } from "@shared/gateways";
+import { chatHasStarted } from "@shared/session";
 import type { ThinkingLevel } from "@shared/protocol";
 import {
   composerStore,

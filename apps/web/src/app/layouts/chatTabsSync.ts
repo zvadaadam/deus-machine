@@ -7,7 +7,7 @@
  */
 
 import { DEFAULT_AGENT_HARNESS } from "@shared/models";
-import { chatHasStarted } from "@shared/gateways";
+import { chatHasStarted } from "@shared/session";
 import { getAgentLabel } from "@/shared/agents";
 import type { Session } from "@/features/session/types";
 import type {

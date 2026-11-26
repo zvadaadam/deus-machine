@@ -213,7 +213,7 @@ it("offers the same raw id over distinct local routes, and keeps the raw owner s
         label: id,
         provider: "",
         runner: harness,
-        thinking: { levels: ["medium", "high"] },
+        thinkingByFormat: { responses: { levels: ["medium", "high"] } },
       },
     ],
   };

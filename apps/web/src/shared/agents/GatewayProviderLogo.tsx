@@ -1,6 +1,6 @@
 import { Layers3 } from "lucide-react";
 import { getAgentLogo } from "@/assets/agents";
-import { gatewayProvider } from "@shared/gateways";
+import { gatewayProvider } from "./gateway-provider";
 
 export function GatewayProviderLogo({ provider }: { provider: string }) {
   const { logo } = gatewayProvider(provider);

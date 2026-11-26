@@ -20,20 +20,21 @@ import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ModelPicker } from "@/features/session/ui/ModelPicker";
+import { gatewayThinking } from "@shared/gateways";
 import { CATALOG_MODEL_LISTS, fitThinkingLevel, modelThinkingLevels, parseModelValue } from "@shared/models";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GatewaysSection } from "@/features/settings/ui/sections/GatewaysSection";
 import type { ThinkingLevel } from "@shared/protocol";
 import "@/global.css";
 const gateway = { ref:"fixture-gateway",preset:"cliproxyapi",formats:["messages","responses"],revision:"revision", baseUrl:"http://localhost", models:[
-  {id:"work:one",label:"GPT 6.2 Astra",provider:"openai",runner:"codex-app-server",thinking:{levels:["medium","high"],default:"medium"}},
+  {id:"work:one",label:"GPT 6.2 Astra",provider:"openai",runner:"codex-app-server",thinkingByFormat:{responses:{levels:["medium","high"],default:"medium"}}},
   {id:"same-family",label:"GPT Terra",provider:"openai",runner:"codex-app-server"},
-  {id:"claude-a",label:"Claude Sonnet",provider:"anthropic",runner:"claude-code",thinking:{levels:["low","high"],default:"high"}},
+  {id:"claude-a",label:"Claude Sonnet",provider:"anthropic",runner:"claude-code",thinkingByFormat:{messages:{levels:["low","high"],default:"high"}}},
   {id:"hidden-image",label:"Hidden image",provider:"openai",excluded:"hidden"},{id:"unknown-alias",label:"Unknown alias",provider:"other"}
 ]};
 const levelsOf = (value: string) => {
   const pick=parseModelValue(value);
-  if(pick?.gatewayRevision) return gateway.models.find(m=>m.id===pick.model)?.thinking?.levels ?? [];
+  if(pick?.gatewayRevision) return gatewayThinking(gateway.models.find(m=>m.id===pick.model),pick.harness)?.levels ?? [];
   const { harness, model } = parseModelValue(value)!;
   return modelThinkingLevels(CATALOG_MODEL_LISTS, harness, model);
 };

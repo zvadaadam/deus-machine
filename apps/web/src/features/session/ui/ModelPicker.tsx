@@ -154,7 +154,7 @@ export function ModelPicker({
     if (!option.thinking?.levels.length) return undefined;
     const requested = changesRoute(option) ? undefined : (preferredThinking ?? undefined);
     return option.gatewayRevision
-      ? gatewayEffort(option, requested)
+      ? gatewayEffort(option.thinking, requested)
       : fitThinkingLevel(requested ?? defaultThinking, option.thinking.levels, defaultThinking);
   }
   const previewLevel = preview && levelFor(preview);

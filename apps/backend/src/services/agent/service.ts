@@ -31,8 +31,8 @@ import {
 } from "@shared/agent-asks";
 import { isUnknownEvent } from "@shared/protocol-types";
 import { hasAgentMessages } from "./agent-messages";
-import { prepareGatewayTurn } from "./gateway-turn";
-import { requireRevision } from "../gateways";
+import { prepareGatewayTurn } from "../gateways/turn";
+import { requireRevision } from "../gateways/connections";
 import { holdingTurn, wireTurn, forgetChatTurns, connectTurnNotices } from "./chat-turn";
 import { onTurnNotice, recoverSteers, userEcho } from "./queue";
 import { AgentLink } from "./client";

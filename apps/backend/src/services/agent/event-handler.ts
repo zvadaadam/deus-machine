@@ -25,7 +25,7 @@ import type {
   ConversationState,
   TurnCancelResult,
 } from "@zvada/agent-server/protocol";
-import { refreshGateway } from "../gateways";
+import { refreshGateway } from "../gateways/connections";
 import {
   isLiveEnvelope,
   isUnknownEvent,
@@ -58,7 +58,7 @@ import {
   turnNotices,
   type NativeEnd,
 } from "./chat-turn";
-import { gatewayTurnEvent } from "./gateway-turn";
+import { gatewayTurnEvent } from "../gateways/turn";
 import { OpenParts } from "./open-parts";
 
 // ---- Types ----

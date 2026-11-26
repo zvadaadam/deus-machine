@@ -18,7 +18,7 @@ export function useNewChatSelection(location: "local" | "cloud") {
   const defaultThinking = useDefaultThinkingLevel();
   const selection = useChatModel({ cloud: location === "cloud", picked });
   const thinkingLevel = selection.gatewayModel
-    ? (gatewayEffort(selection.gatewayModel, pickedLevel ?? undefined) ?? "off")
+    ? (gatewayEffort(selection.gatewayThinking, pickedLevel ?? undefined) ?? "off")
     : fitThinkingLevel(pickedLevel ?? defaultThinking, selection.thinkingLevels, defaultThinking);
   const setModel = useCallback(({ value }: PickerOption, level?: ThinkingLevel) => {
     if (level !== undefined) setThinkingLevel(level);

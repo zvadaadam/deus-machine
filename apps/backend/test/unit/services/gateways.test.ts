@@ -14,7 +14,7 @@ import { SCHEMA_SQL } from "@shared/schema";
 import { LOCAL_CALLER } from "../../../src/api/registry";
 import gatewayHandlers from "../../../src/api/gateways";
 import { GatewayError, ValidationError } from "../../../src/lib/errors";
-import * as gatewayTurn from "../../../src/services/agent/gateway-turn";
+import * as gatewayTurn from "../../../src/services/gateways/turn";
 import { claimTurn, holdingTurn, forgetChatTurns } from "../../../src/services/agent/chat-turn";
 import * as service from "../../../src/services/agent/service";
 import { queuedMessages } from "../../../src/services/agent/queue";
@@ -23,12 +23,12 @@ import {
   prepareGatewayTurn,
   gatewayCredential,
   gatewayTurnEvent,
-} from "../../../src/services/agent/gateway-turn";
-import { checkCatalog } from "../../../src/services/agent/gateway";
+} from "../../../src/services/gateways/turn";
+import { checkCatalog } from "../../../src/services/gateways/catalog";
 import { getAllSettings } from "../../../src/services/settings.service";
 import { operations, assistantCaller } from "../../helpers";
 
-vi.mock("../../../src/services/agent/gateway-turn", async (load) => {
+vi.mock("../../../src/services/gateways/turn", async (load) => {
   const original = await load<typeof gatewayTurn>();
   return { ...original, gatewayCredential: vi.fn(original.gatewayCredential) };
 });
@@ -131,7 +131,7 @@ async function prepared(
     thinkingLevel?: Parameters<typeof prepareGatewayTurn>[1];
   }
 ) {
-  const { requireRevision } = await import("../../../src/services/gateways");
+  const { requireRevision } = await import("../../../src/services/gateways/connections");
   const ref = requireRevision(pick.revision).ref;
   const turn: Parameters<typeof prepareGatewayTurn>[0] = {
     binding: {
@@ -683,7 +683,7 @@ it("joins published ids to the pinned client catalog, leaves unknowns in Setting
     expect(models[0]).toMatchObject({
       label: "GPT 6.2 Astra",
       runner: "codex-app-server",
-      thinking: { levels: ["medium", "high"], default: "medium" },
+      thinkingByFormat: { responses: { levels: ["medium", "high"], default: "medium" } },
     });
     expect(models[1]).toMatchObject({ label: "Sonnet 4.6", runner: "claude-code" });
     expect(models[2]).toMatchObject({ excluded: "hidden" });
@@ -734,7 +734,7 @@ it.each([
   async (preset, baseUrl, error) => {
     const { initVault, seal } = await import("../../../src/services/integrations/vault");
     const { saveSetting } = await import("../../../src/services/settings.service");
-    const { connectionFor } = await import("../../../src/services/gateways");
+    const { connectionFor } = await import("../../../src/services/gateways/connections");
     await initVault("seal");
     const credential = seal({ baseUrl, apiKey: key, formats: ["responses"], models: [] });
     const revision = crypto.randomUUID();
@@ -753,7 +753,7 @@ it.each([
 );
 
 it("seals independent gateways, validates the OpenRouter key, and binds the requested format, model and revision", async () => {
-  const { connectionFor } = await import("../../../src/services/gateways");
+  const { connectionFor } = await import("../../../src/services/gateways/connections");
   const requests: string[] = [];
   const customKey = randomBytes(24).toString("hex");
   const fixture = {
@@ -856,7 +856,7 @@ it("seals independent gateways, validates the OpenRouter key, and binds the requ
     expect(router.models[0]).toMatchObject({
       label: "Example GPT",
       provider: "openai",
-      thinking: { levels: ["low", "high"], default: "high" },
+      thinkingByFormat: { responses: { levels: ["low", "high"], default: "high" } },
     });
     expect(requests).toContain("/api/v1/key");
     expect(requests).toContain("/api/v1/models");
@@ -1010,7 +1010,7 @@ it("uses published capabilities for OpenRouter even when an id is in the harness
     const [router] = await run(api.gateways);
     expect(router!.models[0]?.runner).toBeUndefined();
     expect(router!.models[1]?.runner).toBe("codex-app-server");
-    expect(router!.models[1]?.thinking).toBeUndefined();
+    expect(router!.models[1]?.thinkingByFormat).toBeUndefined();
   } finally {
     fetch.mockRestore();
   }
@@ -1038,7 +1038,7 @@ it("has no account inventory or management key on the wire", () => {
 });
 
 it("keeps the canonical Custom path and honors explicit catalog restrictions in the picker and admission", async () => {
-  const { connectionFor } = await import("../../../src/services/gateways");
+  const { connectionFor } = await import("../../../src/services/gateways/connections");
   const data = [
     { id: "unknown-id" },
     { id: "unspecified", supported_endpoints: null, supported_parameters: null },
@@ -1159,6 +1159,120 @@ it("refreshes an edited gateway while its previous revision still has a read in 
   }
   await expect(oldRead).rejects.toThrow("connection changed");
   expect((await run(api.gateways))[0]?.models.map((m) => m.id)).toEqual(["current"]);
+});
+
+it.each([
+  {
+    name: "a known OpenRouter model",
+    preset: "openrouter",
+    endpoints: ["responses", "messages"],
+    levels: ["high", "ultra"],
+    expected: { responses: { levels: ["high"] } },
+  },
+  {
+    name: "both Custom formats",
+    preset: "custom",
+    endpoints: ["messages", "responses"],
+    levels: ["high", "ultra"],
+    expected: {
+      messages: { levels: ["high"] },
+      responses: { levels: ["high", "ultra"], default: "ultra" },
+    },
+  },
+  {
+    name: "one Custom format",
+    preset: "custom",
+    endpoints: ["responses"],
+    levels: ["ultra"],
+    expected: { responses: { levels: ["ultra"], default: "ultra" } },
+  },
+  {
+    name: "two formats with efforts only Codex accepts",
+    preset: "custom",
+    endpoints: ["messages", "responses"],
+    levels: ["ultra"],
+    expected: { responses: { levels: ["ultra"], default: "ultra" } },
+  },
+  {
+    name: "no supported efforts",
+    preset: "custom",
+    endpoints: ["messages", "responses"],
+    levels: ["off"],
+    expected: undefined,
+  },
+] as const)(
+  "fits advertised efforts once for $name",
+  async ({ preset, endpoints, levels, expected }) => {
+    const row = {
+      id: "openai/gpt-6-luna",
+      endpoints,
+      architecture: { input_modalities: ["text"], output_modalities: ["text"] },
+      supported_parameters: ["tools", "reasoning"],
+      reasoning: { supported_efforts: levels, default_effort: "ultra" },
+    };
+    const fetcher = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ data: [row] }));
+    try {
+      const [model] = await checkCatalog({
+        preset,
+        baseUrl,
+        apiKey: key,
+        formats: ["messages", "responses"],
+      });
+      expect(model).toBeDefined();
+      if (expected) expect(model!.thinkingByFormat).toStrictEqual(expected);
+      else expect(model).not.toHaveProperty("thinkingByFormat");
+    } finally {
+      fetcher.mockRestore();
+    }
+  }
+);
+
+it("reopens the sealed Custom catalog with each runner's fitted efforts", async () => {
+  const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+    Response.json({
+      data: [
+        {
+          id: "both",
+          reasoning: { supported_efforts: ["high", "ultra"], default_effort: "ultra" },
+        },
+      ],
+    })
+  );
+  try {
+    await run(api.connectGateway, {
+      preset: "custom",
+      baseUrl,
+      apiKey: key,
+      revision: null,
+      formats: ["messages", "responses"],
+    });
+    const [saved] = await run(api.gateways);
+    const expected = {
+      messages: { levels: ["high"] },
+      responses: { levels: ["high", "ultra"], default: "ultra" },
+    };
+    expect(saved!.models[0]!.thinkingByFormat).toStrictEqual(expected);
+    const { stdout } = await promisify(execFile)(
+      "bun",
+      [
+        "--no-env-file",
+        "-e",
+        "const {connectionFor}=await import(process.argv[1]); const {models}=await connectionFor(process.argv[2]); console.log(JSON.stringify(models[0].thinkingByFormat));",
+        new URL("../../../src/services/gateways/connections.ts", import.meta.url).href,
+        saved!.revision,
+      ],
+      {
+        cwd: fileURLToPath(new URL("../../../", import.meta.url)),
+        env: { ...process.env, DATABASE_PATH: join(dir, "deus.db") },
+      }
+    );
+    expect(JSON.parse(stdout)).toStrictEqual(expected);
+    expect(fetcher).toHaveBeenCalledOnce();
+  } finally {
+    fetcher.mockRestore();
+  }
 });
 
 it("keeps the Bun catalog and each harness's credential-bearing relay requests on loopback", async () => {
