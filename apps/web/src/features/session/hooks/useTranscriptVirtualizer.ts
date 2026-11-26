@@ -31,6 +31,7 @@ export function useTranscriptVirtualizer({
   firstSeq,
   estimateSize,
   getItemKey,
+  isChasing,
   preserveScrollPosition,
   onLoadOlder,
 }: {
@@ -39,6 +40,7 @@ export function useTranscriptVirtualizer({
   firstSeq: number | undefined;
   estimateSize: (index: number) => number;
   getItemKey: (index: number) => VirtualItem["key"];
+  isChasing: () => boolean;
   preserveScrollPosition: (restore: () => void) => void;
   onLoadOlder?: () => void;
 }) {
@@ -122,6 +124,11 @@ export function useTranscriptVirtualizer({
         const pane = instance.scrollElement;
         const content = list.current;
         if (!pane || !content || (anchor.current && anchorIndex >= 0)) return false;
+        if (isChasing()) {
+          // The chase can stop before React commits the new height on a later task.
+          content.style.height = `${instance.getTotalSize() + delta}px`;
+          return false;
+        }
         if (content.offsetTop + item.end > pane.scrollTop) return false;
         // TanStack applies the correction before it publishes the new measured size.
         content.style.height = `${instance.getTotalSize() + delta}px`;
@@ -129,6 +136,11 @@ export function useTranscriptVirtualizer({
       };
       return measureElement(element, entry, instance);
     },
+  });
+
+  useLayoutEffect(() => {
+    // React skips the height write when measurements return to the previously committed size.
+    if (list.current) list.current.style.height = `${virtualizer.getTotalSize()}px`;
   });
 
   useLayoutEffect(() => {

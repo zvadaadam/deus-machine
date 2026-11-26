@@ -214,6 +214,7 @@ export function Chat({
       : -1;
   const {
     showScrollButton,
+    isChasing,
     stopChase,
     handleScrollToBottomClick,
     transcriptRef,
@@ -244,6 +245,7 @@ export function Chat({
     firstSeq: messages[0]?.seq,
     estimateSize,
     getItemKey,
+    isChasing,
     preserveScrollPosition,
     onLoadOlder,
   });
