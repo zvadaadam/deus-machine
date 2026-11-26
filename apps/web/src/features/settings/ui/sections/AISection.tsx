@@ -2,7 +2,8 @@ import type { GatewayStatus } from "@shared/gateways";
 import { needsRemoteAuth } from "@/platform/ws/device-auth";
 import { api } from "@shared/api";
 import { call } from "@/platform/ws";
-import { useGateways } from "@/shared/hooks/useGateways";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/shared/api/queryKeys";
 import { GatewaysSection } from "./GatewaysSection";
 import { useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
@@ -32,7 +33,7 @@ export function AISection({
   cloudOnly = false,
   loadingDefaults = false,
 }: SettingsSectionProps & { cloudOnly?: boolean; loadingDefaults?: boolean }) {
-  const gateways = useGateways(!cloudOnly);
+  const cache = useQueryClient();
   const local = !cloudOnly && !needsRemoteAuth();
   const [checking, setChecking] = useState(0);
   const recheck = async (connection: GatewayStatus) => {
@@ -78,7 +79,10 @@ export function AISection({
           disabled={refreshing}
           onClick={() => {
             void agentAuthQuery.refetch();
-            if (local) void Promise.allSettled((gateways.data ?? []).map(recheck));
+            if (local) {
+              const gateways = cache.getQueryData<GatewayStatus[]>(queryKeys.settings.gateways);
+              void Promise.allSettled((gateways ?? []).map(recheck));
+            }
           }}
         >
           {refreshing ? (
@@ -100,13 +104,7 @@ export function AISection({
           ))}
         </div>
       </section>
-      <GatewaysSection
-        gateways={gateways.data}
-        error={gateways.error?.message}
-        local={local}
-        recheck={recheck}
-        checking={checking > 0}
-      />
+      <GatewaysSection local={local} recheck={recheck} checking={checking > 0} />
       <section aria-label="Defaults">
         <h4 className="text-muted-foreground mb-1 text-xs font-medium">Defaults</h4>
         <div className="divide-border-subtle divide-y">

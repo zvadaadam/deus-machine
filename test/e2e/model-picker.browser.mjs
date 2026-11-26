@@ -39,9 +39,10 @@ const levelsOf = (value: string) => {
   return modelThinkingLevels(CATALOG_MODEL_LISTS, harness, model);
 };
 const client=new QueryClient();
+const params = new URLSearchParams(location.search);
+if (params.has("settings")) client.setQueryData(["gateways"], [gateway,...(params.has("two")?[{...gateway,ref:"router",preset:"openrouter",revision:"router",baseUrl:"https://openrouter.ai/api"}]:[])]);
 function App() {
-  const params = new URLSearchParams(location.search);
-  if(params.has("settings")) return <QueryClientProvider client={client}><GatewaysSection gateways={[gateway,...(params.has("two")?[{...gateway,ref:"router",preset:"openrouter",revision:"router",baseUrl:"https://openrouter.ai/api"}]:[])]} local={true} checking={false} recheck={async()=>{window.catalogReads=(window.catalogReads??0)+1;}}/></QueryClientProvider>;
+  if(params.has("settings")) return <QueryClientProvider client={client}><GatewaysSection local={true} checking={false} recheck={async()=>{window.catalogReads=(window.catalogReads??0)+1;}}/></QueryClientProvider>;
   const [model, setModel] = useState(params.get("model")!);
   const [level, setLevel] = useState(params.get("level") as ThinkingLevel);
   const [opened, setOpened] = useState("");
@@ -590,10 +591,22 @@ try {
   await form.getByRole("button", { name: "Close" }).click();
   await options.and(settings.locator(":focus")).waitFor({ timeout: 3000 });
   await catalog.click();
+  assert.equal(await settings.evaluate(() => window.catalogReads ?? 0), 0);
+  await settings.getByRole("heading", { name: "OpenAI", exact: true }).waitFor();
+  const rows = settings.getByRole("listitem");
+  await rows.filter({ hasText: "work:one" }).getByText("Codex", { exact: true }).waitFor();
+  await rows
+    .filter({ hasText: "Claude Sonnet" })
+    .getByText("Claude Code", { exact: true })
+    .waitFor();
+  await rows
+    .filter({ hasText: "Hidden image" })
+    .getByText("Not offered in chat", { exact: true })
+    .waitFor();
+  assert.equal(await rows.count(), 5);
+  await options.click();
+  await settings.getByRole("menuitem", { name: "Refresh models" }).click();
   assert.equal(await settings.evaluate(() => window.catalogReads), 1);
-  await settings.getByRole("button", { name: /OpenAI.*2 for chat.*3 total/ }).click();
-  await settings.getByRole("button", { name: "GPT 6.2 Astra", exact: true }).click();
-  await settings.getByText("work:one", { exact: true }).waitFor();
   await settings.close();
 
   chat = await visit("gateway&many&model=gateway:codex-app-server:extra-15:work:one&level=medium");

@@ -887,7 +887,7 @@ No process environment, turn config or client read contains the key. `gatewayCre
 hands the engine a held credential with the chat’s binding. The engine’s loopback relay gives the CLI a placeholder.
 The first admitted turn binds the chat to its gateway and agent. `services/agent/persistence.ts` writes `sessions.gateway_revision` with the first turn record.
 `requireChatRoute` and `requireSameHarness` in `services/agent/turns.ts` refuse a different route. The picker offers “Open in new chat”.
-`services/gateways/catalog.ts` reads the catalog at connect. Opening the models, Retry and a missing model refresh the stored list
+`services/gateways/catalog.ts` reads the catalog at connect. Refresh, Retry and a missing model update the stored list
 through `services/gateways/connections.ts`, one read at a time per revision. A turn checks the stored list and never fetches it.
 `services/agent/event-facts.ts` uses typed engine errors for `usage_limit` and `_gateway`. Keep unknown `scope` values unknown,
 use the validated `retryAt` for Continue, and use `reason` for credential refusal. Never match gateway error text.

@@ -3,17 +3,19 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AISection } from "@/features/settings/ui/sections/AISection";
+import type { GatewayStatus } from "@shared/gateways";
 import type { AgentAuthAnswer, HarnessAuth, HarnessCli } from "@shared/agent-auth";
 
 const state = vi.hoisted(() => ({
   data: undefined as AgentAuthAnswer | undefined,
   isError: false,
+  gateways: [] as GatewayStatus[],
   remote: false,
   isFetching: false,
 }));
 vi.mock("@/assets/agents/cliproxyapi.svg?react", () => ({ default: () => null }));
 vi.mock("@/assets/agents", () => ({ getAgentLogo: () => null }));
-vi.mock("@/shared/hooks/useGateways", () => ({ useGateways: () => ({ data: [] }) }));
+vi.mock("@/shared/hooks/useGateways", () => ({ useGateways: () => ({ data: state.gateways }) }));
 vi.mock("@/platform/ws/device-auth", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   needsRemoteAuth: () => state.remote,
@@ -51,15 +53,17 @@ beforeEach(() => {
   state.data = undefined;
   state.isError = false;
   state.remote = false;
+  state.gateways = [];
   state.isFetching = false;
 });
 
-const render = () =>
+const render = (props: Partial<Parameters<typeof AISection>[0]> = {}) =>
   renderToStaticMarkup(
-    createElement(AISection, {
-      settings: {},
-      saveSetting: async () => true,
-    })
+    createElement(
+      QueryClientProvider,
+      { client: new QueryClient() },
+      createElement(AISection, { settings: {}, saveSetting: vi.fn(), ...props })
+    )
   );
 
 describe("local agent status", () => {
@@ -67,12 +71,10 @@ describe("local agent status", () => {
     const label = "Continue after a usage limit";
     for (const on of [undefined, true]) {
       const props = { settings: { continue_after_usage_limit: on }, saveSetting: vi.fn() };
-      const html = renderToStaticMarkup(createElement(AISection, props));
+      const html = render(props);
       expect(html).toContain(label);
       expect(html).toContain(`aria-checked="${on === true}"`);
-      expect(
-        renderToStaticMarkup(createElement(AISection, { ...props, cloudOnly: true }))
-      ).not.toContain(label);
+      expect(render({ ...props, cloudOnly: true })).not.toContain(label);
     }
   });
 
@@ -190,35 +192,24 @@ it("checks Agent messages by default and honours a saved choice", () => {
     [true, true],
   ] as const) {
     const settings = { agent_messages: saved };
-    const html = renderToStaticMarkup(createElement(AISection, { settings, saveSetting: vi.fn() }));
+    const html = render({ settings });
     const toggle = html.match(/<button\b[^>]*\bid="agent-messages"[^>]*>/)?.[0];
     expect(toggle).toContain(`aria-checked="${checked}"`);
   }
 });
 
 it("makes the connected catalog count an expandable button and keeps connection options separate", async () => {
-  const { GatewaysSection } = await import("@/features/settings/ui/sections/GatewaysSection");
-  const html = renderToStaticMarkup(
-    createElement(
-      QueryClientProvider,
-      { client: new QueryClient() },
-      createElement(GatewaysSection, {
-        gateways: [
-          {
-            ref: "original",
-            preset: "cliproxyapi",
-            formats: ["responses"],
-            revision: "gen",
-            baseUrl: "http://localhost",
-            models: [{ id: "x", provider: "openai" }],
-          },
-        ],
-        local: true,
-        checking: false,
-        recheck: vi.fn(),
-      })
-    )
-  );
+  state.gateways = [
+    {
+      ref: "original",
+      preset: "cliproxyapi",
+      formats: ["responses"],
+      revision: "rev",
+      baseUrl: "http://localhost",
+      models: [{ id: "x", label: "x", provider: "openai" }],
+    },
+  ];
+  const html = render();
   expect(html).toContain(
     "Safest with API keys. If you sign a personal subscription into the proxy, or switch between accounts to get past a limit, the provider can suspend that account."
   );
