@@ -1,22 +1,16 @@
-/**
- * useSlashCommand — Detects `/` trigger in textarea and shows available skills & commands
- *
- * When the user types `/` at position 0 (start of message), opens a popover
- * listing available skills and commands. Items are fetched once via TanStack Query
- * and filtered client-side as the user types.
- */
-
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { readAgentConfig } from "@/features/agent-config/api/agent-config.service";
 import type { SkillItem, CommandItem } from "@shared/types/agent-config";
 import type { AgentConfigReach } from "@/features/workspace/lib/reach";
 
-export interface SlashCommandItem {
+interface SlashItem {
   name: string;
   description: string;
-  /** "skill" or "command" — used for visual distinction */
-  kind: "skill" | "command";
 }
+
+type AgentSlashItem = SlashItem & { kind: "skill" | "command" };
+type SlashAction = SlashItem & { kind: "action"; run: () => void };
+export type SlashCommandItem = AgentSlashItem | SlashAction;
 
 interface UseSlashCommandOptions {
   /** Current textarea value */
@@ -27,18 +21,18 @@ interface UseSlashCommandOptions {
    */
   config: AgentConfigReach;
   /** In the cloud: what reaches the agent from here (the skills a cloud turn carries). */
-  cloudItems?: SlashCommandItem[];
+  cloudItems?: AgentSlashItem[];
   /** Callback to update the textarea value after inserting a command */
   onChange: (newValue: string) => void;
-  /** Disable the hook entirely (e.g. for Codex which doesn't support skills) */
-  enabled?: boolean;
+  includeAgentCommands: boolean;
+  actions: SlashAction[];
   /**
    * When provided, selecting a skill adds a structured mention via this callback
    * instead of inserting `/name ` text inline. The `/query` the user typed is
    * removed. Commands still use the legacy text-insertion path since they're
    * typically one-off actions (e.g. /clear).
    */
-  onAddSkill?: (skill: SlashCommandItem) => void;
+  onAddSkill?: (skill: AgentSlashItem) => void;
 }
 
 interface UseSlashCommandReturn {
@@ -60,19 +54,8 @@ interface UseSlashCommandReturn {
   selectedIndex: number;
 }
 
-/**
- * Detect `/` trigger at position 0 of the input.
- * Returns true when the input starts with `/` and contains no spaces
- * (the user is typing a single-token command name).
- */
-function isSlashTriggerActive(value: string): boolean {
-  if (!value.startsWith("/")) return false;
-  // Only the first "word" — if there's a space, the command is already complete
-  return !value.slice(1).includes(" ");
-}
-
 /** Skills first, then commands, then alphabetically within each group. */
-function sortItems(items: SlashCommandItem[]): SlashCommandItem[] {
+function sortItems(items: AgentSlashItem[]): AgentSlashItem[] {
   return [...items].sort((a, b) => {
     if (a.kind !== b.kind) return a.kind === "skill" ? -1 : 1;
     return a.name.localeCompare(b.name);
@@ -88,7 +71,7 @@ function sortItems(items: SlashCommandItem[]): SlashCommandItem[] {
 export async function readLocalSlashItems(
   folder: string | null,
   read: typeof readAgentConfig = readAgentConfig
-): Promise<SlashCommandItem[]> {
+): Promise<AgentSlashItem[]> {
   const [globalSkills, globalCommands, projectSkills, projectCommands] = await Promise.allSettled([
     read("skills", "global"),
     read("commands", "global"),
@@ -96,7 +79,7 @@ export async function readLocalSlashItems(
     folder ? read("commands", "project", folder) : [],
   ]);
 
-  const items: SlashCommandItem[] = [];
+  const items: AgentSlashItem[] = [];
   const seen = new Set<string>();
   const addItems = (
     result: PromiseSettledResult<SkillItem[] | CommandItem[]>,
@@ -118,8 +101,18 @@ export async function readLocalSlashItems(
 }
 
 /** The `/` menu's items for a cloud agent: only what reaches it from here, never this computer's folders. */
-export function cloudSlashItems(cloudItems: SlashCommandItem[] | undefined): SlashCommandItem[] {
+export function cloudSlashItems(cloudItems: AgentSlashItem[] | undefined): AgentSlashItem[] {
   return sortItems(cloudItems ?? []);
+}
+
+export function withSlashActions(
+  actions: SlashAction[],
+  items: AgentSlashItem[]
+): SlashCommandItem[] {
+  return [
+    ...actions,
+    ...items.filter((item) => !actions.some((action) => action.name === item.name)),
+  ];
 }
 
 export function useSlashCommand({
@@ -127,25 +120,22 @@ export function useSlashCommand({
   config,
   cloudItems,
   onChange,
-  enabled = true,
+  includeAgentCommands,
+  actions,
   onAddSkill,
 }: UseSlashCommandOptions): UseSlashCommandReturn {
-  const [isOpen, setIsOpen] = useState(false);
+  const triggerActive = (includeAgentCommands || actions.length > 0) && /^\/\S*$/.test(value);
+  const [open, setIsOpen] = useState(triggerActive);
+  const isOpen = triggerActive && open;
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   // Cached items from backend (fetched per workspace, filtered client-side)
-  const [localItems, setLocalItems] = useState<SlashCommandItem[]>([]);
+  const [localItems, setLocalItems] = useState<AgentSlashItem[]>([]);
   const cloud = config.where === "cloud";
   const workspacePath = config.where === "local" ? config.folder : null;
-  const allItems = useMemo(
-    () => (cloud ? cloudSlashItems(cloudItems) : localItems),
-    [cloud, cloudItems, localItems]
-  );
   const [loading, setLoading] = useState(false);
   const fetchedWorkspaceRef = useRef<string | null>(null);
 
-  // Detect trigger (disabled entirely for agents that don't support skills)
-  const triggerActive = enabled && isSlashTriggerActive(value);
   const query = triggerActive ? value.slice(1) : "";
 
   // Open/close based on trigger — query in deps so Escape → continued typing reopens
@@ -161,7 +151,7 @@ export function useSlashCommand({
   // Fetch skills + commands when popover first opens (re-fetches on workspace change)
   useEffect(() => {
     // A cloud agent does not run here: nothing on this computer's disk applies.
-    if (!isOpen || cloud) return;
+    if (!isOpen || !includeAgentCommands || cloud) return;
     const cacheKey = workspacePath ?? "__global__";
     if (fetchedWorkspaceRef.current === cacheKey) return;
     fetchedWorkspaceRef.current = cacheKey;
@@ -178,32 +168,36 @@ export function useSlashCommand({
     };
 
     fetchItems();
-  }, [isOpen, cloud, workspacePath]);
+  }, [isOpen, includeAgentCommands, cloud, workspacePath]);
 
   // Filter items by query (client-side fuzzy match)
   const results = useMemo(() => {
     if (!isOpen) return [];
-    if (!query) return allItems;
+    const items = includeAgentCommands
+      ? withSlashActions(actions, cloud ? cloudSlashItems(cloudItems) : localItems)
+      : actions;
+    if (!query) return items;
 
     const lowerQuery = query.toLowerCase();
-    return allItems.filter(
+    return items.filter(
       (item) =>
         item.name.toLowerCase().includes(lowerQuery) ||
         item.description.toLowerCase().includes(lowerQuery)
     );
-  }, [isOpen, query, allItems]);
+  }, [isOpen, query, actions, includeAgentCommands, cloud, cloudItems, localItems]);
 
   // Reset selected index when results change
   useEffect(() => {
     setSelectedIndex(0);
   }, [results.length]);
 
-  // Select an item: for skills with pill mode, surface as a chip above input;
-  // for commands (or skills without pill mode), insert `/name ` text inline.
   const selectItem = useCallback(
     (name: string) => {
-      const item = allItems.find((i) => i.name === name);
-      if (onAddSkill && item?.kind === "skill") {
+      const item = results.find((i) => i.name === name);
+      if (item?.kind === "action") {
+        onChange("");
+        item.run();
+      } else if (onAddSkill && item?.kind === "skill") {
         onAddSkill(item);
         // Remove the typed `/query` — the whole textarea starts with `/` and
         // contains no spaces when the trigger is active, so clearing is safe.
@@ -213,7 +207,7 @@ export function useSlashCommand({
       }
       setIsOpen(false);
     },
-    [onChange, onAddSkill, allItems]
+    [onChange, onAddSkill, results]
   );
 
   // Dismiss the popover
@@ -253,10 +247,10 @@ export function useSlashCommand({
   );
 
   return {
-    isOpen,
+    isOpen: isOpen && (includeAgentCommands || results.length > 0),
     query,
     results,
-    loading,
+    loading: includeAgentCommands && loading,
     selectItem,
     dismiss,
     handleKeyDown,

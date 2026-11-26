@@ -120,6 +120,10 @@ await writeFile(
   `---\nname: ${LOCAL_SKILL}\ndescription: Only in this computer's worktree\n---\nBody.\n`
 );
 
+const commandDir = path.join(repo, ".deus", "local-reach", ".claude", "commands");
+await mkdir(commandDir, { recursive: true });
+await writeFile(path.join(commandDir, "plan.md"), "# A project-specific planning command\n");
+
 const db = new Database(path.join(directory, "deus.db"));
 db.exec(SCHEMA_SQL);
 db.pragma("journal_mode = WAL");
@@ -243,6 +247,19 @@ try {
   await page.keyboard.press("Escape");
   await composer().fill("");
   check("the local `/` menu lists the skill in the workspace's own folder");
+
+  await composer().fill("/");
+  const planAction = page.getByRole("button", { name: /Enter plan mode/ });
+  await planAction.waitFor();
+  assert.equal(await planAction.getAttribute("data-selected"), "true");
+  assert.equal(await page.getByText("A project-specific planning command").count(), 0);
+  await planAction.click();
+  const chip = page.getByRole("button", { name: "Exit plan mode", exact: true });
+  await chip.waitFor();
+  assert.equal(await composer().inputValue(), "");
+  await chip.click();
+  await chip.waitFor({ state: "detached" });
+  check("the /plan action comes before project skills and wins over a project plan command");
 
   // 2. The cloud chat. Rule 2: an internet link opens in the person's browser.
   const releasePreview = Promise.withResolvers();

@@ -5,9 +5,8 @@
  */
 import { useMemo } from "react";
 import { useIntegrations } from "@/features/customize/api/integrations.queries";
-import type { SlashCommandItem } from "./useSlashCommand";
 
-export function useCloudSlashItems(enabled: boolean): SlashCommandItem[] {
+export function useCloudSlashItems(enabled: boolean) {
   const { data } = useIntegrations({ enabled });
   return useMemo(
     () =>

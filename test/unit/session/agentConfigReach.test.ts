@@ -27,7 +27,11 @@ vi.mock("@/features/agent-config/ui/categories/HooksView", () => view("HooksView
 
 import { AgentConfigPanel } from "@/features/agent-config/ui/AgentConfigPanel";
 import { CategoryContentArea } from "@/features/agent-config/ui/CategoryContentArea";
-import { cloudSlashItems, readLocalSlashItems } from "@/features/session/hooks/useSlashCommand";
+import {
+  cloudSlashItems,
+  readLocalSlashItems,
+  withSlashActions,
+} from "@/features/session/hooks/useSlashCommand";
 import { agentConfigOf } from "@/features/workspace/lib/reach";
 
 const workspace = (fields: Partial<Workspace>) =>
@@ -113,6 +117,18 @@ describe("the / menu", () => {
       "global-commands",
       "project-commands@/repos/deus/.deus/w",
     ]);
+  });
+
+  it("lists the composer action first and only once when a disk command has its name", () => {
+    const plan = {
+      kind: "action",
+      name: "plan",
+      description: "Enter plan mode",
+      run: vi.fn(),
+    } as const;
+    const review = { kind: "skill", name: "review", description: "Review changes" } as const;
+    const diskPlan = { kind: "command", name: "plan", description: "Disk plan" } as const;
+    expect(withSlashActions([plan], [review, diskPlan])).toEqual([plan, review]);
   });
 
   it("lists nothing from this computer for a cloud agent, only what reaches it", () => {

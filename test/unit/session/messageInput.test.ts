@@ -9,6 +9,9 @@ import * as ws from "@/platform/ws";
 import { useChatModel } from "@/shared/hooks/useModelLists";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { SessionComposer } from "@/features/session/ui/SessionComposer";
+import { WorkspaceStartComposer } from "@/features/session/ui/WorkspaceStartComposer";
+import { pendingFirstMessages } from "@/features/workspace/store/workspaceStartStore";
+import type { Workspace } from "@/shared/types";
 import { MessageInput } from "@/features/session/ui/MessageInput";
 import {
   composerStore,
@@ -168,7 +171,7 @@ it("opens a chat from another build with its draft editable and Send disabled", 
       );
       expect(html.match(/<textarea[^>]*>/)?.[0]).not.toContain(' disabled=""');
       expect(html).toContain("Keep this draft</textarea>");
-      expect(html).not.toContain('aria-label="Plan mode"');
+      expect(html).not.toContain('aria-label="Exit plan mode"');
     }
   } finally {
     snapshot.mockRestore();
@@ -345,6 +348,7 @@ describe("sending from the composer", () => {
         status: "working",
         agent_harness: "claude-code",
       });
+      sessionComposerActions.setDraft("test", "/plan Follow up");
       const reason =
         "This chat already has 20 messages waiting. Remove one, or wait for the agent to take them.";
       const error = vi.spyOn(toast, "error").mockReturnValue("refused");
@@ -364,9 +368,12 @@ describe("sending from the composer", () => {
       await vi.waitFor(() => expect(error).toHaveBeenCalledExactlyOnceWith(reason));
       expect(call).toHaveBeenCalledExactlyOnceWith(
         op,
-        expect.objectContaining({ content: "Follow up" })
+        expect.objectContaining({ content: "Follow up", permissionMode: "plan" })
       );
-      expect(store.getState().composers.test.draft).toBe("Follow up");
+      expect(store.getState().composers.test).toMatchObject({
+        draft: "/plan Follow up",
+        planModeEnabled: true,
+      });
     }
   );
 
@@ -447,14 +454,127 @@ describe("the composer's placeholder", () => {
   });
 });
 
-describe("the plan mode toggle", () => {
-  const hasToggle = (initialModel: string, workspaceKind: "worktree" | "cloud") =>
-    renderInput({ initialModel, workspaceKind }).includes('aria-label="Plan mode"');
+describe("the /plan action", () => {
+  const sessionId = "slash-plan";
+  const model = "codex-app-server:gpt-6.1-sol";
+  const store = composerStore();
+  const state = () => store.getState().composers[sessionId];
+  const click = (label: string) =>
+    controls.button.mock.calls
+      .findLast(([props]) => props["aria-label"] === label)![0]
+      .onClick({ defaultPrevented: false });
+  const setDraft = (text: string) => sessionComposerActions.setDraft(sessionId, text);
+  const enter = () =>
+    controls.input.mock.lastCall![0].onKeyDown({
+      key: "Enter",
+      nativeEvent: {},
+      preventDefault: vi.fn(),
+    });
 
-  it("is offered on the local agents that can plan", () => {
-    expect(hasToggle("claude-code:opus", "worktree")).toBe(true);
-    expect(hasToggle("codex-app-server:gpt-6.1-sol", "worktree")).toBe(true);
-    expect(hasToggle("gemini:gemini-4-neon", "worktree")).toBe(false);
-    expect(hasToggle("codex-app-server:gpt-6.1-sol", "cloud")).toBe(false);
+  beforeEach(() => {
+    sessionComposerActions.seedIfAbsent(sessionId, emptyComposer(model, "high"));
+    vi.spyOn(store, "getInitialState").mockImplementation(store.getState);
+  });
+  afterEach(() => {
+    sessionComposerActions.discard(sessionId);
+    pendingFirstMessages.clear(sessionId);
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ["claude-code:opus", "worktree", true],
+    [model, "worktree", true],
+    ["gemini:gemini-4-neon", "worktree", false],
+    ["claude-code:opus", "cloud", false],
+    [model, "cloud", false],
+  ] as const)("lists /plan for %s in %s: %s", (initialModel, workspaceKind, offered) => {
+    setDraft("/");
+    const html = renderInput({ sessionId, initialModel, workspaceKind });
+    expect(html.includes("Enter plan mode")).toBe(offered);
+    expect(html).not.toContain('aria-label="Exit plan mode"');
+  });
+
+  it("runs the Codex menu action, clears the query, and lets the chip or a bare send turn Plan off", () => {
+    const send = vi.fn();
+    const draw = () =>
+      renderInput({ sessionId, initialModel: model, workspaceKind: "worktree", onSend: send });
+    vi.stubGlobal("window", { clearTimeout });
+    const chip = 'aria-label="Exit plan mode"';
+    sessionComposerActions.addPastedText(sessionId, "Keep this attachment");
+    for (const exit of ["chip", "send"]) {
+      setDraft("/pl");
+      const menu = draw();
+      expect(menu).toContain("Enter plan mode");
+      expect(menu).not.toContain(">Skills<");
+      expect(menu).not.toContain(">Commands<");
+      enter();
+      expect(state()).toMatchObject({ draft: "", planModeEnabled: true });
+      expect(draw()).toContain(chip);
+      setDraft("/plan");
+      expect(draw()).toContain("Exit plan mode</div>");
+      if (exit === "chip") click("Exit plan mode");
+      else click("Send message");
+      expect(state().planModeEnabled).toBe(false);
+      expect(draw()).not.toContain(chip);
+    }
+    expect(state()).toMatchObject({
+      draft: "",
+      pastedTexts: [{ content: "Keep this attachment" }],
+    });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["codex-app-server", "worktree", false, "/plan fix the header", "fix the header", "plan"],
+    ["codex-app-server", "worktree", true, "/plan fix the header", "fix the header", "plan"],
+    ["gemini", "worktree", false, "/plan fix the header", "/plan fix the header", undefined],
+    ["codex-app-server", "cloud", false, "/plan fix the header", "/plan fix the header", undefined],
+    ["codex-app-server", "worktree", false, "/planet earth", "/planet earth", undefined],
+  ] as const)(
+    "sends %s in %s (Plan on: %s): %s",
+    async (harness, kind, on, draft, content, mode) => {
+      const initialModel = harness === "gemini" ? "gemini:gemini-4-neon" : model;
+      sessionComposerActions.pickModel(sessionId, initialModel, "high");
+      if (on) sessionComposerActions.togglePlanMode(sessionId);
+      setDraft(draft);
+      client.setQueryData(queryKeys.sessions.detail(sessionId), {
+        id: sessionId,
+        agent_harness: harness,
+        workspace_kind: kind,
+        status: "idle",
+      });
+      vi.spyOn(ws, "isConnected").mockReturnValue(true);
+      const call = vi.spyOn(ws, "call").mockResolvedValue({ queued: false });
+      render(createElement(SessionComposer, { sessionId, initialModel }));
+      enter();
+      await vi.waitFor(() => expect(state().draft).toBe(""));
+      expect(call).toHaveBeenCalledExactlyOnceWith(
+        api.sendMessage,
+        expect.objectContaining({
+          sessionId,
+          content,
+          permissionMode: mode,
+        })
+      );
+      expect(state().planModeEnabled).toBe(mode === "plan");
+    }
+  );
+
+  it("stages the remaining text and its Plan setting for first-message delivery", () => {
+    setDraft("/plan Review the layout");
+    render(
+      createElement(WorkspaceStartComposer, {
+        workspace: { id: sessionId, kind: "worktree" } as Workspace,
+      })
+    );
+    click("Send message");
+    expect(pendingFirstMessages.get(sessionId)).toEqual({
+      message: "Review the layout",
+      model,
+      thinkingLevel: "high",
+      planMode: true,
+    });
+    expect(state().planModeEnabled).toBe(true);
   });
 });

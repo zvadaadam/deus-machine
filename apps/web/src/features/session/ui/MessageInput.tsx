@@ -263,11 +263,8 @@ export function MessageInput({
   const { model, agentHarness, lists: modelLists, live: listIsLive } = selection;
   const isClaudeAgent = agentHarness === "claude-code";
 
-  // Build combined message content from all staged sources.
-  // See the big block-comment in the previous revision for ordering rationale
-  // (skills first → inspected elements → file mentions → pastes → typed text,
-  // then images appended as canonical `image` PartInputs).
-  const buildCombinedContent = () => {
+  const showPlanMode = canPlan(agentHarness, workspaceKind);
+  const buildCombinedContent = (typed: string) => {
     const textParts: string[] = [];
     if (skillMentions.length > 0) {
       textParts.push(skillMentions.map((s) => `/${s.name}`).join(" "));
@@ -281,7 +278,6 @@ export function MessageInput({
     for (const paste of pastedTexts) {
       textParts.push(paste.content);
     }
-    const typed = draft.trim();
     if (typed) textParts.push(typed);
     const combinedText = textParts.join("\n\n");
 
@@ -300,7 +296,17 @@ export function MessageInput({
   const canSend = hasContent && !sending && !editing && !disabledReason;
   const handleSend = async (mode?: "steer") => {
     if (!canSend) return;
-    const combined = buildCombinedContent();
+    let typed = draft.trim();
+    if (showPlanMode && /^\/plan(?:\s|$)/.test(draft)) {
+      typed = typed.slice("/plan".length).trimStart();
+      if (!typed) {
+        composer.setDraft("");
+        composer.togglePlanMode();
+        return;
+      }
+      if (!planModeEnabled) composer.togglePlanMode();
+    }
+    const combined = buildCombinedContent(typed);
     if (combined && (await onSend(combined, mode))) composer.clearSent();
   };
 
@@ -326,7 +332,17 @@ export function MessageInput({
     config: agentConfig,
     cloudItems: cloudSlashItems,
     onChange: composer.setDraft,
-    enabled: isClaudeAgent,
+    includeAgentCommands: isClaudeAgent,
+    actions: showPlanMode
+      ? [
+          {
+            kind: "action",
+            name: "plan",
+            description: planModeEnabled ? "Exit plan mode" : "Enter plan mode",
+            run: composer.togglePlanMode,
+          },
+        ]
+      : [],
     onAddSkill: (skill) =>
       composer.addSkillMention({ name: skill.name, description: skill.description }),
   });
@@ -393,7 +409,6 @@ export function MessageInput({
     if (location) onSend(setupEnvironmentPrompt(location));
   };
 
-  const showPlanMode = canPlan(agentHarness, workspaceKind);
   const sendLabel = queueing ? "Queue message" : "Send message";
   let sendTitle = `${sendLabel} (Enter)`;
   if (queueing && isMobile) sendTitle = sendLabel;
@@ -544,8 +559,8 @@ export function MessageInput({
               onThinkingLevelChange={composer.setThinkingLevel}
               onOpenNewTab={onOpenNewTab}
             />
-            {showPlanMode && (
-              <PlanModeToggle enabled={planModeEnabled} onClick={composer.togglePlanMode} />
+            {showPlanMode && planModeEnabled && (
+              <PlanModeToggle onClick={composer.togglePlanMode} />
             )}
           </div>
 

@@ -97,7 +97,7 @@ Google's terms do not grant redistribution. The engine's catalog has no Gemini m
 For a first Gemini chat, the person installs `agy` and signs in to their own Antigravity account
 in Settings → AI Providers or during onboarding. The picker then lists the models that account can run.
 A model already chosen or recorded stays visible while the list is unavailable.
-Its chats have no Plan toggle. Deus declines a question from its question form. Deus tool cards
+Gemini chats do not offer the `/plan` action. Deus declines a question from its question form. Deus tool cards
 show the call's input and status without result text. Gemini takes instructions once per conversation.
 In full access (`bypass_permissions`), the engine starts `agy` with `--dangerously-skip-permissions`.
 Commands can use the network, commit in the worktree and write outside it. Switching into or out
@@ -650,6 +650,9 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   A chat runs with full access or in plan mode, nothing
   between: Deus approves a chat's tool requests itself. A mode between the
   two must route these tools' writes to the person before it ships.
+  In local Claude and Codex composers, `/plan` toggles Plan mode and `/plan <text>`
+  sends the text in Plan mode and leaves it on. The Plan chip turns it off.
+  Composer actions appear first in the `/` menu and take precedence over disk commands of the same name.
 
 Admission is checked when a socket opens (no leases), and the relay can still read
 `q:` frames: end-to-end encryption is separate work. `DEUS_RELAY_URL` points the
