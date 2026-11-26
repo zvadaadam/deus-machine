@@ -534,10 +534,12 @@ export function MessageInput({
               defaultThinking={defaultThinking}
               hasMessages={hasMessages}
               onModelChange={(option, level) => {
-                const live = listIsLive(option.agentHarness);
-                if (level !== undefined && (option.gatewayRevision || live))
-                  composer.pickModel(option.value, level);
-                else composer.setModel(option.value, live ? option.thinking?.levels : undefined);
+                if (level !== undefined) composer.pickModel(option.value, level);
+                else
+                  composer.setModel(
+                    option.value,
+                    listIsLive(option.agentHarness) ? option.thinking?.levels : undefined
+                  );
               }}
               onThinkingLevelChange={composer.setThinkingLevel}
               onOpenNewTab={onOpenNewTab}

@@ -229,7 +229,7 @@ it("opens the matching gateway on a shared model id and presents its only runner
   expect(html).not.toContain('aria-label="Agents"');
 });
 
-it("lets a person reach a source beyond the rail and see the search field's keyboard focus", () => {
+it("lets a person reach a source beyond the rail", () => {
   const html = renderToStaticMarkup(
     createElement(
       TooltipProvider,
@@ -257,6 +257,4 @@ it("lets a person reach a source beyond the rail and see the search field's keyb
   expect(html.match(/<[^>]+aria-label="Account sources"[^>]*>/)?.[0]).toContain("overflow-y-auto");
   expect(html).toContain("Claude Code");
   expect(html).toContain("Codex");
-  expect(html.match(/<input\b[^>]*role="combobox"[^>]*>/)?.[0]).toContain("focus-visible:");
-  expect(html).not.toContain("focus-visible:ring-0");
 });

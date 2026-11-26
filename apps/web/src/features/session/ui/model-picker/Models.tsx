@@ -60,11 +60,7 @@ export function Models({ page, onAgent, locked, onPick, onClose, children }: Mod
         defaultValue={initialModel}
         className="min-w-0 flex-1 rounded-none"
       >
-        <Cmd.CommandInput
-          placeholder="Search models…"
-          onKeyDown={textKeys}
-          className="focus-visible:ring-ring h-10 focus-visible:ring-1 focus-visible:ring-inset"
-        />
+        <Cmd.CommandInput placeholder="Search models…" onKeyDown={textKeys} className="h-10" />
         {selected?.unavailable && (
           <p className="text-text-muted px-3 py-1.5 text-xs">
             {selected.label} is no longer available.

@@ -10,10 +10,11 @@ interface ThinkingProps {
 }
 
 export function Thinking({ model, level, onPick }: ThinkingProps) {
-  const levels = model?.thinking?.levels ?? (model?.gatewayRevision ? [] : undefined);
+  const available = model?.unavailable ? undefined : model;
+  const levels = available?.thinking?.levels;
   return (
-    <div className="border-border-subtle w-28 shrink-0 overflow-y-auto border-l p-1 sm:w-36">
-      <p className="text-text-muted px-2 py-1.5 text-xs">Thinking</p>
+    <div className="border-border-subtle text-text-muted w-28 shrink-0 overflow-y-auto border-l p-1 text-xs sm:w-36">
+      <p className="px-2 py-1.5">Thinking</p>
       {levels?.length ? (
         <div role="radiogroup" aria-label="Thinking effort" className="relative isolate">
           <Glide rows="[role=radio]" className="bg-accent rounded-lg" />
@@ -31,13 +32,9 @@ export function Thinking({ model, level, onPick }: ThinkingProps) {
             </button>
           ))}
         </div>
-      ) : (
-        levels && (
-          <p className="text-text-muted px-2 py-1.5 text-xs text-pretty">
-            {model?.label} has no thinking control.
-          </p>
-        )
-      )}
+      ) : available && (levels || available.gatewayRevision) ? (
+        <p className="px-2 py-1.5 text-pretty">{available.label} has no thinking control.</p>
+      ) : null}
     </div>
   );
 }

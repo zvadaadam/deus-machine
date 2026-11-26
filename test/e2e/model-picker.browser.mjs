@@ -62,7 +62,7 @@ function App() {
   useKeyboardShortcuts({onRefresh: async () => {}});
   const [model, setModel] = useState(params.get("model")!);
   const [level, setLevel] = useState(params.get("level") as ThinkingLevel);
-  const [lastPick, setLastPick] = useState({kind:"",level:""});
+  const [lastPick, setLastPick] = useState<{kind: string; args: (string | undefined)[]}>({kind:"",args:[]});
   const [opened, setOpened] = useState("");
   const [openedLevel, setOpenedLevel] = useState("");
   const [connected,setConnected]=useState(params.has("gateway"));
@@ -79,13 +79,18 @@ function App() {
   const second = params.has("samePreset") ? {...gateway,ref:"office",revision:"other",baseUrl:"http://localhost:8318",models:offered} : {...gateway,ref:"router",revision:"other",preset:"openrouter",models:offered};
   const below = params.has("home");
   return <main className={"bg-background text-foreground flex min-h-screen flex-col items-start p-4 " + (below ? "justify-start" : "justify-end")}>
-    <output data-pick={lastPick.kind} data-picked-level={lastPick.level} data-model={model} data-level={level} data-opened={opened} data-opened-level={openedLevel} />
+    <output data-pick={lastPick.kind} data-pick-args={JSON.stringify(lastPick.args)} data-model={model} data-level={level} data-opened={opened} data-opened-level={openedLevel} />
     <ModelPicker side={below ? "bottom" : "top"} model={model} agentHarness={parseModelValue(model)!.harness} lists={CATALOG_MODEL_LISTS} gateways={connected?[{...gateway,models:offered},...extra,...(params.has("two")?[second]:[])]:[]}
       thinkingLevel={fitThinkingLevel(level, levels, "high")}
       previousGateway={params.has("started") && parseModelValue(model)?.gatewayRevision ? {ref:gateway.ref,label:"CLIProxyAPI"} : undefined}
       hasMessages={params.has("started")}
-      onModelChange={({value}, effort) => { setLastPick({kind:"model",level:effort}); setModel(value); setLevel((current) => effort ?? fitThinkingLevel(current, levelsOf(value), "high")); }}
-      onThinkingLevelChange={(next) => {setLastPick({kind:"level",level:next}); setLevel(next);}} onOpenNewTab={params.has("locked") ? undefined : (value, level) => { setLastPick({kind:"new chat",level}); setOpened(value ?? ""); setOpenedLevel(level ?? ""); }} />
+      onModelChange={({value}, ...levelArgs) => {
+        const [effort] = levelArgs;
+        setLastPick({kind:"model", args:[value, ...levelArgs]});
+        setModel(value);
+        setLevel((current) => effort ?? fitThinkingLevel(current, levelsOf(value), "high"));
+      }}
+      onThinkingLevelChange={(next) => {setLastPick({kind:"level",args:[next]}); setLevel(next);}} onOpenNewTab={params.has("locked") ? undefined : (value, level) => { setLastPick({kind:"new chat",args:[value,level]}); setOpened(value ?? ""); setOpenedLevel(level ?? ""); }} />
   </main>;
 }
 createRoot(document.getElementById("root")!).render(<TooltipProvider><App /></TooltipProvider>);
@@ -171,6 +176,7 @@ try {
   const key = (name) => chat.page.keyboard.press(name);
   const tabNames = (group) => group().getByRole("tab").allTextContents();
   const state = (field) => chat.state.getAttribute("data-" + field);
+  const pickArgs = async () => JSON.parse(await state("pick-args"));
   const checkActive = (name) => active().and(row(name)).waitFor();
   async function checkGlide() {
     const fill = list().locator('[data-slot="glide"][data-lit]');
@@ -257,7 +263,7 @@ try {
   await key("Enter");
   await chat.closed();
   await chat.named("Select model, currently GPT-5.5, thinking Extra high");
-  assert.equal(await state("picked-level"), "xhigh");
+  assert.deepEqual(await pickArgs(), ["codex-app-server:gpt-5.5"]);
   assert.equal(await state("model"), "codex-app-server:gpt-5.5");
   await chat.open();
   await tab(agents, "Claude Code").click();
@@ -469,6 +475,7 @@ try {
   await chat.closed();
   await chat.named("Select model, currently GPT Terra");
   assert.equal(await state("level"), "off");
+  assert.deepEqual(await pickArgs(), ["gateway:codex-app-server:revision:same-family", "off"]);
   await chat.open();
   await chat.menu.getByText("GPT Terra has no thinking control.", { exact: true }).waitFor();
   assert.equal(await chat.menu.getByRole("radio").count(), 0);
@@ -480,6 +487,9 @@ try {
   await chat.open();
   assert.equal(await agents().count(), 0);
   await chat.menu.getByLabel("Agent", { exact: true }).getByText("Codex").waitFor();
+  assert.deepEqual(await chat.menu.getByText(/^work:one /).allTextContents(), [
+    "work:one is no longer available.",
+  ]);
   await row("GPT 6.2 Astra").click();
   await chat.closed();
   assert.equal(await state("opened"), current);
@@ -535,7 +545,7 @@ try {
   await key("Enter");
   await chat.closed();
   await chat.named("Select model, currently GPT 6.2 Astra, thinking High");
-  assert.equal(await state("picked-level"), "high");
+  assert.deepEqual(await pickArgs(), [current, "high"]);
   assert.equal(await state("model"), current);
   await chat.page.close();
 

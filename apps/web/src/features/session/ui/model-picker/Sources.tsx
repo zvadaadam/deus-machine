@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { GatewayLogo } from "@/shared/agents/GatewayLogo";
 import type { PickerTab } from "@/shared/agents/picker";
+import { cn } from "@/shared/lib/utils";
 
 export function PickerMark({ value, preset }: Pick<PickerTab, "value" | "preset">) {
   if (preset) return <GatewayLogo preset={preset} />;
@@ -23,12 +24,10 @@ interface Strip extends PropsWithChildren {
 
 export function PickerTabs({ items, value, onChange, vertical, onClose, children }: Strip) {
   const multiple = items.length > 1;
-  const strip = vertical
-    ? "bg-muted/30 w-11 flex-col overflow-y-auto border-r sm:w-12"
-    : "border-b";
-  const item = vertical
-    ? "h-9 shrink-0 pointer-coarse:h-11 [&>svg]:size-4.5 aria-selected:after:absolute aria-selected:after:inset-y-2 aria-selected:after:right-0 aria-selected:after:w-0.5 aria-selected:after:rounded-full aria-selected:after:bg-primary"
-    : "min-w-0 flex-1 gap-1.5 px-1 py-1.5 [&>svg]:size-3.5";
+  const stripClass = cn(
+    "border-border-subtle relative isolate flex shrink-0 gap-1 p-1",
+    vertical ? "bg-muted/30 w-11 flex-col overflow-y-auto border-r sm:w-12" : "border-b"
+  );
   return (
     <Tabs.Root
       value={value}
@@ -37,10 +36,7 @@ export function PickerTabs({ items, value, onChange, vertical, onClose, children
       className={vertical ? "flex min-w-0 flex-1" : "flex min-h-0 flex-1 flex-col"}
     >
       {multiple && (
-        <Tabs.List
-          aria-label={vertical ? "Account sources" : "Agents"}
-          className={`border-border-subtle relative isolate flex shrink-0 gap-1 p-1 ${strip}`}
-        >
+        <Tabs.List aria-label={vertical ? "Account sources" : "Agents"} className={stripClass}>
           <Glide
             rows="[role=tab]"
             selected="[aria-selected=true]"
@@ -56,7 +52,12 @@ export function PickerTabs({ items, value, onChange, vertical, onClose, children
                   if (vertical && value === choice.value)
                     node?.scrollIntoView({ block: "nearest" });
                 }}
-                className={`text-text-muted aria-selected:bg-accent aria-selected:text-text-primary focus-visible:ring-ring relative flex items-center justify-center rounded-lg text-sm outline-none focus-visible:ring-1 [&>svg]:shrink-0 ${item}`}
+                className={cn(
+                  "text-text-muted aria-selected:bg-accent aria-selected:text-text-primary focus-visible:ring-ring relative flex items-center justify-center rounded-lg text-sm outline-none focus-visible:ring-1 [&>svg]:shrink-0",
+                  vertical
+                    ? "aria-selected:after:bg-primary h-9 shrink-0 aria-selected:after:absolute aria-selected:after:inset-y-2 aria-selected:after:right-0 aria-selected:after:w-0.5 aria-selected:after:rounded-full pointer-coarse:h-11 [&>svg]:size-4.5"
+                    : "min-w-0 flex-1 gap-1.5 px-1 py-1.5 [&>svg]:size-3.5"
+                )}
               >
                 <PickerMark {...choice} />
                 {!vertical && <span className="truncate">{choice.label}</span>}

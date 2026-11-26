@@ -5,6 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ThinkingLevel } from "@/shared/agents";
 import * as picker from "@/shared/agents/picker";
+import { cn } from "@/shared/lib/utils";
 import { Models } from "./Models";
 import { PickerMark, PickerTabs } from "./Sources";
 import { Thinking } from "./Thinking";
@@ -40,10 +41,12 @@ export function ModelPicker(props: ModelPickerProps) {
   }
   const close = () => setOpen(false);
   function choose(option: picker.PickerOption) {
-    const level = picker.levelFor(option, props, newChat);
-    if (newChat) onOpenNewTab?.(option.value, level);
-    else if (option !== selected)
-      props.onModelChange?.(option, level ?? (option.gatewayRevision ? "off" : undefined));
+    if (newChat) onOpenNewTab?.(option.value, picker.levelFor(option, props, true));
+    else if (option !== selected) {
+      if (option.gatewayRevision)
+        props.onModelChange?.(option, picker.levelFor(option, props, false) ?? "off");
+      else props.onModelChange?.(option);
+    }
     close();
   }
   function chooseLevel(level: ThinkingLevel) {
@@ -83,7 +86,10 @@ export function ModelPicker(props: ModelPickerProps) {
         align="start"
         collisionPadding={8}
         onOpenAutoFocus={touchFocus}
-        className={`flex h-80 max-h-(--radix-popover-content-available-height) max-w-[calc(100vw-1rem)] overflow-hidden p-0 ${gateways?.length ? "w-lg" : "w-96"}`}
+        className={cn(
+          "flex h-80 max-h-(--radix-popover-content-available-height) max-w-[calc(100vw-1rem)] overflow-hidden p-0",
+          gateways?.length ? "w-lg" : "w-96"
+        )}
       >
         <PickerTabs
           vertical
