@@ -122,7 +122,6 @@ export async function checkSetupWarning(page, group, evidence, touch = false) {
   };
   await checkAnnouncements();
   assert.equal(await title.getAttribute("aria-expanded"), "false");
-  await page.bringToFront();
   await page.mouse.move(page.viewportSize().width - 120, page.viewportSize().height / 2);
   const clearFocus = () => page.evaluate(() => document.activeElement?.blur());
   await clearFocus();
@@ -144,9 +143,10 @@ export async function checkSetupWarning(page, group, evidence, touch = false) {
     assert.equal(await output.locator("b").count(), 0);
     if (!touch) await page.screenshot({ path: path.join(evidence, `setup-open-${theme}.png`) });
     if (theme === "dark") {
-      const tool = page.getByRole("button", { name: "Expand Read tool details" });
-      const iconX = (await tool.locator(".relative").boundingBox()).x;
-      const labelX = (await tool.getByText("Read", { exact: true }).boundingBox()).x;
+      const work = page.getByRole("button", { name: /^Expand activity, Worked/ });
+      const workBounds = await work.boundingBox();
+      const iconX = (await work.locator("svg").boundingBox()).x;
+      const labelX = (await work.getByText(/^Worked/).boundingBox()).x;
       for (const [node, edge] of [
         [title.locator("svg").first(), iconX],
         [issue.locator("svg").first(), iconX],
@@ -158,18 +158,10 @@ export async function checkSetupWarning(page, group, evidence, touch = false) {
       ]) {
         assert(
           Math.abs((await node.boundingBox()).x - edge) < 0.5,
-          "aligned with the transcript tool"
+          "aligned with the transcript work row"
         );
       }
-      // A linked file adds a badge to this particular Read. Measure the tool's
-      // single text line and vertical padding independently of that accessory.
-      const toolLineHeight = await tool.evaluate((el) => {
-        const css = getComputedStyle(el);
-        return (
-          parseFloat(css.lineHeight) + parseFloat(css.paddingTop) + parseFloat(css.paddingBottom)
-        );
-      });
-      assert.equal((await issue.boundingBox()).height, touch ? 44 : toolLineHeight);
+      assert.equal((await issue.boundingBox()).height, touch ? 44 : workBounds.height);
       if (touch) {
         const bounds = await retry.boundingBox();
         assert(bounds.x + bounds.width <= page.viewportSize().width);
@@ -192,7 +184,7 @@ export async function checkSetupWarning(page, group, evidence, touch = false) {
         );
       }
       const top = (await group.boundingBox()).y - 4;
-      const bottom = (await tool.boundingBox()).y + (await tool.boundingBox()).height + 4;
+      const bottom = workBounds.y + workBounds.height + 4;
       const guide = `position: fixed; content: ""; pointer-events: none; z-index: 1000; top: ${top}px; height: ${bottom - top}px; border-left: 1px dashed color-mix(in oklch, var(--info) 46%, transparent)`;
       await page.screenshot({
         path: path.join(evidence, touch ? "setup-grid-mobile.png" : "setup-grid.png"),

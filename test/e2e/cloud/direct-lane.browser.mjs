@@ -251,6 +251,40 @@ try {
   assert.equal(side.simulator.at(-1).data.streamUrl, "https://stream.test/device");
   check("the sandbox address and the simulator status reach their streams' followers");
 
+  await page.route("https://stream.test/**", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<p>Cloud device screen</p>" })
+  );
+  const showWorkspace = page.getByRole("button", { name: "Show workspace", exact: true });
+  if (await showWorkspace.isVisible()) await showWorkspace.click();
+  await page
+    .locator('[data-slot="new-tab-view"]')
+    .getByRole("button", { name: "Device", exact: true })
+    .click();
+  await page
+    .frameLocator('iframe[title="Cloud device"]')
+    .getByText("Cloud device screen")
+    .waitFor();
+  await page.getByRole("button", { name: "Home", exact: true }).click();
+  const home = await until("Home on the cloud device", () =>
+    platform
+      .commands(SESSION)
+      .find((frame) => frame.type === "simulator.exec.request" && frame.data.verb === "home")
+  );
+  assert.equal(home.data.platform, "ios");
+  send({
+    type: "simulator.exec.response",
+    sessionId: SESSION,
+    requestId: home.data.requestId,
+    verb: "home",
+    timestamp: new Date().toISOString(),
+    success: true,
+    exitCode: 0,
+    output: "",
+  });
+  await page.screenshot({ path: path.join(directory, "device.png") });
+  await page.getByRole("button", { name: "Close Device", exact: true }).click();
+  check("Device embeds the hosted viewer and sends Home over the platform socket");
+
   // 3. A prompt typed in the composer leaves on the session socket, once.
   const prompt = "Say hello from the smoke";
   await page.locator('[contenteditable="true"], textarea').first().click();

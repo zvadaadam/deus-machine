@@ -10,7 +10,7 @@ import integrations from "./integrations";
 import repos from "./repos";
 import sessions from "./sessions";
 import settings from "./settings";
-import simulator from "./simulator";
+import cloudDevice from "./cloud-device";
 import terminal from "./terminal";
 import workspaces from "./workspaces";
 import { Registry } from "./registry";
@@ -26,7 +26,7 @@ export const registry = new Registry([
   ...repos,
   ...sessions,
   ...settings,
-  ...simulator,
+  ...cloudDevice,
   ...terminal,
   ...workspaces,
 ]);

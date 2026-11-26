@@ -1,15 +1,13 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { listHubDevices, startHubDevice } from "../../../src/services/device-hub/devices";
-import { hasAndroidToolchain } from "../../../src/services/device-hub/android-sdk";
-import {
-  hasSimulatorToolchain,
-  listDevices,
-  simctl,
-} from "../../../src/services/simulator-context";
+import { deviceToolchains, hasSimulatorToolchain } from "../../../src/services/device-hub/support";
+import { listDevices, simctl } from "../../../src/services/device-hub/simctl";
 
-vi.mock("../../../src/services/device-hub/android-sdk", () => ({ hasAndroidToolchain: vi.fn() }));
-vi.mock("../../../src/services/simulator-context", () => ({
+vi.mock("../../../src/services/device-hub/support", () => ({
+  deviceToolchains: vi.fn(),
   hasSimulatorToolchain: vi.fn(),
+}));
+vi.mock("../../../src/services/device-hub/simctl", () => ({
   listDevices: vi.fn(),
   simctl: vi.fn(),
 }));
@@ -29,14 +27,18 @@ const sim = {
   runtime: ios.version,
   state: "Shutdown",
   device_type: "iPhone",
-  is_available: true,
+  isAvailable: true,
 };
 const inventory = { simulators: [ios], emulators: [android], errors: [] };
 const fetch = vi.fn();
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubGlobal("fetch", fetch);
-  vi.mocked(hasAndroidToolchain).mockResolvedValue(true);
+  vi.mocked(deviceToolchains).mockResolvedValue({
+    android: true,
+    xcode: { available: true, version: null },
+    installer: true,
+  });
   vi.mocked(hasSimulatorToolchain).mockResolvedValue(true);
   vi.mocked(listDevices).mockResolvedValue([]);
 });
@@ -44,12 +46,12 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("Device inventory and startup", () => {
   it("adds only missing iOS simulators and reports independent platform readiness", async () => {
-    vi.mocked(hasAndroidToolchain).mockResolvedValue(false);
-    vi.mocked(listDevices).mockResolvedValue([
-      sim,
-      { ...sim, udid: "new" },
-      { ...sim, udid: "tv", runtime: "tvOS 27" },
-    ]);
+    vi.mocked(deviceToolchains).mockResolvedValue({
+      android: false,
+      xcode: { available: true, version: null },
+      installer: true,
+    });
+    vi.mocked(listDevices).mockResolvedValue([sim, { ...sim, udid: "new" }]);
     fetch.mockResolvedValue(
       Response.json({
         ...inventory,
@@ -60,7 +62,7 @@ describe("Device inventory and startup", () => {
     const result = await listHubDevices(hub);
     expect(result.devices).toEqual([ios, { ...ios, id: "new" }]);
     expect(result.available).toEqual({ ios: true, android: false });
-    expect(result.detail).toBe("Could not list AVDs\nvendor diagnostic");
+    expect(result.detail).toEqual({ ios: null, android: "Could not list AVDs\nvendor diagnostic" });
   });
 
   it("can list Android without Xcode and does not infer prerequisites from diagnostic text", async () => {
@@ -71,7 +73,7 @@ describe("Device inventory and startup", () => {
     expect(await listHubDevices(hub)).toEqual({
       devices: [android],
       available: { ios: false, android: true },
-      detail: "ENOENT",
+      detail: { ios: null, android: "ENOENT" },
     });
     expect(listDevices).not.toHaveBeenCalled();
   });
@@ -82,7 +84,7 @@ describe("Device inventory and startup", () => {
     expect(await listHubDevices(hub)).toEqual({
       devices: [ios, android],
       available: { ios: true, android: true },
-      detail: "simctl timed out",
+      detail: { ios: "simctl timed out", android: null },
     });
   });
 
@@ -98,6 +100,13 @@ describe("Device inventory and startup", () => {
       "/vendor/serve-sim/grid/api/start",
     ]);
     expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ udid: ios.id });
+  });
+
+  it("reconnects only to a device that is already running", async () => {
+    fetch.mockResolvedValueOnce(Response.json(inventory));
+    await expect(startHubDevice(hub, ios, false)).rejects.toThrow("The device is shut down.");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(simctl).not.toHaveBeenCalled();
   });
 
   it("boots a previously used simulator via the hub", async () => {

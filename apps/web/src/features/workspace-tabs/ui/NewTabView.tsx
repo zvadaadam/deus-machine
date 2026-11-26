@@ -7,6 +7,7 @@
  * - Conditional local-server subscription (only mounted when local Browser is enabled).
  */
 
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useId, useMemo, useState, useRef, type CSSProperties, type KeyboardEvent } from "react";
 import {
   Search,
@@ -32,8 +33,7 @@ import { useFiles } from "@/features/file-browser/api/useFiles";
 import { PierreFileIcon } from "@/features/file-browser/lib/pierreIcons";
 import { useFileChanges } from "@/features/workspace/api/workspace.queries";
 import { useLocalServers } from "@/features/browser/api/browser.queries";
-import { useSimulatorStatusStore } from "@/features/simulator/store";
-import { useCloudSimulatorStore } from "@/features/simulator/cloud/cloudSimulatorStore";
+import { useCloudSimulatorStore } from "@/features/device/cloud/cloudSimulatorStore";
 import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
 import { locationOf } from "@/features/sidebar/lib/location";
 import { uiActions } from "@/shared/stores/uiStore";
@@ -119,7 +119,8 @@ export function NewTabView({
 
   const cloud = workspace.kind === "cloud";
   const gateStage = cloudGateStage(workspace);
-  const canQueryFiles = panelVisible && workspace.state === "ready" && !gateStage;
+  const canQueryFiles =
+    !isCloudDirectWebMode() && panelVisible && workspace.state === "ready" && !gateStage;
 
   const browserVisible = isTabVisible("browser", settings, visibility);
   const visibleTools = useMemo(() => getVisibleTools(settings, visibility), [settings, visibility]);
@@ -131,12 +132,8 @@ export function NewTabView({
   const { data: changesData } = useFileChanges(canQueryFiles ? workspace : null, isWatched);
   const fileChangesCount = changesData?.files?.length ?? 0;
 
-  // Simulator live indicator
-  const simPhase = useSimulatorStatusStore((s) => s.phases[workspace.id]);
   const cloudSimStatus = useCloudSimulatorStore((s) => s.byWorkspace[workspace.id]?.status ?? null);
-  const simulatorActive = Boolean(
-    (simPhase && simPhase !== "idle" && simPhase !== "error") || cloudSimStatus === "ready"
-  );
+  const deviceLive = cloudSimStatus === "ready";
 
   const flatFiles = useMemo(() => flattenFileTree(filesData?.files ?? []), [filesData?.files]);
 
@@ -432,7 +429,7 @@ export function NewTabView({
                 {visibleTools.map((tool) => {
                   const Icon = tool.icon;
                   const showChangesCount = tool.id === "changes" && fileChangesCount > 0;
-                  const showSimDot = tool.id === "simulator" && simulatorActive;
+                  const showDeviceDot = tool.id === "device" && deviceLive;
 
                   return (
                     <button
@@ -458,7 +455,7 @@ export function NewTabView({
                             {fileChangesCount}
                           </span>
                         )}
-                        {showSimDot && (
+                        {showDeviceDot && (
                           <span aria-hidden="true" className="bg-success size-2 rounded-full" />
                         )}
                       </div>

@@ -7,12 +7,10 @@ import {
 const mocks = vi.hoisted(() => ({
   workspace: vi.fn(),
   pause: vi.fn(),
-  release: vi.fn(),
   wake: vi.fn(),
   run: vi.fn(),
   status: vi.fn(),
 }));
-vi.mock("../../../src/services/simulator-context", () => ({ stopStream: mocks.release }));
 vi.mock("../../../src/db", async (original) => ({
   ...(await original<typeof import("../../../src/db")>()),
   getWorkspaceRaw: mocks.workspace,
@@ -66,21 +64,7 @@ describe("workspace archive", () => {
     mocks.pause.mockRejectedValue(new Error("provider unavailable"));
     await expect(archiveWorkspace("workspace")).rejects.toThrow("provider unavailable");
     expect(mocks.run).not.toHaveBeenCalled();
-    expect(mocks.release).not.toHaveBeenCalled();
     expect(mocks.status).not.toHaveBeenCalled();
-  });
-
-  it("releases the local simulator once, after committing the archive", async () => {
-    mocks.workspace.mockReturnValue({ id: "workspace", kind: "worktree" });
-    await expect(
-      archiveWorkspace("workspace", () => {
-        throw new Error("refused");
-      })
-    ).rejects.toThrow("refused");
-    expect(mocks.release).not.toHaveBeenCalled();
-    mocks.release.mockImplementation(() => expect(mocks.run).toHaveBeenCalledOnce());
-    await archiveWorkspace("workspace");
-    expect(mocks.release).toHaveBeenCalledExactlyOnceWith("workspace");
   });
 
   it("skips the pause and local effects for an already archived computer", async () => {
@@ -91,7 +75,7 @@ describe("workspace archive", () => {
       state: "archived",
     });
     await archiveWorkspace("workspace");
-    for (const effect of [mocks.pause, mocks.run, mocks.release, mocks.status])
+    for (const effect of [mocks.pause, mocks.run, mocks.status])
       expect(effect).not.toHaveBeenCalled();
   });
 

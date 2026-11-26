@@ -3,13 +3,14 @@
  *
  * Tabs split cleanly into two lifecycle tiers:
  *   - Lazy: mounted only when active (`new-tab`, `changes`, `files`, `file`, `config`)
- *   - Persistent: always mounted, CSS-hidden when inactive (`terminal`, `browser`, `simulator`)
- *     so PTY sessions, Electron webviews, and simulator streams survive tab/workspace switches.
+ *   - Persistent: always mounted, CSS-hidden when inactive (local terminals, browsers and the cloud device)
+ *     so PTY sessions, Electron webviews and the cloud viewer survive tab/workspace switches.
  *
  * Notice: Expand/Restore controls now live in the top WorkspaceTabBar rather
  * than being prop-drilled through every panel component.
  */
 
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { lazy, Suspense, useLayoutEffect, useState } from "react";
 import { match } from "ts-pattern";
 import { TerminalHost } from "@/features/terminal";
@@ -22,8 +23,7 @@ import { CloudBrowserUnavailable } from "@/features/workspace/ui/CloudBrowserUna
 import { ChangesView } from "@/features/workspace/ui/ChangesView";
 import { FilesView } from "@/features/workspace/ui/FilesView";
 import { AgentConfigPanel } from "@/features/agent-config/ui/AgentConfigPanel";
-import { SimulatorPanel } from "@/features/simulator";
-import { CloudSimulatorPanel } from "@/features/simulator/cloud";
+import { CloudDevicePanel } from "@/features/device/cloud";
 import {
   NewTabView,
   FileTabView,
@@ -87,10 +87,9 @@ export function ContentView({
   onOpenUrl,
 }: ContentViewProps) {
   const cloud = workspace.kind === "cloud";
-  const simulatorAvailable = visibility.simulatorAvailable === true;
 
   // Freeze local hosts on the last local workspace while viewing a cloud workspace
-  // so local PTYs, webviews, and simulator sessions survive local ↔ cloud switches.
+  // so local PTYs and webviews survive local ↔ cloud switches.
   const lastLocal = useLastWhile(
     !cloud,
     { id: workspace.id, path: workspace.workspace_path },
@@ -98,13 +97,15 @@ export function ContentView({
   );
 
   const cloudStage = cloudGateStage(workspace);
-  const cloudServing = cloud && cloudStage === null;
+  const cloudServing = cloud && cloudStage === null && !isCloudDirectWebMode();
   const cloudTerminalId = useLastWhile(cloudServing, workspace.id, workspace.id);
-  const cloudPreviewTemplate = useCloudPreviewTemplate(cloud ? workspace.id : null);
+  const cloudPreviewTemplate = useCloudPreviewTemplate(
+    cloud && !isCloudDirectWebMode() ? workspace.id : null
+  );
 
   const isBrowserActive = activeTab.kind === "browser";
   const isTerminalActive = activeTab.kind === "terminal";
-  const isSimulatorActive = activeTab.kind === "simulator";
+  const isDeviceActive = activeTab.kind === "device";
 
   const lazyContent = match(activeTab)
     .with({ kind: "new-tab" }, (tab) => (
@@ -144,7 +145,7 @@ export function ContentView({
         )
     )
     .with({ kind: "config" }, () => <AgentConfigPanel workspace={workspace} />)
-    .with({ kind: "browser" }, { kind: "terminal" }, { kind: "simulator" }, () => null)
+    .with({ kind: "browser" }, { kind: "terminal" }, () => null)
     .exhaustive();
 
   return (
@@ -221,31 +222,21 @@ export function ContentView({
         )}
       </div>
 
-      {/* Persistent host: Simulator (local iOS simulator + cloud hosted device) */}
-      {(simulatorAvailable || cloud) && (
+      {cloud && (
         <div
           className={cn(
             "relative h-full w-full",
-            !isSimulatorActive && "pointer-events-none invisible absolute"
+            !isDeviceActive && "pointer-events-none invisible absolute"
           )}
         >
-          {simulatorAvailable && lastLocal && (
-            <div className={cn("h-full w-full", cloud && "hidden")}>
-              <SimulatorPanel workspaceId={lastLocal.id} />
-            </div>
-          )}
-          {cloud && (
-            <div className="absolute inset-0 z-10">
-              {cloudStage ? (
-                <CloudSandboxGate workspaceId={workspace.id} stage={cloudStage} />
-              ) : (
-                <CloudSimulatorPanel
-                  key={workspace.id}
-                  workspace={workspace}
-                  visible={panelVisible && isSimulatorActive}
-                />
-              )}
-            </div>
+          {cloudStage ? (
+            <CloudSandboxGate workspaceId={workspace.id} stage={cloudStage} />
+          ) : (
+            <CloudDevicePanel
+              key={workspace.id}
+              workspace={workspace}
+              visible={panelVisible && isDeviceActive}
+            />
           )}
         </div>
       )}

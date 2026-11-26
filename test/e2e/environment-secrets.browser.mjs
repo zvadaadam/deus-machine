@@ -187,9 +187,27 @@ try {
               export * from ${JSON.stringify(path.join(root, "apps/web/src/platform/ws/index.ts"))};
               const fetchEnvironmentFile = async (id) => { const r = await fetch(${JSON.stringify(`${proxy.url.origin}/api/test-environment-file/`)} + encodeURIComponent(id)); if (!r.ok) throw new Error("Invalid repository environment"); return r.json(); };
               const saveEnvironmentFile = async (id, project) => { const r = await fetch(${JSON.stringify(`${proxy.url.origin}/api/test-environment-file/`)} + encodeURIComponent(id), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(project) }); if (!r.ok) throw new Error("Couldn't save environment"); };
-              // The three repository operations the settings sections ask for.
               export const call = async (op, input) => {
                 if (op.name === "repos") return repos;
+                if (op.name === "cloudOrganizations") return {
+                  available: true, accountId: ${JSON.stringify(fixture.ids.alice)},
+                  defaultOrganizationId: ${JSON.stringify(fixture.ids.org)},
+                  items: ${JSON.stringify([
+                    {
+                      id: fixture.ids.org,
+                      name: "Secret test organization",
+                      role: "owner",
+                      ready: true,
+                    },
+                    {
+                      id: fixture.ids.otherOrg,
+                      name: "Another organization",
+                      role: "owner",
+                      ready: true,
+                    },
+                  ])},
+                };
+                if (op.name === "agentModels" || op.name === "cloudModels") return { lists: [] };
                 if (op.name === "repoEnvironmentFile") return fetchEnvironmentFile(input.repoId);
                 if (op.name === "saveRepoEnvironmentFile") return saveEnvironmentFile(input.repoId, input.project);
                 throw new Error(op.name + " is not part of this fixture");
@@ -350,6 +368,7 @@ try {
         repoId: "local",
         location: "cloud",
         model: selectedModel,
+        organizationId: fixture.ids.org,
       });
       await page.evaluate(() => window.secretTestClearSetupRequest());
     } else {
@@ -410,6 +429,7 @@ try {
         repoId: "local",
         location: "local",
         model: selectedModel,
+        organizationId: null,
       });
       await page.evaluate(() => window.secretTestClearSetupRequest());
       // One shared recipe, with only the cloud command changed. File publication is explicit.

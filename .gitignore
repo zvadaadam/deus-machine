@@ -76,9 +76,6 @@ tmp/
 temp/
 *.tmp
 
-# Generated device chrome assets
-apps/web/public/device-chrome/
-
 # AI tools — session logs, transcripts, agent memory
 .entire/
 # Deus's own deus-* skills are checked in.
@@ -116,4 +113,3 @@ main.js
 
 # Local iteration tooling (live-agent probes, ad-hoc harness scripts)
 .scratch/
-.device-use/

@@ -11,7 +11,7 @@ import type { ThinkingLevel } from "@/shared/agents";
 import { HomeView, type Repository } from "@/features/repository";
 import { useWorkspacePanelMode } from "@/features/workspace";
 import { useFileWatcher } from "@/features/file-browser/hooks/useFileWatcher";
-import { useSimulatorCapabilities } from "@/features/simulator";
+import { useDeviceSupport } from "@/features/device/useDeviceSupport";
 import { workspaceLayoutActions } from "@/features/workspace/store";
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
@@ -84,7 +84,7 @@ function trackToolOpened(tool: ContentTab, workspaceId: string | null) {
   const tabEventMap: Partial<Record<ContentTab, () => void>> = {
     terminal: () => track("terminal_opened", { workspace_id: workspaceId ?? undefined }),
     browser: () => track("browser_opened", { workspace_id: workspaceId ?? undefined }),
-    simulator: () => track("simulator_opened", { workspace_id: workspaceId ?? undefined }),
+    device: () => track("device_opened", { workspace_id: workspaceId ?? undefined }),
     changes: () => track("diff_viewed", { workspace_id: workspaceId ?? undefined }),
     files: () => track("files_opened", { workspace_id: workspaceId ?? undefined }),
   };
@@ -116,16 +116,12 @@ export function MainContent({
 
   // Tab visibility gates (local settings/capabilities vs cloud computer)
   const experimentalSettings = useSettings().data;
-  const simulatorCapabilities = useSimulatorCapabilities({
-    enabled: experimentalSettings?.experimental_simulator === true,
-  });
-  const simulatorAvailable =
-    experimentalSettings?.experimental_simulator === true &&
-    simulatorCapabilities.data.available === true;
+  const deviceAvailable =
+    useDeviceSupport(selectedWorkspace?.kind !== "cloud").data?.liveView === "available";
   const workspaceKind = selectedWorkspace?.kind;
   const tabVisibility = useMemo(
-    () => tabsFor(workspaceKind ? { kind: workspaceKind } : null, simulatorAvailable),
-    [workspaceKind, simulatorAvailable]
+    () => tabsFor(workspaceKind ? { kind: workspaceKind } : null, deviceAvailable),
+    [workspaceKind, deviceAvailable]
   );
 
   const visibleTools = useMemo(
@@ -195,7 +191,7 @@ export function MainContent({
     if (sid) sessionComposerActions.appendDraft(sid, REVIEW_CODE);
   }, [selectedWorkspaceId]);
 
-  const prActions = selectedWorkspace && hasCheckout(selectedWorkspace) && (
+  const prActions = !webDirect && selectedWorkspace && hasCheckout(selectedWorkspace) && (
     <PRActions
       state={prState}
       onCreatePR={createPRHandler ? handleCreatePR : undefined}
@@ -243,6 +239,7 @@ export function MainContent({
         {selectedWorkspace ? (
           isMobile ? (
             <MobileLayout
+              visibility={tabVisibility}
               key={selectedWorkspace.id}
               workspace={selectedWorkspace}
               sendAgentMessageHandler={sendAgentMessageHandler}

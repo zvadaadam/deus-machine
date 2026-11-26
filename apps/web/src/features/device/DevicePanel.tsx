@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, House, Play } from "lucide-react";
 import {
@@ -16,13 +16,13 @@ import { call, OpError } from "@/platform/ws";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { resolveBackendEndpoints } from "@/shared/config/backend.config";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DeviceSetupLink } from "./DeviceSetupLink";
 import { useStream } from "@/shared/hooks/useStream";
 import { attachImageFiles, composerTarget } from "@/features/session/store/sessionComposerStore";
 import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
@@ -55,7 +55,6 @@ function Screen({
   useEffect(() => {
     if (!screen.framePresented) return;
     onDisplay(device);
-    return () => onDisplay(null);
   }, [device, onDisplay, screen.framePresented]);
   const size = displayScreen(screen.screen);
   const ratio = size ? size.width / size.height : 9 / 19.5;
@@ -130,40 +129,83 @@ function Devices({
   instance: string;
 }) {
   const cache = useQueryClient();
-  const savedKey = ["deviceHubSelection", instance, workspaceId];
-  const [active, setActive] = useState(() => cache.getQueryData<HubDevice>(savedKey));
-  const [id, setId] = useState(active ? deviceKey(active) : "");
+  const savedKey = ["deviceHubSelection", workspaceId];
+  const [active, setActive] = useState(() =>
+    cache.getQueryData<{ device: HubDevice; instance: string }>(savedKey)
+  );
+  const [platform, setPlatform] = useState<HubDevice["platform"]>(active?.device.platform ?? "ios");
+  const [id, setId] = useState(active ? deviceKey(active.device) : "");
+  const restoring = active && active.instance !== instance;
   const list = useQuery({
     queryKey: ["deviceHubDevices", instance],
     queryFn: () => call(api.deviceHubDevices),
+    // A replacement hub can answer its first inventory while the device is still booting.
+    refetchInterval: (query) =>
+      restoring && !query.state.data?.devices.some((d) => d.booted && deviceKey(d) === id)
+        ? 2500
+        : false,
   });
   const endpoints = useQuery({
     queryKey: ["deviceHubEndpoints", instance],
     queryFn: () => resolveBackendEndpoints(),
   });
   const start = useMutation({
-    mutationFn: (device: HubDevice) =>
+    mutationFn: ({ device, boot }: { device: HubDevice; boot: boolean }) =>
       call(
         api.startHubDevice,
-        { platform: device.platform, id: device.id },
+        { platform: device.platform, id: device.id, boot },
         { timeoutMs: 410_000 }
       ),
     onSuccess(device) {
-      cache.setQueryData(savedKey, device);
-      setActive(device);
+      const connected = { device, instance };
+      cache.setQueryData(savedKey, connected);
+      setActive(connected);
       setId(deviceKey(device));
       void list.refetch();
     },
   });
-  const devices = list.data?.devices ?? [];
+  const devices = list.data?.devices.filter((d) => d.platform === platform) ?? [];
   const selected = devices.find((d) => deviceKey(d) === id);
-  const viewing = active && selected?.booted && deviceKey(active) === id;
+  const viewing =
+    active?.instance === instance && deviceKey(active.device) === id && selected?.booted;
+  const reconnect = restoring && selected?.booted ? selected : null;
+  const attempted = useRef<string | null>(null);
+  const { mutate: connect } = start;
+  useEffect(() => {
+    if (!reconnect || attempted.current === reconnect.id) return;
+    attempted.current = reconnect.id;
+    connect({ device: reconnect, boot: false });
+  }, [connect, reconnect]);
+  function select(value: string) {
+    setId(value);
+    setActive(undefined);
+    onDisplay(null);
+    cache.removeQueries({ queryKey: savedKey, exact: true });
+    start.reset();
+  }
   const failure = list.error ?? start.error ?? endpoints.error;
   let placeholder = "Choose a device";
   if (list.isPending) placeholder = "Finding devices…";
   else if (!devices.length) placeholder = "No devices found";
   return (
     <>
+      <Tabs
+        aria-label="Device platform"
+        value={platform}
+        onValueChange={(value) => {
+          setPlatform(value === "android" ? "android" : "ios");
+          select("");
+        }}
+      >
+        <TabsList className="mx-2 mt-2">
+          <TabsTrigger value="ios" disabled={start.isPending}>
+            iOS
+          </TabsTrigger>
+          <TabsTrigger value="android" disabled={start.isPending}>
+            Android
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
       <div className="border-border-subtle flex min-w-0 items-center gap-2 border-b p-2">
         <Select
           value={id}
@@ -171,38 +213,24 @@ function Devices({
           onOpenChange={(open) => {
             if (open) void list.refetch();
           }}
-          onValueChange={(value) => {
-            setId(value);
-            setActive(undefined);
-            cache.removeQueries({ queryKey: savedKey, exact: true });
-            start.reset();
-          }}
+          onValueChange={select}
         >
           <SelectTrigger size="sm" aria-label="Device" className="min-w-0 flex-1">
             <SelectValue placeholder={placeholder} />
           </SelectTrigger>
           <SelectContent>
-            {(["ios", "android"] as const).map((platform) => {
-              const group = devices.filter((device) => device.platform === platform);
-              if (!group.length) return null;
-              return (
-                <SelectGroup key={platform}>
-                  <SelectLabel>{platform === "ios" ? "iOS" : "Android"}</SelectLabel>
-                  {group.map((device) => (
-                    <SelectItem key={device.id} value={deviceKey(device)}>
-                      {device.name} · {device.version}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              );
-            })}
+            {devices.map((device) => (
+              <SelectItem key={device.id} value={deviceKey(device)}>
+                {device.name} · {device.version}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Button
           size="sm"
           variant="secondary"
           disabled={!selected || !!viewing || start.isPending}
-          onClick={() => selected && start.mutate(selected)}
+          onClick={() => selected && start.mutate({ device: selected, boot: true })}
         >
           <Play />
           {start.isPending ? "Starting…" : "Start"}
@@ -227,32 +255,54 @@ function Devices({
       )}
       {viewing && endpoints.data && (
         <DeviceClientProvider
-          platform={active.platform}
+          platform={active.device.platform}
           options={{
             baseUrl:
               endpoints.data.apiBase +
               "/device-hub/vendor/" +
-              (active.platform === "ios" ? "serve-sim" : "serve-emu"),
-            device: active.id,
+              (active.device.platform === "ios" ? "serve-sim" : "serve-emu"),
+            device: active.device.id,
             streamMode: HUB_STREAM_MODE,
           }}
         >
-          <Screen session={session} device={active} onDisplay={onDisplay} />
+          <Screen session={session} device={active.device} onDisplay={onDisplay} />
         </DeviceClientProvider>
       )}
-      {list.data &&
-        (!list.data.available.ios || !list.data.available.android || list.data.detail) && (
-          <div className="border-border-subtle text-muted-foreground mt-auto border-t px-3 py-2 text-xs">
-            {!list.data.available.ios && <p>iOS Simulators need Xcode.</p>}
-            {!list.data.available.android && (
-              <p>Android emulators need the Android SDK (Android Studio).</p>
-            )}
-            {list.data.available.ios && list.data.available.android && (
-              <p>Some devices could not be listed.</p>
-            )}
-            <DeviceDetails detail={list.data.detail} />
-          </div>
-        )}
+      {devices.length > 0 && !selected && (
+        <p className="text-muted-foreground m-auto p-4 text-center text-sm">
+          Choose a device, then select Start.
+        </p>
+      )}
+      {list.data && !devices.length && (
+        <div className="text-muted-foreground m-auto max-w-xs p-4 text-center text-sm">
+          {platform === "ios" ? (
+            list.data.available.ios ? (
+              <p>
+                Create an iOS Simulator in Xcode’s Window → Devices and Simulators, then open the
+                device picker.
+              </p>
+            ) : (
+              <>
+                <p>iOS Simulators need Xcode.</p>
+                <DeviceSetupLink platform="ios" />
+              </>
+            )
+          ) : (
+            <>
+              {!list.data.available.android && <p>Android emulators need the Android SDK.</p>}
+              {list.data.available.android ? (
+                <p>
+                  Create a virtual device in Android Studio’s Device Manager, start it there, then
+                  open the device picker.
+                </p>
+              ) : (
+                <DeviceSetupLink platform="android" />
+              )}
+            </>
+          )}
+          <DeviceDetails detail={list.data.detail[platform]} />
+        </div>
+      )}
     </>
   );
 }

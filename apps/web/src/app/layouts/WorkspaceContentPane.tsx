@@ -35,7 +35,7 @@ function trackToolOpened(tool: ContentTab, workspaceId: string) {
   const tabEventMap: Partial<Record<ContentTab, () => void>> = {
     terminal: () => track("terminal_opened", { workspace_id: workspaceId }),
     browser: () => track("browser_opened", { workspace_id: workspaceId }),
-    simulator: () => track("simulator_opened", { workspace_id: workspaceId }),
+    device: () => track("device_opened", { workspace_id: workspaceId }),
     changes: () => track("diff_viewed", { workspace_id: workspaceId }),
     files: () => track("files_opened", { workspace_id: workspaceId }),
   };
@@ -89,7 +89,7 @@ export function WorkspaceContentPane({
 
   const experimentalSettings = useSettings().data;
 
-  // Filter open tabs by current visibility gates (e.g. if Simulator is toggled off)
+  // Filter open tabs by current visibility gates
   const visibleWorkspaceTabs = useMemo(() => {
     const filtered = workspaceTabs.filter((tab) =>
       isWorkspaceTabVisible(tab, experimentalSettings, visibility)

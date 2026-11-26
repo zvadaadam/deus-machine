@@ -386,7 +386,7 @@ try {
   await toastOf("ChatGPT").waitFor();
 
   // Review opens Settings > Remote access, where the request is first and stands out.
-  await toastOf("ChatGPT").getByRole("button", { name: "Review" }).click();
+  await toastOf("ChatGPT").getByRole("button", { name: "Review" }).press("Enter");
   await section(page).waitFor();
   await toastOf("ChatGPT").waitFor({ state: "detached" });
   await page.getByRole("img", { name: "1 assistant waiting" }).waitFor();

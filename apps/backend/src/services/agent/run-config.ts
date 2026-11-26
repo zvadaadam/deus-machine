@@ -85,7 +85,7 @@ export interface DeusTurnOptions {
   /** Extra env for the agent process (NO_PROXY past a proxy, for the loopback gateway). */
   env?: Record<string, string>;
   /** The device this workspace is showing when the turn starts. */
-  simulator?: WorkspaceDevice | null;
+  device?: WorkspaceDevice | null;
   setup?: WorkspaceSetup | null;
   /** The workspace's agent-device session (`agentDeviceFor`); the chat's id without one. */
   agentDeviceSession?: string;
@@ -115,7 +115,7 @@ export function buildTurnStartParams(
       systemPromptAppend: buildSystemPromptAppend(
         options.agentMessages,
         options.cwd,
-        options.simulator,
+        options.device,
         options.setup
       ),
       // Deus runs with full access by default, like its cloud runtime.

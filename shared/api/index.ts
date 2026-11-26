@@ -19,7 +19,7 @@ import * as integrations from "./integrations";
 import * as repos from "./repos";
 import * as sessions from "./sessions";
 import * as settings from "./settings";
-import * as simulator from "./simulator";
+import * as cloudDevice from "./cloud-device";
 import * as terminal from "./terminal";
 import * as workspaces from "./workspaces";
 
@@ -34,7 +34,7 @@ export const api = {
   ...repos,
   ...sessions,
   ...settings,
-  ...simulator,
+  ...cloudDevice,
   ...terminal,
   ...workspaces,
 };

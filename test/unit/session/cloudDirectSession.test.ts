@@ -17,7 +17,7 @@ import type { ToolRequestEvent } from "@shared/api/sessions";
 import {
   cloudSimulatorActions,
   useCloudSimulatorStore,
-} from "@/features/simulator/cloud/cloudSimulatorStore";
+} from "@/features/device/cloud/cloudSimulatorStore";
 
 // Exercise the hook's actual frame routing; only React mounting and the socket
 // are replaced. The transcript fold, query cache, simulator store and the
@@ -304,6 +304,26 @@ describe("direct cloud session published frames", () => {
       expect.objectContaining({ type: "request" }),
     ]);
     expect(another).not.toHaveBeenCalled();
+  });
+
+  it("routes Home to the hosted device and settles only its matching reply", async () => {
+    const device = getDirectSession("deus-direct-1", queryClient)!;
+    const home = device.execDevice({ verb: "home", platform: "ios" });
+    const [{ type, data }] = socketSend.mock.lastCall!;
+    expect(type).toBe("simulator.exec.request");
+    expect(data).toMatchObject({ verb: "home", platform: "ios" });
+    onFrame({ type: "simulator.exec.response", requestId: "other", success: false });
+    onFrame({
+      type: "simulator.exec.response",
+      requestId: data.requestId,
+      success: true,
+      output: "Home",
+    });
+    await expect(home).resolves.toEqual({ success: true, exitCode: 0, output: "Home" });
+
+    const pending = device.execDevice({ verb: "screenshot" });
+    cleanup?.();
+    await expect(pending).rejects.toThrow("disconnected");
   });
 
   it("publishes a device frame only when it is well formed", () => {

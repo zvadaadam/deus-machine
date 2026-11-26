@@ -7,14 +7,14 @@ bun run setup    # root + apps/cloud-relay + apps/landing dependencies
 bun run doctor   # verifies the toolchain below
 ```
 
-| Tool                     | Needed for                                                | Notes                                                                                                                                                                                   |
-| ------------------------ | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Node 22.x                | everything                                                | Pinned in `.node-version`. Newer majors (Homebrew's default `node`) fail to compile `better-sqlite3`. Use `brew install node@22 && brew link --overwrite --force node@22`, or fnm/mise. |
-| Bun                      | everything                                                | CI and runtime builds require the Bun version in the root `packageManager` field. Run `bun run build:runtime` before `bun run package:mac:dir`, which uses the staged runtime.          |
-| Xcode Command Line Tools | native modules                                            | `xcode-select --install`                                                                                                                                                                |
-| Full Xcode               | iOS simulator, `bun run build:all`, `bun run package:mac` | The simulator helpers are universal binaries; Command Line Tools cannot link the x86_64 slice. `bun install` skips them without Xcode.                                                  |
-| `jq`, `gh`               | `scripts/bump-version.sh`, releases                       |                                                                                                                                                                                         |
-| Developer ID certificate | signing locally                                           | Not needed normally: releases are signed and notarized in CI. See [docs/releases.md](docs/releases.md).                                                                                 |
+| Tool                     | Needed for                          | Notes                                                                                                                                                                                   |
+| ------------------------ | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node 22.x                | everything                          | Pinned in `.node-version`. Newer majors (Homebrew's default `node`) fail to compile `better-sqlite3`. Use `brew install node@22 && brew link --overwrite --force node@22`, or fnm/mise. |
+| Bun                      | everything                          | CI and runtime builds require the Bun version in the root `packageManager` field. Run `bun run build:runtime` before `bun run package:mac:dir`, which uses the staged runtime.          |
+| Xcode Command Line Tools | native modules                      | `xcode-select --install`                                                                                                                                                                |
+| Full Xcode               | Local iOS Simulators                | Settings → Devices shows the installed version.                                                                                                                                         |
+| `jq`, `gh`               | `scripts/bump-version.sh`, releases |                                                                                                                                                                                         |
+| Developer ID certificate | signing locally                     | Not needed normally: releases are signed and notarized in CI. See [docs/releases.md](docs/releases.md).                                                                                 |
 
 `apps/cloud-relay` and `apps/landing` are standalone packages with their own lockfiles, so a plain
 root `bun install` does not cover them and `bun run typecheck:all` fails until `bun run setup` has run.

@@ -126,16 +126,15 @@ check(
 
 // ── Optional ────────────────────────────────────────────────────────────
 if (process.platform === "darwin") {
-  const env = (await import("../packages/device-use/src/engine/simbridge.ts")).simulatorEnv();
+  const env = (await import("../apps/backend/src/services/device-hub/xcode-env.ts")).simulatorEnv();
   const developerDir = out("xcode-select", ["-p"], env) ?? "";
   const fullXcode = developerDir.includes(".app/") && Boolean(out("xcodebuild", ["-version"], env));
   check(
     "optional",
-    "Full Xcode (iOS simulator, local macOS packaging)",
+    "Full Xcode (iOS Simulators)",
     fullXcode,
     developerDir || "not found",
-    "Install Xcode in /Applications or set DEVELOPER_DIR to its Contents/Developer directory. " +
-      "Without it the simulator helpers are not built and `bun run build:all` / `package:mac` fail."
+    "Install Xcode in /Applications or set DEVELOPER_DIR to its Contents/Developer directory."
   );
 
   const identities = out("security", ["find-identity", "-v", "-p", "codesigning"]) ?? "";

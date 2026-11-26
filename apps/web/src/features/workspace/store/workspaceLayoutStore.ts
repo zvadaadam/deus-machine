@@ -56,7 +56,6 @@ export interface WorkspaceLayoutState {
   chatTabSessionIds: string[]; // Ordered session IDs for open chat tabs
   activeChatTabSessionId: string | null; // Which chat tab is active
   knownChatSessionIds: string[]; // The chats the tab view knew when it last saved
-  simulatorUdid: string | null; // Last-used simulator UDID for this workspace
 }
 
 export const defaultLayout: WorkspaceLayoutState = {
@@ -71,7 +70,6 @@ export const defaultLayout: WorkspaceLayoutState = {
   chatTabSessionIds: [],
   activeChatTabSessionId: null,
   knownChatSessionIds: [],
-  simulatorUdid: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -97,7 +95,6 @@ interface WorkspaceLayoutV11 {
   chatTabSessionIds?: unknown;
   activeChatTabSessionId?: unknown;
   knownChatSessionIds?: unknown;
-  simulatorUdid?: unknown;
 }
 
 const VALID_PANEL_MODES = new Set<WorkspacePanelMode>(["split", "chat", "content"]);
@@ -107,7 +104,6 @@ const VALID_CONTENT_TABS = new Set<ContentTab>([
   "config",
   "terminal",
   "browser",
-  "simulator",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -142,13 +138,7 @@ function sanitizeWorkspaceTabV12(raw: unknown): WorkspaceTab | null {
   if (kind === "new-tab") {
     return { id: raw.id, kind: "new-tab" };
   }
-  if (
-    kind === "changes" ||
-    kind === "files" ||
-    kind === "simulator" ||
-    kind === "device" ||
-    kind === "config"
-  ) {
+  if (kind === "changes" || kind === "files" || kind === "device" || kind === "config") {
     return { id: raw.id, kind };
   }
   if (kind === "file") {
@@ -214,7 +204,6 @@ function sanitizeWorkspaceEntryV12(raw: unknown): WorkspaceLayoutState {
     chatTabSessionIds: asStringArray(raw.chatTabSessionIds),
     activeChatTabSessionId: asStringOrNull(raw.activeChatTabSessionId),
     knownChatSessionIds: asStringArray(raw.knownChatSessionIds),
-    simulatorUdid: asStringOrNull(raw.simulatorUdid),
   };
 }
 
@@ -272,8 +261,7 @@ function migrateWorkspaceEntryV11(
   if (
     activeContentTab === "changes" ||
     activeContentTab === "files" ||
-    activeContentTab === "config" ||
-    activeContentTab === "simulator"
+    activeContentTab === "config"
   ) {
     const activeToolTab = createToolTab(activeContentTab, workspaceId);
     workspaceTabs.push(activeToolTab, ...migratedBrowserTabs);
@@ -321,7 +309,6 @@ function migrateWorkspaceEntryV11(
     chatTabSessionIds: asStringArray(raw.chatTabSessionIds),
     activeChatTabSessionId: asStringOrNull(raw.activeChatTabSessionId),
     knownChatSessionIds: asStringArray(raw.knownChatSessionIds),
-    simulatorUdid: asStringOrNull(raw.simulatorUdid),
   };
 }
 
@@ -604,7 +591,6 @@ interface WorkspaceLayoutStore {
   setSelectedFilePath: (workspaceId: string, path: string | null) => void;
   setPendingFileNavigation: (workspaceId: string, navigation: PendingFileNavigation | null) => void;
   setPanelMode: (workspaceId: string, mode: WorkspacePanelMode) => void;
-  setSimulatorUdid: (workspaceId: string, udid: string | null) => void;
   setChatTabState: (
     workspaceId: string,
     sessionIds: string[],
@@ -654,8 +640,6 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
             activeChatTabSessionId: activeSessionId,
             ...(knownSessionIds ? { knownChatSessionIds: knownSessionIds } : {}),
           }),
-        setSimulatorUdid: (workspaceId, udid) =>
-          get().setLayout(workspaceId, { simulatorUdid: udid }),
 
         clearWorkspaceLayout: (workspaceId) => {
           const existing = get().layouts[workspaceId];
@@ -718,8 +702,6 @@ export const workspaceLayoutActions = {
     useWorkspaceLayoutStore
       .getState()
       .setChatTabState(workspaceId, sessionIds, activeSessionId, knownSessionIds),
-  setSimulatorUdid: (workspaceId: string, udid: string | null) =>
-    useWorkspaceLayoutStore.getState().setSimulatorUdid(workspaceId, udid),
   clearWorkspaceLayout: (workspaceId: string) =>
     useWorkspaceLayoutStore.getState().clearWorkspaceLayout(workspaceId),
   resetAll: () => useWorkspaceLayoutStore.getState().resetAll(),

@@ -26,9 +26,9 @@ describe("Device Hub access", () => {
   it("refuses device operations from a paired viewer", async () => {
     const call = operations(handlers, { deviceId: "phone", assistant: null, relayed: false });
     await expect(call(api.deviceHubDevices, {})).rejects.toThrow("on this computer");
-    await expect(call(api.startHubDevice, { platform: "android", id: "phone" })).rejects.toThrow(
-      "on this computer"
-    );
+    await expect(
+      call(api.startHubDevice, { platform: "android", id: "phone", boot: true })
+    ).rejects.toThrow("on this computer");
     await expect(call(api.retryDeviceHub, {})).rejects.toThrow("on this computer");
   });
 });

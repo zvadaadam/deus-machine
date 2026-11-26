@@ -89,7 +89,7 @@ the same workspaces. It checks, in order:
   open the full log as plain text in a dialog. A pending retry disables both retry
   buttons. A refusal still appears after switching workspaces. Retrying the repaired
   recipe keeps the step in place, then folds it into history. The desktop and phone
-  compare the warning’s alignment with a tool call from a fixture turn.
+  compare the warning’s alignment with the work row of a fixture turn.
 
 ```sh
 bun run native:node
@@ -100,6 +100,11 @@ bun run test:e2e
 The default command runs `test:e2e:workspace-start` in a disposable repository and database.
 
 Screenshots and `results.json` land in `.context/workspace-start/`.
+
+### Workspace tabs and layout
+
+`bun run test:e2e:workspace-layout` opens each tool from New Tab, checks tab
+restoration and visibility, and embeds a scripted cloud device in the Device tab.
 
 ### Desktop workspace links
 
@@ -210,7 +215,7 @@ ids), a streamed reply, a question, the end of the turn, and dropped sockets.
   no backend): the browser lists the platform's sessions, mints a token from
   its web session and holds the socket itself. It checks the sidebar, the
   menu's two organizations (no computer row, "Your computers") and the sidebar
-  filtered by the one chosen (a row and ⌃1), the snapshot, the side streams, `message.send`,
+  filtered by the one chosen (a row and ⌃1), the snapshot, the hosted Device viewer and Home command, the side streams, `message.send`,
   streaming, the question, the session list read again when the turn ends,
   and each row once after a dropped socket.
 - `cloud/organizations.runtime.mjs`, several organizations on one Mac (no

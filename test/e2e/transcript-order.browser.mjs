@@ -273,7 +273,8 @@ async function run() {
     const pageErrors = [];
     page.on("pageerror", (e) => pageErrors.push(e.message));
     const go = async (name) => {
-      await page.goto(`${base}s/local/w/${chats[name].workspace}`, { timeout: 120_000 });
+      const { workspace, session } = chats[name];
+      await page.goto(`${base}s/local/w/${workspace}?session=${session}`, { timeout: 120_000 });
       await page.getByRole("log").waitFor();
     };
     const chooseView = async (command) => {
@@ -429,7 +430,6 @@ async function run() {
     await check(
       "parallel work and a kept answer retain their nodes across settlement",
       async () => {
-        await go("bubbles");
         const reply = fixture(chats.bubbles.session, "message");
         const parallel = reply.tool();
         const done = parallel.part.state;
@@ -446,6 +446,7 @@ async function run() {
           reply.tool(),
           reply.text("Ready.", "streaming")
         );
+        await go("bubbles");
         await logView.getByText("The tag matches.", { exact: true }).waitFor();
         await logView
           .getByRole("button", { name: "Expand activity, Checking the tag · 1 tool call" })

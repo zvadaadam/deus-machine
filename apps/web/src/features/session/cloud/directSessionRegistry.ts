@@ -24,6 +24,7 @@
 // a turn that leaves one out — and no credential: the platform selects the
 // signed-in user's default provider account when admitting the turn.
 
+import type { CloudSimulatorExecResult, CloudSimulatorStatus } from "@shared/events";
 import type { ToolRequestEventData } from "@shared/types/query-protocol";
 import { readCloudTurnSelection } from "@shared/cloud-models";
 import { queryClient } from "@/shared/api/queryClient";
@@ -47,6 +48,8 @@ export interface DirectSessionChannel {
   sendMessage(prompt: string, turnId: string, options: DirectTurnOptions): void;
   /** Cancel the session's active turn (omit `turnId` to cancel whatever is live). */
   cancel(turnId?: string): void;
+  deviceStatus(): CloudSimulatorStatus | null;
+  execDevice(data: Record<string, unknown>): Promise<CloudSimulatorExecResult>;
   /** Deliver a raw ClientCommand frame (question answers). Throws if the socket
    *  is not open — the caller keeps the answer for the next socket. */
   sendRaw(frame: Record<string, unknown>): void;

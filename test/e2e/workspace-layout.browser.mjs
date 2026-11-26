@@ -30,7 +30,7 @@ import { ConnectionIllustration } from "@/features/connection/ui/ConnectionIllus
 import { Check } from "lucide-react";
 import "@/global.css";
 const client = new QueryClient({defaultOptions:{queries:{retry:false}}});
-const settings = {experimental_browser: true, experimental_simulator: true};
+const settings = {experimental_browser: true};
 client.setQueryData(queryKeys.settings.all, settings);
 const workspace = {id:"first",repository_id:"repo",repo_name:"deus/app",title:"Workspace layout",kind:"local",state:"ready",workspace_path:"/fixture",root_path:"/fixture",current_session_id:"session",session_status:"idle",setup_status:"completed",status:"in-progress",git_branch:"layout",git_default_branch:"main",latest_message_sent_at:1};
 window.layoutActions = workspaceLayoutActions;
@@ -62,6 +62,7 @@ const server = await createServer({
   esbuild: { jsx: "automatic" },
   optimizeDeps: { entries: [path.join(artifacts, "entry.tsx")] },
   define: {
+    "import.meta.env.VITE_BACKEND_PORT": JSON.stringify("1420"),
     __APP_VERSION__: JSON.stringify("test"),
     "import.meta.env.VITE_CLOUD_DIRECT": JSON.stringify("0"),
   },
@@ -113,7 +114,6 @@ const server = await createServer({
           if (resource === "settings")
             return json({
               experimental_browser: true,
-              experimental_simulator: true,
             });
           if (resource === "session")
             return json({
@@ -151,7 +151,23 @@ const server = await createServer({
               : json({}, 503);
           if (resource === "fileContent")
             return json({ content: "# Deus Machine\n\nWelcome to browser-style tabs.\n" });
-          if (resource === "simulatorCapabilities") return json({ available: true });
+          if (resource === "deviceSupport")
+            return json({
+              liveView: "available",
+              setup: "new",
+              error: null,
+              xcode: { available: true, version: "27.1" },
+              android: false,
+              hubVersion: "fixture",
+              agentDeviceVersion: "fixture",
+            });
+          if (resource === "cloudPreview") return json(null);
+          if (resource === "cloudSimulator")
+            return json({
+              status: "ready",
+              platform: "ios",
+              streamUrl: "https://viewer.example.test/device",
+            });
           if (resource === "diffFiles") return json({ files: [] });
           if (resource === "localServers")
             return json({
@@ -226,7 +242,7 @@ try {
   await tabs.getByRole("tab", { name: "New tab", exact: true }).waitFor();
   await page
     .locator('[data-slot="new-tab-view"]')
-    .getByRole("button", { name: "Simulator", exact: true })
+    .getByRole("button", { name: "Device", exact: true })
     .waitFor();
   assert.ok(await createPR.isVisible(), "the header shows the available PR action");
   assert.deepEqual(
@@ -343,7 +359,7 @@ try {
     )
   );
   // Every tool can be opened from New Tab and supports expand/restore from the unified tab bar.
-  for (const name of ["Files", "Terminal", "Browser", "Simulator", "Agent"]) {
+  for (const name of ["Files", "Terminal", "Browser", "Device", "Agent"]) {
     await openFromNewTab(name);
     await click("Expand workspace");
     await view("content");
@@ -421,7 +437,6 @@ try {
   await page.evaluate(() => {
     window.client.setQueryData(["settings"], {
       experimental_browser: false,
-      experimental_simulator: true,
     });
   });
   await page.waitForFunction(() => {
@@ -463,7 +478,6 @@ try {
   await page.evaluate(() => {
     window.client.setQueryData(["settings"], {
       experimental_browser: true,
-      experimental_simulator: true,
     });
   });
   await tabs.getByRole("tab", { name: "Browser", exact: true }).waitFor();
@@ -521,7 +535,7 @@ try {
   await view("split");
   // A gated cloud computer still exposes Restore; no VM is provisioned by a layout action.
   await page.evaluate(() => window.setCloudStage("initializing"));
-  for (const name of ["Changes", "Files", "Terminal", "Browser", "Simulator"]) {
+  for (const name of ["Changes", "Files", "Terminal", "Browser", "Device"]) {
     await openFromNewTab(name);
     await page
       .getByText("Setting up your computer…", { exact: true })
@@ -532,6 +546,16 @@ try {
     await click("Restore split");
     await view("split");
   }
+  await page.route("https://viewer.example.test/**", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<p>Hosted device</p>" })
+  );
+  await page.evaluate(() => window.setCloudStage("ready"));
+  const hosted = page.frameLocator('iframe[title="Cloud device"]');
+  await hosted.getByText("Hosted device").waitFor();
+  assert.match(
+    await page.getByTitle("Cloud device", { exact: true }).getAttribute("src"),
+    /embed=1/
+  );
   // Narrow desktop headers stay within the pane, without an overflow menu.
   await page.setViewportSize({ width: 1050, height: 800 });
   await tab("Changes");
@@ -545,17 +569,22 @@ try {
   assert.equal(await page.locator("[data-workspace-view]").count(), 0);
   assert.ok(await createPR.isVisible(), "the phone shows the available PR action");
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-  // Hosted web has no content tools; even a saved focused mode must leave chat usable.
+  // The hosted workspace offers its Device panel over the platform connection.
   await page.setViewportSize({ width: 1440, height: 900 });
+  await page.evaluate(() => localStorage.setItem("deus.cloudDirectWeb", "1"));
+  await page.reload();
+  await page.waitForFunction(() => typeof window.setCloudStage === "function");
   await page.evaluate(() => {
-    localStorage.setItem("deus.cloudDirectWeb", "1");
-    window.layoutActions.setPanelMode("first", "content");
     window.setCloudStage("ready");
+    window.layoutActions.setPanelMode("first", "split");
   });
-  await view("chat");
-  assert.equal(await page.locator("#workspace-content").count(), 0);
-  assert.equal(await createPR.count(), 0, "the hosted chat-only header has no PR controls");
-  assert.equal(await page.getByRole("button", { name: "Show workspace", exact: true }).count(), 0);
+  await view("split");
+  await click("New tab");
+  const hostedTiles = page.locator('[data-slot="new-tab-tile"]');
+  await hostedTiles.first().waitFor();
+  assert.equal(await hostedTiles.count(), 1);
+  await hostedTiles.getByText("Device", { exact: true }).waitFor();
+  assert.equal(await createPR.count(), 0, "hosted workspaces have no local PR controls");
 
   // Rapid same-pixel close with motion ENABLED (50ms intervals during exit animation).
   const motionPage = await browser.newPage({

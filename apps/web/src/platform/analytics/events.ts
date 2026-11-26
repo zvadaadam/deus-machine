@@ -110,7 +110,7 @@ export type AnalyticsEventMap = {
   command_palette_opened: Record<string, never>;
   terminal_opened: { workspace_id?: string };
   browser_opened: { workspace_id?: string };
-  simulator_opened: { workspace_id?: string };
+  device_opened: { workspace_id?: string };
   /** User opened the diff/changes panel for a workspace. */
   diff_viewed: { workspace_id?: string };
   /** User opened the files panel for a workspace. */

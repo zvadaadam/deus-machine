@@ -15,10 +15,6 @@ import * as agentService from "./services/agent";
 import { destroyAllPtySessions } from "./services/pty.service";
 import { deviceHub } from "./services/device-hub";
 import { destroyAllWatchers } from "./services/fs-watcher.service";
-import {
-  reconcile as reconcileSimulators,
-  destroyAll as destroyAllSimulators,
-} from "./services/simulator-context";
 import { invalidate } from "./services/query-engine";
 import {
   setRefreshListener as setLocalServerRefreshListener,
@@ -148,10 +144,6 @@ async function onListening(port: number): Promise<void> {
     notifyDevicesChanged();
   });
 
-  // Discover booted simulators on startup (fire-and-forget).
-  // Restores awareness of running simulators after a backend restart.
-  void reconcileSimulators();
-
   // Periodic localhost dev-server discovery. Probes a curated port list
   // every 60s; the refresh listener pushes a fresh snapshot to all
   // `localServers` WS subscribers each time a sweep completes.
@@ -190,7 +182,6 @@ process.on("uncaughtException", (error, origin) => {
   Sentry.captureException(error);
   stopProcessGroups();
   Promise.allSettled([Sentry.close(2000), deviceHub.shutdown()]).finally(() => {
-    destroyAllSimulators();
     destroyAllPtySessions();
     destroyAllWatchers();
     void agentService.shutdown();
@@ -216,7 +207,6 @@ function shutdown() {
   // First, so a checkout or a setup script stops while the rest shuts down.
   stopProcessGroups();
   void Promise.allSettled([agentService.shutdown(), deviceHub.shutdown()]).finally(() => {
-    destroyAllSimulators();
     destroyAllPtySessions();
     destroyAllWatchers();
     stopLocalServerDiscovery();

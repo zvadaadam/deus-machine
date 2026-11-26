@@ -1,7 +1,7 @@
 import * as api from "@shared/api/device-hub";
 import { AppError } from "../lib/errors";
 import { listHubDevices, startHubDevice } from "../services/device-hub/devices";
-import { deviceHub } from "../services/device-hub";
+import { deviceHub, deviceSupport } from "../services/device-hub";
 import { onFollow, openWith } from "../services/streams";
 import { getConnection } from "../services/ws.service";
 import { handle } from "./registry";
@@ -18,13 +18,14 @@ onFollow(api.deviceHubStatus, (scope, connectionId) => {
 openWith(api.deviceHubStatus, () => [deviceHub.status]);
 
 export default [
+  handle(api.deviceSupport, (_, { caller }) => deviceSupport(caller.relayed || !!caller.deviceId)),
   handle(api.deviceHubDevices, (_, { caller }) => {
     requireLocal(caller.relayed, caller.deviceId);
     return listHubDevices(deviceHub.endpoint);
   }),
   handle(api.startHubDevice, (input, { caller }) => {
     requireLocal(caller.relayed, caller.deviceId);
-    return startHubDevice(deviceHub.endpoint, input);
+    return startHubDevice(deviceHub.endpoint, input, input.boot);
   }),
   handle(api.retryDeviceHub, (_, { caller }) => {
     requireLocal(caller.relayed, caller.deviceId);

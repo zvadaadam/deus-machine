@@ -6,7 +6,7 @@ Thanks for your interest in contributing to Deus! This document covers everythin
 
 - **Node.js** 22.x exactly (see `.node-version`; newer majors fail to compile native modules)
 - **Bun** for all package commands. Use the version in the root `package.json` under `packageManager`.
-- **Xcode Command Line Tools** on macOS; full Xcode only for the iOS simulator and local packaging
+- **Xcode Command Line Tools** on macOS. Install full Xcode to run iOS Simulators
 
 ## Setup
 

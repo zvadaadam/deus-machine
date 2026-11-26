@@ -6,19 +6,9 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
-import { useSimulatorCapabilities } from "@/features/simulator";
 import type { SettingsSectionProps } from "./types";
 
 export function ExperimentalSection({ settings, saveSetting }: SettingsSectionProps) {
-  const simulatorCapabilities = useSimulatorCapabilities();
-  const simulatorUnavailableReason =
-    simulatorCapabilities.data.available === false
-      ? simulatorCapabilities.data.unavailableReason
-      : null;
-  const simulatorSwitchDisabled =
-    settings.experimental_simulator !== true && simulatorCapabilities.data.available === false;
-
   return (
     <FieldGroup className="gap-5">
       <div>
@@ -27,27 +17,6 @@ export function ExperimentalSection({ settings, saveSetting }: SettingsSectionPr
           Early-access features that are still in development.
         </p>
       </div>
-
-      {/* iOS Simulator */}
-      <Field orientation="horizontal">
-        <FieldContent>
-          <FieldLabel htmlFor="experimental-simulator" className="text-sm">
-            iOS Simulator
-          </FieldLabel>
-          <FieldDescription>
-            {simulatorUnavailableReason ??
-              "A Simulator tab in each workspace, to watch and use an iOS Simulator."}
-          </FieldDescription>
-        </FieldContent>
-        <Switch
-          id="experimental-simulator"
-          checked={settings.experimental_simulator === true}
-          disabled={simulatorSwitchDisabled}
-          onCheckedChange={(checked) => saveSetting("experimental_simulator", checked)}
-        />
-      </Field>
-
-      <Separator />
 
       {/* Browser */}
       <Field orientation="horizontal">

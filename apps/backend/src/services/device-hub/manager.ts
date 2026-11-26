@@ -1,60 +1,22 @@
-import { spawn } from "node:child_process";
 import { chmod, cp, mkdir, mkdtemp, readdir, readFile, rename, rm } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { subscriptionKey } from "@deus/runtime-client";
 import type { HubView } from "@shared/api/device-hub";
 import { createBackendChildEnv } from "@shared/lib/child-env";
 import { HUB_STREAM_MODE, type HubStatus } from "@shared/types/device-hub";
 import { getErrorMessage } from "@shared/lib/errors";
-import manifest from "../../../../../resources/device-hub/package.json";
+import { launch } from "./process";
+import { bootIdentity } from "./simctl";
+import { deviceToolchains, hubManifest, hubVersion, liveViewSupport } from "./support";
+import { simulatorEnv } from "./xcode-env";
 
-export const hubVersion = manifest.dependencies["expo-device-hub"];
 const packagePath = "node_modules/expo-device-hub";
 const cliPath = packagePath + "/dist/server/cli.mjs";
 
 export interface HubEndpoint {
   origin: string;
   token: string;
-}
-
-function launch(
-  args: string[],
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-  signal: AbortSignal,
-  installing = false
-) {
-  signal.throwIfAborted();
-  const runtime = process.env.DEUS_RUNTIME_EXECUTABLE;
-  const child = spawn(runtime || "bun", args, {
-    cwd,
-    env: runtime ? { ...env, BUN_BE_BUN: "1" } : env,
-    stdio: ["ignore", "ignore", installing ? "pipe" : "ignore"],
-  });
-  let stderr = "";
-  child.stderr?.setEncoding("utf8").on("data", (chunk: string) => {
-    stderr = (stderr + chunk).slice(-4096);
-  });
-  let kill: NodeJS.Timeout | undefined;
-  const stop = () => {
-    child.kill("SIGTERM");
-    kill = setTimeout(() => child.kill("SIGKILL"), 1500);
-  };
-  signal.addEventListener("abort", stop, { once: true });
-  const closed = new Promise<void>((resolve, reject) => {
-    child.once("error", reject);
-    child.once("close", (code, reason) => {
-      if (code === 0) return resolve();
-      const detail = stderr.trim().split("\n").slice(-8).join("\n");
-      reject(new Error(detail || `Process exited with ${reason ?? "code " + code}.`));
-    });
-  }).finally(() => {
-    signal.removeEventListener("abort", stop);
-    clearTimeout(kill);
-  });
-  return { child, closed };
 }
 
 async function discover(
@@ -144,8 +106,43 @@ export class DeviceHub {
     return { platform: view.platform, id: view.deviceId };
   }
 
+  async setupState() {
+    if (this.status.phase === "error") return "failed";
+    if (this.status.phase === "ready") return "ready";
+    if (this.status.phase !== "idle") return "working";
+    return (await installedVersion(join(this.options.directory, hubVersion))) === hubVersion
+      ? "ready"
+      : "new";
+  }
+
   retry() {
-    if (this.views.size && this.status.phase === "error") this.start();
+    if (this.status.phase !== "error") return;
+    this.start();
+    if (!this.views.size) {
+      clearTimeout(this.idle);
+      this.idle = setTimeout(() => this.controller?.abort(), this.options.idleMs ?? 180_000);
+    }
+  }
+
+  private async watchBoots(signal: AbortSignal) {
+    const boots = new Map<string, number>();
+    while (!signal.aborted) {
+      const shown = new Set(
+        [...this.views].filter((v) => v.platform === "ios").map((v) => v.deviceId)
+      );
+      for (const id of shown) {
+        if (!id) continue;
+        const pid = await bootIdentity(id).catch(() => null);
+        if (!pid || signal.aborted) continue;
+        if (boots.has(id) && boots.get(id) !== pid) {
+          // The old native input channel continues to accept taps after reboot but drops them.
+          this.controller?.abort();
+          return;
+        }
+        boots.set(id, pid);
+      }
+      await delay(2500, undefined, { signal });
+    }
   }
 
   async shutdown() {
@@ -186,43 +183,39 @@ export class DeviceHub {
 
   private async run(signal: AbortSignal) {
     const base = this.options.directory;
-    const versionDirectory = join(base, hubVersion);
-    // Older prototypes installed edited files at the version root under the same package version.
-    const installed = join(versionDirectory, "runtime");
+    const installed = join(base, hubVersion);
     const env = createBackendChildEnv();
     this.set({ phase: "starting" });
+    const { installer } = await deviceToolchains();
+    if (liveViewSupport(process.platform, process.arch, installer, false) !== "available")
+      throw new Error("The Device tab needs the local Apple silicon runtime.");
+    signal.throwIfAborted();
     await mkdir(base, { recursive: true, mode: 0o700 });
     await chmod(base, 0o700);
     if ((await installedVersion(installed)) !== hubVersion) {
       this.set({ phase: "installing" });
       const staging = await mkdtemp(join(base, ".install-"));
       try {
-        const staged = join(staging, "runtime");
-        await mkdir(staged);
-        const resources = process.env.DEUS_RESOURCES_PATH;
-        const source = resources
-          ? join(resources, "app.asar.unpacked/resources/device-hub")
-          : fileURLToPath(new URL("../../../../../resources/device-hub/", import.meta.url));
+        const source = hubManifest();
         for (const file of ["package.json", "bun.lock"])
-          await cp(join(source, file), join(staged, file));
+          await cp(join(source, file), join(staging, file));
         await launch(
           ["install", "--frozen-lockfile", "--ignore-scripts"],
-          staged,
+          staging,
           env,
           AbortSignal.any([signal, AbortSignal.timeout(180_000)]),
           true
         ).closed;
-        if ((await installedVersion(staged)) !== hubVersion)
+        if ((await installedVersion(staging)) !== hubVersion)
           throw new Error("Bun did not install the pinned device package.");
         signal.throwIfAborted();
-        await rm(versionDirectory, { recursive: true, force: true });
-        await rename(staging, versionDirectory);
+        await rm(installed, { recursive: true, force: true });
+        await rename(staging, installed);
       } finally {
         await rm(staging, { recursive: true, force: true });
       }
       this.set({ phase: "starting" });
     }
-    const { simulatorEnv } = await import("device-use/engine");
     const stateDirectory = join(base, "state");
     const simDirectory = join(base, "serve-sim");
     await rm(stateDirectory, { recursive: true, force: true });
@@ -265,7 +258,7 @@ export class DeviceHub {
       ]);
       clearTimeout(timeout);
       this.set({ phase: "ready", instance: crypto.randomUUID() });
-      await hub.closed;
+      await Promise.race([hub.closed, this.watchBoots(processSignal)]);
       throw new Error("The device service exited.");
     } catch (error) {
       stop.signal.throwIfAborted();

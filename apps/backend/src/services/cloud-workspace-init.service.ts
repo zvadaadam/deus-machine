@@ -853,7 +853,7 @@ async function provisionCloudWorkspace(
         (await refreshEnvironmentGithubTokenOnce(originUrl, envInfo.environmentId, org)) ??
         undefined;
       identity.throwIfAborted();
-      // Every cloud workspace shows a Simulator tab; an environment saved
+      // Every cloud workspace shows a Device tab; an environment saved
       // before devices existed cannot honour it, and the recipe is captured
       // at create — so upgrade the environment FIRST (enabling is free:
       // billing starts with a device). Best-effort: the workspace still
@@ -864,7 +864,7 @@ async function provisionCloudWorkspace(
       // Adding a personal secret scope must not select a same-name personal recipe.
       environment = envInfo.environmentId;
     } else {
-      // Every inline cloud workspace can host a device (the Simulator tab):
+      // Every inline cloud workspace can host a device (the Device tab):
       // `.simulator()` only ENABLES it — billing starts when a device starts,
       // so the flag is free until the tab is used. Named environments (above)
       // are the agent's own config and are left alone.

@@ -2,8 +2,8 @@ import { z } from "zod";
 import { getErrorMessage } from "@shared/lib/errors";
 import type { HubDevice, HubInventory } from "@shared/types/device-hub";
 import { AppError, ConflictError } from "../../lib/errors";
-import { hasSimulatorToolchain, listDevices, simctl } from "../simulator-context";
-import { hasAndroidToolchain } from "./android-sdk";
+import { listDevices, simctl } from "./simctl";
+import { deviceToolchains, hasSimulatorToolchain } from "./support";
 import type { HubEndpoint } from "./manager";
 
 const device = z.object({
@@ -51,15 +51,13 @@ async function request(hub: HubEndpoint | null, path: string, body?: object) {
 
 async function iosDevices(): Promise<HubDevice[]> {
   const all = await listDevices();
-  return all
-    .filter((sim) => sim.runtime.startsWith("iOS "))
-    .map((sim) => ({
-      platform: "ios",
-      id: sim.udid,
-      name: sim.name,
-      version: sim.runtime,
-      booted: sim.state === "Booted",
-    }));
+  return all.map((sim) => ({
+    platform: "ios",
+    id: sim.udid,
+    name: sim.name,
+    version: sim.runtime,
+    booted: sim.state === "Booted",
+  }));
 }
 
 async function listSimulators() {
@@ -79,10 +77,10 @@ async function hubInventory(hub: HubEndpoint | null) {
 }
 
 export async function listHubDevices(hub: HubEndpoint | null): Promise<HubInventory> {
-  const [list, ios, android] = await Promise.all([
+  const [list, ios, { android }] = await Promise.all([
     hubInventory(hub),
     listSimulators(),
-    hasAndroidToolchain(),
+    deviceToolchains(),
   ]);
   const known = new Set(list.simulators.map((sim) => sim.id));
   return {
@@ -92,13 +90,14 @@ export async function listHubDevices(hub: HubEndpoint | null): Promise<HubInvent
       ...list.emulators,
     ],
     available: { ios: ios.available, android },
-    detail: [toolDetail(list.errors), ios.detail].filter(Boolean).join("\n") || null,
+    detail: { ios: ios.detail, android: toolDetail(list.errors) || null },
   };
 }
 
 export async function startHubDevice(
   hub: HubEndpoint | null,
-  target: Pick<HubDevice, "platform" | "id">
+  target: Pick<HubDevice, "platform" | "id">,
+  boot = true
 ) {
   const list = await hubInventory(hub);
   const known = (target.platform === "ios" ? list.simulators : list.emulators).find(
@@ -124,6 +123,7 @@ export async function startHubDevice(
   };
   let id = selected.id;
   if (!selected.booted) {
+    if (!boot) throw new ConflictError("The device is shut down.");
     if (known) {
       const result = await perform("/api/devices/boot", selected);
       id = result.serial ?? id;

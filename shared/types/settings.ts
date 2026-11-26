@@ -35,7 +35,6 @@ export interface Settings {
   openai_api_key?: string;
 
   // Experimental (default: false when absent — opt-in for new users)
-  experimental_simulator?: boolean;
   experimental_browser?: boolean;
 
   // Remote Access
@@ -56,6 +55,7 @@ export type SettingsSection =
   | "general"
   | "github"
   | "browser"
+  | "devices"
   | "ai"
   | "cloud"
   | "environment"

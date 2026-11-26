@@ -4,7 +4,7 @@ Status: built as `@deus/screen-studio` 0.2 in `packages/screen-studio`, used by 
 
 ## Product boundary
 
-Screen Studio records what an agent does and turns it into video. It records; it does not drive. The agent keeps its own tools — agent-browser, Playwright, device-use, agent-device, Cua. A browser tab reports its own input; other controllers report what they did, live or in a log imported afterwards. Two workflows share one capture:
+Screen Studio records what an agent does and turns it into video. It records; it does not drive. The agent keeps its own tools — agent-browser, Playwright, agent-device, Cua. A browser tab reports its own input; other controllers report what they did, live or in a log imported afterwards. Two workflows share one capture:
 
 - A coding agent records a short walkthrough, marks what matters, and gets an MP4 with readable pacing, framing and chapters.
 - An editor (Showtell, a human, another agent) opens the original media and its events, and makes its own choices.
@@ -118,7 +118,6 @@ So a Deus recording freezes whenever the user is not looking at the browser tab,
 - A Showtell bridge: import the media and translate chapters and selected actions into source-time notes. The bundle has what it needs.
 - Places for Cua actions: the window's frame on screen at each turn would map its click points onto the display.
 - Keeping Deus's hidden browser tab painted while recording (above).
-- device-use's simbridge looks for SimulatorKit in `Developer/Library/PrivateFrameworks`; Xcode 27.1 ships it in `Contents/SharedFrameworks`, so simbridge taps fail with that Xcode (this affected Deus's simulator tools, since removed). The iOS capture test here released UI steps from the host instead.
 - Extraction: publish, then switch Deus's import to the package name.
 
 The earlier exploratory scripts (`experiments/capture-lab`) imported the modules this rebuild replaced and are no longer in the tree; their findings are summarized above.

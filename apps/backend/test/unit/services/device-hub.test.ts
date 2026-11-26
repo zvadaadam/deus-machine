@@ -2,10 +2,17 @@ import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DeviceHub, hubVersion } from "../../../src/services/device-hub/manager";
+import { hubVersion } from "../../../src/services/device-hub/support";
+import { DeviceHub } from "../../../src/services/device-hub/manager";
 import type { HubStatus } from "@shared/types/device-hub";
 
-vi.mock("device-use/engine", () => ({ simulatorEnv: (env: NodeJS.ProcessEnv) => env }));
+vi.mock("../../../src/services/device-hub/support", async (original) => ({
+  ...(await original<typeof import("../../../src/services/device-hub/support")>()),
+  deviceToolchains: async () => ({ installer: true }),
+  liveViewSupport: () => "available",
+}));
+const { bootIdentity } = vi.hoisted(() => ({ bootIdentity: vi.fn(async () => 123) }));
+vi.mock("../../../src/services/device-hub/simctl", () => ({ bootIdentity }));
 
 describe("Device Hub lifecycle", () => {
   let directory: string;
@@ -34,6 +41,9 @@ if (!process.argv.includes("--require-token") || process.argv[process.argv.index
 if ((fs.statSync(directory).mode & 0o777) !== 0o700 || (fs.statSync(process.env.SERVE_SIM_STATE_DIR).mode & 0o777) !== 0o700 || fs.readdirSync(directory).length) process.exit(23);
 process.on("SIGTERM", () => { if (!process.env.FIXTURE_STUCK) process.exit(0); });
 fs.writeFileSync("pid", String(process.pid));
+if (process.env.FIXTURE_MONITOR) require("node:child_process").spawn(process.execPath, ["-e",
+  'process.on("SIGTERM", () => {}); require("node:fs").writeFileSync("monitor", String(process.pid)); setInterval(()=>{}, 1000);'
+], {stdio:"ignore"});
 function publish(port, pid) {
   fs.writeFileSync(directory + "/server-" + port + ".json", JSON.stringify({pid, port, url:"http://127.0.0.1:" + port, token: "x".repeat(43)}), {mode:0o600});
 }
@@ -58,7 +68,7 @@ setInterval(() => {}, 1000);
   const wait = (phase: HubStatus["phase"]) =>
     vi.waitFor(() => expect(hub.status.phase).toBe(phase), { timeout: 5000 });
   const view = { workspaceId: "w", deviceId: null, platform: null };
-  const installed = () => join(directory, "hub", hubVersion, "runtime");
+  const installed = () => join(directory, "hub", hubVersion);
 
   it("installs once, shares one process, and reuses it across a brief disconnect", async () => {
     const leave = hub.follow(view);
@@ -131,6 +141,33 @@ setInterval(() => {}, 1000);
     expect(hub.endpoint).toBeNull();
     await hub.shutdown();
     expect(hub.status.phase).toBe("idle");
+  });
+
+  it("reconnects the shown device after a new boot", async () => {
+    bootIdentity.mockResolvedValueOnce(123).mockResolvedValue(456);
+    const scope = { workspaceId: "w", platform: "ios", deviceId: "A0-B0" } as const;
+    hub.follow(scope);
+    await wait("ready");
+    const first = hub.status;
+    await vi.waitFor(
+      () => {
+        expect(hub.status.phase).toBe("ready");
+        expect(hub.status).not.toEqual(first);
+      },
+      { timeout: 7000 }
+    );
+    expect(hub.displayedDevice("w")).toEqual({ platform: "ios", id: "A0-B0" });
+  }, 10000);
+
+  it("stops a stubborn monitor after the hub's group leader exits", async () => {
+    vi.stubEnv("FIXTURE_MONITOR", "1");
+    hub.follow(view);
+    await wait("ready");
+    const pid = Number(await vi.waitFor(() => readFile(join(installed(), "monitor"), "utf8")));
+    const leader = Number(await readFile(join(installed(), "pid"), "utf8"));
+    process.kill(leader, "SIGTERM");
+    await wait("error");
+    await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow());
   });
 
   it("reaps a hub that ignores SIGTERM before shutdown returns", async () => {

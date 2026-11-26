@@ -108,7 +108,8 @@ describe("Device Hub proxy", () => {
       { incoming: { socket: { remoteAddress: "192.0.2.1" } } }
     );
     expect(remote.status).toBe(403);
-    expect((await fetch(base + "/vendor/serve-sim/exec-ws")).status).toBe(404);
+    for (const path of ["/exec-ws", "/helper/abc/stream.avcc", "/helper/abc/stream.mjpeg"])
+      expect((await fetch(base + "/vendor/serve-sim" + path)).status).toBe(404);
     const ws = new WebSocket(base.replace("http:", "ws:") + "/vendor/serve-sim/helper/ws", {
       origin: "https://example.test",
     });

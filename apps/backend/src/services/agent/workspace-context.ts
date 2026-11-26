@@ -19,12 +19,10 @@ export function getProjectName(cwd: string): string {
   return path.basename(cwd.substring(0, idx));
 }
 
-export type WorkspaceDevice = { udid: string } | Pick<HubDevice, "platform" | "id">;
+export type WorkspaceDevice = Pick<HubDevice, "platform" | "id">;
 
 function deviceInstructions(device?: WorkspaceDevice | null) {
   if (!device) return "";
-  if ("udid" in device)
-    return `This workspace's Simulator tab shows the simulator ${device.udid}: pass \`--udid ${device.udid}\` to agent-device so the person sees what you do.\n`;
   const flag = device.platform === "ios" ? "--udid" : "--serial";
   return `This workspace's Device tab shows ${device.id}. Pass \`${flag} ${device.id}\` to agent-device so the person sees what you do.\n`;
 }

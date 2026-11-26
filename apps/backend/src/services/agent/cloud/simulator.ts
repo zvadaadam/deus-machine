@@ -28,9 +28,9 @@ import {
   type CloudSimulatorPlatform,
   type CloudSimulatorStatus,
 } from "@shared/events";
-import type { CloudSimulatorExecResult } from "@shared/types/simulator";
+import type { CloudSimulatorExecResult } from "@shared/events";
 import { cloudOrg } from "./config";
-import { cloudSimulatorEvents } from "@shared/api/simulator";
+import { cloudSimulatorEvents } from "@shared/api/cloud-device";
 import { publish } from "../../streams";
 
 /** The session a frame arrived on — the two ids the event envelope needs. */
@@ -529,32 +529,19 @@ export function buildCloudSimulatorExecFrameData(
   request: CloudSimulatorExecRequest
 ): Record<string, unknown> {
   const verb = request.verb.trim();
-  if (!verb) throw new Error("A simulator exec needs a verb");
+  if (!verb) throw new Error("A device command needs a verb");
   const args = request.args ?? [];
   if (args.length > SIMULATOR_EXEC_MAX_ARGS) {
-    throw new Error(`A simulator exec takes at most ${SIMULATOR_EXEC_MAX_ARGS} args`);
+    throw new Error(`A device command takes at most ${SIMULATOR_EXEC_MAX_ARGS} args`);
   }
   if (args.some((arg) => arg.length > SIMULATOR_EXEC_MAX_ARG_LENGTH)) {
     throw new Error(
-      `A simulator exec arg is limited to ${SIMULATOR_EXEC_MAX_ARG_LENGTH} characters`
+      `A device command argument is limited to ${SIMULATOR_EXEC_MAX_ARG_LENGTH} characters`
     );
   }
   return {
     verb,
     ...(args.length > 0 ? { args } : {}),
     ...(request.platform ? { platform: request.platform } : {}),
-  };
-}
-
-/** The platform's `simulator.exec.response`, as the request's result. */
-export function readCloudSimulatorExecResult(
-  data: Record<string, unknown>
-): CloudSimulatorExecResult {
-  const success = data.success === true;
-  return {
-    success,
-    exitCode: typeof data.exitCode === "number" ? data.exitCode : success ? 0 : -1,
-    output: typeof data.output === "string" ? data.output : "",
-    ...(typeof data.error === "string" ? { error: data.error } : {}),
   };
 }

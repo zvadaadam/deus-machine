@@ -15,7 +15,6 @@ import {
 } from "./workspace-lifecycle";
 import { stopWorkspaceSetup } from "./project-environment.service";
 import { invalidate } from "./query-engine";
-import { stopStream } from "./simulator-context";
 import { autoProgressStatus } from "./workspace-status.service";
 
 /**
@@ -48,7 +47,6 @@ export function archiveWorkspace(
     if (!markArchived(workspace, encodeOrigin(by))) return;
     const done = retireWorkspaceAttempt(workspaceId);
     try {
-      stopStream(workspaceId);
       const stopped = stopWorkspaceSetup(workspaceId);
       autoProgressStatus(workspaceId, "done", { force: true });
       await stopped;

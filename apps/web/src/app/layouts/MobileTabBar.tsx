@@ -2,9 +2,9 @@
  * MobileTabBar -- bottom navigation for mobile web layout.
  *
  * Chat (default) and Code (all-files diff viewer); a cloud computer adds
- * Simulator — the hosted device is billable, and a phone must be able to see
+ * Device — the hosted device is billable, and a phone must be able to see
  * and stop it. Badge count on Code when file changes exist; a live dot on
- * Simulator while the device is up.
+ * Device while the device is up.
  * Fixed at the bottom of the mobile flex column (not position:fixed).
  * Safe-area aware for notched iOS devices.
  */
@@ -12,32 +12,36 @@
 import { MessageSquare, GitBranch, Smartphone } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
-export type MobileTab = "chat" | "code" | "simulator";
+export type MobileTab = "chat" | "code" | "device";
 
 interface MobileTabBarProps {
   activeTab: MobileTab;
   onTabChange: (tab: MobileTab) => void;
   fileChangesCount: number;
-  /** Cloud computers only: the hosted-device tab. */
-  showSimulator?: boolean;
+  showDevice: boolean;
+  showCode: boolean;
   /** The hosted device is running (and billing) — shown as a dot. */
-  simulatorLive?: boolean;
+  deviceLive?: boolean;
 }
 
 const BASE_TABS: Array<{ id: MobileTab; label: string; icon: typeof MessageSquare }> = [
   { id: "chat", label: "Chat", icon: MessageSquare },
   { id: "code", label: "Code", icon: GitBranch },
 ];
-const SIMULATOR_TAB = { id: "simulator" as const, label: "Simulator", icon: Smartphone };
+const DEVICE_TAB = { id: "device" as const, label: "Device", icon: Smartphone };
 
 export function MobileTabBar({
   activeTab,
   onTabChange,
   fileChangesCount,
-  showSimulator = false,
-  simulatorLive = false,
+  showDevice,
+  showCode,
+  deviceLive = false,
 }: MobileTabBarProps) {
-  const tabs = showSimulator ? [...BASE_TABS, SIMULATOR_TAB] : BASE_TABS;
+  const tabs = [
+    ...BASE_TABS.filter((tab) => tab.id !== "code" || showCode),
+    ...(showDevice ? [DEVICE_TAB] : []),
+  ];
   return (
     <div
       data-slot="mobile-tab-bar"
@@ -72,7 +76,7 @@ export function MobileTabBar({
                   {fileChangesCount > 99 ? "99+" : fileChangesCount}
                 </span>
               )}
-              {tab.id === "simulator" && simulatorLive && (
+              {tab.id === "device" && deviceLive && (
                 <span
                   aria-label="Device live"
                   className="bg-success absolute -top-0.5 -right-1.5 h-2 w-2 rounded-full"

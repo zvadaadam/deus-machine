@@ -52,7 +52,6 @@ export const PreferencesFile = z
     anthropic_api_key: z.string().optional(),
     // A level the model lists (an open vocabulary); a blank reads as the default, see readThinkingLevel.
     default_thinking_level: z.string().optional(),
-    experimental_simulator: z.boolean().optional(),
     experimental_browser: z.boolean().optional(),
   })
   .passthrough();

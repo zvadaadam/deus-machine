@@ -34,9 +34,9 @@ The recording stops itself after maxDurationSeconds (default 300). If recording_
 export function buildSystemPromptAppend(
   agentMessages: boolean,
   cwd?: string,
-  simulator?: WorkspaceDevice | null,
+  device?: WorkspaceDevice | null,
   setup?: WorkspaceSetup | null
 ): string {
-  const workspaceContext = buildWorkspaceContext(cwd, simulator, setup) || FALLBACK_CONTEXT;
+  const workspaceContext = buildWorkspaceContext(cwd, device, setup) || FALLBACK_CONTEXT;
   return `${workspaceContext}\n${SCREEN_RECORDING}${agentMessages ? AGENT_MESSAGES : ""}`.trim();
 }

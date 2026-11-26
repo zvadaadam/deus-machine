@@ -262,7 +262,6 @@ describe("workspaceLayoutStore", () => {
             chatTabSessionIds: ["sess-a", "sess-b"],
             activeChatTabSessionId: "sess-b",
             knownChatSessionIds: ["sess-a", "sess-b"],
-            simulatorUdid: "SIM-UDID-42",
             pendingFileNavigation: { requestId: "stale", path: "old.ts", target: "files" },
           },
           "ws-changes": {
@@ -275,7 +274,6 @@ describe("workspaceLayoutStore", () => {
             chatTabSessionIds: ["sess-c"],
             activeChatTabSessionId: "sess-c",
             knownChatSessionIds: ["sess-c"],
-            simulatorUdid: null,
           },
         },
       },
@@ -292,7 +290,6 @@ describe("workspaceLayoutStore", () => {
     expect(browserWs.chatTabSessionIds).toEqual(["sess-a", "sess-b"]);
     expect(browserWs.activeChatTabSessionId).toBe("sess-b");
     expect(browserWs.knownChatSessionIds).toEqual(["sess-a", "sess-b"]);
-    expect(browserWs.simulatorUdid).toBe("SIM-UDID-42");
     expect(browserWs.pendingFileNavigation).toBeNull();
     expect(browserWs.nextTerminalNum).toBe(1);
     expect(browserWs.workspaceTabs).toHaveLength(2);

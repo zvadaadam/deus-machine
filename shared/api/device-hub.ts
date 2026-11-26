@@ -1,7 +1,9 @@
 import { z } from "zod";
-import type { HubDevice, HubInventory, HubStatus } from "../types/device-hub";
+import type { DeviceSupport, HubDevice, HubInventory, HubStatus } from "../types/device-hub";
 import { out, read, write } from "./op";
 import { stream, type ScopeOf } from "./stream";
+
+export const deviceSupport = read({ name: "deviceSupport", output: out<DeviceSupport>() });
 
 export const deviceHubStatus = stream({
   name: "deviceHubStatus",
@@ -22,6 +24,10 @@ export const deviceHubDevices = read({
 
 export const startHubDevice = write({
   name: "startHubDevice",
-  input: z.object({ platform: z.enum(["ios", "android"]), id: z.string().min(1) }),
+  input: z.object({
+    platform: z.enum(["ios", "android"]),
+    id: z.string().min(1),
+    boot: z.boolean(),
+  }),
   output: out<HubDevice>(),
 });

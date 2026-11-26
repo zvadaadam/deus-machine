@@ -31,8 +31,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/shared/lib/utils";
 import { tempo } from "@/shared/lib/tempo";
 import { useReorderSensors } from "@/shared/hooks/useReorderSensors";
-import { useSimulatorStatusStore } from "@/features/simulator/store";
-import { useCloudSimulatorStore } from "@/features/simulator/cloud/cloudSimulatorStore";
+import { useCloudSimulatorStore } from "@/features/device/cloud/cloudSimulatorStore";
 import { PierreFileIcon } from "@/features/file-browser/lib/pierreIcons";
 import { TAB_KIND_ICONS, getWorkspaceTabTitle } from "../registry";
 import type { WorkspaceTab } from "../types";
@@ -87,7 +86,7 @@ function getWrappedIndex(currentIndex: number, nextIndex: number, count: number)
   return nextIndex;
 }
 
-function TabIcon({ tab, simulatorActive }: { tab: WorkspaceTab; simulatorActive: boolean }) {
+function TabIcon({ tab, deviceLive }: { tab: WorkspaceTab; deviceLive: boolean }) {
   if (tab.kind === "file") {
     const fileName = getWorkspaceTabTitle(tab);
     return <PierreFileIcon fileName={fileName} size={14} className="shrink-0" />;
@@ -96,7 +95,7 @@ function TabIcon({ tab, simulatorActive }: { tab: WorkspaceTab; simulatorActive:
   return (
     <span className="relative flex shrink-0 items-center justify-center">
       <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-      {tab.kind === "simulator" && simulatorActive && (
+      {tab.kind === "device" && deviceLive && (
         <span
           aria-hidden="true"
           className="bg-success absolute -top-0.5 -right-0.5 size-1.5 rounded-full"
@@ -120,7 +119,7 @@ function WorkspaceTabPill({
   suppressPillMotion,
   activePillLayoutId,
   canClose,
-  simulatorActive,
+  deviceLive,
   fileChangesCount,
   onSelect,
   onClose,
@@ -134,7 +133,7 @@ function WorkspaceTabPill({
   suppressPillMotion: boolean;
   activePillLayoutId: string;
   canClose: boolean;
-  simulatorActive: boolean;
+  deviceLive: boolean;
   fileChangesCount: number;
   onSelect: () => void;
   onClose: () => void;
@@ -199,7 +198,7 @@ function WorkspaceTabPill({
             onKeyDown={onKeyDown}
             className="control-interaction flex h-full min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-lg border-none bg-transparent pr-1 pl-2 text-left text-inherit"
           >
-            <TabIcon tab={tab} simulatorActive={simulatorActive} />
+            <TabIcon tab={tab} deviceLive={deviceLive} />
             <span
               className={cn("min-w-0 flex-1 truncate", isActive ? "font-medium" : "font-normal")}
               data-medium-label={title}
@@ -271,15 +270,10 @@ export function WorkspaceTabBar({
   const reducedMotion = useReducedMotion();
   const [isDraggingAny, setIsDraggingAny] = useState(false);
 
-  const simPhase = useSimulatorStatusStore((s) =>
-    workspaceId ? s.phases[workspaceId] : undefined
-  );
   const cloudSimStatus = useCloudSimulatorStore((s) =>
     workspaceId ? (s.byWorkspace[workspaceId]?.status ?? null) : null
   );
-  const simulatorActive = Boolean(
-    (simPhase && simPhase !== "idle" && simPhase !== "error") || cloudSimStatus === "ready"
-  );
+  const deviceLive = cloudSimStatus === "ready";
 
   const sensors = useReorderSensors({ keyboard: false });
   const tabIds = useMemo(() => tabs.map((t) => t.id), [tabs]);
@@ -470,7 +464,7 @@ export function WorkspaceTabBar({
                             suppressPillMotion={isDraggingAny}
                             activePillLayoutId={activePillLayoutId}
                             canClose={canClose}
-                            simulatorActive={simulatorActive}
+                            deviceLive={deviceLive}
                             fileChangesCount={fileChangesCount}
                             onSelect={() => onTabSelect(tab.id)}
                             onClose={() => onTabClose(tab.id)}

@@ -1,3 +1,4 @@
+import { readCloudSimulatorExecResult } from "@shared/cloud-simulator";
 // backend/src/services/agent/cloud/driver.ts
 // Cloud session driver: agnt-backed sessions feeding the SAME fold as local.
 //
@@ -46,7 +47,6 @@ import {
   buildCloudSimulatorExecFrameData,
   forgetCloudSimulators,
   parkCloudSimulator,
-  readCloudSimulatorExecResult,
   readCloudSimulatorStatus,
   relayCloudSimulatorEvent,
   SIMULATOR_EXEC_TIMEOUT_MS,
@@ -1409,7 +1409,7 @@ function currentCloudSessionRow(workspaceId: string): {
     | undefined;
   if (!row) throw new NotFoundError(`Workspace not found: ${workspaceId}`);
   if (row.kind !== "cloud")
-    throw new ValidationError("Hosted simulators run in cloud workspaces only");
+    throw new ValidationError("Hosted devices run in cloud workspaces only");
   if (!row.session_id) {
     throw new ConflictError("This cloud workspace has no session to reach its sandbox through");
   }

@@ -1,5 +1,15 @@
 import type { ComponentType, SVGAttributes } from "react";
-import { Bot, Box, Chrome, Cloud, FlaskConical, Globe, Settings2, UserCircle } from "lucide-react";
+import {
+  Bot,
+  Box,
+  Chrome,
+  Cloud,
+  FlaskConical,
+  Globe,
+  Settings2,
+  Smartphone,
+  UserCircle,
+} from "lucide-react";
 import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 import { SlackIcon } from "@/shared/components/icons/SlackIcon";
 import { capabilities } from "@/platform/capabilities";
@@ -46,6 +56,12 @@ export const settingsNavigation: SettingsNavigationItem[] = [
     icon: Chrome,
     capability: "browserProfileImport",
     keywords: ["profile", "import", "cookies"],
+  },
+  {
+    id: "devices",
+    label: "Devices",
+    icon: Smartphone,
+    keywords: ["simulator", "emulator", "ios", "android", "iphone", "agent-device"],
   },
   {
     id: "ai",

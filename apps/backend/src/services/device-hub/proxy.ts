@@ -7,7 +7,7 @@ import type { HubEndpoint } from "./manager";
 const prefix = "/api/device-hub";
 const getRoutes = [
   /^\/vendor\/serve-sim\/(api|appstate|grid\/api)$/,
-  /^\/vendor\/serve-sim\/helper\/[\da-f-]+\/(config|health|stream-settings|stream\.avcc|stream\.mjpeg|webrtc\/stats)$/i,
+  /^\/vendor\/serve-sim\/helper\/[\da-f-]+\/(config|health|stream-settings|webrtc\/stats)$/i,
   /^\/vendor\/serve-emu\/(api|health|webrtc\/stats)$/,
   /^\/vendor\/serve-emu\/api\/(devices|session|foreground|stream-mode|stream-settings)$/,
 ];
