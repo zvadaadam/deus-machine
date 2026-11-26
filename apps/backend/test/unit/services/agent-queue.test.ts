@@ -4971,6 +4971,23 @@ describe("continuing a chat after a usage limit", () => {
     expect(starts()).toHaveLength(2);
   });
 
+  it("keeps an empty queue waiting at a usage limit after the Stop RPC rejects", async () => {
+    preference(true);
+    await send("A");
+    engine.cancelTurn.mockRejectedValueOnce(new Error("Lost Stop reply"));
+    await expect(stop()).resolves.toEqual({ unconfirmed: true });
+    expect(wireTurnId()).toBe("A");
+    windows([{ id: "primary", usedPercent: 100, resetsAt }], "limited");
+    fail();
+    await vi.advanceTimersByTimeAsync(resetsAt - now + minute);
+    expect(starts()).toEqual(["A"]);
+    expect(await queue()).toEqual({
+      items: [],
+      paused: "limit",
+      limit: { resetsAt, continues: false },
+    });
+  });
+
   it.each([false, true])(
     "waits at a stopped turn's usage limit when Stop held a row (resumed before the end: %s)",
     async (resume) => {
