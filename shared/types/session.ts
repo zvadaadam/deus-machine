@@ -35,6 +35,11 @@ export interface Message {
  * Older history can lack a recorded start time. */
 export type SessionTurn = Omit<ConversationTurn, "status" | "errors" | "startedAt"> & {
   startedAt?: number;
+  execution?: NonNullable<ConversationTurn["execution"]> & {
+    via?: string;
+    gatewayRef?: string;
+    modelLabel?: string;
+  };
   providerCredentialSource?: TurnProviderCredentialSource;
 };
 
@@ -75,6 +80,7 @@ export interface Session {
   agent_harness: string;
   /** True once this local chat's agent has been given the tool to message the person. */
   agent_messages: boolean;
+  gateway_generation?: string | null;
   agent_session_id?: string | null;
   /** agnt cloud session id — the direct lane connects to this (cloud only). */
   provider_session_id?: string | null;

@@ -64,6 +64,7 @@ export const sendMessage = write({
     /** The bare model id (`opus`), not the picker's `claude-code:opus`: the harness is `agentHarness`. */
     model: z.string().min(1),
     agentHarness: AgentHarnessSchema,
+    gatewayGeneration: z.string().uuid().optional(),
     /** The caller's id for this turn: its optimistic bubble and the agent's echo share it. */
     turnId: z.string().min(1).optional(),
     permissionMode: z.string().optional(),
@@ -81,6 +82,7 @@ export type QueuedMessages = {
   items: {
     id: string;
     text: string;
+    reason?: string;
     images: number;
     state: "sending" | "steering" | "waiting";
     origin?: Origin;

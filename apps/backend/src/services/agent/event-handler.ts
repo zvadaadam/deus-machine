@@ -1,4 +1,3 @@
-import { findConversationMessage, turnProviderCredentialSource } from "@shared/conversation-rows";
 // backend/src/services/agent/event-handler.ts
 // The single entry point for agent → backend data flow.
 //
@@ -19,12 +18,14 @@ import {
   projectCloudSnapshot,
   type RestoredCloudConversation,
 } from "@shared/cloud-session-snapshot";
+import { findConversationMessage, turnProviderCredentialSource } from "@shared/conversation-rows";
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
 import type {
   ConversationChange,
   ConversationState,
   TurnCancelResult,
 } from "@zvada/agent-server/protocol";
+import { refreshGateway } from "../gateways";
 import {
   isLiveEnvelope,
   isUnknownEvent,
@@ -57,6 +58,7 @@ import {
   turnNotices,
   type NativeEnd,
 } from "./chat-turn";
+import { gatewayTurnEvent } from "./gateway-turn";
 import { OpenParts } from "./open-parts";
 
 // ---- Types ----
@@ -271,6 +273,18 @@ export function createAgentEventHandler(): AgentEventHandler & {
       // `error`) leave it optional in the body.
       const sessionId = envelope.sessionId;
       const state = stateFor(sessionId);
+      let holder = holdingTurn(sessionId);
+      const last = lastTurn(sessionId);
+      const received = envelope.event;
+      if (!isUnknownEvent(received) && "turnId" in received && received.turnId) {
+        const record =
+          holder?.turnId === received.turnId
+            ? holder
+            : last?.turnId === received.turnId
+              ? last
+              : undefined;
+        envelope = gatewayTurnEvent(envelope, record?.gateway);
+      }
 
       // The fold takes the union as-is, unknown types included (they land in
       // `state.unknownEvents`, in arrival order) and reports no row changes for
@@ -285,8 +299,6 @@ export function createAgentEventHandler(): AgentEventHandler & {
       const stamped = isUnknownEvent(envelope.event) ? envelope.event.raw : envelope.event;
       const turnId = "turnId" in stamped ? stamped.turnId : undefined;
       const messageId = "messageId" in stamped ? stamped.messageId : undefined;
-      let holder = holdingTurn(sessionId);
-      const last = lastTurn(sessionId);
       // A replay or another cloud client can be the first we hear of this turn; an ended one stays history.
       if (!holder && !isUnknownEvent(envelope.event) && envelope.event.type === "turn.started") {
         if (
@@ -312,9 +324,10 @@ export function createAgentEventHandler(): AgentEventHandler & {
             : undefined;
         admitTurn(sessionId, holder.turnId, "event", outputAt);
       }
-      const owner = holder?.turnId ?? last?.turnId;
+      const owner = holder ?? last;
       const deferred =
         holder && holder.phase !== "running" && last && !last.nativeEnd && last.turnId === turnId;
+      const outcomeOwner = deferred ? last : owner;
       const { facts } = state;
 
       if (isUnknownEvent(envelope.event)) {
@@ -358,11 +371,14 @@ export function createAgentEventHandler(): AgentEventHandler & {
             conversation,
             changes,
             (turn) => {
-              outcome = turnOutcomeFor(facts, deferred ? last.turnId : owner, turn);
+              outcome = turnOutcomeFor(facts, outcomeOwner, turn);
               return deferred ? undefined : outcome;
             },
             turnProviderCredentialSource(event),
-            by
+            by,
+            outcomeOwner?.gateway
+              ? { turnId: outcomeOwner.turnId, revision: outcomeOwner.gateway.binding.revision }
+              : undefined
           );
 
       let ended: NativeEnd | undefined;
@@ -370,7 +386,13 @@ export function createAgentEventHandler(): AgentEventHandler & {
         const { turnId } = event;
         const cancelled = event.stopReason === "cancelled";
         ended = { type: "end", turnId, cancelled, held, outcome, by };
-        if (
+        if (outcomeOwner?.gateway) {
+          if ((held || deferred) && outcome?.error?.category === "usage_limit")
+            ended.limit =
+              event.error?.retryAt === undefined ? {} : { resetsAt: event.error.retryAt };
+          if (held && event.error?.reason === "modelUnavailable")
+            void refreshGateway(outcomeOwner.gateway.binding.revision).catch(() => {});
+        } else if (
           (held || deferred) &&
           outcome?.status === "error" &&
           event.error?.category === "usage_limit" &&
@@ -400,7 +422,7 @@ export function createAgentEventHandler(): AgentEventHandler & {
       // product plumbing only this process has.
       for (const write of applySessionFacts(
         facts,
-        event.type === "turn.started" ? holder?.turnId : owner,
+        event.type === "turn.started" ? holder : outcomeOwner,
         sessionId,
         event,
         conversation,

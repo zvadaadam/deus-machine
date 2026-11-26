@@ -2,6 +2,9 @@
 // consecutive turns, or error before the turn ends. Release is the only exit.
 import type { Origin, TurnCancelResult } from "@zvada/agent-server/protocol";
 import { match } from "ts-pattern";
+import type { GatewayFormat } from "@shared/gateways";
+import type { AgentHarness } from "@shared/enums";
+import type { ThinkingLevel } from "@shared/protocol";
 import { invalidate } from "../query-engine";
 import {
   persistSessionStatus,
@@ -53,6 +56,25 @@ type Setup = {
   done: Promise<void>;
   prior?: SessionProjection;
 };
+export interface GatewayAttribution {
+  binding: { readonly ref: string; readonly revision: string; readonly format: GatewayFormat };
+  execution: {
+    readonly harness: AgentHarness;
+    readonly model: string;
+    via?: string;
+    modelLabel?: string;
+  };
+}
+
+export interface GatewayTurn extends GatewayAttribution {
+  delivery?: { apiKey: string; baseUrl: string };
+  thinkingLevel?: ThinkingLevel;
+}
+
+export function gatewayExecution(gateway: GatewayAttribution) {
+  return { ...gateway.execution, gatewayRef: gateway.binding.ref };
+}
+
 type Turn = {
   turnId: string;
   phase: "preparing" | "starting" | "running";
@@ -60,8 +82,9 @@ type Turn = {
   lastOutputAt?: number;
   setup?: Setup;
   stops?: Set<Origin>;
+  gateway?: GatewayTurn;
 };
-type Last = { turnId: string; nativeEnd: false | NativeEnd };
+type Last = { turnId: string; nativeEnd: false | NativeEnd; gateway?: GatewayAttribution };
 type Chat = {
   pendingStops: number;
   turn?: Turn;
@@ -93,12 +116,18 @@ export function competingEnd(id: string, winner?: string) {
   return end && end.turnId === winner ? end : undefined;
 }
 
-export function claimTurn(id: string, turnId: string, setup?: Setup, sentAt?: number): boolean {
+export function claimTurn(
+  id: string,
+  turnId: string,
+  setup?: Setup,
+  sentAt?: number,
+  gateway?: GatewayTurn
+): boolean {
   const old = chats.get(id);
   if (old?.turn) return false;
   clearTimeout(old?.deadline?.timer);
   const chat: Chat = { pendingStops: 0, last: old?.last, setupStop: old?.setupStop };
-  chat.turn = { turnId, phase: setup ? "preparing" : "starting", setup, sentAt };
+  chat.turn = { turnId, phase: setup ? "preparing" : "starting", setup, sentAt, gateway };
   chats.set(id, chat);
   return true;
 }
@@ -166,7 +195,11 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
   const prior = turn.setup?.prior;
   const remember = () => {
     delete chat.setupStop;
-    chat.last = { turnId, nativeEnd: reason.type === "end" && reason };
+    const gateway = turn.gateway && {
+      binding: turn.gateway.binding,
+      execution: turn.gateway.execution,
+    };
+    chat.last = { turnId, nativeEnd: reason.type === "end" && reason, gateway };
   };
   const writeStatus = (status: SessionProjection | "stopped" | undefined) => {
     if (error) persistSessionStatus(id, "error", error.message, error.category);
@@ -183,6 +216,10 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
       stopReason,
       cancelledBy: by,
       undeliveredSteers: kept,
+      ...(turn.gateway && {
+        execution: gatewayExecution(turn.gateway),
+        gatewayGeneration: turn.gateway.binding.revision,
+      }),
     });
     if (saved.ok) turnNotices().stored(id, turnId);
     reportInterruption(id, turnId, true, stopReason === "cancelled" ? "cancelled" : "failure", by);

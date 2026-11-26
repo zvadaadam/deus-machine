@@ -18,7 +18,8 @@
 
 import { match } from "ts-pattern";
 import { classifyError } from "@zvada/agent-server/protocol";
-import type { ConversationState, ConversationTurn } from "@zvada/agent-server/protocol";
+import type { ConversationState, ConversationTurn, ErrorInfo } from "@zvada/agent-server/protocol";
+import type { GatewayAttribution } from "./chat-turn";
 import { isGenericTurnFailure } from "@shared/lib/send-refusal";
 import { isUnknownEvent, type AnyLifecycleEvent } from "@shared/protocol-types";
 import {
@@ -46,16 +47,34 @@ export interface SessionFactWrite {
   result: WriteResult<void>;
 }
 
+type Owner = { turnId: string; gateway?: GatewayAttribution };
+function sessionErrorCategory(error: ErrorInfo, owner?: Owner) {
+  if (owner?.gateway) {
+    if (error.category === "rate_limit" || error.category === "usage_limit") return "usage_limit";
+    if (error.reason === "credentialRefused") return "_gateway";
+  }
+  return error.category;
+}
+
 /** The terminal state an ended turn leaves the session in. */
-function turnOutcome(turn: ConversationTurn, alreadyReported: boolean): TurnOutcomeWrite {
+function turnOutcome(
+  turn: ConversationTurn,
+  alreadyReported: boolean,
+  owner?: Owner
+): TurnOutcomeWrite {
   if (turn.stopReason === "error") {
     // A standalone `error` event already wrote the status + message; the
     // terminal event must not overwrite it with a vaguer one.
-    if (alreadyReported) return { status: "error" };
+    if (alreadyReported && !owner?.gateway) return { status: "error" };
     const message = turn.error?.message ?? "Agent turn failed";
     return {
       status: "error",
-      error: { message, category: turn.error?.category ?? classifyError(new Error(message)) },
+      error: {
+        message,
+        category: turn.error
+          ? sessionErrorCategory(turn.error, owner)
+          : classifyError(new Error(message)),
+      },
     };
   }
   // end_turn, max_tokens, refusal, max_turn_requests and any adapter
@@ -67,17 +86,17 @@ function turnOutcome(turn: ConversationTurn, alreadyReported: boolean): TurnOutc
 /** Compute the session outcome for persistChanges while advancing this turn's error and delivery reports. */
 export function turnOutcomeFor(
   facts: SessionFacts,
-  owner: string | undefined,
+  owner: Owner | undefined,
   turn: ConversationTurn
 ): TurnOutcomeWrite | undefined {
-  if (owner !== undefined && owner !== turn.turnId) return;
+  if (owner !== undefined && owner.turnId !== turn.turnId) return;
   const failure = facts.deliveryFailure?.turnId === turn.turnId ? facts.deliveryFailure : undefined;
   const outcome: TurnOutcomeWrite = failure
     ? {
         status: "error",
         error: { category: "network", message: failure.message },
       }
-    : turnOutcome(turn, facts.errorReported);
+    : turnOutcome(turn, facts.errorReported, owner);
   if (failure) facts.deliveryFailure = undefined;
   if (outcome.status === "error") facts.errorReported = true;
   return outcome;
@@ -93,7 +112,7 @@ export function turnOutcomeFor(
  */
 export function applySessionFacts(
   facts: SessionFacts,
-  owner: string | undefined,
+  owner: Owner | undefined,
   sessionId: string,
   event: AnyLifecycleEvent,
   conversation: ConversationState,
@@ -103,7 +122,8 @@ export function applySessionFacts(
   const turnId = "turnId" in event ? event.turnId : undefined;
   const otherError =
     event.type === "error" && (deferred || event._meta?.cloudErrorCode === "MESSAGE_SEND_FAILED");
-  if (owner !== undefined && turnId !== undefined && turnId !== owner && !otherError) return [];
+  if (owner !== undefined && turnId !== undefined && turnId !== owner.turnId && !otherError)
+    return [];
 
   return match(event)
     .with({ type: "session.created" }, (e): SessionFactWrite[] => {
@@ -121,7 +141,7 @@ export function applySessionFacts(
     })
     .with({ type: "turn.started" }, (e): SessionFactWrite[] => {
       if (
-        owner !== e.turnId ||
+        owner?.turnId !== e.turnId ||
         conversation.turns.find((t) => t.turnId === e.turnId)?.status === "ended"
       )
         return [];
@@ -129,7 +149,7 @@ export function applySessionFacts(
       return [{ fact: "session-working", result: persistSessionStatus(sessionId, "working") }];
     })
     .with({ type: "session.limits" }, (e) => {
-      if (owner !== e.turnId) return [];
+      if (owner?.turnId !== e.turnId) return [];
       for (const window of e.windows) {
         const status = window.status ?? ((window.usedPercent ?? 0) >= 100 ? e.status : undefined);
         if (status === "limited" && window.resetsAt !== undefined)
@@ -156,11 +176,12 @@ export function applySessionFacts(
       )
         return [];
       facts.errorReported = true;
+      const category = sessionErrorCategory(e, owner);
       if (deferred) {
-        deferred.prior = ["error", e.message, e.category];
+        deferred.prior = ["error", e.message, category];
         return [];
       }
-      const result = persistSessionStatus(sessionId, "error", e.message, e.category);
+      const result = persistSessionStatus(sessionId, "error", e.message, category);
       return [{ fact: "session-error", result }];
     })
     .otherwise(() => []);

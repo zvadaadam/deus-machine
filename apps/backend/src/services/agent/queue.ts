@@ -20,6 +20,7 @@ import { continuedSettings } from "./turn-settings";
 import {
   previousSend,
   requireSameHarness,
+  requireChatRoute,
   retryReadSteer,
   sendMessage,
   withdrawSteerRetry,
@@ -182,9 +183,11 @@ function queueFor(sessionId: string): Queue {
   return q;
 }
 
-function checkQueueHarness(id: string, chat: LocalChat, harness: Input["agentHarness"]) {
+function checkQueueRoute(chat: LocalChat, input: Input) {
   // The first turn binds the harness before its user echo increments the message count.
-  if (chat.message_count > 0 || holdingTurn(id)) requireSameHarness(chat.agent_harness, harness);
+  if (chat.message_count > 0 || holdingTurn(input.sessionId))
+    requireSameHarness(chat.agent_harness, input.agentHarness);
+  requireChatRoute(input.sessionId, input.gatewayGeneration);
 }
 
 function newRow(q: Queue, message: Message, origin: Origin | undefined, ownTurn: boolean): Row {
@@ -294,7 +297,7 @@ function appendRow(q: Queue, item: Row) {
 }
 
 function append(message: Message, origin: Origin | undefined, chat: LocalChat, start = true) {
-  checkQueueHarness(message.sessionId, chat, message.agentHarness);
+  checkQueueRoute(chat, message);
   const q = queueFor(message.sessionId);
   const sender = agentOrigin(origin);
   // Once the matching row has run, retrying a lost answer can queue it again.
@@ -452,7 +455,7 @@ export async function steerMessage(
     await sendMessage(steerId === undefined ? input : message, origin);
     return { outcome: "sent" };
   }
-  checkQueueHarness(sessionId, chat, input.agentHarness);
+  checkQueueRoute(chat, input);
   const q = queueFor(sessionId);
   const item = newRow(q, message, origin, true);
   if (turnId !== undefined) item.steer = { id: message.turnId, turnId };
@@ -482,6 +485,7 @@ export async function steerQueuedMessage(
   const { ownTurn } = item;
   const chat = localChat(sessionId);
   if (!chat) return "gone";
+  checkQueueRoute(chat, item.message);
   let waiting: "queued" | "own_turn" | "refused" = ownTurn ? "own_turn" : "queued";
   const card = waitingOnCard(chat, sessionId, turnId);
   if (card) return ownTurn ? "own_turn" : card;
@@ -597,7 +601,7 @@ async function continueLimited(q: Queue, turnId: string) {
   await sendMessage({
     sessionId: id,
     content: "Continue.",
-    ...continuedSettings(harness, turns),
+    ...continuedSettings(id, harness, turns),
     permissionMode: turns.at(-1)?.execution?.permissionMode,
   });
 }

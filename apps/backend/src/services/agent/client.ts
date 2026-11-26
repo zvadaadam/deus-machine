@@ -25,6 +25,7 @@ import {
 } from "../../../../agent-server";
 import { DB_PATH } from "../../lib/database";
 import { simulatorEnv } from "../device-hub/xcode-env";
+import { gatewayCredential } from "./gateway-turn";
 import { hasAgentMessages } from "./agent-messages";
 
 // ============================================================================
@@ -63,6 +64,7 @@ export class AgentLink {
   /** Start the engine and connect to it. */
   static async open(options: AgentLinkOptions): Promise<AgentLink> {
     const transport = startEngine({
+      credentials: gatewayCredential,
       hasAgentMessages,
       request: options.onToolRequest,
       title: options.onTitle,
