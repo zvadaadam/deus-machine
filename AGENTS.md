@@ -124,8 +124,9 @@ shows the EAS viewer through the backend. Hosted web is chat-only.
 - **Selection.** The visible Device tab follows its workspace and device.
   `agentDeviceFor` gives the turn the iOS UDID or Android serial in that
   subscription. Every harness gets the device in its briefing and
-  `AGENT_DEVICE_SESSION` set to the workspace ID. `agent-device help <topic>`
-  describes the CLI shipped with the app.
+  `AGENT_DEVICE_SESSION` set to the workspace ID. Gemini takes instructions once
+  per conversation, so its briefing keeps the initial device selection.
+  `agent-device help <topic>` describes the CLI shipped with the app.
 - **Daemon.** `AgentLink.open` sets `AGENT_DEVICE_STATE_DIR` beside the
   database and an idle timeout of 30 minutes. Device claims, runner leases and
   the build cache are shared in `~/.agent-device`. Closing a session releases
@@ -1016,7 +1017,7 @@ A state change must leave its neighbours in place. Reserve space for a heavier l
 - Never edit outside your worktree directory
 - Never start the app outside your worktree directory
 - Never use npm or yarn
-- WebSocket push over polling — only poll for git diffs on working sessions or when a visible local workspace cannot be watched
+- Use WebSocket push except for git diffs on working sessions, file changes when a visible local workspace cannot be watched, and device recovery. Because `simctl` sends no reboot event, the Device hub checks every 2.5 s whether a shown iOS simulator has rebooted, and the panel refetches inventory at the same interval for at most 30 s during recovery.
 - All colors via CSS variables/tokens, never hardcoded
 
 ## Feedback to Deus
