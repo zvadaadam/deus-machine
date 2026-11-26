@@ -1,6 +1,7 @@
 import type { ReportedOrigin } from "@shared/protocol-types";
 import { cn } from "@/shared/lib/utils";
 import { useSession } from "../api/session.queries";
+import { chatReference } from "../lib/chatReference";
 import { openChat } from "../lib/openChat";
 import { useWorkspacesByRepo } from "@/features/workspace/api/workspace.queries";
 import { useWorkspaceStore } from "@/features/workspace/store";
@@ -44,12 +45,8 @@ function ChatName({ sessionId, name }: { sessionId: string; name?: string }) {
   const workspace = groups
     ?.flatMap((group) => group.workspaces)
     .find((w) => w.id === session?.workspace_id);
-  const title = session?.title || name || "another chat";
-  const place = workspace && workspace.id !== selected ? workspace.title || workspace.slug : null;
-  // A workspace named as its chat (its first, titled alike) is said once.
-  const label = place && place !== title ? `${place} · ${title}` : title;
-  // A sender put away (its chat or its workspace archived) or gone is named, not linked.
-  if (!workspace || !session || session.is_hidden)
+  const { label, canOpen } = chatReference(workspace, session, workspace?.id === selected, name);
+  if (!canOpen || !workspace)
     return (
       <span className="truncate" title={label}>
         {label}
