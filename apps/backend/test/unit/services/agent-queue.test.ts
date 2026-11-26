@@ -28,6 +28,8 @@ import * as cloud from "../../../src/services/agent/cloud/driver";
 import {
   QueueLimitError,
   enqueueMessage,
+  onTurnNotice,
+  queuedMessages,
   resumeQueuedMessages,
   steerMessage,
   steerQueuedMessage,
@@ -908,13 +910,8 @@ describe("stopping the current turn", () => {
     await outliveStop("A");
     engine.startTurn.mockRejectedValueOnce(busyReply("A"));
     await send("B");
-    const reply = Promise.withResolvers<{ outcome: "no_active_turn" }>();
-    engine.cancelTurn.mockReturnValueOnce(reply.promise);
-    const stopping = stopSession({ sessionId }, fromAssistant);
-    await resumeQueuedMessages(sessionId, fromChat);
     expect(starts()).toEqual(["A", "B"]);
-    reply.resolve({ outcome: "no_active_turn" });
-    await stopping;
+    onTurnNotice(sessionId, { type: "engine_idle" });
     await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "B"]));
     expect(await ids()).toEqual([]);
   });
@@ -943,27 +940,44 @@ describe("stopping the current turn", () => {
       wire?.reject(new Error("start refused"));
       release?.();
       await Promise.all([sending, stopping]);
+      expect(starts().filter((id) => id === "B")).toHaveLength(1);
+      engine.startTurn.mockRejectedValueOnce(busyReply("A"));
       await resumeQueuedMessages(sessionId, fromChat);
       expect(await ids()).toEqual(["B"]);
-      expect(starts().filter((id) => id === "B")).toHaveLength(1);
+      expect(starts().filter((id) => id === "B")).toHaveLength(2);
       end("A");
-      await vi.waitFor(() => expect(starts().filter((id) => id === "B")).toHaveLength(2));
+      await vi.waitFor(() => expect(starts().filter((id) => id === "B")).toHaveLength(3));
     }
   );
 
-  it("retries the busy head on each person's Resume with the original send id", async () => {
-    await send("A");
-    await outliveStop("A");
-    engine.startTurn.mockRejectedValueOnce(busyReply("A"));
-    await send("B");
-    engine.startTurn.mockRejectedValueOnce(busyReply("A"));
-    await resumeInWindow();
-    expect(starts()).toEqual(["A", "B", "B"]);
-    expect(await ids()).toEqual(["B"]);
-    await resumeInWindow();
-    expect(starts()).toEqual(["A", "B", "B", "B"]);
-    expect(await ids()).toEqual([]);
-  });
+  it.each(["person", "agent"])(
+    "shows Resume and retries the busy head on each %s Resume with the original send id",
+    async (who) => {
+      await send("A");
+      await outliveStop("A");
+      engine.startTurn.mockRejectedValueOnce(busyReply("A"));
+      await send("B");
+      expect(await queue()).toMatchObject({ paused: "failed", items: [waitingRow("B")] });
+      const resume = () =>
+        who === "person" ? resumeInWindow() : resumeQueuedMessages(sessionId, fromChat);
+      const published: (string | null)[] = [];
+      const unwatch = onInvalidate((names) => {
+        if (names.includes("queuedMessages")) published.push(queuedMessages(sessionId).paused);
+      });
+      engine.startTurn.mockRejectedValueOnce(busyReply("A"));
+      try {
+        await resume();
+        expect(published.at(-1)).toBe("failed");
+      } finally {
+        unwatch();
+      }
+      expect(starts()).toEqual(["A", "B", "B"]);
+      expect(await ids()).toEqual(["B"]);
+      await resume();
+      expect(starts()).toEqual(["A", "B", "B", "B"]);
+      expect(await queue()).toEqual({ paused: null, items: [] });
+    }
+  );
 
   it("keeps a later composer send behind the busy head until the named turn ends", async () => {
     await send("A");
@@ -2785,7 +2799,7 @@ describe("messages held for a local chat", () => {
       else end("first");
       await vi.waitFor(async () =>
         expect(await queue()).toMatchObject({
-          paused: failure === "failed" ? "failed" : null,
+          paused: "failed",
           items: [waitingRow("a"), waitingRow("b")],
         })
       );

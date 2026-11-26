@@ -209,8 +209,9 @@ export function queuedMessages(sessionId: string): api.QueuedMessages {
   const q = queues.get(sessionId);
   if (!q) return { paused: null, items: [] };
   const { hold } = q;
+  const fenced = q.busyOn && q.items.some((row) => row.state === "waiting");
   return {
-    paused: hold?.reason ?? null,
+    paused: hold?.reason ?? (fenced ? "failed" : null),
     ...(hold?.reason === "stopped" && hold.by && { stoppedBy: hold.by }),
     ...(hold?.reason === "limit" && { limit: hold.limit }),
     items: q.items.map(({ message, text, images, state, origin }) => ({
@@ -233,10 +234,13 @@ function waitForWinner(q: Queue, { competingTurnId }: ChatBusyError) {
   return false;
 }
 
-// A busy head waits for the named end, engine-confirmed absence, or the person's Resume.
+// A busy head waits for the named end, engine-confirmed absence, or Resume.
 async function drain(q: Queue | undefined, retryBusy = false) {
   if (!q) return;
-  if (retryBusy) delete q.busyOn;
+  if (retryBusy && q.busyOn) {
+    delete q.busyOn;
+    changed(q);
+  }
   const head = q.items.find((item) => !item.held);
   if (head?.state !== "waiting") return;
   if (q.busyOn && (!q.hold || head.sentAs)) return;
@@ -263,9 +267,10 @@ async function drain(q: Queue | undefined, retryBusy = false) {
     const busy = error instanceof ChatBusyError;
     if (queues.get(q.sessionId) !== q || !returnHead(q, turnId, busy)) return;
     if (!busy) interrupt(q, turnId, "failure");
-    changed(q);
     // The competing turn may already have ended while this attempt held the head.
-    if (busy && waitForWinner(q, error)) void drain(q);
+    const winnerEnded = busy && waitForWinner(q, error);
+    changed(q);
+    if (winnerEnded) void drain(q);
   }
 }
 
@@ -525,7 +530,7 @@ export async function resumeQueuedMessages(sessionId: string, by?: Origin) {
   const q = queues.get(sessionId);
   const hold = q?.hold;
   const agent = agentOrigin(by);
-  const retry = !!q?.busyOn && !agent;
+  const retry = !!q?.busyOn;
   if (!q || (!hold && !retry)) return { outcome: "open" } as const;
   if (agent && hold?.reason === "stopped" && !agentOrigin(hold.by))
     return { outcome: "person_only" } as const;
