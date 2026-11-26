@@ -292,10 +292,10 @@ describe("Device Hub lifecycle", () => {
     await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow());
   });
 
-  it("keeps running when macOS refuses to signal part of the hub's group", async () => {
-    // macOS signals the group members it may and still answers EPERM for the rest.
+  it("finishes an idle stop when macOS reports EPERM for unreaped hub processes", async () => {
     const kill = process.kill.bind(process);
     const refused = vi.spyOn(process, "kill").mockImplementation((pid, signal) => {
+      // Deliver the signal so the live fixture can exit.
       const sent = kill(pid, signal);
       if (pid < 0 && signal !== 0) {
         throw Object.assign(new Error("kill EPERM"), { code: "EPERM", syscall: "kill" });
