@@ -1075,7 +1075,10 @@ async function run() {
     const openHosted = async () => {
       const previous = platform.live(hosted);
       await hostedPage.goto(base);
-      await hostedPage.getByText("Hosted transcript", { exact: true }).first().click();
+      await hostedPage
+        .locator('[data-slot="sidebar"]')
+        .getByText("Hosted transcript", { exact: true })
+        .click();
       await until(
         "hosted session",
         () => platform.live(hosted) && platform.live(hosted) !== previous

@@ -481,11 +481,12 @@ export function MainLayout() {
           onAddFromGitHub={handleAddFromGitHub}
           addActions={addActions}
           repos={repos}
-          repoGroups={repoGroups}
+          hasWorkspaces={repoGroups.some((group) =>
+            group.workspaces.some((workspace) => workspace.state !== "archived")
+          )}
           repoGroupsLoading={workspacesQuery.isLoading}
           repoGroupsError={workspacesQuery.isError ? getErrorMessage(workspacesQuery.error) : null}
           onStartWorkspace={handleStartWorkspace}
-          onWorkspaceClick={openWorkspace}
         />
       )}
 

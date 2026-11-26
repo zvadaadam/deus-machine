@@ -121,9 +121,6 @@ export function AppSidebar({
         isExpanded={isExpanded}
       />
 
-      {/* App-level nav — sits under the header, above the repo list. The first
-          row is Home: where a workspace starts, or on web-direct (which cannot
-          start one) the list of cloud sessions. */}
       <div className="relative isolate flex flex-col gap-px px-1.5 pb-1">
         {sidebarGlide}
         <AppNavRow

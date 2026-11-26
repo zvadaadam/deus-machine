@@ -273,15 +273,15 @@ try {
     "This chat already has 20 messages waiting. Remove one, or wait for the agent to take them.";
   const data = [];
   let heldUpdates;
-  let refusedId,
-    refusal,
-    lostId,
+  let refusal,
     lostReply,
     connections = 0;
   // Forward the write. Only its successful reply is lost between the host and this window.
   await page.routeWebSocket(/\/ws$/, (socket) => {
     connections++;
     const server = socket.connectToServer();
+    // A new connection can reuse the previous one's request IDs.
+    let refusedId, lostId;
     server.onMessage(async (raw) => {
       const frame = JSON.parse(String(raw));
       if (heldUpdates && (frame.type === "q:snapshot" || frame.type === "q:delta"))
@@ -705,9 +705,7 @@ try {
       });
       const live = "Still typing ".repeat(7000);
       await homeInput(p).fill(live);
-      await main(p)
-        .getByRole("button", { name: /Cloud fixture/ })
-        .click();
+      await openWorkspace(cloudWorkspace, p);
       await value(field, sent);
       await field.press("Enter");
       await until(() =>
@@ -880,15 +878,16 @@ try {
     await cloudPage.clock.install();
     try {
       await cloudPage.goto(origin, { timeout: 90000 });
-      await cloudPage.getByText("Cloud chat", { exact: true }).first().waitFor();
+      const sidebar = cloudPage.locator('[data-slot="sidebar"]');
+      await sidebar.getByText("Cloud chat", { exact: true }).waitFor();
       hostedSessions = [...hostedSessions, "Created after refresh"];
       // The clock owns the visible tab's real 60-second discovery interval.
       assert.equal(await cloudPage.getByText("Created after refresh", { exact: true }).count(), 0);
       await cloudPage.clock.fastForward(60001);
-      await cloudPage.getByText("Created after refresh", { exact: true }).first().waitFor();
+      await sidebar.getByText("Created after refresh", { exact: true }).waitFor();
       await cloudPage
         .getByText(
-          "Start a session in the Deus desktop app. This list refreshes every minute and when you return to this tab.",
+          "Open one from the sidebar, which refreshes every minute and when you return to this tab. Start a session in the Deus desktop app.",
           { exact: true }
         )
         .waitFor({ timeout: 3000 });
@@ -924,7 +923,7 @@ try {
             (expected) => sessionStorage.getItem("deus_cloud_session") === expected,
             member
           );
-          await p.getByText("Cloud chat", { exact: true }).first().click();
+          await p.locator('[data-slot="sidebar"]').getByText("Cloud chat", { exact: true }).click();
           await chatInput(p).waitFor();
         };
         const switchMember = async (token) => {

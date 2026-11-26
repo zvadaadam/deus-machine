@@ -664,11 +664,11 @@ local relay's development JWKS.
 A window has a **place**: this computer, or the cloud. `local` and `cloud` are the words
 `createWorkspace` takes; in the cloud the window is also in one **organization** of the
 account. The sidebar lists that place's workspaces only (a cloud workspace's organization
-is its `organization_id`, else the default one); everything else (the selected
-workspace, the command palette, Home's recent list) reads the full list. Selecting a
-workspace from anywhere moves the window to where it runs, organization included, and a
-manual switch returns to the workspace last selected in that place. Switching is a view
-filter: it tears nothing down, and agents elsewhere keep running. The rules are pure
+is its `organization_id`, else the default one). The selected workspace and command palette
+read the full list. Selecting any workspace moves the window to where it runs, organization
+included, and a manual switch returns to the workspace last selected in that place.
+Switching is a view filter: it tears nothing down, and agents elsewhere keep running.
+The rules are pure
 functions in `features/sidebar/lib/location.ts`; the choice (`location`,
 `cloudOrganizationId`) is kept in the sidebar store; one hook, `useWindowPlace`, wires
 them for `MainLayout`.
