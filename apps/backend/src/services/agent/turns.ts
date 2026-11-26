@@ -369,7 +369,7 @@ async function sendMessageOnce(
         const winner = refusalData(err, "turnActive")?.turnId;
         const end = competingEnd(sessionId, winner);
         // The competing engine turn supplies its own end, including when it beat the busy answer.
-        if (refuseTurn(sessionId, turnId) && end) turnNotices?.queue(sessionId, end);
+        if (refuseTurn(sessionId, turnId) && end) turnNotices().queue(sessionId, end);
         throw new ChatBusyError(
           "The agent is still working — wait for the current turn to finish.",
           winner

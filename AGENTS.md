@@ -216,7 +216,7 @@ Dragging a waiting row's grip, or using Space and the arrow keys, calls
 `moveQueuedMessage` to put it before another waiting row or last. The sending head
 stays first until its user echo is complete.
 A Stop, an interruption or the holding turn’s failed or cancelled end marks the rows already queued.
-An end for another turn counts only if it returns a sending row still missing its echo.
+Only the end of the turn holding the chat can hold the queue, unless another end returns a row still waiting for its echo.
 After a Stop or interruption, the turn takes no more steers and only its usage limit marks rows again.
 A cancellation credits its first Stop, and one without a stopper leaves held rows for the person.
 The person’s Stop takes priority, and the first agent Stop replaces a failure or usage limit.

@@ -28,28 +28,26 @@ import {
 type Input = ParsedInputOf<typeof api.sendMessage>;
 type Message = Input & { turnId: string };
 type LocalChat = Pick<SessionRow, "status" | "agent_harness" | "message_count" | "error_category">;
-type Attempt = { turnId: string; state: "sending" | "busy" | "returned" };
 type SteerReceipt = "acknowledged" | "read" | "queued" | "refused" | "unconfirmed";
 type Placement = "front" | "in_place";
-type Steer = {
-  id: string;
-  turnId: string;
-  unread: Placement;
-  answer: ReturnType<typeof Promise.withResolvers<SteerReceipt>>;
-  receipt?: "read" | "queued";
-};
-type Item = {
+type Row = {
   message: Message;
-  delivery: "queued" | "standalone";
   origin?: Origin;
   text: string;
   images: number;
-  attempt?: Attempt;
+  state: api.QueuedMessages["items"][number]["state"];
   held: boolean;
-  /** The turn named by a fresh steer, including one kept without reaching the wire. */
-  target?: string;
-  steer?: Steer;
-  recoveredSteer?: Pick<Steer, "turnId" | "id">;
+  ownTurn: boolean;
+  sentAs?: { turnId: string; reuse: boolean };
+  steer?: {
+    id: string;
+    turnId: string;
+    live?: {
+      unread: Placement;
+      answer: ReturnType<typeof Promise.withResolvers<SteerReceipt>>;
+      acknowledged: boolean;
+    };
+  };
 };
 
 type Hold =
@@ -58,7 +56,7 @@ type Hold =
   | { reason: "limit"; turnId: string; limit: NonNullable<api.QueuedMessages["limit"]> };
 interface Queue {
   sessionId: string;
-  items: Item[];
+  items: Row[];
   hold?: Hold;
   answered?: string;
   busyOn?: string;
@@ -66,7 +64,7 @@ interface Queue {
 
 /**
  * Stop marks every row present, as does an interruption or the holder's failed or cancelled end.
- * An end for another turn counts only when it returns a row missing its echo.
+ * Only the end of the turn holding the chat can hold the queue, unless another end returns a row still waiting for its echo.
  * After a Stop or interruption, the turn takes no more steers and only its usage limit marks rows again.
  * A cancellation credits its first Stop, and one without a stopper leaves held rows for the person.
  * The person's Stop takes priority, and the first agent Stop replaces a failure or limit.
@@ -189,12 +187,7 @@ function checkQueueHarness(id: string, chat: LocalChat, harness: Input["agentHar
   if (chat.message_count > 0 || holdingTurn(id)) requireSameHarness(chat.agent_harness, harness);
 }
 
-function newQueueItem(
-  q: Queue,
-  message: Message,
-  origin: Origin | undefined,
-  delivery: Item["delivery"]
-): Item {
+function newRow(q: Queue, message: Message, origin: Origin | undefined, ownTurn: boolean): Row {
   const sender = agentOrigin(origin);
   if (sender && q.items.filter((item) => item.origin).length >= MAX_AGENT_MESSAGES)
     throw new QueueLimitError("agents");
@@ -202,7 +195,8 @@ function newQueueItem(
   const input = toEngineInput(message.content);
   return {
     message,
-    delivery,
+    ownTurn,
+    state: "waiting",
     origin: sender,
     held: !!sender && !!q.hold,
     text: inputToText(input),
@@ -213,32 +207,23 @@ function newQueueItem(
 export function queuedMessages(sessionId: string): api.QueuedMessages {
   const q = queues.get(sessionId);
   if (!q) return { paused: null, items: [] };
-  const row = (item: Item) => {
-    const { message, text, images, origin } = item;
-    return {
+  const { hold } = q;
+  return {
+    paused: hold?.reason ?? null,
+    ...(hold?.reason === "stopped" && hold.by && { stoppedBy: hold.by }),
+    ...(hold?.reason === "limit" && { limit: hold.limit }),
+    items: q.items.map(({ message, text, images, state, origin }) => ({
       id: message.turnId,
       text,
       images,
-      state: stateOf(item),
+      state,
       ...(origin && { origin }),
-    };
+    })),
   };
-  const pause = q.hold;
-  return {
-    paused: pause?.reason ?? null,
-    ...(pause?.reason === "stopped" && pause.by && { stoppedBy: pause.by }),
-    ...(pause?.reason === "limit" && { limit: pause.limit }),
-    items: q.items.map(row),
-  };
-}
-
-function stateOf(item: Item): api.QueuedMessages["items"][number]["state"] {
-  if (item.attempt?.state === "sending") return "sending";
-  return item.steer ? "steering" : "waiting";
 }
 
 function waitingRow(q: Queue | undefined, id: string) {
-  return q?.items.find((item) => item.message.turnId === id && stateOf(item) === "waiting");
+  return q?.items.find((item) => item.message.turnId === id && item.state === "waiting");
 }
 
 function waitForWinner(q: Queue, { competingTurnId }: ChatBusyError) {
@@ -252,19 +237,20 @@ async function drain(q: Queue | undefined, retryBusy = false) {
   if (!q) return;
   if (retryBusy) delete q.busyOn;
   const head = q.items.find((item) => !item.held);
-  if (!head || stateOf(head) !== "waiting") return;
-  if (q.busyOn && (!q.hold || head.attempt)) return;
+  if (!head || head.state !== "waiting") return;
+  if (q.busyOn && (!q.hold || head.sentAs)) return;
   if (!localChat(q.sessionId)) {
     queues.delete(q.sessionId);
     notify([q.sessionId]);
     return;
   }
   if (holdingTurn(q.sessionId)) return;
-  const previous = head.attempt;
+  const previous = head.sentAs;
   let turnId = head.message.turnId;
-  if (previous) turnId = previous.state === "busy" ? previous.turnId : uuidv7();
+  if (previous) turnId = previous.reuse ? previous.turnId : uuidv7();
   // A strict send can report an interruption before it returns its admission promise.
-  head.attempt = { turnId, state: "sending" };
+  head.sentAs = { turnId, reuse: false };
+  head.state = "sending";
   const admission = sendMessage({ ...head.message, turnId }, head.origin);
   changed(q);
   try {
@@ -272,12 +258,12 @@ async function drain(q: Queue | undefined, retryBusy = false) {
     return { item: head, turnId };
   } catch (error) {
     if (holdingTurn(q.sessionId)?.turnId === turnId) return;
-    const state = error instanceof ChatBusyError ? "busy" : "returned";
-    if (queues.get(q.sessionId) !== q || !recoverAttempt(q, turnId, state)) return;
-    if (state === "returned") interrupt(q, turnId, "failure");
+    const busy = error instanceof ChatBusyError;
+    if (queues.get(q.sessionId) !== q || !returnHead(q, turnId, busy)) return;
+    if (!busy) interrupt(q, turnId, "failure");
     changed(q);
     // The competing turn may already have ended while this attempt held the head.
-    if (error instanceof ChatBusyError && waitForWinner(q, error)) void drain(q);
+    if (busy && waitForWinner(q, error)) void drain(q);
   }
 }
 
@@ -296,10 +282,10 @@ function positionOf(sessionId: string, turnId: string) {
   return (queues.get(sessionId)?.items.findIndex((row) => row.message.turnId === turnId) ?? -1) + 1;
 }
 
-function appendRow(q: Queue, item: Item) {
+function appendRow(q: Queue, item: Row) {
   const firstHeld = item.held
     ? -1
-    : q.items.findIndex((row) => row.held && stateOf(row) !== "sending");
+    : q.items.findIndex((row) => row.held && row.state !== "sending");
   if (firstHeld < 0) return q.items.push(item);
   q.items.splice(firstHeld, 0, item);
   return firstHeld + 1;
@@ -314,12 +300,12 @@ function append(message: Message, origin: Origin | undefined, chat: LocalChat, s
     sender &&
     q.items.find(
       (item) =>
-        stateOf(item) === "waiting" &&
+        item.state === "waiting" &&
         sameOrigin(item.origin, sender) &&
         item.message.content === message.content
     );
   if (duplicate) return q.items.indexOf(duplicate) + 1;
-  const position = appendRow(q, newQueueItem(q, message, origin, "queued"));
+  const position = appendRow(q, newRow(q, message, origin, false));
   changed(q);
   if (start) void drain(q);
   return position;
@@ -344,7 +330,7 @@ export async function sendOrQueue(input: Input) {
   const queued = { turnId: message.turnId, queued: true as const };
   if (alreadyQueued(message)) return queued;
   const queue = queues.get(sessionId);
-  const behind = queue?.items.some((item) => !item.held && stateOf(item) === "waiting");
+  const behind = queue?.items.some((item) => !item.held && item.state === "waiting");
   const admission =
     behind || holdingTurn(sessionId) ? previousSend(message, message.turnId) : sendMessage(message);
   let start = !behind;
@@ -384,12 +370,10 @@ function waitingOnCard(chat: LocalChat, sessionId: string, turnId?: string) {
 }
 
 /** Keep the sending head and earlier fresh steers ahead of a front-of-queue fallback. */
-function putFirst(q: Queue, items: Item[]) {
+function putFirst(q: Queue, items: Row[]) {
   const rest = q.items.filter((row) => !items.includes(row));
   const first = rest.findIndex(
-    (row) =>
-      row.attempt?.state !== "sending" &&
-      !(row.delivery === "standalone" && stateOf(row) === "steering")
+    (row) => row.state !== "sending" && !(row.ownTurn && row.state === "steering")
   );
   rest.splice(first < 0 ? rest.length : first, 0, ...items);
   q.items = rest;
@@ -398,15 +382,16 @@ function putFirst(q: Queue, items: Item[]) {
 /** A receipt belongs to its named turn. The row stays in its slot while the wire answers. */
 function steerInto(
   q: Queue,
-  item: Item,
+  item: Row,
   chat: LocalChat,
   turnId: string,
   id: string,
   unread: Placement
 ) {
   const answer = Promise.withResolvers<SteerReceipt>();
-  const steer: Steer = { id, turnId, unread, answer };
-  item.steer = steer;
+  const live = { unread, answer, acknowledged: false };
+  item.steer = { id, turnId, live };
+  item.state = "steering";
   changed(q);
   void admit().then(answer.resolve, answer.reject);
   return answer.promise;
@@ -419,18 +404,23 @@ function steerInto(
       input: toEngineInput(item.message.content),
       ...(item.origin && { origin: item.origin }),
     }).catch((error: unknown) => {
-      if (error instanceof DifferentTurnMessageError && !steer.receipt) {
+      if (error instanceof DifferentTurnMessageError && item.steer?.live === live) {
         delete item.steer;
-        if (item.delivery === "standalone") q.items.splice(q.items.indexOf(item), 1);
+        item.state = "waiting";
+        if (item.ownTurn) q.items.splice(q.items.indexOf(item), 1);
         changed(q);
         throw error;
       }
     });
-    if (steer.receipt) return steer.receipt;
+    if (item.steer?.live !== live) return answer.promise;
     if (queues.get(q.sessionId) !== q) return "queued";
     if (!result) return "unconfirmed";
-    if (result.outcome === "steered") return "acknowledged";
-    delete item.steer;
+    if (result.outcome === "steered") {
+      live.acknowledged = true;
+      return "acknowledged";
+    }
+    delete item.steer.live;
+    item.state = "waiting";
     changed(q);
     return "refused";
   }
@@ -452,11 +442,11 @@ export async function steerMessage(
   if (steerId !== undefined) {
     const held = alreadyQueued(message, origin);
     if (held) {
-      if (held.target !== undefined && held.target !== turnId)
-        throw new DifferentTurnMessageError();
       const pending = held.steer;
+      if (held.ownTurn && pending && pending.turnId !== turnId)
+        throw new DifferentTurnMessageError();
       return freshOutcome(
-        pending?.id === steerId ? (pending.receipt ?? (await pending.answer.promise)) : "queued"
+        pending?.id === steerId && pending.live ? await pending.live.answer.promise : "queued"
       );
     }
     const sent = previousSend(message, steerId, origin);
@@ -478,8 +468,8 @@ export async function steerMessage(
   }
   checkQueueHarness(sessionId, chat, input.agentHarness);
   const q = queueFor(sessionId);
-  const item = newQueueItem(q, message, origin, "standalone");
-  item.target = turnId;
+  const item = newRow(q, message, origin, true);
+  if (turnId !== undefined) item.steer = { id: message.turnId, turnId };
   if (waitingOnCard(chat, sessionId, turnId)) {
     appendRow(q, item);
     changed(q);
@@ -501,9 +491,9 @@ export async function steerQueuedMessage(
 ) {
   const q = queues.get(sessionId);
   const item = q?.items.find((row) => row.message.turnId === id);
-  if (!q || !item || stateOf(item) === "sending") return "gone";
-  if (item.steer) return item.steer.answer.promise;
-  const ownTurn = item.delivery === "standalone";
+  if (!q || !item || item.state === "sending") return "gone";
+  if (item.steer?.live) return item.steer.live.answer.promise;
+  const { ownTurn } = item;
   const chat = localChat(sessionId);
   if (!chat) return "gone";
   let waiting: "queued" | "own_turn" | "refused" = ownTurn ? "own_turn" : "queued";
@@ -627,57 +617,60 @@ async function continueLimited(q: Queue, turnId: string) {
   });
 }
 
-function settleSteer(steer: Steer, receipt: "read" | "queued") {
-  steer.receipt = receipt;
-  steer.answer.resolve(receipt);
-}
-
 export function userEcho(sessionId: string, turnId: string, steerId?: string) {
   const q = queues.get(sessionId);
   if (!q) return;
-  const index = q.items.findIndex((item) => {
-    if (steerId === undefined) return item.attempt?.turnId === turnId;
-    const steer = item.steer ?? item.recoveredSteer;
-    return steer?.id === steerId && steer.turnId === turnId;
-  });
+  const index = q.items.findIndex(({ sentAs, steer }) =>
+    steerId === undefined
+      ? sentAs?.turnId === turnId
+      : steer?.id === steerId && steer.turnId === turnId
+  );
   if (index < 0) return;
-  const [item] = q.items.splice(index, 1);
-  if (steerId !== undefined && item?.steer) settleSteer(item.steer, "read");
-  if (steerId !== undefined && item?.attempt?.state === "sending") {
-    void withdrawSteerRetry(sessionId, item.attempt.turnId).then((withdrawn) => {
-      if (withdrawn) void drain(q);
-    });
+  const item = q.items.splice(index, 1)[0]!;
+  if (steerId !== undefined) {
+    item.steer?.live?.answer.resolve("read");
+    delete item.steer;
+    if (item.state === "sending" && item.sentAs)
+      void withdrawSteerRetry(sessionId, item.sentAs.turnId).then((withdrawn) => {
+        if (withdrawn) void drain(q);
+      });
   }
   changed(q);
 }
 
-function recoverAttempt(q: Queue, turnId: string, state: "busy" | "returned" = "returned") {
-  const head = q.items.find((item) => item.attempt?.turnId === turnId);
-  if (!head?.attempt) return false;
-  // A busy reply keeps its retry id even if Stop has already returned the head.
-  if (head.attempt.state !== "sending" && state !== "busy") return false;
-  head.attempt = { turnId, state };
+function returnHead(q: Queue, turnId: string, reuse = false) {
+  const head = q.items.find((item) => item.sentAs?.turnId === turnId);
+  if (!head?.sentAs) return false;
+  // A busy reply keeps its retry id even if Stop already returned the head.
+  if (head.state === "sending") head.state = "waiting";
+  else if (!reuse) return false;
+  head.sentAs.reuse = reuse;
   return true;
 }
 
-export function recoverSteers(id: string, turnId: string, returnHead = false) {
+export function recoverSteers(id: string, turnId: string, missingHead = false, unread?: string[]) {
   const q = queues.get(id);
   if (!q) return;
-  // A read echo lost in a replay gap can come back as a held row.
   const kept: string[] = [];
-  const front: Item[] = [];
-  for (const item of q.items) {
+  const front: Row[] = [];
+  for (const item of [...q.items]) {
     const steer = item.steer;
-    if (!steer || steer.turnId !== turnId) continue;
-    settleSteer(steer, "queued");
-    item.recoveredSteer = { turnId, id: steer.id };
-    delete item.steer;
-    item.delivery = "standalone";
+    if (steer?.turnId !== turnId || !steer.live) continue;
+    // The native end accounts for accepted steers even if their user echoes were lost.
+    if (steer.live.acknowledged && unread && !unread.includes(steer.id)) {
+      q.items.splice(q.items.indexOf(item), 1);
+      steer.live.answer.resolve("read");
+      continue;
+    }
+    steer.live.answer.resolve("queued");
+    if (steer.live.unread === "front") front.push(item);
+    delete steer.live;
+    item.state = "waiting";
+    item.ownTurn = true;
     kept.push(steer.id);
-    if (steer.unread === "front") front.push(item);
   }
   if (front.length) putFirst(q, front);
-  if (returnHead) recoverAttempt(q, turnId);
+  if (missingHead) returnHead(q, turnId);
   return kept;
 }
 
@@ -696,8 +689,9 @@ export function onTurnNotice(id: string, event: TurnNotice) {
   }
   const gone = event.type === "end" || event.gone;
   const turnId = event.turnId;
-  if (gone && turnId) recoverSteers(id, turnId);
-  const missingEcho = gone && turnId !== undefined && recoverAttempt(q, turnId);
+  const unread = event.type === "end" && event.held ? (event.undeliveredSteers ?? []) : undefined;
+  if (gone && turnId) recoverSteers(id, turnId, false, unread);
+  const missingEcho = gone && turnId !== undefined && returnHead(q, turnId);
   if (event.type === "interrupted") interrupt(q, turnId, event.cause, event.by);
   else if (event.held && event.limit) {
     markRows(q, turnId);

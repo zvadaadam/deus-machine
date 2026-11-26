@@ -19,6 +19,7 @@ export type NativeEnd = {
   cancelled: boolean;
   held: boolean;
   by?: Origin;
+  undeliveredSteers?: string[];
   outcome?: TurnOutcomeWrite;
   limit?: { resetsAt?: number };
 };
@@ -39,9 +40,13 @@ interface TurnNotices {
   withdrawCards: (id: string, turnId: string) => void;
   stored: (id: string, turnId: string) => void;
 }
-export let turnNotices: TurnNotices | undefined;
+let connected: TurnNotices | undefined;
 export function connectTurnNotices(notices: TurnNotices) {
-  turnNotices = notices;
+  connected = notices;
+}
+export function turnNotices() {
+  if (!connected) throw new Error("Turn notices have not been connected.");
+  return connected;
 }
 
 type Setup = {
@@ -128,8 +133,8 @@ export function reportInterruption(
   cause: "failure" | "cancelled" = "failure",
   by?: Origin
 ) {
-  if (gone && turnId) turnNotices?.withdrawCards(id, turnId);
-  turnNotices?.queue(id, { type: "interrupted", turnId, gone, cause, by });
+  if (gone && turnId) turnNotices().withdrawCards(id, turnId);
+  turnNotices().queue(id, { type: "interrupted", turnId, gone, cause, by });
 }
 
 type ErrorInfo = NonNullable<TurnOutcomeWrite["error"]>;
@@ -172,7 +177,7 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
   const endLocally = (stopReason: "cancelled" | "error") => {
     remember();
     writeStatus("stopped");
-    const kept = turnNotices?.recover(id, turnId, true);
+    const kept = turnNotices().recover(id, turnId, true);
     const saved = persistTurn(id, {
       turnId,
       endedAt: Date.now(),
@@ -180,7 +185,7 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
       cancelledBy: by,
       undeliveredSteers: kept,
     });
-    if (saved.ok) turnNotices?.stored(id, turnId);
+    if (saved.ok) turnNotices().stored(id, turnId);
     reportInterruption(id, turnId, true, stopReason === "cancelled" ? "cancelled" : "failure", by);
     notify(id);
   };
@@ -195,7 +200,7 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
     .with("refused", () => {
       writeStatus(prior);
       const interrupted = !!error || !!by;
-      const kept = turnNotices?.recover(id, turnId, interrupted);
+      const kept = turnNotices().recover(id, turnId, interrupted);
       if (interrupted || kept?.length) reportInterruption(id, turnId, true);
       notify(id);
     })
@@ -204,7 +209,7 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
       // A Stop in app setup leaves the engine's last turn free to report its late end.
       chat.setupStop = { turnId, by };
       writeStatus(prior ?? "stopped");
-      turnNotices?.recover(id, turnId, true);
+      turnNotices().recover(id, turnId, true);
       reportInterruption(id, turnId, true, "cancelled", by);
       notify(id);
     })
@@ -227,7 +232,7 @@ export function askStop(id: string, origin: Origin) {
   chats.set(id, chat);
   const turn = chat.turn;
   if (turn) (turn.stops ??= new Set()).add(by);
-  turnNotices?.queue(id, { type: "stop", turnId: turn?.turnId, by });
+  turnNotices().queue(id, { type: "stop", turnId: turn?.turnId, by });
 
   const deadline = (kind: "settle" | "warn") => {
     if (chat.deadline?.kind === "settle" || chat.deadline?.kind === kind) return;
@@ -246,52 +251,37 @@ export function askStop(id: string, origin: Origin) {
   };
 
   return (result?: TurnCancelResult | { outcome: "released" }) => {
-    const current = chats.get(id) === chat;
-    const credit = (effective: boolean) => {
-      if (!turn) return;
-      if (!effective) turn.stops?.delete(by);
+    if (turn) {
+      // Only a Stop the engine took can keep the credit.
+      if (result?.outcome !== "cancelled" && result?.outcome !== "unconfirmed")
+        turn.stops?.delete(by);
       persistStopCredit(id, turn.turnId, firstStop(turn));
-    };
+    }
     const settle = () => {
-      if (!current) return;
-      if (chat.turn) return deadline("settle");
-      clearDeadline(chat);
-      if (persistStopStatus(id)) notify(id);
+      if (chat.turn) deadline("settle");
+      else {
+        clearDeadline(chat);
+        if (persistStopStatus(id)) notify(id);
+      }
+      return false;
     };
-    const warn = () => {
-      if (current) deadline("warn");
-      return current;
-    };
-
-    const unconfirmed = match(result)
-      .with({ outcome: "cancelled" }, () => {
-        credit(true);
-        settle();
-        return false;
-      })
-      .with({ outcome: "unconfirmed" }, () => {
-        credit(true);
-        return warn();
-      })
-      .with({ outcome: "no_active_turn" }, ({ activeTurnId }) => {
-        credit(false);
-        if (current && !activeTurnId) {
+    // The requested turn can end and a successor start during the RPC.
+    const unconfirmed =
+      chats.get(id) === chat &&
+      match(result)
+        .with({ outcome: "cancelled" }, { outcome: "released" }, settle)
+        .with({ outcome: "unconfirmed" }, undefined, () => {
+          deadline("warn");
+          return true;
+        })
+        .with({ outcome: "no_active_turn" }, ({ activeTurnId }) => {
+          if (activeTurnId) return false;
           if (chat.turn) releaseTurn(id, chat.turn.turnId, { type: "gone" });
           else settle();
-          if (chats.get(id) === chat) turnNotices?.queue(id, { type: "engine_idle" });
-        }
-        return false;
-      })
-      .with({ outcome: "released" }, () => {
-        credit(false);
-        settle();
-        return false;
-      })
-      .with(undefined, () => {
-        credit(false);
-        return warn();
-      })
-      .exhaustive();
+          if (chats.get(id) === chat) turnNotices().queue(id, { type: "engine_idle" });
+          return false;
+        })
+        .exhaustive();
     chat.pendingStops--;
     prune(id, chat);
     return { unconfirmed };
@@ -302,7 +292,7 @@ export function forgetChatTurns(id?: string) {
   if (id === undefined) {
     for (const chat of chats.values()) clearDeadline(chat);
     chats.clear();
-    turnNotices = undefined;
+    connected = undefined;
   } else {
     const chat = chats.get(id);
     if (chat) {

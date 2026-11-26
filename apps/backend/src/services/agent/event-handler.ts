@@ -248,7 +248,7 @@ export function createAgentEventHandler(): AgentEventHandler & {
           type: cause ?? "gone",
           error: { message, category: "network" },
         });
-        if (absent) turnNotices?.queue(sessionId, { type: "engine_idle" });
+        if (absent) turnNotices().queue(sessionId, { type: "engine_idle" });
         return;
       }
       const warning = message + " The agent has not confirmed it stopped.";
@@ -367,9 +367,9 @@ export function createAgentEventHandler(): AgentEventHandler & {
 
       let ended: NativeEnd | undefined;
       if (event.type === "turn.ended") {
-        const { turnId } = event;
+        const { turnId, undeliveredSteers } = event;
         const cancelled = event.stopReason === "cancelled";
-        ended = { type: "end", turnId, cancelled, held, outcome, by };
+        ended = { type: "end", turnId, cancelled, held, outcome, by, undeliveredSteers };
         if (
           (held || deferred) &&
           outcome?.status === "error" &&
@@ -437,7 +437,7 @@ export function createAgentEventHandler(): AgentEventHandler & {
         .otherwise(() => {});
 
       if (!NOT_PUSHED.has(envelope.event.type)) pushEnvelope(envelope);
-      if (ended) turnNotices?.queue(sessionId, ended);
+      if (ended) turnNotices().queue(sessionId, ended);
     },
   };
 }

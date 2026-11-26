@@ -8,6 +8,7 @@
  * the PR snapshot refresh are mocked; the database is real.
  */
 
+import { wireTestTurnNotices } from "../../fixtures/turn-notices";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LifecycleEvent, WireEventEnvelope } from "@zvada/agent-server/protocol";
@@ -189,6 +190,7 @@ describeWithDb("engine turn → handler → SQLite", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
     handler = createAgentEventHandler();
+    wireTestTurnNotices({ stored: handler.turnStored });
   });
 
   afterEach(() => {

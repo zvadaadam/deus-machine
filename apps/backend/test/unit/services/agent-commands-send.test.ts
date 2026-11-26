@@ -2,6 +2,7 @@
 // The engine echo writes the prompt. The operation tells the composer whether it was
 // admitted, queued for a later turn, or refused.
 
+import { wireTestTurnNotices } from "../../fixtures/turn-notices";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -94,6 +95,7 @@ describeWithDb("sendMessage", () => {
 
   beforeEach(() => {
     forgetChatTurns();
+    wireTestTurnNotices();
     SESSION = crypto.randomUUID();
     db = createTestDb();
     mockGetDatabase.mockReturnValue(db);

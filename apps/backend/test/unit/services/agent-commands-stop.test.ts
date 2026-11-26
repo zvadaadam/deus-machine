@@ -8,6 +8,7 @@
  * SQLite: the command's whole observable effect is one UPDATE.
  */
 
+import { wireTestTurnNotices } from "../../fixtures/turn-notices";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -65,6 +66,7 @@ describeWithDb("stopSession", () => {
       .status;
 
   beforeEach(() => {
+    wireTestTurnNotices();
     db = createTestDb();
     mockGetDatabase.mockReturnValue(db);
     vi.spyOn(agentService, "isConnected").mockReturnValue(true);

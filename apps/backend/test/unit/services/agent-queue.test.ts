@@ -2289,6 +2289,18 @@ describe("messages held for a local chat", () => {
     expect(starts()).toEqual(["first"]);
   });
 
+  it("starts only the listed steer when a native end accounts for a missing read echo", async () => {
+    await send("T");
+    for (const id of ["read", "unread"])
+      await steerMessage({ ...message(id), turnId: "T" }, fromChat, id);
+    gap("replay_failed");
+    end("T", "end_turn", ["unread"]);
+    expect(await ids()).toEqual(["unread"]);
+    await resumeInWindow();
+    expect(starts()).toEqual(["T", "unread"]);
+    expect(await ids()).toEqual([]);
+  });
+
   it("a steer echoed after its RPC timed out never runs a second time", async () => {
     await send("first");
     engine.steerTurn.mockRejectedValueOnce(new Error("timed out"));
@@ -2706,7 +2718,11 @@ describe("messages held for a local chat", () => {
     await expect(steerRow("waiting-0")).resolves.toEqual({ outcome: "steered" });
     echo("head");
     await send("last");
-    end("head", "cancelled");
+    end(
+      "head",
+      "cancelled",
+      engine.steerTurn.mock.calls.map(([p]) => p.steerId!)
+    );
     expect(await ids()).toEqual([rows[1]!.id, ...waiting, "last"]);
     await expect(send("manual")).resolves.toEqual({ turnId: "manual" });
   });

@@ -70,9 +70,21 @@ let localAgents: LocalAgents | null = null;
 let events: AgentEventHandler | null = null;
 
 /** Start the engine and connect the event handler to it. Call once at startup. */
-export async function init(): Promise<void> {
+export async function init({ agentless = false } = {}): Promise<void> {
   if (link || events) {
     console.warn("[AgentService] Already initialized, skipping");
+    return;
+  }
+  const handler = createAgentEventHandler();
+  connectTurnNotices({
+    queue: onTurnNotice,
+    recover: recoverSteers,
+    withdrawCards: (id, turnId) => cancelSessionRelays(id, "turn interrupted", turnId),
+    stored: handler.turnStored,
+  });
+  events = handler;
+  if (agentless) {
+    console.warn("[AgentService] Starting in explicit agentless mode (AGENT_ALLOW_AGENTLESS=true)");
     return;
   }
   // Before the engine can admit a turn: none of the turns the database still
@@ -88,14 +100,6 @@ export async function init(): Promise<void> {
     console.log(`[AgentService] Settled ${settled.value.length} chat(s) a restart interrupted`);
     invalidate(["workspaces", "sessions", "session"], { sessionIds: settled.value });
   }
-  const handler = createAgentEventHandler();
-  connectTurnNotices({
-    queue: onTurnNotice,
-    recover: recoverSteers,
-    withdrawCards: (id, turnId) => cancelSessionRelays(id, "turn interrupted", turnId),
-    stored: handler.turnStored,
-  });
-  events = handler;
   // A client that starts following a chat while its agent waits on a question
   // or a plan (a window opened late, a phone) is shown it at once; one that
   // follows every chat (a window's card host) is shown every chat's.
