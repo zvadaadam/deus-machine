@@ -249,7 +249,6 @@ interface TurnRow {
 }
 
 export interface DeusHost extends OperatorHost<Caller> {
-  queueView(caller: Who, sessionId: string): ReturnType<typeof queueView>;
   /** Run one of the app's operations for the call's caller; a write's access read again just before it. */
   act<O extends AnyOp>(caller: Who, op: O, input: InputOf<O>): Promise<OutputOf<O>>;
 }
@@ -318,15 +317,28 @@ function limitNote(limit: sessions.QueuedMessages["limit"]) {
 
 type QueueSenderName = (origin?: Origin) => string;
 
-function queueSenderNames(references: () => Map<string, string>, reader?: Origin): QueueSenderName {
-  let refs: Map<string, string> | undefined;
+function queueSenderNames(origins: (Origin | undefined)[], reader?: Origin): QueueSenderName {
+  const ids = new Set(origins.flatMap((o) => (o?.kind === "session" ? [o.sessionId] : [])));
+  const refs = ids.size
+    ? getDatabase()
+        .prepare<[string], { id: string; ref: string }>(
+          `
+    SELECT s.id, (CASE WHEN EXISTS (
+      SELECT 1 FROM workspaces other WHERE other.kind != 'cloud' AND other.id != w.id
+        AND other.slug = w.slug COLLATE NOCASE
+    ) THEN r.name || '/' ELSE '' END) || w.slug || ':' || s.chat AS ref
+    FROM sessions s JOIN workspaces w ON s.workspace_id = w.id JOIN repositories r ON r.id = w.repository_id
+    WHERE s.id IN (SELECT value FROM json_each(?)) AND w.kind != 'cloud'
+  `
+        )
+        .all(JSON.stringify([...ids]))
+    : [];
+  const names = new Map(refs.map(({ id, ref }) => [id, quoted(ref)]));
   return (origin) => {
     if (!origin || origin.kind === "person") return "the person";
     if (reader && sameOrigin(reader, origin)) return "you";
     if (origin.kind === "assistant") return quoted(origin.name);
-    refs ??= references();
-    const name = refs.get(origin.sessionId);
-    return name ? quoted(name) : "a chat that is gone";
+    return names.get(origin.sessionId) ?? "a chat that is gone";
   };
 }
 
@@ -360,7 +372,13 @@ function queueNote(queue: sessions.QueuedMessages, hold?: string) {
     .join(", ");
 }
 
-function queueView(queue: sessions.QueuedMessages, by: Origin, senderName: QueueSenderName) {
+export function queueView(caller: Who, sessionId: string) {
+  const by = originOf(caller);
+  const queue = queuedMessages(sessionId);
+  const senderName = queueSenderNames(
+    [queue.stoppedBy, ...queue.items.map((row) => row.origin)],
+    by
+  );
   const hold = queueHold(queue, senderName);
   return { items: queue.items, by, senderName, hold, note: queueNote(queue, hold) };
 }
@@ -388,22 +406,24 @@ export function createDeusHost(): DeusHost {
     return run(op, input);
   }
 
-  function readRows(where = "", ...args: unknown[]): Row[] {
-    return getDatabase()
-      .prepare(`${ROWS} ${where} ORDER BY w.id, COALESCE(s.chat, 1e9), s.id`)
-      .all(...args) as Row[];
-  }
-
-  /** Give a workspace with neither a chat nor a first chat's id one when it is opened. */
+  /**
+   * The rows, a workspace with neither a chat nor a first chat's id given one
+   * now (stored once), so it is listed, retried and removed like any other.
+   */
   function rows(where = "", ...args: unknown[]): Row[] {
-    const found = readRows(where, ...args);
+    const db = getDatabase();
+    const query = () =>
+      db
+        .prepare(`${ROWS} ${where} ORDER BY w.id, COALESCE(s.chat, 1e9), s.id`)
+        .all(...args) as Row[];
+    const found = query();
     const missing = found.filter((r) => !r.session_id && !r.first_session_id);
     if (!missing.length) return found;
-    const assign = getDatabase().prepare(
-      "UPDATE workspaces SET first_session_id = ? WHERE id = ? AND first_session_id IS NULL"
-    );
-    for (const row of missing) assign.run(uuidv7(), row.workspace_id);
-    return readRows(where, ...args);
+    for (const r of missing)
+      db.prepare(
+        "UPDATE workspaces SET first_session_id = ? WHERE id = ? AND first_session_id IS NULL"
+      ).run(uuidv7(), r.workspace_id);
+    return query();
   }
 
   /** Each chat's last ended turn, in one read. */
@@ -453,7 +473,8 @@ export function createDeusHost(): DeusHost {
   function entriesOf(found: readonly Row[]): Entry[] {
     const ended = lastEnded(found.flatMap((r) => (r.session_id ? [r.session_id] : [])));
     const counted = new Map<string, number>();
-    return found.flatMap((row): Entry[] => {
+    const limited = new Set<string>();
+    const entries = found.flatMap((row): Entry[] => {
       const id = row.session_id ?? row.first_session_id;
       if (!id) return [];
       // Its stored number (made in order, never moved); a chat from before numbers counts on.
@@ -463,6 +484,7 @@ export function createDeusHost(): DeusHost {
       const stoppedInSetup = setupStop(id);
       const status = statusOf(row, !!stoppedInSetup || last?.turn.outcome === "cancelled");
       const cancelledBy = stoppedInSetup?.by ?? last?.turn.cancelledBy;
+      if (status === "error" && row.error_category === "usage_limit") limited.add(id);
       // The workspace's title and time stand in only for a first chat with no row yet.
       const title = row.session_id ? row.s_title : row.ws_title;
       const sent = epochMs(row.session_id ? row.last_user_message_at : row.ws_updated_at);
@@ -493,79 +515,31 @@ export function createDeusHost(): DeusHost {
           ...(activity ? { lastActivityAt: activity } : {}),
           ...(status === "error" && error ? { error: homeRelative(error, "diagnostic") } : {}),
           ...(root ? { root } : {}),
-          ...(status === "error" &&
-            row.error_category === "usage_limit" && { note: limitNote(queuedMessages(id).limit) }),
         },
       ];
     });
-  }
-
-  function senderRefs(origins: (Origin | undefined)[], listed?: Entry[]) {
-    const ids = new Set(origins.flatMap((o) => (o?.kind === "session" ? [o.sessionId] : [])));
-    const refs = (named: Entry[], all: Entry[]) =>
-      new Map(named.map((entry) => [entry.id, refOf(entry, all)]));
-    if (listed)
-      return refs(
-        listed.filter((entry) => ids.has(entry.id)),
-        listed
-      );
-
-    // A chat from before stored numbers needs its siblings to compute its place.
-    const from = "SELECT value FROM json_each(@ids)";
-    const named = entriesOf(
-      readRows(
-        `AND (s.id IN (${from}) OR w.id IN (
-         SELECT workspace_id FROM sessions WHERE chat IS NULL AND id IN (${from})))`,
-        { ids: JSON.stringify([...ids]) }
-      )
-    ).filter((entry) => ids.has(entry.id));
-    const names = new Set(named.map((entry) => entry.workspace.name.toLowerCase()));
-    if (!names.size) return new Map<string, string>();
-
-    // SQLite folds ASCII. Read only possible spellings, then compare them as refOf does.
-    const candidates = getDatabase()
-      .prepare<string, { id: string; slug: string }>(
-        `SELECT id, slug FROM workspaces WHERE kind != 'cloud' AND
-       (slug COLLATE NOCASE IN (SELECT value FROM json_each(?)) OR length(slug) != length(CAST(slug AS BLOB)))`
-      )
-      .all(JSON.stringify([...names]));
-    const peers = candidates.filter(
-      ({ id, slug }) =>
-        names.has(slug.toLowerCase()) && !named.some((entry) => entry.workspace.id === id)
-    );
-    if (!peers.length) return refs(named, named);
-    const rows = readRows(
-      `AND w.id IN (SELECT value FROM json_each(?)) AND s.id IS
-       (SELECT id FROM sessions WHERE workspace_id = w.id ORDER BY chat, id LIMIT 1)`,
-      JSON.stringify(peers.map(({ id }) => id))
-    );
-    // An unopened namesake counts for refOf, but cannot be looked up as a sender.
-    for (const row of rows) row.first_session_id ??= row.workspace_id;
-    return refs(named, [...named, ...entriesOf(rows)]);
-  }
-
-  function withQueueNote(entry: Entry, all?: Entry[]) {
-    const queue = queuedMessages(entry.id);
-    const name = queueSenderNames(() => senderRefs([queue.stoppedBy], all));
-    const note = queueNote(queue, queueHold(queue, name) ?? entry.note);
-    if (note) entry.note = note;
-    return entry;
+    const queues = entries.map((entry) => ({ entry, queue: queuedMessages(entry.id) }));
+    const senderName = queueSenderNames(queues.map(({ queue }) => queue.stoppedBy));
+    for (const { entry, queue } of queues) {
+      const hold =
+        queueHold(queue, senderName) ??
+        (limited.has(entry.id) ? limitNote(queue.limit) : undefined);
+      const note = queueNote(queue, hold);
+      if (note) entry.note = note;
+    }
+    return entries;
   }
 
   /** Every entry, archived ones too (names resolve over them). */
-  function everything() {
-    const all = entriesOf(rows());
-    return all.map((entry) => withQueueNote(entry, all));
-  }
-  function entryById(id: string) {
-    const members = rows(
-      "AND w.id = (SELECT workspace_id FROM sessions WHERE id = ? UNION SELECT id FROM workspaces WHERE first_session_id = ?)",
-      id,
-      id
-    );
-    const entry = entriesOf(members).find((e) => e.id === id);
-    return entry && withQueueNote(entry);
-  }
+  const everything = () => entriesOf(rows());
+  const entryById = (id: string) =>
+    entriesOf(
+      rows(
+        "AND w.id = (SELECT workspace_id FROM sessions WHERE id = ? UNION SELECT id FROM workspaces WHERE first_session_id = ?)",
+        id,
+        id
+      )
+    ).find((entry) => entry.id === id);
 
   /** Workspaces agents started that are being set up now. */
   const agentSetups = () =>
@@ -793,15 +767,6 @@ export function createDeusHost(): DeusHost {
 
   const host: DeusHost = {
     act,
-    queueView(caller, id) {
-      const queue = queuedMessages(id);
-      const by = originOf(caller);
-      const names = queueSenderNames(
-        () => senderRefs([queue.stoppedBy, ...queue.items.map((row) => row.origin)]),
-        by
-      );
-      return queueView(queue, by, names);
-    },
 
     async list(_caller, filter) {
       const all = everything();

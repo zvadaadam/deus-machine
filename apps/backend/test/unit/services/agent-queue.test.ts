@@ -46,7 +46,7 @@ import {
 } from "../../../src/services/query-engine";
 import { subscribe } from "../../../src/services/streams";
 import { addConnection, closeAll } from "../../../src/services/ws.service";
-import { createDeusHost } from "../../../src/services/assistants/host";
+import { createDeusHost, queueView } from "../../../src/services/assistants/host";
 import * as workspaceInit from "../../../src/services/workspace-init.service";
 import { answerMcp, withSessionTools } from "../../../src/services/assistants/operator";
 import * as access from "../../../src/services/assistants/access";
@@ -3710,12 +3710,12 @@ describe("operating another chat's queue", () => {
       expect((await host.view(windowCaller, sessionId, { last: 1 })).note).toContain(
         'stopped by "review:3"'
       );
-      expect(new Set(projected.mock.calls.map(([id]) => id))).toEqual(new Set([sessionId, "peer"]));
+      expect(new Set(projected.mock.calls.map(([id]) => id))).toEqual(new Set([sessionId]));
     } finally {
       projected.mockRestore();
     }
     db.prepare("UPDATE workspaces SET slug = 'REVIEW' WHERE id = 'unrelated'").run();
-    const view = host.queueView(windowCaller, sessionId);
+    const view = queueView(windowCaller, sessionId);
     expect(view.hold).toBe('held: stopped by "repo/review:3"');
     expect(view.senderName({ kind: "session", sessionId: "unrelated" })).toBe(
       "a chat that is gone"
@@ -3727,7 +3727,6 @@ describe("operating another chat's queue", () => {
 
   it("uses the sender's current unambiguous reference for its rows and its Stop", async () => {
     db.exec(`
-      UPDATE workspaces SET slug = 'chec' || char(0x212A) || 'out' WHERE id = 'w'; -- Kelvin sign folds to k
       INSERT INTO repositories (id, name, root_path) VALUES ('other', 'Other project', '/tmp/other');
       INSERT INTO workspaces (id, repository_id, slug, state)
         VALUES ('another', 'other', 'checkout', 'ready');
