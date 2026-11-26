@@ -256,7 +256,7 @@ export function createAgentEventHandler(): AgentEventHandler & {
         persistSessionStatus(sessionId, "working", warning, "network"),
         sessionId
       );
-      reportInterruption(sessionId, turnId, false, cause);
+      reportInterruption(sessionId, turnId, false, cause, firstStop(turn));
     },
 
     handleTitle(sessionId, title) {
@@ -349,6 +349,7 @@ export function createAgentEventHandler(): AgentEventHandler & {
       const event = envelope.event;
       const isDelta = event.type === "message.part.delta";
       const held = event.type === "turn.ended" && holder?.turnId === event.turnId;
+      const by = held ? firstStop(holder) : undefined;
       let outcome: TurnOutcomeWrite | undefined;
       const writes = isDelta
         ? []
@@ -361,14 +362,14 @@ export function createAgentEventHandler(): AgentEventHandler & {
               return deferred ? undefined : outcome;
             },
             turnProviderCredentialSource(event),
-            held ? firstStop(holder) : undefined
+            by
           );
 
       let ended: NativeEnd | undefined;
       if (event.type === "turn.ended") {
         const { turnId } = event;
         const cancelled = event.stopReason === "cancelled";
-        ended = { type: "end", turnId, cancelled, held, outcome };
+        ended = { type: "end", turnId, cancelled, held, outcome, by };
         if (
           (held || deferred) &&
           outcome?.status === "error" &&

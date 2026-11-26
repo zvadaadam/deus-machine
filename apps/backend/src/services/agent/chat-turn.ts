@@ -18,6 +18,7 @@ export type NativeEnd = {
   turnId: string;
   cancelled: boolean;
   held: boolean;
+  by?: Origin;
   outcome?: TurnOutcomeWrite;
   limit?: { resetsAt?: number };
 };
@@ -25,7 +26,13 @@ export type TurnNotice =
   | NativeEnd
   | { type: "engine_idle" }
   | { type: "stop"; turnId?: string; by: Origin }
-  | { type: "interrupted"; turnId?: string; gone: boolean; cause: "failure" | "cancelled" };
+  | {
+      type: "interrupted";
+      turnId?: string;
+      gone: boolean;
+      cause: "failure" | "cancelled";
+      by?: Origin;
+    };
 interface TurnNotices {
   queue: (id: string, notice: TurnNotice) => void;
   recover: (id: string, turnId: string, returnHead?: boolean) => string[] | undefined;
@@ -118,10 +125,11 @@ export function reportInterruption(
   id: string,
   turnId: string | undefined,
   gone: boolean,
-  cause: "failure" | "cancelled" = "failure"
+  cause: "failure" | "cancelled" = "failure",
+  by?: Origin
 ) {
   if (gone && turnId) turnNotices?.withdrawCards(id, turnId);
-  turnNotices?.queue(id, { type: "interrupted", turnId, gone, cause });
+  turnNotices?.queue(id, { type: "interrupted", turnId, gone, cause, by });
 }
 
 type ErrorInfo = NonNullable<TurnOutcomeWrite["error"]>;
@@ -173,7 +181,7 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
       undeliveredSteers: kept,
     });
     if (saved.ok) turnNotices?.stored(id, turnId);
-    reportInterruption(id, turnId, true, stopReason === "cancelled" ? "cancelled" : "failure");
+    reportInterruption(id, turnId, true, stopReason === "cancelled" ? "cancelled" : "failure", by);
     notify(id);
   };
 
@@ -197,7 +205,7 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
       chat.setupStop = { turnId, by };
       writeStatus(prior ?? "stopped");
       turnNotices?.recover(id, turnId, true);
-      reportInterruption(id, turnId, true, "cancelled");
+      reportInterruption(id, turnId, true, "cancelled", by);
       notify(id);
     })
     .with("gone", () => endLocally("error"))

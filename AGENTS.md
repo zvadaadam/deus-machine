@@ -215,12 +215,16 @@ Each composer follows `queuedMessages` for the sender, text and picture count in
 Dragging a waiting row's grip, or using Space and the arrow keys, calls
 `moveQueuedMessage` to put it before another waiting row or last. The sending head
 stays first until its user echo is complete.
-A fatal error leaves the local turn holding its chat until it ends. A message the person sends then queues and waits for Resume after the failed end.
-A plain send joins an open queue behind its waiting messages. After Stop, waiting messages
-stay held until Resume. A fresh send can still start an idle chat while its queue is held.
-A message the person sends after Stop starts its own turn when the stopped turn ends or Deus gives it up.
-An empty Stop or failure hold clears when its turn settles. A usage limit can hold an empty queue.
-The rules above `transition` in `services/agent/queue.ts` say who may resume each hold.
+A Stop, an interruption or the holding turn’s failed or cancelled end marks the rows already queued.
+An end for another turn counts only if it returns a sending row still missing its echo.
+After a Stop or interruption, the turn takes no more steers and only its usage limit marks rows again.
+A cancellation credits its first Stop, and one without a stopper leaves held rows for the person.
+The person’s Stop takes priority, and the first agent Stop replaces a failure or usage limit.
+Only a usage limit holds an empty queue, and clearing it releases its rows.
+A later send goes ahead of held rows, but an agent or assistant joins a standing hold.
+A fresh steer may enter another turn, and an agent’s fallback row joins the hold.
+A held row may move but cannot steer into a turn or block an unheld row.
+Resume clears every mark, and agents may resume failures, agent Stops and limits after a reported reset.
 During local app setup, Stop returns the chat to idle at once, except for an agent's or
 assistant's first task, which ends in an error saying it was not delivered. The person
 keeps their draft, a queue head waits first, and an operator's send is refused

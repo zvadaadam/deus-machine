@@ -45,125 +45,59 @@ type Item = {
   text: string;
   images: number;
   attempt?: Attempt;
-  afterStop?: string;
+  held: boolean;
   /** The turn named by a fresh steer, including one kept without reaching the wire. */
   target?: string;
   steer?: Steer;
   recoveredSteer?: Pick<Steer, "turnId" | "id">;
 };
 
-type Pause =
-  | { reason: "resumed"; turnId: string; scope: "failure" | "turn" }
-  | { reason: "stopped"; turnId?: string; by?: Origin }
-  | { reason: "failed"; turnId?: string }
-  | { reason: "limit"; turnId: string; limit: NonNullable<api.QueuedMessages["limit"]> }
-  | null;
+type Hold =
+  | { reason: "stopped"; by?: Origin }
+  | { reason: "failed" }
+  | { reason: "limit"; turnId: string; limit: NonNullable<api.QueuedMessages["limit"]> };
 interface Queue {
   sessionId: string;
   items: Item[];
-  pause: Pause;
+  hold?: Hold;
+  answered?: string;
   busyOn?: string;
 }
 
-function hold(q: Queue) {
-  return q.pause?.reason === "resumed" ? null : q.pause;
+/**
+ * Stop marks every row present, as does an interruption or the holder's failed or cancelled end.
+ * An end for another turn counts only when it returns a row missing its echo.
+ * After a Stop or interruption, the turn takes no more steers and only its usage limit marks rows again.
+ * A cancellation credits its first Stop, and one without a stopper leaves held rows for the person.
+ * The person's Stop takes priority, and the first agent Stop replaces a failure or limit.
+ * Only a limit can hold an empty queue, and clearing it releases its rows.
+ * A later send goes ahead of held rows, but an agent or assistant joins a standing hold.
+ * A fresh steer may enter another turn, and an agent’s fallback row joins the hold.
+ * A held row may move but cannot steer into a turn or block an unheld row.
+ * Resume clears every mark, and agents may resume failures, agent Stops and limits after a reported reset.
+ */
+function markRows(q: Queue, turnId?: string) {
+  if (turnId !== undefined) q.answered = turnId;
+  for (const row of q.items) row.held = true;
 }
 
-type PauseEvent =
-  | Extract<TurnNotice, { type: "stop" | "interrupted" }>
-  | (Extract<TurnNotice, { type: "end" }> & { missingEcho: boolean })
-  | { type: "resume"; by?: Origin }
-  | { type: "schedule"; on: boolean }
-  | { type: "clear_limit" | "empty" };
+function recordStop(q: Queue, by?: Origin) {
+  const prior = q.hold;
+  if (prior?.reason !== "stopped" || by?.kind === "person" || (!by && agentOrigin(prior.by)))
+    q.hold = { reason: "stopped", by };
+}
 
-/**
- * A Stop replaces any limit and holds waiting rows, including on an idle chat. It follows the
- * turn that holds the chat. An empty Stop or failure clears when that turn ends,
- * its start is refused (including busy), or Deus gives it up. With no turn, an empty hold clears at once.
- * The person's Stop takes priority. The turn itself credits the first Stop that took effect.
- * A cancellation from a card, harness or replay keeps its turn's stopper or a standing
- * person-only hold. Otherwise it replaces any earlier failure or agent Stop with a person-only hold.
- * A failure or missing start echo holds for anyone. An interruption can replace a limit or
- * another turn's Resume. A standing Stop or failure survives non-cancelled ends, limits included.
- * An unrelated replayed end changes nothing unless it returns a head missing its echo.
- * The person can resume any hold. Agents can resume failures, agent Stops and usage limits
- * after a reported reset. A limit can hold an empty queue. A plain send can still start an idle chat.
- * Resume covers its own turn's end and failure. Its usage limit still applies. A resumed Stop
- * or the person's Resume also covers that turn's cancellation. An agent resuming a live failure
- * waits for it to settle. The person's later Resume opens the queue; the row waits for its turn.
- */
-function transition(
+function interrupt(
   q: Queue,
-  event: PauseEvent
-): "open" | "person_only" | "before_reset" | undefined {
-  const prior = q.pause;
-  const holder = holdingTurn(q.sessionId)?.turnId;
-  switch (event.type) {
-    case "resume": {
-      if (!prior) return "open";
-      const agent = agentOrigin(event.by);
-      if (prior.reason === "resumed") {
-        if (agent || prior.scope === "turn") return "open";
-        prior.scope = "turn";
-        return;
-      }
-      if (agent) {
-        if (prior.reason === "stopped" && !agentOrigin(prior.by)) return "person_only";
-        if (prior.reason === "limit") {
-          if (prior.limit.resetsAt === undefined) return "person_only";
-          if (prior.limit.resetsAt > Date.now()) return "before_reset";
-        }
-      }
-      q.pause =
-        prior.reason !== "limit" && prior.turnId && prior.turnId === holder
-          ? {
-              reason: "resumed",
-              turnId: prior.turnId,
-              scope: agent && prior.reason === "failed" ? "failure" : "turn",
-            }
-          : null;
-      return;
-    }
-    case "empty":
-      if (
-        (prior?.reason === "stopped" || prior?.reason === "failed") &&
-        (!holder || holder !== prior.turnId)
-      )
-        q.pause = null;
-      return;
-    case "clear_limit":
-      if (prior?.reason === "limit") q.pause = null;
-      return;
-    case "schedule":
-      if (prior?.reason === "limit") prior.limit.continues = event.on;
-      return;
+  turnId: string | undefined,
+  cause: "cancelled" | "failure",
+  by?: Origin
+) {
+  if (!turnId || q.answered !== turnId) {
+    markRows(q, turnId);
+    if (cause === "failure") q.hold ??= { reason: "failed" };
   }
-  const { turnId } = event;
-  const sameTurn = turnId !== undefined && prior?.turnId === turnId;
-  if (event.type === "end" && !event.held && !event.missingEcho && !sameTurn) return;
-  const cancelled =
-    event.type === "end" ? event.cancelled : event.type === "stop" || event.cause === "cancelled";
-  const limited = event.type === "end" && event.limit;
-  const resumed = sameTurn && prior.reason === "resumed" && (!cancelled || prior.scope === "turn");
-  if (event.type !== "stop" && resumed && !limited) {
-    if (turnId !== holder) q.pause = null;
-  } else if (cancelled) {
-    const by = event.type === "stop" ? event.by : undefined;
-    const keep =
-      prior?.reason === "stopped" && by?.kind !== "person" && (sameTurn || !agentOrigin(prior.by));
-    q.pause = { reason: "stopped", by: keep ? prior.by : by, turnId };
-  } else if (prior?.reason === "stopped" || (prior?.reason === "failed" && event.type === "end")) {
-    return;
-  } else if (limited) {
-    const continues =
-      limited.resetsAt !== undefined && getSetting("continue_after_usage_limit") === true;
-    q.pause = { reason: "limit", turnId: event.turnId, limit: { ...limited, continues } };
-  } else if (
-    event.type === "interrupted" ||
-    (event.type === "end" && (event.outcome?.status === "error" || event.missingEcho))
-  ) {
-    q.pause = { reason: "failed", turnId };
-  } else if (prior?.reason === "resumed") q.pause = null;
+  if (cause === "cancelled") recordStop(q, by);
 }
 
 const MAX_QUEUED_MESSAGES = 20;
@@ -202,20 +136,25 @@ function notify(sessionIds: string[]) {
   invalidate(["queuedMessages"], { sessionIds });
 }
 
-function changed(q: Queue, event?: PauseEvent) {
-  const refusal = event && transition(q, event);
-  if (refusal) return refusal;
-  if (!q.items.length) {
-    transition(q, { type: "empty" });
-    if (!q.pause) queues.delete(q.sessionId);
+function changed(q: Queue) {
+  if (q.hold?.reason !== "limit" && !q.items.some((row) => row.held)) {
+    delete q.hold;
+    if (!q.items.length && (!q.answered || q.answered !== holdingTurn(q.sessionId)?.turnId))
+      queues.delete(q.sessionId);
   }
   notify([q.sessionId]);
+}
+
+function clearHold(q: Queue) {
+  delete q.hold;
+  for (const row of q.items) row.held = false;
+  changed(q);
 }
 
 function queueFor(sessionId: string): Queue {
   const existing = queues.get(sessionId);
   if (existing) return existing;
-  const q: Queue = { sessionId, items: [], pause: null };
+  const q: Queue = { sessionId, items: [] };
   queues.set(sessionId, q);
   // Archive, hide and delete publish a changed list. A turn's scoped updates
   // cannot remove a chat. Check all held queues in one read on list changes.
@@ -225,10 +164,10 @@ function queueFor(sessionId: string): Queue {
       for (const id of ctx.sessionIds) {
         const held = queues.get(id);
         if (
-          held?.pause?.reason === "limit" &&
+          held?.hold?.reason === "limit" &&
           (holdingTurn(id) || localChat(id)?.error_category !== "usage_limit")
         ) {
-          changed(held, { type: "clear_limit" });
+          clearHold(held);
         }
       }
       return;
@@ -261,12 +200,11 @@ function newQueueItem(
     throw new QueueLimitError("agents");
   if (q.items.length >= MAX_QUEUED_MESSAGES) throw new QueueLimitError("total");
   const input = toEngineInput(message.content);
-  const stopped = !sender && q.pause?.reason === "stopped" ? q.pause.turnId : undefined;
   return {
     message,
     delivery,
     origin: sender,
-    afterStop: stopped && holdingTurn(q.sessionId)?.turnId === stopped ? stopped : undefined,
+    held: !!sender && !!q.hold,
     text: inputToText(input),
     images: typeof input === "string" ? 0 : input.filter((p) => p.type === "image").length,
   };
@@ -285,7 +223,7 @@ export function queuedMessages(sessionId: string): api.QueuedMessages {
       ...(origin && { origin }),
     };
   };
-  const pause = hold(q);
+  const pause = q.hold;
   return {
     paused: pause?.reason ?? null,
     ...(pause?.reason === "stopped" && pause.by && { stoppedBy: pause.by }),
@@ -313,21 +251,15 @@ function waitForWinner(q: Queue, { competingTurnId }: ChatBusyError) {
 async function drain(q: Queue | undefined, retryBusy = false) {
   if (!q) return;
   if (retryBusy) delete q.busyOn;
-  const canStart = !q.pause || (q.pause.reason === "resumed" && q.pause.scope === "turn");
-  const stopped = q.pause?.reason === "stopped" && q.pause.turnId;
-  // The person's send after Stop runs when that turn gives up the chat, while earlier rows stay held.
-  const head = stopped
-    ? q.items.find((item) => item.afterStop === stopped && item.attempt?.state !== "returned")
-    : canStart && q.items[0];
+  const head = q.items.find((item) => !item.held);
   if (!head || stateOf(head) !== "waiting") return;
-  if (q.busyOn && (!stopped || head.attempt)) return;
+  if (q.busyOn && (!q.hold || head.attempt)) return;
   if (!localChat(q.sessionId)) {
     queues.delete(q.sessionId);
     notify([q.sessionId]);
     return;
   }
   if (holdingTurn(q.sessionId)) return;
-  if (head !== q.items[0]) q.items = [head, ...q.items.filter((item) => item !== head)];
   const previous = head.attempt;
   let turnId = head.message.turnId;
   if (previous) turnId = previous.state === "busy" ? previous.turnId : uuidv7();
@@ -342,12 +274,8 @@ async function drain(q: Queue | undefined, retryBusy = false) {
     if (holdingTurn(q.sessionId)?.turnId === turnId) return;
     const state = error instanceof ChatBusyError ? "busy" : "returned";
     if (queues.get(q.sessionId) !== q || !recoverAttempt(q, turnId, state)) return;
-    changed(
-      q,
-      state === "returned"
-        ? { type: "interrupted", turnId, gone: true, cause: "failure" }
-        : undefined
-    );
+    if (state === "returned") interrupt(q, turnId, "failure");
+    changed(q);
     // The competing turn may already have ended while this attempt held the head.
     if (error instanceof ChatBusyError && waitForWinner(q, error)) void drain(q);
   }
@@ -368,6 +296,15 @@ function positionOf(sessionId: string, turnId: string) {
   return (queues.get(sessionId)?.items.findIndex((row) => row.message.turnId === turnId) ?? -1) + 1;
 }
 
+function appendRow(q: Queue, item: Item) {
+  const firstHeld = item.held
+    ? -1
+    : q.items.findIndex((row) => row.held && stateOf(row) !== "sending");
+  if (firstHeld < 0) return q.items.push(item);
+  q.items.splice(firstHeld, 0, item);
+  return firstHeld + 1;
+}
+
 function append(message: Message, origin: Origin | undefined, chat: LocalChat, start = true) {
   checkQueueHarness(message.sessionId, chat, message.agentHarness);
   const q = queueFor(message.sessionId);
@@ -382,8 +319,7 @@ function append(message: Message, origin: Origin | undefined, chat: LocalChat, s
         item.message.content === message.content
     );
   if (duplicate) return q.items.indexOf(duplicate) + 1;
-  q.items.push(newQueueItem(q, message, origin, "queued"));
-  const position = q.items.length;
+  const position = appendRow(q, newQueueItem(q, message, origin, "queued"));
   changed(q);
   if (start) void drain(q);
   return position;
@@ -408,7 +344,7 @@ export async function sendOrQueue(input: Input) {
   const queued = { turnId: message.turnId, queued: true as const };
   if (alreadyQueued(message)) return queued;
   const queue = queues.get(sessionId);
-  const behind = queue && !hold(queue) && queue.items.some((item) => stateOf(item) === "waiting");
+  const behind = queue?.items.some((item) => !item.held && stateOf(item) === "waiting");
   const admission =
     behind || holdingTurn(sessionId) ? previousSend(message, message.turnId) : sendMessage(message);
   let start = !behind;
@@ -430,15 +366,13 @@ export async function sendOrQueue(input: Input) {
 type SteerResult = OutputOf<typeof api.steerMessage>;
 
 function canSteer(q: Queue, chat: LocalChat, turnId: string | undefined): turnId is string {
-  // A hold covers waiting rows. A fresh steer can enter a different running turn.
-  const pause = q.pause;
   const turn = holdingTurn(q.sessionId);
   return (
     turnId !== undefined &&
     turnId === turn?.turnId &&
     turn.phase !== "preparing" &&
     chat.status !== "error" &&
-    !(pause?.reason === "stopped" && pause.turnId === turnId)
+    q.answered !== turnId
   );
 }
 
@@ -547,7 +481,7 @@ export async function steerMessage(
   const item = newQueueItem(q, message, origin, "standalone");
   item.target = turnId;
   if (waitingOnCard(chat, sessionId, turnId)) {
-    q.items.push(item);
+    appendRow(q, item);
     changed(q);
     return { outcome: "queued" };
   }
@@ -575,7 +509,7 @@ export async function steerQueuedMessage(
   let waiting: "queued" | "own_turn" | "refused" = ownTurn ? "own_turn" : "queued";
   const card = waitingOnCard(chat, sessionId, turnId);
   if (card) return ownTurn ? "own_turn" : card;
-  if (!ownTurn && !hold(q) && canSteer(q, chat, turnId)) {
+  if (!ownTurn && !item.held && canSteer(q, chat, turnId)) {
     const receipt = await steerInto(q, item, chat, turnId, uuidv7(), fallback);
     if (receipt !== "refused") return receipt;
     waiting = "refused";
@@ -618,25 +552,34 @@ export function removeQueuedMessage(sessionId: string, id: string) {
 export async function resumeQueuedMessages(sessionId: string, by?: Origin) {
   const q = queues.get(sessionId);
   if (!q) return { outcome: "open" } as const;
-  const refusal = changed(q, { type: "resume", by });
-  const retry = !!q.busyOn && !agentOrigin(by);
-  if (refusal && !retry) return { outcome: refusal };
+  const hold = q.hold;
+  const agent = agentOrigin(by);
+  const retry = !!q.busyOn && !agent;
+  if (!hold && !retry) return { outcome: "open" } as const;
+  if (agent && hold?.reason === "stopped" && !agentOrigin(hold.by))
+    return { outcome: "person_only" } as const;
+  if (agent && hold?.reason === "limit") {
+    if (hold.limit.resetsAt === undefined) return { outcome: "person_only" } as const;
+    if (hold.limit.resetsAt > Date.now()) return { outcome: "before_reset" } as const;
+  }
+  clearHold(q);
   return { outcome: "resumed", turnId: (await drain(q, retry))?.turnId } as const;
 }
 
 export function continueAfterLimit(sessionId: string, on: boolean) {
   const q = queues.get(sessionId);
-  if (q?.pause?.reason !== "limit" || q.pause.limit.resetsAt === undefined)
+  if (q?.hold?.reason !== "limit" || q.hold.limit.resetsAt === undefined)
     throw new ConflictError("This chat has no reported reset time.");
-  if (on && q.pause.limit.resetsAt <= Date.now())
-    return continueLimited(q, q.pause.turnId).then(() => ({}));
-  changed(q, { type: "schedule", on });
+  if (on && q.hold.limit.resetsAt <= Date.now())
+    return continueLimited(q, q.hold.turnId).then(() => ({}));
+  q.hold.limit.continues = on;
+  changed(q);
   return {};
 }
 
 function continueAt(q: Queue) {
-  return q.pause?.reason === "limit" && q.pause.limit.continues
-    ? (q.pause.limit.resetsAt ?? Infinity) + MINUTE
+  return q.hold?.reason === "limit" && q.hold.limit.continues
+    ? (q.hold.limit.resetsAt ?? Infinity) + MINUTE
     : Infinity;
 }
 
@@ -651,8 +594,8 @@ function watchResets() {
 function checkResets() {
   const now = Date.now();
   for (const q of queues.values()) {
-    if (q.pause?.reason === "limit" && continueAt(q) <= now)
-      void continueLimited(q, q.pause.turnId).catch((error) =>
+    if (q.hold?.reason === "limit" && continueAt(q) <= now)
+      void continueLimited(q, q.hold.turnId).catch((error) =>
         console.warn("[Queue] Could not continue the chat:", error)
       );
   }
@@ -660,7 +603,7 @@ function checkResets() {
 }
 
 async function continueLimited(q: Queue, turnId: string) {
-  changed(q, { type: "clear_limit" });
+  clearHold(q);
   const id = q.sessionId;
   const chat = localChat(id);
   if (chat?.status !== "error" || chat.error_category !== "usage_limit" || holdingTurn(id)) return;
@@ -742,19 +685,30 @@ export function recoverSteers(id: string, turnId: string, returnHead = false) {
 export function onTurnNotice(id: string, event: TurnNotice) {
   if (event.type === "engine_idle") return void drain(queues.get(id), true);
   const keepEmpty =
-    event.type === "stop" || (event.type === "end" ? !!event.limit : event.cause === "cancelled");
+    event.type === "end" ? event.held && event.limit : event.type === "stop" || !event.gone;
   const q = queues.get(id) ?? (keepEmpty && localChat(id) ? queueFor(id) : undefined);
   if (!q) return;
   if (event.type === "stop") {
-    for (const item of q.items) delete item.afterStop;
-    changed(q, event);
+    markRows(q, event.turnId);
+    recordStop(q, event.by);
+    changed(q);
     return;
   }
   const gone = event.type === "end" || event.gone;
-  const turnId = gone ? event.turnId : undefined;
-  if (turnId !== undefined) recoverSteers(id, turnId);
-  const missingEcho = turnId !== undefined && recoverAttempt(q, turnId);
-  changed(q, event.type === "end" ? { ...event, missingEcho } : event);
+  const turnId = event.turnId;
+  if (gone && turnId) recoverSteers(id, turnId);
+  const missingEcho = gone && turnId !== undefined && recoverAttempt(q, turnId);
+  if (event.type === "interrupted") interrupt(q, turnId, event.cause, event.by);
+  else if (event.held && event.limit) {
+    markRows(q, turnId);
+    const continues =
+      event.limit.resetsAt !== undefined && getSetting("continue_after_usage_limit") === true;
+    q.hold ??= { reason: "limit", turnId: event.turnId, limit: { ...event.limit, continues } };
+  } else if (event.held || missingEcho) {
+    if (event.cancelled) interrupt(q, turnId, "cancelled", event.by);
+    else if (missingEcho || event.outcome?.status === "error") interrupt(q, turnId, "failure");
+  }
+  changed(q);
   const winnerEnded = event.type === "end" && q.busyOn === event.turnId;
   if (winnerEnded || (event.type === "end" ? event.outcome : gone)) void drain(q, winnerEnded);
 }
