@@ -41,6 +41,7 @@ export interface PendingFileNavigation {
 export interface WorkspaceLayoutState {
   workspaceTabs: WorkspaceTab[];
   activeWorkspaceTabId: string | null;
+  deviceChoice: { key: string; started: boolean } | null;
   nextTerminalNum: number; // Counter for "Terminal N" naming
   selectedFilePath: string | null;
   pendingFileNavigation: PendingFileNavigation | null;
@@ -54,6 +55,7 @@ export interface WorkspaceLayoutState {
 export const defaultLayout: WorkspaceLayoutState = {
   workspaceTabs: [],
   activeWorkspaceTabId: null,
+  deviceChoice: null,
   nextTerminalNum: 1,
   selectedFilePath: null,
   pendingFileNavigation: null,

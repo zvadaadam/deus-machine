@@ -1,4 +1,17 @@
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -39,11 +52,6 @@ if (process.argv[2] === "install") {
   fs.mkdirSync("node_modules/expo-device-hub/dist/server", { recursive: true });
   fs.writeFileSync("node_modules/expo-device-hub/package.json", JSON.stringify({version: "${hubVersion}"}));
   fs.writeFileSync("node_modules/expo-device-hub/dist/server/cli.mjs", "");
-  if (process.env.FIXTURE_WINNER) {
-    const other = process.env.FIXTURE_WINNER + "/node_modules/expo-device-hub";
-    fs.cpSync("node_modules/expo-device-hub", other, {recursive:true});
-    fs.writeFileSync(other + "/dist/server/cli.mjs", "another publisher");
-  }
   if (process.env.FIXTURE_OFFLINE) console.error("Could not download package\\nregistry connection timed out");
   process.exit(process.env.FIXTURE_OFFLINE ? 1 : 0);
 }
@@ -165,42 +173,42 @@ setInterval(() => {}, 1000);
     expect(await readFile(join(base, "install-count"), "utf8")).toBe("11");
   });
 
-  it("publishes one installation for concurrent backends with separate private launch directories", async () => {
-    const sibling = new DeviceHub({ directory: base, changed: () => {} });
-    try {
-      hub.follow(view);
-      sibling.follow(view);
-      await wait("ready");
-      await vi.waitFor(() => expect(sibling.status.phase).toBe("ready"), { timeout: 5000 });
-      expect(await readFile(join(base, "install-count"), "utf8")).toBe("1");
-      const runs = await readdir(join(base, "run"));
-      expect(runs).toHaveLength(2);
-      for (const run of runs) {
-        const dir = join(base, "run", run);
-        expect((await stat(dir)).mode & 0o777).toBe(0o700);
-        expect(await readFile(join(dir, "owner.pid"), "utf8")).toBe(String(process.pid));
-        expect(await stat(join(dir, "state/server-19821.json"))).toBeDefined();
-        expect(await stat(join(dir, "serve-sim"))).toBeDefined();
+  it("uses the canonical database's installation for aliases and isolates sibling databases", async () => {
+    const file = join(directory, "first.db");
+    const alias = join(directory, "link.db");
+    await writeFile(file, "");
+    await symlink(file, alias);
+    const cache = await installPath(file + ".device-hub");
+    const pkg = join(cache, "node_modules/expo-device-hub");
+    await mkdir(join(pkg, "dist/server"), { recursive: true });
+    await writeFile(join(pkg, "package.json"), JSON.stringify({ version: hubVersion }));
+    await writeFile(join(cache, cliPath), "");
+    for (const [path, expected] of [
+      [alias, "ready"],
+      [join(directory, "second.db"), "new"],
+    ] as const) {
+      vi.stubEnv("DATABASE_PATH", path);
+      vi.resetModules();
+      const { initDatabase, closeDatabase } = await import("../../../src/lib/database");
+      const { deviceHub } = await import("../../../src/services/device-hub");
+      initDatabase();
+      try {
+        if (path === alias) {
+          await unlink(alias);
+          await writeFile(alias, "");
+        }
+        expect(await deviceHub.setupState()).toBe(expected);
+      } finally {
+        closeDatabase();
       }
-      await sibling.shutdown();
-      expect(await readdir(join(base, "run"))).toHaveLength(1);
-      expect(hub.status.phase).toBe("ready");
-    } finally {
-      await sibling.shutdown();
     }
   });
 
-  it("accepts a valid package published while its own staging install was running", async () => {
-    vi.stubEnv("FIXTURE_WINNER", installed);
-    hub.follow(view);
-    await wait("ready");
-    expect(await readFile(join(installed, cliPath), "utf8")).toBe("another publisher");
-    expect((await readdir(base)).filter((name) => name.startsWith(".install-"))).toEqual([]);
-  });
-
   it("keeps both frozen installs when a release changes only its lockfile", async () => {
-    hub.follow(view);
+    const leave = hub.follow(view);
     await wait("ready");
+    leave();
+    await wait("idle");
     const original = hubManifest();
     vi.stubEnv("DEUS_RESOURCES_PATH", directory);
     const manifest = hubManifest();
@@ -211,39 +219,44 @@ setInterval(() => {}, 1000);
     }
     const other = await installPath(base);
     expect(other).not.toBe(installed);
-    const sibling = new DeviceHub({ directory: base, changed: () => {} });
-    try {
-      expect(await sibling.setupState()).toBe("new");
-      sibling.follow(view);
-      await vi.waitFor(() => expect(sibling.status.phase).toBe("ready"), { timeout: 5000 });
-      for (const path of [installed, other])
-        expect((await stat(join(path, cliPath))).isFile()).toBe(true);
-    } finally {
-      await sibling.shutdown();
-    }
-  });
-
-  it("reclaims a dead install lock and orphaned work, preserving live owners", async () => {
-    const dead = 2147483647;
-    expect(() => process.kill(dead, 0)).toThrow();
-    for (const root of [join(base, "run"), base]) {
-      for (const pid of [dead, process.pid]) {
-        const dir = join(root, (root === base ? ".install-" : "") + pid + "-fixture");
-        await mkdir(dir, { recursive: true });
-        await writeFile(join(dir, "owner.pid"), String(pid));
-      }
-    }
-    const lock = join(base, "install.lock");
-    await mkdir(lock);
-    await writeFile(join(lock, "owner-" + dead), String(dead));
+    expect(await hub.setupState()).toBe("new");
     hub.follow(view);
     await wait("ready");
-    await hub.shutdown();
-    expect(await readdir(join(base, "run"))).toEqual([process.pid + "-fixture"]);
-    expect((await readdir(base)).filter((d) => d.startsWith(".install-"))).toEqual([
-      ".install-" + process.pid + "-fixture",
-    ]);
-    await expect(stat(lock)).rejects.toMatchObject({ code: "ENOENT" });
+    for (const path of [installed, other])
+      expect((await stat(join(path, cliPath))).isFile()).toBe(true);
+  });
+
+  it("reaps a leftover group and removes abandoned runs and staging before starting", async () => {
+    const runs = join(base, "run");
+    const leftover = join(runs, "previous");
+    await mkdir(leftover, { recursive: true });
+    await mkdir(join(runs, "partial"));
+    await mkdir(join(base, ".install-partial"));
+    const child = spawn(
+      process.execPath,
+      [
+        "-e",
+        `process.on("SIGTERM", () => {});
+         setInterval(() => {}, 1000);
+         process.send("ready");`,
+      ],
+      { detached: true, stdio: ["ignore", "ignore", "ignore", "ipc"] }
+    );
+    const exited = once(child, "exit");
+    try {
+      await once(child, "message");
+      await writeFile(join(leftover, "group.pid"), String(child.pid));
+      hub.follow(view);
+      await wait("ready");
+      expect(child.signalCode).toBe("SIGKILL");
+      expect(await readdir(runs)).toHaveLength(1);
+      await hub.shutdown();
+      expect(await readdir(runs)).toEqual([]);
+      expect((await readdir(base)).filter((name) => name.startsWith(".install-"))).toEqual([]);
+    } finally {
+      child.kill("SIGKILL");
+      await exited;
+    }
   });
 
   it("keeps a different process's discovery private and cancels a start still waiting for its child", async () => {

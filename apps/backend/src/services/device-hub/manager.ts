@@ -15,7 +15,7 @@ import {
   installPath,
   prepareDirectories,
   validInstall,
-  withOwnedDirectory,
+  withTempDirectory,
 } from "./storage";
 import { simulatorEnv } from "./xcode-env";
 
@@ -198,7 +198,7 @@ export class DeviceHub {
       this.set({ phase: "starting" });
     }
 
-    await withOwnedDirectory(run, "", async (directory) => {
+    await withTempDirectory(join(run, "hub-"), async (directory) => {
       const stateDirectory = join(directory, "state");
       const simDirectory = join(directory, "serve-sim");
       const stop = new AbortController();

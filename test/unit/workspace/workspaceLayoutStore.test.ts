@@ -34,6 +34,17 @@ describe("workspaceLayoutStore", () => {
     expect(resolved.activeTab).toEqual({ id: DEFAULT_NEW_TAB_ID, kind: "new-tab" });
   });
 
+  it("remembers the chosen device with its workspace across a reload", async () => {
+    const deviceChoice = { key: "android:Pixel", started: true };
+    workspaceLayoutActions.setLayout("first", { deviceChoice });
+    const saved = storage.setItem.mock.lastCall![1];
+    workspaceLayoutActions.resetAll();
+    storage.getItem.mockReturnValueOnce(saved);
+    await useWorkspaceLayoutStore.persist.rehydrate();
+    expect(workspaceLayoutActions.getLayout("first").deviceChoice).toEqual(deviceChoice);
+    expect(workspaceLayoutActions.getLayout("second").deviceChoice).toBeNull();
+  });
+
   it.each([12, 13])("resets v%i layouts before the next workspace write", async (version) => {
     storage.getItem.mockReturnValueOnce(
       JSON.stringify({

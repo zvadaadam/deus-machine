@@ -1,26 +1,31 @@
 import { useCallback, useEffect, useState } from "react";
-import { skipToken, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import * as api from "@shared/api/device-hub";
 import { deviceIdentity, type HubDevice } from "@shared/types/device-hub";
+import {
+  useWorkspaceLayoutStore,
+  workspaceLayoutActions,
+} from "@/features/workspace/store/workspaceLayoutStore";
+import { getBaseURL } from "@/shared/config/api.config";
 import { call } from "@/platform/ws";
 import { deviceKey } from "./devices";
 
 const recoveryMs = 30_000;
 
-export type Attachment = { workspaceId: string; instance: string; device: HubDevice };
+export type Attachment = {
+  workspaceId: string;
+  instance: string;
+  device: HubDevice;
+  baseUrl: string;
+};
 
 export function useDeviceSelection(
   workspaceId: string,
   instance: string,
-  attached: HubDevice | null,
+  attached: Attachment | null,
   onAttach: (attachment: Attachment | null) => void
 ) {
-  const cache = useQueryClient();
-  const { data: choice } = useQuery<{ key: string; started: boolean } | null>({
-    queryKey: ["deviceHubSelection", workspaceId],
-    queryFn: skipToken,
-    initialData: null,
-  });
+  const choice = useWorkspaceLayoutStore((state) => state.layouts[workspaceId]?.deviceChoice);
   const id = choice?.key;
   const [deadline, setDeadline] = useState(() =>
     choice?.started ? Date.now() + recoveryMs : null
@@ -38,12 +43,23 @@ export function useDeviceSelection(
     },
   });
   const start = useMutation({
-    mutationFn: ({ device, boot }: { device: HubDevice; boot: boolean }) =>
-      call(
-        api.startHubDevice,
-        { platform: device.platform, identity: deviceIdentity(device), boot },
-        { timeoutMs: boot ? 410_000 : recoveryMs }
-      ),
+    mutationFn: async ({ device, boot }: { device: HubDevice; boot: boolean }) => {
+      const [connected, apiBase] = await Promise.all([
+        call(
+          api.startHubDevice,
+          { platform: device.platform, identity: deviceIdentity(device), boot },
+          { timeoutMs: boot ? 410_000 : recoveryMs }
+        ),
+        getBaseURL(),
+      ]);
+      const vendor = connected.platform === "ios" ? "serve-sim" : "serve-emu";
+      return {
+        workspaceId,
+        instance,
+        device: connected,
+        baseUrl: apiBase + "/device-hub/vendor/" + vendor,
+      };
+    },
   });
   const { mutate, reset } = start;
   const { refetch } = list;
@@ -52,12 +68,11 @@ export function useDeviceSelection(
       mutate(
         { device, boot },
         {
-          onSuccess(connected) {
-            cache.setQueryData(["deviceHubSelection", workspaceId], {
-              key: deviceKey(connected),
-              started: true,
+          onSuccess(connection) {
+            workspaceLayoutActions.setLayout(workspaceId, {
+              deviceChoice: { key: deviceKey(connection.device), started: true },
             });
-            onAttach({ workspaceId, instance, device: connected });
+            onAttach(connection);
           },
           onSettled() {
             setDeadline(null);
@@ -66,22 +81,24 @@ export function useDeviceSelection(
         }
       );
     },
-    [cache, instance, mutate, onAttach, refetch, workspaceId]
+    [mutate, onAttach, refetch, workspaceId]
   );
   const choose = useCallback(
     (key: string | null) => {
-      cache.setQueryData(["deviceHubSelection", workspaceId], key ? { key, started: false } : null);
+      workspaceLayoutActions.setLayout(workspaceId, {
+        deviceChoice: key ? { key, started: false } : null,
+      });
       onAttach(null);
       reset();
     },
-    [cache, onAttach, reset, workspaceId]
+    [onAttach, reset, workspaceId]
   );
   const inventory = list.data;
   const devices =
     inventory?.devices.filter((d) => d.platform === "ios" || inventory.available.android) ?? [];
   const selected = devices.find((d) => deviceKey(d) === id);
   const viewing =
-    selected?.booted && attached?.id === selected.id && deviceKey(attached) === id
+    selected?.booted && attached?.device.id === selected.id && deviceKey(attached.device) === id
       ? attached
       : null;
 

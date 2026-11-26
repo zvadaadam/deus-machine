@@ -20,13 +20,17 @@ const DB_PATH = process.env.DATABASE_PATH
 
 let dbInstance: BetterSqlite3.Database | null = null;
 let dbOwner: BetterSqlite3.Database | undefined;
+let databaseFile: string | undefined;
 
-function canonicalDatabaseFile(filename: string): string {
-  const directory = path.dirname(filename);
+function canonicalDatabaseFile(): string {
+  if (databaseFile) return databaseFile;
+  if (DB_PATH === ":memory:") return DB_PATH;
+  const directory = path.dirname(DB_PATH);
   fs.mkdirSync(directory, { recursive: true });
-  return fs.lstatSync(filename, { throwIfNoEntry: false })
-    ? fs.realpathSync.native(filename)
-    : path.join(fs.realpathSync.native(directory), path.basename(filename));
+  databaseFile = fs.lstatSync(DB_PATH, { throwIfNoEntry: false })
+    ? fs.realpathSync.native(DB_PATH)
+    : path.join(fs.realpathSync.native(directory), path.basename(DB_PATH));
+  return databaseFile;
 }
 
 function claimDatabase(filename: string): BetterSqlite3.Database {
@@ -136,7 +140,7 @@ function initDatabase(): BetterSqlite3.Database {
   console.log("Opening database:", DB_PATH);
 
   try {
-    const filename = DB_PATH === ":memory:" ? DB_PATH : canonicalDatabaseFile(DB_PATH);
+    const filename = canonicalDatabaseFile();
     if (filename !== ":memory:") dbOwner = claimDatabase(filename);
     dbInstance = openSqliteDatabase(filename);
     dbInstance.pragma("journal_mode = WAL");
@@ -203,6 +207,7 @@ function closeDatabaseHandles(): void {
   dbInstance = null;
   dbOwner?.close();
   dbOwner = undefined;
+  databaseFile = undefined;
 }
 
 function closeDatabase(): void {
@@ -215,4 +220,4 @@ function closeDatabase(): void {
   }
 }
 
-export { initDatabase, getDatabase, closeDatabase, DB_PATH };
+export { initDatabase, getDatabase, closeDatabase, canonicalDatabaseFile, DB_PATH };

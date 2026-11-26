@@ -15,6 +15,19 @@ function signalGroup(pid: number, signal: NodeJS.Signals | 0) {
   }
 }
 
+export async function stopGroup(pid: number | undefined) {
+  if (!pid || !signalGroup(pid, "SIGTERM")) return;
+  const deadline = Date.now() + graceMs;
+  while (signalGroup(pid, 0)) {
+    if (Date.now() >= deadline) {
+      signalGroup(pid, "SIGKILL");
+      while (signalGroup(pid, 0)) await delay(50);
+      return;
+    }
+    await delay(50);
+  }
+}
+
 /** Keep a parent-death pipe outside the group: even a SIGKILL of the backend closes its writer. */
 function guardGroup(pid: number, directory: string) {
   const guard = spawn(
@@ -27,7 +40,7 @@ function guardGroup(pid: number, directory: string) {
          kill -KILL "-$1" 2>/dev/null
          while kill -0 "-$1" 2>/dev/null; do sleep 0.05; done
        fi
-       if [ "$result" != "installed" ]; then rm -rf -- "$3"; fi`,
+       if [ "$result" = "installed" ]; then rm -f -- "$3/group.pid"; else rm -rf -- "$3"; fi`,
       "deus-device-group",
       String(pid),
       String(graceMs / 1000),
@@ -66,19 +79,7 @@ export function launch(
     stderr = (stderr + chunk).slice(-4096);
   });
   let stopping: Promise<void> | undefined;
-  async function stopGroup() {
-    if (!pid || !signalGroup(pid, "SIGTERM")) return;
-    const deadline = Date.now() + graceMs;
-    while (signalGroup(pid, 0)) {
-      if (Date.now() >= deadline) {
-        signalGroup(pid, "SIGKILL");
-        while (signalGroup(pid, 0)) await delay(50);
-        return;
-      }
-      await delay(50);
-    }
-  }
-  const stop = () => (stopping ??= stopGroup());
+  const stop = () => (stopping ??= stopGroup(pid));
   signal.addEventListener("abort", stop, { once: true });
   const closed = new Promise<void>((resolve, reject) => {
     child.once("error", reject);

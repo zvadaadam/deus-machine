@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { Play } from "lucide-react";
 import { DeviceClientProvider } from "@expo/hub-client";
 import * as api from "@shared/api/device-hub";
@@ -12,7 +12,6 @@ import {
 import { getErrorMessage } from "@shared/lib/errors";
 import { Button } from "@/components/ui/button";
 import { call, OpError } from "@/platform/ws";
-import { resolveBackendEndpoints } from "@/shared/config/backend.config";
 import { useStream } from "@/shared/hooks/useStream";
 import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
 import { DevicePicker } from "./DevicePicker";
@@ -61,7 +60,7 @@ function Devices({
   onAttach,
   onDisplay,
 }: {
-  attached: HubDevice | null;
+  attached: Attachment | null;
   onAttach: (attachment: Attachment | null) => void;
   onDisplay: (device: HubDevice | null) => void;
   workspaceId: string;
@@ -71,22 +70,13 @@ function Devices({
   const selection = useDeviceSelection(workspaceId, instance, attached, onAttach);
   const { list, selected, viewing } = selection;
   const inventory = list.data;
-  const endpoints = useQuery({
-    queryKey: ["deviceHubEndpoints", instance],
-    queryFn: () => resolveBackendEndpoints(),
-  });
-  const failure = list.error ?? selection.error ?? endpoints.error;
+  const failure = list.error ?? selection.error;
   return (
     <DeviceClientProvider
-      platform={viewing?.platform ?? null}
+      platform={viewing?.device.platform ?? null}
       options={{
-        baseUrl:
-          viewing && endpoints.data
-            ? endpoints.data.apiBase +
-              "/device-hub/vendor/" +
-              (viewing.platform === "ios" ? "serve-sim" : "serve-emu")
-            : null,
-        device: viewing?.id,
+        baseUrl: viewing?.baseUrl ?? null,
+        device: viewing?.device.id,
         streamMode: HUB_STREAM_MODE,
       }}
     >
@@ -138,8 +128,12 @@ function Devices({
             : "Choose a device, then select Start."}
         </p>
       )}
-      {viewing && endpoints.data && (
-        <DeviceView device={viewing} onDisplay={onDisplay} onReconnect={selection.reconnect} />
+      {viewing && (
+        <DeviceView
+          device={viewing.device}
+          onDisplay={onDisplay}
+          onReconnect={selection.reconnect}
+        />
       )}
     </DeviceClientProvider>
   );
@@ -161,17 +155,17 @@ export default function DevicePanel({
     status.phase === "ready" &&
     attachment?.instance === status.instance &&
     attachment.workspaceId === workspaceId
-      ? attachment.device
+      ? attachment
       : null;
   const [shown, setShown] = useState<HubDevice | null>(null);
   useStream(
     api.deviceHubStatus,
     {
       workspaceId,
-      platform: attached?.platform ?? null,
-      deviceId: attached?.id ?? null,
+      platform: attached?.device.platform ?? null,
+      deviceId: attached?.device.id ?? null,
       displayedInstance:
-        status.phase === "ready" && attached && shown === attached ? status.instance : null,
+        status.phase === "ready" && attached && shown === attached.device ? status.instance : null,
     },
     setStatus
   );

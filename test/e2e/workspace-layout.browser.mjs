@@ -430,9 +430,8 @@ try {
     if (name === "Device") {
       await page.getByText("Starting devices…", { exact: true }).waitFor();
       await page.evaluate(() => {
-        window.client.setQueryData(["deviceHubSelection", "first"], {
-          key: "ios:ios-1",
-          started: true,
+        window.layoutActions.setLayout("first", {
+          deviceChoice: { key: "ios:ios-1", started: true },
         });
         window.devicesReady();
       });
@@ -457,15 +456,14 @@ try {
       assert.equal(inventoryReads(), afterTimeout);
 
       await page.evaluate(() => {
-        window.client.setQueryData(["deviceHubSelection", "first"], {
-          key: "android:Removed AVD",
-          started: true,
+        window.layoutActions.setLayout("first", {
+          deviceChoice: { key: "android:Removed AVD", started: true },
         });
         window.devicesReady("replacement");
       });
       await page.getByText("Choose a device, then select Start.", { exact: true }).waitFor();
       assert.equal(
-        await page.evaluate(() => window.client.getQueryData(["deviceHubSelection", "first"])),
+        await page.evaluate(() => window.layoutActions.getLayout("first").deviceChoice),
         null
       );
       const afterRemoval = inventoryReads();

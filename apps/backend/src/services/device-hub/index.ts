@@ -1,15 +1,19 @@
-import { dirname, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { deviceHubStatus } from "@shared/api/device-hub";
 import type { DeviceSupport } from "@shared/types/device-hub";
 import { getSessionRaw } from "../../db/queries";
-import { DB_PATH, getDatabase } from "../../lib/database";
+import { canonicalDatabaseFile, getDatabase } from "../../lib/database";
 import { publish } from "../streams";
 import { DeviceHub } from "./manager";
 import { agentDeviceVersion, deviceToolchains, hubVersion, liveViewSupport } from "./support";
 
 export const deviceHub = new DeviceHub({
   get directory() {
-    return resolve(dirname(DB_PATH), "device-hub");
+    const database = canonicalDatabaseFile();
+    return database === ":memory:"
+      ? join(tmpdir(), `deus-memory-${process.pid}.device-hub`)
+      : database + ".device-hub";
   },
   changed: (status, scope) => publish(deviceHubStatus, scope, status),
 });
