@@ -12,7 +12,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { hubManifest, hubVersion } from "../../../src/services/device-hub/support";
 import { cliPath, installPath } from "../../../src/services/device-hub/storage";
@@ -21,7 +21,7 @@ import type { DeviceSetup, HubStatus } from "@shared/types/device-hub";
 
 vi.mock("../../../src/services/device-hub/support", async (original) => ({
   ...(await original<typeof import("../../../src/services/device-hub/support")>()),
-  deviceToolchains: async () => ({ installer: true }),
+  deviceToolchains: async () => ({ installer: true, androidSdk: "/fixture/Android SDK" }),
   liveViewSupport: () => "available",
 }));
 const { bootIdentity } = vi.hoisted(() => ({ bootIdentity: vi.fn(async () => 123) }));
@@ -100,6 +100,18 @@ describe("Device Hub lifecycle", () => {
     await wait("ready");
     expect(phases.filter((s) => s.phase === "installing")).toHaveLength(1);
     expect(await readFile(await state("pid"), "utf8")).not.toBe(pid);
+  });
+
+  it("starts the hub with the detected Android SDK tools first on PATH", async () => {
+    hub.follow(view);
+    await wait("ready");
+    expect(await readFile(await state("path"), "utf8")).toBe(
+      [
+        "/fixture/Android SDK/platform-tools",
+        "/fixture/Android SDK/emulator",
+        process.env.PATH,
+      ].join(delimiter)
+    );
   });
 
   it("names the most recently shown device and releases it when the viewer disconnects", async () => {

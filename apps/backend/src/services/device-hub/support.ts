@@ -6,7 +6,7 @@ import type { DeviceSupport } from "@shared/types/device-hub";
 import rootPackage from "../../../../../package.json";
 import manifest from "../../../../../resources/device-hub/package.json";
 import { readXcode } from "./simctl";
-import { hasAndroidToolchain } from "./android-sdk";
+import { findAndroidSdk } from "./android-sdk";
 
 export const hubVersion = manifest.dependencies["expo-device-hub"];
 export const agentDeviceVersion = rootPackage.dependencies["agent-device"];
@@ -46,12 +46,12 @@ export function liveViewSupport(
 }
 
 async function probe() {
-  const [xcode, android, installer] = await Promise.all([
+  const [xcode, androidSdk, installer] = await Promise.all([
     readXcode(),
-    hasAndroidToolchain(),
+    findAndroidSdk(),
     hasInstaller(),
   ]);
-  return { xcode, android, installer };
+  return { xcode, android: androidSdk !== null, androidSdk, installer };
 }
 
 let cache: { until: number; result: ReturnType<typeof probe> } | undefined;

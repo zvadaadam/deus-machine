@@ -54,6 +54,7 @@ if (process.argv[2] === "install") {
     if (!env.FIXTURE_STUCK) process.exit(0);
   });
   writeFileSync(join(directory, "pid"), String(process.pid));
+  writeFileSync(join(directory, "path"), env.PATH);
   if (env.FIXTURE_BROKEN) {
     unlinkSync(process.argv[2]);
     process.exit(24);
