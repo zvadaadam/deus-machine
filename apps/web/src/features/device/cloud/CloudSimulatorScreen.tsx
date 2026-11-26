@@ -1,7 +1,6 @@
 import { isEmbeddableStreamUrl, toEmbeddedStreamUrl } from "./cloudSimulatorStream";
 
 interface CloudSimulatorScreenProps {
-  workspaceId: string;
   streamUrl: string;
   visible: boolean;
 }

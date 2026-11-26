@@ -277,7 +277,7 @@ export function openToolTabState(
     return { ...res, consumedTerminalNum: false };
   }
 
-  // Singleton tools: changes, files, simulator, config
+  // Each remaining tool has one tab per workspace.
   const existing = state.tabs.find((t) => t.kind === kind);
   if (existing) {
     return {

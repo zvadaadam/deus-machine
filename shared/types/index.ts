@@ -68,8 +68,6 @@ export type {
   LocalServersSnapshot,
 } from "./local-server";
 
-// Simulator capability types
-
 // GitHub types
 export type { PRStatus, GhCliStatus, CheckDetail, PRSummary, BranchSummary } from "./github";
 
