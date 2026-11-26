@@ -216,6 +216,7 @@ beforeEach(async () => {
     ticket: `ticket-for-${session.accountId}`,
   }));
   await openTunnel();
+  transport.invalidate.mockReset();
 });
 
 afterEach(() => {
@@ -310,15 +311,19 @@ describe("account-bound tunnel", () => {
     expect(transport.sockets).toHaveLength(0);
   });
 
-  it("reports connecting after a close and a new open until the relay confirms registration", async () => {
+  it("pushes connecting on close and connected only after the relay confirms registration", async () => {
+    const states: string[] = [];
+    transport.invalidate.mockImplementation((resources: string[]) => {
+      if (resources.includes("relayStatus")) states.push(getRelayStatus().state);
+    });
     tunnel().handlers.get("close")!(1006, "");
-    expect(getRelayStatus()).toMatchObject({ state: "connecting", connected: false });
+    expect(states.at(-1)).toBe("connecting");
     await vi.advanceTimersByTimeAsync(1_000);
     expect(transport.sockets).toHaveLength(2);
     tunnel().handlers.get("open")!();
-    expect(getRelayStatus()).toMatchObject({ state: "connecting", connected: false });
+    expect(states).not.toContain("connected");
     receive({ type: "registered" });
-    expect(getRelayStatus()).toMatchObject({ state: "connected", connected: true });
+    expect(states.at(-1)).toBe("connected");
   });
 
   it("replaces the tunnel when the desktop switches accounts; the old socket's events are ignored", async () => {
@@ -421,6 +426,17 @@ describe("account-bound tunnel", () => {
 });
 
 describe("tunnel failures", () => {
+  it("redials a tunnel that opens but never confirms registration", async () => {
+    tunnel().handlers.get("close")!(1006, "");
+    await vi.advanceTimersByTimeAsync(1_000);
+    tunnel().handlers.get("open")!();
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(tunnel().terminate).toHaveBeenCalledOnce();
+    expect(getRelayStatus().error).toMatch(/did not confirm registration/);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(transport.sockets).toHaveLength(3);
+  });
+
   it("ends a refused handshake and redials with a fresh ticket", async () => {
     expect(tunnel().options).toEqual({ handshakeTimeout: 15_000 });
     const refused = tunnel();
@@ -721,12 +737,11 @@ describe("device revocation", () => {
       expect.stringContaining("UPDATE paired_devices"),
       "hash"
     );
-    // No grant has been added or removed yet.
-    expect(transport.invalidate).not.toHaveBeenCalled();
+    expect(transport.invalidate.mock.calls).toEqual([[["relayStatus"]]]);
+    transport.invalidate.mockClear();
 
     expect(revokeDevice("phone")).toBe(true);
-    // The device left the list: the clients showing it are sent it again, once.
-    expect(transport.invalidate.mock.calls).toEqual([[["pairedDevices"]]]);
+    expect(transport.invalidate.mock.calls).toEqual([[["relayStatus"]], [["pairedDevices"]]]);
     expect(getConnection(directId)).toBeUndefined();
     expect(getConnection(relayId)).toBeUndefined();
     expect(direct.close).toHaveBeenCalledWith(4001, "Device access revoked");
@@ -763,6 +778,15 @@ describe("device revocation", () => {
 });
 
 describe("relay client liveness", () => {
+  it("publishes the client count when a silent viewer is forgotten", () => {
+    receive({ type: "client_connected", clientId: "phone", deviceToken: "t", accountId: "user_a" });
+    expect(getRelayStatus().clients).toBe(1);
+    transport.invalidate.mockClear();
+    vi.advanceTimersByTime(90_000);
+    expect(transport.invalidate).toHaveBeenCalledExactlyOnceWith(["relayStatus"]);
+    expect(getRelayStatus().clients).toBe(0);
+  });
+
   it("answers the probe through a virtual authenticated connection", () => {
     receive({
       type: "client_connected",

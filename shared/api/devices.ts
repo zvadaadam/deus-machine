@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import type { PairedDevice, RelayStatus } from "../types/devices";
-import { live, out, read, write } from "./op";
+import { live, out, write } from "./op";
 
 /** The devices this computer approved, and which of them are connected right now. */
 export const pairedDevices = live({
@@ -11,7 +11,7 @@ export const pairedDevices = live({
 });
 
 /** Whether other devices can reach this computer through its Deus account, and why not. */
-export const relayStatus = read({ name: "relayStatus", output: out<RelayStatus>() });
+export const relayStatus = live({ name: "relayStatus", output: out<RelayStatus>() });
 
 /** Take a device's access away. Its open connections are closed. */
 export const revokeDevice = write({

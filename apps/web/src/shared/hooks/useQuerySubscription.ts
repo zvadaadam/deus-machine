@@ -30,12 +30,12 @@ export function useQuerySubscription<O extends LiveOp>(
   const params = options.params as Record<string, unknown> | undefined;
   const resource = op.name as LiveName;
   const cache = useQueryClient();
-  const runtime = runtimeForQueryClient(cache) ?? getRuntimeClient();
   const key = hashKey([resource, params ?? {}, queryKey]);
   useEffect(() => {
     if (!enabled) return;
+    const runtime = runtimeForQueryClient(cache) ?? getRuntimeClient();
     return runtime.retainQuery(resource, params, queryKey, mergeDelta);
     // Values are serialized together; a changed cache key is a new projection.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runtime, key, enabled, mergeDelta]);
+  }, [cache, key, enabled, mergeDelta]);
 }

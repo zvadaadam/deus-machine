@@ -50,14 +50,14 @@ export function useRevokeDevice() {
   });
 }
 
-/** Fetch relay connection status. Polls every 5s when enabled. */
 export function useRelayStatus(enabled: boolean) {
+  useQuerySubscription(api.relayStatus, { queryKey: authKeys.relayStatus, enabled });
   return useQuery({
     queryKey: authKeys.relayStatus,
     queryFn: () => call(api.relayStatus),
     enabled,
-    refetchInterval: enabled ? 5_000 : false,
-    staleTime: 3_000,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 }
 
