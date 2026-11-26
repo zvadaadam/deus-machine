@@ -139,7 +139,9 @@ export function createAgentTools(host: AgentToolHost, options: AgentToolOptions 
         target: z
           .enum(["browser", "simulator"])
           .optional()
-          .describe("What to record. Default: browser"),
+          .describe(
+            "Defaults to browser. Without a destination, simulator records the iOS Simulator the host chooses, or the only booted one."
+          ),
         destination: z.string().optional().describe("Simulator UDID (simulator only)"),
         ...(options.allowSourceIds
           ? {

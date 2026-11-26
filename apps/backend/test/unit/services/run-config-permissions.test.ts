@@ -24,7 +24,7 @@ it.each([
     device: { platform, id },
   });
   expect(turn.config.systemPromptAppend).toContain(
-    `Device tab shows ${id}. Pass \`${flag} ${id}\``
+    `Device tab shows ${id}. Pass \`--platform ${platform} ${flag} ${id}\``
   );
 });
 
@@ -61,7 +61,7 @@ describe.each(LOCAL_HARNESSES)("%s and the Device tab", (harness) => {
       ...workspace,
       device,
     });
-    expect(shown.config.systemPromptAppend).toContain(`--udid ${device.id}`);
+    expect(shown.config.systemPromptAppend).toContain(`--platform ios --udid ${device.id}`);
     const none = buildTurnStartParams("session", "turn", harness, "Check it", workspace);
     expect(none.config.systemPromptAppend).not.toContain("--udid");
   });
@@ -74,7 +74,9 @@ describe.each(LOCAL_HARNESSES)("%s and agent-device", (harness) => {
       agentDeviceSession: "workspace-1",
       env: { CODEX_HOME: "/homes/chat-1" },
     });
-    expect(params.config.systemPromptAppend).toContain("`agent-device open <app or bundle id>");
+    expect(params.config.systemPromptAppend).toContain(
+      "`agent-device open <app or bundle id> --foreground`"
+    );
     // Every harness has the Deus tools, so every one is briefed on them.
     expect(params.config.systemPromptAppend).toContain("# Screen Recording");
     // Every chat of the workspace shares it, and a simulator recording joins it.

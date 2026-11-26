@@ -24,7 +24,7 @@ export type WorkspaceDevice = Pick<HubDevice, "platform" | "id">;
 function deviceInstructions(device?: WorkspaceDevice | null) {
   if (!device) return "";
   const flag = device.platform === "ios" ? "--udid" : "--serial";
-  return `This workspace's Device tab shows ${device.id}. Pass \`${flag} ${device.id}\` to agent-device so the person sees what you do.\n`;
+  return `This workspace's Device tab shows ${device.id}. Pass \`--platform ${device.platform} ${flag} ${device.id}\` to agent-device so the person sees what you do.\n`;
 }
 
 export type WorkspaceSetup =
@@ -50,7 +50,7 @@ function setupInstructions(setup?: WorkspaceSetup | null): string {
 /** How to drive a simulator: Deus ships agent-device (scripts/runtime/agent-clis.ts), whose own help carries the rest. */
 const AGENT_DEVICE =
   "Drive iOS Simulators and Android emulators with the `agent-device` CLI. " +
-  "Start with `agent-device open <app or bundle id> --platform ios --foreground`, which prints a snapshot with `@refs`. " +
+  "Start with `agent-device open <app or bundle id> --foreground`, which prints a snapshot with `@refs`. " +
   'Act with `press|fill|longpress <@ref> --settle`, `scroll <direction> --settle` or `back --settle`, verify with `wait text "…"`, ' +
   "and end with `agent-device close` (`close --shutdown` if you booted it) so another workspace can use the device. " +
   "`agent-device help <topic>` has more (`dogfood` for exploratory QA, `debugging`, `react-native`).\n";

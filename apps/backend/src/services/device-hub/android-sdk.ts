@@ -1,10 +1,10 @@
 import { constants } from "node:fs";
 import { access, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, delimiter, dirname, join } from "node:path";
+import { basename, delimiter, dirname, join, resolve } from "node:path";
 
-/** The SDK executables used by the hub to list and start emulators. */
-export async function hasAndroidToolchain(env = process.env, home = homedir()) {
+/** Find one SDK with all the tools the hub uses to list, start and stream emulators. */
+export async function findAndroidSdk(env = process.env, home = homedir()) {
   const roots = new Set(
     [env.ANDROID_HOME, env.ANDROID_SDK_ROOT].filter((root): root is string => !!root)
   );
@@ -14,28 +14,30 @@ export async function hasAndroidToolchain(env = process.env, home = homedir()) {
     roots.add(join(home, "Android/sdk"));
   }
   // A CLI on PATH can be a symlink into an SDK outside the default locations.
-  await Promise.all(
+  const pathRoots = await Promise.all(
     (env.PATH ?? "")
       .split(delimiter)
       .filter(Boolean)
       .flatMap((directory) =>
         ["adb", "emulator"].map(async (tool) => {
           const file = await realpath(join(directory, tool)).catch(() => null);
-          if (!file) return;
+          if (!file) return null;
           const parent = dirname(file);
-          if (basename(parent) === (tool === "adb" ? "platform-tools" : "emulator"))
-            roots.add(dirname(parent));
+          return basename(parent) === (tool === "adb" ? "platform-tools" : "emulator")
+            ? dirname(parent)
+            : null;
         })
       )
   );
+  for (const root of pathRoots) if (root) roots.add(root);
   const tools = ["platform-tools/adb", "emulator/emulator", "cmdline-tools/latest/bin/avdmanager"];
-  const found = await Promise.all(
-    tools.map((tool) =>
-      Promise.any([...roots].map((root) => access(join(root, tool), constants.X_OK))).then(
-        () => true,
-        () => false
-      )
-    )
-  );
-  return found.every(Boolean);
+  for (const root of roots) {
+    try {
+      await Promise.all(tools.map((tool) => access(join(root, tool), constants.X_OK)));
+      return resolve(root);
+    } catch {
+      // Try the next SDK if this one is incomplete.
+    }
+  }
+  return null;
 }

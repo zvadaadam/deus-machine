@@ -1,5 +1,5 @@
 /** The hosted device uses the platform’s EAS viewer and session events. */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AlertCircle, Check, Loader2, Play, RotateCcw, Sparkles, X } from "lucide-react";
 import { match } from "ts-pattern";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,6 @@ import { CloudSimulatorScreen } from "./CloudSimulatorScreen";
 interface CloudDevicePanelProps {
   workspace: Workspace;
   visible: boolean;
-  toolbarAction?: ReactNode;
 }
 
 /** The platform stops an idle device after 20 minutes; a viewer looking at
@@ -96,7 +95,7 @@ async function attachScreenshot(target: ComposerTarget, base64: string): Promise
   await attachImageFiles(target, [file]);
 }
 
-export function CloudDevicePanel({ workspace, visible, toolbarAction }: CloudDevicePanelProps) {
+export function CloudDevicePanel({ workspace, visible }: CloudDevicePanelProps) {
   const workspaceId = workspace.id;
   const device = useCloudSimulatorStore(
     (s) => s.byWorkspace[workspaceId] ?? EMPTY_CLOUD_SIM_DEVICE
@@ -283,7 +282,6 @@ export function CloudDevicePanel({ workspace, visible, toolbarAction }: CloudDev
 
   const header = (
     <CloudSimulatorHeader
-      toolbarAction={toolbarAction}
       device={device}
       phase={phase}
       onStart={handleStart}
@@ -309,7 +307,6 @@ export function CloudDevicePanel({ workspace, visible, toolbarAction }: CloudDev
             {phase === "live" && device.streamUrl ? (
               <CloudSimulatorScreen
                 key={device.streamUrl}
-                workspaceId={workspaceId}
                 streamUrl={device.streamUrl}
                 visible={visible}
               />

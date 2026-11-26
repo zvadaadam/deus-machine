@@ -87,7 +87,7 @@ async function hubInventory(hub: HubEndpoint | null) {
 }
 
 export async function listHubDevices(hub: HubEndpoint | null): Promise<HubInventory> {
-  const [list, ios, { android }] = await Promise.all([
+  const [list, ios, { androidSdk }] = await Promise.all([
     hubInventory(hub),
     listSimulators(),
     deviceToolchains(),
@@ -99,7 +99,7 @@ export async function listHubDevices(hub: HubEndpoint | null): Promise<HubInvent
       ...ios.devices.filter((sim) => !known.has(sim.id)),
       ...list.emulators,
     ],
-    available: { ios: ios.available, android },
+    available: { ios: ios.available, android: androidSdk !== null },
     detail: { ios: ios.detail, android: toolDetail(list.errors) || null },
   };
 }

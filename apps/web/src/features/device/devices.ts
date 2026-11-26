@@ -1,6 +1,17 @@
-import { deviceIdentity, type HubDevice } from "@shared/types/device-hub";
+import { deviceIdentity, type HubDevice, type HubInventory } from "@shared/types/device-hub";
 
 export const deviceKey = (device: HubDevice) => device.platform + ":" + deviceIdentity(device);
+
+export function canClearMissingDevice(key: string, { available, detail }: HubInventory) {
+  return (["ios", "android"] as const).some(
+    (platform) => key.startsWith(platform + ":") && available[platform] && detail[platform] === null
+  );
+}
+
+export function needsRecoveryPoll(key: string, inventory: HubInventory) {
+  const device = inventory.devices.find((d) => deviceKey(d) === key);
+  return device ? !device.booted : !canClearMissingDevice(key, inventory);
+}
 
 export const deviceSetup = {
   ios: {

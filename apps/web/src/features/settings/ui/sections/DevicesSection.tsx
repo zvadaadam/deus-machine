@@ -7,6 +7,7 @@ import { getErrorMessage } from "@shared/lib/errors";
 import { Button } from "@/components/ui/button";
 import { useDeviceSupport } from "@/features/device/useDeviceSupport";
 import { DeviceSetupLink } from "@/features/device/DeviceSetupLink";
+import { isTabVisible } from "@/features/workspace-tabs/registry";
 import { call } from "@/platform/ws";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 
@@ -51,7 +52,9 @@ function tabStatus(liveView: DeviceSupport["liveView"], setup: DeviceSetup["setu
 export function DevicesSection() {
   const support = useDeviceSupport();
   const data = support.data;
-  const enabled = data?.liveView === "available";
+  const enabled = isTabVisible("device", undefined, {
+    deviceAvailable: data?.liveView === "available",
+  });
   const queryKey = [deviceSetup.name];
   useQuerySubscription(deviceSetup, { queryKey, enabled });
   const setup = useQuery({
@@ -85,7 +88,7 @@ export function DevicesSection() {
             }
             detail={
               <>
-                Open it from New Tab → Device.
+                {enabled && "Open it from New Tab → Device."}
                 <span className="text-text-muted mt-0.5 block text-xs">
                   Expo Device Hub {data.hubVersion}
                 </span>

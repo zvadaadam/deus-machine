@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { subscriptionKey } from "@deus/runtime-client";
 import type { HubView } from "@shared/api/device-hub";
 import { createBackendChildEnv } from "@shared/lib/child-env";
@@ -219,7 +219,7 @@ export class DeviceHub {
     const base = this.options.directory;
     const env = createBackendChildEnv();
     this.set({ phase: "starting" });
-    const { installer } = await deviceToolchains();
+    const { installer, androidSdk } = await deviceToolchains();
     if (liveViewSupport(process.platform, process.arch, installer) !== "available")
       throw new Error("The Device tab needs the local Apple silicon runtime.");
     signal.throwIfAborted();
@@ -233,6 +233,13 @@ export class DeviceHub {
       this.set({ phase: "starting" });
     }
 
+    if (androidSdk) {
+      env.ANDROID_HOME = androidSdk;
+      env.ANDROID_SDK_ROOT = androidSdk;
+      env.PATH = [join(androidSdk, "platform-tools"), join(androidSdk, "emulator"), env.PATH]
+        .filter(Boolean)
+        .join(delimiter);
+    }
     await withTempDirectory(join(run, "hub-"), async (directory) => {
       const stateDirectory = join(directory, "state");
       const simDirectory = join(directory, "serve-sim");
