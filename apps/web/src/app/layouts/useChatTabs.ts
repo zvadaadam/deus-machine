@@ -2,7 +2,7 @@
  * useChatTabs — manages chat tab lifecycle with persistence across workspace switches.
  *
  * Tab order and active tab are persisted in workspaceLayoutStore (localStorage).
- * Full tab metadata (agentHarness, hasStarted, label) is reconstructed from session
+ * Full tab metadata (agentHarness, hasStarted, title and sequence) is reconstructed from session
  * records fetched via useWorkspaceSessions.
  */
 
@@ -35,12 +35,11 @@ import { unreadActions } from "@/features/session/store/unreadStore";
 import type { ChatTab, ClosedSessionTab, SessionChatTab } from "@/features/session/ui/tabs";
 import { getChatTabSessionId, isSessionChatTab } from "@/features/session/ui/tabs";
 import {
-  NEW_CHAT_LABEL,
   arrivedTab,
   arrivedWhileAway,
   createPendingTab,
   getOpenSessionIds,
-  nextStartedChatLabel,
+  nextChatSequence,
   reconcileLive,
   sessionToTab,
 } from "./chatTabsSync";
@@ -63,7 +62,6 @@ function createPlaceholderSessionTab(
     kind: "session",
     id: `tab-${sessionId}`,
     sessionId,
-    label: NEW_CHAT_LABEL,
     agentHarness,
     hasStarted: false,
     initialModel,
@@ -354,12 +352,8 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
 
       if (isSessionChatTab(closingTab)) {
         const entry: ClosedSessionTab = {
+          ...closingTab,
           id: createClosedTabId(closingTab.sessionId),
-          label: closingTab.label,
-          sessionId: closingTab.sessionId,
-          agentHarness: closingTab.agentHarness,
-          hasStarted: closingTab.hasStarted,
-          initialModel: closingTab.initialModel,
           closedAt: Date.now(),
         };
         setClosedTabs((prev) => [
@@ -424,13 +418,15 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
 
   const handleTabRestore = useCallback((closedTab: ClosedSessionTab) => {
     const newId = `tab-${closedTab.sessionId}`;
+    const { sequence, agentHarness } = closedTab;
 
     const restoredTab: SessionChatTab = {
       kind: "session",
       id: newId,
       sessionId: closedTab.sessionId,
-      label: closedTab.label,
-      agentHarness: closedTab.agentHarness,
+      title: closedTab.title,
+      sequence,
+      agentHarness,
       hasStarted: closedTab.hasStarted,
       initialModel: closedTab.initialModel,
     };
@@ -442,8 +438,8 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       }
       return [
         ...prev,
-        restoredTab.hasStarted && prev.some((tab) => tab.label === restoredTab.label)
-          ? { ...restoredTab, label: nextStartedChatLabel(prev, restoredTab.agentHarness) }
+        restoredTab.hasStarted
+          ? { ...restoredTab, sequence: nextChatSequence(prev, agentHarness, sequence) }
           : restoredTab,
       ];
     });
@@ -468,7 +464,6 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       const updatedTabs = [...prevTabs];
       updatedTabs[tabIndex] = {
         ...tab,
-        label: NEW_CHAT_LABEL,
         agentHarness: nextAgentHarness,
         hasStarted: false,
       };
@@ -487,7 +482,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       const updatedTabs = [...prevTabs];
       updatedTabs[tabIndex] = {
         ...tab,
-        label: nextStartedChatLabel(prevTabs, tab.agentHarness),
+        sequence: nextChatSequence(prevTabs, tab.agentHarness),
         hasStarted: true,
         initialModel: undefined,
       };
@@ -516,7 +511,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
           (!chatHasStarted(session) ||
             (closed.hasStarted && closed.agentHarness === session.agent_harness))
         )
-          return closed;
+          return { ...closed, title: session.title };
         return { ...sessionToTab(session, sequences.get(session.id) ?? 1), closedAt: 0 };
       });
   }, [workspaceSessions, openSessionIds, closedTabs]);

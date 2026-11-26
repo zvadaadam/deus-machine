@@ -6,7 +6,7 @@ import { TabPill } from "@/components/ui/tab-pill";
 import { copyWorkspaceLink } from "@/features/workspace/lib/workspaceAddress";
 import { cn } from "@/shared/lib/utils";
 import { CircularPixelGrid } from "../CircularPixelGrid";
-import { getChatTabSessionId, type ChatTab } from "./types";
+import { chatTabLabel, getChatTabSessionId, type ChatTab } from "./types";
 
 const AGENT_ICON_SIZE = "h-3.5 w-3.5";
 
@@ -55,8 +55,8 @@ export function SessionTab({
   tabRef,
 }: SessionTabProps) {
   const sessionId = getChatTabSessionId(tab);
-  const closeProps =
-    canClose && onClose ? { onClose, closeAriaLabel: `Close ${tab.label} tab` } : {};
+  const label = chatTabLabel(tab);
+  const closeProps = canClose && onClose ? { onClose, closeAriaLabel: `Close ${label} tab` } : {};
 
   const pill = (
     <TabPill
@@ -72,7 +72,7 @@ export function SessionTab({
       )}
       {...closeProps}
     >
-      {tab.label}
+      {label}
     </TabPill>
   );
   if (!sessionId) return pill;

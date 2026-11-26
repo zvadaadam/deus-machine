@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { sessionToTab } from "@/app/layouts/chatTabsSync";
+import { chatTabLabel } from "@/features/session/ui/tabs/types";
 import { toast } from "sonner";
 import {
   mapToRepoGroups,
@@ -112,7 +113,9 @@ describe("mapToRepoGroups", () => {
 describe("toSession", () => {
   it("opens an untitled direct chat as New chat", () => {
     const row = toSession(agntSession({ title: null, status: "ready" }) as never);
-    expect(sessionToTab(row, 4)).toMatchObject({ label: "New chat", hasStarted: false });
+    const tab = sessionToTab(row, 4);
+    expect(tab.hasStarted).toBe(false);
+    expect(chatTabLabel(tab)).toBe("New chat");
   });
 
   it("maps an agnt session to the detail the direct lane reads", () => {

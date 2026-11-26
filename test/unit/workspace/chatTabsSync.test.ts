@@ -11,6 +11,7 @@ import {
   sessionToTab,
 } from "@/app/layouts/chatTabsSync";
 import type { Session } from "@/features/session/types";
+import { chatTabLabel } from "@/features/session/ui/tabs/types";
 
 vi.mock("@/features/session/api/session.queries", () => ({
   useWorkspaceSessions: () => ({ data: [] }),
@@ -23,7 +24,7 @@ const closedTab = (sessionId: string) =>
   ({
     id: `c-${sessionId}`,
     sessionId,
-    label: "x",
+    sequence: 1,
     agentHarness: "claude-code",
     hasStarted: true,
     closedAt: 1,
@@ -82,7 +83,36 @@ describe("tabs that follow the live chat list (H9, H21)", () => {
   it("W4: two chats that start in one snapshot get different labels", () => {
     const tabs = [sessionToTab(chat("a", 0), 1), sessionToTab(chat("b", 0), 2)];
     const next = reconcileLive({ tabs, closed: [] }, [chat("a"), chat("b")], new Set(["a", "b"]));
-    expect(new Set(next.tabs.map((t) => t.label)).size).toBe(2);
+    expect(new Set(next.tabs.map(chatTabLabel)).size).toBe(2);
+  });
+
+  it("shows a title before the first message and uses New chat while unnamed", () => {
+    expect(chatTabLabel(createPendingTab())).toBe("New chat");
+    const draft = chat("draft", 0);
+    expect(chatTabLabel(sessionToTab(draft, 1))).toBe("New chat");
+    expect(chatTabLabel(sessionToTab({ ...draft, title: "Review" }, 1))).toBe("Review");
+  });
+
+  it("keeps each started chat's number when its live title arrives, changes and clears", () => {
+    const [a, b, c] = ["a", "b", "c"].map((id) => chat(id));
+    const current = { tabs: [sessionToTab(a, 1), sessionToTab(b, 2)], closed: [] };
+    const seen = new Set(["a", "b"]);
+    const named = reconcileLive(current, [{ ...a, title: "First pass" }, b], seen);
+    expect(named.tabs.map(chatTabLabel)).toEqual(["First pass", "Claude Code #2"]);
+    const renamed = reconcileLive(named, [{ ...a, title: "Reviewed" }, b, c], seen);
+    expect(renamed.tabs.map(chatTabLabel)).toEqual([
+      "Reviewed",
+      "Claude Code #2",
+      "Claude Code #3",
+    ]);
+    seen.add("c");
+    const cleared = reconcileLive(renamed, [{ ...a, title: null }, b, c], seen);
+    expect(cleared.tabs.map(chatTabLabel)).toEqual([
+      "Claude Code #1",
+      "Claude Code #2",
+      "Claude Code #3",
+    ]);
+    expect(cleared.tabs[1]).toBe(current.tabs[1]);
   });
 });
 
@@ -133,11 +163,11 @@ it.each([
     const before = {
       ...sessionToTab(chat("moved"), 1),
       hasStarted: true,
-      label: "Claude Code #1",
       agentHarness: "claude-code" as const,
     };
     const actual = { ...chat("moved"), agent_harness: "codex-app-server" as const, ...evidence };
     const next = reconcileLive({ tabs: [before], closed: [] }, [actual], new Set(["moved"]));
-    expect(next.tabs[0]).toMatchObject({ label: "Codex #1", agentHarness: "codex-app-server" });
+    expect(next.tabs[0].agentHarness).toBe("codex-app-server");
+    expect(chatTabLabel(next.tabs[0])).toBe("Codex #1");
   }
 );

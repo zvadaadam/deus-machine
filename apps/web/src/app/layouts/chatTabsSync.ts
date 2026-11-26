@@ -8,7 +8,6 @@
 
 import { DEFAULT_AGENT_HARNESS } from "@shared/models";
 import { chatHasStarted } from "@shared/session";
-import { getAgentLabel } from "@/shared/agents";
 import type { Session } from "@/features/session/types";
 import type {
   ChatTab,
@@ -18,8 +17,6 @@ import type {
 } from "@/features/session/ui/tabs";
 import { isSessionChatTab } from "@/features/session/ui/tabs";
 
-export const NEW_CHAT_LABEL = "New chat";
-
 export function getOpenSessionIds(tabs: ChatTab[]): Set<string> {
   const ids = new Set<string>();
   for (const tab of tabs) {
@@ -28,15 +25,10 @@ export function getOpenSessionIds(tabs: ChatTab[]): Set<string> {
   return ids;
 }
 
-export function buildStartedChatLabel(agentHarness: string, sequence: number): string {
-  return `${getAgentLabel(agentHarness)} #${sequence}`;
-}
-
 export function createPendingTab(): PendingChatTab {
   return {
     kind: "pending",
     id: "tab-default",
-    label: NEW_CHAT_LABEL,
     agentHarness: DEFAULT_AGENT_HARNESS,
     hasStarted: false,
   };
@@ -49,7 +41,8 @@ export function sessionToTab(session: Session, sequence: number): SessionChatTab
     kind: "session",
     id: `tab-${session.id}`,
     sessionId: session.id,
-    label: hasStarted ? buildStartedChatLabel(session.agent_harness, sequence) : NEW_CHAT_LABEL,
+    title: session.title,
+    sequence: hasStarted ? sequence : undefined,
     agentHarness: session.agent_harness,
     hasStarted,
     // Hydrated tabs let SessionComposer restore the model from recorded turns.
@@ -58,17 +51,19 @@ export function sessionToTab(session: Session, sequence: number): SessionChatTab
 }
 
 /** Keep existing labels stable when chats start out of order or tabs close. */
-export function nextStartedChatLabel(tabs: ChatTab[], agentHarness: string): string {
-  const labels = new Set(tabs.filter((tab) => tab.hasStarted).map((tab) => tab.label));
-  let sequence = 1;
-  while (labels.has(buildStartedChatLabel(agentHarness, sequence))) sequence++;
-  return buildStartedChatLabel(agentHarness, sequence);
+export function nextChatSequence(tabs: ChatTab[], agentHarness: string, preferred = 1): number {
+  const used = new Set(
+    tabs.filter((tab) => tab.agentHarness === agentHarness).map((tab) => tab.sequence)
+  );
+  let sequence = used.has(preferred) ? 1 : preferred;
+  while (used.has(sequence)) sequence++;
+  return sequence;
 }
 
 /** A tab for a chat that arrived, labelled after the tabs already there. */
 export function arrivedTab(tabs: ChatTab[], session: Session): SessionChatTab {
   const tab = sessionToTab(session, 1);
-  if (tab.hasStarted) tab.label = nextStartedChatLabel(tabs, session.agent_harness);
+  if (tab.hasStarted) tab.sequence = nextChatSequence(tabs, session.agent_harness);
   return tab;
 }
 
@@ -112,6 +107,10 @@ export function reconcileLive(
   tabs = [...tabs];
   tabs.forEach((tab, i) => {
     const session = isSessionChatTab(tab) ? live.get(tab.sessionId) : undefined;
+    if (session && tab.title !== session.title) {
+      tabs[i] = { ...tab, title: session.title };
+      changed = true;
+    }
     if (
       !session ||
       !chatHasStarted(session) ||
@@ -120,11 +119,11 @@ export function reconcileLive(
       return;
     changed = true;
     tabs[i] = {
-      ...tab,
+      ...tabs[i],
       hasStarted: true,
       initialModel: undefined,
       agentHarness: session.agent_harness,
-      label: nextStartedChatLabel(tabs, session.agent_harness),
+      sequence: nextChatSequence(tabs, session.agent_harness),
     };
   });
   if (!changed) tabs = current.tabs;

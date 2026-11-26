@@ -24,6 +24,7 @@ import {
 } from "@/features/session/lib/openChat";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
 import type { Session } from "@/features/session/types";
+import { chatTabLabel } from "@/features/session/ui/tabs/types";
 import { useSidebarStore } from "@/features/sidebar/store";
 import { copyWorkspaceLink, currentChatLink } from "@/features/workspace/lib/workspaceAddress";
 import {
@@ -438,15 +439,31 @@ it("reopens a chat with the label it had when closed in this visit", () => {
   workspaceLayoutActions.setChatTabState("w", ["b", "a"], "b");
   act(() => root.render(createElement(Tabs)));
   readList(["a", "b"]);
-  const label = view.tabs[1].label;
+  const label = chatTabLabel(view.tabs[1]);
   const focusKey = view.focusActiveTabKey;
   expect(label).toMatch(/#2$/);
   act(() => view.handleTabClose("tab-a"));
   expect(view.activeTabId).toBe("tab-b");
   expect(view.focusActiveTabKey).toBe(focusKey + 1);
-  expect(view.closedTabs[0].label).toBe(label);
+  expect(chatTabLabel(view.closedTabs[0])).toBe(label);
   act(() => view.handleTabRestore(view.closedTabs[0]));
-  expect(view.activeTab?.label).toBe(label);
+  expect(chatTabLabel(view.activeTab!)).toBe(label);
+});
+
+it("hydrates a saved tab with its live title and follows renames while the tab is closed", () => {
+  workspaceLayoutActions.setChatTabState("w", ["b", "a"], "a", ["b", "a"]);
+  act(() => root.render(createElement(Tabs)));
+  const rename = (title: string | null) =>
+    act(() => useList.setState({ data: [{ ...chat("a"), title }, chat("b")] }));
+  rename("Named while away");
+  expect(chatTabLabel(view.activeTab!)).toBe("Named while away");
+  act(() => view.handleTabClose("tab-a"));
+  rename("Named while closed");
+  expect(chatTabLabel(view.closedTabs[0])).toBe("Named while closed");
+  act(() => view.handleTabRestore(view.closedTabs[0]));
+  expect(chatTabLabel(view.activeTab!)).toBe("Named while closed");
+  rename(null);
+  expect(chatTabLabel(view.activeTab!)).toBe("Claude Code #2");
 });
 
 it("reopens a chat that started elsewhere with its live agent and label", () => {
@@ -454,7 +471,8 @@ it("reopens a chat that started elsewhere with its live agent and label", () => 
   act(() => root.render(createElement(Tabs)));
   act(() => useList.setState({ data: [chat("a"), { ...chat("b"), message_count: 0 }] }));
   act(() => view.handleTabClose("tab-b"));
-  expect(view.closedTabs[0]).toMatchObject({ hasStarted: false, label: "New chat" });
+  expect(view.closedTabs[0].hasStarted).toBe(false);
+  expect(chatTabLabel(view.closedTabs[0])).toBe("New chat");
 
   act(() =>
     useList.setState({
@@ -469,8 +487,9 @@ it("reopens a chat that started elsewhere with its live agent and label", () => 
       ],
     })
   );
-  const started = { agentHarness: "codex-app-server", hasStarted: true, label: "Codex #1" };
+  const started = { agentHarness: "codex-app-server", hasStarted: true, sequence: 1 };
   expect(view.closedTabs[0]).toMatchObject(started);
+  expect(chatTabLabel(view.closedTabs[0])).toBe("Codex #1");
   act(() => view.handleTabRestore(view.closedTabs[0]));
   expect(view.activeTab).toMatchObject(started);
 });
@@ -484,11 +503,12 @@ it("counts a bound chat with a missing echo when numbering reopened and arriving
   workspaceLayoutActions.setChatTabState("w", ["a", "b", "c"], "b");
   act(() => root.render(createElement(Tabs)));
   act(() => useList.setState({ data: [chat("a"), bound("b"), chat("c")] }));
-  expect(view.tabs.map((t) => t.label)).toEqual([
+  expect(view.tabs.map(chatTabLabel)).toEqual([
     "Claude Code #1",
     "Claude Code #2",
     "Claude Code #3",
   ]);
   act(() => useList.setState({ data: [chat("a"), bound("b"), chat("c"), bound("d")] }));
-  expect(view.tabs[3]).toMatchObject({ hasStarted: true, label: "Claude Code #4" });
+  expect(view.tabs[3].hasStarted).toBe(true);
+  expect(chatTabLabel(view.tabs[3])).toBe("Claude Code #4");
 });

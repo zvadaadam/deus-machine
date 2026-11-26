@@ -37,6 +37,7 @@ import { SessionProvider } from "@/features/session/context";
 import { FilesView } from "@/features/workspace/ui/FilesView";
 import type { Workspace } from "@/shared/types";
 import { useChatTabs } from "@/app/layouts/useChatTabs";
+import { chatTabLabel } from "@/features/session/ui/tabs/types";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useUIStore } from "@/shared/stores/uiStore";
@@ -96,7 +97,7 @@ client.setQueryData(queryKeys.sessions.byWorkspace("tab-workspace"), tabSessions
 function TabJourney() {
   const tabs = useChatTabs({workspaceId: "tab-workspace", activeSessionId: "a"});
   return <>
-    <output data-model={tabs.activeTab?.initialModel ?? ""} data-harness={tabs.activeTab?.agentHarness} data-session={tabs.activeTab?.sessionId}>{tabs.tabs.map(tab => tab.label).join(" | ")}</output>
+    <output data-model={tabs.activeTab?.initialModel ?? ""} data-harness={tabs.activeTab?.agentHarness} data-session={tabs.activeTab?.sessionId}>{tabs.tabs.map(chatTabLabel).join(" | ")}</output>
     <button onClick={() => client.setQueryData(queryKeys.sessions.byWorkspace("tab-workspace"), tabSessions.map(s => s.id === "a" ? {...s, message_count: 2} : s))}>Discover earlier chat</button>
     <button onClick={() => tabs.markChatTabStarted("tab-c")}>Start third chat</button>
     <button onClick={() => tabs.handleTabClose("tab-b")}>Close original chat</button>
