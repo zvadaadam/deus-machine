@@ -48,6 +48,7 @@ import type { AgentConversationSnapshot } from "@shared/cloud-session-snapshot";
 // shared/protocol-types.ts.
 // eslint-disable-next-line no-restricted-imports -- reduce has no zod-free subpath
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
+import { produce } from "immer";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import type { Message } from "@shared/types/session";
@@ -543,37 +544,23 @@ export function patchSessionDetail(
     patchWorkspaceSessionStatus(qc, sessionId, patch.status);
 }
 
-/** A direct turn (or an optimistic send) updates its chat in each cached workspace list. */
+/** A direct turn updates its chat in each cached workspace list. */
 export function patchWorkspaceSessionStatus(
   qc: QueryClient,
   sessionId: string,
-  status: SessionStatus,
-  expected?: SessionStatus
-): SessionStatus | null {
-  let previousStatus: SessionStatus | null = null;
-  const matches = (value: SessionStatus | null) => expected === undefined || value === expected;
-  qc.setQueriesData<RepoGroup[]>({ queryKey: ["workspaces", "by-repo"] }, (old) =>
-    Array.isArray(old)
-      ? old.map((group) => ({
-          ...group,
-          workspaces: group.workspaces.map((workspace) => {
-            const current =
-              workspace.current_session_id === sessionId && matches(workspace.session_status);
-            const chat = workspace.chats?.find(
-              (row) => row.id === sessionId && matches(row.status)
-            );
-            if (!current && !chat) return workspace;
-            previousStatus ??= chat?.status ?? workspace.session_status;
-            return {
-              ...workspace,
-              session_status: current ? status : workspace.session_status,
-              chats: workspace.chats?.map((row) => (row === chat ? { ...row, status } : row)),
-            };
-          }),
-        }))
-      : old
+  status: SessionStatus
+): void {
+  qc.setQueriesData<RepoGroup[]>({ queryKey: ["workspaces", "by-repo"] }, (groups) =>
+    produce(groups, (draft) => {
+      for (const group of draft ?? []) {
+        for (const workspace of group.workspaces) {
+          if (workspace.current_session_id === sessionId) workspace.session_status = status;
+          const chat = workspace.chats?.find((row) => row.id === sessionId);
+          if (chat) chat.status = status;
+        }
+      }
+    })
   );
-  return previousStatus;
 }
 
 // ---- Transcript order (snapshot backfill) ----

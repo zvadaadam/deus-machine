@@ -78,8 +78,18 @@ it.each([
 it.each([
   ["GetWorkspaceDiff", "No changes found"],
   ["BrowserSnapshot", "No snapshot captured"],
-])("keeps %s's empty result distinct from a missing result", (tool, emptyLabel) => {
+  ["BrowserConsoleMessages", "No console messages"],
+  ["BrowserNetworkRequests", "No network requests"],
+  ["GetTerminalOutput", "No terminal output available"],
+])("shows %s's empty result only after the call finishes", (tool, emptyLabel) => {
   const part = completed(tool, tool, {}, "", [{ type: "text", text: "" }]);
+  const pending = expanded({
+    ...part,
+    state: { status: "in_progress", input: { toolSummary: "Check state" }, time: { start: 1 } },
+  });
+  expect(pending).toContain("Check state");
+  expect(pending).toContain("tool-loading-shimmer");
+  expect(pending).not.toContain(emptyLabel);
   const html = expanded(part);
   expect(html).toContain(emptyLabel);
   expect(html).not.toContain("No result recorded");

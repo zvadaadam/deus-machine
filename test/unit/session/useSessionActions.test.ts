@@ -1,4 +1,10 @@
-import { QueryClient, type MutationObserverOptions } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  type MutationObserverOptions,
+} from "@tanstack/react-query";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useSessionActions } from "@/features/session/hooks/useSessionActions";
 import {
@@ -11,6 +17,7 @@ import { api } from "@shared/api";
 import type { PaginatedMessages, Session } from "@shared/types/session";
 import { OpError, RuntimeError } from "@/platform/ws/runtime-client";
 import { emitSendAttemptFailed } from "@/features/connection";
+import { useWorkspacesByRepo } from "@/features/workspace/api/workspace.queries";
 
 const state = vi.hoisted(() => ({
   queryClient: null as QueryClient | null,
@@ -186,6 +193,8 @@ describe("prompt delivery", () => {
     "keeps a queued send out of the transcript when the window showed %s",
     async (status) => {
       const client = state.queryClient!;
+      const sidebar = queryKeys.workspaces.byRepo("active");
+      client.setQueryData(sidebar, []);
       client.setQueryData<Session>(queryKeys.sessions.detail(SESSION), (old) => ({
         ...old!,
         status,
@@ -219,6 +228,7 @@ describe("prompt delivery", () => {
           expect.objectContaining({ content: "Follow up" })
         );
         expect(client.getQueryData(key)).toEqual(page);
+        expect(client.getQueryState(sidebar)?.isInvalidated).toBe(false);
         expect(state.error).not.toHaveBeenCalled();
       } finally {
         sessionComposerActions.discard(SESSION);
@@ -298,21 +308,28 @@ describe("prompt delivery", () => {
     return { id: "w1", current_session_id: SESSION, session_status: status, chats };
   }
 
-  it("restores the chat to idle when the host stays offline and no update arrives", async () => {
+  it("keeps the sidebar on the host's status throughout a pending send and a lost acknowledgment", async () => {
     const { useSendMessage } = await import("@/features/session/api/session.queries");
     const client = state.queryClient!;
     const key = queryKeys.workspaces.byRepo("active");
     const list = (status: Session["status"]) => [{ workspaces: [workspaceWithStatus(status)] }];
     client.setQueryData(key, list("idle"));
-    state.isConnected.mockReturnValue(false);
-    state.connect.mockImplementationOnce(() => {
-      expect(client.getQueryData(key)).toEqual(list("working"));
-      throw new RuntimeError("unavailable", "Host offline");
+    function Sidebar() {
+      return useWorkspacesByRepo("active").data?.[0].workspaces[0].chats?.[0].status;
+    }
+    const status = () =>
+      renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(Sidebar)));
+    state.call.mockImplementationOnce(() => {
+      expect(status()).toBe("idle");
+      for (const pushed of ["working", "needs_response", "error"] as const) {
+        client.setQueryData(key, list(pushed));
+        expect(status()).toBe(pushed);
+      }
+      throw new RuntimeError("unknown-outcome", "Acknowledgment lost");
     });
-    await expect(useSendMessage().mutateAsync(prompt)).rejects.toThrow("Host offline");
-    expect(client.getQueryData(key)).toEqual(list("idle"));
-    expect(client.getQueryState(key)?.isInvalidated).toBe(true);
-    expect(state.call).not.toHaveBeenCalled();
+    await expect(useSendMessage().mutateAsync(prompt)).rejects.toThrow("Acknowledgment lost");
+    expect(status()).toBe("error");
+    expect(client.getQueryState(key)?.isInvalidated).toBe(false);
   });
 
   it("restores an offline hosted chat to idle when its direct channel is missing", async () => {
@@ -332,11 +349,17 @@ describe("prompt delivery", () => {
       "The cloud connection isn't ready yet"
     );
     expect(client.getQueryData(key)).toEqual(idle);
-    expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(key)?.isInvalidated).toBe(false);
     expect(state.call).not.toHaveBeenCalled();
   });
 
   it.each([
+    {
+      stage: "connect",
+      failure: new RuntimeError("unavailable", "Host offline"),
+      serverStatus: "working",
+      notices: 1,
+    },
     {
       stage: "connect",
       failure: new RuntimeError("unavailable", "Host offline"),
@@ -386,8 +409,8 @@ describe("prompt delivery", () => {
       });
       await expect(useSendMessage().mutateAsync(prompt)).rejects.toBe(failure);
       expect(client.getQueryData(active)).toEqual(updated);
-      expect(client.getQueryState(active)?.isInvalidated).toBe(true);
-      expect(client.getQueryState(archived)?.isInvalidated).toBe(true);
+      expect(client.getQueryState(active)?.isInvalidated).toBe(false);
+      expect(client.getQueryState(archived)?.isInvalidated).toBe(false);
       expect(state.call).toHaveBeenCalledTimes(stage === "call" ? 1 : 0);
       expect(emitSendAttemptFailed).toHaveBeenCalledTimes(notices);
     }

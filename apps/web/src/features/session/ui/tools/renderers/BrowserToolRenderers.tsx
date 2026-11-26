@@ -32,7 +32,7 @@ import {
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";
 import { OutputBlock } from "@/components/ui/output-block";
-import { extractImage, extractText, ICON_CLS, renderToolImage } from "./shared";
+import { extractImage, extractText, ICON_CLS, renderTextResult, renderToolImage } from "./shared";
 import type { ToolRendererProps } from "../../chat-types";
 
 /** Truncate a domain from URL for preview */
@@ -65,13 +65,7 @@ export function BrowserSnapshotToolRenderer(props: ToolRendererProps) {
           <span className="text-muted-foreground truncate font-mono">{getDomain(url)}</span>
         ) : null
       }
-      renderContent={() =>
-        text ? (
-          <OutputBlock>{text}</OutputBlock>
-        ) : (
-          <div className="text-muted-foreground px-2 pb-2 text-xs italic">No snapshot captured</div>
-        )
-      }
+      renderContent={() => renderTextResult(props, "No snapshot captured")}
     />
   );
 }
@@ -339,13 +333,7 @@ export function BrowserConsoleMessagesToolRenderer(props: ToolRendererProps) {
       renderSummary={() =>
         count ? <span className="text-muted-foreground">{count} messages</span> : null
       }
-      renderContent={() =>
-        text ? (
-          <OutputBlock>{text}</OutputBlock>
-        ) : (
-          <div className="text-muted-foreground px-2 pb-2 text-xs italic">No console messages</div>
-        )
-      }
+      renderContent={() => renderTextResult(props, "No console messages")}
     />
   );
 }
@@ -396,13 +384,7 @@ export function BrowserNetworkRequestsToolRenderer(props: ToolRendererProps) {
       renderSummary={() =>
         count ? <span className="text-muted-foreground">{count} requests</span> : null
       }
-      renderContent={() =>
-        text ? (
-          <OutputBlock>{text}</OutputBlock>
-        ) : (
-          <div className="text-muted-foreground px-2 pb-2 text-xs italic">No network requests</div>
-        )
-      }
+      renderContent={() => renderTextResult(props, "No network requests")}
     />
   );
 }
