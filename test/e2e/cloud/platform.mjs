@@ -8,6 +8,7 @@
 // recorded in `unserved`, for the journey to compare with its allow-list.
 import assert from "node:assert/strict";
 import http from "node:http";
+import { generateSecret, SignJWT } from "jose";
 import { WebSocketServer } from "ws";
 import { WebSocketEventSchema } from "@deus-hq/api";
 
@@ -45,7 +46,7 @@ export function wire(frame) {
 
 /**
  * @param {object} options
- * @param {string} options.bearer        the Deus Cloud session `/dashboard` routes accept
+ * @param {string} [options.bearer]      override the fixture account's Deus Cloud session
  * @param {string[]} options.sessions    the platform session ids it knows
  * @param {(sessionId: string) => object} options.snapshot  the `session.snapshot` sent on connect
  * @param {string} [options.org]         the account's organization, served as the dashboard lists it
@@ -71,8 +72,14 @@ export async function startPlatform({
   orgs,
   github = {},
 }) {
+  const accountId = "acc_smoke";
+  bearer ??= await new SignJWT({ sub: accountId })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setExpirationTime("24h")
+    .sign(await generateSecret("HS256"));
   const platform = {
     url: "",
+    bearer,
     /** Every request but CORS preflights, as `METHOD /path`. */
     requests: [],
     /** Requests answered 404, as `METHOD /path`. */
@@ -158,7 +165,7 @@ export async function startPlatform({
     // The account's organizations, in the shape of AGNT's `routes/dashboard/orgs.ts`.
     if (accountOrgs.length > 0 && route === "GET /dashboard/orgs") {
       return json({
-        account_id: "acc_smoke",
+        account_id: accountId,
         items: accountOrgs.map((o) => ({
           id: o.id,
           name: o.name,

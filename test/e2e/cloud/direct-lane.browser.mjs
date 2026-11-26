@@ -56,7 +56,6 @@ const history = [
 ];
 let running = false;
 const platform = await startPlatform({
-  bearer: "bearer-smoke",
   sessions: [SESSION],
   snapshot: () => ({
     type: "session.snapshot",
@@ -134,7 +133,10 @@ try {
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   // Signed in: the bearer the deus-web login leaves in sessionStorage.
-  await context.addInitScript(() => sessionStorage.setItem("deus_cloud_session", "bearer-smoke"));
+  await context.addInitScript(
+    (bearer) => sessionStorage.setItem("deus_cloud_session", bearer),
+    platform.bearer
+  );
   const page = await context.newPage();
   page.setDefaultTimeout(30_000);
   page.on("pageerror", (error) => errors.push(error.message));

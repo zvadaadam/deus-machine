@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { getSession } from "@/platform/native/deus-cloud";
+import { CLOUD_SESSION_KEY } from "@/platform/ws/cloud-session";
+import { applyDeusCloudAuthChange } from "@/shared/api/cloudAuthCache";
 import {
   ensureWebCloudSession,
   handleWebCloudSessionExpired,
@@ -101,6 +104,36 @@ describe("login loop guard", () => {
     handleWebCloudSessionExpired();
     expect(await readWebCloudSessionBearer()).toBeNull();
     expect(win().location.href).toContain("/auth/login?client=deus-web");
+  });
+});
+
+describe("the browser's Deus Cloud account in Settings", () => {
+  function session(claims: { sub?: string; exp?: number }) {
+    sessionStorage.setItem(CLOUD_SESSION_KEY, "test." + btoa(JSON.stringify(claims)) + ".test");
+  }
+
+  it.each([{}, { sub: "" }, { exp: 1 }, { sub: "", exp: 1 }])(
+    "clears a bearer without an account once, without leaving Settings (%j)",
+    async (claims) => {
+      vi.mocked(applyDeusCloudAuthChange).mockClear();
+      session(claims);
+      await expect(getSession()).resolves.toMatchObject({ signedIn: false, accountId: null });
+      expect(sessionStorage.getItem(CLOUD_SESSION_KEY)).toBeNull();
+      await getSession();
+      expect(applyDeusCloudAuthChange).toHaveBeenCalledOnce();
+      expect(win().location.href).toBe(APP_URL);
+    }
+  );
+
+  it("shows a valid account and tears down its expired session just once", async () => {
+    session({ sub: "account" });
+    await expect(getSession()).resolves.toMatchObject({ signedIn: true, accountId: "account" });
+    vi.mocked(applyDeusCloudAuthChange).mockClear();
+    session({ sub: "account", exp: 1 });
+    await expect(getSession()).resolves.toMatchObject({ signedIn: false });
+    expect(sessionStorage.getItem(CLOUD_SESSION_KEY)).toBeNull();
+    await getSession();
+    expect(applyDeusCloudAuthChange).toHaveBeenCalledOnce();
   });
 });
 

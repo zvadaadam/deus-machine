@@ -4,6 +4,7 @@ import { getErrorMessage } from "@shared/lib/errors";
 import type { DeusCloudAuthResult, DeusCloudSessionStatus } from "@shared/types";
 import type { GithubAppState } from "@shared/types/github";
 import { call } from "@/platform/ws";
+import { CLOUD_SESSION_KEY, cloudSessionClaims } from "@/platform/ws/cloud-session";
 import { openExternalPending } from "./window";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { isRelayMode } from "@/shared/config/backend.config";
@@ -39,25 +40,18 @@ const browserSession = (): boolean => isCloudDirectWebMode() || isRelayMode();
  */
 function webDirectSession(): DeusCloudSessionStatus | null {
   try {
-    const bearer = sessionStorage.getItem("deus_cloud_session");
-    if (!bearer) return null;
-    const payload = JSON.parse(atob(bearer.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
-    // An expired bearer must not report "signed in" — Settings would offer a
-    // dead session until some agnt request 401s. Clear it and fall through to
-    // signed-out; this is a passive status read, so no redirect here (the
-    // request-path 401 handler owns re-auth navigation). It IS an account
-    // boundary though: run the same teardown as sign-out, or the already-minted
-    // direct token keeps its socket streaming (and sendable) under a UI that
-    // says signed out. One-shot — the cleared bearer short-circuits above on
-    // every later heartbeat.
-    if (typeof payload.exp === "number" && payload.exp * 1000 <= Date.now()) {
+    const bearer = sessionStorage.getItem(CLOUD_SESSION_KEY);
+    if (bearer === null) return null;
+    const payload = cloudSessionClaims(bearer);
+    // Retire the account's cache and direct socket on this passive check. A 401 handles re-auth.
+    if (!payload || (typeof payload.exp === "number" && payload.exp * 1000 <= Date.now())) {
       clearWebCloudSession();
       applyDeusCloudAuthChange(queryClient, { ...WEB_SESSION, cloudUrl: resolveDeusCloudUrl() });
       return null;
     }
     return {
       signedIn: true,
-      accountId: typeof payload.sub === "string" ? payload.sub : null,
+      accountId: payload.sub,
       expiresAt:
         typeof payload.exp === "number" ? new Date(payload.exp * 1000).toISOString() : null,
       tokenType: "Bearer",

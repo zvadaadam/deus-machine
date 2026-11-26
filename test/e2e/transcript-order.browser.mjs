@@ -155,7 +155,6 @@ async function run() {
     const hostedSessions = [hosted];
     let resume;
     platform = await startPlatform({
-      bearer: "test-bearer",
       org: "org_transcript",
       sessions: hostedSessions,
       listSessions: () => [summary],
@@ -1068,10 +1067,10 @@ async function run() {
     });
     const hostedPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
     hostedPage.setDefaultTimeout(12_000);
-    await hostedPage.addInitScript(() => {
+    await hostedPage.addInitScript((bearer) => {
       localStorage.setItem("deus.cloudDirectWeb", "1");
-      sessionStorage.setItem("deus_cloud_session", "test-bearer");
-    });
+      sessionStorage.setItem("deus_cloud_session", bearer);
+    }, platform.bearer);
     const openHosted = async () => {
       const previous = platform.live(hosted);
       await hostedPage.goto(base);
