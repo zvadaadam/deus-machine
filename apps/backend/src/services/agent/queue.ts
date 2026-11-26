@@ -286,7 +286,10 @@ function alreadyQueued({ sessionId, turnId, content }: Message, origin?: Origin)
 
 function appendRow(q: Queue, item: Row) {
   if (item.held) return q.items.push(item);
-  const at = q.items.findLastIndex((row) => !row.held || row.state === "sending") + 1;
+  let at = 0;
+  for (const [index, row] of q.items.entries()) {
+    if (!row.held || row.state === "sending") at = index + 1;
+  }
   q.items.splice(at, 0, item);
   return at + 1;
 }
