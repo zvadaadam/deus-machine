@@ -106,7 +106,11 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
           : host.act(caller, updateSessionTitle, { sessionId: entry.id, title: name });
         const { previousTitle } = await write.catch((error: unknown) => {
           if (session && entry.status === "setting_up" && error instanceof NotFoundError)
-            throw refuse.busy(callHint, ref, "being set up", "sent");
+            throw new OperatorError(
+              "busy",
+              `${json(ref)} is being set up, so nothing was renamed.`,
+              { next: callHint("wait_for_sessions", { sessions: [ref] }) }
+            );
           throw error;
         });
         const target = workspace ? `workspace ${quoted(entry.workspace.name)}` : quoted(ref);

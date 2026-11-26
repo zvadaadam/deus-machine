@@ -52,6 +52,9 @@ it.each([
   "x\u0085y",
   "x\u2028y",
   "x\u2029y",
+  "Bad\0name",
+  "\tReady",
+  "Ready\ud800",
   "a".repeat(121),
 ])("refuses the same invalid name on either operation (%j)", async (title) => {
   await expect(nameChat(title)).rejects.toMatchObject({ statusCode: 400 });
@@ -72,6 +75,12 @@ it("trims both names, accepts 120 characters and keeps later summaries from repl
   await expect(nameWorkspace("Shipping")).resolves.toEqual({ previousTitle: title });
   expect(persistSessionTitle("s", "Late summary").ok).toBe(true);
   expect(titles()).toEqual({ chat: "Review", workspace: "Shipping" });
+});
+
+it("applies a late summary to an unnamed archived workspace", () => {
+  db.exec("UPDATE workspaces SET state = 'archived'");
+  expect(persistSessionTitle("s", "Late summary").ok).toBe(true);
+  expect(titles()).toEqual({ chat: "Late summary", workspace: "Late summary" });
 });
 
 it("refuses a hidden chat and both targets in an archived workspace", async () => {
@@ -116,6 +125,7 @@ it("stamps a title renamed during cloud session creation once the twin is linked
   vi.mocked(createSession).mockImplementationOnce(async ({ metadata }) => {
     expect(metadata).toEqual({ harness: "claude-code" });
     await nameChat("In review");
+    await expect(nameChat("Bad\0name")).rejects.toMatchObject({ statusCode: 400 });
     expect(fetch).not.toHaveBeenCalled();
     return { id: "twin", organizationId: "org", userId: "user" };
   });

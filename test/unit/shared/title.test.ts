@@ -15,3 +15,13 @@ it("cuts a generated title at 120 characters and trims the result", () => {
   expect(toTitle("a".repeat(119) + " b")).toBe("a".repeat(119));
   expect(toTitle("")).toBeNull();
 });
+
+it.each(["\t", "\0", "\ud800"])("keeps words apart around %j in a generated title", (character) => {
+  expect(toTitle(`Fix${character}login`)).toBe("Fix login");
+});
+
+it("replaces each invalid character with a space before trimming and cutting the first line", () => {
+  const prefix = "🌱".repeat(117);
+  expect(toTitle(`\0 ${prefix}\t\ud800X\0extra`)).toBe(prefix + "  X");
+  expect(toTitle("\0 \t\udc00\nSecond line")).toBeNull();
+});

@@ -75,8 +75,8 @@ function writesOutsideOwner(sql: string, { db, writer }: Guard, directRun = fals
     // cannot establish ownership. Other tables may build their own SQL.
     if (raw.split(/\s+/, 1)[0].includes(unknown)) return true;
     const target =
-      /\b(?:update(?:\s+or\s+\w+)?|(?:insert(?:\s+or\s+\w+)?|replace)\s+into|delete\s+from)\b\s*(?:["'`[]?\w+["'`\]]?\s*\.\s*)?["'`[]?([\w«»]*)/gi;
-    const matches = [...raw.matchAll(target)];
+      /'(?:''|[^'])*'|"(?:""|[^"])*"|`(?:``|[^`])*`|\[[^\]]*\]|\b(?:update(?:\s+or\s+\w+)?|(?:insert(?:\s+or\s+\w+)?|replace)\s+into|delete\s+from)\b\s*(?:["'`[]?\w+["'`\]]?\s*\.\s*)?["'`[]?([\w«»]*)["'`\]]?/gi;
+    const matches = [...raw.matchAll(target)].filter((match) => match[1] !== undefined);
     // REPLACE can replace a title even when the statement omits the column.
     if (
       writer !== titleOwner &&
@@ -330,6 +330,8 @@ it("checks assembled statements and distinguishes assignment targets from reads"
     'db.exec("UPDATE workspaces SET pr_url = ?; DELETE /* cleanup */ FROM workspaces"); // reject',
     "db.prepare(`UPDATE workspaces SET pr_url = ? WHERE state IN (${placeholders})`);",
     'db.prepare("UPDATE automation_runs SET error_message = ?");',
+    `db.prepare("UPDATE sessions SET error_message = 'replace into sessions'");`,
+    `db.prepare("REPLACE INTO 'sessions' (id) VALUES (?)"); // reject`,
     'let sql = head + "pr_url = ?"; sql += ", setup_status = ?";',
     "db.exec(sql); // reject",
     'db.query("DELETE FROM " + table); // reject',

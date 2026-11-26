@@ -883,9 +883,9 @@ describe("through MCP and as a chat's own tools", () => {
     it("renames a workspace during setup and keeps that name when the first task arrives", async () => {
       const host = createDeusHost();
       const entry = await host.start!(chatCaller, startInput({ title: "Start title" }));
-      expect(await rename({ session: "new1:1" }, "Too soon")).toMatchObject({
+      expect(await rename({ session: "new1:1" }, "Too soon")).toEqual({
         isError: true,
-        text: expect.stringMatching(/refused \(busy\).*being set up/),
+        text: 'refused (busy): "new1:1" is being set up, so nothing was renamed.\n  -> wait_for_sessions(sessions: ["new1:1"])',
       });
       expect(await rename({ workspace: "new1" }, "Building")).toEqual({
         isError: false,

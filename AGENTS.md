@@ -318,8 +318,7 @@ It starts the local job in `workspace-checkout.ts`. The lifecycle owner
 and writes `state`,
 `init_stage`, `setup_status`, `init_fetch_issue`, `error_message` and `error_detail`.
 The owner also records `archived_at` and `archived_by` when a workspace is archived.
-An archived chat or workspace keeps its name. A summary or start title names only
-an unnamed chat or workspace, so a rename always stands.
+A rename is refused on an archived chat or workspace. A summary or start title names only an unnamed chat or workspace, archived or not, so a rename always stands.
 `workspace-lifecycle-fence.test.ts` checks the owner's imports and checks backend
 SQL and the integration CLI for lifecycle writes. Each local start has an
 in-memory attempt token. Archiving aborts that checkout and waits for its git
