@@ -277,9 +277,11 @@ export function askStop(id: string, origin: Origin) {
           if (activeTurnId) return;
           if (chat.turn) releaseTurn(id, chat.turn.turnId, { type: "gone" });
           else settle();
-          if (chats.get(id) === chat) turnNotices().queue(id, { type: "engine_idle" });
         })
         .exhaustive();
+    // A refused retry can replace the chat record while this Stop is waiting for its answer.
+    if (result?.outcome === "no_active_turn" && !result.activeTurnId && !holdingTurn(id))
+      turnNotices().queue(id, { type: "engine_idle" });
     chat.pendingStops--;
     prune(id, chat);
     return { unconfirmed: unconfirmed === true };

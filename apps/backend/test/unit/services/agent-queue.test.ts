@@ -28,7 +28,6 @@ import * as cloud from "../../../src/services/agent/cloud/driver";
 import {
   QueueLimitError,
   enqueueMessage,
-  onTurnNotice,
   queuedMessages,
   resumeQueuedMessages,
   steerMessage,
@@ -906,15 +905,24 @@ describe("stopping the current turn", () => {
     });
   });
 
-  it("retries the busy head when the engine confirms there is no active turn", async () => {
+  it("retries the busy head when a pending Stop finds the engine idle after another agent's busy Resume", async () => {
     await send("A");
     await outliveStop("A");
     engine.startTurn.mockRejectedValueOnce(busyReply("A"));
     await send("B");
     expect(starts()).toEqual(["A", "B"]);
-    onTurnNotice(sessionId, { type: "engine_idle" });
-    await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "B"]));
-    expect(await ids()).toEqual([]);
+    const reply = Promise.withResolvers<TurnCancelResult>();
+    engine.cancelTurn.mockReturnValueOnce(reply.promise);
+    const stopping = stopSession({ sessionId }, fromAssistant);
+    expect(engine.cancelTurn).toHaveBeenLastCalledWith(sessionId, undefined);
+    engine.startTurn.mockRejectedValueOnce(busyReply("A"));
+    await resumeQueuedMessages(sessionId, fromChat);
+    expect(starts()).toEqual(["A", "B", "B"]);
+    expect(await queue()).toMatchObject({ paused: "failed", items: [waitingRow("B")] });
+    reply.resolve({ outcome: "no_active_turn" });
+    await stopping;
+    await vi.waitFor(() => expect(starts()).toEqual(["A", "B", "B", "B"]));
+    expect(await queue()).toEqual({ paused: null, items: [] });
   });
 
   it.each(["stopped in setup", "refused on the wire"] as const)(
