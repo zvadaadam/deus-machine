@@ -42,7 +42,6 @@ import {
   type TurnOutcomeWrite,
   type WriteResult,
 } from "./persistence";
-import { pushCloudSessionTitle } from "./cloud/driver";
 import { applySessionFacts, describeEvent, turnOutcomeFor, type SessionFacts } from "./event-facts";
 import { refreshPrSnapshotForSession } from "../pr-snapshot.service";
 import { restoreCloudSnapshot } from "./cloud/snapshot";
@@ -93,7 +92,7 @@ function reportsFor(state: SessionState, turnId?: string) {
 
 // ---- Resource groups for invalidation ----
 
-const SESSION_RESOURCES: LiveName[] = ["workspaces", "sessions", "session"];
+export const SESSION_RESOURCES: LiveName[] = ["workspaces", "sessions", "session"];
 /** A message or a compaction row was written: the session's own row counts them. */
 const TRANSCRIPT_RESOURCES: LiveName[] = ["session"];
 
@@ -262,8 +261,6 @@ export function createAgentEventHandler(): AgentEventHandler & {
     handleTitle(sessionId, title) {
       console.log(`[AgentEvent] deus/title: session=${sessionId} title="${title}"`);
       persistAndInvalidate(persistSessionTitle(sessionId, title), sessionId);
-      // The cloud twin carries the title too — that's what the Mac-closed web lists.
-      pushCloudSessionTitle(sessionId, title);
     },
 
     handle(envelope) {

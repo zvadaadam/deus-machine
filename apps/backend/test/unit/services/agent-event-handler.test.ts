@@ -130,6 +130,7 @@ import {
 } from "../../../src/services/agent/chat-turn";
 import { wireTestTurnNotices } from "../../fixtures/turn-notices";
 import { createAgentEventHandler } from "../../../src/services/agent/event-handler";
+import * as cloud from "../../../src/services/agent/cloud/driver";
 import { cloudSaveFailures, sessionEvents } from "@shared/api/sessions";
 import { published } from "../../helpers";
 
@@ -1425,12 +1426,14 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
   describe("handleTitle", () => {
     it("persists the title and invalidates the session resources", () => {
+      const push = vi.spyOn(cloud, "pushCloudSessionFacts");
       handler.handleTitle(SESSION, "Fix the login bug");
 
       expect(mockPersistSessionTitle).toHaveBeenCalledWith(SESSION, "Fix the login bug");
       expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "sessions", "session"], {
         sessionIds: [SESSION],
       });
+      expect(push).not.toHaveBeenCalled();
     });
   });
 });
