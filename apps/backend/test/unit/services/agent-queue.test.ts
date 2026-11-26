@@ -4926,8 +4926,26 @@ describe("continuing a chat after a usage limit", () => {
     }
   );
 
+  it("waits for the person's Continue when a stopped turn hits a usage limit with an empty queue", async () => {
+    preference(true);
+    await send("A");
+    await stopped("A");
+    windows([{ id: "primary", usedPercent: 100, resetsAt }], "limited");
+    fail();
+    expect(await queue()).toEqual({
+      items: [],
+      paused: "limit",
+      limit: { resetsAt, continues: false },
+    });
+    await vi.advanceTimersByTimeAsync(resetsAt - now + minute);
+    expect(starts()).toEqual(["A"]);
+    await choose(true);
+    expect(engine.startTurn.mock.lastCall![0].input).toBe("Continue.");
+    expect(starts()).toHaveLength(2);
+  });
+
   it.each([false, true])(
-    "honors Stop and an optional Resume (%s) if the same turn then reports a limit",
+    "waits at a stopped turn's usage limit when Stop held a row (resumed before the end: %s)",
     async (resume) => {
       preference(true);
       await sendInOrder("A", "waiting");
@@ -4936,10 +4954,13 @@ describe("continuing a chat after a usage limit", () => {
       if (resume) await resumeInWindow();
       fail();
       expect((await queue()).paused).toBe(resume ? "limit" : "stopped");
-      expect(starts()).toEqual(["A"]);
+      if (resume) expect((await queue()).limit).toEqual({ resetsAt, continues: false });
       await vi.advanceTimersByTimeAsync(5 * minute);
-      expect((await queue()).paused).toBe(resume ? null : "stopped");
-      expect(starts()).toEqual(resume ? ["A", "waiting"] : ["A"]);
+      expect(starts()).toEqual(["A"]);
+      expect(await ids()).toEqual(["waiting"]);
+      if (resume) await choose(true);
+      else await resumeInWindow();
+      expect(starts()).toEqual(["A", "waiting"]);
     }
   );
 
