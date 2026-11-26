@@ -1,3 +1,5 @@
+> Retired on 2026-11-26: the Pencil file and its mapping below are kept only for reference. Do not update them (see AGENTS.md, Design).
+
 # design/
 
 `deus.pen` — the Deus Machine product, designed exactly as it is built.

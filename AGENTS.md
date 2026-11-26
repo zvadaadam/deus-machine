@@ -970,61 +970,12 @@ which hold only what it cannot trace: the shadcn component library, the
 `native` bridge object, and a few packages no import names (Tailwind, loaded
 from CSS; the native modules and tools the build and packaging scripts call).
 
-## Design ↔ code sync (design/deus.pen)
+## Design
 
-The app UI is designed in `design/deus.pen` (Pencil). The file is encrypted — read and
-edit it only through the Pencil MCP tools (`get_app_state`, `execute`), never with `Read`
-or `Grep`. Pencil is an external design tool; it is not bundled into Deus. The
-`design/` folder and its documents are independent of product integrations.
-The retained Design-tab and Pencil mockups are historical after the embedded
-integration's removal; preserve those documents rather than restoring the feature.
-
-`deus.pen` is a reconstruction of `apps/web` as it exists today, not a moodboard:
-
-- **Variables are the CSS.** Every colour, radius and type step is a Pencil variable named
-  after its custom property in `apps/web/src/global.css` (`bg-elevated`, `text-tertiary`,
-  `border-subtle`, `radius-lg`, `text-base`, …). The `mode` theme axis carries `:root`
-  (light) and `.dark` — the same two palettes.
-- **Components are the components.** `DS/*` frames map one-to-one onto React components;
-  the frame name points at the file that renders it (`DS/SidebarRow-Workspace` →
-  `features/sidebar/ui/WorkspaceItem.tsx`). Instance overrides stand in for props.
-- **Screens are real states**, at the sizes the app ships: 1440×900 desktop, 390×844
-  mobile. Every content tab, all nine settings sections, every dialog and the mobile
-  layouts are drawn — not just the happy path.
-
-Top-level frames are numbered by band: `00` overview, `01–05` foundations (colour/type/
-radius, motion, elevation, iconography, interaction states), `10–26` the component library,
-`30` states, `40–49` screens, `47a–e` the onboarding flow, `48a–f` Customize, `50–58`
-settings, `60–66` overlays, `70–73` mobile, `80` the `/connect` route, `90` the landing
-site. Keep the numbering when you add to it.
-
-The landing site (`apps/landing`) does not share these tokens — it has its own shadcn/Geist
-palette, namespaced `lp-*` in the design file, and ships dark-only. Never bind an app
-screen to an `lp-*` token or the reverse.
-
-`design/README.md` holds the full component → file and variable → token mapping.
-
-**The rule:** whoever changes one side changes the other in the same piece of work. Ship a
-UI change in code, update the matching `DS/*` component or screen; change the design,
-follow it with the code change. Divergence between `deus.pen` and `apps/web` is a bug. If
-another session owns the file right now, note the divergence instead of editing in
-parallel.
-
-Two things the file cannot render exactly, both documented on canvas: corners ship as
-`corner-shape: superellipse(1.5)` with every radius token scaled ×1.25 (`md` = 10px, not
-8px) and Pencil can only draw circular arcs; and the system font stack (SF Pro Text / SF
-Mono) is substituted with Inter / Roboto Mono because Pencil carries only Google fonts.
-Use the scaled radius values — they are what ships in supporting browsers.
-Buttons reuse `radius-lg` (10px circular fallback, 12.5px continuous corners);
-circular controls retain `radius-full`. See `design/controls.md`.
-
-Working notes for the Pencil editor: set variables before nodes; the canvas has no
-autosave, so save with the Pencil MCP's `save` tool, and always before switching
-branches (Pen keeps the open document in memory and writes it back over the
-checked-out one); layout/render goes
-stale after long editing sessions — save and relaunch Pen to get accurate screenshots. A
-component instance resolves its theme once per document, so light-mode sheets are built
-from primitives rather than instances.
+`design/deus.pen` is retired (the owner's word, 2026-11-26): do not read, update or sync it,
+and do not ask for it in a review. A design decision is shown to the owner as a page they can
+click (a Conductor artifact), built from the app's own tokens in `apps/web/src/global.css`.
+`design/motion.md` and `design/controls.md` still hold the motion and control rules.
 
 ## Interface motion
 
