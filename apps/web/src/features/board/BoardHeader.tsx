@@ -1,7 +1,13 @@
 import { BoardAvatar } from "./BoardAvatar";
 import { channelName } from "@shared/boards";
 import { GitBranch, Hash } from "lucide-react";
-import type { Board } from "@shared/boards";
+import type { BoardDetail } from "@shared/boards";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { LabelPill } from "@/components/ui/label-pill";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { linkToWorkspace } from "@/features/workspace/lib/workspaceAddress";
@@ -46,7 +52,39 @@ export function WorkspaceChip({
   );
 }
 
-export function BoardHeader({ board }: { board: Board }) {
+function BoardWorkspaces({ workspaces }: Pick<BoardDetail, "workspaces">) {
+  const rows = Object.entries(workspaces);
+  if (!rows.length) return null;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="text-text-secondary hover:bg-control-hover shrink-0 rounded-md px-1.5 py-1 text-xs"
+        >
+          {rows.length} {rows.length === 1 ? "workspace" : "workspaces"}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="max-w-72">
+        {rows.map(([id, workspace]) => (
+          <DropdownMenuItem
+            key={id}
+            disabled={workspace.archived}
+            onSelect={() => showWorkspace(id)}
+          >
+            <GitBranch aria-hidden />
+            <span className="min-w-0 truncate">{workspace.name}</span>
+            {workspace.archived && (
+              <span className="text-text-muted ml-auto text-xs">Archived</span>
+            )}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+export function BoardHeader({ board }: { board: BoardDetail }) {
   const channel = channelName(board.name);
   return (
     <header className="border-border-subtle grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 border-b px-3 py-1 md:flex md:h-11 md:px-4 md:py-0">
@@ -66,6 +104,9 @@ export function BoardHeader({ board }: { board: Board }) {
           name={board.coordinator_name}
           archived={!!board.read_only}
         />
+      </div>
+      <div className="col-start-3 row-start-1 ml-auto flex shrink-0 items-center">
+        <BoardWorkspaces workspaces={board.workspaces} />
       </div>
     </header>
   );

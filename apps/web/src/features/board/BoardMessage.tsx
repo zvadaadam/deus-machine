@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/api";
-import type { Board, BoardRow } from "@shared/boards";
+import type { Board, BoardDetail, BoardRow } from "@shared/boards";
 import { getErrorMessage } from "@shared/lib/errors";
 import { ChatMarkdown } from "@/components/markdown";
 import { chatTabLabel } from "@/features/session/ui/tabs/types";
@@ -87,7 +87,7 @@ function dayLabel(date: Date) {
 
 export const replyCount = (count: number) => count + (count === 1 ? " reply" : " replies");
 
-type MessageProps = { board: Board; profile: SidebarProfile; post: BoardRow };
+type MessageProps = { board: BoardDetail; profile: SidebarProfile; post: BoardRow };
 
 export function BoardRows({
   board,
@@ -155,6 +155,7 @@ function BoardMessage({
   const coordinator = post.author_kind === "bot";
   const person = profileName(profile);
   const transform = useMemo(() => boardMentions(person), [person]);
+  const subject = post.about_workspace_id && board.workspaces[post.about_workspace_id];
   const time = localDate(post.created_at);
   return (
     <article
@@ -172,11 +173,11 @@ function BoardMessage({
           <strong className="text-foreground text-base font-semibold wrap-anywhere">
             {coordinator ? "Coordinator" : person}
           </strong>
-          {coordinator && post.about_workspace_id !== board.workspace_id && post.about_name && (
+          {coordinator && subject && (
             <WorkspaceChip
               id={post.about_workspace_id}
-              name={post.about_name}
-              archived={!!post.about_archived}
+              name={subject.name}
+              archived={subject.archived}
             />
           )}
           <time

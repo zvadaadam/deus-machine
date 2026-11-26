@@ -19,14 +19,16 @@ export interface Board {
   last_seq: number;
 }
 
+export interface BoardDetail extends Board {
+  workspaces: Record<string, { name: string; archived: boolean }>;
+}
+
 export interface BoardPost {
   id: string;
   seq: number;
   thread_seq: number | null;
   author_kind: "person" | "bot";
   about_workspace_id: string | null;
-  about_name: string | null;
-  about_archived: number | null;
   body: string;
   created_at: string;
   reply_count: number;
@@ -46,7 +48,7 @@ export interface BoardThread extends BoardPost {
 type BoardDelivery = "waiting" | "delivered" | "not_delivered";
 export type BoardRow<T extends BoardPost = BoardPost> = T & { delivery?: BoardDelivery };
 export interface BoardChannelPage {
-  board: Board;
+  board: BoardDetail;
   posts: BoardRow<BoardThread>[];
 }
 export interface BoardThreadPage {

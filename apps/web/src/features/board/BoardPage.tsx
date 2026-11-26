@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowLeft, X } from "lucide-react";
-import type { Board } from "@shared/boards";
+import type { BoardDetail } from "@shared/boards";
 import { getErrorMessage } from "@shared/lib/errors";
 import { SidebarInset } from "@/components/ui/sidebar";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
@@ -39,7 +39,7 @@ function ThreadPane({
   thread,
   mobile,
 }: {
-  board: Board;
+  board: BoardDetail;
   profile: SidebarProfile;
   thread: number;
   mobile: boolean;

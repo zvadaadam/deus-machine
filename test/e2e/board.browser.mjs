@@ -240,6 +240,7 @@ async function run() {
     await feed
       .getByText("No posts yet. The coordinator posts here when it starts or finishes work.")
       .waitFor();
+    assert.equal(await page.getByRole("button", { name: /^\d+ workspaces?$/ }).count(), 0);
     const mobileWorkspace = await host.write("createWorkspace", { repository_id: "project" });
     await until(
       async () => {
@@ -260,6 +261,7 @@ async function run() {
     const place = workspace.title ?? workspace.slug;
     await page.getByRole("link", { name: "Open workspace, " + place }).waitFor();
     assert.equal(await rootRow.getByRole("link").count(), 0);
+    assert.equal(await page.getByRole("button", { name: /^\d+ workspaces?$/ }).count(), 0);
     await feed.getByText("Today", { exact: true }).waitFor();
     const channelWidth = () =>
       page
@@ -318,6 +320,18 @@ async function run() {
       .locator("article[data-seq='3']")
       .getByRole("link", { name: "Open workspace, Mobile verification" });
     assert.ok((await subjectChip.getAttribute("href")).includes(subject.id));
+    await page.getByRole("button", { name: "1 workspace", exact: true }).click();
+    const workspaces = page.getByRole("menu", { name: "1 workspace" });
+    await workspaces.getByRole("menuitem", { name: "Mobile verification" }).click();
+    await until(
+      () =>
+        page.evaluate(async (id) => {
+          const { useWorkspaceStore } = await import("/src/features/workspace/store/index.ts");
+          return useWorkspaceStore.getState().selectedWorkspaceId === id;
+        }, subject.id),
+      5000,
+      "open the named workspace"
+    );
     await page.goto(base + "b/" + board.id + "?thread=1");
     assert.equal(
       (await host.read("boardThread", { boardId: board.id, thread: 1 })).replies.length,

@@ -217,3 +217,39 @@ it("resolves the same workspace and chat references as rename and refuses unfami
   ).toMatchObject({ isError: true, content: [{ text: expect.stringContaining("ambiguous") }] });
   expect(store.getBoard(board.id).last_seq).toBe(2);
 });
+
+it("counts distinct subjects across roots and replies and retains the words when a subject goes away", () => {
+  const { id } = store.createBoard("s", "Release");
+  expect(store.boardDetail(id)?.workspaces).toEqual({});
+  db.exec(`INSERT INTO repositories (id, name) VALUES ('mobile-project','Phone');
+    INSERT INTO workspaces(id,repository_id,slug,title,state) VALUES ('mobile','mobile-project','mars','Mobile verification','ready')`);
+  store.savePost(id, { body: "Build" }, { kind: "bot" });
+  store.savePost(id, { body: "Release" }, { kind: "bot", aboutWorkspaceId: "w" });
+  expect(store.boardDetail(id)?.workspaces).toEqual({});
+  store.savePost(
+    id,
+    { body: "Mobile started", thread: 1 },
+    { kind: "bot", aboutWorkspaceId: "mobile" }
+  );
+  const reply = store.savePost(
+    id,
+    { body: "Mobile passed", thread: 1 },
+    { kind: "bot", aboutWorkspaceId: "mobile" }
+  ).post;
+  expect(store.boardDetail(id)?.workspaces).toEqual({
+    mobile: { name: "Mobile verification", archived: false },
+  });
+  db.exec("UPDATE workspaces SET title='Phone release', state='archived' WHERE id='mobile'");
+  expect(store.boardDetail(id)?.workspaces.mobile).toEqual({
+    name: "Phone release",
+    archived: true,
+  });
+  db.exec("DELETE FROM repositories WHERE id='mobile-project'");
+  expect(store.boardDetail(id)?.workspaces).toEqual({});
+  expect(store.getPost(id, reply.seq)).toMatchObject({
+    about_workspace_id: null,
+    body: "Mobile passed",
+  });
+  db.exec("DELETE FROM repositories WHERE id='r'");
+  expect(store.boardDetail(id)).toBeNull();
+});

@@ -2,6 +2,7 @@ import {
   BOARD_PAGE_SIZE,
   boardReadOnlyReason,
   type Board,
+  type BoardDetail,
   type BoardPost,
   type BoardPostInput,
   type BoardThread,
@@ -11,12 +12,13 @@ import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../../lib/database";
 import { ConflictError, NotFoundError, ValidationError } from "../../lib/errors";
 
-const boardSelect = `SELECT b.id, b.name, b.workspace_id, b.last_seq,
+const boardFields = `b.id, b.name, b.workspace_id, b.last_seq,
   CASE WHEN NOT s.is_hidden THEN s.id END AS delivery_session_id,
   COALESCE(w.title, w.slug) AS coordinator_name,
-  CASE WHEN w.state = 'archived' THEN 'archived' END AS read_only
-  FROM boards b JOIN workspaces w ON w.id = b.workspace_id
+  CASE WHEN w.state = 'archived' THEN 'archived' END AS read_only`;
+const boardTables = `FROM boards b JOIN workspaces w ON w.id = b.workspace_id
   LEFT JOIN sessions s ON s.id = b.delivery_session_id`;
+const boardSelect = `SELECT ${boardFields} ${boardTables}`;
 
 export function listBoards(): Board[] {
   return getDatabase()
@@ -24,13 +26,6 @@ export function listBoards(): Board[] {
     .all();
 }
 
-export function boardDetail(id: string): Board | null {
-  return (
-    getDatabase()
-      .prepare<[string], Board>(boardSelect + " WHERE b.id = ?")
-      .get(id) ?? null
-  );
-}
 /** One lookup for all chats whose queues or echoes changed. */
 export function boardsForDeliveryChats(sessionIds: string[]) {
   return getDatabase()
@@ -42,9 +37,29 @@ export function boardsForDeliveryChats(sessionIds: string[]) {
 }
 
 export function getBoard(id: string): Board {
-  const board = boardDetail(id);
-  if (!board) throw new NotFoundError("This board does not exist.");
-  return board;
+  const row = getDatabase()
+    .prepare<[string], Board>(boardSelect + " WHERE b.id = ?")
+    .get(id);
+  if (!row) throw new NotFoundError("This board does not exist.");
+  return row;
+}
+
+/** The board and the distinct subjects of all its posts, including replies outside the current page. */
+export function boardDetail(id: string): BoardDetail | null {
+  const subjects = `(SELECT json_group_object(id, json_object('name', name, 'archived', json(archived)))
+    FROM (SELECT w.id, COALESCE(w.title, w.slug) AS name,
+            CASE w.state WHEN 'archived' THEN 'true' ELSE 'false' END AS archived
+          FROM (SELECT DISTINCT about_workspace_id FROM board_messages
+                WHERE board_id = b.id AND about_workspace_id != b.workspace_id) subject
+          JOIN workspaces w ON w.id = subject.about_workspace_id
+          ORDER BY name COLLATE NOCASE, w.id)) AS workspaces`;
+  const row = getDatabase()
+    .prepare<
+      [string],
+      Board & { workspaces: string }
+    >(`SELECT ${boardFields}, ${subjects} ${boardTables} WHERE b.id = ?`)
+    .get(id);
+  return row ? { ...row, workspaces: JSON.parse(row.workspaces) } : null;
 }
 
 function writableBoard(id: string) {
@@ -105,11 +120,9 @@ export function deliveryChat(board: Board) {
 }
 
 const postFields = `m.id, m.seq, m.thread_seq, m.author_kind, m.about_workspace_id,
-  COALESCE(a.title, a.slug) AS about_name, a.state = 'archived' AS about_archived,
   m.body, m.created_at, m.reply_count, m.delivery_session_id, m.delivery_refusal,
   s.title AS delivery_title, s.chat AS delivery_chat, s.agent_harness AS delivery_harness, s.is_hidden AS delivery_hidden`;
-const posts =
-  "board_messages m LEFT JOIN sessions s ON s.id = m.delivery_session_id LEFT JOIN workspaces a ON a.id = m.about_workspace_id";
+const posts = "board_messages m LEFT JOIN sessions s ON s.id = m.delivery_session_id";
 
 export function getPost(board: string, seq: number): BoardPost {
   const post = getDatabase()
