@@ -139,6 +139,11 @@ export function useTranscriptVirtualizer({
   });
 
   useLayoutEffect(() => {
+    // React skips the height write when measurements return to the previously committed size.
+    if (list.current) list.current.style.height = `${virtualizer.getTotalSize()}px`;
+  });
+
+  useLayoutEffect(() => {
     head.current = firstSeq;
     if (prepended && anchor.current === page && page.restoredTop == null) {
       restoreAnchor(virtualizer, page);

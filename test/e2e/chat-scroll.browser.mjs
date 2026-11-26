@@ -3,6 +3,7 @@ import { after, afterEach, before, beforeEach, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import { chromium } from "playwright";
+import { expect } from "playwright/test";
 import { build } from "vite";
 
 // Bundle the real transcript and styles in memory. The fixture supplies data locally.
@@ -489,6 +490,55 @@ test("an above-row measurement on the chase's last idle frame survives a 30-fram
 
 test("a shrinking live row keeps the trailing compaction visible through chase shutdown", () =>
   resizeAtChaseShutdown(-160, 30));
+
+test("a visible row returning to its committed size clears the interim list height", async () => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await renderChat({ messages: history(1, 8) });
+  await waitAtBottom();
+  const row = page.locator('[data-message-id="reply-8"]');
+  const { committed, grown, reverted, visible } = await row.evaluate(async (row) => {
+    const pane = row.closest("#chat-messages");
+    const list = row.parentElement;
+    const virtualizer = globalThis.chatVirtualizer;
+    const heights = () => ({ list: list.offsetHeight, measured: virtualizer.getTotalSize() });
+    const committed = list.offsetHeight;
+    const notify = virtualizer.options.onChange;
+    let publish;
+    virtualizer.options.onChange = (...args) => {
+      publish = () => notify(...args);
+    };
+
+    const frame = () => new Promise(globalThis.requestAnimationFrame);
+    pane.style.right = "1px"; // Wake the chase with a viewport resize.
+    await frame();
+    await frame();
+    const spacer = globalThis.document.createElement("div");
+    spacer.style.height = "64px";
+    row.firstElementChild.append(spacer);
+    for (let i = 0; i < 30; i++) await frame(); // Let the chase reach the bottom and idle.
+    const grown = heights();
+    const bounds = row.getBoundingClientRect();
+    const view = pane.getBoundingClientRect();
+    const visible = bounds.bottom > view.top && bounds.top < view.bottom;
+    spacer.remove();
+    await frame();
+    await frame();
+    const reverted = heights();
+    virtualizer.options.onChange = notify;
+    publish();
+    return { committed, grown, reverted, visible };
+  });
+
+  assert.ok(visible, "the same row still intersects the viewport when it shrinks");
+  assert.deepEqual(grown, { list: committed + 64, measured: committed + 64 });
+  assert.deepEqual(reverted, { list: committed + 64, measured: committed });
+  await expect
+    .poll(async () => {
+      await waitFrames(2);
+      return row.evaluate((row) => row.parentElement.offsetHeight);
+    })
+    .toBe(committed);
+});
 
 test("prepending with a concurrent append preserves the row through delayed measurement", async () => {
   await renderChat({ messages: history(22, 34), hasOlder: true });
