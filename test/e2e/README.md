@@ -215,7 +215,7 @@ ids), a streamed reply, a question, the end of the turn, and dropped sockets.
   no backend): the browser lists the platform's sessions, mints a token from
   its web session and holds the socket itself. It checks the sidebar, the
   menu's two organizations (no computer row, "Your computers") and the sidebar
-  filtered by the one chosen (a row and ⌃1), the snapshot, the hosted Device viewer and Home command, the side streams, `message.send`,
+  filtered by the one chosen (a row and ⌃1), the snapshot, the side streams, `message.send`,
   streaming, the question, the session list read again when the turn ends,
   and each row once after a dropped socket.
 - `cloud/organizations.runtime.mjs`, several organizations on one Mac (no

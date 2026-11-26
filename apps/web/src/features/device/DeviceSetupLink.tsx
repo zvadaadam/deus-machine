@@ -1,15 +1,8 @@
 import { openExternal } from "@/platform/native/window";
+import { deviceSetup } from "./devices";
 
-const links = {
-  ios: ["Install Xcode", "https://apps.apple.com/app/xcode/id497799835"],
-  android: [
-    "Install Android Studio and create a virtual device",
-    "https://developer.android.com/studio",
-  ],
-} as const;
-
-export function DeviceSetupLink({ platform }: { platform: keyof typeof links }) {
-  const [label, url] = links[platform];
+export function DeviceSetupLink({ platform }: { platform: keyof typeof deviceSetup }) {
+  const { label, url } = deviceSetup[platform];
   return (
     <a
       href={url}

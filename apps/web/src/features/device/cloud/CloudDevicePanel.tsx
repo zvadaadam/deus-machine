@@ -5,6 +5,8 @@ import { match } from "ts-pattern";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
 import { getErrorMessage } from "@shared/lib/errors";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import type { Workspace } from "@/shared/types";
@@ -124,8 +126,7 @@ export function CloudDevicePanel({ workspace, visible, toolbarAction }: CloudDev
   useEffect(() => {
     if (!unknown) return;
     let cancelled = false;
-    cloudSimulatorService
-      .status(workspaceId)
+    call(api.cloudSimulator, { workspaceId })
       .then((seed) => {
         if (cancelled) return;
         // An identity change while the read was in flight: the answer is the

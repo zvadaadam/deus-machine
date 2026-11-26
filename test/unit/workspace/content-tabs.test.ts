@@ -24,8 +24,8 @@ describe("workspace tools", () => {
         const visible = (mode === "electron" || mode === "web-dev") && available;
         expect(isTabVisible("device", {}, local)).toBe(visible);
         expect(getVisibleTools({}, local).some((tool) => tool.id === "device")).toBe(visible);
-        expect(isTabVisible("device", {}, cloud)).toBe(true);
-        expect(anyContentTabVisible({}, cloud)).toBe(true);
+        expect(isTabVisible("device", {}, cloud)).toBe(mode !== "web-direct");
+        expect(anyContentTabVisible({}, cloud)).toBe(mode !== "web-direct");
       }
     }
   );
@@ -35,9 +35,10 @@ describe("workspace tools", () => {
     expect(isTabVisible("browser", settings)).toBe(capabilities.nativeBrowser);
     expect(isTabVisible("browser", {}, tabsFor({ kind: "cloud" }))).toBe(true);
   });
-  it("offers only the hosted device in a direct cloud workspace", () => {
+  it("keeps hosted web chat-only even when a workspace has devices", () => {
     vi.stubEnv("VITE_CLOUD_DIRECT", "1");
-    expect(getVisibleTools({}, tabsFor({ kind: "cloud" })).map((t) => t.id)).toEqual(["device"]);
-    expect(anyContentTabVisible({}, tabsFor({ kind: "worktree" }))).toBe(false);
+    for (const kind of ["cloud", "worktree"]) {
+      expect(getVisibleTools({}, tabsFor({ kind }, true))).toEqual([]);
+    }
   });
 });

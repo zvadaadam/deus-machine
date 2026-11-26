@@ -1,4 +1,3 @@
-import { simulatorEnv } from "../device-hub/xcode-env";
 // backend/src/services/agent/client.ts
 // The backend's link to the engine, which runs in this process
 // (apps/agent-server): the standard @zvada/agent-server wire on an in-process
@@ -25,6 +24,7 @@ import {
   type SessionTitle,
 } from "../../../../agent-server";
 import { DB_PATH } from "../../lib/database";
+import { simulatorEnv } from "../device-hub/xcode-env";
 import { hasAgentMessages } from "./agent-messages";
 
 // ============================================================================

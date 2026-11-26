@@ -113,8 +113,6 @@ describe("Stop delivery", () => {
       SESSION,
       {
         sendMessage: vi.fn(),
-        deviceStatus: vi.fn(),
-        execDevice: vi.fn(),
         sendRaw: vi.fn(),
         cancel,
       },
@@ -135,8 +133,6 @@ describe("Stop delivery", () => {
       SESSION,
       {
         sendMessage: vi.fn(),
-        deviceStatus: vi.fn(),
-        execDevice: vi.fn(),
         sendRaw: vi.fn(),
         cancel: () => {
           throw new Error(message);

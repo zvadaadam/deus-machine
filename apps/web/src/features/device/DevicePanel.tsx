@@ -1,31 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, House, Play } from "lucide-react";
-import {
-  DeviceClientProvider,
-  DeviceScreen,
-  displayScreen,
-  useDeviceClient,
-  useDeviceScreenClient,
-} from "@expo/hub-client";
+import { Play } from "lucide-react";
+import { DeviceClientProvider } from "@expo/hub-client";
 import * as api from "@shared/api/device-hub";
-import { HUB_STREAM_MODE, type HubDevice, type HubStatus } from "@shared/types/device-hub";
+import {
+  HUB_STREAM_MODE,
+  type HubDevice,
+  type HubInventory,
+  type HubStatus,
+} from "@shared/types/device-hub";
 import { getErrorMessage } from "@shared/lib/errors";
 import { Button } from "@/components/ui/button";
 import { call, OpError } from "@/platform/ws";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { resolveBackendEndpoints } from "@/shared/config/backend.config";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DeviceSetupLink } from "./DeviceSetupLink";
 import { useStream } from "@/shared/hooks/useStream";
-import { attachImageFiles, composerTarget } from "@/features/session/store/sessionComposerStore";
 import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
+import { DevicePicker } from "./DevicePicker";
+import { DeviceActions, DeviceView } from "./DeviceView";
+import { DeviceSetupLink } from "./DeviceSetupLink";
+import { deviceKey, deviceSetup } from "./devices";
 
 function DeviceDetails({ detail }: { detail?: string | null }) {
   if (!detail) return null;
@@ -37,83 +30,25 @@ function DeviceDetails({ detail }: { detail?: string | null }) {
   );
 }
 
-const deviceKey = (device: HubDevice) => device.platform + ":" + device.id;
-
-type ReportDevice = (device: HubDevice | null) => void;
-
-function Screen({
-  session,
-  device,
-  onDisplay,
-}: {
-  session: string | null;
-  device: HubDevice;
-  onDisplay: ReportDevice;
-}) {
-  const client = useDeviceClient();
-  const screen = useDeviceScreenClient();
-  useEffect(() => {
-    if (!screen.framePresented) return;
-    onDisplay(device);
-  }, [device, onDisplay, screen.framePresented]);
-  const size = displayScreen(screen.screen);
-  const ratio = size ? size.width / size.height : 9 / 19.5;
-  const capture = useMutation({
-    mutationFn: async () => {
-      if (!session) return;
-      const target = composerTarget(session);
-      const shot = await client.screenshot({ format: "png" });
-      if (!shot) throw new Error("The device could not capture a screenshot.");
-      const attached = await attachImageFiles(target, [
-        new File([shot.blob], "device-screenshot.png", { type: shot.blob.type }),
-      ]);
-      if (!attached) throw new Error("The screenshot could not be added to the chat.");
-    },
-  });
+function EmptyDevices({ inventory }: { inventory: HubInventory }) {
   return (
-    <>
-      <div className="border-border-subtle flex items-center justify-end gap-1 border-b px-2 py-1">
-        <Button
-          size="xs"
-          variant="ghost"
-          disabled={!screen.framePresented}
-          onClick={() => client.pressButton("home")}
-        >
-          <House />
-          Home
-        </Button>
-        <Button
-          size="xs"
-          variant="ghost"
-          disabled={!session || !screen.framePresented || capture.isPending}
-          onClick={() => capture.mutate()}
-        >
-          <Camera />
-          Screenshot
-        </Button>
-      </div>
-      {capture.error && (
-        <p role="alert" className="text-destructive px-3 text-sm">
-          {getErrorMessage(capture.error)}
-        </p>
-      )}
-      <div className="[container-type:size] m-3 grid min-h-0 flex-1 place-items-center">
-        <div
-          className="relative overflow-hidden rounded-lg"
-          style={{ width: `min(100cqw, ${100 * ratio}cqh)`, aspectRatio: ratio }}
-        >
-          <DeviceScreen client={screen} />
+    <div className="text-muted-foreground m-auto max-w-xs space-y-2 p-4 text-center text-sm">
+      {inventory.available.ios ? (
+        <p>{deviceSetup.ios.create}</p>
+      ) : (
+        <div>
+          <p>iOS Simulators need Xcode.</p>
+          <DeviceSetupLink platform="ios" />
         </div>
-        {(!screen.framePresented || screen.inputError || screen.status === "error") && (
-          <p
-            role="status"
-            className="bg-background text-muted-foreground pointer-events-none absolute max-w-full rounded-lg px-3 py-2 text-center text-sm"
-          >
-            {screen.inputError || screen.error || "Connecting to the device…"}
-          </p>
-        )}
-      </div>
-    </>
+      )}
+      <DeviceDetails detail={inventory.detail.ios} />
+      {inventory.available.android && (
+        <>
+          <p>{deviceSetup.android.create}</p>
+          <DeviceDetails detail={inventory.detail.android} />
+        </>
+      )}
+    </div>
   );
 }
 
@@ -123,7 +58,7 @@ function Devices({
   instance,
   onDisplay,
 }: {
-  onDisplay: ReportDevice;
+  onDisplay: (device: HubDevice | null) => void;
   workspaceId: string;
   session: string | null;
   instance: string;
@@ -133,7 +68,6 @@ function Devices({
   const [active, setActive] = useState(() =>
     cache.getQueryData<{ device: HubDevice; instance: string }>(savedKey)
   );
-  const [platform, setPlatform] = useState<HubDevice["platform"]>(active?.device.platform ?? "ios");
   const [id, setId] = useState(active ? deviceKey(active.device) : "");
   const restoring = active && active.instance !== instance;
   const list = useQuery({
@@ -164,10 +98,14 @@ function Devices({
       void list.refetch();
     },
   });
-  const devices = list.data?.devices.filter((d) => d.platform === platform) ?? [];
+  const inventory = list.data;
+  const devices =
+    inventory?.devices.filter((d) => d.platform === "ios" || inventory.available.android) ?? [];
   const selected = devices.find((d) => deviceKey(d) === id);
   const viewing =
-    active?.instance === instance && deviceKey(active.device) === id && selected?.booted;
+    active?.instance === instance && deviceKey(active.device) === id && selected?.booted
+      ? active.device
+      : undefined;
   const reconnect = restoring && selected?.booted ? selected : null;
   const attempted = useRef<string | null>(null);
   const { mutate: connect } = start;
@@ -177,6 +115,7 @@ function Devices({
     connect({ device: reconnect, boot: false });
   }, [connect, reconnect]);
   function select(value: string) {
+    if (value === id) return;
     setId(value);
     setActive(undefined);
     onDisplay(null);
@@ -184,48 +123,32 @@ function Devices({
     start.reset();
   }
   const failure = list.error ?? start.error ?? endpoints.error;
-  let placeholder = "Choose a device";
-  if (list.isPending) placeholder = "Finding devices…";
-  else if (!devices.length) placeholder = "No devices found";
   return (
-    <>
-      <Tabs
-        aria-label="Device platform"
-        value={platform}
-        onValueChange={(value) => {
-          setPlatform(value === "android" ? "android" : "ios");
-          select("");
-        }}
+    <DeviceClientProvider
+      platform={viewing?.platform ?? null}
+      options={{
+        baseUrl:
+          viewing && endpoints.data
+            ? endpoints.data.apiBase +
+              "/device-hub/vendor/" +
+              (viewing.platform === "ios" ? "serve-sim" : "serve-emu")
+            : null,
+        device: viewing?.id,
+        streamMode: HUB_STREAM_MODE,
+      }}
+    >
+      <div
+        role="group"
+        aria-label="Device controls"
+        className="border-border-subtle flex min-w-0 shrink-0 items-center gap-1.5 border-b p-2"
       >
-        <TabsList className="mx-2 mt-2">
-          <TabsTrigger value="ios" disabled={start.isPending}>
-            iOS
-          </TabsTrigger>
-          <TabsTrigger value="android" disabled={start.isPending}>
-            Android
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
-      <div className="border-border-subtle flex min-w-0 items-center gap-2 border-b p-2">
-        <Select
-          value={id}
+        <DevicePicker
+          inventory={inventory}
+          selected={selected}
           disabled={start.isPending}
-          onOpenChange={(open) => {
-            if (open) void list.refetch();
-          }}
-          onValueChange={select}
-        >
-          <SelectTrigger size="sm" aria-label="Device" className="min-w-0 flex-1">
-            <SelectValue placeholder={placeholder} />
-          </SelectTrigger>
-          <SelectContent>
-            {devices.map((device) => (
-              <SelectItem key={device.id} value={deviceKey(device)}>
-                {device.name} · {device.version}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          onOpen={() => void list.refetch()}
+          onSelect={select}
+        />
         <Button
           size="sm"
           variant="secondary"
@@ -235,6 +158,7 @@ function Devices({
           <Play />
           {start.isPending ? "Starting…" : "Start"}
         </Button>
+        <DeviceActions session={session} />
       </div>
       {failure && (
         <div role="alert" className="text-destructive p-3 text-sm">
@@ -253,57 +177,14 @@ function Devices({
           />
         </div>
       )}
-      {viewing && endpoints.data && (
-        <DeviceClientProvider
-          platform={active.device.platform}
-          options={{
-            baseUrl:
-              endpoints.data.apiBase +
-              "/device-hub/vendor/" +
-              (active.device.platform === "ios" ? "serve-sim" : "serve-emu"),
-            device: active.device.id,
-            streamMode: HUB_STREAM_MODE,
-          }}
-        >
-          <Screen session={session} device={active.device} onDisplay={onDisplay} />
-        </DeviceClientProvider>
-      )}
-      {devices.length > 0 && !selected && (
+      {inventory && !failure && !devices.length && <EmptyDevices inventory={inventory} />}
+      {!failure && devices.length > 0 && (!selected || restoring) && (
         <p className="text-muted-foreground m-auto p-4 text-center text-sm">
-          Choose a device, then select Start.
+          {restoring ? "Reconnecting to the device…" : "Choose a device, then select Start."}
         </p>
       )}
-      {list.data && !devices.length && (
-        <div className="text-muted-foreground m-auto max-w-xs p-4 text-center text-sm">
-          {platform === "ios" ? (
-            list.data.available.ios ? (
-              <p>
-                Create an iOS Simulator in Xcode’s Window → Devices and Simulators, then open the
-                device picker.
-              </p>
-            ) : (
-              <>
-                <p>iOS Simulators need Xcode.</p>
-                <DeviceSetupLink platform="ios" />
-              </>
-            )
-          ) : (
-            <>
-              {!list.data.available.android && <p>Android emulators need the Android SDK.</p>}
-              {list.data.available.android ? (
-                <p>
-                  Create a virtual device in Android Studio’s Device Manager, start it there, then
-                  open the device picker.
-                </p>
-              ) : (
-                <DeviceSetupLink platform="android" />
-              )}
-            </>
-          )}
-          <DeviceDetails detail={list.data.detail[platform]} />
-        </div>
-      )}
-    </>
+      {viewing && endpoints.data && <DeviceView device={viewing} onDisplay={onDisplay} />}
+    </DeviceClientProvider>
   );
 }
 
@@ -332,7 +213,7 @@ export default function DevicePanel({
   return (
     <section
       aria-label="Device panel"
-      className="bg-background text-foreground flex h-full min-h-0 flex-col"
+      className="bg-background text-foreground @container flex h-full min-h-0 flex-col"
     >
       {status.phase === "ready" ? (
         <Devices

@@ -25,10 +25,10 @@ import {
   CloudSimulatorPlatformSchema,
   CloudSimulatorStatusSchema,
   type CloudSimulatorEvent,
+  type CloudSimulatorExecResult,
   type CloudSimulatorPlatform,
   type CloudSimulatorStatus,
 } from "@shared/events";
-import type { CloudSimulatorExecResult } from "@shared/events";
 import { cloudOrg } from "./config";
 import { cloudSimulatorEvents } from "@shared/api/cloud-device";
 import { publish } from "../../streams";
@@ -543,5 +543,18 @@ export function buildCloudSimulatorExecFrameData(
     verb,
     ...(args.length > 0 ? { args } : {}),
     ...(request.platform ? { platform: request.platform } : {}),
+  };
+}
+
+/** The platform's `simulator.exec.response`, as the request's result. */
+export function readCloudSimulatorExecResult(
+  data: Record<string, unknown>
+): CloudSimulatorExecResult {
+  const success = data.success === true;
+  return {
+    success,
+    exitCode: typeof data.exitCode === "number" ? data.exitCode : success ? 0 : -1,
+    output: typeof data.output === "string" ? data.output : "",
+    ...(typeof data.error === "string" ? { error: data.error } : {}),
   };
 }

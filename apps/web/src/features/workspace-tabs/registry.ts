@@ -50,7 +50,6 @@ export interface ToolDefinition {
   /** Platform capability that must be true. Absent = always available. */
   capabilityGate?: CapabilityName;
   requiresDeviceView?: boolean;
-  hostedWeb?: boolean;
   /** The gates above are this computer's own panel's: a cloud workspace's tab
    *  is served by the cloud computer and always shows. */
   localGates?: boolean;
@@ -97,7 +96,6 @@ const TOOL_DEFINITIONS: Record<ContentTab, ToolDefinition> = {
     keywords: ["ios", "android", "simulator", "emulator", "phone"],
     requiresDeviceView: true,
     localGates: true,
-    hostedWeb: true,
     icon: Smartphone,
   },
   config: {
@@ -156,9 +154,9 @@ export function isTabVisible(
   settings?: Settings,
   visibility: ContentTabVisibility = {}
 ): boolean {
+  if (isCloudDirectWebMode()) return false;
   const item = TOOL_DEFINITIONS[tab];
   if (!item) return false;
-  if (isCloudDirectWebMode()) return item.hostedWeb === true && visibility.cloud === true;
   if (item.localGates && visibility.cloud === true) return true;
   if (item.capabilityGate && !capabilities[item.capabilityGate]) return false;
   if (
@@ -176,6 +174,7 @@ export function isWorkspaceTabVisible(
   settings?: Settings,
   visibility: ContentTabVisibility = {}
 ): boolean {
+  if (isCloudDirectWebMode()) return false;
   if (tab.kind === "new-tab") return anyContentTabVisible(settings, visibility);
   if (tab.kind === "file") return isTabVisible("files", settings, visibility);
   return isTabVisible(tab.kind, settings, visibility);

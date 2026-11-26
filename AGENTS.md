@@ -110,7 +110,7 @@ Apple silicon Mac in the desktop app or `dev:web`. Settings → Devices reads
 `deviceSupport` for the local runtime, Xcode and Android SDK. Opening the tab
 installs the pinned hub beside the database. The backend owns one loopback
 process and stops it three minutes after the last viewer leaves. A cloud
-workspace's Device tab shows its platform's EAS viewer.
+workspace's Device tab shows the EAS viewer through the backend. Hosted web is chat-only.
 
 - **Agents.** Deus ships the pinned `agent-device` CLI on the agents' PATH,
   including on Intel Macs. `scripts/runtime/agent-clis.ts` stages the package
@@ -756,9 +756,9 @@ tab says so. Rule 2, `openAddress` /
 internet address opens in the person's browser, a localhost one in the cloud preview at
 its port (or says "That address is on the cloud computer"), and a file in the Files tab
 (text) or says it cannot be shown. `session/lib/openFromChat.ts` carries the rule out; the
-`file-preview` route refuses a cloud workspace. Which tabs a workspace has is
-`features/workspace-tabs/registry.ts` (`tabsFor`): a cloud workspace's Browser and Device are
-its computer's and ignore this computer's settings. "New workspace from a pull request or
+`file-preview` route refuses a cloud workspace. The workspace tab registry
+(`features/workspace-tabs/registry.ts`, `tabsFor`) exposes Browser and Device for cloud
+workspaces connected through a backend, regardless of this computer’s settings. "New workspace from a pull request or
 branch" is local (`offersNewFromBranch`). The sidebar row and the place menu read every
 visible chat's activity (`placeActivity` in the menu). A waiting chat or an unseen reply can
 mark the row while another chat's working grid runs. A failed setup has its own mark.

@@ -565,7 +565,7 @@ screenshot of the app at rest:
   composer's own pill chrome is the whole overlay.
 - **Inspect prompt** — clicking an element with the picker opens a floating composer
   anchored to it, carrying the element as a `primary/8` chip.
-- **Device** — the local panel places the platform and device pickers above the live screen. Cloud workspaces embed the EAS viewer with their device controls.
+- **Device** — the local panel groups devices by platform in one picker, alongside Start, Home and Screenshot. Cloud workspaces connected through the backend embed the EAS viewer.
 
 ### Light mode
 

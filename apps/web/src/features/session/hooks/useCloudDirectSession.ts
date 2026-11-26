@@ -24,7 +24,6 @@
  * so a cloud-direct session's Mac lanes all stand down and this fold owns the key.
  */
 
-import { deviceRequests } from "@/features/device/cloud/directDevice";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -215,11 +214,8 @@ setToolResponseInterceptor((requestId, result, error) => {
 const REFETCH_DEBOUNCE_MS = 250;
 
 // ---- Device frames ----------------------------------------------------------
-// The platform's simulator.* frames have no fold surface; the Device tab
-// reads them from the cloud simulator store, which the Mac lane feeds from the
-// host's `cloudSimulatorEvents`. Publish them on that stream here so the SAME
-// store serves this lane. Web-direct rows are keyed by the session (the adapter's workspace
-// IS the session), hence workspaceId = sessionId.
+// Publish the platform’s device events on the same stream as the Mac backend.
+// A web-direct workspace is keyed by its session id.
 const SIMULATOR_FRAME_KINDS = new Map<string, CloudSimulatorEventKind>([
   ["simulator.status", "status"],
   ["simulator.screenshot", "screenshot"],
@@ -429,13 +425,8 @@ export function useCloudDirectSession(
       }
     };
 
-    const deviceCommands = deviceRequests();
     const onFrame = (frame: Record<string, unknown>) => {
       if (closed) return;
-      if (frame.type === "simulator.exec.response") {
-        deviceCommands.receive(frame);
-        return;
-      }
       // The event also reaches the fold below, as on the local lane.
       if (frame.type === "elicitation.requested") askUser(frame);
       // Answered or retracted elsewhere (another client, the turn ending):
@@ -650,7 +641,6 @@ export function useCloudDirectSession(
         setStatus("open");
       },
       onDown: (reason) => {
-        deviceCommands.disconnect();
         if (closed) return;
         terminallyDown = true;
         pendingTurn = null;
@@ -683,12 +673,6 @@ export function useCloudDirectSession(
           assertDeliverable();
           socket.send(buildCancelFrame(turnId));
         },
-        deviceStatus: primarySimulatorStatus,
-        execDevice: (data) =>
-          deviceCommands.exec((frame) => {
-            assertDeliverable();
-            socket.send(frame);
-          }, data),
         sendRaw: (raw) => {
           assertDeliverable();
           socket.send(raw);
@@ -700,7 +684,6 @@ export function useCloudDirectSession(
     const dispose = () => {
       if (closed) return;
       closed = true;
-      deviceCommands.disconnect();
       disposeChannel();
       socket.close();
       // Parked questions deliberately SURVIVE this teardown: the next socket

@@ -191,7 +191,7 @@ export function MainContent({
     if (sid) sessionComposerActions.appendDraft(sid, REVIEW_CODE);
   }, [selectedWorkspaceId]);
 
-  const prActions = !webDirect && selectedWorkspace && hasCheckout(selectedWorkspace) && (
+  const prActions = selectedWorkspace && hasCheckout(selectedWorkspace) && (
     <PRActions
       state={prState}
       onCreatePR={createPRHandler ? handleCreatePR : undefined}

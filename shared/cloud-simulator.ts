@@ -1,8 +1,4 @@
-import {
-  CloudSimulatorStatusSchema,
-  type CloudSimulatorStatus,
-  type CloudSimulatorExecResult,
-} from "./events";
+import { CloudSimulatorStatusSchema, type CloudSimulatorStatus } from "./events";
 
 // A complete mirror names devices, not platformless command errors. Validate
 // the whole list before treating an omitted platform as a removed device.
@@ -75,17 +71,4 @@ export function selectPrimaryCloudSimulator<
     }
   }
   return best;
-}
-
-/** The platform's `simulator.exec.response`, as the request's result. */
-export function readCloudSimulatorExecResult(
-  data: Record<string, unknown>
-): CloudSimulatorExecResult {
-  const success = data.success === true;
-  return {
-    success,
-    exitCode: typeof data.exitCode === "number" ? data.exitCode : success ? 0 : -1,
-    output: typeof data.output === "string" ? data.output : "",
-    ...(typeof data.error === "string" ? { error: data.error } : {}),
-  };
 }

@@ -10,7 +10,6 @@
  * than being prop-drilled through every panel component.
  */
 
-import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { lazy, Suspense, useLayoutEffect, useState } from "react";
 import { match } from "ts-pattern";
 import { TerminalHost } from "@/features/terminal";
@@ -97,11 +96,9 @@ export function ContentView({
   );
 
   const cloudStage = cloudGateStage(workspace);
-  const cloudServing = cloud && cloudStage === null && !isCloudDirectWebMode();
+  const cloudServing = cloud && cloudStage === null;
   const cloudTerminalId = useLastWhile(cloudServing, workspace.id, workspace.id);
-  const cloudPreviewTemplate = useCloudPreviewTemplate(
-    cloud && !isCloudDirectWebMode() ? workspace.id : null
-  );
+  const cloudPreviewTemplate = useCloudPreviewTemplate(cloud ? workspace.id : null);
 
   const isBrowserActive = activeTab.kind === "browser";
   const isTerminalActive = activeTab.kind === "terminal";

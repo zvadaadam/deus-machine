@@ -10,8 +10,6 @@
 
 import { api } from "@shared/api";
 import type { CloudSimulatorExecResult } from "@shared/events";
-import { getDirectSession } from "@/features/session/cloud/directSessionRegistry";
-import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { call } from "@/platform/ws";
 import type { CloudSimPlatform } from "./cloudSimulatorStore";
 
@@ -28,49 +26,25 @@ export const EXEC_TIMEOUT_MS = 100_000;
  *  failure (and drops its busy state) for a command the backend then sends. */
 export const COMMAND_TIMEOUT_MS = 75_000;
 
-function channel(workspaceId: string) {
-  const direct = getDirectSession(workspaceId);
-  if (!direct) throw new Error("Connect to the cloud computer to use its device.");
-  return direct;
-}
-
 export const cloudSimulatorService = {
-  async status(workspaceId: string) {
-    return isCloudDirectWebMode()
-      ? channel(workspaceId).deviceStatus()
-      : call(api.cloudSimulator, { workspaceId });
-  },
   /** Boot a device; omit the platform to let the environment's default pick. */
-  start: async (workspaceId: string, platform?: CloudSimPlatform): Promise<void> =>
-    isCloudDirectWebMode()
-      ? channel(workspaceId).sendRaw({
-          type: "simulator.start",
-          data: platform ? { platform } : {},
-        })
-      : call(api.cloudSimStart, { workspaceId, platform }, { timeoutMs: COMMAND_TIMEOUT_MS }),
+  start: (workspaceId: string, platform?: CloudSimPlatform): Promise<void> =>
+    call(api.cloudSimStart, { workspaceId, platform }, { timeoutMs: COMMAND_TIMEOUT_MS }),
 
   /** Stop a device; omitting the platform stops every running device. */
-  stop: async (workspaceId: string, platform?: CloudSimPlatform): Promise<void> =>
-    isCloudDirectWebMode()
-      ? channel(workspaceId).sendRaw({ type: "simulator.stop", data: platform ? { platform } : {} })
-      : call(api.cloudSimStop, { workspaceId, platform }, { timeoutMs: COMMAND_TIMEOUT_MS }),
+  stop: (workspaceId: string, platform?: CloudSimPlatform): Promise<void> =>
+    call(api.cloudSimStop, { workspaceId, platform }, { timeoutMs: COMMAND_TIMEOUT_MS }),
 
   /** One device operation in the agent-device verb grammar
    *  (`press`, `fill`, `home`, `screenshot`, …). A verb acts on the device, so
    *  a lost answer is an unknown outcome, never a safe retry. */
-  exec: async (
+  exec: (
     workspaceId: string,
     verb: string,
     args?: string[],
     platform?: CloudSimPlatform
   ): Promise<CloudSimulatorExecResult> =>
-    isCloudDirectWebMode()
-      ? channel(workspaceId).execDevice({ verb, args, platform })
-      : call(
-          api.cloudSimExec,
-          { workspaceId, verb, args, platform },
-          { timeoutMs: EXEC_TIMEOUT_MS }
-        ),
+    call(api.cloudSimExec, { workspaceId, verb, args, platform }, { timeoutMs: EXEC_TIMEOUT_MS }),
 
   /** The PNG does not come back here — it arrives as a `cloudSimulatorEvents`
    *  screenshot event (the platform fans captures out to every viewer). */

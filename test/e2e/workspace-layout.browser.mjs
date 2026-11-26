@@ -24,6 +24,8 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { ThemeProvider } from "@/app/providers/ThemeProvider";
 import { MainContent } from "@/app/layouts/MainContent";
 import { queryKeys } from "@/shared/api/queryKeys";
+import { deviceHubStatus } from "@shared/api/device-hub";
+import { getRuntimeClient } from "@/platform/ws";
 import { workspaceLayoutActions, useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { ConnectionIllustration } from "@/features/connection/ui/ConnectionIllustration";
@@ -37,6 +39,9 @@ window.layoutActions = workspaceLayoutActions;
 window.layoutState = () => useWorkspaceLayoutStore.getState().layouts;
 window.settingsTarget = () => useUIStore.getState().environmentSettingsTarget;
 window.client = client;
+window.devicesReady = () => getRuntimeClient().publish(deviceHubStatus, {
+  workspaceId: workspace.id, platform: null, deviceId: null,
+}, { phase: "ready", instance: "layout" });
 function App() {
  const [current, setCurrent] = useState(workspace);
  const chatRef = useRef(null);
@@ -53,6 +58,7 @@ createRoot(document.getElementById("root")!).render(<App />);
 `
 );
 let filesOnline = true;
+let androidAvailable = true;
 const requests = [];
 const server = await createServer({
   configFile: false,
@@ -151,13 +157,34 @@ const server = await createServer({
               : json({}, 503);
           if (resource === "fileContent")
             return json({ content: "# Deus Machine\n\nWelcome to browser-style tabs.\n" });
+          if (resource === "deviceHubDevices")
+            return json({
+              devices: [
+                {
+                  id: "ios-1",
+                  name: "Test iPhone",
+                  platform: "ios",
+                  version: "iOS",
+                  booted: false,
+                },
+                {
+                  id: "android-1",
+                  name: "Test Pixel",
+                  platform: "android",
+                  version: "Android",
+                  booted: false,
+                },
+              ],
+              available: { ios: true, android: androidAvailable },
+              detail: { ios: null, android: null },
+            });
           if (resource === "deviceSupport")
             return json({
               liveView: "available",
               setup: "new",
               error: null,
               xcode: { available: true, version: "27.1" },
-              android: false,
+              android: androidAvailable,
               hubVersion: "fixture",
               agentDeviceVersion: "fixture",
             });
@@ -361,6 +388,28 @@ try {
   // Every tool can be opened from New Tab and supports expand/restore from the unified tab bar.
   for (const name of ["Files", "Terminal", "Browser", "Device", "Agent"]) {
     await openFromNewTab(name);
+    if (name === "Device") {
+      await page.getByText("Starting devices…", { exact: true }).waitFor();
+      await page.evaluate(() => window.devicesReady());
+      const picker = page.getByRole("button", { name: "Choose device" });
+      await picker.click();
+      const menu = page.getByRole("menu");
+      await menu
+        .getByRole("group", { name: "iOS Simulators" })
+        .getByText("Test iPhone", { exact: false })
+        .waitFor();
+      const android = menu.getByRole("group", { name: "Android emulators" });
+      const setup = menu.getByRole("menuitem", { name: "Android emulators need Android Studio" });
+      assert.equal(await setup.count(), 0);
+      await android.getByRole("menuitemradio", { name: /Test Pixel/ }).click();
+      assert.match(await picker.innerText(), /Test Pixel/);
+      androidAvailable = false;
+      await picker.click();
+      await setup.waitFor();
+      assert.equal(await android.count(), 0);
+      assert.equal(await setup.getAttribute("href"), "https://developer.android.com/studio");
+      await page.keyboard.press("Escape");
+    }
     await click("Expand workspace");
     await view("content");
     await click("Restore split");
@@ -569,22 +618,26 @@ try {
   assert.equal(await page.locator("[data-workspace-view]").count(), 0);
   assert.ok(await createPR.isVisible(), "the phone shows the available PR action");
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-  // The hosted workspace offers its Device panel over the platform connection.
+  await page.locator("#mobile-tab-device").click();
+  await hosted.getByText("Hosted device").waitFor();
+  await page.locator("#mobile-tab-chat").click();
+  // Hosted web stays chat-only even with a cloud device and a saved content pane.
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.evaluate(() => localStorage.setItem("deus.cloudDirectWeb", "1"));
   await page.reload();
   await page.waitForFunction(() => typeof window.setCloudStage === "function");
   await page.evaluate(() => {
     window.setCloudStage("ready");
-    window.layoutActions.setPanelMode("first", "split");
+    window.layoutActions.setPanelMode("first", "content");
   });
-  await view("split");
-  await click("New tab");
-  const hostedTiles = page.locator('[data-slot="new-tab-tile"]');
-  await hostedTiles.first().waitFor();
-  assert.equal(await hostedTiles.count(), 1);
-  await hostedTiles.getByText("Device", { exact: true }).waitFor();
-  assert.equal(await createPR.count(), 0, "hosted workspaces have no local PR controls");
+  await view("chat");
+  assert.equal(await page.locator("#workspace-content").count(), 0);
+  assert.equal(await createPR.count(), 0);
+  assert.equal(await page.getByRole("button", { name: "Show workspace", exact: true }).count(), 0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator("#mobile-panel-chat").waitFor();
+  assert.equal(await page.getByRole("tablist", { name: "View" }).count(), 0);
+  assert.equal(await page.getByTitle("Cloud device", { exact: true }).count(), 0);
 
   // Rapid same-pixel close with motion ENABLED (50ms intervals during exit animation).
   const motionPage = await browser.newPage({

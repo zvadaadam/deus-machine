@@ -2,8 +2,7 @@
  * MobileLayout -- single-panel mobile layout with bottom tab bar.
  *
  * Replaces the desktop ResizablePanelGroup on screens < 768px.
- * Two views: Chat (full-width ChatArea) and Code (full-width ChangesDiffViewer).
- * Chat is the default -- "AI chat as a first-class citizen".
+ * Chat opens first. The tab bar shows Code and any available Device panel.
  */
 
 import { lazy, Suspense, useState, useCallback, useMemo } from "react";
@@ -16,10 +15,9 @@ import { workspaceLayoutActions } from "@/features/workspace/store";
 import { useFileChanges } from "@/features/workspace";
 import { ChangesView } from "@/features/workspace/ui/ChangesView";
 import { CloudSandboxGate } from "@/features/workspace/ui/CloudSandboxGate";
-import type { ContentTabVisibility } from "@/features/workspace-tabs/registry";
 import { CloudDevicePanel } from "@/features/device/cloud";
 import { useCloudSimulatorStore } from "@/features/device/cloud/cloudSimulatorStore";
-import { isTabVisible } from "./content-tabs";
+import { isTabVisible, type ContentTabVisibility } from "./content-tabs";
 import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
 import type { Workspace } from "@/shared/types";
@@ -79,18 +77,15 @@ export function MobileLayout({
 }: MobileLayoutProps) {
   const [activeTab, setActiveTab] = useState<MobileTab>("chat");
 
-  const showCode = !isCloudDirectWebMode() && !failedToStart(workspace);
-  const showDevice = !failedToStart(workspace) && isTabVisible("device", undefined, visibility);
+  const chatOnly = isCloudDirectWebMode() || failedToStart(workspace);
+  const showDevice = !chatOnly && isTabVisible("device", undefined, visibility);
   const cloudStage = cloudGateStage(workspace);
   const deviceLive = useCloudSimulatorStore((s) => s.byWorkspace[workspace.id]?.status === "ready");
-  const tab =
-    (activeTab === "device" && !showDevice) || (activeTab === "code" && !showCode)
-      ? "chat"
-      : activeTab;
+  const tab = chatOnly || (activeTab === "device" && !showDevice) ? "chat" : activeTab;
 
   // File changes -- always queried for the badge count on the code tab,
   // and used by ChangesDiffViewer when the code tab is active.
-  const { data: fileChangesData } = useFileChanges(showCode ? workspace : null, isWatched);
+  const { data: fileChangesData } = useFileChanges(chatOnly ? null : workspace, isWatched);
   const fileChanges = useMemo(() => fileChangesData?.files ?? [], [fileChangesData]);
 
   // Insert code review prompt into the active chat's composer and switch
@@ -139,11 +134,11 @@ export function MobileLayout({
         />
         {/* PRs are Mac-side (gh + the worktree): web-direct has neither, so the
             Create PR sheet and the status bar don't mount. */}
-        {showCode && hasCheckout(workspace) && <MobilePRHeaderAction {...prBarProps} />}
+        {!chatOnly && hasCheckout(workspace) && <MobilePRHeaderAction {...prBarProps} />}
       </div>
 
       {/* PR status bar -- only shown when a PR exists, 32px */}
-      {showCode && hasCheckout(workspace) && <MobilePRStatusBar {...prBarProps} />}
+      {!chatOnly && hasCheckout(workspace) && <MobilePRStatusBar {...prBarProps} />}
 
       {/* Content area -- both views always mounted, inactive hidden via display:none */}
       <div
@@ -161,7 +156,7 @@ export function MobileLayout({
       </div>
 
       {/* Code panel — reuses ChangesView in compact mode (no file tree, keeps header) */}
-      {showCode && (
+      {!chatOnly && (
         <div
           className={cn("min-h-0 flex-1 overflow-hidden", tab !== "code" && "hidden")}
           id="mobile-panel-code"
@@ -199,13 +194,12 @@ export function MobileLayout({
           )}
         </div>
       )}
-      {(showCode || showDevice) && (
+      {!chatOnly && (
         <MobileTabBar
           activeTab={tab}
           onTabChange={setActiveTab}
           fileChangesCount={fileChanges.length}
           showDevice={showDevice}
-          showCode={showCode}
           deviceLive={deviceLive}
         />
       )}

@@ -1,4 +1,3 @@
-import { readCloudSimulatorExecResult } from "@shared/cloud-simulator";
 // backend/src/services/agent/cloud/driver.ts
 // Cloud session driver: agnt-backed sessions feeding the SAME fold as local.
 //
@@ -47,6 +46,7 @@ import {
   buildCloudSimulatorExecFrameData,
   forgetCloudSimulators,
   parkCloudSimulator,
+  readCloudSimulatorExecResult,
   readCloudSimulatorStatus,
   relayCloudSimulatorEvent,
   SIMULATOR_EXEC_TIMEOUT_MS,

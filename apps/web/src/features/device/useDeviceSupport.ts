@@ -15,6 +15,7 @@ export function useDeviceSupport(enabled = true) {
     enabled: enabled && mode !== "web-direct",
     staleTime: 60_000,
     refetchOnMount: "always",
+    // Following deviceHubStatus would start the hub just by opening Settings.
     refetchInterval: (q) => (q.state.data?.setup === "working" ? 1000 : false),
     select: (data) =>
       localDeviceRenderer(mode) || data.liveView !== "available"

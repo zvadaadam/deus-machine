@@ -1,10 +1,8 @@
 /**
  * MobileTabBar -- bottom navigation for mobile web layout.
  *
- * Chat (default) and Code (all-files diff viewer); a cloud computer adds
- * Device — the hosted device is billable, and a phone must be able to see
- * and stop it. Badge count on Code when file changes exist; a live dot on
- * Device while the device is up.
+ * Chat and Code share the bar with Device on supported local and cloud workspaces.
+ * Code shows the number of changed files. Device shows when a cloud device is live.
  * Fixed at the bottom of the mobile flex column (not position:fixed).
  * Safe-area aware for notched iOS devices.
  */
@@ -19,7 +17,6 @@ interface MobileTabBarProps {
   onTabChange: (tab: MobileTab) => void;
   fileChangesCount: number;
   showDevice: boolean;
-  showCode: boolean;
   /** The hosted device is running (and billing) — shown as a dot. */
   deviceLive?: boolean;
 }
@@ -35,13 +32,9 @@ export function MobileTabBar({
   onTabChange,
   fileChangesCount,
   showDevice,
-  showCode,
   deviceLive = false,
 }: MobileTabBarProps) {
-  const tabs = [
-    ...BASE_TABS.filter((tab) => tab.id !== "code" || showCode),
-    ...(showDevice ? [DEVICE_TAB] : []),
-  ];
+  const tabs = showDevice ? [...BASE_TABS, DEVICE_TAB] : BASE_TABS;
   return (
     <div
       data-slot="mobile-tab-bar"

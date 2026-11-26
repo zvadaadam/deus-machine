@@ -10,8 +10,6 @@ import {
 const channel = (): DirectSessionChannel => ({
   sendMessage: vi.fn(),
   cancel: vi.fn(),
-  deviceStatus: vi.fn(),
-  execDevice: vi.fn(),
   sendRaw: vi.fn(),
 });
 
