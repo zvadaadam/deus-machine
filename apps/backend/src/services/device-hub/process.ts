@@ -5,12 +5,18 @@ import { processGroupsStopped, trackProcessGroup } from "@shared/lib/process-gro
 
 const graceMs = 1500;
 
+/** False when nothing more can be signalled. macOS answers EPERM for a group with a member it
+ *  will not let us signal, after signalling the rest. A stop runs from an abort listener, so a
+ *  throw here would end the backend. */
 function signalGroup(pid: number, signal: NodeJS.Signals | 0) {
   try {
     process.kill(-pid, signal);
     return true;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ESRCH" && code !== "EPERM") {
+      console.warn(`[DeviceHub] Could not signal process group ${pid}:`, error);
+    }
     return false;
   }
 }
