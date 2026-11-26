@@ -39,9 +39,9 @@ window.layoutActions = workspaceLayoutActions;
 window.layoutState = () => useWorkspaceLayoutStore.getState().layouts;
 window.settingsTarget = () => useUIStore.getState().environmentSettingsTarget;
 window.client = client;
-window.devicesReady = () => getRuntimeClient().publish(deviceHubStatus, {
-  workspaceId: workspace.id, platform: null, deviceId: null,
-}, { phase: "ready", instance: "layout" });
+window.devicesReady = (instance = "layout") => getRuntimeClient().publish(deviceHubStatus, {
+  workspaceId: workspace.id, platform: null, deviceId: null, displayedInstance: null,
+}, { phase: "ready", instance });
 function App() {
  const [current, setCurrent] = useState(workspace);
  const chatRef = useRef(null);
@@ -429,8 +429,49 @@ try {
     await openFromNewTab(name);
     if (name === "Device") {
       await page.getByText("Starting devices…", { exact: true }).waitFor();
-      await page.evaluate(() => window.devicesReady());
+      await page.evaluate(() => {
+        window.client.setQueryData(["deviceHubSelection", "first"], {
+          key: "ios:ios-1",
+          started: true,
+        });
+        window.devicesReady();
+      });
       const picker = page.getByRole("button", { name: "Choose device" });
+      const reconnecting = page.getByText("Reconnecting to the device…", { exact: true });
+      await reconnecting.waitFor();
+      const inventoryRoute = "/api/query/deviceHubDevices";
+      const waitForInventory = () =>
+        page.waitForFunction(() => !window.client.isFetching({ queryKey: ["deviceHubDevices"] }));
+      await page.waitForResponse(
+        (response) => new URL(response.url()).pathname === inventoryRoute,
+        { timeout: 10_000 }
+      );
+      await reconnecting.waitFor({ state: "hidden", timeout: 40_000 });
+      assert.match(await picker.innerText(), /Test iPhone/);
+      assert(await page.getByRole("button", { name: "Start", exact: true }).isEnabled());
+      const inventoryReads = () => requests.filter((req) => req === inventoryRoute).length;
+      await waitForInventory();
+      const afterTimeout = inventoryReads();
+      await page.waitForTimeout(3000);
+      await waitForInventory();
+      assert.equal(inventoryReads(), afterTimeout);
+
+      await page.evaluate(() => {
+        window.client.setQueryData(["deviceHubSelection", "first"], {
+          key: "android:Removed AVD",
+          started: true,
+        });
+        window.devicesReady("replacement");
+      });
+      await page.getByText("Choose a device, then select Start.", { exact: true }).waitFor();
+      assert.equal(
+        await page.evaluate(() => window.client.getQueryData(["deviceHubSelection", "first"])),
+        null
+      );
+      const afterRemoval = inventoryReads();
+      await page.waitForTimeout(3000);
+      await waitForInventory();
+      assert.equal(inventoryReads(), afterRemoval);
       await picker.click();
       const menu = page.getByRole("menu");
       await menu

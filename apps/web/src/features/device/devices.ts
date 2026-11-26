@@ -1,6 +1,6 @@
-import type { HubDevice } from "@shared/types/device-hub";
+import { deviceIdentity, type HubDevice } from "@shared/types/device-hub";
 
-export const deviceKey = (device: HubDevice) => device.platform + ":" + device.id;
+export const deviceKey = (device: HubDevice) => device.platform + ":" + deviceIdentity(device);
 
 export const deviceSetup = {
   ios: {

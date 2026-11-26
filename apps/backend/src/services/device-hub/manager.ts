@@ -1,4 +1,4 @@
-import { chmod, cp, mkdir, mkdtemp, readdir, readFile, rename, rm } from "node:fs/promises";
+import { mkdir, readdir, readFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { join } from "node:path";
 import { subscriptionKey } from "@deus/runtime-client";
@@ -8,11 +8,16 @@ import { HUB_STREAM_MODE, type HubStatus } from "@shared/types/device-hub";
 import { getErrorMessage } from "@shared/lib/errors";
 import { launch } from "./process";
 import { bootIdentity } from "./simctl";
-import { deviceToolchains, hubManifest, hubVersion, liveViewSupport } from "./support";
+import { deviceToolchains, liveViewSupport } from "./support";
+import {
+  cliPath,
+  installHub,
+  installPath,
+  prepareDirectories,
+  validInstall,
+  withOwnedDirectory,
+} from "./storage";
 import { simulatorEnv } from "./xcode-env";
-
-const packagePath = "node_modules/expo-device-hub";
-const cliPath = packagePath + "/dist/server/cli.mjs";
 
 export interface HubEndpoint {
   origin: string;
@@ -55,15 +60,6 @@ async function discover(
   }
 }
 
-async function installedVersion(directory: string) {
-  try {
-    const pkg = JSON.parse(await readFile(join(directory, packagePath, "package.json"), "utf8"));
-    return pkg.version;
-  } catch {
-    return null;
-  }
-}
-
 interface HubOptions {
   directory: string;
   changed: (status: HubStatus, view: HubView) => void;
@@ -96,11 +92,18 @@ export class DeviceHub {
   }
 
   displayedDevice(workspaceId: string) {
-    if (this.status.phase !== "ready") return null;
+    const status = this.status;
+    if (status.phase !== "ready" || !this.endpoint || this.controller?.signal.aborted) return null;
     // A viewer can disappear without sending a final write. Its subscription is the lease.
     const view = [...this.views]
       .reverse()
-      .find((v) => v.workspaceId === workspaceId && v.platform && v.deviceId);
+      .find(
+        (v) =>
+          v.workspaceId === workspaceId &&
+          v.displayedInstance === status.instance &&
+          v.platform &&
+          v.deviceId
+      );
     if (!view?.platform || !view.deviceId || !/^[a-zA-Z0-9_:.[\]-]+$/.test(view.deviceId))
       return null;
     return { platform: view.platform, id: view.deviceId };
@@ -110,9 +113,7 @@ export class DeviceHub {
     if (this.status.phase === "error") return "failed";
     if (this.status.phase === "ready") return "ready";
     if (this.status.phase !== "idle") return "working";
-    return (await installedVersion(join(this.options.directory, hubVersion))) === hubVersion
-      ? "ready"
-      : "new";
+    return (await validInstall(await installPath(this.options.directory))) ? "ready" : "new";
   }
 
   retry() {
@@ -183,92 +184,74 @@ export class DeviceHub {
 
   private async run(signal: AbortSignal) {
     const base = this.options.directory;
-    const installed = join(base, hubVersion);
     const env = createBackendChildEnv();
     this.set({ phase: "starting" });
     const { installer } = await deviceToolchains();
-    if (liveViewSupport(process.platform, process.arch, installer, false) !== "available")
+    if (liveViewSupport(process.platform, process.arch, installer) !== "available")
       throw new Error("The Device tab needs the local Apple silicon runtime.");
     signal.throwIfAborted();
-    await mkdir(base, { recursive: true, mode: 0o700 });
-    await chmod(base, 0o700);
-    if ((await installedVersion(installed)) !== hubVersion) {
+    const run = await prepareDirectories(base);
+    const installed = await installPath(base);
+    if (!(await validInstall(installed))) {
       this.set({ phase: "installing" });
-      const staging = await mkdtemp(join(base, ".install-"));
-      try {
-        const source = hubManifest();
-        for (const file of ["package.json", "bun.lock"])
-          await cp(join(source, file), join(staging, file));
-        await launch(
-          ["install", "--frozen-lockfile", "--ignore-scripts"],
-          staging,
-          env,
-          AbortSignal.any([signal, AbortSignal.timeout(180_000)]),
-          true
-        ).closed;
-        if ((await installedVersion(staging)) !== hubVersion)
-          throw new Error("Bun did not install the pinned device package.");
-        signal.throwIfAborted();
-        await rm(installed, { recursive: true, force: true });
-        await rename(staging, installed);
-      } finally {
-        await rm(staging, { recursive: true, force: true });
-      }
+      await installHub(base, installed, env, signal);
       this.set({ phase: "starting" });
     }
-    const stateDirectory = join(base, "state");
-    const simDirectory = join(base, "serve-sim");
-    await rm(stateDirectory, { recursive: true, force: true });
-    await mkdir(stateDirectory, { mode: 0o700 });
-    await mkdir(simDirectory, { recursive: true, mode: 0o700 });
-    await chmod(simDirectory, 0o700);
-    const childEnv = {
-      ...simulatorEnv(env),
-      EXPO_DEVICE_HUB_STATE_DIR: stateDirectory,
-      SERVE_SIM_STATE_DIR: simDirectory,
-    };
-    const stop = new AbortController();
-    const processSignal = AbortSignal.any([signal, stop.signal]);
-    const hub = launch(
-      [
-        cliPath,
-        "--host",
-        "127.0.0.1",
-        "--port",
-        "0",
-        "--require-token",
-        "--transport",
-        HUB_STREAM_MODE,
-      ],
-      installed,
-      childEnv,
-      processSignal
-    );
-    const timeout = setTimeout(
-      () =>
-        stop.abort(new Error("The device service did not report its address within 30 seconds.")),
-      30_000
-    );
-    try {
-      this.endpoint = await Promise.race([
-        discover(stateDirectory, hub.child.pid, processSignal),
-        hub.closed.then((): never => {
-          throw new Error("The device service exited before it was ready.");
-        }),
+
+    await withOwnedDirectory(run, "", async (directory) => {
+      const stateDirectory = join(directory, "state");
+      const simDirectory = join(directory, "serve-sim");
+      const stop = new AbortController();
+      const processSignal = AbortSignal.any([signal, stop.signal]);
+      await Promise.all([
+        mkdir(stateDirectory, { mode: 0o700 }),
+        mkdir(simDirectory, { mode: 0o700 }),
       ]);
-      clearTimeout(timeout);
-      this.set({ phase: "ready", instance: crypto.randomUUID() });
-      await Promise.race([hub.closed, this.watchBoots(processSignal)]);
-      throw new Error("The device service exited.");
-    } catch (error) {
-      stop.signal.throwIfAborted();
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-      this.endpoint = null;
-      stop.abort();
-      await hub.closed.catch(() => {});
-      await rm(stateDirectory, { recursive: true, force: true });
-    }
+      const hub = launch(
+        [
+          cliPath,
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "0",
+          "--require-token",
+          "--transport",
+          HUB_STREAM_MODE,
+        ],
+        installed,
+        {
+          ...simulatorEnv(env),
+          EXPO_DEVICE_HUB_STATE_DIR: stateDirectory,
+          SERVE_SIM_STATE_DIR: simDirectory,
+        },
+        processSignal,
+        { directory }
+      );
+      const timeout = setTimeout(
+        () =>
+          stop.abort(new Error("The device service did not report its address within 30 seconds.")),
+        30_000
+      );
+      try {
+        this.endpoint = await Promise.race([
+          discover(stateDirectory, hub.child.pid, processSignal),
+          hub.closed.then((): never => {
+            throw new Error("The device service exited before it was ready.");
+          }),
+        ]);
+        clearTimeout(timeout);
+        this.set({ phase: "ready", instance: crypto.randomUUID() });
+        await Promise.race([hub.closed, this.watchBoots(processSignal)]);
+        throw new Error("The device service exited.");
+      } catch (error) {
+        stop.signal.throwIfAborted();
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+        this.endpoint = null;
+        stop.abort();
+        await hub.closed.catch(() => {});
+      }
+    });
   }
 }

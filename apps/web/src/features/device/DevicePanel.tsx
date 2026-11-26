@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Play } from "lucide-react";
 import { DeviceClientProvider } from "@expo/hub-client";
 import * as api from "@shared/api/device-hub";
@@ -18,7 +18,8 @@ import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLay
 import { DevicePicker } from "./DevicePicker";
 import { DeviceActions, DeviceView } from "./DeviceView";
 import { DeviceSetupLink } from "./DeviceSetupLink";
-import { deviceKey, deviceSetup } from "./devices";
+import { useDeviceSelection, type Attachment } from "./useDeviceSelection";
+import { deviceSetup } from "./devices";
 
 function DeviceDetails({ detail }: { detail?: string | null }) {
   if (!detail) return null;
@@ -56,73 +57,25 @@ function Devices({
   workspaceId,
   session,
   instance,
+  attached,
+  onAttach,
   onDisplay,
 }: {
+  attached: HubDevice | null;
+  onAttach: (attachment: Attachment | null) => void;
   onDisplay: (device: HubDevice | null) => void;
   workspaceId: string;
   session: string | null;
   instance: string;
 }) {
-  const cache = useQueryClient();
-  const savedKey = ["deviceHubSelection", workspaceId];
-  const [active, setActive] = useState(() =>
-    cache.getQueryData<{ device: HubDevice; instance: string }>(savedKey)
-  );
-  const [id, setId] = useState(active ? deviceKey(active.device) : "");
-  const restoring = active && active.instance !== instance;
-  const list = useQuery({
-    queryKey: ["deviceHubDevices", instance],
-    queryFn: () => call(api.deviceHubDevices),
-    // A replacement hub can answer its first inventory while the device is still booting.
-    refetchInterval: (query) =>
-      restoring && !query.state.data?.devices.some((d) => d.booted && deviceKey(d) === id)
-        ? 2500
-        : false,
-  });
+  const selection = useDeviceSelection(workspaceId, instance, attached, onAttach);
+  const { list, selected, viewing } = selection;
+  const inventory = list.data;
   const endpoints = useQuery({
     queryKey: ["deviceHubEndpoints", instance],
     queryFn: () => resolveBackendEndpoints(),
   });
-  const start = useMutation({
-    mutationFn: ({ device, boot }: { device: HubDevice; boot: boolean }) =>
-      call(
-        api.startHubDevice,
-        { platform: device.platform, id: device.id, boot },
-        { timeoutMs: 410_000 }
-      ),
-    onSuccess(device) {
-      const connected = { device, instance };
-      cache.setQueryData(savedKey, connected);
-      setActive(connected);
-      setId(deviceKey(device));
-      void list.refetch();
-    },
-  });
-  const inventory = list.data;
-  const devices =
-    inventory?.devices.filter((d) => d.platform === "ios" || inventory.available.android) ?? [];
-  const selected = devices.find((d) => deviceKey(d) === id);
-  const viewing =
-    active?.instance === instance && deviceKey(active.device) === id && selected?.booted
-      ? active.device
-      : undefined;
-  const reconnect = restoring && selected?.booted ? selected : null;
-  const attempted = useRef<string | null>(null);
-  const { mutate: connect } = start;
-  useEffect(() => {
-    if (!reconnect || attempted.current === reconnect.id) return;
-    attempted.current = reconnect.id;
-    connect({ device: reconnect, boot: false });
-  }, [connect, reconnect]);
-  function select(value: string) {
-    if (value === id) return;
-    setId(value);
-    setActive(undefined);
-    onDisplay(null);
-    cache.removeQueries({ queryKey: savedKey, exact: true });
-    start.reset();
-  }
-  const failure = list.error ?? start.error ?? endpoints.error;
+  const failure = list.error ?? selection.error ?? endpoints.error;
   return (
     <DeviceClientProvider
       platform={viewing?.platform ?? null}
@@ -145,18 +98,18 @@ function Devices({
         <DevicePicker
           inventory={inventory}
           selected={selected}
-          disabled={start.isPending}
+          disabled={selection.starting}
           onOpen={() => void list.refetch()}
-          onSelect={select}
+          onSelect={selection.select}
         />
         <Button
           size="sm"
           variant="secondary"
-          disabled={!selected || !!viewing || start.isPending}
-          onClick={() => selected && start.mutate({ device: selected, boot: true })}
+          disabled={!selected || !!viewing || selection.starting}
+          onClick={selection.start}
         >
           <Play />
-          {start.isPending ? "Starting…" : "Start"}
+          {selection.starting ? "Starting…" : "Start"}
         </Button>
         <DeviceActions session={session} />
       </div>
@@ -177,13 +130,17 @@ function Devices({
           />
         </div>
       )}
-      {inventory && !failure && !devices.length && <EmptyDevices inventory={inventory} />}
-      {!failure && devices.length > 0 && (!selected || restoring) && (
+      {inventory && !failure && !selection.devices.length && <EmptyDevices inventory={inventory} />}
+      {!failure && selection.devices.length > 0 && (!selected || selection.recovering) && (
         <p className="text-muted-foreground m-auto p-4 text-center text-sm">
-          {restoring ? "Reconnecting to the device…" : "Choose a device, then select Start."}
+          {selection.recovering
+            ? "Reconnecting to the device…"
+            : "Choose a device, then select Start."}
         </p>
       )}
-      {viewing && endpoints.data && <DeviceView device={viewing} onDisplay={onDisplay} />}
+      {viewing && endpoints.data && (
+        <DeviceView device={viewing} onDisplay={onDisplay} onReconnect={selection.reconnect} />
+      )}
     </DeviceClientProvider>
   );
 }
@@ -199,13 +156,22 @@ export default function DevicePanel({
     (s) => s.layouts[workspaceId]?.activeChatTabSessionId
   );
   const [status, setStatus] = useState<HubStatus>({ phase: "idle" });
+  const [attachment, setAttachment] = useState<Attachment | null>(null);
+  const attached =
+    status.phase === "ready" &&
+    attachment?.instance === status.instance &&
+    attachment.workspaceId === workspaceId
+      ? attachment.device
+      : null;
   const [shown, setShown] = useState<HubDevice | null>(null);
   useStream(
     api.deviceHubStatus,
     {
       workspaceId,
-      platform: shown?.platform ?? null,
-      deviceId: shown?.id ?? null,
+      platform: attached?.platform ?? null,
+      deviceId: attached?.id ?? null,
+      displayedInstance:
+        status.phase === "ready" && attached && shown === attached ? status.instance : null,
     },
     setStatus
   );
@@ -217,10 +183,12 @@ export default function DevicePanel({
     >
       {status.phase === "ready" ? (
         <Devices
-          key={status.instance}
+          key={workspaceId + ":" + status.instance}
           workspaceId={workspaceId}
           session={activeSession ?? defaultSession}
           instance={status.instance}
+          attached={attached}
+          onAttach={setAttachment}
           onDisplay={setShown}
         />
       ) : (

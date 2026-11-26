@@ -19,6 +19,7 @@ import {
 
 export function DeviceActions({ session }: { session: string | null }) {
   const client = useDeviceClient();
+  const live = client.framePresented && client.status === "streaming";
   const capture = useMutation({
     mutationFn: async (target: ComposerTarget) => {
       const shot = await client.screenshot({ format: "png" });
@@ -37,7 +38,7 @@ export function DeviceActions({ session }: { session: string | null }) {
         title="Home"
         size="xs"
         variant="ghost"
-        disabled={!client.framePresented}
+        disabled={!live}
         onClick={() => client.pressButton("home")}
       >
         <House />
@@ -48,7 +49,7 @@ export function DeviceActions({ session }: { session: string | null }) {
         title="Screenshot"
         size="xs"
         variant="ghost"
-        disabled={!client.framePresented || !session || capture.isPending}
+        disabled={!live || !session || capture.isPending}
         onClick={() => session && capture.mutate(composerTarget(session))}
       >
         <Camera />
@@ -61,14 +62,24 @@ export function DeviceActions({ session }: { session: string | null }) {
 export function DeviceView({
   device,
   onDisplay,
+  onReconnect,
 }: {
   device: HubDevice;
-  onDisplay: (device: HubDevice) => void;
+  onDisplay: (device: HubDevice | null) => void;
+  onReconnect: () => void;
 }) {
   const screen = useDeviceScreenClient();
+  const live = screen.framePresented && screen.status === "streaming";
   useEffect(() => {
-    if (screen.framePresented) onDisplay(device);
-  }, [device, onDisplay, screen.framePresented]);
+    if (!live) return;
+    onDisplay(device);
+    return () => onDisplay(null);
+  }, [device, live, onDisplay]);
+  // A different AVD can take the serial while the stream is disconnected.
+  const lostEmulator = device.platform === "android" && screen.framePresented && !live;
+  useEffect(() => {
+    if (lostEmulator) onReconnect();
+  }, [lostEmulator, onReconnect]);
   const size = displayScreen(screen.screen);
   const ratio = size ? size.width / size.height : 9 / 19.5;
   return (
@@ -79,7 +90,7 @@ export function DeviceView({
       >
         <DeviceScreen client={screen} />
       </div>
-      {(!screen.framePresented || screen.inputError || screen.status === "error") && (
+      {(!live || screen.inputError) && (
         <p
           role="status"
           className="bg-background text-muted-foreground pointer-events-none absolute max-w-full rounded-lg px-3 py-2 text-center text-sm"

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { getErrorMessage } from "@shared/lib/errors";
-import type { HubDevice, HubInventory } from "@shared/types/device-hub";
+import { deviceIdentity, type HubDevice, type HubInventory } from "@shared/types/device-hub";
 import { AppError, ConflictError } from "../../lib/errors";
 import { listDevices, simctl } from "./simctl";
 import { deviceToolchains, hasSimulatorToolchain } from "./support";
@@ -12,6 +12,7 @@ const device = z.object({
   version: z.string(),
   platform: z.enum(["ios", "android"]),
   booted: z.boolean(),
+  physical: z.boolean(),
 });
 const errors = z.array(z.object({ message: z.string(), error: z.string().nullish() }));
 const inventory = z.object({ simulators: z.array(device), emulators: z.array(device), errors });
@@ -73,7 +74,16 @@ async function listSimulators() {
 }
 
 async function hubInventory(hub: HubEndpoint | null) {
-  return inventory.parse(await request(hub, "/api/devices"));
+  const list = inventory.parse(await request(hub, "/api/devices"));
+  const virtual = list.emulators.filter((d) => !d.physical);
+  // Expo falls back to the serial as the name if adb cannot identify the running AVD.
+  const emulators = virtual.filter(
+    (d) =>
+      d.name.trim() &&
+      (!d.booted || d.name !== d.id) &&
+      virtual.filter((other) => other.name === d.name).length === 1
+  );
+  return { ...list, simulators: list.simulators.filter((d) => !d.physical), emulators };
 }
 
 export async function listHubDevices(hub: HubEndpoint | null): Promise<HubInventory> {
@@ -96,21 +106,22 @@ export async function listHubDevices(hub: HubEndpoint | null): Promise<HubInvent
 
 export async function startHubDevice(
   hub: HubEndpoint | null,
-  target: Pick<HubDevice, "platform" | "id">,
+  target: { platform: HubDevice["platform"]; identity: string },
   boot = true
 ) {
   const list = await hubInventory(hub);
   const known = (target.platform === "ios" ? list.simulators : list.emulators).find(
-    (d) => d.id === target.id
+    (d) => deviceIdentity(d) === target.identity
   );
-  let selected = known;
+  let selected: HubDevice | undefined = known;
   if (!selected && target.platform === "ios") {
     const ios = await listSimulators();
     if (!ios.available) throw new ConflictError("iOS Simulators need Xcode.");
     if (ios.detail) throw new AppError(503, "iOS simulators could not be listed.", ios.detail);
-    selected = ios.devices.find((device) => device.id === target.id);
+    selected = ios.devices.find((device) => device.id === target.identity);
   }
-  if (!selected) throw new ConflictError("This device is no longer available.");
+  if (!selected)
+    throw new ConflictError("This device is no longer available. Choose a device again.");
 
   const perform = async (path: string, body: object) => {
     const result = action.parse(await request(hub, path, body));
@@ -126,7 +137,16 @@ export async function startHubDevice(
     if (!boot) throw new ConflictError("The device is shut down.");
     if (known) {
       const result = await perform("/api/devices/boot", selected);
-      id = result.serial ?? id;
+      if (selected.platform === "android") {
+        const running = (await hubInventory(hub)).emulators.find(
+          (d) => d.booted && d.name === target.identity
+        );
+        if (!running || (result.serial && result.serial !== running.id))
+          throw new ConflictError(
+            "The running emulator could not be identified. Choose a device again."
+          );
+        id = running.id;
+      }
     } else {
       // A simulator that has never booted has no hub inventory entry.
       try {

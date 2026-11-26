@@ -39,10 +39,8 @@ async function hasInstaller() {
 export function liveViewSupport(
   platform: NodeJS.Platform,
   arch: string,
-  installer: boolean,
-  remote: boolean
-): DeviceSupport["liveView"] {
-  if (remote) return "remote";
+  installer: boolean
+): Exclude<DeviceSupport["liveView"], "remote"> {
   if (platform !== "darwin" || arch !== "arm64") return "unsupported";
   return installer ? "available" : "no-runtime";
 }

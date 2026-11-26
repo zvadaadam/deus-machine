@@ -13,18 +13,24 @@ export interface HubDevice {
   booted: boolean;
 }
 
+export function deviceIdentity(device: HubDevice) {
+  return device.platform === "ios" ? device.id : device.name;
+}
+
 export interface HubInventory {
   devices: HubDevice[];
   available: { ios: boolean; android: boolean };
   detail: Record<HubDevice["platform"], string | null>;
 }
 
-export interface DeviceSupport {
-  liveView: "available" | "unsupported" | "no-runtime" | "remote";
-  setup: "new" | "working" | "ready" | "failed";
-  error: string | null;
-  xcode: { available: boolean; version: string | null };
-  android: boolean;
-  hubVersion: string;
-  agentDeviceVersion: string;
-}
+export type DeviceSupport =
+  | { liveView: "remote" }
+  | {
+      liveView: "available" | "unsupported" | "no-runtime";
+      setup: "new" | "working" | "ready" | "failed";
+      error: string | null;
+      xcode: { available: boolean; version: string | null };
+      android: boolean;
+      hubVersion: string;
+      agentDeviceVersion: string;
+    };

@@ -11,6 +11,7 @@ export const deviceHubStatus = stream({
     workspaceId: z.string().min(1),
     platform: z.enum(["ios", "android"]).nullable(),
     deviceId: z.string().min(1).max(256).nullable(),
+    displayedInstance: z.string().nullable(),
   }),
   event: out<HubStatus>(),
 });
@@ -26,7 +27,7 @@ export const startHubDevice = write({
   name: "startHubDevice",
   input: z.object({
     platform: z.enum(["ios", "android"]),
-    id: z.string().min(1),
+    identity: z.string().min(1),
     boot: z.boolean(),
   }),
   output: out<HubDevice>(),

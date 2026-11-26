@@ -35,10 +35,9 @@ function Row({
   );
 }
 
-function tabStatus(s: DeviceSupport) {
+function tabStatus(s: Exclude<DeviceSupport, { liveView: "remote" }>) {
   if (s.liveView === "unsupported") return "Needs a Mac with Apple silicon";
   if (s.liveView === "no-runtime") return "Device runtime unavailable";
-  if (s.liveView === "remote") return "Open Deus on this Mac";
   return {
     ready: "Ready",
     new: "Sets up the first time you open it",
@@ -48,7 +47,7 @@ function tabStatus(s: DeviceSupport) {
 }
 
 export function DevicesSection() {
-  const support = useDeviceSupport();
+  const support = useDeviceSupport({ refreshSetup: true });
   const retry = useMutation({
     mutationFn: () => call(retryDeviceHub),
     onSettled: () => support.refetch(),
@@ -63,7 +62,9 @@ export function DevicesSection() {
           your app on the same devices.
         </p>
       </div>
-      {data ? (
+      {data?.liveView === "remote" ? (
+        <Row label="Device tab" status="The Device tab works in Deus on the Mac itself." />
+      ) : data ? (
         <div className="space-y-3">
           <Row
             label="Device tab"

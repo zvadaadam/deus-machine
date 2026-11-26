@@ -18,16 +18,26 @@ describe("Device Hub access", () => {
         workspaceId: "w",
         deviceId: null,
         platform: null,
+        displayedInstance: null,
       })
     ).toThrow("on this computer");
     expect(follow).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { deviceId: "phone", assistant: null, relayed: false },
+    { deviceId: null, assistant: null, relayed: true },
+  ])("answers remote Settings without host details for %o", async (caller) => {
+    expect(await operations(handlers, caller)(api.deviceSupport, {})).toEqual({
+      liveView: "remote",
+    });
   });
 
   it("refuses device operations from a paired viewer", async () => {
     const call = operations(handlers, { deviceId: "phone", assistant: null, relayed: false });
     await expect(call(api.deviceHubDevices, {})).rejects.toThrow("on this computer");
     await expect(
-      call(api.startHubDevice, { platform: "android", id: "phone", boot: true })
+      call(api.startHubDevice, { platform: "android", identity: "phone", boot: true })
     ).rejects.toThrow("on this computer");
     await expect(call(api.retryDeviceHub, {})).rejects.toThrow("on this computer");
   });

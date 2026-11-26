@@ -115,7 +115,8 @@ export function MainContent({
 
   const experimentalSettings = useSettings().data;
   const deviceAvailable =
-    useDeviceSupport(selectedWorkspace?.kind !== "cloud").data?.liveView === "available";
+    useDeviceSupport({ enabled: selectedWorkspace?.kind !== "cloud" }).data?.liveView ===
+    "available";
   const workspaceKind = selectedWorkspace?.kind;
   const tabVisibility = useMemo(
     () => tabsFor(workspaceKind ? { kind: workspaceKind } : null, deviceAvailable),

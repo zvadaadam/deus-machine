@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 import { processGroupsStopped, trackProcessGroup } from "@shared/lib/process-groups";
 
@@ -15,15 +16,22 @@ function signalGroup(pid: number, signal: NodeJS.Signals | 0) {
 }
 
 /** Keep a parent-death pipe outside the group: even a SIGKILL of the backend closes its writer. */
-function guardGroup(pid: number) {
+function guardGroup(pid: number, directory: string) {
   const guard = spawn(
     "/bin/sh",
     [
       "-c",
-      'read -r done || { kill -TERM -- "-$1" 2>/dev/null || exit 0; sleep "$2"; kill -KILL -- "-$1" 2>/dev/null; }',
+      `printf '%s' "$1" > "$3/group.pid"
+       if ! read -r result && kill -TERM "-$1" 2>/dev/null; then
+         sleep "$2"
+         kill -KILL "-$1" 2>/dev/null
+         while kill -0 "-$1" 2>/dev/null; do sleep 0.05; done
+       fi
+       if [ "$result" != "installed" ]; then rm -rf -- "$3"; fi`,
       "deus-device-group",
       String(pid),
       String(graceMs / 1000),
+      directory,
     ],
     {
       detached: true,
@@ -31,7 +39,7 @@ function guardGroup(pid: number) {
     }
   );
   guard.stdin.on("error", () => {});
-  return guard;
+  return { stdin: guard.stdin, closed: once(guard, "close") };
 }
 
 export function launch(
@@ -39,7 +47,7 @@ export function launch(
   cwd: string,
   env: NodeJS.ProcessEnv,
   signal: AbortSignal,
-  installing = false
+  { directory, installing }: { directory: string; installing?: boolean }
 ) {
   signal.throwIfAborted();
   if (processGroupsStopped()) throw new Error("Deus is shutting down.");
@@ -52,7 +60,7 @@ export function launch(
   });
   const pid = child.pid;
   const forget = trackProcessGroup(pid);
-  const guard = pid ? guardGroup(pid) : null;
+  const guard = pid ? guardGroup(pid, directory) : null;
   let stderr = "";
   child.stderr?.setEncoding("utf8").on("data", (chunk: string) => {
     stderr = (stderr + chunk).slice(-4096);
@@ -64,6 +72,7 @@ export function launch(
     while (signalGroup(pid, 0)) {
       if (Date.now() >= deadline) {
         signalGroup(pid, "SIGKILL");
+        while (signalGroup(pid, 0)) await delay(50);
         return;
       }
       await delay(50);
@@ -89,7 +98,8 @@ export function launch(
       await stop();
     } finally {
       forget();
-      guard?.stdin.end("stopped\n");
+      guard?.stdin.end(installing ? "installed\n" : "stopped\n");
+      await guard?.closed;
     }
   });
   return { child, closed };
