@@ -142,6 +142,7 @@
     "@tanstack/react-router": "^1.168.1",
     "@tanstack/react-virtual": "^3.13.19",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/bun": "1.3.12",
     "@types/mdast": "4.0.4",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.3",
