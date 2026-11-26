@@ -55,7 +55,7 @@ interface QueueControls {
 }
 
 function QueuedRow({
-  row: { id, text, images, state, origin },
+  row: { id, text, images, state, origin, reason },
   moving,
   sessionId,
   turnId,
@@ -95,7 +95,7 @@ function QueuedRow({
         <div
           className={cn(
             "border-border-subtle bg-bg-muted text-text-secondary mb-1 flex h-8 items-center gap-1 rounded-lg border px-0.5 text-sm pointer-coarse:h-12",
-            origin && "h-12 pointer-coarse:h-18",
+            (origin || reason) && "h-auto min-h-12 py-1 pointer-coarse:min-h-18",
             isDragging && "border-border-strong shadow-sm"
           )}
         >
@@ -131,6 +131,7 @@ function QueuedRow({
                 {text}
               </span>
             )}
+            {reason && <span className="text-warning col-span-full text-xs">{reason}</span>}
             {images > 0 && <ImageCount count={images} besideText={Boolean(text)} />}
           </div>
           <div

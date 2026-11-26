@@ -6,6 +6,7 @@ import { uuidv7 } from "@shared/lib/uuid";
 import { encodeOrigin, getTurnsForMessages, sameOrigin, type SessionRow } from "../../db";
 import { getDatabase } from "../../lib/database";
 import {
+  AppError,
   ChatBusyError,
   ConflictError,
   DifferentTurnMessageError,
@@ -38,6 +39,7 @@ type Row = {
   images: number;
   state: api.QueuedMessages["items"][number]["state"];
   held: boolean;
+  reason?: string;
   ownTurn: boolean;
   sentAs?: { turnId: string; reuse: boolean };
   steer?: {
@@ -72,6 +74,7 @@ interface Queue {
  * A person's send follows the last unheld row or leads the waiting rows if all are held, while an agent or assistant joins a standing hold.
  * A fresh steer may enter another turn, and an agent’s fallback row joins the hold.
  * A held row may move but cannot steer into a turn or block an unheld row.
+ * With no reset time only a person may retry the limit, with the waiting head or “Continue.”
  * Resume and clearing a limit both release every marked row, and agents may resume failures, agent Stops and limits after a reported reset.
  */
 function markRows(q: Queue, turnId?: string) {
@@ -216,11 +219,12 @@ export function queuedMessages(sessionId: string): api.QueuedMessages {
     paused: hold?.reason ?? (fenced ? "failed" : null),
     ...(hold?.reason === "stopped" && hold.by && { stoppedBy: hold.by }),
     ...(hold?.reason === "limit" && { limit: hold.limit }),
-    items: q.items.map(({ message, text, images, state, origin }) => ({
+    items: q.items.map(({ message, text, images, state, origin, reason }) => ({
       id: message.turnId,
       text,
       images,
       state,
+      ...(reason && { reason }),
       ...(origin && { origin }),
     })),
   };
@@ -259,6 +263,7 @@ async function drain(q: Queue | undefined, retryBusy = false) {
   // A strict send can report an interruption before it returns its admission promise.
   head.sentAs = { turnId, reuse: false };
   head.state = "sending";
+  delete head.reason;
   const admission = sendMessage({ ...head.message, turnId }, head.origin);
   changed(q);
   try {
@@ -267,7 +272,12 @@ async function drain(q: Queue | undefined, retryBusy = false) {
   } catch (error) {
     if (holdingTurn(q.sessionId)?.turnId === turnId) return;
     const busy = error instanceof ChatBusyError;
-    if (queues.get(q.sessionId) !== q || !returnHead(q, turnId, busy)) return;
+    const reason = busy
+      ? undefined
+      : error instanceof AppError
+        ? error.message
+        : "Could not send this queued message.";
+    if (queues.get(q.sessionId) !== q || !returnHead(q, turnId, busy, reason)) return;
     if (!busy) interrupt(q, turnId, "failure");
     // The competing turn may already have ended while this attempt held the head.
     const winnerEnded = busy && waitForWinner(q, error);
@@ -541,6 +551,11 @@ export async function resumeQueuedMessages(sessionId: string, by?: Origin) {
     if (hold.limit.resetsAt === undefined) return { outcome: "person_only" } as const;
     if (hold.limit.resetsAt > Date.now()) return { outcome: "before_reset" } as const;
   }
+  if (hold?.reason === "limit" && hold.limit.resetsAt === undefined)
+    return {
+      outcome: "resumed",
+      turnId: (await continueLimited(q, hold.turnId, retry))?.turnId,
+    } as const;
   clearHold(q);
   return { outcome: "resumed", turnId: (await drain(q, retry))?.turnId } as const;
 }
@@ -581,7 +596,7 @@ function checkResets() {
   watchResets();
 }
 
-async function continueLimited(q: Queue, turnId: string) {
+async function continueLimited(q: Queue, turnId: string, retryBusy = false) {
   clearHold(q);
   const id = q.sessionId;
   const chat = localChat(id);
@@ -594,11 +609,11 @@ async function continueLimited(q: Queue, turnId: string) {
     )
     .all(id);
   if (recent[0]?.turn_id !== turnId) return;
-  if (q.items.length) return drain(q);
+  if (q.items.length) return drain(q, retryBusy);
   const harness = knownHarness(chat.agent_harness);
   if (!harness) return;
   const turns = getTurnsForMessages(db, id, recent);
-  await sendMessage({
+  return sendMessage({
     sessionId: id,
     content: "Continue.",
     ...continuedSettings(id, harness, turns),
@@ -627,9 +642,13 @@ export function userEcho(sessionId: string, turnId: string, steerId?: string) {
   changed(q);
 }
 
-function returnHead(q: Queue, turnId: string, reuse = false) {
+function returnHead(q: Queue, turnId: string, reuse = false, reason?: string) {
   const head = q.items.find((item) => item.sentAs?.turnId === turnId);
   if (!head?.sentAs) return false;
+  if (reason) {
+    head.reason = reason;
+    if (head.state === "waiting") changed(q); // Setup already returned this attempt.
+  }
   // A busy reply keeps its retry id even if Stop already returned the head.
   if (head.state === "sending") head.state = "waiting";
   else if (!reuse) return false;
