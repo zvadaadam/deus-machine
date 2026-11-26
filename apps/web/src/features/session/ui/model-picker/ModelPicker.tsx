@@ -7,7 +7,7 @@ import type { ThinkingLevel } from "@/shared/agents";
 import * as picker from "@/shared/agents/picker";
 import { cn } from "@/shared/lib/utils";
 import { Models } from "./Models";
-import { PickerMark, PickerTabs } from "./Sources";
+import { PickerMark, PickerTabs } from "./PickerTabs";
 import { Thinking } from "./Thinking";
 
 interface ModelPickerProps extends picker.PickerChat {

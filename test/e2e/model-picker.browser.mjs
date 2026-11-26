@@ -527,7 +527,6 @@ try {
     else await search().fill("no such model");
     await chat.page.evaluate(() => globalThis.dispatchEvent(new Event("disconnect-gateway")));
     await rail().waitFor({ state: "detached" });
-    await checkFocus(search());
     assert.equal(await search().inputValue(), browsing === "subscriptions" ? "no such model" : "");
     await search().fill("GPT-6-Astra");
     await key("Enter");

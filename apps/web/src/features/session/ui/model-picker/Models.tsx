@@ -1,10 +1,10 @@
-import { useId, useLayoutEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { ArrowUpRight, Check } from "lucide-react";
 import * as Cmd from "@/components/ui/command";
 import { GatewayProviderLogo } from "@/shared/agents/GatewayProviderLogo";
 import * as picker from "@/shared/agents/picker";
 import { uiActions } from "@/shared/stores/uiStore";
-import { PickerTabs } from "./Sources";
+import { PickerTabs } from "./PickerTabs";
 
 interface ModelsProps {
   page: picker.PickerPage;
@@ -28,21 +28,6 @@ function textKeys(e: KeyboardEvent<HTMLInputElement>) {
 export function Models({ page, onAgent, locked, onPick, onClose, children }: ModelsProps) {
   const { source, agents, agent, options, selected, initialModel, empty, newChat } = page;
   const sections = picker.providerGroups(options);
-  const region = useId();
-  const previous = useRef(page);
-  // A live disconnect can remove the focused field or tab. Keep keyboard navigation in the open picker.
-  useLayoutEffect(() => {
-    if (previous.current !== page && document.activeElement === document.body) {
-      const dialog = document
-        .getElementById(region)
-        ?.closest<HTMLElement>('[role="dialog"][data-state="open"]');
-      const target = window.matchMedia("(pointer: coarse)").matches
-        ? dialog
-        : dialog?.querySelector("input");
-      target?.focus({ preventScroll: true });
-    }
-    previous.current = page;
-  }, [page, region]);
   const notice = locked ? "This chat keeps its agent" : newChat ? "Opens a new chat" : undefined;
   function openSettings() {
     onClose();
@@ -52,7 +37,6 @@ export function Models({ page, onAgent, locked, onPick, onClose, children }: Mod
     <PickerTabs value={agent} items={agents} onChange={onAgent}>
       <Cmd.Command
         key={source + "/" + agent}
-        id={region}
         label="Search models"
         vimBindings={false}
         filter={picker.filterModel}
