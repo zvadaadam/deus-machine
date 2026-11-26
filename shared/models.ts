@@ -197,8 +197,14 @@ export function defaultModelId(
 // ── Picker values ──────────────────────────────────────────────────────────
 
 /** A picker value names its harness and model: `claude-code:opus`. */
-export function modelValue(harness: AgentHarness, model: string): string {
-  return `${harness}:${model}`;
+export function modelValue(
+  harness: AgentHarness,
+  model: string,
+  gatewayGeneration?: string | null
+): string {
+  return gatewayGeneration
+    ? `gateway:${harness}:${gatewayGeneration}:${model}`
+    : `${harness}:${model}`;
 }
 
 /**
@@ -208,8 +214,16 @@ export function modelValue(harness: AgentHarness, model: string): string {
  */
 export function parseModelValue(
   value: string
-): { harness: AgentHarness; model: string } | undefined {
+): { harness: AgentHarness; model: string; gatewayGeneration?: string } | undefined {
   const text = value.trim();
+  if (text.startsWith("gateway:")) {
+    const [, id, gatewayGeneration, ...parts] = text.split(":");
+    const harness = knownHarness(id);
+    const model = parts.join(":");
+    return harness && gatewayGeneration && model
+      ? { harness, model, gatewayGeneration }
+      : undefined;
+  }
   const colon = text.indexOf(":");
   if (colon <= 0 || colon === text.length - 1) return undefined;
   const prefix = text.slice(0, colon).toLowerCase();

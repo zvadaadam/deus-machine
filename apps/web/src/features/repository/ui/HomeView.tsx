@@ -504,8 +504,11 @@ export function HomeView({
                 model={selection.model}
                 agentHarness={selection.agentHarness}
                 lists={selection.lists}
+                gateways={selection.gateways}
+                previousGateway={selection.previousGateway}
                 thinkingLevel={selection.thinkingLevel}
-                thinkingLevels={selection.thinkingLevels}
+                preferredThinking={selection.preferredThinking}
+                defaultThinking={selection.defaultThinking}
                 hasMessages={false}
                 onModelChange={selection.setModel}
                 onThinkingLevelChange={selection.setThinkingLevel}

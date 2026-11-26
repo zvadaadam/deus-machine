@@ -7,6 +7,7 @@
  */
 
 import { DEFAULT_AGENT_HARNESS } from "@shared/models";
+import { chatHasStarted } from "@shared/gateways";
 import { getAgentLabel } from "@/shared/agents";
 import type { Session } from "@/features/session/types";
 import type {
@@ -43,7 +44,7 @@ export function createPendingTab(): PendingChatTab {
 
 /** Build a tab from a session record. Sequence is computed externally. */
 export function sessionToTab(session: Session, sequence: number): SessionChatTab {
-  const hasStarted = session.message_count > 0;
+  const hasStarted = chatHasStarted(session);
   return {
     kind: "session",
     id: `tab-${session.id}`,
@@ -66,12 +67,9 @@ export function nextStartedChatLabel(tabs: ChatTab[], agentHarness: string): str
 
 /** A tab for a chat that arrived, labelled after the tabs already there. */
 export function arrivedTab(tabs: ChatTab[], session: Session): SessionChatTab {
-  return {
-    ...sessionToTab(session, 1),
-    ...(session.message_count > 0
-      ? { label: nextStartedChatLabel(tabs, session.agent_harness) }
-      : {}),
-  };
+  const tab = sessionToTab(session, 1);
+  if (tab.hasStarted) tab.label = nextStartedChatLabel(tabs, session.agent_harness);
+  return tab;
 }
 
 export interface TabsAndClosed {
@@ -110,13 +108,16 @@ export function reconcileLive(
         ? tabs.map((tab, i) => (i === placeholder ? arrivedTab(tabs, session) : tab))
         : [...tabs, arrivedTab(tabs, session)];
   }
-  // A cloud snapshot can establish that an untitled chat has started after
-  // discovery has already hydrated the tabs. Preserve order and draft choices.
-  // Labels allocated one after another, against the list as it is built.
+  // Admission settles the draft tab's agent even if its user echo was lost.
   tabs = [...tabs];
   tabs.forEach((tab, i) => {
     const session = isSessionChatTab(tab) ? live.get(tab.sessionId) : undefined;
-    if (tab.hasStarted || !session || session.message_count === 0) return;
+    if (
+      !session ||
+      !chatHasStarted(session) ||
+      (tab.hasStarted && tab.agentHarness === session.agent_harness)
+    )
+      return;
     changed = true;
     tabs[i] = {
       ...tab,

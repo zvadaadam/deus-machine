@@ -2,6 +2,8 @@ import { useCallback, useState } from "react";
 import { getStoredModel, setStoredModel } from "@/features/session/lib/modelPreference";
 import { useDefaultThinkingLevel } from "@/features/settings/api";
 import { fitThinkingLevel, type ThinkingLevel } from "@/shared/agents";
+import type { PickerOption } from "@/shared/agents/picker";
+import { gatewayEffort } from "@shared/gateways";
 import { useChatModel } from "@/shared/hooks/useModelLists";
 
 /**
@@ -15,18 +17,19 @@ export function useNewChatSelection(location: "local" | "cloud") {
   const [pickedLevel, setThinkingLevel] = useState<ThinkingLevel | null>(null);
   const defaultThinking = useDefaultThinkingLevel();
   const selection = useChatModel({ cloud: location === "cloud", picked });
-  const thinkingLevel = fitThinkingLevel(
-    pickedLevel ?? defaultThinking,
-    selection.thinkingLevels,
-    defaultThinking
-  );
-  const setModel = useCallback((value: string) => {
+  const thinkingLevel = selection.gatewayModel
+    ? (gatewayEffort(selection.gatewayModel, pickedLevel ?? undefined) ?? "off")
+    : fitThinkingLevel(pickedLevel ?? defaultThinking, selection.thinkingLevels, defaultThinking);
+  const setModel = useCallback(({ value }: PickerOption, level?: ThinkingLevel) => {
+    if (level !== undefined) setThinkingLevel(level);
     setModelState(value);
     setStoredModel(value);
   }, []);
   return {
     ...selection,
     thinkingLevel,
+    preferredThinking: pickedLevel,
+    defaultThinking,
     /** The level the first turn names; none for a model with no thinking control. */
     sentThinkingLevel: selection.thinkingLevels.length ? thinkingLevel : undefined,
     setModel,

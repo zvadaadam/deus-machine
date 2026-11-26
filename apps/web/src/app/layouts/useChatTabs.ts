@@ -12,6 +12,13 @@ import { toast } from "sonner";
 import { shallow } from "zustand/shallow";
 import { hashKey, useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/api";
+import { chatHasStarted } from "@shared/gateways";
+import type { ThinkingLevel } from "@shared/protocol";
+import {
+  composerStore,
+  composerTarget,
+  sessionComposerActions,
+} from "@/features/session/store/sessionComposerStore";
 import { DEFAULT_AGENT_HARNESS } from "@shared/models";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { runtimeForQueryClient } from "@/platform/ws/runtime-client";
@@ -68,7 +75,7 @@ function computeSequences(sessions: Session[]): Map<string, number> {
   const counters = new Map<string, number>();
   const result = new Map<string, number>();
   for (const s of sessions) {
-    if (s.message_count > 0) {
+    if (chatHasStarted(s)) {
       const next = (counters.get(s.agent_harness) ?? 0) + 1;
       counters.set(s.agent_harness, next);
       result.set(s.id, next);
@@ -292,7 +299,8 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     () => mainTabs.filter(isSessionChatTab).map((tab) => tab.sessionId),
     [mainTabs]
   );
-  const runtime = runtimeForQueryClient(useQueryClient());
+  const cache = useQueryClient();
+  const runtime = runtimeForQueryClient(cache);
   const detailKey = hashKey(openIds);
   useEffect(() => {
     if (!runtime) return;
@@ -374,7 +382,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
   );
 
   const handleTabAdd = useCallback(
-    async (initialModel?: string) => {
+    async (initialModel?: string, thinkingLevel?: ThinkingLevel) => {
       // Web-direct has no session-create path yet (the mutate lane needs the
       // Mac backend; agnt-side creation is a follow-up) — every entry point
       // funnels through here (+ button, Cmd+T, open-in-new-tab), so one guard
@@ -384,7 +392,15 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
         return;
       }
       try {
+        const drafts = composerStore(cache);
         const newSession = await createSessionMutation.mutateAsync(workspaceId);
+        if (initialModel && thinkingLevel !== undefined) {
+          sessionComposerActions.pickModel(
+            composerTarget(newSession.id, drafts),
+            initialModel,
+            thinkingLevel
+          );
+        }
         const agentHarness = initialModel
           ? getAgentHarnessForModel(initialModel)
           : DEFAULT_AGENT_HARNESS;
@@ -403,7 +419,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
         toast.error(getErrorMessage(error));
       }
     },
-    [workspaceId, createSessionMutation]
+    [workspaceId, createSessionMutation, cache]
   );
 
   const handleTabRestore = useCallback((closedTab: ClosedSessionTab) => {
@@ -495,7 +511,12 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       .sort((a, b) => (order.get(a.id) ?? order.size) - (order.get(b.id) ?? order.size))
       .map((session) => {
         const closed = closedTabs[order.get(session.id) ?? closedTabs.length];
-        if (closed && (closed.hasStarted || session.message_count === 0)) return closed;
+        if (
+          closed &&
+          (!chatHasStarted(session) ||
+            (closed.hasStarted && closed.agentHarness === session.agent_harness))
+        )
+          return closed;
         return { ...sessionToTab(session, sequences.get(session.id) ?? 1), closedAt: 0 };
       });
   }, [workspaceSessions, openSessionIds, closedTabs]);

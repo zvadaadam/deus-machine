@@ -242,7 +242,7 @@ A late read removes its recovered steer and withdraws the retry if it is still i
 If the cancel is unconfirmed and the turn is still live, the watchdog records a warning and leaves it running.
 Resume appears above held rows, even before the turn ends, and while a waiting send needs a competing turn to end. At a usage limit, pressing Continue
 before the reported reset schedules a turn one minute after it. The person can enable this for future limits in Settings.
-Pressing Continue after the reset starts the turn at once. While Deus stays open, the first waiting message goes, or “Continue.”
+Pressing Continue after the reset starts the turn at once. With no reported reset, the person can press Try again. While Deus stays open, the first waiting message goes, or “Continue.”
 with the chat's settings. A new send, Resume, Stop, hiding the chat or archiving its workspace clears the schedule.
 A steer read mid-turn splits one reply into groups with one footer (`groupTurns` in
 `session/lib/chatTimeline.ts`). Cloud chats keep their send, including the hosted web's
@@ -876,6 +876,24 @@ the catalog can move to a package the day Deus Cloud reads it too.
   (Claude), a `.deus-skill.json` marker. Nothing without the marker is replaced
   or removed; a folder is swapped in by two renames, never half written.
   `DEUS_SKILLS_HOME` points it elsewhere (tests, dev).
+
+### Gateways
+
+A gateway is an endpoint the person adds in Settings → AI Providers. `shared/gateways.ts` owns the presets:
+OpenRouter has a pinned origin, CLIProxyAPI takes only loopback, and Custom takes HTTPS (HTTP on loopback) and the formats the person declares.
+With no gateway, `ModelPicker.tsx` shows no source rail and a native turn runs without gateway preparation or delivery.
+`services/gateways.ts` seals the client key with the vault in the private `gateways` setting. A connection edit changes its generation.
+No process environment, turn config or client read contains the key. `gatewayCredential` in `services/agent/gateway-turn.ts`
+hands the engine a held credential with the chat’s binding. The engine’s loopback relay gives the CLI a placeholder.
+The first admitted turn binds the chat to its gateway and agent. `services/agent/persistence.ts` writes `sessions.gateway_generation` with the first turn record.
+`requireChatRoute` and `requireSameHarness` in `services/agent/turns.ts` refuse a different route. The picker offers “Open in new chat”.
+`services/agent/gateway.ts` reads the catalog at connect. Opening the models, Retry and a missing model refresh the stored list
+through `services/gateways.ts`, one read at a time per revision. A turn checks the stored list and never fetches it.
+`services/agent/event-facts.ts` uses typed engine errors for `usage_limit` and `_gateway`. Keep unknown `scope` values unknown,
+use the validated `retryAt` for Continue, and use `reason` for credential refusal. Never match gateway error text.
+`mergeProxyExclusions` in `shared/lib/child-env.ts` preserves loopback at backend start and when the login shell is merged, so gateway and engine relay traffic stays direct.
+`fromThisComputer` in `api/gateways.ts` limits changes to this computer, including its window. Paired devices and assistants can read the public list.
+`test/e2e/model-picker.browser.mjs` covers the gateway rail, agent tabs, model list and thinking column.
 
 ### Adding an operation or a stream
 

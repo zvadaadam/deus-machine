@@ -1,3 +1,5 @@
+import type { OpenChatWithModel } from "@/shared/agents/picker";
+import { chatHasStarted } from "@shared/gateways";
 import { forwardRef, useEffect, useImperativeHandle, type ReactNode } from "react";
 import type { WorkspaceKind } from "@shared/enums";
 import { useStore } from "zustand";
@@ -40,7 +42,7 @@ interface SessionComposerProps {
     retrying: boolean;
   };
   /** Called when user picks a model from a locked agent group. */
-  onOpenNewTab?: (initialModel?: string) => void;
+  onOpenNewTab?: OpenChatWithModel;
   /** Reports the current agent harness to parents that gate on it. */
   onAgentHarnessChange?: (harness: AgentHarness) => void;
   /** Fires after a successful send. */
@@ -107,11 +109,16 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
       : defaultThinking;
 
     const pickedModel = useStore(composerStore(), (s) => s.composers[sessionId]?.model);
+    const hasMessages = chatHasStarted({
+      ...session,
+      message_count: messages.length || session?.message_count,
+    });
     const selection = useChatModel({
       cloud: workspaceKind === "cloud",
       workspaceId,
       harness: session?.agent_harness,
       turns,
+      gatewayGeneration: hasMessages ? (session?.gateway_generation ?? null) : undefined,
       picked: pickedModel ?? initialModel,
     });
     const { agentHarness } = selection;
@@ -126,10 +133,12 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
       sessionId,
       steerTurnId,
       model: needsHistory ? undefined : selection.model,
+      gatewayModel: selection.gatewayModel,
       workspaceId: workspaceId ?? undefined,
       workspaceKind,
       targetBranch: targetBranch ?? "main",
       onMessageSent: onSendComplete,
+      onOpenNewTab,
     });
 
     useImperativeHandle(
@@ -185,7 +194,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
         workspaceKind={workspaceKind}
         contextTokenCount={session?.context_token_count ?? 0}
         contextUsedPercent={session?.context_used_percent ?? 0}
-        hasMessages={messages.length > 0}
+        hasMessages={hasMessages}
         environmentUnconfigured={environmentUnconfigured}
         showCompactButton={showCompactButton}
         onSend={sendMessage}

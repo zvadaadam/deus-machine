@@ -56,79 +56,74 @@ export const TurnFooter = memo(function TurnFooter({
 
   if (!copyText && durationMs == null && !tokenLabel && !costLabel && !attribution) return null;
 
-  return (
-    <div className="text-muted-foreground/70 flex items-center gap-1 px-2 py-1 text-xs">
-      {!workedTime && (
-        <>
-          {durationMs != null &&
-            (timestampTooltip ? (
-              <TooltipProvider delayDuration={200}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span
-                      tabIndex={0}
-                      className="hover:bg-foreground/5 focus-visible:ring-ring inline-flex cursor-help rounded-sm px-1 font-mono tracking-tight tabular-nums transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                      aria-label={`Turn took ${formatTurnDurationLabel(durationMs)}. Started ${timestampTooltip.startedLabel}. Finished ${timestampTooltip.endedLabel}.`}
-                    >
-                      {formatTurnDurationLabel(durationMs)}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="px-2.5 py-1.5">
-                    <div className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1">
-                      <span className="text-muted-foreground/70">Started</span>
-                      <span className="font-mono tabular-nums">
-                        {timestampTooltip.startedLabel}
-                      </span>
-                      <span className="text-muted-foreground/70">Finished</span>
-                      <span className="font-mono tabular-nums">{timestampTooltip.endedLabel}</span>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            ) : (
-              <span className="font-mono tracking-tight tabular-nums">
+  const execution = attribution?.execution;
+  const metrics = [
+    execution?.via && (
+      <span key="provider" className="text-text-secondary truncate">
+        {execution.modelLabel ?? execution.model} via {execution.via}
+      </span>
+    ),
+    !workedTime &&
+      durationMs != null &&
+      (timestampTooltip ? (
+        <TooltipProvider key="duration" delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                tabIndex={0}
+                className="hover:bg-foreground/5 focus-visible:ring-ring inline-flex cursor-help rounded-sm px-1 font-mono tracking-tight tabular-nums transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                aria-label={`Turn took ${formatTurnDurationLabel(durationMs)}. Started ${timestampTooltip.startedLabel}. Finished ${timestampTooltip.endedLabel}.`}
+              >
                 {formatTurnDurationLabel(durationMs)}
               </span>
-            ))}
+            </TooltipTrigger>
+            <TooltipContent side="top" className="px-2.5 py-1.5">
+              <div className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1">
+                <span className="text-muted-foreground/70">Started</span>
+                <span className="font-mono tabular-nums">{timestampTooltip.startedLabel}</span>
+                <span className="text-muted-foreground/70">Finished</span>
+                <span className="font-mono tabular-nums">{timestampTooltip.endedLabel}</span>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : (
+        <span key="duration" className="font-mono tracking-tight tabular-nums">
+          {formatTurnDurationLabel(durationMs)}
+        </span>
+      )),
+    !workedTime && tokenLabel && (
+      <span
+        key="tokens"
+        className="font-mono tracking-tight tabular-nums"
+        title="Harness-reported tokens for this turn"
+      >
+        {tokenLabel}
+      </span>
+    ),
+    !workedTime && costLabel && (
+      <span
+        key="cost"
+        className="font-mono tracking-tight tabular-nums"
+        title="Harness-reported cost for this turn"
+      >
+        {costLabel}
+      </span>
+    ),
+  ].filter((metric) => !!metric);
 
-          {durationMs != null && (tokenLabel || costLabel || copyText) && (
+  return (
+    <div className="text-muted-foreground/70 flex items-center gap-1 px-2 py-1 text-xs">
+      {metrics.map((metric, index) => (
+        <Fragment key={metric.key}>
+          {index > 0 && (
             <span className="text-muted-foreground/30" aria-hidden="true">
               •
             </span>
           )}
-
-          {tokenLabel && (
-            <span
-              className="font-mono tracking-tight tabular-nums"
-              title="Harness-reported tokens for this turn"
-            >
-              {tokenLabel}
-            </span>
-          )}
-
-          {tokenLabel && costLabel && (
-            <span className="text-muted-foreground/30" aria-hidden="true">
-              •
-            </span>
-          )}
-
-          {costLabel && (
-            <span
-              className="font-mono tracking-tight tabular-nums"
-              title="Harness-reported cost for this turn"
-            >
-              {costLabel}
-            </span>
-          )}
-
-          {(tokenLabel || costLabel) && copyText && (
-            <span className="text-muted-foreground/30" aria-hidden="true">
-              •
-            </span>
-          )}
-        </>
-      )}
-
+          {metric}
+        </Fragment>
+      ))}
       {(attribution || workedTime) && (
         <Popover>
           <PopoverTrigger asChild>

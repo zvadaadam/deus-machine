@@ -21,7 +21,7 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { getErrorMessage } from "@shared/lib/errors";
 import type { RepoGroup } from "@shared/types/workspace";
-import { getAgentHarnessForModel, getModelId } from "@/shared/agents";
+import { turnSelection } from "@/shared/agents";
 import { useDefaultThinkingLevel } from "@/features/settings/api";
 import {
   pendingFirstMessages,
@@ -90,8 +90,7 @@ export function useFirstMessageDelivery(repoGroups: RepoGroup[], loaded: boolean
         await send({
           sessionId,
           content: first.message,
-          model: getModelId(first.model),
-          agentHarness: getAgentHarnessForModel(first.model),
+          ...turnSelection(first.model),
           turnId: newTurnId(),
           thinkingLevel,
           permissionMode: first.planMode ? "plan" : undefined,
