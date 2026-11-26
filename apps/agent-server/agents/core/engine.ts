@@ -9,7 +9,7 @@ import { LOCAL_HARNESSES } from "@shared/harnesses";
 import { createBackendChildEnv } from "@shared/lib/child-env";
 import { deusTools } from "../deus-tools";
 import { getShellEnvironment } from "../environment";
-import { chatTools } from "../../host-link";
+import { chatTools, heldCredential } from "../../host-link";
 import { trackedSessions } from "../../session-tracker";
 import { createCheckpoint } from "./checkpoint";
 import { decideToolUse } from "./tool-policy";
@@ -31,6 +31,7 @@ async function checkpointHook(
 export function getRegistry(): AgentRegistry {
   registry ??= createAgentRegistry({
     harnesses: [...LOCAL_HARNESSES],
+    credentials: heldCredential,
     // The engine uses a staged CLI or its verified pin. It downloads agy on first use.
     provision: { mode: "pinned" },
     // Harnesses merge their environment with process.env before reaching this hook.

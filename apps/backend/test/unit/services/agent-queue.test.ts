@@ -23,6 +23,8 @@ import * as api from "@shared/api/sessions";
 import { findConversationMessage } from "@shared/conversation-rows";
 import { SCHEMA_SQL } from "@shared/schema";
 import * as chatTurns from "../../../src/services/agent/chat-turn";
+import * as gatewayTurn from "../../../src/services/gateways/turn";
+import * as gateways from "../../../src/services/gateways/connections";
 import * as agent from "../../../src/services/agent/service";
 import * as cloud from "../../../src/services/agent/cloud/driver";
 import {
@@ -346,6 +348,152 @@ afterEach(async () => {
   db.close();
   vi.resetAllMocks();
 });
+
+function mockGateway(revision: string) {
+  vi.spyOn(gateways, "requireRevision").mockReturnValue({
+    ref: "fixture",
+    preset: "cliproxyapi",
+    revision,
+    credential: "sealed-fixture",
+  });
+  return vi.spyOn(gatewayTurn, "prepareGatewayTurn").mockResolvedValue(undefined);
+}
+
+it("writes the route with the first durable turn record, including a retry after a rolled back insert", async () => {
+  const revision = crypto.randomUUID(),
+    turnId = "test-binding";
+  mockGateway(revision);
+  const storedRevision = () =>
+    db.prepare("SELECT gateway_revision FROM sessions WHERE id=?").pluck().get(sessionId);
+  engine.startTurn.mockResolvedValueOnce();
+  await run(api.sendMessage, { ...message(turnId), turnId, gatewayRevision: revision });
+  expect(storedRevision()).toBeNull();
+  db.exec(
+    "CREATE TEMP TRIGGER reject_turn BEFORE INSERT ON turns BEGIN SELECT RAISE(ABORT,'fixture failure'); END"
+  );
+  emit({ type: "turn.started", sessionId, turnId, timestamp: seq });
+  expect(storedRevision()).toBeNull();
+  db.exec("DROP TRIGGER reject_turn");
+  emit({ type: "turn.ended", sessionId, turnId, timestamp: seq, stopReason: "end_turn" });
+  expect(storedRevision()).toBe(revision);
+  expect(db.prepare("SELECT COUNT(*) FROM turns WHERE session_id=?").pluck().get(sessionId)).toBe(
+    1
+  );
+});
+
+it.each([
+  [true, "credentialRefused", "_gateway"],
+  [true, undefined, "auth"],
+  [false, "credentialRefused", "auth"],
+] as const)(
+  "uses gateway key recovery only for its own refusal (%s, %s)",
+  async (bound, reason, expected) => {
+    const revision = crypto.randomUUID(),
+      turnId = "auth";
+    if (bound) mockGateway(revision);
+    await run(api.sendMessage, {
+      ...message(turnId),
+      turnId,
+      ...(bound && { gatewayRevision: revision }),
+    });
+    emit({
+      type: "turn.ended",
+      sessionId,
+      turnId,
+      timestamp: seq,
+      stopReason: "error",
+      error: { category: "auth", reason, message: "Auth check" },
+    });
+    expect(
+      db.prepare("SELECT error_category FROM sessions WHERE id=?").pluck().get(sessionId)
+    ).toBe(expected);
+  }
+);
+
+it("shows the refused gateway connection reason on the waiting row", async () => {
+  const revision = crypto.randomUUID();
+  enqueueMessage(
+    { ...message("held"), turnId: "held", gatewayRevision: revision },
+    { kind: "assistant", id: "assistant", name: "Assistant" }
+  );
+  await vi.waitFor(async () =>
+    expect((await queue()).items[0]).toMatchObject({
+      state: "waiting",
+      reason: expect.stringMatching(/connection changed/i),
+    })
+  );
+});
+
+it("keeps a queued gateway row editable when the native successor refuses its steer", async () => {
+  const revision = crypto.randomUUID();
+  const prep = mockGateway(revision).mockImplementationOnce(() => new Promise<never>(() => {}));
+  const first = expect(
+    run(api.sendMessage, { ...message("first"), turnId: "first", gatewayRevision: revision })
+  ).rejects.toThrow();
+  await vi.waitFor(() => expect(prep).toHaveBeenCalled());
+  await run(api.sendMessage, { ...message("old"), turnId: "old", gatewayRevision: revision });
+  await stop();
+  await first;
+  await send("native");
+  await resumeInWindow();
+  await expect(steerRow("old")).rejects.toThrow(/different provider/);
+  expect(engine.steerTurn).not.toHaveBeenCalled();
+  expect((await queue()).items).toMatchObject([waitingRow("old")]);
+  expect(await read("old")).toEqual({ content: "Message old" });
+  expect(await remove("old")).toEqual({ removed: true });
+});
+
+it.each(["gap", "watchdog"])(
+  "releases the gateway credential at %s settlement and reconciles its late end",
+  async (settlement) => {
+    const revision = crypto.randomUUID();
+    const delivery = { apiKey: "test-only", baseUrl: "http://localhost/v1" };
+    mockGateway(revision).mockImplementationOnce(async (turn) => {
+      turn.delivery = delivery;
+    });
+    const turnId = "active";
+    const request = { sessionId, turnId, harness: "codex-app-server" } as const;
+    await run(api.sendMessage, {
+      ...message("active"),
+      model: "custom:model",
+      turnId,
+      gatewayRevision: revision,
+    });
+    await expect(gatewayTurn.gatewayCredential(request)).resolves.toMatchObject(delivery);
+    if (settlement === "gap") gap("server_restarted");
+    else {
+      vi.useFakeTimers();
+      engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId });
+      await stop();
+      await vi.advanceTimersByTimeAsync(15_000);
+    }
+    expect(holdingTurn(sessionId)).toBeUndefined();
+    await expect(gatewayTurn.gatewayCredential(request)).rejects.toThrow("no longer active");
+    emit({
+      type: "turn.ended",
+      sessionId,
+      turnId,
+      timestamp: seq,
+      stopReason: "error",
+      error: {
+        category: "rate_limit",
+        message: "Fixture throttled",
+        retryAt: seq + 120000,
+        retryAtSource: "header",
+      },
+    });
+    const row = db
+      .prepare("SELECT outcome, execution FROM turns WHERE session_id=? AND turn_id=?")
+      .get(sessionId, turnId) as { outcome: string; execution: string };
+    expect(JSON.parse(row.outcome).error).toMatchObject({
+      category: "rate_limit",
+      message: "Fixture throttled",
+      retryAtSource: "header",
+    });
+    expect(JSON.parse(row.execution)).toMatchObject({ model: "custom:model" });
+    expect(row.outcome).not.toContain("test-only");
+  }
+);
 
 describe("stopping the current turn", () => {
   const host = createDeusHost();
@@ -1251,6 +1399,17 @@ describe("stopping the current turn", () => {
 });
 
 describe("messages held for a local chat", () => {
+  it("refuses to queue another agent on a bound chat before its first user echo", async () => {
+    const gatewayRevision = crypto.randomUUID();
+    db.prepare(
+      "UPDATE sessions SET agent_harness = 'claude-code', gateway_revision = ? WHERE id = ?"
+    ).run(gatewayRevision, sessionId);
+    await expect(
+      enqueueMessage({ ...message("queued"), turnId: "queued", gatewayRevision }, fromChat)
+    ).rejects.toThrow("Cannot switch agent from claude-code to codex-app-server");
+    expect(await ids()).toEqual([]);
+  });
+
   it("starts a fresh steer on a free chat with a stale card and steers its holder with a stale idle status", async () => {
     db.prepare("UPDATE sessions SET status = 'needs_response' WHERE id = ?").run(sessionId);
     const next = await steerMessage(message("first"), fromChat, "first");
@@ -4602,6 +4761,48 @@ describe("continuing a chat after a usage limit", () => {
   beforeEach(() => vi.useFakeTimers({ now }));
   afterEach(() => vi.restoreAllMocks());
 
+  it.each([0, 8 * 86400000, Number.MAX_SAFE_INTEGER])(
+    "uses a gateway deadline only within seven days (%s)",
+    async (offset) => {
+      const turnId = "A",
+        revision = crypto.randomUUID();
+      mockGateway(revision);
+      await run(api.sendMessage, { ...message(turnId), turnId, gatewayRevision: revision });
+      const retryAt = resetsAt + offset;
+      const error = {
+        category: "rate_limit",
+        message: "limited",
+        retryAt,
+        retryAtSource: "header",
+      };
+      emit({ type: "turn.ended", sessionId, turnId, timestamp: now, stopReason: "error", error });
+      const limit = (await queue()).limit;
+      expect(limit).toBeDefined();
+      expect(limit?.resetsAt).toBe(offset ? undefined : resetsAt);
+      const raw = db.prepare("SELECT outcome FROM turns WHERE turn_id=?").pluck().get(turnId);
+      expect(JSON.parse(String(raw)).error.retryAt).toBe(offset ? undefined : resetsAt);
+      if (offset) {
+        await resumeInWindow();
+        expect(engine.startTurn.mock.lastCall?.[0].input).toBe("Continue.");
+      }
+      await stop();
+    }
+  );
+  it("uses only session limit windows for a native usage limit, even when the engine supplies retryAt", async () => {
+    await send("A");
+    windows([{ id: "primary", usedPercent: 100, resetsAt }], "limited");
+    emit({
+      type: "turn.ended",
+      sessionId,
+      turnId: "A",
+      timestamp: now,
+      stopReason: "error",
+      error: { category: "usage_limit", message: "Limited", retryAt: resetsAt + 10000 },
+    });
+    expect((await queue()).limit?.resetsAt).toBe(resetsAt);
+    await stop();
+  });
+
   it.each([false, true])(
     "refuses an agent's resume before the reset and reports automatic continuation (%s)",
     async (on) => {
@@ -4646,6 +4847,47 @@ describe("continuing a chat after a usage limit", () => {
     );
     expect((await queue()).paused).toBe("limit");
     expect(starts()).toEqual(["active"]);
+  });
+
+  it.each([
+    { gateway: false, waiting: false },
+    { gateway: false, waiting: true },
+    { gateway: true, waiting: false },
+    { gateway: true, waiting: true },
+  ])(
+    "a person's untimed Resume continues the chat (gateway $gateway, waiting $waiting)",
+    async ({ gateway, waiting }) => {
+      const revision = gateway ? crypto.randomUUID() : undefined;
+      if (revision) mockGateway(revision);
+      const selected = (id: string) =>
+        run(api.sendMessage, {
+          ...message(id),
+          turnId: id,
+          gatewayRevision: revision,
+        });
+      await selected("active");
+      if (waiting) await selected("later");
+      fail();
+      expect((await queue()).limit).toEqual({ continues: false });
+      await resumeInWindow();
+      const [next] = engine.startTurn.mock.lastCall!;
+      expect(next.input).toBe(waiting ? "Message later" : "Continue.");
+      expect(next.config.model).toBe(message(waiting ? "later" : "active").model);
+      expect(next.config.retryPolicy).toBe(gateway ? "failFast" : undefined);
+      expect((await queue()).paused).toBeNull();
+    }
+  );
+
+  it("starts a waiting row on untimed Resume after the chat leaves the usage limit", async () => {
+    await sendInOrder("T1", "A");
+    fail();
+    // A scoped session invalidation normally clears this hold when a new turn starts.
+    db.prepare("UPDATE sessions SET status = 'idle', error_category = NULL WHERE id = ?").run(
+      sessionId
+    );
+    expect(await queue()).toMatchObject({ paused: "limit", items: [waitingRow("A")] });
+    await resumeInWindow();
+    expect(starts()).toEqual(["T1", "A"]);
   });
 
   it("uses the latest rejected Claude window reported during the failing turn", async () => {

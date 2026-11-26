@@ -1,5 +1,8 @@
+import { OpError } from "@/platform/ws/runtime-client";
 /** Send and steer use the model and settings shown in this chat's composer. */
 
+import type { ModelDescriptor } from "@shared/models";
+import { gatewayEffort } from "@shared/gateways";
 import type { WorkspaceKind } from "@shared/enums";
 import { canPlan } from "@shared/harnesses";
 import { useCallback } from "react";
@@ -7,7 +10,7 @@ import { toast } from "sonner";
 import { newTurnId, useSendMessage, useStopSession } from "../api/session.queries";
 import { connect, isConnected } from "@/platform/ws";
 import { track } from "@/platform/analytics";
-import { getAgentHarnessForModel, getModelId } from "@/shared/agents";
+import { turnSelection } from "@/shared/agents";
 import { COMPACT_CONVERSATION, createPRPrompt } from "../lib/sessionPrompts";
 import { composerStore } from "../store/sessionComposerStore";
 
@@ -15,12 +18,14 @@ interface UseSessionActionsProps {
   sessionId: string;
   steerTurnId?: string;
   model?: string;
+  gatewayThinking?: ModelDescriptor["thinking"];
   workspaceId?: string;
   workspaceKind?: WorkspaceKind | null;
   /** Branch PR prompts target (defaults to "main"). */
   targetBranch?: string;
   /** Fires after a successful send. */
   onMessageSent?: () => void;
+  onOpenNewTab?: () => void;
 }
 
 interface UseSessionActionsReturn {
@@ -39,10 +44,12 @@ export function useSessionActions({
   sessionId,
   steerTurnId,
   model,
+  gatewayThinking,
   workspaceId,
   workspaceKind,
   targetBranch = "main",
   onMessageSent,
+  onOpenNewTab,
 }: UseSessionActionsProps): UseSessionActionsReturn {
   const sendMessageMutation = useSendMessage();
   const stopSessionMutation = useStopSession();
@@ -57,19 +64,30 @@ export function useSessionActions({
       const content = customContent || composer.draft.trim();
       if (!content) return false;
 
-      const agentHarness = getAgentHarnessForModel(model);
+      const selection = turnSelection(model);
+      const { agentHarness } = selection;
       try {
         await sendMessageMutation.mutateAsync({
           ...(mode === "steer" ? { mode, turnId: steerTurnId } : { turnId: newTurnId() }),
           sessionId,
           content,
-          model: getModelId(model),
-          agentHarness,
+          ...selection,
           permissionMode:
             composer.planModeEnabled && canPlan(agentHarness, workspaceKind) ? "plan" : undefined,
-          thinkingLevel: composer.thinkingLevel,
+          thinkingLevel: selection.gatewayRevision
+            ? gatewayEffort(gatewayThinking, composer.thinkingLevel)
+            : composer.thinkingLevel,
         });
       } catch (error) {
+        if (
+          error instanceof OpError &&
+          (error.details as { kind?: string } | undefined)?.kind === "connection_changed"
+        ) {
+          toast.error(error.message, {
+            action: onOpenNewTab && { label: "Open in new chat", onClick: () => onOpenNewTab() },
+          });
+          return false;
+        }
         console.error("Failed to send message:", error);
         toast.error(error instanceof Error ? error.message : "Failed to send message");
         // The toast is feedback, not delivery: the caller learns it failed.
@@ -83,7 +101,16 @@ export function useSessionActions({
       }
       return true;
     },
-    [sessionId, steerTurnId, model, workspaceKind, sendMessageMutation, onMessageSent]
+    [
+      sessionId,
+      steerTurnId,
+      model,
+      gatewayThinking,
+      workspaceKind,
+      sendMessageMutation,
+      onMessageSent,
+      onOpenNewTab,
+    ]
   );
 
   const stopSession = useCallback(async () => {

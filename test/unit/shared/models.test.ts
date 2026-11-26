@@ -8,6 +8,7 @@ import {
   fitThinkingLevel,
   harnessNamed,
   modelLabel,
+  modelValue,
   thinkingLevelLabel,
   modelThinkingLevels,
   parseModelValue,
@@ -16,7 +17,16 @@ import {
   type ModelDescriptor,
 } from "@shared/models";
 import { LOCAL_HARNESSES } from "@shared/harnesses";
-import { modelPickerView } from "@/shared/agents/picker";
+import type { GatewayCatalog } from "@shared/gateways";
+import {
+  changesRoute,
+  filterModel,
+  levelFor,
+  modelKeywords,
+  modelPickerView,
+  providerGroups,
+  type PickerOption,
+} from "@/shared/agents/picker";
 
 const row = (
   harness: ModelDescriptor["harness"],
@@ -203,11 +213,49 @@ describe("what a model picker shows", () => {
       ["Claude Code", ["Sonnet 5.5", "Opus 5.5", "Haiku 4.5"]],
       ["Codex", ["GPT-Next", "GPT-6.1-Sol"]],
     ]);
-    expect(view.selected).toEqual({
+    expect(view.selected).toMatchObject({
       value: "codex-app-server:gpt-6.1-sol",
       label: "GPT-6.1-Sol",
       agentHarness: "codex-app-server",
     });
+  });
+
+  it("shows a Custom model only on formats allowed by its catalog and connection", () => {
+    const gateway: GatewayCatalog = {
+      ref: "custom",
+      preset: "custom",
+      formats: ["responses", "messages"],
+      revision: "rev",
+      baseUrl: "http://localhost",
+      models: [
+        { id: "alias", label: "Alias", provider: "" },
+        { id: "responses", label: "Responses only", provider: "", formats: ["responses"] },
+        { id: "image", label: "Image", provider: "", excluded: "non_chat" },
+        { id: "hidden", label: "Hidden", provider: "", excluded: "hidden" },
+      ],
+    };
+    const options = (formats: GatewayCatalog["formats"]) =>
+      modelPickerView([], undefined, [{ ...gateway, formats }]).groups.map((g) => [
+        g.agentHarness,
+        g.options.map((o) => o.id),
+      ]);
+    expect(options(gateway.formats)).toEqual([
+      ["claude-code", ["alias"]],
+      ["codex-app-server", ["alias", "responses"]],
+    ]);
+    expect(options(["messages"])).toEqual([["claude-code", ["alias"]]]);
+  });
+
+  it("selects one existing native row for a subscription choice saved by an older client", () => {
+    const old = "codex:gpt-5.3-codex";
+    const current = defaultModelId(CATALOG_MODEL_LISTS, "codex-app-server")!;
+    const view = modelPickerView(CATALOG_MODEL_LISTS, old);
+    expect(view.selected?.value).toBe(modelValue("codex-app-server", current));
+    expect(
+      view.groups
+        .find((group) => group.agentHarness === "codex-app-server")
+        ?.options.filter((option) => option.id === current)
+    ).toHaveLength(1);
   });
 
   it("keeps the chat's model among its harness's rows when no list names it", () => {
@@ -220,6 +268,79 @@ describe("what a model picker shows", () => {
       "claude-code:haiku",
     ]);
     expect(view.groups[1].options).toHaveLength(2);
+  });
+
+  it("places each gateway route in its runner's tab and search keeps the available agents", () => {
+    const gateway: GatewayCatalog = {
+      ref: "fixture-gateway",
+      preset: "cliproxyapi",
+      formats: ["responses", "messages"],
+      revision: "revision",
+      baseUrl: "http://localhost",
+      models: [
+        {
+          id: "internal:one",
+          label: "Friendly",
+          provider: "openai",
+          runner: "codex-app-server",
+          thinkingByFormat: { responses: { levels: ["high"] } },
+        },
+        { id: "claude-a", label: "Sonnet", provider: "anthropic", runner: "claude-code" },
+        { id: "other", label: "Kimi K3", provider: "kimi", runner: "claude-code" },
+        { id: "unclassified", label: "unclassified", provider: "unknown" },
+      ],
+    };
+    const selected = modelValue("codex-app-server", "internal:one", gateway.revision);
+    const view = modelPickerView(lists, selected, [gateway]);
+    const tabs = view.groups.filter((g) => g.source === gateway.ref);
+    expect(
+      tabs.map((g) => [
+        g.agentHarness,
+        providerGroups(g.options).map(([label, rows]) => [label, rows.map((o) => o.id)]),
+      ])
+    ).toEqual([
+      [
+        "claude-code",
+        [
+          ["Anthropic", ["claude-a"]],
+          ["Kimi", ["other"]],
+        ],
+      ],
+      ["codex-app-server", [["OpenAI", ["internal:one"]]]],
+    ]);
+    expect(
+      view.groups
+        .filter((g) => g.source === "subscriptions")
+        .flatMap((g) => g.options)
+        .some((o) => o.gatewayRevision)
+    ).toBe(false);
+    for (const query of ["FRIEND", "nal:one", "OpenAI"]) {
+      const matches = (options: PickerOption[]) =>
+        options.filter((o) => filterModel(o.value, query, modelKeywords(o)));
+      expect(matches(tabs[0].options)).toEqual([]);
+      expect(matches(tabs[1].options).map((o) => o.value)).toEqual([selected]);
+    }
+    expect(view.selected).toMatchObject({ label: "Friendly", thinking: { levels: ["high"] } });
+    expect(modelPickerView(lists, selected, null).selected).toMatchObject({
+      value: selected,
+      unavailable: true,
+    });
+    expect(
+      modelPickerView(lists, selected, [{ ...gateway, models: gateway.models.slice(0, 1) }])
+        .groups.filter((g) => g.source === gateway.ref)
+        .map((g) => g.label)
+    ).toEqual(["Codex"]);
+  });
+
+  it("searches even a short subscription list and carries each result’s own thinking controls", () => {
+    const view = modelPickerView(lists, "claude-code:opus");
+    const matches = (query: string) =>
+      view.groups[0].options.filter((o) => filterModel(o.value, query, modelKeywords(o)));
+    expect(matches("sonnet").map((o) => [o.label, o.thinking?.levels])).toEqual([
+      ["Sonnet 5.5", ["low", "medium", "high"]],
+    ]);
+    expect(view.selected?.label).toBe("Opus 5.5");
+    expect(matches("missing")).toEqual([]);
   });
 
   it("marks nothing for a value that names no harness", () => {
@@ -255,5 +376,114 @@ describe("harnessNamed", () => {
     expect(harnessNamed("Gemini")).toBe("gemini");
     for (const said of ["unknown-agent", "", "claude-codex", "acp"])
       expect(harnessNamed(said)).toBeUndefined();
+  });
+});
+
+it("round-trips the gateway revision and the full model id", () => {
+  const value = modelValue("codex-app-server", "vendor/model:variant", "edition");
+  expect(value).toBe("gateway:codex-app-server:edition:vendor/model:variant");
+  expect(parseModelValue(value)).toEqual({
+    harness: "codex-app-server",
+    model: "vendor/model:variant",
+    gatewayRevision: "edition",
+  });
+});
+
+describe("changing a chat's route", () => {
+  const claude = { agentHarness: "claude-code" } as const;
+  const codex = { agentHarness: "codex-app-server" } as const;
+  const office = { ...codex, gatewayRevision: "office" };
+  const home = { ...codex, gatewayRevision: "home" };
+  it.each([
+    ["a fresh chat can change both agent and source", claude, office, false, false],
+    ["another subscription model on the same agent", codex, codex, true, false],
+    ["another model on the same gateway revision", office, office, true, false],
+    ["another subscription agent", claude, codex, true, true],
+    ["the same agent via a gateway", codex, office, true, true],
+    ["the same agent via a subscription", office, codex, true, true],
+    ["the same agent via another gateway", office, home, true, true],
+    [
+      "another revision of a saved gateway, including a missing model",
+      office,
+      { ...office, gatewayRevision: "office-edited" },
+      true,
+      true,
+    ],
+    [
+      "another agent on the same gateway",
+      office,
+      { ...claude, gatewayRevision: "office" },
+      true,
+      true,
+    ],
+  ] as const)("%s", (_name, from, to, started, expected) => {
+    expect(changesRoute(from, to, started)).toBe(expected);
+  });
+});
+
+describe("the thinking level for a model choice", () => {
+  const native: PickerOption = {
+    agentHarness: "codex-app-server",
+    id: "one",
+    label: "One",
+    value: "codex-app-server:one",
+    thinking: { levels: ["low", "high"] },
+  };
+  const gateway = {
+    ...native,
+    value: "gateway:codex-app-server:office:one",
+    gatewayRevision: "office",
+    thinking: { levels: ["medium", "high"], default: "medium" },
+  };
+  const chat = { model: "claude-code:opus", thinkingLevel: "high", defaultThinking: "low" };
+  it.each([
+    [
+      "current model keeps its shown level even without a descriptor",
+      { ...native, value: chat.model, thinking: undefined },
+      {},
+      false,
+      "high",
+    ],
+    ["a model without levels", { ...native, thinking: { levels: [] } }, {}, false, undefined],
+    ["an unknown gateway effort", { ...gateway, thinking: undefined }, {}, true, undefined],
+    ["a native model fits its preference", native, { preferredThinking: "max" }, false, "high"],
+    [
+      "an explicit null uses the configured native default",
+      native,
+      { preferredThinking: null },
+      false,
+      "low",
+    ],
+    [
+      "a new chat on a native route uses the configured default",
+      native,
+      { preferredThinking: "max" },
+      true,
+      "low",
+    ],
+    ["a fresh gateway pick uses the offered preference", gateway, {}, false, "high"],
+    [
+      "an unoffered preference uses the gateway default",
+      gateway,
+      { preferredThinking: "max" },
+      false,
+      "medium",
+    ],
+    [
+      "a gateway with no default uses its first level",
+      { ...gateway, thinking: { levels: ["low", "high"] } },
+      { preferredThinking: "max" },
+      false,
+      "low",
+    ],
+    ["a started chat opening a gateway uses its default", gateway, {}, true, "medium"],
+  ] satisfies [
+    string,
+    PickerOption,
+    Partial<Parameters<typeof levelFor>[1]>,
+    boolean,
+    string | undefined,
+  ][])("%s", (_name, option, overrides, newChat, expected) => {
+    expect(levelFor(option, { ...chat, ...overrides }, newChat)).toBe(expected);
   });
 });

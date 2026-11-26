@@ -9,7 +9,7 @@
 // The broker's key lives in Deus Cloud and nowhere else: it can act on every
 // account connected through it, so it must never be on a computer. What this
 // computer holds for such a connection is a row saying which app and which
-// Deus account, with no credential. Its requests go through the gateway like
+// Deus account, with no credential. Its requests go through the app proxy like
 // any other app's; the Deus session rides only the hop from this backend to
 // Deus Cloud, and the agent sees neither.
 

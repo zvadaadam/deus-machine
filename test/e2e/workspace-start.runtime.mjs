@@ -835,6 +835,45 @@ try {
     "The setup row shares the tool grid and announces just its label. Both log actions show literal output in the app. A slow retry is sent once, a refusal survives navigation, and a repaired setup folds into history."
   );
 
+  // Home keeps a saved gateway selection while its catalog is pending and after a lost revision.
+  const missingPick = await browser.newPage({ storageState: await desktop.storageState() });
+  await missingPick.addInitScript(() =>
+    localStorage.setItem("deus:welcome-last-model", "gateway:codex-app-server:gone:fixture-model")
+  );
+  const gatewayReads = [];
+  let readingGateways = true;
+  await missingPick.routeWebSocket(/\/ws(?:\?|$)/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((raw) => {
+      if (readingGateways && JSON.parse(String(raw)).resource === "gateways") {
+        gatewayReads.push(() => server.send(raw));
+      } else server.send(raw);
+    });
+  });
+  await missingPick.goto(url(home));
+  await missingPick.getByRole("button", { name: "New workspace in launch", exact: true }).click();
+  const gatewayDraft = composer(missingPick);
+  await gatewayDraft.fill("Keep the gateway I chose");
+  for (const reason of ["Reading gateways…", "This gateway model is no longer available."]) {
+    if (reason !== "Reading gateways…") {
+      readingGateways = false;
+      assert(gatewayReads.length > 0);
+      for (const resume of gatewayReads) resume();
+    }
+    const send = missingPick.getByRole("button", { name: "Send message", exact: true });
+    await missingPick.getByTitle(reason, { exact: true }).waitFor();
+    assert(await send.isDisabled());
+    await missingPick
+      .getByRole("button", { name: /Select model, currently fixture-model/ })
+      .waitFor();
+    await gatewayDraft.press("Enter");
+    assert.equal(await gatewayDraft.inputValue(), "Keep the gateway I chose");
+  }
+  await missingPick.close();
+  check(
+    "Home keeps the chosen gateway and blocks Enter while discovery is pending or its revision is gone"
+  );
+
   assert.deepEqual(errors, []);
   report.errors = errors;
   await writeFile(path.join(evidence, "results.json"), JSON.stringify(report, null, 2));

@@ -3,7 +3,7 @@
 // process: the backend registers itself once (`setHost`, from `startEngine`),
 // and each tool's request is a call into it, bounded by the tool's deadline.
 
-import type { HostToolSource } from "@zvada/agent-server/core";
+import type { CredentialSource, HostToolSource } from "@zvada/agent-server/core";
 import type {
   GetDiffRequest,
   GetDiffResponse,
@@ -24,6 +24,7 @@ export interface SessionTitle {
 
 /** What the backend answers for the engine. */
 export interface DeusHost {
+  credentials?: CredentialSource;
   /** Whether this chat was given the tool for messaging the person. */
   hasAgentMessages?(sessionId: string): boolean;
   /** A chat's tools: the Deus tools `own`, with the session tools the backend adds beside them. */
@@ -42,6 +43,12 @@ const DATA_QUERY_TIMEOUT_MS = 10_000;
 const AUTOMATION_TIMEOUT_MS = 30_000;
 
 let host: DeusHost | null = null;
+
+/** The current host authorizes a turn or listing before the engine selects its login. */
+export const heldCredential: CredentialSource = async (request, signal) => {
+  if (!host) throw new Error("Deus host not connected.");
+  return host.credentials?.(request, signal);
+};
 
 /** A chat's tools, as the backend composes them; the Deus tools alone when it adds none. */
 export function chatTools(own: HostToolSource): HostToolSource {

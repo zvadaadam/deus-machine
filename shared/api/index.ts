@@ -13,6 +13,7 @@ import * as assistants from "./assistants";
 import * as automations from "./automations";
 import * as browser from "./browser";
 import * as deviceHub from "./device-hub";
+import * as gateways from "./gateways";
 import * as devices from "./devices";
 import * as files from "./files";
 import * as integrations from "./integrations";
@@ -28,6 +29,7 @@ export const api = {
   ...automations,
   ...browser,
   ...deviceHub,
+  ...gateways,
   ...devices,
   ...files,
   ...integrations,

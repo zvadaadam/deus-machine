@@ -314,7 +314,7 @@ export function toSession(s: AgntSession, owner: QueryClient = queryClient): Ses
     context_token_count: 0,
     context_used_percent: 0,
     is_hidden: false,
-    last_user_message_at: s.updated_at,
+    last_user_message_at: s.title ? s.updated_at : null,
     updated_at: s.updated_at,
   };
 }

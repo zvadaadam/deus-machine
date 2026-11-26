@@ -121,6 +121,7 @@ const server = await createServer({
             return json({
               experimental_browser: true,
             });
+          if (resource === "gateways") return json([]);
           if (resource === "session")
             return json({
               id: "session",

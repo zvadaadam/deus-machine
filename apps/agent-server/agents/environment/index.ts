@@ -3,6 +3,7 @@
 export { getShellEnvironment } from "./shell-env";
 
 import { getShellEnvironment } from "./shell-env";
+import { mergeProxyExclusions } from "../../../../shared/lib/child-env";
 
 /**
  * Fold the login shell's environment into process.env once at startup —
@@ -16,7 +17,9 @@ import { getShellEnvironment } from "./shell-env";
  * CLAUDE_CLI_PATH / CODEX_CLI_PATH as well).
  */
 export function applyShellEnvironment(): void {
-  for (const [key, value] of Object.entries(getShellEnvironment())) {
+  const shell = getShellEnvironment();
+  mergeProxyExclusions(process.env, shell.NO_PROXY, shell.no_proxy);
+  for (const [key, value] of Object.entries(shell)) {
     if (key === "PATH" && process.env.PATH) {
       // Union rather than skip: a GUI-launched process has a minimal PATH,
       // and the login shell's entries (homebrew, nvm, …) must still be

@@ -82,7 +82,7 @@ export interface DeusTurnOptions {
   supportsImages?: boolean;
   /** The installed apps' MCP servers (services/integrations/runtime.ts). */
   mcpServers?: Record<string, McpServerConfig>;
-  /** Extra env for the agent process (NO_PROXY past a proxy, for the loopback gateway). */
+  /** Extra env for the agent process (NO_PROXY past a proxy, for the app proxy). */
   env?: Record<string, string>;
   /** The device this workspace is showing when the turn starts. */
   device?: WorkspaceDevice | null;

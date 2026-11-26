@@ -1,4 +1,12 @@
-import { RefreshCw } from "lucide-react";
+import type { GatewayStatus } from "@shared/gateways";
+import { needsRemoteAuth } from "@/platform/ws/device-auth";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/shared/api/queryKeys";
+import { GatewaysSection } from "./GatewaysSection";
+import { useState } from "react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -9,8 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Field, FieldContent, FieldDescription, FieldLabel } from "@/components/ui/field";
-import { Separator } from "@/components/ui/separator";
+import { Field, FieldContent, FieldDescription } from "@/components/ui/field";
 import { useAgentAuth } from "../../api/settings.queries";
 import type { SettingsSectionProps } from "./types";
 import { readThinkingLevel } from "@shared/protocol";
@@ -24,8 +31,22 @@ export function AISection({
   settings,
   saveSetting,
   cloudOnly = false,
-}: SettingsSectionProps & { cloudOnly?: boolean }) {
+  loadingDefaults = false,
+}: SettingsSectionProps & { cloudOnly?: boolean; loadingDefaults?: boolean }) {
+  const cache = useQueryClient();
+  const local = !cloudOnly && !needsRemoteAuth();
+  const [checking, setChecking] = useState(0);
+  const recheck = async (connection: GatewayStatus) => {
+    setChecking((n) => n + 1);
+    try {
+      await call(api.refreshGateway, { revision: connection.revision });
+    } finally {
+      setChecking((n) => n - 1);
+    }
+  };
   const agentAuthQuery = useAgentAuth(!cloudOnly);
+
+  const refreshing = agentAuthQuery.isFetching || checking > 0;
 
   if (cloudOnly) {
     return (
@@ -42,94 +63,97 @@ export function AISection({
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-start justify-between">
+    <div className="mx-auto w-full max-w-2xl space-y-6">
+      <header className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-base font-semibold">AI Providers</h3>
-          <p className="text-muted-foreground mt-1 text-base">
-            Manage AI accounts and choose models in each conversation.
+          <p className="text-muted-foreground mt-1 text-sm">
+            Accounts your agents use, on this computer and through gateways.
           </p>
         </div>
         <Button
           variant="ghost"
           size="icon"
           aria-label="Refresh local provider status"
-          className="size-8 shrink-0"
-          onClick={() => agentAuthQuery.refetch()}
-          disabled={agentAuthQuery.isFetching}
+          className="size-8 pointer-coarse:size-11"
+          disabled={refreshing}
+          onClick={() => {
+            void agentAuthQuery.refetch();
+            if (local) {
+              const gateways = cache.getQueryData<GatewayStatus[]>(queryKeys.settings.gateways);
+              void Promise.allSettled((gateways ?? []).map(recheck));
+            }
+          }}
         >
-          <RefreshCw className={`size-3.5 ${agentAuthQuery.isFetching ? "animate-spin" : ""}`} />
+          {refreshing ? (
+            <Loader2 aria-hidden className="size-4 animate-spin" />
+          ) : (
+            <RefreshCw aria-hidden className="size-4" />
+          )}
         </Button>
-      </div>
-
+      </header>
+      <section aria-label="Agents">
+        <h4 className="text-muted-foreground text-xs font-medium">Agents</h4>
+        <div className="divide-border-subtle divide-y">
+          {LOCAL_HARNESSES.map((harness) => (
+            <LocalAgentRow
+              key={harness}
+              harness={harness}
+              state={readLocalAgent(agentAuthQuery, harness)}
+            />
+          ))}
+        </div>
+      </section>
+      <GatewaysSection local={local} recheck={recheck} checking={checking > 0} />
+      <section aria-label="Defaults">
+        <h4 className="text-muted-foreground mb-1 text-xs font-medium">Defaults</h4>
+        <div className="divide-border-subtle divide-y">
+          <Field orientation="horizontal" className="items-center justify-between py-2.5">
+            <Label htmlFor="thinking-level">Default thinking</Label>
+            <Select
+              disabled={loadingDefaults}
+              value={readThinkingLevel(settings.default_thinking_level) ?? DEFAULT_THINKING_LEVEL}
+              onValueChange={(v) => saveSetting("default_thinking_level", v)}
+            >
+              <SelectTrigger id="thinking-level" className="w-24">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {["low", "medium", "high"].map((v) => (
+                  <SelectItem key={v} value={v}>
+                    {v[0]?.toUpperCase() + v.slice(1)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field orientation="horizontal" className="items-center justify-between py-2.5">
+            <Label htmlFor="continue-after-limit">Continue after a usage limit</Label>
+            <Switch
+              disabled={loadingDefaults}
+              id="continue-after-limit"
+              checked={settings.continue_after_usage_limit === true}
+              onCheckedChange={(on) => saveSetting("continue_after_usage_limit", on)}
+            />
+          </Field>
+          <Field orientation="horizontal" className="items-center justify-between py-2.5">
+            <FieldContent>
+              <Label htmlFor="agent-messages">Agent messages</Label>
+              <FieldDescription id="agent-messages-description">
+                Agents send you updates while they work.
+              </FieldDescription>
+            </FieldContent>
+            <Switch
+              disabled={loadingDefaults}
+              id="agent-messages"
+              aria-describedby="agent-messages-description"
+              checked={settings.agent_messages !== false}
+              onCheckedChange={(on) => saveSetting("agent_messages", on)}
+            />
+          </Field>
+        </div>
+      </section>
       <ProviderAccounts />
-
-      <div>
-        <h4 className="text-text-primary text-sm font-medium">On this computer</h4>
-        <p className="text-text-muted mt-1 text-sm">
-          Local agents use their own CLI login. Cloud account defaults do not change it.
-        </p>
-      </div>
-      {LOCAL_HARNESSES.map((harness) => (
-        <LocalAgentRow
-          key={harness}
-          harness={harness}
-          state={readLocalAgent(agentAuthQuery, harness)}
-        />
-      ))}
-      <div className="space-y-4">
-        <Separator />
-
-        <Field orientation="horizontal">
-          <FieldContent>
-            <FieldLabel htmlFor="agent-messages">Agent messages</FieldLabel>
-            <FieldDescription>
-              In new local chats, agents send you updates while they work. In Chat bubbles, their
-              other text waits inside the work line.
-            </FieldDescription>
-          </FieldContent>
-          <Switch
-            id="agent-messages"
-            checked={settings.agent_messages !== false}
-            onCheckedChange={(checked) => saveSetting("agent_messages", checked)}
-          />
-        </Field>
-        <Separator />
-
-        {/* Default thinking level */}
-        <div className="space-y-2">
-          <Label htmlFor="thinking-level" className="text-sm">
-            Default thinking
-          </Label>
-          <p className="text-muted-foreground text-sm">
-            How hard the model should think by default. Individual turns can still be adjusted via
-            the thinking indicator next to the model picker.
-          </p>
-          <Select
-            value={readThinkingLevel(settings.default_thinking_level) ?? DEFAULT_THINKING_LEVEL}
-            onValueChange={(value) => saveSetting("default_thinking_level", value)}
-          >
-            <SelectTrigger id="thinking-level" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center justify-between gap-4">
-          <Label htmlFor="continue-after-limit">
-            When a usage limit resets, continue the chats it stopped.
-          </Label>
-          <Switch
-            id="continue-after-limit"
-            checked={settings.continue_after_usage_limit === true}
-            onCheckedChange={(on) => saveSetting("continue_after_usage_limit", on)}
-          />
-        </div>
-      </div>
     </div>
   );
 }

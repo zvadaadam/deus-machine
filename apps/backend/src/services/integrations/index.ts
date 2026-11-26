@@ -14,15 +14,17 @@
 //   auth/           MCP OAuth; vendor-approved clients; accounts Deus Cloud holds
 //   sign-in-route.ts  how an app's account is reached: here, or through Deus Cloud
 //   credentials.ts  an account → the headers or env of one request
-//   gateway.ts      the one door agents use to reach an app with an account
+//   app-proxy.ts    the one door agents use to reach an app with an account
 //   runtime.ts      a local turn's MCP servers
 //   cloud-turns.ts  what a cloud turn carries: apps that reach the cloud, skills
 //   probe.ts        an MCP client that connects and lists tools
 
+import { getSetting } from "../settings.service";
+import { invalidate } from "../query-engine";
 import { getErrorMessage } from "@shared/lib/errors";
 import { setSignInReturnBase } from "./auth/callback";
 import { reconcileCloudAccounts } from "./cloud-apps";
-import { setGatewayPort } from "./gateway";
+import { setAppProxyPort } from "./app-proxy";
 import { resumeSkillInstalls } from "./skills";
 import { hasSealedCredentials } from "./store";
 import { initVault } from "./vault";
@@ -31,17 +33,19 @@ export { completeOAuthCallback } from "./apps";
 export { SIGN_IN_CALLBACK_PATH } from "./auth/callback";
 export { completeCloudCallback, reconcileCloudAccounts } from "./cloud-apps";
 export { resolveCloudTurnExtensions } from "./cloud-turns";
-export { GATEWAY_PATH, isGatewayKey, proxyMcp } from "./gateway";
+export { APP_PROXY_PATH, isAppProxyKey, proxyMcp } from "./app-proxy";
 export { resolveTurnApps } from "./runtime";
 export { getState } from "./state";
 
-/** Once the backend listens: where sign-ins return and agents reach the gateway. */
+/** Once the backend listens: where sign-ins return and agents reach the app proxy. */
 export async function startIntegrations(port: number): Promise<void> {
   // Sign-ins return in the user's browser, which knows this computer as localhost.
   setSignInReturnBase(`http://localhost:${port}`);
-  setGatewayPort(port);
+  setAppProxyPort(port);
   try {
-    if (hasSealedCredentials()) await initVault("read");
+    const gateway = !!getSetting("gateways")?.length;
+    if (hasSealedCredentials() || gateway) await initVault("read");
+    if (gateway) invalidate(["gateways"]);
     resumeSkillInstalls();
   } catch (error) {
     console.warn("[Integrations] Startup failed:", getErrorMessage(error));

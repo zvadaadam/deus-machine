@@ -84,7 +84,10 @@ import {
   setAppEnabled,
   uninstallApp,
 } from "../../../../src/services/integrations/apps";
-import { __gatewayKeyForTests, GATEWAY_PATH } from "../../../../src/services/integrations/gateway";
+import {
+  __appProxyKeyForTests,
+  APP_PROXY_PATH,
+} from "../../../../src/services/integrations/app-proxy";
 import { installPlugin, uninstallPlugin } from "../../../../src/services/integrations/plugins";
 import {
   installSkill,
@@ -133,10 +136,10 @@ afterEach(async () => {
 const snapshot = () => composeSnapshot(testCatalog(), getState());
 const app = (id: string) => snapshot().apps.find((v) => v.app.id === id)!;
 const skill = (id: string) => snapshot().skills.find((v) => v.skill.id === id)!;
-const gateway = (id: string) => ({
+const appProxy = (id: string) => ({
   type: "http",
-  url: `http://127.0.0.1:${PORT}${GATEWAY_PATH}/${id}`,
-  headers: { Authorization: `Bearer ${__gatewayKeyForTests()}` },
+  url: `http://127.0.0.1:${PORT}${APP_PROXY_PATH}/${id}`,
+  headers: { Authorization: `Bearer ${__appProxyKeyForTests()}` },
   required: false,
 });
 
@@ -175,7 +178,7 @@ describe("apps", () => {
     await connectApp({ appId: "sentry", values: { token: "t1" } });
     const { servers } = await resolveTurnApps("codex-app-server");
     expect(Object.keys(servers).sort()).toEqual(["deus_context7", "deus_sentry"]);
-    expect(servers.deus_sentry).toEqual(gateway("sentry"));
+    expect(servers.deus_sentry).toEqual(appProxy("sentry"));
     expect(Object.keys((await resolveTurnApps("claude-code")).servers).sort()).toEqual([
       "context7",
       "sentry",
@@ -190,7 +193,7 @@ describe("apps", () => {
     expect(skipped).toContainEqual({ appId: "linear", reason: "Not connected" });
   });
 
-  it("a pasted token is sealed at rest, and a turn names the gateway, never the token", async () => {
+  it("a pasted token is sealed at rest, and a turn names the app proxy, never the token", async () => {
     expect(await connectApp({ appId: "sentry", values: { token: "sntrys_secret" } })).toEqual({
       status: "connected",
     });
@@ -202,10 +205,10 @@ describe("apps", () => {
     expect(raw.credential).not.toContain("sntrys_secret");
 
     const turn = await resolveTurnApps();
-    expect(turn.servers.sentry).toEqual(gateway("sentry"));
+    expect(turn.servers.sentry).toEqual(appProxy("sentry"));
     expect(JSON.stringify(turn)).not.toContain("sntrys_secret");
 
-    // The gateway is what holds it, per request.
+    // The app proxy is what holds it, per request.
     const row = getInstallation("app", "sentry")!;
     const credentials = await credentialsFor(app("sentry").app, getConnection(row.connectionId!));
     expect(credentials).toMatchObject({
@@ -301,7 +304,7 @@ describe("apps", () => {
     expect(state.db!.prepare("SELECT kind, credential FROM integration_connections").get()).toEqual(
       { kind: "cli", credential: null }
     );
-    expect((await resolveTurnApps()).servers.github).toEqual(gateway("github"));
+    expect((await resolveTurnApps()).servers.github).toEqual(appProxy("github"));
 
     const connection = () => getConnection(getInstallation("app", "github")!.connectionId!);
     const github = app("github").app;

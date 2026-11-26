@@ -39,7 +39,7 @@ export function agentReadiness(
   }
   if (cli.state !== "ready" && cli.state !== "unmanaged") {
     return cli.version
-      ? { state: "unknown", status: "first-turn", detail: "installs with its first turn" }
+      ? { state: "unknown", status: "first-turn", detail: "Installs on first use" }
       : { state: "not_installed", detail: cli.error || "Not available on this computer" };
   }
 

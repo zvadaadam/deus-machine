@@ -2,6 +2,21 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { resolveDefaultDatabasePath } from "../runtime";
 
+/** Proxy clients can prefer either spelling, so both must describe the same bypass. */
+export function mergeProxyExclusions(
+  env: NodeJS.ProcessEnv,
+  ...lists: (string | undefined)[]
+): void {
+  const hosts = new Set(
+    [env.NO_PROXY, env.no_proxy, ...lists]
+      .join(",")
+      .split(",")
+      .map((host) => host.trim())
+      .filter(Boolean)
+  );
+  if (hosts.size) env.NO_PROXY = env.no_proxy = hosts.has("*") ? "*" : [...hosts].join(",");
+}
+
 /** Backend settings withheld from the processes it starts. */
 const BACKEND_CHILD_ENV_DENYLIST = [
   "BUN_OPTIONS",

@@ -6,7 +6,7 @@ import { cloudNotReady } from "../../lib/section-organization";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { getStoredModel } from "@/features/session/lib/modelPreference";
-import { getModelId, modelLabel } from "@/shared/agents";
+import { turnSelection, modelLabel } from "@/shared/agents";
 import { useChatModel } from "@/shared/hooks/useModelLists";
 import { defaultProviderAccount } from "@shared/types/provider-account";
 import { HARNESSES } from "@shared/harnesses";
@@ -28,12 +28,14 @@ export function SetUpEnvironmentWithAgent({
   const organizations = useCloudOrganizations();
   const providers = useProviderAccounts();
   const requestEnvSetup = useUIStore((state) => state.requestEnvSetup);
-  const { model, agentHarness, lists, unavailable } = useChatModel({
+  const { model, agentHarness, gatewayModel, lists, unavailable } = useChatModel({
     picked: getStoredModel(),
     cloud: location === "cloud",
   });
   const provider = agentHarness && HARNESSES[agentHarness].cloudProvider;
-  const label = model && agentHarness && modelLabel(lists, agentHarness, getModelId(model));
+  const label =
+    gatewayModel?.label ??
+    (model && agentHarness && modelLabel(lists, agentHarness, turnSelection(model).model));
   function setupProblem() {
     if (!repoId) return "Add this repository to Deus to start a setup workspace.";
     if (unavailable) return unavailable;

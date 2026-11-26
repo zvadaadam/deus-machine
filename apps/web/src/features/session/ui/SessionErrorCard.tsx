@@ -30,7 +30,30 @@ import { hasLimitReset, limitTime } from "../lib/queuedMessages";
 
 function UsageLimit({ sessionId, message }: Pick<SessionErrorCardProps, "sessionId" | "message">) {
   const limit = useQueuedMessages(sessionId).data?.limit;
-  if (limit?.resetsAt === undefined) return message;
+  if (!limit) return message;
+  if (limit.resetsAt === undefined) {
+    return (
+      <>
+        The provider is rate limiting this chat. You can try again when it is ready.
+        <details className="text-text-secondary mt-1 text-xs">
+          <summary>Details</summary>
+          {message}
+        </details>
+        <Button
+          variant="outline"
+          size="xs"
+          className="mt-1.5 pointer-coarse:min-h-11"
+          onClick={() =>
+            call(api.resumeQueuedMessages, { sessionId }).catch((error) =>
+              toast.error(getErrorMessage(error))
+            )
+          }
+        >
+          Try again
+        </Button>
+      </>
+    );
+  }
   const hasReset = hasLimitReset(limit.resetsAt);
   const at = limitTime(limit.resetsAt + 60_000);
   const scheduled = limit.continues;
@@ -86,6 +109,7 @@ export function SessionErrorCard({
     .with("network", () => "Connection Error")
     .with("db_write", () => "Database Error")
     .with("process_exit", () => "Process Crashed")
+    .with("_gateway", () => "Gateway")
     .with(PROVIDER_ACCOUNT_CATEGORY, () => "AI account needed")
     .otherwise(() => (agentHarness ? `${getAgentLabel(agentHarness)} Error` : "Error"));
 
@@ -96,7 +120,11 @@ export function SessionErrorCard({
   } else if (category === "auth" && !cloud) {
     const harness = knownHarness(agentHarness);
     action = harness ? <LoginAction harness={harness} /> : <AIProvidersButton />;
-  } else if (category === "auth" || category === PROVIDER_ACCOUNT_CATEGORY) {
+  } else if (
+    category === "_gateway" ||
+    category === "auth" ||
+    category === PROVIDER_ACCOUNT_CATEGORY
+  ) {
     action = <AIProvidersButton />;
   } else if (category === "context_limit" && onNewChat) {
     action = (
@@ -111,7 +139,7 @@ export function SessionErrorCard({
     <div className="border-destructive/20 border-l-destructive bg-destructive/5 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-l-2 px-3 py-2.5">
       <div className="min-w-[min(100%,16rem)] flex-1">
         <p className="text-destructive/80 text-xs font-medium">{title}</p>
-        <p className="text-foreground/80 mt-0.5 text-sm break-words">{description}</p>
+        <div className="text-foreground/80 mt-0.5 text-sm break-words">{description}</div>
         {category === "process_exit" && (
           <p className="text-muted-foreground mt-1 text-xs">
             The agent process exited unexpectedly. Try sending your message again.

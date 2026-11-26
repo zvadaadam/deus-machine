@@ -97,7 +97,7 @@ describe("onboarding Claude account status", () => {
     const html = render();
     expect(html).toContain(">Gemini</p>");
     expect(html).toContain(">Not available on this computer<");
-    expect(html).toContain(">installs with its first turn<");
+    expect(html).toContain(">Installs on first use<");
     expect(html.match(/>Install<\/button>/g)).toHaveLength(1);
   });
 

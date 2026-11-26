@@ -4,7 +4,13 @@
 
 import { createHash } from "node:crypto";
 import { refusalData, WireRequestError } from "@zvada/agent-server/client";
-import { WIRE_ERROR_CODES, type AgentInput, type Origin } from "@zvada/agent-server/protocol";
+import {
+  credentialFormat,
+  takesHeldCredential,
+  WIRE_ERROR_CODES,
+  type AgentInput,
+  type Origin,
+} from "@zvada/agent-server/protocol";
 import type * as api from "@shared/api/sessions";
 import type { ParsedInputOf } from "@shared/api/op";
 import { uuidv7 } from "@shared/lib/uuid";
@@ -12,10 +18,13 @@ import { readPermissionMode, readThinkingLevel } from "@shared/protocol";
 import { readCloudTurnSelection, type CloudTurnSelection } from "@shared/cloud-models";
 import { canPlan, HARNESSES } from "@shared/harnesses";
 import { ACTIVE_TURN_STATUSES } from "@shared/enums";
+import { chatHasStarted } from "@shared/session";
+import { requireRevision } from "../gateways/connections";
 import { getDatabase } from "../../lib/database";
 import {
   AgentServerDisconnectedError,
   ChatBusyError,
+  GatewayError,
   ConflictError,
   DifferentTurnMessageError,
   NotFoundError,
@@ -65,6 +74,26 @@ export async function withdrawSteerRetry(sessionId: string, turnId: string) {
   turn.setup.controller.abort(STEER_READ);
   await turn.setup.done;
   return true;
+}
+
+export function requireChatRoute(
+  sessionId: string,
+  requestedRevision: string | undefined,
+  chat = getSessionRaw(getDatabase(), sessionId)
+) {
+  if (!chat) return;
+  const holder = holdingTurn(sessionId);
+  const revision = holder ? holder.gateway?.binding.revision : (chat.gateway_revision ?? undefined);
+  if (revision === requestedRevision) return;
+  // An accepted native turn can lose its first echo and start acknowledgement.
+  if (
+    holder ||
+    chatHasStarted(chat) ||
+    getDatabase().prepare("SELECT 1 FROM turns WHERE session_id = ? LIMIT 1").get(sessionId)
+  )
+    throw new ConflictError(
+      "This chat uses a different provider connection. Open a new chat to switch."
+    );
 }
 
 export function requireSameHarness(current: string, requested: string): void {
@@ -210,7 +239,7 @@ async function sendMessageOnce(
   // a specific SDK process. Reject cross-harness switches to keep the server
   // authoritative; the UI disables these options too, but this is the source
   // of truth.
-  if (session && session.message_count > 0) requireSameHarness(session.agent_harness, agentHarness);
+  if (session && chatHasStarted(session)) requireSameHarness(session.agent_harness, agentHarness);
 
   if (session?.is_hidden) throw new ConflictError("That chat is archived; it takes no messages.");
   // The workspace decides the transport and local cwd before a send changes the chat.
@@ -226,6 +255,18 @@ async function sendMessageOnce(
         ? "The agent is waiting for your response — answer the pending prompt first."
         : "The agent is still working — wait for the current turn to finish."
     );
+  }
+  if (session) requireChatRoute(sessionId, input.gatewayRevision, session);
+  if (isCloud && input.gatewayRevision) throw new ValidationError("Gateways run on this computer.");
+  let gateway;
+  if (input.gatewayRevision) {
+    if (!takesHeldCredential(agentHarness))
+      throw new GatewayError("Gateways run Claude Code and Codex on this computer.", "no_route");
+    const { ref, revision } = requireRevision(input.gatewayRevision);
+    gateway = {
+      binding: { ref, revision, format: credentialFormat(agentHarness) },
+      execution: { harness: agentHarness, model },
+    };
   }
   const cwd = workspace && !isCloud ? computeWorkspacePath(workspace) : undefined;
 
@@ -280,7 +321,7 @@ async function sendMessageOnce(
     session && ([session.status, session.error_message, session.error_category] as const);
   const setup = start && { controller: new AbortController(), done: start.promise, prior };
   // Nothing awaits between the holder check above and this claim, so no other send can take the chat.
-  if (setup) claimTurn(sessionId, turnId, setup, sentAt);
+  if (setup) claimTurn(sessionId, turnId, setup, sentAt, gateway);
   const working = persistSessionStatus(sessionId, "working");
   if (!working.ok) {
     refuseTurn(sessionId, turnId);
@@ -424,6 +465,7 @@ export async function stopSession(
 }
 
 function startError(err: unknown) {
+  if (err instanceof GatewayError) return { message: err.message, category: "invalid_request" };
   const message =
     err instanceof WireRequestError
       ? err.message || "Agent rejected the message"

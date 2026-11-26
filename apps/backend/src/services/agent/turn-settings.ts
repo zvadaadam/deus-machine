@@ -13,18 +13,21 @@ import {
   findModel,
   latestTurnExecution,
   defaultModelId,
-  modelForSession,
   type HarnessModels,
 } from "@shared/models";
 import { readThinkingLevel, type ThinkingLevel } from "@shared/protocol";
 import type { SessionTurn } from "@shared/types/session";
 import { runAsThisComputer as run } from "../query-engine";
+import { getSessionRaw } from "../../db";
+import { getDatabase } from "../../lib/database";
+import { holdingTurn } from "./chat-turn";
 import { getSetting } from "../settings.service";
 
 export interface TurnSettings {
   agentHarness: AgentHarness;
   model: string;
   thinkingLevel: ThinkingLevel;
+  gatewayRevision?: string;
 }
 
 function defaultThinking() {
@@ -90,20 +93,28 @@ export async function startSettings(
 }
 
 export function continuedSettings(
+  sessionId: string,
   harness: AgentHarness,
   turns: readonly SessionTurn[]
 ): TurnSettings {
   // The operator does not pass its cutoff, so a send falls back to the catalog, the only list that needs no read.
-  const model = modelForSession(harness, turns, CATALOG_MODEL_LISTS);
+  const gateway = holdingTurn(sessionId)?.gateway;
+  const gatewayRevision =
+    gateway?.binding.revision ?? getSessionRaw(getDatabase(), sessionId)?.gateway_revision;
+  const latest = latestTurnExecution(harness, turns);
+  const model =
+    gateway?.execution.model ??
+    latest?.model ??
+    (gatewayRevision ? undefined : defaultModelId(CATALOG_MODEL_LISTS, harness));
   if (!model)
     throw new OperatorError(
       "unsupported",
       `send_message: this chat has no recorded model. Ask the person to choose a model for ${HARNESSES[harness].label} in the chat, or use start_session with a model. Nothing was sent.`
     );
-  const latest = latestTurnExecution(harness, turns);
   return {
     agentHarness: harness,
     model,
+    ...(gatewayRevision && { gatewayRevision }),
     thinkingLevel: continuedThinkingLevel(latest) ?? defaultThinking(),
   };
 }

@@ -67,6 +67,7 @@ export function useSessionComposer(
   const draftActions = useDraftActions(target, state);
   const setters = useMemo(
     () => ({
+      pickModel: (model: string, level: ThinkingLevel) => actions.pickModel(target, model, level),
       setModel: (v: string, levels: readonly ThinkingLevel[] | undefined) =>
         actions.setModel(target, v, levels, defaultThinking),
       setThinkingLevel: (level: ThinkingLevel) => actions.setThinkingLevel(target, level),

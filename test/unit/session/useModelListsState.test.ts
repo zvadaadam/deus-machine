@@ -1,12 +1,20 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import type { GatewayCatalog } from "@shared/gateways";
 
 const state = vi.hoisted(() => ({
   local: undefined as unknown,
   cloud: undefined as unknown,
+  gateway: undefined as GatewayCatalog | undefined,
+  readingGateways: false,
 }));
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: state.local }) }));
+vi.mock("@/shared/hooks/useGateways", () => ({
+  useGateways: () => ({
+    data: state.readingGateways ? undefined : state.gateway ? [state.gateway] : [],
+  }),
+}));
 vi.mock("@/shared/hooks/useCloudModels", () => ({ useCloudModels: () => ({ data: state.cloud }) }));
 vi.mock("@/platform/ws", () => ({ call: vi.fn() }));
 vi.mock("@/shared/config/webDirectMode", () => ({ isCloudDirectWebMode: () => false }));
@@ -53,6 +61,7 @@ describe("the harnesses a picker offers", () => {
       expect(unavailable).toBe("No models available.");
       expect(modelPickerView(lists, undefined).groups).toContainEqual(
         expect.objectContaining({
+          source: "subscriptions",
           agentHarness: "codex-app-server",
           options: [],
           empty: { message: unavailable, openSettings: true },
@@ -100,6 +109,42 @@ describe("the harnesses a picker offers", () => {
     });
   });
 
+  it.each([
+    [true, "Reading gateways…"],
+    [false, "This gateway model is no longer available."],
+  ] as const)("keeps Home's unavailable gateway pick (list pending %s)", (pending, unavailable) => {
+    const picked = "gateway:codex-app-server:gone:work:one";
+    state.readingGateways = pending;
+    try {
+      const choice = useChatModel({ cloud: false, picked });
+      expect(choice).toMatchObject({
+        agentHarness: "codex-app-server",
+        picked,
+        model: picked,
+        unavailable,
+      });
+      expect(useChatModel({ cloud: true, picked }).model).not.toBe(picked);
+    } finally {
+      state.readingGateways = false;
+    }
+  });
+
+  it("keeps a started chat on its own route when a pick names a missing gateway", () => {
+    const harness = "codex-app-server";
+    const choice = useChatModel({
+      cloud: false,
+      harness,
+      gatewayRevision: null,
+      turns: [{ turnId: "one", execution: { harness, model: "native-model" } }],
+      picked: "gateway:codex-app-server:gone:other-model",
+    });
+    expect(choice).toMatchObject({
+      model: "codex-app-server:native-model",
+      picked: undefined,
+      unavailable: undefined,
+    });
+  });
+
   it("Home resolves its saved local pick and the cloud default without changing the preference", () => {
     state.cloud = state.local = undefined;
     const storage = new Map<string, string>();
@@ -140,4 +185,64 @@ describe("the harnesses a picker offers", () => {
       expect(cloud.live("gemini")).toBe(false);
     }
   );
+});
+
+it("offers the same raw id over distinct local routes, and keeps the raw owner separate from its fallback label", () => {
+  const revision = crypto.randomUUID();
+  const harness = "codex-app-server";
+  const id = "test:model";
+  const native = state.local;
+  state.local = {
+    lists: [
+      {
+        harness,
+        source: "live",
+        models: [{ harness, id, label: "Native model", thinking: { levels: ["medium", "high"] } }],
+      },
+    ],
+  };
+  state.gateway = {
+    ref: "fixture-gateway",
+    preset: "cliproxyapi",
+    formats: ["messages", "responses"],
+    baseUrl: "http://localhost",
+    revision,
+    models: [
+      {
+        id,
+        label: id,
+        provider: "",
+        runner: harness,
+        thinkingByFormat: { responses: { levels: ["medium", "high"] } },
+      },
+    ],
+  };
+  try {
+    const local = useChatModel({
+      cloud: false,
+      harness,
+      gatewayRevision: revision,
+      turns: [{ turnId: "one", execution: { harness, model: id } }],
+    });
+    const view = modelPickerView(local.lists, local.model, local.gateways);
+    expect(view.selected).toMatchObject({
+      label: "test:model",
+      gatewayRevision: revision,
+    });
+    expect(local.gatewayModel?.provider).toBe("");
+    const routes = view.groups.flatMap((group) =>
+      group.options
+        .filter((option) => option.id === id)
+        .map((option) => [group.source, group.agentHarness, option.value])
+    );
+    expect(routes).toEqual([
+      ["subscriptions", harness, `${harness}:${id}`],
+      ["fixture-gateway", harness, `gateway:${harness}:${revision}:${id}`],
+    ]);
+    expect(local.thinkingLevels).toEqual(["medium", "high"]);
+    expect(useChatModel({ cloud: true }).gateways).toBeUndefined();
+  } finally {
+    state.local = native;
+    state.gateway = undefined;
+  }
 });

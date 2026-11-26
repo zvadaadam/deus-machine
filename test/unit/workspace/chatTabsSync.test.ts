@@ -122,3 +122,22 @@ describe("an open-chat request (H22)", () => {
     expect(useOpenChatStore.getState().requested.w).toBeUndefined();
   });
 });
+
+it.each([
+  { message_count: 1 },
+  { message_count: 0, gateway_revision: "bound" },
+  { message_count: 0, last_user_message_at: "2026-11-26 08:00:00" },
+])(
+  "follows the first admitted harness even after a native Claude placeholder was marked started ($message_count messages)",
+  (evidence) => {
+    const before = {
+      ...sessionToTab(chat("moved"), 1),
+      hasStarted: true,
+      label: "Claude Code #1",
+      agentHarness: "claude-code" as const,
+    };
+    const actual = { ...chat("moved"), agent_harness: "codex-app-server" as const, ...evidence };
+    const next = reconcileLive({ tabs: [before], closed: [] }, [actual], new Set(["moved"]));
+    expect(next.tabs[0]).toMatchObject({ label: "Codex #1", agentHarness: "codex-app-server" });
+  }
+);

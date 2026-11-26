@@ -1,3 +1,5 @@
+import type { OpenChatWithModel } from "@/shared/agents/picker";
+import { chatHasStarted } from "@shared/session";
 import { forwardRef, useEffect, useImperativeHandle, type ReactNode } from "react";
 import type { WorkspaceKind } from "@shared/enums";
 import { useStore } from "zustand";
@@ -40,7 +42,7 @@ interface SessionComposerProps {
     retrying: boolean;
   };
   /** Called when user picks a model from a locked agent group. */
-  onOpenNewTab?: (initialModel?: string) => void;
+  onOpenNewTab?: OpenChatWithModel;
   /** Reports the current agent harness to parents that gate on it. */
   onAgentHarnessChange?: (harness: AgentHarness) => void;
   /** Fires after a successful send. */
@@ -107,11 +109,14 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
       : defaultThinking;
 
     const pickedModel = useStore(composerStore(), (s) => s.composers[sessionId]?.model);
+    const started = chatHasStarted(session ?? {});
+    const hasMessages = started || messages.length > 0;
     const selection = useChatModel({
       cloud: workspaceKind === "cloud",
       workspaceId,
       harness: session?.agent_harness,
       turns,
+      gatewayRevision: started ? (session?.gateway_revision ?? null) : undefined,
       picked: pickedModel ?? initialModel,
     });
     const { agentHarness } = selection;
@@ -125,11 +130,13 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     const { sendMessage, stopSession, compactConversation, createPR, sending } = useSessionActions({
       sessionId,
       steerTurnId,
-      model: needsHistory ? undefined : selection.model,
+      model: needsHistory || selection.unavailable ? undefined : selection.model,
+      gatewayThinking: selection.gatewayThinking,
       workspaceId: workspaceId ?? undefined,
       workspaceKind,
       targetBranch: targetBranch ?? "main",
       onMessageSent: onSendComplete,
+      onOpenNewTab,
     });
 
     useImperativeHandle(
@@ -185,7 +192,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
         workspaceKind={workspaceKind}
         contextTokenCount={session?.context_token_count ?? 0}
         contextUsedPercent={session?.context_used_percent ?? 0}
-        hasMessages={messages.length > 0}
+        hasMessages={hasMessages}
         environmentUnconfigured={environmentUnconfigured}
         showCompactButton={showCompactButton}
         onSend={sendMessage}

@@ -224,6 +224,17 @@ export const sessionComposerActions = {
     edit(key, (c) => {
       c.draft = appendText(c.draft, text);
     }),
+  pickModel(target: Target, model: string, thinkingLevel: ThinkingLevel) {
+    const { store, id } = resolve(target);
+    if (!store.getState().composers[id]) {
+      sessionComposerActions.seedIfAbsent(target, emptyComposer(model, thinkingLevel));
+      return;
+    }
+    editSettings(target, (composer) => {
+      composer.model = model;
+      composer.thinkingLevel = thinkingLevel;
+    });
+  },
   setModel: (
     key: Target,
     model: string,

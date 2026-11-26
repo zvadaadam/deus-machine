@@ -292,6 +292,7 @@ async function main() {
   // path the event handler runs, described by the same `describeEvent`. What
   // is left below is colouring and the harness's own "am I done yet".
   const turnId = uuidv7();
+  const owner = { turnId };
   let turnDone = false;
   const facts: SessionFacts = { errorReported: false };
   let conversation = emptyConversation();
@@ -326,9 +327,9 @@ async function main() {
     const writes = isDelta
       ? []
       : persistChanges(sessionId, folded.state, folded.changes, (turn) =>
-          turnOutcomeFor(facts, turnId, turn)
+          turnOutcomeFor(facts, owner, turn)
         );
-    const factWrites = applySessionFacts(facts, turnId, sessionId, event, conversation);
+    const factWrites = applySessionFacts(facts, owner, sessionId, event, conversation);
 
     // The harness stops when the turn is over, or when an error ended it.
     // `isUnknownEvent` first: `UnknownEvent.type` is an open string, so

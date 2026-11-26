@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SetUpEnvironmentWithAgent } from "@/features/settings/ui/sections/SetUpEnvironmentWithAgent";
 import { cloudNotReady } from "@/features/settings/lib/section-organization";
 import type { CloudOrganizations } from "@shared/types/environment-secrets";
+import type { GatewayCatalog } from "@shared/gateways";
 import type { ProviderAccounts } from "@shared/types/provider-account";
 
 const twoOrganizations = (ready: { acme: boolean; beta: boolean }): CloudOrganizations => ({
@@ -99,6 +100,23 @@ describe("environment setup provider readiness", () => {
   it("uses the connected personal Claude default", () => {
     expect(render()).toContain("Set up with agent");
     expect(render()).not.toContain('disabled=""');
+  });
+  it("names the gateway model by its catalog label for local setup", () => {
+    state.model = "gateway:claude-code:revision:vendor/model-v2";
+    client.setQueryData<GatewayCatalog[]>(
+      ["gateways"],
+      [
+        {
+          ref: "fixture",
+          revision: "revision",
+          preset: "custom",
+          baseUrl: "https://gateway.example",
+          formats: ["messages"],
+          models: [{ id: "vendor/model-v2", provider: "vendor", label: "Studio Model" }],
+        },
+      ]
+    );
+    expect(render("local")).toContain("Start a local workspace with Studio Model");
   });
   it("resolves a saved local Gemini pick for cloud setup and keeps it for local setup", () => {
     state.model = "gemini:gemini-4-neon";

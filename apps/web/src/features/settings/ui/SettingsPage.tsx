@@ -41,7 +41,7 @@ export function SettingsPage() {
   const updateSettingsMutation = useUpdateSettings();
 
   const loading =
-    activeSection === "environment" || activeSection === "slack"
+    activeSection === "ai" || activeSection === "environment" || activeSection === "slack"
       ? false // These cloud sections manage their own loading state.
       : isLoading;
   const saving = updateSettingsMutation.isPending;
@@ -89,7 +89,9 @@ export function SettingsPage() {
       .with("github", () => <GitHubSection />)
       .with("browser", () => <BrowserSection />)
       .with("devices", () => <DevicesSection />)
-      .with("ai", () => <AISection {...sectionProps} cloudOnly={cloudOnly} />)
+      .with("ai", () => (
+        <AISection {...sectionProps} cloudOnly={cloudOnly} loadingDefaults={isLoading} />
+      ))
       .with("cloud", () => <CloudSection />)
       .with("environment", () => <EnvironmentSection />)
       .with("slack", () => <SlackSection />)
@@ -119,7 +121,7 @@ export function SettingsPage() {
         </div>
         {/* min-h-0: without it the flex item refuses to shrink below its
             content, the viewport never overflows, and the page can't scroll. */}
-        <ScrollArea className="min-h-0 flex-1">
+        <ScrollArea className="min-h-0 flex-1 [&>[data-slot=scroll-area-viewport]>div]:w-full [&>[data-slot=scroll-area-viewport]>div]:table-fixed">
           <div className="mx-auto max-w-4xl px-4 py-6 sm:px-8">
             {/* Saving indicator */}
             {saving && (

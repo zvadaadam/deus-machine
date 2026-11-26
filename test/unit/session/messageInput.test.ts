@@ -20,7 +20,7 @@ import type { SessionStatus } from "@shared/enums";
 
 // Render the actual composer and toolbar; unrelated provider pickers don't
 // need a live settings connection to verify whether a user can stop a turn.
-vi.mock("@/features/session/ui/ModelPicker", () => ({ ModelPicker: () => null }));
+vi.mock("@/features/session/ui/model-picker/ModelPicker", () => ({ ModelPicker: () => null }));
 const controls = vi.hoisted(() => ({
   input: vi.fn(),
   button: vi.fn(),

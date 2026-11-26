@@ -2,6 +2,7 @@ import { toast } from "sonner";
 import type { AgentAuthAnswer, HarnessAuth } from "@shared/agent-auth";
 import { agentReadiness } from "@shared/agent-readiness";
 import type { AgentHarness } from "@shared/enums";
+import { harnessInfo } from "@shared/harnesses";
 import { api } from "@shared/api";
 import { openExternalPending } from "@/platform/native/window";
 import { queryClient } from "@/shared/api/queryClient";
@@ -12,7 +13,22 @@ export type LocalAgentState = ReturnType<typeof readLocalAgent>;
 
 /** "Claude Max · you@example.com". */
 export function accountLine(auth: HarnessAuth): string {
-  return [auth.label, auth.email, auth.organization].filter(Boolean).join(" · ") || "Signed in";
+  const source =
+    auth.credential === "api_key" && ["environment", "settings"].includes(auth.source ?? "")
+      ? auth.source
+      : undefined;
+  return (
+    [
+      auth.label ?? (auth.credential === "api_key" ? "API key" : undefined),
+      auth.email,
+      auth.organization,
+      source,
+    ]
+      .filter(Boolean)
+      .join(" · ") ||
+    harnessInfo(auth.harness)?.vendor ||
+    auth.harness
+  );
 }
 
 /** An unknown login, or one the read could not get, is not a signed-out one. */
@@ -21,7 +37,8 @@ export function readLocalAgent(
   harness: AgentHarness
 ) {
   const pending = { status: query.isFetching ? "checking" : "failed" } as const;
-  if (query.isError || !query.data || query.data.error !== undefined) return pending;
+  if (query.data?.error) return { status: "failed", detail: query.data.error } as const;
+  if (query.isError || !query.data) return pending;
   const agent = agentReadiness(query.data, harness);
   switch (agent.state) {
     case "ready":

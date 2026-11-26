@@ -744,7 +744,7 @@ export function createDeusHost(): DeusHost {
       if (firsts.get(sessionId)?.claimed === false)
         throw new Refused({ code: "busy", detail: "This chat is being set up." });
       const { turns } = await run(sessions.messages, { sessionId, limit: 50 });
-      const settings = continuedSettings(harness, turns);
+      const settings = continuedSettings(sessionId, harness, turns);
       mayTouch(caller, sessionId);
       try {
         return await write({ sessionId, content: message, turnId, ...settings }, origin);

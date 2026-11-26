@@ -25,7 +25,7 @@ import { CloudToggle, BranchPickerButton } from "./composer/ComposerControls";
 import { RepoPicker } from "./composer/RepoPicker";
 import { useNewChatSelection } from "./composer/useNewChatSelection";
 import { useComposerLocation } from "./composer/useComposerLocation";
-import { ModelPicker } from "@/features/session/ui/ModelPicker";
+import { ModelPicker } from "@/features/session/ui/model-picker/ModelPicker";
 import type { ThinkingLevel } from "@/shared/agents";
 import { uiActions, useUIStore } from "@/shared/stores/uiStore";
 import { FIRST_MESSAGE_PLACEHOLDER } from "@/features/workspace/lib/newWorkspace";
@@ -264,7 +264,8 @@ export function HomeView({
 
   // ── Send ────────────────────────────────────────────────────────
   const hasContent = message.trim().length > 0 || attachments.length > 0;
-  const canSend = hasContent && !!selectedRepoId && !!selection.model && !isSubmitting;
+  const canSend =
+    hasContent && !!selectedRepoId && !!selection.model && !selection.unavailable && !isSubmitting;
 
   // A project that runs only in the cloud, where the cloud cannot be used now.
   const sendBlock = cloudOnlySendBlock({
@@ -504,8 +505,10 @@ export function HomeView({
                 model={selection.model}
                 agentHarness={selection.agentHarness}
                 lists={selection.lists}
+                gateways={selection.gateways}
                 thinkingLevel={selection.thinkingLevel}
-                thinkingLevels={selection.thinkingLevels}
+                preferredThinking={selection.preferredThinking}
+                defaultThinking={selection.defaultThinking}
                 hasMessages={false}
                 onModelChange={selection.setModel}
                 onThinkingLevelChange={selection.setThinkingLevel}

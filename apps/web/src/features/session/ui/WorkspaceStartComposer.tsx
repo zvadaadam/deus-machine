@@ -25,7 +25,13 @@ export function WorkspaceStartComposer({ workspace }: { workspace: Workspace }) 
 
   const handleSend = (message: string) => {
     const composer = composerStore().getState().composers[workspace.id];
-    if (!composer || !selection.model || pendingFirstMessages.get(workspace.id)) return false;
+    if (
+      !composer ||
+      !selection.model ||
+      selection.unavailable ||
+      pendingFirstMessages.get(workspace.id)
+    )
+      return false;
     pendingFirstMessages.set(workspace.id, {
       message,
       model: selection.model,

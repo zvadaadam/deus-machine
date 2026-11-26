@@ -1,7 +1,7 @@
 // Apps that connect through the person's Deus account, end to end over real
 // HTTP: the real client against a server that behaves like Deus Cloud, the
 // real callback route, and an MCP client reaching the tools through the
-// gateway the way an agent's harness does.
+// app proxy the way an agent's harness does.
 
 import fs from "fs";
 import path from "path";
@@ -60,7 +60,7 @@ import {
 } from "../../../../src/services/integrations/cloud-apps";
 import { __resetCloudAccountsForTests } from "../../../../src/services/integrations/auth/cloud-accounts";
 import { __resetOAuthForTests } from "../../../../src/services/integrations/auth/mcp-oauth";
-import { __gatewayKeyForTests } from "../../../../src/services/integrations/gateway";
+import { __appProxyKeyForTests } from "../../../../src/services/integrations/app-proxy";
 import { listConnections } from "../../../../src/services/integrations/store";
 import { __resetVaultKeyForTests } from "../../../../src/services/integrations/vault";
 
@@ -197,7 +197,7 @@ describe("an app that connects through the Deus account", () => {
     expect(view("slack")).toMatchObject({ available: false, unavailable: "soon" });
   });
 
-  it("connects on the sign-in page, and the agent reaches its tools through the gateway", async () => {
+  it("connects on the sign-in page, and the agent reaches its tools through the app proxy", async () => {
     await deusAccount("alice");
     const url = await startSignIn("instagram");
     expect(url).toMatch(new RegExp(`^${cloud.base}/link/`));
@@ -215,7 +215,7 @@ describe("an app that connects through the Deus account", () => {
     await settleChecks();
     expect(view("instagram")).toMatchObject({ readiness: "ready", toolCount: 1 });
 
-    // The turn names the gateway; nothing of Deus Cloud or the Deus session is in it.
+    // The turn names the app proxy; nothing of Deus Cloud or the Deus session is in it.
     const turn = await resolveTurnApps();
     expect(turn.servers.instagram).toMatchObject({
       type: "http",
@@ -235,12 +235,12 @@ describe("an app that connects through the Deus account", () => {
     );
     await client.close();
     expect(cloud.calls).toEqual(["alice:instagram:INSTAGRAM_CREATE_POST"]);
-    // Deus Cloud saw the Deus session from the gateway, never the agent's gateway key.
+    // Deus Cloud saw the Deus session from the app proxy, never the agent's app proxy key.
     expect(cloud.requests.length).toBeGreaterThan(0);
     for (const request of cloud.requests) {
       expect(request.path).toBe("/me/connections/instagram/mcp");
       expect(request.headers.authorization).toBe(`Bearer ${cloud.session("alice")}`);
-      expect(JSON.stringify(request.headers)).not.toContain(__gatewayKeyForTests());
+      expect(JSON.stringify(request.headers)).not.toContain(__appProxyKeyForTests());
     }
   });
 

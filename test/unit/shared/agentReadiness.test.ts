@@ -8,7 +8,7 @@ const signedIn = { harness, state: "signed_in", methods: [] };
 it.each([
   [undefined, "unknown", "Status unavailable"],
   [{ state: "missing" }, "not_installed", "Not available on this computer"],
-  [{ state: "missing", version: "1" }, "unknown", "installs with its first turn"],
+  [{ state: "missing", version: "1" }, "unknown", "Installs on first use"],
   [{ state: "installing", receivedBytes: 1, totalBytes: 3 }, "unknown", "installing, 33%"],
   [{ state: "installing", receivedBytes: 0, totalBytes: 5 }, "unknown", "installing, 0%"],
   [{ state: "installing" }, "unknown", "installing"],
@@ -19,7 +19,7 @@ it.each([
     "unknown",
     "its install failed: Offline; the next turn tries again",
   ],
-  [{ state: "future", version: "1" }, "unknown", "installs with its first turn"],
+  [{ state: "future", version: "1" }, "unknown", "Installs on first use"],
 ] satisfies [Omit<HarnessCli, "harness"> | undefined, string, string][])(
   "checks the CLI %j before trusting its login",
   (cli, state, detail) => {

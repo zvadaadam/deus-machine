@@ -1,15 +1,27 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AISection } from "@/features/settings/ui/sections/AISection";
+import type { GatewayStatus } from "@shared/gateways";
 import type { AgentAuthAnswer, HarnessAuth, HarnessCli } from "@shared/agent-auth";
 
 const state = vi.hoisted(() => ({
   data: undefined as AgentAuthAnswer | undefined,
   isError: false,
+  gateways: [] as GatewayStatus[],
+  remote: false,
+  isFetching: false,
+}));
+vi.mock("@/assets/agents/cliproxyapi.svg?react", () => ({ default: () => null }));
+vi.mock("@/assets/agents", () => ({ getAgentLogo: () => null }));
+vi.mock("@/shared/hooks/useGateways", () => ({ useGateways: () => ({ data: state.gateways }) }));
+vi.mock("@/platform/ws/device-auth", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  needsRemoteAuth: () => state.remote,
 }));
 vi.mock("@/features/settings/api/settings.queries", () => ({
-  useAgentAuth: () => ({ ...state, isLoading: false, isFetching: false, refetch: vi.fn() }),
+  useAgentAuth: () => ({ ...state, isLoading: false, refetch: vi.fn() }),
 }));
 vi.mock("@/features/settings/ui/sections/ProviderAccounts", () => ({
   ProviderAccounts: () => null,
@@ -40,48 +52,72 @@ const ready: HarnessCli[] = [
 beforeEach(() => {
   state.data = undefined;
   state.isError = false;
+  state.remote = false;
+  state.gateways = [];
+  state.isFetching = false;
 });
 
-const render = () =>
+const render = (props: Partial<Parameters<typeof AISection>[0]> = {}) =>
   renderToStaticMarkup(
-    createElement(AISection, {
-      settings: {},
-      saveSetting: async () => true,
-    })
+    createElement(
+      QueryClientProvider,
+      { client: new QueryClient() },
+      createElement(AISection, { settings: {}, saveSetting: vi.fn(), ...props })
+    )
   );
 
 describe("local agent status", () => {
   it("offers automatic continuation for local chats and defaults it off", () => {
-    const label = "When a usage limit resets, continue the chats it stopped.";
+    const label = "Continue after a usage limit";
     for (const on of [undefined, true]) {
       const props = { settings: { continue_after_usage_limit: on }, saveSetting: vi.fn() };
-      const html = renderToStaticMarkup(createElement(AISection, props));
+      const html = render(props);
       expect(html).toContain(label);
       expect(html).toContain(`aria-checked="${on === true}"`);
-      expect(
-        renderToStaticMarkup(createElement(AISection, { ...props, cloudOnly: true }))
-      ).not.toContain(label);
+      expect(render({ ...props, cloudOnly: true })).not.toContain(label);
     }
+  });
+
+  it("labels an unconfigured gateway, explains agent messages and spins the disabled refresh during a read", () => {
+    state.isFetching = true;
+    const html = render();
+    expect(html).toContain("No gateways connected");
+    expect(html).toContain("Agents send you updates while they work.");
+    expect(
+      html.match(
+        /<button[^>]*aria-label="Refresh local provider status"[^>]*>[\s\S]*?<\/button>/
+      )?.[0]
+    ).toEqual(expect.stringMatching(/disabled=""[\s\S]*lucide-loader/));
   });
 
   it("offers sign-in for a signed-out agent", () => {
     state.data = { auth: [claude({}), codex], clis: ready, logins: [] };
     const html = render();
-    expect(html).toContain("Not connected");
+    expect(html.match(/>Not signed in</g)).toHaveLength(1);
+    expect(html).toContain("Anthropic");
     expect(html.match(/>Sign in<\/button>/g)).toHaveLength(1);
   });
 
   it("shows who a signed-in agent runs as, and signs out only its own login", () => {
     state.data = {
-      auth: [claude({ state: "signed_in", source: "environment", label: "Claude API key" }), codex],
+      auth: [
+        claude({
+          state: "signed_in",
+          source: "environment",
+          credential: "api_key",
+          label: "Claude API key",
+        }),
+        codex,
+      ],
       clis: ready,
       logins: [],
     };
     const html = render();
-    expect(html.match(/>Connected<\/span>/g)).toHaveLength(2);
+    expect(html.match(/>Signed in<\/span>/g)).toHaveLength(2);
     expect(html).toContain("ChatGPT Pro · member@example.com");
-    expect(html).toContain("Claude API key");
-    expect(html.match(/>Sign out<\/button>/g)).toHaveLength(1);
+    expect(html).toContain("Claude API key · environment");
+    expect(html).toContain('aria-label="Codex options"');
+    expect(html).not.toContain('aria-label="Claude Code options"');
     expect(html).not.toContain(">Sign in</button>");
   });
 
@@ -101,7 +137,8 @@ describe("local agent status", () => {
     };
     const html = render();
     expect(html).toContain("Waiting for sign-in…");
-    expect(html).toContain(">Cancel</button>");
+    expect(html).not.toContain("Not signed in");
+    expect(html).toContain('aria-label="Claude Code options"');
     expect(html).toContain("Paste the code the sign-in page shows");
     expect(html).not.toContain(">Sign in</button>");
   });
@@ -125,7 +162,7 @@ describe("local agent status", () => {
     const html = render();
     expect(html).toContain("Installing 0.3.288 · 45%");
     expect(html).toContain(">Not available on this computer<");
-    expect(html).toContain(">installs with its first turn<");
+    expect(html).toContain(">Installs on first use<");
     expect(html.match(/>Install<\/button>/g)).toHaveLength(1);
     expect(html).not.toContain(">Sign in</button>");
   });
@@ -139,7 +176,9 @@ describe("local agent status", () => {
       if (failure === "unknown")
         state.data.auth[0] = claude({ state: "unknown", error: "timed out" });
       const html = render();
-      expect(html).toContain("Status unavailable");
+      expect(html).toContain("Unavailable");
+      if (failure === "envelope") expect(html).toContain("Agent server is disconnected");
+      if (failure === "unknown") expect(html).toContain("timed out");
       expect(html).toContain('aria-label="Refresh local provider status"');
       expect(html).not.toContain(">Sign in</button>");
     }
@@ -153,8 +192,35 @@ it("checks Agent messages by default and honours a saved choice", () => {
     [true, true],
   ] as const) {
     const settings = { agent_messages: saved };
-    const html = renderToStaticMarkup(createElement(AISection, { settings, saveSetting: vi.fn() }));
+    const html = render({ settings });
     const toggle = html.match(/<button\b[^>]*\bid="agent-messages"[^>]*>/)?.[0];
     expect(toggle).toContain(`aria-checked="${checked}"`);
   }
+});
+
+it("makes the connected catalog count an expandable button and keeps connection options separate", async () => {
+  state.gateways = [
+    {
+      ref: "original",
+      preset: "cliproxyapi",
+      formats: ["responses"],
+      revision: "rev",
+      baseUrl: "http://localhost",
+      models: [{ id: "x", label: "x", provider: "openai" }],
+    },
+  ];
+  const html = render();
+  expect(html).toContain(
+    "Safest with API keys. If you sign a personal subscription into the proxy, or switch between accounts to get past a limit, the provider can suspend that account."
+  );
+  expect(html).toContain("No chat models");
+  expect(html).toMatch(/<button[^>]*aria-expanded="false"[^>]*>[\s\S]*?1 model[\s\S]*?<\/button>/);
+});
+
+it("offers the gateway presets on this computer", () => {
+  expect(render()).toContain('aria-label="Gateways"');
+  expect(render()).toContain(">Add gateway<");
+  state.remote = true;
+  expect(render()).not.toContain(">Add gateway<");
+  expect(render()).toContain("Manage gateways on this computer.");
 });

@@ -3,15 +3,15 @@ import { getErrorMessage } from "@shared/lib/errors";
 import {
   completeCloudCallback,
   completeOAuthCallback,
-  GATEWAY_PATH,
-  isGatewayKey,
+  APP_PROXY_PATH,
+  isAppProxyKey,
   proxyMcp,
   SIGN_IN_CALLBACK_PATH,
 } from "../services/integrations";
 import { isLocalhost, getClientIp } from "../lib/network";
 
 // What agents and sign-ins reach over plain HTTP: the page a sign-in returns
-// to, and the gateway agents' MCP clients call.
+// to, and the app proxy agents' MCP clients call.
 // Everything the app's own UI reads or changes goes over the WebSocket
 // (q:subscribe / q:request / q:mutate), not through here.
 
@@ -53,13 +53,13 @@ app.get(`${CALLBACK}/:attempt`, async (c) => {
 });
 
 /**
- * The gateway: an agent on this computer reaches an app's MCP server through
+ * The app proxy: an agent on this computer reaches an app's MCP server through
  * here, and the account's credential is attached on the way out. Only this
  * computer, and only with the key a turn's config carries (so a web page that
  * finds the port cannot use the user's accounts).
  */
-app.all(`${GATEWAY_PATH.replace(/^\/api/, "")}/:appId`, async (c) => {
-  if (!isLocalhost(getClientIp(c)) || !isGatewayKey(c.req.header("authorization"))) {
+app.all(`${APP_PROXY_PATH.replace(/^\/api/, "")}/:appId`, async (c) => {
+  if (!isLocalhost(getClientIp(c)) || !isAppProxyKey(c.req.header("authorization"))) {
     return c.text("Forbidden", 403);
   }
   return proxyMcp(c.req.param("appId"), c.req.raw);

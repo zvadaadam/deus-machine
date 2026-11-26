@@ -1,3 +1,4 @@
+import type { OpenChatWithModel } from "@/shared/agents/picker";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { subagentGroups } from "@zvada/agent-server/protocol/selectors";
 import { Chat } from "./Chat";
@@ -44,7 +45,7 @@ interface SessionPanelProps {
   onAgentHarnessChange?: (agentHarness: AgentHarness) => void;
   onSessionStarted?: () => void;
   /** Opens a new chat tab with the given model pre-selected */
-  onOpenNewTab?: (initialModel?: string) => void;
+  onOpenNewTab?: OpenChatWithModel;
   /** Model to pre-select when this tab was created from the locked-group picker */
   initialModel?: string;
 }

@@ -31,6 +31,8 @@ import {
 } from "@shared/agent-asks";
 import { isUnknownEvent } from "@shared/protocol-types";
 import { hasAgentMessages } from "./agent-messages";
+import { prepareGatewayTurn } from "../gateways/turn";
+import { requireRevision } from "../gateways/connections";
 import { holdingTurn, wireTurn, forgetChatTurns, connectTurnNotices } from "./chat-turn";
 import { onTurnNotice, recoverSteers, userEcho } from "./queue";
 import { AgentLink } from "./client";
@@ -180,9 +182,15 @@ export async function startTurn(
   const stopped = Promise.withResolvers<never>();
   const onAbort = () => stopped.reject(signal?.reason);
   signal?.addEventListener("abort", onAbort);
-  const apps = await Promise.race([turnApps(agentHarness), stopped.promise]).finally(() =>
-    signal?.removeEventListener("abort", onAbort)
-  );
+  const holder = holdingTurn(sessionId);
+  const gateway = holder?.turnId === turnId ? holder.gateway : undefined;
+  const [apps] = await Promise.race([
+    Promise.all([
+      turnApps(agentHarness),
+      gateway && prepareGatewayTurn(gateway, run.thinkingLevel, signal),
+    ]),
+    stopped.promise,
+  ]).finally(() => signal?.removeEventListener("abort", onAbort));
   // Stop can arrive after the apps resolve and before this turn is registered.
   signal?.throwIfAborted();
   if (!getDatabase().prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId)) {
@@ -191,6 +199,7 @@ export async function startTurn(
   const device = agentDeviceFor(sessionId);
   const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, {
     ...run,
+    ...(gateway && { thinkingLevel: gateway.thinkingLevel }),
     ...apps,
     agentMessages: hasAgentMessages(sessionId),
     setup: setupForTurn(sessionId),
@@ -200,6 +209,10 @@ export async function startTurn(
     supportsImages: supportsImages(agentHarness),
   });
   // Wire before the request: the engine can publish the first event in the same tick as its answer.
+  if (gateway) {
+    requireRevision(gateway.binding.revision);
+    params.config.retryPolicy = "failFast";
+  }
   wireTurn(sessionId, turnId);
   await link.startTurn(params);
 }
@@ -228,33 +241,14 @@ export async function steerTurn(harness: string, params: TurnSteerParams) {
  * own configuration does not have (`appServerName`). The chat's Deus tools
  * are the engine's to deliver (`hostTools`).
  */
-async function turnApps(
-  harness: AgentHarness
-): Promise<Pick<DeusTurnOptions, "mcpServers" | "env">> {
+async function turnApps(harness: AgentHarness): Promise<Pick<DeusTurnOptions, "mcpServers">> {
   const { servers, skipped } = await resolveTurnApps(harness);
   if (skipped.length) {
     console.log(
       `[AgentService] Apps not in this turn: ${skipped.map((s) => `${s.appId} (${s.reason})`).join(", ")}`
     );
   }
-  return { mcpServers: servers, env: loopbackPastProxy() };
-}
-
-/**
- * Apps with an account are reached at this backend's loopback gateway. Where
- * the user's environment sends HTTP through a proxy, the agent's MCP client
- * must not send loopback there: add it to NO_PROXY, keeping what they have.
- */
-function loopbackPastProxy(): Record<string, string> {
-  const proxied = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"].some(
-    (name) => process.env[name] || process.env[name.toLowerCase()]
-  );
-  if (!proxied) return {};
-  const current = process.env.NO_PROXY ?? process.env.no_proxy ?? "";
-  const value = [
-    ...new Set([...current.split(",").filter(Boolean), "127.0.0.1", "localhost"]),
-  ].join(",");
-  return { NO_PROXY: value, no_proxy: value };
+  return { mcpServers: servers };
 }
 
 /**

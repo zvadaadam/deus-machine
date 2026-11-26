@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { sessionToTab } from "@/app/layouts/chatTabsSync";
 import { toast } from "sonner";
 import {
   mapToRepoGroups,
@@ -109,6 +110,11 @@ describe("mapToRepoGroups", () => {
 });
 
 describe("toSession", () => {
+  it("opens an untitled direct chat as New chat", () => {
+    const row = toSession(agntSession({ title: null, status: "ready" }) as never);
+    expect(sessionToTab(row, 4)).toMatchObject({ label: "New chat", hasStarted: false });
+  });
+
   it("maps an agnt session to the detail the direct lane reads", () => {
     expect(toSession(agntSession({ id: "x", status: "ready" }) as never)).toMatchObject({
       id: "x",

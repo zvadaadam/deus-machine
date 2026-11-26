@@ -15,6 +15,7 @@
  * submitted snapshot, even if more was staged in the meantime.
  */
 
+import type { OpenChatWithModel } from "@/shared/agents/picker";
 import { tempo } from "@/shared/lib/tempo";
 import { Collapse } from "@/components/ui/collapse";
 import { useEffect } from "react";
@@ -55,16 +56,10 @@ import { InspectedElementCard } from "./InspectedElementCard";
 import { FileMentionCard } from "./FileMentionCard";
 import { SkillMentionCard } from "./SkillMentionCard";
 import { serializeInspectElement } from "../lib/parseInspectTags";
-import {
-  DEFAULT_THINKING_LEVEL,
-  composerThinking,
-  getAgentHarnessForModel,
-  getModelId,
-  modelThinkingLevels as thinkingLevelsOf,
-  type ThinkingLevel,
-} from "@/shared/agents";
+import { DEFAULT_THINKING_LEVEL, composerThinking, type ThinkingLevel } from "@/shared/agents";
 import type { ChatModelSelection } from "@/shared/hooks/useModelLists";
-import { ModelPicker } from "./ModelPicker";
+import { gatewayEffort } from "@shared/gateways";
+import { ModelPicker } from "./model-picker/ModelPicker";
 import { PlanModeToggle } from "./PlanModeToggle";
 import { ContextTokenIndicator } from "./ContextTokenIndicator";
 
@@ -98,7 +93,7 @@ interface MessageInputProps {
   sendDisabledReason?: string;
   onCompact?: () => void;
   onStop?: () => void;
-  onOpenNewTab?: (initialModel?: string) => void;
+  onOpenNewTab?: OpenChatWithModel;
 
   /** Replaces the default "Ask a follow-up…" hint. */
   placeholder?: string;
@@ -268,13 +263,6 @@ export function MessageInput({
   const { model, agentHarness, lists: modelLists, live: listIsLive } = selection;
   const isClaudeAgent = agentHarness === "claude-code";
 
-  const fittingLevels = (value: string) => {
-    const harness = getAgentHarnessForModel(value);
-    return listIsLive(harness)
-      ? thinkingLevelsOf(modelLists, harness, getModelId(value))
-      : undefined;
-  };
-
   // Build combined message content from all staged sources.
   // See the big block-comment in the previous revision for ordering rationale
   // (skills first → inspected elements → file mentions → pastes → typed text,
@@ -384,8 +372,10 @@ export function MessageInput({
   // is what a send carries. Against the catalog alone the chat keeps its own.
   const fitTo =
     model && agentHarness && listIsLive(agentHarness) ? selection.thinkingLevels : undefined;
-  const shownThinking = composerThinking(thinkingLevel, fitTo, defaultThinking);
-  const live = fitTo !== undefined;
+  const shownThinking = selection.gatewayModel
+    ? (gatewayEffort(selection.gatewayThinking, thinkingLevel) ?? "off")
+    : composerThinking(thinkingLevel, fitTo, defaultThinking);
+  const live = !!selection.gatewayModel || fitTo !== undefined;
   const { setThinkingLevel } = composer;
   useEffect(() => {
     if (live && shownThinking !== thinkingLevel) setThinkingLevel(shownThinking);
@@ -536,10 +526,21 @@ export function MessageInput({
               model={model}
               agentHarness={agentHarness}
               lists={modelLists}
+              gateways={selection.gateways}
+              previousGateway={selection.previousGateway}
+              previousLabel={selection.previousLabel}
               thinkingLevel={shownThinking}
-              thinkingLevels={selection.thinkingLevels}
+              preferredThinking={thinkingLevel}
+              defaultThinking={defaultThinking}
               hasMessages={hasMessages}
-              onModelChange={(value) => composer.setModel(value, fittingLevels(value))}
+              onModelChange={(option, level) => {
+                if (level !== undefined) composer.pickModel(option.value, level);
+                else
+                  composer.setModel(
+                    option.value,
+                    listIsLive(option.agentHarness) ? option.thinking?.levels : undefined
+                  );
+              }}
               onThinkingLevelChange={composer.setThinkingLevel}
               onOpenNewTab={onOpenNewTab}
             />
