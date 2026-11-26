@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { toast } from "sonner";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { api } from "@shared/api";
 import type { AgentAuthAnswer, HarnessAuth } from "@shared/agent-auth";
 import { agentReadiness } from "@shared/agent-readiness";
@@ -12,9 +12,10 @@ import {
   localSignIn,
   readLocalAgent,
 } from "@/features/settings/lib/local-agent-login";
-import { useAgentAuthEvents } from "@/features/settings/api/settings.queries";
+import { useAgentAuth, useAgentAuthEvents } from "@/features/settings/api/settings.queries";
 import { call } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
+import { queryClient, setActiveQueryClient } from "@/shared/api/queryClient";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useStream } from "@/shared/hooks/useStream";
 
@@ -25,12 +26,15 @@ vi.mock("@/platform/ws", () => ({ call: vi.fn() }));
 beforeEach(() => {
   vi.spyOn(toast, "error").mockClear();
 });
+const originalClient = queryClient;
+afterEach(() => setActiveQueryClient(originalClient));
 
 const models = [...queryKeys.settings.agentModels, "workspace"];
 function observe(direct = false) {
   vi.mocked(isCloudDirectWebMode).mockReturnValue(direct);
   vi.mocked(useStream).mockClear();
   const client = new QueryClient();
+  setActiveQueryClient(client);
   client.setQueryData(models, { lists: [] });
   function Shell() {
     useAgentAuthEvents();
@@ -136,6 +140,89 @@ it("leaves other harnesses quiet and clears this window's install when it is rea
   failInstall("gemini", "Download failed");
   expect(toast.error).not.toHaveBeenCalled();
 });
+
+it("keeps an install and its late refusal on the computer that received the request", async () => {
+  observe();
+  const first = Promise.withResolvers<void>();
+  vi.mocked(call).mockReturnValueOnce(first.promise);
+  const install = installLocalAgent("gemini");
+  observe();
+  failInstall("gemini", "Another computer's install");
+  await installLocalAgent("gemini");
+  first.reject(new Error("Left the first computer"));
+  await install;
+  expect(toast.error).not.toHaveBeenCalled();
+  failInstall("gemini", "Download failed");
+  expect(toast.error).toHaveBeenCalledExactlyOnceWith("Couldn’t install Gemini: Download failed", {
+    id: "cli-install-gemini",
+  });
+});
+
+it.each(["ready", "failed"] as const)(
+  "retires a requested install when the stream resets after a missed %s event",
+  async (state) => {
+    observe();
+    await installLocalAgent("gemini");
+    vi.mocked(call).mockResolvedValueOnce({
+      auth: [],
+      clis: [
+        { harness: "gemini", state, error: state === "failed" ? "Download failed" : undefined },
+      ],
+      logins: [],
+    });
+    const [cli] = vi.mocked(useStream).mock.calls;
+    await cli![3]!();
+    failInstall("gemini", "A later install");
+    if (state === "failed") {
+      expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+        "Couldn’t install Gemini: Download failed",
+        {
+          id: "cli-install-gemini",
+        }
+      );
+    } else expect(toast.error).not.toHaveBeenCalled();
+  }
+);
+
+it.each(["ordinary read", "retry during reset", "progress during reset"])(
+  "leaves the current install to report its own failure after %s",
+  async (scenario) => {
+    const client = observe();
+    await installLocalAgent("gemini");
+    const old = Promise.withResolvers<AgentAuthAnswer>();
+    vi.mocked(call).mockReturnValueOnce(old.promise);
+    const [cli] = vi.mocked(useStream).mock.calls;
+    let read;
+    if (scenario === "ordinary read") {
+      function Settings() {
+        useAgentAuth();
+        return null;
+      }
+      renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(Settings)));
+      read = client.getQueryCache().find({ queryKey: queryKeys.settings.agentAuth })!.fetch();
+    } else {
+      read = cli![3]!();
+    }
+    if (scenario !== "progress during reset") await installLocalAgent("gemini");
+    if (scenario !== "retry during reset")
+      cli![2]({ harness: "gemini", phase: "downloading", version: "2", receivedBytes: 10 });
+    old.resolve({
+      auth: [],
+      logins: [],
+      clis: [{ harness: "gemini", state: "failed", error: "Old download" }],
+    });
+    await read;
+    expect(toast.error).not.toHaveBeenCalled();
+    failInstall("gemini", "Current download");
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+      "Couldn’t install Gemini: Current download",
+      {
+        id: "cli-install-gemini",
+      }
+    );
+    client.clear();
+  }
+);
 
 it.each(["progress", "rejection"])(
   "shows one toast for a rejected install when %s arrives first",

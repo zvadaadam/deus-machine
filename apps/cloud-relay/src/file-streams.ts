@@ -48,11 +48,16 @@ function responseHeaders(status: number, fields: Record<string, string>): Header
   for (const [name, value] of Object.entries(fields)) {
     if (fileHeaders.has(name.toLowerCase())) headers.append(name, value);
   }
+  const range = headers.get("content-range");
+  if (status === 416) {
+    const size = /^bytes \*\/(\d+)$/.exec(range ?? "")?.[1];
+    if (!size || !Number.isSafeInteger(Number(size))) return null;
+    return new Headers({ ...policyHeaders, "Content-Range": `bytes */${size}` });
+  }
   if (!servedTypes.has((headers.get("content-type") ?? "").toLowerCase())) return null;
   const rawLength = headers.get("content-length") ?? "";
   const length = Number(rawLength);
   if (!/^\d+$/.test(rawLength) || !Number.isSafeInteger(length)) return null;
-  const range = headers.get("content-range");
   if (status !== 206) return range === null ? headers : null;
   const match = /^bytes (\d+)-(\d+)\/(\d+|\*)$/.exec(range ?? "");
   if (!match) return null;
@@ -157,7 +162,7 @@ export class FileStreams {
       this.fail(read, "duplicate head");
       return;
     }
-    if (frame.status !== 200 && frame.status !== 206) {
+    if (frame.status !== 200 && frame.status !== 206 && frame.status !== 416) {
       this.fail(read, "host refused file", false);
       return;
     }
@@ -168,7 +173,7 @@ export class FileStreams {
         return;
       }
       clearTimeout(read.timer);
-      if (read.method === "HEAD") {
+      if (read.method === "HEAD" || frame.status === 416) {
         read.resolve(new Response(null, { status: frame.status, headers }));
         this.release(read);
         return;

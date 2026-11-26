@@ -39,11 +39,7 @@ import { derivePRActionState } from "@/features/workspace/lib/prState";
 import { hasCheckout } from "@/features/workspace/lib/startState";
 import { pendingFirstMessages } from "@/features/workspace/store/workspaceStartStore";
 import { chatView, type ChatView } from "@/features/settings/lib/chatView";
-import {
-  useAgentAuthEvents,
-  useSettings,
-  useUpdateSettings,
-} from "@/features/settings/api/settings.queries";
+import { useEditableSettings, useUpdateSettings } from "@/features/settings/api/settings.queries";
 import { useFirstMessageDelivery } from "@/features/session/hooks/useFirstMessageDelivery";
 import { useSidebarStore } from "@/features/sidebar/store";
 import { useWindowPlace } from "@/features/sidebar/hooks/useWindowPlace";
@@ -235,7 +231,6 @@ export function MainLayout() {
   // on screen. A start that fails keeps it: the workspace's start view shows
   // it, and a retry sends it.
   useFirstMessageDelivery(repoGroups, workspacesQuery.isSuccess);
-  useAgentAuthEvents();
 
   const handleStartWorkspace = useCallback(
     async (
@@ -404,11 +399,11 @@ export function MainLayout() {
     onSwitchPlace: places.chooseIndex,
   });
 
-  const { data: settings } = useSettings();
+  const { settings } = useEditableSettings();
   const { mutate: updateSettings } = useUpdateSettings();
   function showChatView(view: ChatView) {
     updateSettings(
-      { chat_view: view },
+      { key: "chat_view", value: view },
       { onError: (error) => toast.error(getErrorMessage(error)) }
     );
   }

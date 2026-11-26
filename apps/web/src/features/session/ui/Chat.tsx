@@ -1,4 +1,5 @@
 import { useSettings } from "@/features/settings/api/settings.queries";
+import { echoMessageId } from "@zvada/agent-server/protocol/factories";
 import { chatView } from "@/features/settings/lib/chatView";
 import { tempo } from "@/shared/lib/tempo";
 import { match } from "ts-pattern";
@@ -198,8 +199,9 @@ export function Chat({
       if (item.type === "cloudEnv") return `cloudEnv:${item.entries[0]?.id ?? index}`;
       if (item.type === "start") return "start";
       if (item.type === "user") return item.message.id;
-      if (item.afterUserId) return `reply:${item.afterUserId}`;
-      return item.turnId ? `turn:${item.turnId}` : item.messages[0].id;
+      return item.turnId
+        ? `reply:${item.afterUserId ?? echoMessageId(item.turnId)}`
+        : item.messages[0].id;
     },
     [timeline]
   );

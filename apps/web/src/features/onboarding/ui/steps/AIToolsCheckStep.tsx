@@ -1,6 +1,6 @@
 import { match } from "ts-pattern";
 import { CliStatusRow } from "../components/CliStatusRow";
-import { useAgentAuth, useAgentAuthEvents } from "@/features/settings/api/settings.queries";
+import { useAgentAuth } from "@/features/settings/api/settings.queries";
 import {
   installLabel,
   installLocalAgent,
@@ -49,7 +49,6 @@ function statusOf(state: LocalAgentState) {
 
 export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
   const auth = useAgentAuth();
-  useAgentAuthEvents();
 
   function row(harness: AgentHarness) {
     const state = readLocalAgent(auth, harness);

@@ -1,7 +1,9 @@
+import { isPublicSetting, type Settings } from "@shared/types/settings";
 import fs from "fs";
 import path from "path";
 import { DB_PATH } from "../lib/database";
 import { PreferencesFile } from "../lib/schemas";
+import { invalidate } from "./query-engine";
 
 function preferencesPath(): string {
   return path.join(path.dirname(DB_PATH), "preferences.json");
@@ -49,17 +51,10 @@ function writePreferences(settings: Record<string, any>): void {
   cached = null;
 }
 
-/**
- * Kept in preferences.json but never served or written through the settings
- * API: remote devices read settings through the relay. `relay_machines` holds
- * this computer's Deus Cloud machine secrets.
- */
-export const PRIVATE_SETTINGS: ReadonlySet<string> = new Set(["relay_machines"]);
-
-export function getAllSettings(): Record<string, any> {
-  const prefs = readPreferences();
-  for (const key of PRIVATE_SETTINGS) delete prefs[key];
-  return prefs;
+export function getAllSettings(): Settings {
+  return Object.fromEntries(
+    Object.entries(readPreferences()).filter(([key]) => isPublicSetting(key))
+  );
 }
 
 /** Get a single setting value by key. Returns the parsed value or null. */
@@ -70,9 +65,8 @@ export function getSetting(key: string): any {
 
 export function saveSetting(key: string, value: any): void {
   const current = readPreferences();
-  // Guard against readPreferences returning a non-object (e.g. if Zod fails and raw is an array/string)
-  const obj =
-    typeof current === "object" && current !== null && !Array.isArray(current) ? current : {};
-  obj[key] = value;
-  writePreferences(obj);
+  current[key] = value;
+  writePreferences(current);
+  if (isPublicSetting(key))
+    invalidate(key === "server_name" ? ["settings", "relayStatus"] : ["settings"]);
 }

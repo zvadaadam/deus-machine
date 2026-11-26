@@ -181,7 +181,7 @@ it("can renew again when the person starts a recovered, paused video at the same
   expect(call).toHaveBeenCalledTimes(2);
 });
 
-function renderRecording(open: boolean) {
+function renderRecording(open: boolean, chapters: { title: string; time: number }[] = []) {
   dialog.open = open;
   return renderToStaticMarkup(
     createElement(
@@ -196,13 +196,28 @@ function renderRecording(open: boolean) {
           toolResult: {
             type: "tool_result",
             tool_use_id: "record",
-            content: JSON.stringify({ outputPath: path, thumbnailPath: "/tmp/thumb.png" }),
+            content: JSON.stringify({
+              outputPath: path,
+              thumbnailPath: thumb,
+              duration: 30,
+              chapters,
+            }),
           },
         }),
       })
     )
   );
 }
+
+it.each([{ chapters: [] }, { chapters: [{ title: "Start", time: 0 }] }])(
+  "shows the playhead without a width transition between seeks with $chapters",
+  ({ chapters }) => {
+    cache.setQueryData(["fileUrl", "recording", path], first);
+    const player = renderRecording(true, chapters);
+    expect(player).not.toContain("transition-[width]");
+    expect(player).not.toMatch(/\b(?:bg-black|text-white|fill-white)\b/);
+  }
+);
 
 it.each(["refused read", "failed element retry"])(
   "leaves a quiet card and one player message for a %s",

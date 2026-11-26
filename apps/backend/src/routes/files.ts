@@ -12,8 +12,8 @@ function fileResponse(method: string, init: ResponseInit, open: () => fs.ReadStr
   return new Response(Readable.toWeb(open()) as unknown as BodyInit, init);
 }
 
-app.get("/workspaces/:id/file-preview", (c) => {
-  const { realPath, type, stat } = resolveBrowserFile({
+app.get("/workspaces/:id/file-preview", async (c) => {
+  const { realPath, type, stat } = await resolveBrowserFile({
     kind: "preview",
     workspaceId: c.req.param("id"),
     path: c.req.query("path") ?? "",
@@ -29,10 +29,10 @@ app.get("/workspaces/:id/file-preview", (c) => {
   return fileResponse(c.req.method, { headers }, () => fs.createReadStream(realPath));
 });
 
-app.get("/files/stream", (c) => {
+app.get("/files/stream", async (c) => {
   const file = c.req.query("path");
   if (!file) throw new ValidationError("path parameter is required");
-  const { realPath, type, stat } = resolveBrowserFile({ kind: "recording", path: file });
+  const { realPath, type, stat } = await resolveBrowserFile({ kind: "recording", path: file });
   const range = fileRange(stat.size, c.req.method === "GET" ? c.req.header("range") : undefined);
   if (range.status === 416) return new Response(null, { status: 416, headers: range.headers });
   const init = {

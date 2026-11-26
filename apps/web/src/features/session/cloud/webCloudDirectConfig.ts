@@ -17,10 +17,9 @@
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { queryClient } from "@/shared/api/queryClient";
 import { notifyAuthChange } from "@/platform/ws/device-auth";
+import { CLOUD_SESSION_KEY } from "@/platform/ws/cloud-session";
 import { assertSecureCloudUrl } from "@shared/cloud-url";
 export { isCloudDirectWebMode };
-
-const BEARER_KEY = "deus_cloud_session";
 
 const stripTrailingSlash = (u: string): string => u.replace(/\/$/, "");
 
@@ -43,7 +42,7 @@ export function resolveDeusCloudUrl(): string {
 /** The browser's `deus_cloud_session` bearer, or null when signed out. */
 export async function readWebCloudSessionBearer(): Promise<string | null> {
   try {
-    return sessionStorage.getItem(BEARER_KEY);
+    return sessionStorage.getItem(CLOUD_SESSION_KEY);
   } catch {
     return null;
   }
@@ -86,7 +85,7 @@ export function captureCloudSessionFromFragment(): boolean {
     // Only a login THIS tab started may hand us a session (see LOGIN_STATE_KEY).
     if (!echoed || !expected || echoed !== expected) return false;
 
-    sessionStorage.setItem(BEARER_KEY, decodeURIComponent(match[1]));
+    sessionStorage.setItem(CLOUD_SESSION_KEY, decodeURIComponent(match[1]));
     notifyAuthChange();
     // Anchor the 401 cooldown to the CALLBACK, not the outbound redirect: a
     // hosted login that takes longer than the cooldown would otherwise return
@@ -119,7 +118,7 @@ export function beginWebCloudLogin(returnPath = "/"): void {
 /** Drop the stored bearer (sign out of the direct-web session). */
 export function clearWebCloudSession(): void {
   try {
-    sessionStorage.removeItem(BEARER_KEY);
+    sessionStorage.removeItem(CLOUD_SESSION_KEY);
   } catch {
     /* sessionStorage unavailable — nothing to clear */
   }
@@ -159,7 +158,7 @@ export function redirectToWebCloudLogin(
 export function ensureWebCloudSession(): void {
   if (!isCloudDirectWebMode()) return;
   try {
-    if (sessionStorage.getItem(BEARER_KEY)) return;
+    if (sessionStorage.getItem(CLOUD_SESSION_KEY)) return;
   } catch {
     return;
   }
@@ -196,7 +195,7 @@ export function handleWebCloudSessionExpired(expectedBearer?: string | null): vo
   // A request admitted by an older account cannot sign out a replacement.
   if (expectedBearer !== undefined) {
     try {
-      if (sessionStorage.getItem(BEARER_KEY) !== expectedBearer) return;
+      if (sessionStorage.getItem(CLOUD_SESSION_KEY) !== expectedBearer) return;
     } catch {
       return;
     }

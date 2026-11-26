@@ -42,25 +42,29 @@ import {
   addConnection,
   FrameTooLarge,
   removeConnection,
-  getConnection,
   setProtocolHandlers,
   handleProtocolMessage,
   type AssistantAdmission,
   type WsSendable,
 } from "./ws.service";
-import { handleFrame as handleQueryFrame, removeSubs as removeQuerySubs } from "./query-engine";
+import {
+  handleFrame as handleQueryFrame,
+  invalidate,
+  removeSubs as removeQuerySubs,
+} from "./query-engine";
 
 // ---- Tunnel State ----
 
 let tunnelWs: WebSocket | null = null;
 let fileStreams: RelayFileStreams | null = null;
-let registeredTunnel: WebSocket | null = null;
+let registered = false;
 /** The account the current tunnel serves; a different signed-in account replaces it. */
 let hostAccount: string | null = null;
 let machineId: string | null = null;
 let dial: AbortController | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let stableTimer: ReturnType<typeof setTimeout> | null = null;
+// First the registration deadline, then the time a registered tunnel must stay up to reset backoff.
+let tunnelTimer: ReturnType<typeof setTimeout> | undefined;
 let reconnectAttempt = 0;
 let lastError: string | null = null;
 
@@ -69,12 +73,6 @@ let lastError: string | null = null;
 const clientToConn = new Map<string, string>();
 /** Relay clients whose assistant sign-in is being checked (the latest check each); gone once they disconnect. */
 const admitting = new Map<string, symbol>();
-
-function unlinkClient(clientId: string): string | undefined {
-  const connectionId = clientToConn.get(clientId);
-  clientToConn.delete(clientId);
-  return connectionId;
-}
 
 const MAX_RECONNECT_DELAY = 30_000;
 const BASE_RECONNECT_DELAY = 1_000;
@@ -106,19 +104,23 @@ export function reconcileRelay({ restart = false }: { restart?: boolean } = {}):
   const session = enabled ? currentAccountSession() : null;
   if (session && restart) forgetRemovedMachine(session.accountId);
   if (!session || isMachineRemoved(session.accountId)) {
-    if (hostAccount !== null || tunnelWs || dial || reconnectTimer) disconnectFromRelay();
-    return;
+    if (hostAccount !== null || tunnelWs || dial || reconnectTimer) resetTunnel();
+  } else if (hostAccount !== session.accountId || !(tunnelWs || dial || reconnectTimer)) {
+    resetTunnel();
+    hostAccount = session.accountId;
+    machineId = getMachineId(session.accountId);
+    reconnectAttempt = 0;
+    void openTunnel();
   }
-  if (hostAccount === session.accountId && (tunnelWs || dial || reconnectTimer)) return;
-
-  disconnectFromRelay();
-  hostAccount = session.accountId;
-  machineId = getMachineId(session.accountId);
-  reconnectAttempt = 0;
-  void openTunnel();
+  invalidate(["relayStatus"]);
 }
 
 export function disconnectFromRelay(): void {
+  resetTunnel();
+  invalidate(["relayStatus"]);
+}
+
+function resetTunnel(): void {
   fileHandles.clear();
   fileStreams?.disconnect();
   fileStreams = null;
@@ -131,12 +133,10 @@ export function disconnectFromRelay(): void {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
-  if (stableTimer) {
-    clearTimeout(stableTimer);
-    stableTimer = null;
-  }
+  clearTimeout(tunnelTimer);
   const socket = tunnelWs;
   tunnelWs = null;
+  registered = false;
   socket?.close(1000, "Disconnecting");
   dropClients();
 }
@@ -152,7 +152,7 @@ function assistantUrlOf(enabled: boolean): string | null {
 /** What Settings shows about the tunnel (`relayStatus`, and `GET /api/relay/status`). */
 export function getRelayStatus(): RelayStatus {
   const enabled = getSetting("remote_access_enabled") === true;
-  const connected = tunnelWs?.readyState === WebSocket.OPEN && tunnelWs === registeredTunnel;
+  const connected = registered && tunnelWs?.readyState === WebSocket.OPEN;
   const session = enabled && !hostAccount ? currentAccountSession() : null;
   const removed = session !== null && isMachineRemoved(session.accountId);
   const state: RelayState = !enabled
@@ -214,6 +214,7 @@ async function openTunnel(): Promise<void> {
   if (controller.signal.aborted || hostAccount !== account) return;
   dial = null;
   machineId = hostTicket.machineId;
+  invalidate(["relayStatus"]);
 
   const url = `${DEFAULT_RELAY_URL}/api/servers/${machineId}/tunnel`;
   console.log(`[Relay] Connecting to ${url}...`);
@@ -243,14 +244,13 @@ async function openTunnel(): Promise<void> {
     if (!current()) return;
     console.log("[Relay] Tunnel connected, registering...");
     lastError = null;
+    invalidate(["relayStatus"]);
+    tunnelTimer = setTimeout(() => {
+      if (!current()) return;
+      lastError = "The relay did not confirm registration";
+      socket.terminate();
+    }, HANDSHAKE_TIMEOUT_MS);
     sendToRelay({ type: "register", serverName: getServerName(), routeKey: fileHandles.routeKey });
-    // Start backoff over only once the tunnel has held: a tunnel that keeps
-    // being replaced (two Deus apps hosting one machine) must not redial hot.
-    if (stableTimer) clearTimeout(stableTimer);
-    stableTimer = setTimeout(() => {
-      stableTimer = null;
-      if (current()) reconnectAttempt = 0;
-    }, STABLE_TUNNEL_MS);
   });
 
   socket.on("message", (raw: Buffer | string) => {
@@ -277,6 +277,8 @@ async function openTunnel(): Promise<void> {
     fileStreams?.disconnect();
     fileStreams = null;
     tunnelWs = null;
+    clearTimeout(tunnelTimer);
+    registered = false;
     dropClients();
     if (String(reason) === DISPLACED) {
       lastError = "Another Deus app on this computer is hosting remote access";
@@ -292,10 +294,9 @@ async function openTunnel(): Promise<void> {
 }
 
 function dropClients(): void {
-  for (const [, connId] of clientToConn) {
-    removeConnection(connId);
-  }
+  const connections = [...clientToConn.values()];
   clientToConn.clear();
+  for (const id of connections) removeConnection(id);
   admitting.clear();
 }
 
@@ -319,12 +320,15 @@ function attachClient(
       sendToRelay({ type: "data", clientId, payload });
     },
     close(_code, reason) {
-      unlinkClient(clientId);
       sendToRelay({ type: "auth_response", clientId, allowed: false, reason });
+    },
+    onRemove() {
+      if (clientToConn.delete(clientId)) invalidate(["relayStatus"]);
     },
   };
   clientToConn.set(clientId, addConnection(virtualWs, deviceId, true, admission));
   sendToRelay({ type: "auth_response", clientId, allowed: true });
+  invalidate(["relayStatus"]);
 }
 
 /**
@@ -384,7 +388,13 @@ function handleRelayFrame(frame: RelayFrame): void {
       fileStreams?.receive(f)
     )
     .with({ type: "registered" }, () => {
-      registeredTunnel = tunnelWs;
+      if (registered) return;
+      registered = true;
+      clearTimeout(tunnelTimer);
+      tunnelTimer = setTimeout(() => {
+        reconnectAttempt = 0;
+      }, STABLE_TUNNEL_MS);
+      invalidate(["relayStatus"]);
       console.log("[Relay] Registered with relay successfully");
     })
     .with({ type: "client_connected" }, (f) => {
@@ -417,7 +427,7 @@ function handleRelayFrame(frame: RelayFrame): void {
     })
     .with({ type: "client_disconnected" }, (f) => {
       admitting.delete(f.clientId);
-      const connId = unlinkClient(f.clientId);
+      const connId = clientToConn.get(f.clientId);
       if (connId) {
         removeConnection(connId);
         console.log(`[Relay] Client ${f.clientId} disconnected`);
@@ -426,13 +436,6 @@ function handleRelayFrame(frame: RelayFrame): void {
     .with({ type: "data" }, (f) => {
       const connId = clientToConn.get(f.clientId);
       if (!connId) return;
-      // Forgotten for going silent (ws.service): its probes go unanswered
-      // until it reconnects.
-      if (!getConnection(connId)) {
-        clientToConn.delete(f.clientId);
-        return;
-      }
-
       try {
         const msg = JSON.parse(f.payload) as Record<string, unknown>;
         // Unified protocol handler — same as local WS clients
@@ -516,6 +519,7 @@ function sendToRelay(frame: ServerFrame, socket = tunnelWs): void {
 }
 
 function scheduleReconnect(): void {
+  invalidate(["relayStatus"]);
   if (reconnectTimer || !hostAccount) return;
   const delay = Math.min(BASE_RECONNECT_DELAY * 2 ** reconnectAttempt, MAX_RECONNECT_DELAY);
   reconnectAttempt++;

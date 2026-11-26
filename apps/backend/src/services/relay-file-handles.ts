@@ -21,7 +21,7 @@ export class FileHandles {
   readonly routeKey = randomHandle();
   private readonly entries = new Map<string, Entry>();
 
-  issue(deviceId: string, file: ReturnType<typeof resolveBrowserFile>): string {
+  issue(deviceId: string, file: Awaited<ReturnType<typeof resolveBrowserFile>>): string {
     const now = Date.now();
     for (const [handle, entry] of this.entries) {
       if (entry.expires <= now) this.entries.delete(handle);

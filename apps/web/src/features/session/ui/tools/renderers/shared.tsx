@@ -1,3 +1,7 @@
+import { OutputBlock } from "@/components/ui/output-block";
+import { ToolInput } from "../components/ToolInput";
+import type { ToolRendererProps } from "../../chat-types";
+
 type TextResultBlock = {
   type: "text";
   text: string;
@@ -64,6 +68,16 @@ export function extractText(content: unknown = ""): string {
       .join("\n");
   }
   return JSON.stringify(content, null, 2);
+}
+
+export function renderTextResult({ toolUse, toolResult }: ToolRendererProps, empty: string) {
+  if (!toolResult) return <ToolInput input={toolUse.input} />;
+  const text = extractText(toolResult.content);
+  return text ? (
+    <OutputBlock>{text}</OutputBlock>
+  ) : (
+    <div className="text-muted-foreground px-2 pb-2 text-xs italic">{empty}</div>
+  );
 }
 
 export const ICON_CLS = "text-muted-foreground/70 h-3.5 w-3.5";

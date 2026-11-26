@@ -166,7 +166,25 @@ describe("file reads through the object", () => {
     await message({ type: "file_end", streamId: read.id });
   });
 
-  it.each([403, 404, 416])("maps host refusal %i to the common 404", async (status) => {
+  it("returns an unsatisfiable range with the current file length and no body", async () => {
+    const { id, result } = start({ headers: { Range: "bytes=16-" } });
+    await head(
+      id,
+      { "Content-Range": "bytes */8", "Content-Type": "text/html", "Set-Cookie": "x=1" },
+      416
+    );
+    const response = await result;
+    expect(response.status).toBe(416);
+    expect(response.body).toBeNull();
+    expect(Object.fromEntries(response.headers)).toEqual({
+      "content-range": "bytes */8",
+      "cache-control": "private",
+      "referrer-policy": "no-referrer",
+      "x-content-type-options": "nosniff",
+    });
+  });
+
+  it.each([403, 404, 500])("maps host refusal %i to the common 404", async (status) => {
     const { id, result } = start();
     await head(id, headers(0), status);
     await denied(result);
@@ -188,6 +206,9 @@ describe("file reads through the object", () => {
 
   it.each([
     [200, {}],
+    [416, {}],
+    [416, { "content-range": "bytes 2-4/6" }],
+    [416, { "content-range": "bytes */9007199254740992" }],
     [200, { "content-length": "-1" }],
     [200, { "content-length": "9007199254740992" }],
     [206, headers(2)],

@@ -39,11 +39,16 @@ import type { Workspace } from "@/shared/types";
 import { useChatTabs } from "@/app/layouts/useChatTabs";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { queryKeys } from "@/shared/api/queryKeys";
-import { selectRuntime } from "@/platform/ws";
+import { useUIStore } from "@/shared/stores/uiStore";
+import { call, selectRuntime } from "@/platform/ws";
 import { Toaster } from "@/components/ui/sonner";
 import "@/global.css";
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 window.welcomeCommands = [];
+if (location.search === "?onboarding") {
+  selectRuntime().call = call;
+  window.requestedProject = () => useUIStore.getState().newWorkspaceRequest?.repoId;
+}
 window.composerForSession = sessionId => composerStore().getState().composers[sessionId];
 window.deliverWelcomeHistory = () => client.setQueryData(queryKeys.sessions.messages("history-session"), {
   messages: [{id: "saved-message", session_id: "history-session", turn_id: "saved-turn", role: "user", seq: 1, parts: [{type: "text", id: "saved-text", text: "Earlier recorded prompt", state: "done"}]}],
@@ -820,9 +825,7 @@ try {
   assert(onboardingWrites.includes("gitClone"), "the Deus source is cloned");
   assert(!onboardingWrites.includes("createWorkspace"), "no workspace is created behind the user");
   await cloned.getByRole("button", { name: "Start a workspace", exact: true }).click();
-  await page.waitForFunction(() =>
-    document.querySelector('[class*="transition-opacity"]')?.classList.contains("opacity-0")
-  );
+  await page.waitForFunction(() => window.requestedProject() === "deus-repo");
   assert.deepEqual(errors, []);
   console.log(
     "PASS: GitHub form focus/Enter/cache hygiene, Cloud ownership, stable chat grouping/dimming, unique tab labels and model restoration, Files retry/reconnect/refresh failures, mobile layout/error recovery, conversation history retry, direct snapshot/token/socket recovery, and onboarding auth/login/project/finish recovery"

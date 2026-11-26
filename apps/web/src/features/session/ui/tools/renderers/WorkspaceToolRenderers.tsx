@@ -1,8 +1,7 @@
 import { HelpCircle, GitCompare, MessageCircle, Terminal } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";
-import { OutputBlock } from "@/components/ui/output-block";
-import { extractText, ICON_CLS } from "./shared";
+import { extractText, ICON_CLS, renderTextResult } from "./shared";
 import type { ToolRendererProps } from "../../chat-types";
 import { getPathLeaf } from "../utils/getPathLeaf";
 
@@ -130,7 +129,6 @@ export function AskUserQuestionToolRenderer(props: ToolRendererProps) {
 export function GetWorkspaceDiffToolRenderer(props: ToolRendererProps) {
   const { file, stat } = props.toolUse.input ?? {};
   const safeFile = typeof file === "string" ? file : "";
-  const output = extractText(props.toolResult?.content);
   const preview = safeFile ? getPathLeaf(safeFile, "all changes") : stat ? "stat" : "all changes";
 
   return (
@@ -141,13 +139,7 @@ export function GetWorkspaceDiffToolRenderer(props: ToolRendererProps) {
       renderSummary={() => (
         <span className="text-muted-foreground truncate font-mono">{preview}</span>
       )}
-      renderContent={() =>
-        output ? (
-          <OutputBlock>{output}</OutputBlock>
-        ) : (
-          <div className="text-muted-foreground px-2 pb-2 text-xs italic">No changes found</div>
-        )
-      }
+      renderContent={() => renderTextResult(props, "No changes found")}
     />
   );
 }
@@ -200,15 +192,7 @@ export function GetTerminalOutputToolRenderer(props: ToolRendererProps) {
       icon={<Terminal className={ICON_CLS} />}
       {...props}
       renderSummary={() => <span className="text-muted-foreground">{sourceLabel}</span>}
-      renderContent={() =>
-        output ? (
-          <OutputBlock>{output}</OutputBlock>
-        ) : (
-          <div className="text-muted-foreground px-2 pb-2 text-xs italic">
-            No terminal output available
-          </div>
-        )
-      }
+      renderContent={() => renderTextResult(props, "No terminal output available")}
     />
   );
 }

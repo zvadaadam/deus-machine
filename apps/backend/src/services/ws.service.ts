@@ -12,6 +12,8 @@ export interface WsSendable {
   /** A transport may throw FrameTooLarge before sending any bytes. */
   send(data: string | ArrayBuffer): void;
   close(code?: number, reason?: string): void;
+  /** Release a relay route even when its silent connection is forgotten without a close. */
+  onRemove?(): void;
 }
 
 export interface WsConnection {
@@ -102,6 +104,7 @@ export function removeConnection(id: string): void {
   if (conn.endTimer) clearTimeout(conn.endTimer);
   if (connections.size === 0) stopHeartbeat();
   extendedHandlers.onDisconnect?.(id);
+  conn.ws.onRemove?.();
   if (conn.deviceId) deviceListener?.();
 }
 

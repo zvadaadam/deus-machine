@@ -6,7 +6,7 @@
 import { uuidv7 } from "@shared/lib/uuid";
 import { attachAdoptedSession, insertAdoptedWorkspace } from "../workspace-lifecycle";
 import { getDatabase } from "../../lib/database";
-import { getRepositoryById } from "../../db";
+import { createChat, getRepositoryById } from "../../db";
 import { NotFoundError } from "../../lib/errors";
 import type { AutomationRow, AutomationRunRow, AutomationWithDetailsRow } from "../../db/types";
 
@@ -244,11 +244,7 @@ export function adoptRunRows(input: {
           organization_id: input.organizationId,
         });
       }
-      const sessionId = uuidv7();
-      db.prepare(
-        `INSERT INTO sessions (id, workspace_id, agent_harness, provider_session_id, status)
-         VALUES (?, ?, 'claude-code', ?, 'idle')`
-      ).run(sessionId, workspaceId, input.providerSessionId);
+      const sessionId = createChat(db, workspaceId, { providerSessionId: input.providerSessionId });
       session = { id: sessionId, workspace_id: workspaceId };
     }
 

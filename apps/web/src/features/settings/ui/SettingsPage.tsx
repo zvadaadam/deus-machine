@@ -9,7 +9,8 @@ import { isTextFieldFocused } from "@/shared/lib/keyboard";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { useTheme } from "@/app/providers";
 import { useUIStore } from "@/shared/stores/uiStore";
-import { useSettings, useUpdateSettings } from "../api/settings.queries";
+import { useEditableSettings, useUpdateSettings } from "../api/settings.queries";
+import type { Settings } from "../types";
 import { resolveSettingsSection } from "../settings-navigation";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import {
@@ -36,14 +37,13 @@ export function SettingsPage() {
   const { toggleSidebar } = useSidebar();
   const isMobile = useIsMobile();
 
-  const settingsQuery = useSettings();
+  const { settings, isLoading } = useEditableSettings();
   const updateSettingsMutation = useUpdateSettings();
 
-  const settings = settingsQuery.data || {};
   const loading =
     activeSection === "environment" || activeSection === "slack"
       ? false // These cloud sections manage their own loading state.
-      : settingsQuery.isLoading;
+      : isLoading;
   const saving = updateSettingsMutation.isPending;
 
   // ESC closes settings
@@ -61,9 +61,9 @@ export function SettingsPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [closeSettings]);
 
-  async function saveSetting(key: string, value: unknown): Promise<boolean> {
+  async function saveSetting(key: keyof Settings, value: unknown): Promise<boolean> {
     try {
-      await updateSettingsMutation.mutateAsync({ [key]: value });
+      await updateSettingsMutation.mutateAsync({ key, value });
       return true;
     } catch (error) {
       console.error("Failed to save setting:", error);

@@ -103,7 +103,7 @@ import {
   readAppTools,
   upsertInstallation,
 } from "../../../../src/services/integrations/store";
-import { __resetVaultKeyForTests } from "../../../../src/services/integrations/vault";
+import * as vault from "../../../../src/services/integrations/vault";
 import { __resetCredentialCacheForTests } from "../../../../src/services/integrations/credentials";
 
 const PORT = 4100;
@@ -118,7 +118,7 @@ beforeEach(() => {
   process.env.DEUS_VAULT_KEY = "11".repeat(32);
   process.env.DEUS_SKILLS_HOME = state.dir;
   delete process.env.DEUS_CLOUD_EXTENSIONS;
-  __resetVaultKeyForTests();
+  vault.__resetVaultKeyForTests();
   __resetCredentialCacheForTests();
   startIntegrations(PORT);
 });
@@ -233,8 +233,17 @@ describe("apps", () => {
     });
   });
 
-  it("rejects a missing required variable", async () => {
-    await expect(connectApp({ appId: "exa", values: {} })).rejects.toThrow("API key is required");
+  it("rejects blank pasted credentials before asking the vault to seal them", async () => {
+    const init = vi.spyOn(vault, "initVault");
+    try {
+      await expect(connectApp({ appId: "exa", values: {} })).rejects.toThrow("API key is required");
+      await expect(connectApp({ appId: "sentry", values: { token: "  " } })).rejects.toThrow(
+        /Paste your/
+      );
+      expect(init).not.toHaveBeenCalledWith("seal");
+    } finally {
+      init.mockRestore();
+    }
   });
 
   it("a switched-off app stays installed but leaves turns", async () => {

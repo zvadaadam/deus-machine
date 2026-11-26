@@ -24,7 +24,7 @@ import type { HarnessCliProgress } from "@zvada/agent-server/protocol";
 // ── Preferences ────────────────────────────────────────────────────────────
 
 /** This computer's preferences. Its machine secrets are never among them. */
-export const settings = read({ name: "settings", output: out<Settings>() });
+export const settings = live({ name: "settings", output: out<Settings>() });
 
 /** Change one preference. Turning remote access on or off takes effect at once. */
 export const saveSetting = write({

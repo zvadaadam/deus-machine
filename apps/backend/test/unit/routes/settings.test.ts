@@ -8,12 +8,15 @@ import { errorHandler } from "../../../src/middleware/error-handler";
 // tested in ../api/settings.test.ts.
 
 vi.mock("../../../src/services/settings.service", () => ({
-  getAllSettings: vi.fn(() => ({ theme: "dark", lang: "en" })),
+  getAllSettings: vi.fn(() => ({})),
   saveSetting: vi.fn(),
   getSetting: vi.fn(() => null),
-  PRIVATE_SETTINGS: new Set(["relay_machines"]),
 }));
 vi.mock("../../../src/services/automations", () => ({ initAutomations: vi.fn() }));
+vi.mock("../../../src/services/integrations", () => ({ reconcileCloudAccounts: vi.fn() }));
+vi.mock("../../../src/services/cloud-settings.service", () => ({
+  refreshCloudOrganizations: vi.fn(),
+}));
 vi.mock("../../../src/services/relay.service", () => ({ reconcileRelay: vi.fn() }));
 vi.mock("../../../src/services/keep-awake.service", () => ({ syncKeepAwake: vi.fn() }));
 // The agent-auth route's module also answers for the local agents: keep the
@@ -56,14 +59,17 @@ describe("GET /settings/agent-auth", () => {
 });
 
 describe("POST /settings/cloud/credentials", () => {
-  const push = (routes: Hono, authorization?: string) =>
+  const push = (routes: Hono, authorization?: string, sessionToken: string | null = null) =>
     routes.request("/settings/cloud/credentials", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(authorization ? { authorization } : {}),
       },
-      body: JSON.stringify({ deusCloudSessionToken: null }),
+      body: JSON.stringify({
+        deusCloudUrl: "https://cloud.test",
+        deusCloudSessionToken: sessionToken,
+      }),
     });
 
   // The spawn token arrives once, on stdin (lib/parent-stdin.ts): load the routes afresh.
@@ -96,6 +102,31 @@ describe("POST /settings/cloud/credentials", () => {
     const routes = await routesSpawned(null);
     expect((await push(routes)).status).toBe(401);
     expect((await push(routes, "Bearer anything")).status).toBe(401);
+  });
+
+  it("refreshes assistants after the desktop restores its credentials", async () => {
+    const stdin = new PassThrough();
+    const routes = await routesSpawned(stdin);
+    const { onInvalidate } = await import("../../../src/services/query-engine");
+    const { currentAccountSession } = await import("../../../src/services/account-session");
+    const { reconcileRelay } = await import("../../../src/services/relay.service");
+    const refreshed = vi.fn();
+    const stop = onInvalidate((names) => {
+      if (names.includes("assistants")) refreshed(currentAccountSession()?.accountId);
+    });
+    try {
+      stdin.write("fixture-spawn\n");
+      expect((await push(routes, "Bearer different")).status).toBe(401);
+      expect(refreshed).not.toHaveBeenCalled();
+      const payload = Buffer.from(JSON.stringify({ sub: "restored-account" })).toString(
+        "base64url"
+      );
+      expect((await push(routes, "Bearer fixture-spawn", `test.${payload}.test`)).status).toBe(200);
+      expect(refreshed).toHaveBeenCalledExactlyOnceWith("restored-account");
+      expect(reconcileRelay).toHaveBeenCalledBefore(refreshed);
+    } finally {
+      stop();
+    }
   });
 
   it("takes no account when stdin ends before a token", async () => {

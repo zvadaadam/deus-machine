@@ -76,6 +76,7 @@ import { archiveWorkspace } from "../workspace-archive.service";
 import { createLocalWorkspace } from "../workspace-init.service";
 import {
   attachParts,
+  createChat,
   encodeOrigin,
   getMessages,
   getSessionRaw,
@@ -951,18 +952,15 @@ export function createDeusHost(): DeusHost {
         const settings = await startSettings(harness, input);
         if (input.workspace) {
           const workspaceId = input.workspace.id;
-          const sessionId = uuidv7();
           // The commit: checked and inserted in one synchronous step.
           mayStart(caller, input);
-          db.transaction(() => {
-            db.prepare(
-              "INSERT INTO sessions (id, workspace_id, status, agent_harness, started_by, updated_at) VALUES (?, ?, 'idle', ?, ?, datetime('now'))"
-            ).run(sessionId, workspaceId, harness, encodeOrigin(input.origin));
-            db.prepare("UPDATE workspaces SET current_session_id = ? WHERE id = ?").run(
-              sessionId,
-              workspaceId
-            );
-          })();
+          const sessionId = db.transaction(() =>
+            createChat(db, workspaceId, {
+              harness,
+              startedBy: encodeOrigin(input.origin),
+              select: true,
+            })
+          )();
           invalidate(["workspaces", "sessions"]);
           // Made: a first task that cannot be delivered is the chat's error, not a refusal.
           await sendFirst(caller, sessionId, input, settings).catch(() => {});

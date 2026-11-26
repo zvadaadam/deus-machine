@@ -14,6 +14,7 @@ vi.mock("node:fs/promises", async (original) => {
   const disk = await original<typeof import("node:fs/promises")>();
   return {
     ...disk,
+    realpath: vi.fn(disk.realpath),
     open: async (...args: Parameters<typeof disk.open>) => {
       io.opens++;
       const f = await disk.open(...args);
@@ -55,12 +56,12 @@ const request = (
     ...extra,
   });
 const wait = (assertion: () => void) => vi.waitFor(assertion, { timeout: 5000, interval: 5 });
-beforeEach(() => {
+beforeEach(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "deus-file-test-"));
   file = path.join(dir, "recording.mp4");
   fs.writeFileSync(file, contents);
   const input = { kind: "recording" as const, path: file };
-  handle = fileHandles.issue("phone", resolveBrowserFile(input));
+  handle = fileHandles.issue("phone", await resolveBrowserFile(input));
   host = new RelayFileStreams((f) => wire.push(f), sendChunk);
   io.opens = 0;
   io.closed = 0;
@@ -77,9 +78,10 @@ afterEach(async () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-it("validates the open and looks up the handle before touching disk", () => {
+it("validates the open and looks up the handle before touching disk", async () => {
   const reserve = vi.spyOn(tunnel, "createSenderWindow");
-  const resolve = vi.spyOn(fs, "realpathSync");
+  const resolve = vi.mocked((await import("node:fs/promises")).realpath);
+  resolve.mockClear();
   try {
     request(1, { credit: 0 });
     request(2, { handle: "unknown" });
@@ -92,7 +94,6 @@ it("validates the open and looks up the handle before touching disk", () => {
     expect(io.opens).toBe(0);
   } finally {
     reserve.mockRestore();
-    resolve.mockRestore();
   }
 });
 
@@ -110,7 +111,12 @@ it("answers HEAD, an unsatisfiable range and a changed file without sending byte
       "Accept-Ranges": "bytes",
     },
   });
-  expect(wire).toContainEqual({ type: "file_head", streamId: 2, status: 404, headers: {} });
+  expect(wire).toContainEqual({
+    type: "file_head",
+    streamId: 2,
+    status: 416,
+    headers: { "Content-Range": `bytes */${contents.length}` },
+  });
   fs.renameSync(file, file + ".old");
   fs.writeFileSync(file, "replacement");
   request(3);
@@ -212,7 +218,7 @@ it("keeps the selected file after a symlink is removed and stops granting bytes 
   const alias = path.join(dir, "alias.mp4");
   fs.symlinkSync(file, alias);
   fileHandles.clear();
-  handle = fileHandles.issue("phone", resolveBrowserFile({ kind: "recording", path: alias }));
+  handle = fileHandles.issue("phone", await resolveBrowserFile({ kind: "recording", path: alias }));
   fs.unlinkSync(alias);
   request(1);
   await wait(() => expect(chunks).toHaveLength(4));

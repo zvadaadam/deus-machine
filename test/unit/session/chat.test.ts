@@ -161,6 +161,13 @@ it("keeps Worked open when older messages of the same reply are prepended", () =
     expect(render([reply("turn-1", 1, "Earlier work"), ...page])).toMatch(
       /Collapse activity, Worked.*Earlier work.*Expand activity, Worked/s
     );
+    useOpenChatStore.setState({ transcriptFolds: {} });
+    buttons.mockClear();
+    render(page.slice(1));
+    buttons.mock.calls[0][0].onToggle();
+    expect(render(page)).toMatch(
+      /Expand activity, Worked.*Collapse activity, Worked.*After steer/s
+    );
   } finally {
     buttons.mockRestore();
     snapshots.mockRestore();
