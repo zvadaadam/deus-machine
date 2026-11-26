@@ -7,6 +7,44 @@ import { checkCatalog } from "../../../../src/services/gateways/catalog";
 
 useGatewayFixture();
 
+it.each([
+  ["x", "Codex Max", true],
+  ["1", "Codex Max", true],
+  ["8317", "Codex Max", true],
+  ["gpt-5.5-codex-m", "Codex Max", true],
+  ["fixture-key-1234", "Model fixture-key-1234", false],
+] as const)(
+  "checks the base URL and model catalog for a reflected key (%s)",
+  async (apiKey, label, accepted) => {
+    const id = "gpt-5.5-codex-max";
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (url) =>
+        Response.json(
+          String(url).endsWith("/v1/models")
+            ? { data: [{ id, display_name: label }] }
+            : { models: [] }
+        )
+      );
+    try {
+      const connect = run(api.connectGateway, {
+        preset: "cliproxyapi",
+        baseUrl: "http://127.0.0.1:8317",
+        apiKey,
+        revision: null,
+      });
+      if (accepted) {
+        await connect;
+        expect((await run(api.gateways))[0]?.models).toMatchObject([{ id, label }]);
+      } else {
+        await expect(connect).rejects.toThrow("CLIProxyAPI returned an unreadable model list.");
+      }
+    } finally {
+      fetch.mockRestore();
+    }
+  }
+);
+
 it("reports a rejected API key even when cancelling the 401 response body fails", async () => {
   const body = new ReadableStream({ cancel: () => Promise.reject(new Error("stream closed")) });
   const fetcher = vi

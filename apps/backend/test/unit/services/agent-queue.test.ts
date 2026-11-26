@@ -1399,6 +1399,17 @@ describe("stopping the current turn", () => {
 });
 
 describe("messages held for a local chat", () => {
+  it("refuses to queue another agent on a bound chat before its first user echo", async () => {
+    const gatewayRevision = crypto.randomUUID();
+    db.prepare(
+      "UPDATE sessions SET agent_harness = 'claude-code', gateway_revision = ? WHERE id = ?"
+    ).run(gatewayRevision, sessionId);
+    await expect(
+      enqueueMessage({ ...message("queued"), turnId: "queued", gatewayRevision }, fromChat)
+    ).rejects.toThrow("Cannot switch agent from claude-code to codex-app-server");
+    expect(await ids()).toEqual([]);
+  });
+
   it("starts a fresh steer on a free chat with a stale card and steers its holder with a stale idle status", async () => {
     db.prepare("UPDATE sessions SET status = 'needs_response' WHERE id = ?").run(sessionId);
     const next = await steerMessage(message("first"), fromChat, "first");

@@ -30,7 +30,15 @@ import {
 
 type Input = ParsedInputOf<typeof api.sendMessage>;
 type Message = Input & { turnId: string };
-type LocalChat = Pick<SessionRow, "status" | "agent_harness" | "message_count" | "error_category">;
+type LocalChat = Pick<
+  SessionRow,
+  | "status"
+  | "agent_harness"
+  | "message_count"
+  | "last_user_message_at"
+  | "gateway_revision"
+  | "error_category"
+>;
 type SteerReceipt = "acknowledged" | "read" | "queued" | "refused" | "unconfirmed";
 type Placement = "front" | "in_place";
 type Row = {
@@ -125,7 +133,8 @@ const OPEN_LOCAL = `FROM sessions s JOIN workspaces w ON w.id = s.workspace_id
   WHERE w.kind = 'worktree' AND w.state != 'archived' AND s.is_hidden = 0`;
 
 function localChat(id: string) {
-  const sql = `SELECT s.status, s.agent_harness, s.message_count, s.error_category ${OPEN_LOCAL} AND s.id = ?`;
+  const sql = `SELECT s.status, s.agent_harness, s.message_count, s.last_user_message_at,
+    s.gateway_revision, s.error_category ${OPEN_LOCAL} AND s.id = ?`;
   return getDatabase().prepare<[string], LocalChat>(sql).get(id);
 }
 

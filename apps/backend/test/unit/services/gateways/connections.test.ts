@@ -67,9 +67,14 @@ it("accepts a loopback gateway with a fresh identity and keeps the key out of re
   expect((await readFile(join(dir, "preferences.json"), "utf8")).includes(key)).toBe(false);
 });
 
-it.each(["%73ynthetic-fixture", "bad%", "%FF"])(
-  "rejects a Custom address containing an encoded key or malformed escape (%s)",
-  async (path) => {
+it.each([
+  ["synthetic-fixture", "Enter the API key in its own field."],
+  ["%73ynthetic-fixture", "Enter the API key in its own field."],
+  ["bad%", "Enter a gateway base URL without a query or fragment."],
+  ["%FF", "Enter a gateway base URL without a query or fragment."],
+])(
+  "rejects a Custom address containing the key or a malformed escape (%s)",
+  async (path, message) => {
     const fetch = vi
       .spyOn(globalThis, "fetch")
       .mockRejectedValue(new Error("unexpected network request"));
@@ -82,7 +87,7 @@ it.each(["%73ynthetic-fixture", "bad%", "%FF"])(
           revision: null,
           formats: ["responses"],
         })
-      ).rejects.toThrow(ValidationError);
+      ).rejects.toMatchObject({ constructor: ValidationError, message });
       expect(fetch).not.toHaveBeenCalled();
     } finally {
       fetch.mockRestore();

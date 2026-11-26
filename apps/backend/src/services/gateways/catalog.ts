@@ -13,6 +13,7 @@ import {
   type GatewayModel,
 } from "@shared/gateways";
 import { GatewayError } from "../../lib/errors";
+import { containsApiKey } from "./api-key";
 
 // Catalog requests
 
@@ -103,7 +104,9 @@ export async function checkCatalog(
     const rows = new Map<string, GatewayModel>();
     for (const item of data) {
       const row = describeModel(item, connection.formats, spec.catalog, rich.get(item.id));
-      if ([row.id, row.provider, row.label].some((value) => value?.includes(connection.apiKey)))
+      if (
+        [row.id, row.provider, row.label].some((value) => containsApiKey(value, connection.apiKey))
+      )
         throw new Error();
       rows.set(row.id, row);
     }
