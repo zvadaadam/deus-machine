@@ -185,28 +185,48 @@ async function refreshSource(
  * through the repository's local exclude file, which is never committed;
  * `.deus/environment.json` stays visible so it can still be shared.
  */
-export async function excludeWorkspacesFromRepo(
+async function excludeWorkspacesFromRepo(
   repoRootPath: string,
-  workspacePath: string,
+  workspacePath?: string,
   signal?: AbortSignal
 ): Promise<void> {
   const cwd = repoRootPath;
-  // Already ignored: .gitignore, a global exclude or an earlier workspace.
-  if (
-    await succeeds(
-      runGit(["check-ignore", "-q", path.relative(repoRootPath, workspacePath)], { cwd, signal })
-    )
-  )
-    return;
+  const hideWorktree =
+    workspacePath &&
+    !(await succeeds(
+      runGit(["check-ignore", "-q", "--", path.relative(cwd, workspacePath)], { cwd, signal })
+    ));
   const excludeFile = path.resolve(
     repoRootPath,
     (await runGit(["rev-parse", "--git-path", "info/exclude"], { cwd, signal })).trim()
   );
-  fs.mkdirSync(path.dirname(excludeFile), { recursive: true });
-  fs.appendFileSync(
-    excludeFile,
-    "\n# Deus workspaces (local worktrees)\n/.deus/*\n!/.deus/environment.json\n"
-  );
+  const existing = fs.existsSync(excludeFile) ? fs.readFileSync(excludeFile, "utf8") : "";
+  // The main checkout and its linked worktrees can have different .gitignores.
+  const rules = [];
+  if (!existing.split(/\r?\n/).includes("/.context/")) rules.push("/.context/");
+  if (hideWorktree) rules.push("/.deus/*", "!/.deus/environment.json");
+  if (rules.length) {
+    fs.mkdirSync(path.dirname(excludeFile), { recursive: true });
+    fs.appendFileSync(excludeFile, `\n# Deus local workspaces\n${rules.join("\n")}\n`);
+  }
+}
+
+export async function excludeExistingWorkspaceContext(): Promise<void> {
+  const repos = getDatabase()
+    .prepare<[], { root_path: string }>(
+      `
+    SELECT DISTINCT r.root_path FROM repositories r JOIN workspaces w ON w.repository_id = r.id
+    WHERE w.kind = 'worktree' AND r.root_path IS NOT NULL
+  `
+    )
+    .all();
+  for (const { root_path } of repos) {
+    if (processGroupsStopped()) return;
+    if (fs.existsSync(path.join(root_path, ".git")))
+      await excludeWorkspacesFromRepo(root_path).catch((err) =>
+        console.warn("[WORKSPACE] Could not exclude .context from git status:", err)
+      );
+  }
 }
 
 /** Local secrets are not in git; the setup script that follows usually needs them. */

@@ -335,6 +335,8 @@ backend publishes the changed list before it acknowledges the write.
 For each new mutation that removes a row, use `useMutationState` in the list
 reader to hide the pending row and let the server's live list update the cache.
 
+Local checkouts share the repository’s Git exclude file, which keeps each workspace’s untracked `.context/` files out of Changes.
+
 Creating a local workspace writes its row and returns. The rest runs in the
 background, in three stages: `fetch` (origin's latest for the branch it starts
 from), `worktree` (`git worktree add` on a new branch), and `session` (the first
