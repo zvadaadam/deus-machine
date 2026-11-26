@@ -65,10 +65,13 @@ export function ClosedSessionsPopover({ closedTabs, onTabRestore }: ClosedSessio
                   className="control-interaction text-text-secondary hover:bg-bg-raised flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-base"
                 >
                   {getClosedTabIcon(closedTab.agentHarness)}
-                  <span className="min-w-0 flex-1 truncate">{label}</span>
+                  <span className="min-w-0 flex-1 truncate pointer-coarse:wrap-anywhere pointer-coarse:whitespace-normal">
+                    {label}
+                  </span>
                 </TooltipTrigger>
                 <TooltipContent
                   side="left"
+                  onEscapeKeyDown={() => setOpen(false)}
                   className="max-w-[min(20rem,var(--radix-tooltip-content-available-width))] wrap-anywhere"
                 >
                   {label}
