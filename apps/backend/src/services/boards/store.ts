@@ -105,9 +105,11 @@ export function deliveryChat(board: Board) {
 }
 
 const postFields = `m.id, m.seq, m.thread_seq, m.author_kind, m.about_workspace_id,
+  COALESCE(a.title, a.slug) AS about_name, a.state = 'archived' AS about_archived,
   m.body, m.created_at, m.reply_count, m.delivery_session_id, m.delivery_refusal,
   s.title AS delivery_title, s.chat AS delivery_chat, s.agent_harness AS delivery_harness, s.is_hidden AS delivery_hidden`;
-const posts = "board_messages m LEFT JOIN sessions s ON s.id = m.delivery_session_id";
+const posts =
+  "board_messages m LEFT JOIN sessions s ON s.id = m.delivery_session_id LEFT JOIN workspaces a ON a.id = m.about_workspace_id";
 
 export function getPost(board: string, seq: number): BoardPost {
   const post = getDatabase()
@@ -131,7 +133,7 @@ function rootPost(board: string, seq: number) {
 export function savePost(
   boardId: string,
   input: BoardPostInput,
-  by: { kind: "bot" } | { postId: string }
+  by: { kind: "bot"; aboutWorkspaceId?: string } | { postId: string }
 ) {
   const db = getDatabase();
   const { body, thread } = input;
@@ -170,7 +172,7 @@ export function savePost(
       seq,
       thread ?? null,
       "kind" in by ? "bot" : "person",
-      "kind" in by ? board.workspace_id : null,
+      "kind" in by ? (by.aboutWorkspaceId ?? null) : null,
       body,
       thread ? null : seq,
       recipient

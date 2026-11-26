@@ -5,6 +5,7 @@
  * Import this file early in your app to ensure tools are registered.
  */
 
+import { CreateBoardToolRenderer } from "./renderers/CreateBoardToolRenderer";
 import { toolRegistry } from "./ToolRegistry";
 import {
   DefaultToolRenderer,
@@ -119,6 +120,7 @@ export function registerAllTools() {
   toolRegistry.register("AskUserQuestion", AskUserQuestionToolRenderer);
   toolRegistry.register("GetWorkspaceDiff", GetWorkspaceDiffToolRenderer);
   toolRegistry.register("DiffComment", DiffCommentToolRenderer);
+  toolRegistry.register("create_board", CreateBoardToolRenderer);
   toolRegistry.register("GetTerminalOutput", GetTerminalOutputToolRenderer);
 
   // Deus MCP — Recording tools

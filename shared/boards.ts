@@ -25,6 +25,8 @@ export interface BoardPost {
   thread_seq: number | null;
   author_kind: "person" | "bot";
   about_workspace_id: string | null;
+  about_name: string | null;
+  about_archived: number | null;
   body: string;
   created_at: string;
   reply_count: number;

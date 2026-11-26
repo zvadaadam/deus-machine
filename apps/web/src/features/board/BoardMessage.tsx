@@ -13,6 +13,7 @@ import { getRuntimeClient, runtimeForQueryClient } from "@/platform/ws";
 import { cn } from "@/shared/lib/utils";
 import { openBoard } from "./address";
 import { BoardAvatar } from "./BoardAvatar";
+import { WorkspaceChip } from "./BoardHeader";
 import { boardMentions } from "./mentions";
 
 function Receipt({ board, post }: { board: Board; post: BoardRow }) {
@@ -160,17 +161,24 @@ function BoardMessage({
       data-message={post.id}
       data-seq={post.seq}
       className={cn(
-        "group grid grid-cols-[32px_minmax(0,1fr)] items-start gap-x-3 px-3 py-2 md:px-4",
+        "group grid grid-cols-[32px_minmax(0,1fr)] items-start gap-x-3 px-3 py-3 md:px-4",
         entering && "chat-item-enter",
         selected && "bg-bg-selection"
       )}
     >
       <BoardAvatar kind={post.author_kind} board={board} profile={profile} />
       <div className="min-w-0">
-        <div className="mb-1 flex min-h-5 flex-wrap items-center gap-x-2">
+        <div className="mb-1.5 flex min-h-5 flex-wrap items-center gap-x-2">
           <strong className="text-foreground text-base font-semibold wrap-anywhere">
             {coordinator ? "Coordinator" : person}
           </strong>
+          {coordinator && post.about_workspace_id !== board.workspace_id && post.about_name && (
+            <WorkspaceChip
+              id={post.about_workspace_id}
+              name={post.about_name}
+              archived={!!post.about_archived}
+            />
+          )}
           <time
             className="text-text-muted text-xs tabular-nums"
             dateTime={time.toISOString()}

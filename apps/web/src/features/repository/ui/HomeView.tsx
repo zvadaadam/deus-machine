@@ -20,7 +20,7 @@ import { PastedImageCard } from "@/features/session/ui/PastedImageCard";
 import type { Repository } from "../types";
 import { tempo } from "@/shared/lib/tempo";
 import { CloudToggle, BranchPickerButton } from "./composer/ComposerControls";
-import { CoordinatorToggle } from "./composer/CoordinatorToggle";
+import { CoordinatorToggle, coordinatorDescription } from "./composer/CoordinatorToggle";
 import { RepoPicker } from "./composer/RepoPicker";
 import { useNewChatSelection } from "./composer/useNewChatSelection";
 import { useComposerLocation } from "./composer/useComposerLocation";
@@ -540,6 +540,13 @@ export function HomeView({
             </div>
           </div>
         </ImageDropTarget>
+        <AnimatePresence initial={false}>
+          {hasRepos && location === "local" && coordinator && (
+            <Collapse key="coordinator">
+              <p className="text-text-muted px-2 pt-2 text-sm">{coordinatorDescription}</p>
+            </Collapse>
+          )}
+        </AnimatePresence>
       </div>
 
       <AnimatePresence>

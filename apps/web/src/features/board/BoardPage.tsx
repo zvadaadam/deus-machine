@@ -3,6 +3,7 @@ import { ArrowLeft, X } from "lucide-react";
 import type { Board } from "@shared/boards";
 import { getErrorMessage } from "@shared/lib/errors";
 import { SidebarInset } from "@/components/ui/sidebar";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
 import type { SidebarProfile } from "@/features/sidebar/model/types";
 import { AnimatePresence, m } from "framer-motion";
@@ -138,7 +139,7 @@ function Channel({
     <ThreadPane key={thread} board={board} profile={profile} thread={thread} mobile={compact} />
   );
   const channel = (
-    <main className="flex h-full min-w-0 flex-1 flex-col">
+    <main className={cn("mx-auto flex h-full w-full min-w-0 flex-col", !thread && "max-w-[880px]")}>
       <BoardHeader board={board} />
       <BoardScroll
         label="Channel messages"
@@ -186,12 +187,18 @@ function Channel({
         </AnimatePresence>
       </>
     );
-  if (!threadPane) return channel;
   return (
-    <div className="flex h-full min-h-0">
-      {channel}
-      <div className="border-border-subtle w-2/5 border-l">{threadPane}</div>
-    </div>
+    <ResizablePanelGroup direction="horizontal" autoSaveId="board-thread">
+      <ResizablePanel id="board-channel" order={1} defaultSize={55} minSize={25}>
+        {channel}
+      </ResizablePanel>
+      {threadPane && <ResizableHandle />}
+      {threadPane && (
+        <ResizablePanel id="board-thread" order={2} defaultSize={45} minSize={25}>
+          {threadPane}
+        </ResizablePanel>
+      )}
+    </ResizablePanelGroup>
   );
 }
 

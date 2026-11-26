@@ -72,7 +72,7 @@ it("pages roots by sequence and agents by last activity, with atomic root summar
 
 it("keeps the board and subject when the chat is archived and selects its newest eligible chat for delivery", () => {
   const { id } = store.createBoard("s", "Release");
-  store.savePost(id, { body: "Started" }, { kind: "bot" });
+  store.savePost(id, { body: "Started" }, { kind: "bot", aboutWorkspaceId: "w" });
   store.savePost(id, { body: "Which checks?" }, { postId: "p" });
   db.exec(`INSERT INTO sessions(id, workspace_id) VALUES ('next', 'w');
     UPDATE sessions SET is_hidden = 1 WHERE id = 's'`);
@@ -162,4 +162,58 @@ it("shares tools across coordinator chats and checks ownership and archive at ca
     )
   ).rejects.toThrow("The coordinator workspace is archived.");
   expect(boardSource(sibling)).toBeUndefined();
+});
+
+it("resolves the same workspace and chat references as rename and refuses unfamiliar ones before posting", async () => {
+  const caller = createChat(db, "w", {});
+  const board = store.createBoard(caller, "Release");
+  db.exec(
+    "INSERT INTO workspaces(id,repository_id,slug,title,state) VALUES ('mobile','r','mars','Mobile verification','ready')"
+  );
+  createChat(db, "mobile", {});
+  createChat(db, "mobile", {});
+  const { sessionTools } = await import("../../../src/services/session-tools");
+  const host = sessionTools(caller).compose({
+    name: "base",
+    tools: [],
+    async call() {
+      throw new Error("Unexpected base call");
+    },
+  });
+  const from = {
+    sessionId: caller,
+    turnId: "turn",
+    harness: "claude-code",
+    permissionMode: "bypass_permissions",
+  } as const;
+  const call = (name: string, args: Record<string, unknown>) =>
+    host.call(name, args, from, new AbortController().signal);
+  expect((await call("list_sessions", {})).content).toEqual(
+    expect.arrayContaining([expect.objectContaining({ text: expect.stringContaining("mars") })])
+  );
+  for (const workspace of ["mars", "mars:2"]) {
+    const result = await call("post_to_board", { board: board.id, body: workspace, workspace });
+    expect(result.isError).not.toBe(true);
+  }
+  expect(store.readChannel(board.id).map((post) => post.about_workspace_id)).toEqual([
+    "mobile",
+    "mobile",
+  ]);
+  const refused = await call("post_to_board", {
+    board: board.id,
+    body: "Unknown workspace",
+    workspace: "jupiter",
+  });
+  expect(refused).toMatchObject({
+    isError: true,
+    content: [{ text: expect.stringMatching(/not_found[\s\S]*mars/) }],
+  });
+  db.exec(
+    "INSERT INTO repositories(id,name) VALUES ('second','Second project'); INSERT INTO workspaces(id,repository_id,slug,state) VALUES ('other-mars','second','mars','ready')"
+  );
+  createChat(db, "other-mars", {});
+  expect(
+    await call("post_to_board", { body: "Ambiguous workspace", workspace: "mars" })
+  ).toMatchObject({ isError: true, content: [{ text: expect.stringContaining("ambiguous") }] });
+  expect(store.getBoard(board.id).last_seq).toBe(2);
 });

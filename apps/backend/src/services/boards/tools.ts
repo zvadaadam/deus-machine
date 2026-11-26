@@ -1,12 +1,13 @@
 import { z } from "zod";
 import type { HostToolSource } from "@zvada/agent-server/core";
-import { OperatorError, refuse } from "@zvada/agent-server/operator";
+import { OperatorError, refuse, type SessionCaller } from "@zvada/agent-server/operator";
 import { boardPostFields, boardReadOnlyReason } from "@shared/boards";
 import { tool } from "@shared/host-tool";
 import { TitleSchema } from "@shared/title";
 import { getDatabase } from "../../lib/database";
 import { AppError } from "../../lib/errors";
 import * as store from "./store";
+import { theOperator, workspaceArg } from "../assistants/operator";
 
 function coordinatorState(sessionId: string) {
   return getDatabase()
@@ -49,10 +50,17 @@ export function boardSource(sessionId: string): HostToolSource | undefined {
     tool(
       "post_to_board",
       "Post a channel message, or reply to a root by number.",
-      { board: boardArg, ...boardPostFields.shape },
-      async ({ board, ...input }) => {
+      {
+        board: boardArg,
+        ...boardPostFields.shape,
+        workspace: workspaceArg.describe(
+          "The workspace this post reports on. Set it when the post is about one workspace: the person opens that workspace from the post."
+        ),
+      },
+      async ({ board, workspace, ...input }, caller: SessionCaller) => {
+        const about = workspace && (await theOperator().find(caller, workspace)).workspace.id;
         const id = store.boardForChat(sessionId, board);
-        const { post } = store.savePost(id, input, { kind: "bot" });
+        const { post } = store.savePost(id, input, { kind: "bot", aboutWorkspaceId: about });
         return result({ board: id, thread: post.thread_seq ?? post.seq, seq: post.seq });
       }
     ),
@@ -98,10 +106,15 @@ export function boardSource(sessionId: string): HostToolSource | undefined {
   ];
   return {
     name: "boards",
-    instructions:
-      "Your workspace can coordinate boards. Use create_board, read_board and post_to_board. Write @you when the person needs to act. For a board delivery, call post_to_board before finishing. Omit board and thread to answer the originating thread.",
+    instructions: `You are this workspace's coordinator. The person made it one so that work happens in other workspaces while they follow it on a board, without reading every chat.
+Work that changes files: start a workspace for each separate piece with the session tools, tell it what to do, wait for it and check its result. Keep this checkout for reading; the changes belong to the workspaces you start.
+Keep the person posted on your board, not only in this chat. Create a board for the work if you have none (create_board), and post what they would want to know without asking (post_to_board): what you started, each result, and any decision you need from them. Write @you only when they must read or act.
+A question you can answer by reading needs no workspace and no post.
+For a post about a workspace, use its reference from list_sessions in workspace.
+Report each workspace's result in its own post, with \`workspace\` set to it. A post about the work as a whole needs none.
+For a board delivery, call post_to_board before finishing. Omit board and thread to answer the originating thread.`,
     tools,
-    async call(name, args, caller) {
+    async call(name, args, caller, signal) {
       const state = caller.sessionId === sessionId ? coordinatorState(sessionId) : undefined;
       if (state !== "ready")
         throw refuse.access(
@@ -112,15 +125,16 @@ export function boardSource(sessionId: string): HostToolSource | undefined {
       const selected = tools.find((each) => each.name === name);
       if (!selected) throw refuse.unsupported("Unknown board tool.");
       try {
+        const from: SessionCaller = { kind: "session", ...caller, signal };
         const source = name !== "create_board" && store.deliverySource(sessionId, caller.turnId);
         if (source && name === "read_board")
-          return await selected.run({ board: source.board, ...args });
+          return await selected.run({ board: source.board, ...args }, from);
         if (source && name === "post_to_board") {
           if (args.board !== undefined && args.board !== source.board && args.thread === undefined)
             throw refuse.unsupported("Name a thread when replying on a different board.");
-          return await selected.run({ ...source, ...args });
+          return await selected.run({ ...source, ...args }, from);
         }
-        return await selected.run(args);
+        return await selected.run(args, from);
       } catch (error) {
         if (error instanceof z.ZodError)
           throw new OperatorError(

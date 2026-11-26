@@ -70,14 +70,15 @@ const normal = (file: string) =>
   path.posix.normalize(file.replace(/\\/g, "/")).replace(/^\.\//, "");
 
 const words = z.string().trim().min(1, "must not be empty or only spaces");
+export const workspaceArg = words
+  .optional()
+  .describe("A workspace, by the name list_sessions prints after `workspace`");
 const sessionArg = words.describe("The session, as list_sessions prints it");
 
 function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
   const renameInput = {
     session: words.optional().describe("A chat, as list_sessions prints it (workspace:N)"),
-    workspace: words
-      .optional()
-      .describe("A workspace, by the name list_sessions prints after `workspace`"),
+    workspace: workspaceArg,
     name: TitleSchema.describe("The new name: one line, at most 120 characters"),
   };
   const rename = tool<typeof renameInput, Caller>({
@@ -361,7 +362,7 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
 let operator: Operator<Caller> | null = null;
 
 /** Made on first use: the host reads the app's operations, which are served by then. */
-function theOperator(): Operator<Caller> {
+export function theOperator(): Operator<Caller> {
   if (!operator) {
     const host = createDeusHost();
     const made: Operator<Caller> = createOperator<Caller>(host, {

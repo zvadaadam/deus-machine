@@ -29,7 +29,7 @@ async function backendProcess() {
   const startPosts = Promise.withResolvers();
   const finishPlan = Promise.withResolvers();
   process.on("message", (command) => {
-    if (command?.workspace) startPosts.resolve(command.workspace);
+    if (command?.workspace) startPosts.resolve(command);
     if (command === "release") release.resolve();
     if (command === "finish-plan") finishPlan.resolve();
   });
@@ -37,12 +37,18 @@ async function backendProcess() {
   async function* turn({ input }) {
     if (input === prompt) {
       yield call("create_board", { name: "Release desk" });
-      await startPosts.promise;
-      yield call("post_to_board", { body: "Release checklist\n\nThe build is ready for review." });
+      const { own } = await startPosts.promise;
+      yield call("post_to_board", {
+        workspace: own,
+        body: "Release checklist\n\nThe build is ready for review.",
+      });
       await release.promise;
       yield { say: "The release checklist is ready." };
     } else if (typeof input === "string" && input.endsWith(question)) {
-      yield call("post_to_board", { body: answer });
+      const { workspace } = await startPosts.promise;
+      const sessions = yield call("list_sessions", {});
+      assert.ok(sessions.output.includes(workspace));
+      yield call("post_to_board", { body: answer, workspace });
     } else if (input === "Publish the checklist history") {
       for (let i = 1; i <= historySize; i++)
         yield call("post_to_board", { body: "Checklist item " + i });
@@ -185,7 +191,12 @@ async function run() {
     await openHomeFor("project");
     await until(() => flag.isEnabled(), 5000, "local coordinator control");
     await flag.hover();
+    const description =
+      "A coordinator starts and directs work in other workspaces and reports to you on a board.";
+    await page.getByRole("tooltip").filter({ hasText: description }).waitFor();
     await flag.click();
+    await flag.getByText("Coordinator", { exact: true }).waitFor();
+    await page.locator("p").filter({ hasText: description }).waitFor();
     assert.equal(await flag.getAttribute("aria-pressed"), "true");
     if (process.env.DEUS_BOARD_SCREENSHOTS) {
       await page.waitForFunction(
@@ -196,7 +207,17 @@ async function run() {
         },
         await page.getByRole("button", { name: "Start new project", exact: true }).elementHandle()
       );
-      await page.evaluate(() => document.fonts.ready);
+      await page.mouse.move(2, 2);
+      await page.evaluate(async () => {
+        await document.fonts.ready;
+        await Promise.all(
+          document
+            .getAnimations()
+            .filter((a) => a.effect?.getTiming().iterations !== Infinity)
+            .map((a) => a.finished.catch(() => {}))
+        );
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      });
       await page.screenshot({
         path: path.join(process.env.DEUS_BOARD_SCREENSHOTS, "coordinator-home.png"),
         animations: "disabled",
@@ -216,14 +237,64 @@ async function run() {
     assert.equal(new URL(page.url()).pathname, "/b/" + board.id);
     await page.reload();
     const feed = page.getByRole("region", { name: "Channel messages" });
-    await feed.getByText("No posts yet. The coordinator posts here when it starts or finishes work.").waitFor();
-    child.send({ workspace: workspace.slug });
+    await feed
+      .getByText("No posts yet. The coordinator posts here when it starts or finishes work.")
+      .waitFor();
+    const mobileWorkspace = await host.write("createWorkspace", { repository_id: "project" });
+    await until(
+      async () => {
+        const w = await host.read("workspace", { workspaceId: mobileWorkspace.workspaceId });
+        return w.state === "ready";
+      },
+      20000,
+      "reply subject workspace"
+    );
+    const subject = await host.read("workspace", { workspaceId: mobileWorkspace.workspaceId });
+    await host.write("updateWorkspaceTitle", {
+      workspaceId: subject.id,
+      title: "Mobile verification",
+    });
+    child.send({ workspace: subject.slug, own: workspace.slug });
     const rootRow = feed.locator("article[data-seq='1']");
     await rootRow.getByText("Coordinator", { exact: true }).waitFor();
+    const place = workspace.title ?? workspace.slug;
+    await page.getByRole("link", { name: "Open workspace, " + place }).waitFor();
+    assert.equal(await rootRow.getByRole("link").count(), 0);
+    await feed.getByText("Today", { exact: true }).waitFor();
+    const channelWidth = () =>
+      page
+        .locator("main")
+        .filter({ has: feed })
+        .last()
+        .evaluate((el) => Math.round(el.getBoundingClientRect().width));
+    assert.equal(await channelWidth(), 880);
+    const boardType = await rootRow
+      .locator(".markdown-content p")
+      .first()
+      .evaluate((el) => [getComputedStyle(el).fontSize, getComputedStyle(el).lineHeight]);
     await rootRow.hover();
     await rootRow.getByRole("button", { name: "Reply in thread" }).click();
     const thread = page.getByRole("complementary", { name: "Thread" });
     const reply = thread.getByRole("textbox", { name: "Reply…" });
+    const divider = page.getByRole("separator").and(page.locator("[data-slot=resizable-handle]"));
+    await divider.waitFor({ state: "attached" });
+    assert.equal(Number(await divider.getAttribute("aria-valuenow")), 55);
+    await divider.focus();
+    await page.keyboard.press("ArrowLeft");
+    await until(
+      async () => Number(await divider.getAttribute("aria-valuenow")) < 55,
+      4000,
+      "workspace keyboard resize"
+    );
+    const keyboardWidth = Number(await divider.getAttribute("aria-valuenow"));
+    const handle = await divider.boundingBox();
+    const y = handle.y + handle.height / 2;
+    await page.mouse.move(handle.x, y);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + 38, y, { steps: 5 });
+    await page.mouse.up();
+    const savedWidth = Number(await divider.getAttribute("aria-valuenow"));
+    assert.ok(savedWidth > keyboardWidth);
     await reply.fill(question);
     await reply.press("Enter");
     await thread.getByRole("link", { name: "Queued for Coordinator · Release room" }).waitFor();
@@ -242,37 +313,52 @@ async function run() {
     child.send("release");
     await thread.getByRole("link", { name: "Sent to Coordinator · Release room" }).waitFor();
     await thread.getByText(/The release captain can review it today/).waitFor();
+    await thread.locator("span.rounded-full").filter({ hasText: /^@/ }).waitFor();
+    const subjectChip = thread
+      .locator("article[data-seq='3']")
+      .getByRole("link", { name: "Open workspace, Mobile verification" });
+    assert.ok((await subjectChip.getAttribute("href")).includes(subject.id));
     await page.goto(base + "b/" + board.id + "?thread=1");
     assert.equal(
       (await host.read("boardThread", { boardId: board.id, thread: 1 })).replies.length,
       2
     );
+    assert.equal(Number(await divider.getAttribute("aria-valuenow")), savedWidth);
     await thread.getByRole("link", { name: "Sent to Coordinator · Release room" }).click();
+    const chatType = await page
+      .getByText("The release checklist is ready.", { exact: true })
+      .first()
+      .evaluate((el) => [getComputedStyle(el).fontSize, getComputedStyle(el).lineHeight]);
+    assert.deepEqual(boardType, chatType);
     await page
       .getByText(/From #release-desk · thread 1/)
       .first()
       .waitFor();
-    await boardRow.click();
-    await rootRow.getByRole("button", { name: "2 replies" }).click();
+    const card = page.getByRole("link", { name: "Open #release-desk" });
+    const chatBox = page.locator('[data-slot="main-content"] textarea').first();
+    const sendChat = async (text) => {
+      await chatBox.fill(text);
+      await chatBox.press("Enter");
+    };
 
     // The chat can work in Plan, but a delivery needs a turn that can answer the person.
     const idle = () =>
       until(async () => (await host.read("session", { sessionId: sid })).status === "idle");
-    const chatTurn = (content, permissionMode) =>
+    const publish = (content) =>
       host.write("sendMessage", {
         sessionId: sid,
         turnId: crypto.randomUUID(),
         content,
         agentHarness: "claude-code",
         model: "sonnet",
-        permissionMode,
+        permissionMode: "bypass_permissions",
       });
     await idle();
     const planRead = once(child, "message", { signal: AbortSignal.timeout(18000) });
-    await chatTurn(planPrompt, "plan");
+    await sendChat("/plan " + planPrompt);
     const [outcome] = await planRead;
     assert.equal(outcome, "read-in-plan");
-    await page.getByRole("button", { name: "Close thread" }).click();
+    await card.click();
     const channel = page.getByRole("textbox", { name: "Message #release-desk" });
     await channel.fill(handoff);
     await channel.press("Enter");
@@ -281,8 +367,16 @@ async function run() {
     assert.equal((await host.read("queuedMessages", { sessionId: sid })).items.length, 0);
     child.send("finish-plan");
     await idle();
-    await chatTurn("Resume full access", "bypass_permissions");
+    await rootRow.getByRole("button", { name: "2 replies" }).click();
+    await thread.getByRole("link", { name: "Sent to Coordinator · Release room" }).click();
+    const planChip = page.getByRole("button", { name: "Exit plan mode", exact: true });
+    await planChip.waitFor();
+    await sendChat("/plan");
+    await planChip.waitFor({ state: "hidden" });
+    await sendChat("Resume full access");
+    await page.getByText("Resume full access", { exact: true }).first().waitFor();
     await idle();
+    await card.click();
     await refused.getByRole("button", { name: "Send again" }).click();
     await refused.getByRole("link", { name: "Sent to Coordinator · Release room" }).waitFor();
     await refused.getByRole("button", { name: /1 reply/ }).click();
@@ -306,9 +400,14 @@ async function run() {
     await phone.goBack();
     await phone.getByRole("region", { name: "Channel messages" }).waitFor();
 
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await page.getByRole("button", { name: "Back to channel" }).waitFor();
+    assert.equal(await page.getByRole("region", { name: "Channel messages" }).count(), 0);
+    assert.equal(await page.locator("[aria-label='Channel messages']").count(), 1);
+    await page.setViewportSize({ width: 1440, height: 900 });
     await mobile.close();
     await page.getByRole("button", { name: "Close thread" }).click();
-    await chatTurn("Publish the checklist history", "bypass_permissions");
+    await publish("Publish the checklist history");
     await feed.getByText(`Checklist item ${historySize}`, { exact: true }).waitFor();
     await idle();
     await page.reload();
@@ -332,7 +431,7 @@ async function run() {
     await feed.evaluate(async () => {
       for (let frame = 0; frame < 15; frame++) await new Promise(requestAnimationFrame);
     });
-    await chatTurn("Publish the latest update", "bypass_permissions");
+    await publish("Publish the latest update");
     await feed.getByText("Final checklist update", { exact: true }).waitFor();
     await until(
       () => feed.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop <= 1),
