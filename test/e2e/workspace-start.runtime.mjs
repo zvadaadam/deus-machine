@@ -337,6 +337,22 @@ try {
     "New workspace and a project's + both open Home, ready to type, with the project chosen; no dialog"
   );
 
+  const homeLayout = () =>
+    a.getByRole("heading", { name: "What are we building?" }).evaluate((heading) => {
+      const pane = heading.parentElement.getBoundingClientRect();
+      const top = heading.getBoundingClientRect().top - pane.top;
+      const bottom = heading.nextElementSibling.getBoundingClientRect().bottom - pane.top;
+      return { top, bottom, middle: (top + bottom) / 2, target: 0.45 * pane.height };
+    });
+  assert.equal(await composer(a).inputValue(), "");
+  const empty = await homeLayout();
+  assert(Math.abs(empty.middle - empty.target) <= 2, "The empty block sits at 45% of the pane");
+  await composer(a).fill("One\nTwo\nThree\nFour\nFive\nSix");
+  const grown = await homeLayout();
+  assert(grown.bottom > empty.bottom, "Six lines grow the composer");
+  assert(Math.abs(grown.top - empty.top) <= 0.5, "The heading stays in place");
+  check("Home's empty block sits at 45% of its pane and typing six lines keeps the heading still");
+
   // ── 3. A start that fails, from the composer: the project's branch does not exist.
   await composer(a).fill("Add a dark mode toggle to the settings page");
   await composer(a).press("Enter");
