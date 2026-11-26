@@ -8,7 +8,7 @@ import {
 } from "@/features/workspace/store/workspaceLayoutStore";
 import { getBaseURL } from "@/shared/config/api.config";
 import { call } from "@/platform/ws";
-import { deviceKey } from "./devices";
+import { canClearMissingDevice, deviceKey } from "./devices";
 
 const recoveryMs = 30_000;
 
@@ -123,13 +123,14 @@ export function useDeviceSelection(
   useEffect(() => {
     if (!list.isSuccess || !list.isFetchedAfterMount || !id) return;
     if (!selected) {
-      choose(null);
+      if (canClearMissingDevice(id, list.data.detail)) choose(null);
     } else if (recoverUntil && Date.now() < recoverUntil && selected.booted && start.isIdle) {
       attach(selected, false);
     }
   }, [
     attach,
     id,
+    list.data,
     list.isSuccess,
     list.isFetchedAfterMount,
     recoverUntil,

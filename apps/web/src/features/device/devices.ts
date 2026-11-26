@@ -1,6 +1,12 @@
-import { deviceIdentity, type HubDevice } from "@shared/types/device-hub";
+import { deviceIdentity, type HubDevice, type HubInventory } from "@shared/types/device-hub";
 
 export const deviceKey = (device: HubDevice) => device.platform + ":" + deviceIdentity(device);
+
+export function canClearMissingDevice(key: string, detail: HubInventory["detail"]) {
+  return !Object.entries(detail).some(
+    ([platform, error]) => key.startsWith(platform + ":") && error !== null
+  );
+}
 
 export const deviceSetup = {
   ios: {
