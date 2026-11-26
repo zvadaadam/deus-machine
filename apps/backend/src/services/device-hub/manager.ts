@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { subscriptionKey } from "@deus/runtime-client";
 import type { HubView } from "@shared/api/device-hub";
 import { createBackendChildEnv } from "@shared/lib/child-env";
-import { HUB_STREAM_MODE, type HubStatus } from "@shared/types/device-hub";
+import { HUB_STREAM_MODE, type DeviceSetup, type HubStatus } from "@shared/types/device-hub";
 import { getErrorMessage } from "@shared/lib/errors";
 import { launch } from "./process";
 import { bootIdentity } from "./simctl";
@@ -63,6 +63,7 @@ async function discover(
 interface HubOptions {
   directory: string;
   changed: (status: HubStatus, view: HubView) => void;
+  setupChanged: () => void;
   idleMs?: number;
 }
 
@@ -74,6 +75,7 @@ export class DeviceHub {
   private controller?: AbortController;
   private running?: Promise<void>;
   private disposed = false;
+  private installed?: boolean;
 
   constructor(private readonly options: HubOptions) {}
 
@@ -109,11 +111,41 @@ export class DeviceHub {
     return { platform: view.platform, id: view.deviceId };
   }
 
-  async setupState() {
-    if (this.status.phase === "error") return "failed";
-    if (this.status.phase === "ready") return "ready";
-    if (this.status.phase !== "idle") return "working";
-    return (await validInstall(await installPath(this.options.directory))) ? "ready" : "new";
+  async initializeSetup() {
+    try {
+      const installed = await validInstall(await installPath(this.options.directory));
+      // A simultaneous first viewer may already have validated or installed a newer tree.
+      if (this.installed === undefined) this.setInstalled(installed);
+    } catch (error) {
+      if (this.installed !== undefined || this.status.phase !== "idle") return;
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") this.setInstalled(false);
+      else
+        this.set({
+          phase: "error",
+          message: "Devices could not be set up.",
+          detail: getErrorMessage(error),
+        });
+    }
+  }
+
+  setupState(): DeviceSetup {
+    switch (this.status.phase) {
+      case "error":
+        return { setup: "failed", error: this.status.detail };
+      case "idle":
+        return { setup: this.installed ? "ready" : "new", error: null };
+      case "ready":
+        return { setup: "ready", error: null };
+      case "starting":
+      case "installing":
+        return { setup: "working", error: null };
+    }
+  }
+
+  private setInstalled(installed: boolean) {
+    if (this.installed === installed) return;
+    this.installed = installed;
+    this.options.setupChanged();
   }
 
   retry() {
@@ -155,6 +187,7 @@ export class DeviceHub {
 
   private set(status: HubStatus) {
     this.status = status;
+    this.options.setupChanged();
     const scopes = new Map([...this.views].map((view) => [subscriptionKey(view), view]));
     for (const view of scopes.values()) this.options.changed(status, view);
   }
@@ -192,9 +225,11 @@ export class DeviceHub {
     signal.throwIfAborted();
     const run = await prepareDirectories(base);
     const installed = await installPath(base);
-    if (!(await validInstall(installed))) {
+    this.setInstalled(await validInstall(installed));
+    if (!this.installed) {
       this.set({ phase: "installing" });
       await installHub(base, installed, env, signal);
+      this.setInstalled(true);
       this.set({ phase: "starting" });
     }
 

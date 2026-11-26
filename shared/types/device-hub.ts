@@ -23,12 +23,15 @@ export interface HubInventory {
   detail: Record<HubDevice["platform"], string | null>;
 }
 
+export interface DeviceSetup {
+  setup: "new" | "working" | "ready" | "failed";
+  error: string | null;
+}
+
 export type DeviceSupport =
   | { liveView: "remote" }
   | {
       liveView: "available" | "unsupported" | "no-runtime";
-      setup: "new" | "working" | "ready" | "failed";
-      error: string | null;
       xcode: { available: boolean; version: string | null };
       android: boolean;
       hubVersion: string;

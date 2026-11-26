@@ -26,7 +26,7 @@ it("answers remote Settings without probing SDKs or the local installation", asy
   }
 });
 
-it("caches independent platform checks and reads setup without starting the hub", async () => {
+it("caches independent platform checks without starting the hub", async () => {
   vi.useFakeTimers();
   try {
     for (const ios of [true, false])

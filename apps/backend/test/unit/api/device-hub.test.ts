@@ -28,9 +28,11 @@ describe("Device Hub access", () => {
     { deviceId: "phone", assistant: null, relayed: false },
     { deviceId: null, assistant: null, relayed: true },
   ])("answers remote Settings without host details for %o", async (caller) => {
-    expect(await operations(handlers, caller)(api.deviceSupport, {})).toEqual({
+    const call = operations(handlers, caller);
+    expect(await call(api.deviceSupport, {})).toEqual({
       liveView: "remote",
     });
+    await expect(call(api.deviceSetup)).rejects.toThrow("on this computer");
   });
 
   it("refuses device operations from a paired viewer", async () => {

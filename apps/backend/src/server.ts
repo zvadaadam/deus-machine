@@ -48,6 +48,7 @@ Sentry.init({
 
 // Initialize database
 const db = initDatabase();
+void deviceHub.initializeSetup();
 // Assistants unused for a month are forgotten (also whenever the list is read).
 forgetUnusedAssistants();
 deleteEmptyUnnamedProjects();

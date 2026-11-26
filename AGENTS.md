@@ -107,10 +107,11 @@ of full access restarts `agy` and resumes the conversation.
 
 The Device tab streams iOS Simulators and Android emulators over WebRTC on an
 Apple silicon Mac in the desktop app or `dev:web`. Settings → Devices reads
-`deviceSupport` for the local runtime, Xcode and Android SDK. Opening the tab
-installs the pinned hub beside the database. The backend owns one loopback
-process and stops it three minutes after the last viewer leaves. A cloud
-workspace's Device tab shows the EAS viewer through the backend. Hosted web is chat-only.
+`deviceSupport` for the local runtime, Xcode and Android SDK and follows
+`deviceSetup` for installation progress. Opening the tab installs the pinned
+hub beside the database. The backend owns one loopback process and stops it
+three minutes after the last viewer leaves. A cloud workspace's Device tab
+shows the EAS viewer through the backend. Hosted web is chat-only.
 
 - **Agents.** Deus ships the pinned `agent-device` CLI on the agents' PATH,
   including on Intel Macs. `scripts/runtime/agent-clis.ts` stages the package

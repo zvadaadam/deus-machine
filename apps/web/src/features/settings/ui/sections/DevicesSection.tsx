@@ -1,13 +1,14 @@
 import type { ReactNode } from "react";
 import { CheckCircle2, Circle } from "lucide-react";
-import { useMutation } from "@tanstack/react-query";
-import { retryDeviceHub } from "@shared/api/device-hub";
-import type { DeviceSupport } from "@shared/types/device-hub";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { deviceSetup, retryDeviceHub } from "@shared/api/device-hub";
+import type { DeviceSetup, DeviceSupport } from "@shared/types/device-hub";
 import { getErrorMessage } from "@shared/lib/errors";
 import { Button } from "@/components/ui/button";
 import { useDeviceSupport } from "@/features/device/useDeviceSupport";
 import { DeviceSetupLink } from "@/features/device/DeviceSetupLink";
 import { call } from "@/platform/ws";
+import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 
 function Row({
   label,
@@ -35,24 +36,32 @@ function Row({
   );
 }
 
-function tabStatus(s: Exclude<DeviceSupport, { liveView: "remote" }>) {
-  if (s.liveView === "unsupported") return "Needs a Mac with Apple silicon";
-  if (s.liveView === "no-runtime") return "Device runtime unavailable";
+function tabStatus(liveView: DeviceSupport["liveView"], setup: DeviceSetup["setup"] | undefined) {
+  if (liveView === "unsupported") return "Needs a Mac with Apple silicon";
+  if (liveView === "no-runtime") return "Device runtime unavailable";
+  if (!setup) return "Checking setup…";
   return {
     ready: "Ready",
     new: "Sets up the first time you open it",
     working: "Setting up devices…",
     failed: "Setup failed",
-  }[s.setup];
+  }[setup];
 }
 
 export function DevicesSection() {
-  const support = useDeviceSupport({ refreshSetup: true });
-  const retry = useMutation({
-    mutationFn: () => call(retryDeviceHub),
-    onSettled: () => support.refetch(),
-  });
+  const support = useDeviceSupport();
   const data = support.data;
+  const enabled = data?.liveView === "available";
+  const queryKey = [deviceSetup.name];
+  useQuerySubscription(deviceSetup, { queryKey, enabled });
+  const setup = useQuery({
+    queryKey,
+    queryFn: () => call(deviceSetup),
+    enabled,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+  const retry = useMutation({ mutationFn: () => call(retryDeviceHub) });
   return (
     <section className="space-y-5">
       <div>
@@ -68,17 +77,23 @@ export function DevicesSection() {
         <div className="space-y-3">
           <Row
             label="Device tab"
-            ready={data.liveView === "available" && data.setup === "ready"}
-            status={tabStatus(data)}
+            ready={enabled && setup.data?.setup === "ready"}
+            status={
+              setup.error && enabled
+                ? getErrorMessage(setup.error)
+                : tabStatus(data.liveView, setup.data?.setup)
+            }
             detail={
               <>
                 Open it from New Tab → Device.
                 <span className="text-text-muted mt-0.5 block text-xs">
                   Expo Device Hub {data.hubVersion}
                 </span>
-                {data.liveView === "available" && data.setup === "failed" && (
+                {enabled && setup.data?.setup === "failed" && (
                   <>
-                    {data.error && <p className="mt-1 whitespace-pre-wrap">{data.error}</p>}
+                    {setup.data.error && (
+                      <p className="mt-1 whitespace-pre-wrap">{setup.data.error}</p>
+                    )}
                     <Button
                       variant="outline"
                       size="xs"

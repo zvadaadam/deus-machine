@@ -212,7 +212,7 @@ describe("agentService.startTurn", () => {
   });
 
   it("names the live device on a turn and drops it when the view is gone", async () => {
-    const hub = new DeviceHub({ directory: "/unused", changed: () => {} });
+    const hub = new DeviceHub({ directory: "/unused", changed: () => {}, setupChanged: () => {} });
     hub.status = { phase: "ready", instance: "hub" };
     hub.endpoint = { origin: "http://127.0.0.1", token: "fixture" };
     vi.spyOn(deviceHub, "displayedDevice").mockImplementation((workspace) =>

@@ -19,6 +19,10 @@ openWith(api.deviceHubStatus, () => [deviceHub.status]);
 
 export default [
   handle(api.deviceSupport, (_, { caller }) => deviceSupport(caller.relayed || !!caller.deviceId)),
+  handle(api.deviceSetup, (_, { caller }) => {
+    requireLocal(caller.relayed, caller.deviceId);
+    return deviceHub.setupState();
+  }),
   handle(api.deviceHubDevices, (_, { caller }) => {
     requireLocal(caller.relayed, caller.deviceId);
     return listHubDevices(deviceHub.endpoint);

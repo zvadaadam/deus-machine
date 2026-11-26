@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { chmod, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { launch, stopGroup } from "./process";
+import { launch } from "./process";
 import { hubManifest, hubVersion } from "./support";
 
 const packagePath = "node_modules/expo-device-hub";
@@ -38,15 +38,9 @@ export async function withTempDirectory(prefix: string, use: (directory: string)
 
 async function removeLeftovers(parent: string, prefix: string) {
   for (const entry of await readdir(parent, { withFileTypes: true })) {
-    if (!entry.isDirectory() || !entry.name.startsWith(prefix)) continue;
-    const directory = join(parent, entry.name);
-    try {
-      const group = Number(await readFile(join(directory, "group.pid"), "utf8"));
-      if (Number.isSafeInteger(group) && group > 1) await stopGroup(group);
-    } catch (error) {
-      if (!hasCode(error, "ENOENT")) throw error;
+    if (entry.isDirectory() && entry.name.startsWith(prefix)) {
+      await rm(join(parent, entry.name), { recursive: true, force: true });
     }
-    await rm(directory, { recursive: true, force: true });
   }
 }
 

@@ -1,9 +1,17 @@
 import { z } from "zod";
-import type { DeviceSupport, HubDevice, HubInventory, HubStatus } from "../types/device-hub";
-import { out, read, write } from "./op";
+import type {
+  DeviceSetup,
+  DeviceSupport,
+  HubDevice,
+  HubInventory,
+  HubStatus,
+} from "../types/device-hub";
+import { live, out, read, write } from "./op";
 import { stream, type ScopeOf } from "./stream";
 
 export const deviceSupport = read({ name: "deviceSupport", output: out<DeviceSupport>() });
+
+export const deviceSetup = live({ name: "deviceSetup", output: out<DeviceSetup>() });
 
 export const deviceHubStatus = stream({
   name: "deviceHubStatus",

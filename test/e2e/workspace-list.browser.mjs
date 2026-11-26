@@ -18,6 +18,7 @@ const evidence = path.join(root, ".context/workspace-list");
 await mkdir(evidence, { recursive: true });
 const directory = await mkdtemp(path.join(evidence, "run-"));
 const database = path.join(directory, "deus.db");
+const releaseDeviceInstall = path.join(directory, "release-device-install");
 const stack = createStack({ root, directory });
 const spawnToken = crypto.randomUUID();
 let backend, db, server, browser, host, baseUrl, local, remote, offline, upstream;
@@ -71,6 +72,8 @@ async function startBackend(port = "0") {
       DEUS_USER_DATA_DIR: directory,
       TMPDIR: directory,
       DEUS_BUNDLED_BIN_DIR: path.join(root, "test/e2e/fixtures/github"),
+      DEUS_RUNTIME_EXECUTABLE: path.join(root, "apps/backend/test/fixtures/device-hub-runtime.mjs"),
+      DEUS_TEST_DEVICE_INSTALL_GATE: releaseDeviceInstall,
       DEUS_TEST_MERGED_HEAD: path.join(directory, "merged-head"),
     },
   });
@@ -152,6 +155,31 @@ async function openWorkspaceTool(page, name) {
   await newTabView.getByRole("button", { name, exact: true }).click();
   await existing.waitFor();
 }
+
+test(
+  "open Settings follows device setup started in another window",
+  {
+    skip: process.platform !== "darwin" || process.arch !== "arm64",
+  },
+  async (t) => {
+    const settings = await tab(t);
+    const viewer = await tab(t);
+    const ws = await start(local, "Device setup");
+    await settings.goto(`${baseUrl}/settings`);
+    await settings.getByRole("button", { name: "Devices", exact: true }).click();
+    const row = settings.getByRole("heading", { name: "Device tab", exact: true }).locator("../..");
+    await row.getByText("Sets up the first time you open it", { exact: true }).waitFor();
+    assert.deepEqual(await backend.read("deviceSetup"), { setup: "new", error: null });
+
+    await viewer.goto(`${baseUrl}/w/${ws.id}`);
+    await openWorkspaceTool(viewer, "Device");
+    await viewer.getByText("Setting up devices…", { exact: true }).waitFor();
+    await row.getByText("Setting up devices…", { exact: true }).waitFor();
+    await writeFile(releaseDeviceInstall, "");
+    await row.getByText("Ready", { exact: true }).waitFor();
+    await viewer.getByRole("button", { name: "Choose device" }).waitFor();
+  }
+);
 
 test("a linked chat leaves the saved tab unread and shows its background work", async (t) => {
   const page = await tab(t);

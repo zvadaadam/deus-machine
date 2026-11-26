@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import {
-  chmod,
   mkdir,
   mkdtemp,
   readFile,
@@ -18,7 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { hubManifest, hubVersion } from "../../../src/services/device-hub/support";
 import { cliPath, installPath } from "../../../src/services/device-hub/storage";
 import { DeviceHub } from "../../../src/services/device-hub/manager";
-import type { HubStatus } from "@shared/types/device-hub";
+import type { DeviceSetup, HubStatus } from "@shared/types/device-hub";
 
 vi.mock("../../../src/services/device-hub/support", async (original) => ({
   ...(await original<typeof import("../../../src/services/device-hub/support")>()),
@@ -32,51 +31,24 @@ describe("Device Hub lifecycle", () => {
   let directory: string;
   let hub: DeviceHub;
   let phases: HubStatus[];
+  let setupChanges: DeviceSetup[];
   let installed: string;
   let base: string;
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), "deus-hub-test-"));
     phases = [];
+    setupChanges = [];
     base = join(directory, "hub");
     installed = await installPath(base);
-    const runtime = join(directory, "runtime");
-    await writeFile(
-      runtime,
-      `#!/usr/bin/env node
-const fs = require("node:fs");
-if (process.env.BUN_BE_BUN !== "1") process.exit(20);
-if (process.argv[2] === "install") {
-  if (!process.argv.includes("--frozen-lockfile") || !fs.existsSync("bun.lock")) process.exit(21);
-  fs.appendFileSync(require("node:path").join(process.cwd(), "..", "install-count"), "1");
-  fs.mkdirSync("node_modules/expo-device-hub/dist/server", { recursive: true });
-  fs.writeFileSync("node_modules/expo-device-hub/package.json", JSON.stringify({version: "${hubVersion}"}));
-  fs.writeFileSync("node_modules/expo-device-hub/dist/server/cli.mjs", "");
-  if (process.env.FIXTURE_OFFLINE) console.error("Could not download package\\nregistry connection timed out");
-  process.exit(process.env.FIXTURE_OFFLINE ? 1 : 0);
-}
-const directory = process.env.EXPO_DEVICE_HUB_STATE_DIR;
-if (!process.argv.includes("--require-token") || process.argv[process.argv.indexOf("--host") + 1] !== "127.0.0.1") process.exit(22);
-if ((fs.statSync(directory).mode & 0o777) !== 0o700 || (fs.statSync(process.env.SERVE_SIM_STATE_DIR).mode & 0o777) !== 0o700 || fs.readdirSync(directory).length) process.exit(23);
-process.on("SIGTERM", () => { if (!process.env.FIXTURE_STUCK) process.exit(0); });
-fs.writeFileSync(directory + "/pid", String(process.pid));
-if (process.env.FIXTURE_BROKEN) { fs.unlinkSync(process.argv[2]); process.exit(24); }
-if (process.env.FIXTURE_MONITOR) require("node:child_process").spawn(process.execPath, ["-e",
-  'process.on("SIGTERM", () => {}); require("node:fs").writeFileSync(process.env.EXPO_DEVICE_HUB_STATE_DIR+"/monitor", String(process.pid)); setInterval(()=>{}, 1000);'
-], {stdio:"ignore"});
-function publish(port, pid) {
-  fs.writeFileSync(directory + "/server-" + port + ".json", JSON.stringify({pid, port, url:"http://127.0.0.1:" + port, token: "x".repeat(43)}), {mode:0o600});
-}
-publish(19820, process.pid + 1);
-if (!process.env.FIXTURE_NO_DISCOVERY) publish(19821, process.pid);
-setInterval(() => {}, 1000);
-`
+    vi.stubEnv(
+      "DEUS_RUNTIME_EXECUTABLE",
+      join(import.meta.dirname, "../../fixtures/device-hub-runtime.mjs")
     );
-    await chmod(runtime, 0o755);
-    vi.stubEnv("DEUS_RUNTIME_EXECUTABLE", runtime);
     hub = new DeviceHub({
       directory: base,
       idleMs: 80,
+      setupChanged: () => setupChanges.push(hub.setupState()),
       changed: (s) => phases.push(s),
     });
   });
@@ -96,20 +68,32 @@ setInterval(() => {}, 1000);
   };
 
   it("installs once, shares one process, and reuses it across a brief disconnect", async () => {
+    await hub.initializeSetup();
+    expect(setupChanges).toEqual([{ setup: "new", error: null }]);
+    expect(hub.status.phase).toBe("idle");
     const leave = hub.follow(view);
     const leaveSecond = hub.follow(view);
     await wait("ready");
     const pid = await readFile(await state("pid"), "utf8");
+    expect([...new Set(setupChanges.map((state) => state.setup))]).toEqual([
+      "new",
+      "working",
+      "ready",
+    ]);
     expect(phases.filter((s) => s.phase === "installing")).toHaveLength(1);
     expect(JSON.stringify(phases)).not.toContain("token");
-    expect(hub.endpoint?.origin).toBe("http://127.0.0.1:19821");
-    expect((await stat(await state("server-19821.json"))).mode & 0o777).toBe(0o600);
+    const { hostname, port } = new URL(hub.endpoint!.origin);
+    expect(hostname).toBe("127.0.0.1");
+    expect(port).not.toBe("1");
+    expect((await stat(await state(`server-${port}.json`))).mode & 0o777).toBe(0o600);
     leave();
     leaveSecond();
     const reopen = hub.follow(view);
     expect(await readFile(await state("pid"), "utf8")).toBe(pid);
+    setupChanges.length = 0;
     reopen();
     await wait("idle");
+    expect(setupChanges).toEqual([{ setup: "ready", error: null }]);
     expect(hub.endpoint).toBeNull();
     expect(await readdir(join(base, "run"))).toEqual([]);
     hub.follow(view);
@@ -151,6 +135,10 @@ setInterval(() => {}, 1000);
       message: "Devices could not be set up.",
       detail: "Could not download package\nregistry connection timed out",
     });
+    expect(setupChanges.at(-1)).toEqual({
+      setup: "failed",
+      error: "Could not download package\nregistry connection timed out",
+    });
     const wrongPackage = join(installed, "node_modules/expo-device-hub");
     await mkdir(wrongPackage, { recursive: true });
     await writeFile(join(wrongPackage, "package.json"), JSON.stringify({ version: "0.25.0" }));
@@ -165,8 +153,7 @@ setInterval(() => {}, 1000);
     hub.follow(view);
     await wait("error");
     await expect(stat(join(installed, cliPath))).rejects.toMatchObject({ code: "ENOENT" });
-    const sibling = new DeviceHub({ directory: base, changed: () => {} });
-    expect(await sibling.setupState()).toBe("new");
+    expect(hub.setupState()).toEqual({ setup: "failed", error: expect.any(String) });
     vi.stubEnv("FIXTURE_BROKEN", "");
     hub.retry();
     await wait("ready");
@@ -197,7 +184,8 @@ setInterval(() => {}, 1000);
           await unlink(alias);
           await writeFile(alias, "");
         }
-        expect(await deviceHub.setupState()).toBe(expected);
+        await deviceHub.initializeSetup();
+        expect(deviceHub.setupState()).toEqual({ setup: expected, error: null });
       } finally {
         closeDatabase();
       }
@@ -219,42 +207,38 @@ setInterval(() => {}, 1000);
     }
     const other = await installPath(base);
     expect(other).not.toBe(installed);
-    expect(await hub.setupState()).toBe("new");
+    hub = new DeviceHub({ directory: base, changed: () => {}, setupChanged: () => {} });
+    await hub.initializeSetup();
+    expect(hub.setupState().setup).toBe("new");
     hub.follow(view);
     await wait("ready");
     for (const path of [installed, other])
       expect((await stat(join(path, cliPath))).isFile()).toBe(true);
   });
 
-  it("reaps a leftover group and removes abandoned runs and staging before starting", async () => {
+  it("removes stale runs and staging while leaving an unrelated process group alive", async () => {
     const runs = join(base, "run");
     const leftover = join(runs, "previous");
     await mkdir(leftover, { recursive: true });
     await mkdir(join(runs, "partial"));
     await mkdir(join(base, ".install-partial"));
-    const child = spawn(
-      process.execPath,
-      [
-        "-e",
-        `process.on("SIGTERM", () => {});
-         setInterval(() => {}, 1000);
-         process.send("ready");`,
-      ],
-      { detached: true, stdio: ["ignore", "ignore", "ignore", "ipc"] }
-    );
-    const exited = once(child, "exit");
+    const sleep = spawn("sleep", ["60"], { detached: true, stdio: "ignore" });
+    const exited = once(sleep, "exit");
     try {
-      await once(child, "message");
-      await writeFile(join(leftover, "group.pid"), String(child.pid));
+      await once(sleep, "spawn");
+      const group = sleep.pid!;
+      await writeFile(join(leftover, "group.pid"), String(group));
+      const signal = vi.spyOn(process, "kill");
       hub.follow(view);
       await wait("ready");
-      expect(child.signalCode).toBe("SIGKILL");
-      expect(await readdir(runs)).toHaveLength(1);
-      await hub.shutdown();
-      expect(await readdir(runs)).toEqual([]);
+      const remaining = await readdir(runs);
+      expect(remaining).not.toContain("previous");
+      expect(remaining).not.toContain("partial");
       expect((await readdir(base)).filter((name) => name.startsWith(".install-"))).toEqual([]);
+      expect(sleep.kill(0)).toBe(true);
+      expect(signal).not.toHaveBeenCalledWith(-group, expect.anything());
     } finally {
-      child.kill("SIGKILL");
+      sleep.kill("SIGKILL");
       await exited;
     }
   });
@@ -264,7 +248,7 @@ setInterval(() => {}, 1000);
     hub.follow(view);
     await vi.waitFor(
       async () => {
-        await stat(await state("server-19820.json"));
+        await stat(await state("server-1.json"));
       },
       { timeout: 5000 }
     );

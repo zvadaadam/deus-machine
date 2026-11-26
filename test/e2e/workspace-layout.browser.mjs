@@ -181,8 +181,6 @@ const server = await createServer({
           if (resource === "deviceSupport")
             return json({
               liveView: "available",
-              setup: "new",
-              error: null,
               xcode: { available: true, version: "27.1" },
               android: androidAvailable,
               hubVersion: "fixture",

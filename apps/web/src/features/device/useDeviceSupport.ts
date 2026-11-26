@@ -8,7 +8,7 @@ export function localDeviceRenderer(mode: DeploymentMode) {
   return mode === "electron" || mode === "web-dev";
 }
 
-export function useDeviceSupport({ enabled = true, refreshSetup = false } = {}) {
+export function useDeviceSupport({ enabled = true } = {}) {
   const mode = getDeploymentMode();
   return useQuery({
     queryKey: ["deviceSupport"],
@@ -16,13 +16,6 @@ export function useDeviceSupport({ enabled = true, refreshSetup = false } = {}) 
     enabled: enabled && mode !== "web-direct",
     staleTime: 60_000,
     refetchOnMount: "always",
-    // Following deviceHubStatus would start the hub just by opening Settings.
-    refetchInterval: (q) => {
-      const data = q.state.data;
-      return refreshSetup && data?.liveView === "available" && data.setup === "working"
-        ? 1000
-        : false;
-    },
     select: (data): DeviceSupport => (localDeviceRenderer(mode) ? data : { liveView: "remote" }),
   });
 }

@@ -15,7 +15,7 @@ function signalGroup(pid: number, signal: NodeJS.Signals | 0) {
   }
 }
 
-export async function stopGroup(pid: number | undefined) {
+async function stopGroup(pid: number | undefined) {
   if (!pid || !signalGroup(pid, "SIGTERM")) return;
   const deadline = Date.now() + graceMs;
   while (signalGroup(pid, 0)) {
@@ -34,13 +34,12 @@ function guardGroup(pid: number, directory: string) {
     "/bin/sh",
     [
       "-c",
-      `printf '%s' "$1" > "$3/group.pid"
-       if ! read -r result && kill -TERM "-$1" 2>/dev/null; then
+      `if ! read -r result && kill -TERM "-$1" 2>/dev/null; then
          sleep "$2"
          kill -KILL "-$1" 2>/dev/null
          while kill -0 "-$1" 2>/dev/null; do sleep 0.05; done
        fi
-       if [ "$result" = "installed" ]; then rm -f -- "$3/group.pid"; else rm -rf -- "$3"; fi`,
+       if [ "$result" != "installed" ]; then rm -rf -- "$3"; fi`,
       "deus-device-group",
       String(pid),
       String(graceMs / 1000),
