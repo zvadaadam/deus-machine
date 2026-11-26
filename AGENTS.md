@@ -303,10 +303,6 @@ After rechecking the recorded path and counts, `workspace-lifecycle.ts` unlinks 
 the project, its workspaces, chats and boards. The folder, checkouts and Git branches stay on disk.
 Startup also clears automation links before deleting empty-named projects with no workspaces.
 
-Only the person can make a local workspace a coordinator, with the flag on Home or “Make coordinator” in its row menu.
-A chat pins its board tools at its first ask. A conversation already started keeps its tools, and the promotion explains that new chats coordinate and opens the workspace with its New chat action. Archiving the workspace hides its boards from the sidebar.
-Their links still open for reading. Restoring the workspace brings the boards back. Removing its project deletes them.
-
 A workspace is created in one place: Home, whose composer sends the first
 message with it. Everything that wants one goes there through
 `openNewWorkspace({ repoId?, draft? })` (`features/workspace/lib/newWorkspace.ts`):
@@ -455,6 +451,20 @@ has no composer: nothing typed there could be sent.
 
 `bun run test:e2e:workspace-start` runs these against the real backend, git and
 web app (see `test/e2e/README.md`).
+
+### Coordinator boards
+
+A coordinator directs work in other local workspaces and reports to the person on a board.
+Only the person can make one, with Home’s Coordinator flag or the workspace menu’s one-way “Make coordinator”.
+Each chat pins its tools in `sessions.board_tools` before its agent conversation starts.
+A fresh chat in a coordinator workspace gets `create_board`, `read_board` and `post_to_board`
+from `services/boards/tools.ts`. The workspace owns its boards across chats.
+
+A person’s post ID is the turn ID that delivers it. `preserveTurnId` keeps it through the queue.
+The receipt is waiting while queued or sending, delivered after the initial user echo, or not delivered with “Send again”.
+The channel and open thread follow the live `boardChannel` and `boardThread` reads.
+Archiving the workspace hides its boards from the sidebar and leaves their links readable. Restore brings them back.
+Removing the project deletes its boards. Posts elsewhere about a removed workspace keep their words and lose the workspace link.
 
 ### Remote access (relay)
 

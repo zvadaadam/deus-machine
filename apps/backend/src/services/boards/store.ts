@@ -31,6 +31,16 @@ export function boardDetail(id: string): Board | null {
       .get(id) ?? null
   );
 }
+/** One lookup for all chats whose queues or echoes changed. */
+export function boardsForDeliveryChats(sessionIds: string[]) {
+  return getDatabase()
+    .prepare<[string], { id: string }>(
+      "SELECT id FROM boards WHERE delivery_session_id IN (SELECT value FROM json_each(?))"
+    )
+    .all(JSON.stringify(sessionIds))
+    .map((row) => row.id);
+}
+
 export function getBoard(id: string): Board {
   const board = boardDetail(id);
   if (!board) throw new NotFoundError("This board does not exist.");
@@ -172,7 +182,8 @@ export function savePost(
       ).run(seq, boardId, thread);
     return { post: getPost(boardId, seq), created: true };
   })();
-  if (result.created) invalidate(["boards", "boardChannel", "boardThread"], { boardIds: [boardId] });
+  if (result.created && "kind" in by)
+    invalidate(["boards", "boardChannel", "boardThread"], { boardIds: [boardId] });
   return result;
 }
 
@@ -214,3 +225,28 @@ function roots(board: string, activity: boolean, cursor: number) {
 export const readChannel = (board: string, before = Number.MAX_SAFE_INTEGER) =>
   roots(board, false, before);
 export const readThreads = (board: string, after = 0) => roots(board, true, after);
+
+/** The stored destination of this chat turn. Words in a prompt cannot address a board. */
+export function deliverySource(sessionId: string, turnId: string) {
+  return getDatabase()
+    .prepare<[string, string], { board: string; thread: number }>(
+      `SELECT board_id AS board,
+    COALESCE(thread_seq, seq) AS thread FROM board_messages
+    WHERE id = ? AND author_kind = 'person' AND delivery_session_id = ?`
+    )
+    .get(turnId, sessionId);
+}
+
+export function recordDelivery(
+  board: string,
+  seq: number,
+  sessionId: string | null,
+  refusal: string | null
+) {
+  getDatabase()
+    .prepare(
+      `UPDATE board_messages SET delivery_session_id = ?, delivery_refusal = ?
+    WHERE board_id = ? AND seq = ? AND author_kind = 'person' AND (delivery_session_id IS NOT ? OR delivery_refusal IS NOT ?)`
+    )
+    .run(sessionId, refusal, board, seq, sessionId, refusal);
+}

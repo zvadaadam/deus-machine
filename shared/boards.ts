@@ -41,13 +41,15 @@ export interface BoardThread extends BoardPost {
   last_reply_at: string | null;
 }
 
+type BoardDelivery = "waiting" | "delivered" | "not_delivered";
+export type BoardRow<T extends BoardPost = BoardPost> = T & { delivery?: BoardDelivery };
 export interface BoardChannelPage {
   board: Board;
-  posts: BoardThread[];
+  posts: BoardRow<BoardThread>[];
 }
 export interface BoardThreadPage {
-  root: BoardPost;
-  replies: BoardPost[];
+  root: BoardRow;
+  replies: BoardRow[];
   hasEarlier: boolean;
 }
 

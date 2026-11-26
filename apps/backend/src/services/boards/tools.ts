@@ -99,7 +99,7 @@ export function boardSource(sessionId: string): HostToolSource | undefined {
   return {
     name: "boards",
     instructions:
-      "Your workspace can coordinate boards. Use create_board, read_board and post_to_board. Write @you when the person needs to act.",
+      "Your workspace can coordinate boards. Use create_board, read_board and post_to_board. Write @you when the person needs to act. For a board delivery, call post_to_board before finishing. Omit board and thread to answer the originating thread.",
     tools,
     async call(name, args, caller) {
       const state = caller.sessionId === sessionId ? coordinatorState(sessionId) : undefined;
@@ -112,6 +112,14 @@ export function boardSource(sessionId: string): HostToolSource | undefined {
       const selected = tools.find((each) => each.name === name);
       if (!selected) throw refuse.unsupported("Unknown board tool.");
       try {
+        const source = name !== "create_board" && store.deliverySource(sessionId, caller.turnId);
+        if (source && name === "read_board")
+          return await selected.run({ board: source.board, ...args });
+        if (source && name === "post_to_board") {
+          if (args.board !== undefined && args.board !== source.board && args.thread === undefined)
+            throw refuse.unsupported("Name a thread when replying on a different board.");
+          return await selected.run({ ...source, ...args });
+        }
         return await selected.run(args);
       } catch (error) {
         if (error instanceof z.ZodError)

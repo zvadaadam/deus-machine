@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import type { Origin } from "@zvada/agent-server/protocol";
+import { echoMessageId, type Origin } from "@zvada/agent-server/protocol";
 import type { SessionTurn } from "@shared/types/session";
 
 interface TurnRow {
@@ -37,6 +37,38 @@ export function getTurn(
     .prepare("SELECT * FROM turns WHERE session_id = ? AND turn_id = ?")
     .get(sessionId, turnId) as TurnRow | undefined;
   return row && decodeTurn(row);
+}
+
+/** A turn's initial user echo is a receipt once its text is stored. Look up just the requested message IDs. */
+export function receivedUserTurns(
+  db: Database.Database,
+  requested: { sessionId: string; turnId: string }[]
+) {
+  if (!requested.length) return new Set<string>();
+  const rows = db
+    .prepare<[string], { turn_id: string }>(
+      `SELECT m.turn_id FROM json_each(?) r CROSS JOIN messages m ON m.id = json_extract(r.value, '$[0]')
+     WHERE m.session_id = json_extract(r.value, '$[1]') AND m.turn_id = json_extract(r.value, '$[2]') AND m.role = 'user'
+     AND m.steer_id IS NULL AND m.origin IS NULL AND EXISTS (SELECT 1 FROM parts p
+       WHERE p.message_id = m.id AND p.type = 'text' AND length(json_extract(p.data, '$.text')) > 0)`
+    )
+    .all(
+      JSON.stringify(
+        requested.map(({ sessionId, turnId }) => [echoMessageId(turnId), sessionId, turnId])
+      )
+    );
+  return new Set(rows.map((row) => row.turn_id));
+}
+
+/** Most recent turns first, including an outcome with no messages. */
+export function recentTurns(db: Database.Database, sessionId: string, limit = 50) {
+  return db
+    .prepare<[string, number], TurnRow>(
+      `SELECT * FROM turns WHERE session_id = ?
+    ORDER BY COALESCE(started_at, ended_at, 0) DESC, turn_id DESC LIMIT ?`
+    )
+    .all(sessionId, limit)
+    .map(decodeTurn);
 }
 
 /** Page-associated turns plus outcomes that have no message at all. A turn whose

@@ -138,6 +138,12 @@ export async function init({
       if (!known) return;
       if (event.type === "message.started" && event.role === "user" && event.steerId !== undefined)
         userEcho(sessionId, event.turnId, event.steerId);
+      if (
+        event.type === "message.part" &&
+        event.messageId === echoMessageId(event.turnId) &&
+        event.part.type === "text"
+      )
+        invalidate(["session"], { sessionIds: [sessionId] });
       // The sending head stays until its text is published. A message end carries only ids.
       if (event.type === "message.ended" && event.messageId === echoMessageId(event.turnId))
         userEcho(sessionId, event.turnId);

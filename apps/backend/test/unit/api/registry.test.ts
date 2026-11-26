@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { live, out, read, write } from "@shared/api/op";
+import { boards, postBoardMessage } from "@shared/api/boards";
 import { removeRepo } from "@shared/api/repos";
 import type { AssistantAccess } from "@shared/types/assistants";
 import { handle, LOCAL_CALLER, Registry } from "../../../src/api/registry";
@@ -114,6 +115,8 @@ describe("an assistant's reach", () => {
     handle(greet, ({ name }) => `hello ${name}`),
     handle(rename, () => {}),
     handle(removeRepo, () => {}),
+    handle(boards, () => []),
+    handle(postBoardMessage, () => ({ seq: 1 })),
     handle(count, () => 3),
     handle(agentMcp, ({ message }) => ({ answered: message })),
   ]);
@@ -122,6 +125,10 @@ describe("an assistant's reach", () => {
   it.each(["pending", "read", "operate"] as const)(
     "refuses a %s assistant everything but the operator tools, reads, writes and live reads alike",
     async (access) => {
+      expect(() => ops.runLive("boards", {}, assistant(access))).toThrow(/assistant/i);
+      await expect(
+        ops.run("postBoardMessage", "write", {}, assistant(access))
+      ).rejects.toMatchObject({ statusCode: 403 });
       await expect(
         ops.run("greet", "read", { name: "Ada" }, assistant(access))
       ).rejects.toMatchObject({

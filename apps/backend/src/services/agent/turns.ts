@@ -30,7 +30,13 @@ import {
   NotFoundError,
   ValidationError,
 } from "../../lib/errors";
-import { encodeOrigin, getSessionRaw, getTurn, getWorkspaceForMiddleware } from "../../db";
+import {
+  encodeOrigin,
+  getSessionRaw,
+  getTurn,
+  getWorkspaceForMiddleware,
+  receivedUserTurns,
+} from "../../db";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
 import { persistLastUserMessageAt, persistSessionStatus } from "./persistence";
 import { invalidate } from "../query-engine";
@@ -159,19 +165,34 @@ export function retryReadSteer(
   return true;
 }
 
+/** A sender that tracks the first user echo needs its own turn, including through the queue. */
+export type LocalSend = ParsedInputOf<typeof api.sendMessage> & { preserveTurnId?: true };
+
+/** An external post keeps its turn id across queue loss and a change of recipient. */
+export function requireUnusedTurn(sessionId: string, turnId: string) {
+  if (getTurn(getDatabase(), sessionId, turnId))
+    throw new ConflictError(
+      "This post's turn already ended in the chat. Open the chat to see what happened, or post it again."
+    );
+}
+
 /** Replay an admission without starting another turn. */
-export function previousSend(
-  input: ParsedInputOf<typeof api.sendMessage>,
-  turnId: string,
-  origin?: Origin
-) {
-  const known = admissionsOf.get(getDatabase())?.get(`${input.sessionId}\0${turnId}`);
+export function previousSend(input: LocalSend, turnId: string, origin?: Origin) {
+  const db = getDatabase();
+  if (
+    input.preserveTurnId &&
+    holdingTurn(input.sessionId)?.turnId !== turnId &&
+    !receivedUserTurns(db, [{ sessionId: input.sessionId, turnId }]).has(turnId)
+  ) {
+    requireUnusedTurn(input.sessionId, turnId);
+    return;
+  }
+  const known = admissionsOf.get(db)?.get(`${input.sessionId}\0${turnId}`);
   if (known) {
     if (known.content !== digest(input.content) || known.origin !== encodeOrigin(origin))
       throw new DifferentTurnMessageError();
     return known.done;
   }
-  const db = getDatabase();
   if (!getTurn(db, input.sessionId, turnId)) return;
   const echo = db
     .prepare<[string, string], { id: string; origin: string | null; kind: string }>(
@@ -196,10 +217,7 @@ export function previousSend(
  * one awaited, a failed one failed; a different request under that id is a
  * conflict. Its state is left as it is.
  */
-export async function sendMessage(
-  input: ParsedInputOf<typeof api.sendMessage>,
-  origin?: Origin
-): Promise<{ turnId: string }> {
+export async function sendMessage(input: LocalSend, origin?: Origin): Promise<{ turnId: string }> {
   const turnId = input.turnId;
   if (!turnId) return sendMessageOnce(input, origin);
   const previous = previousSend(input, turnId, origin);
@@ -321,7 +339,12 @@ async function sendMessageOnce(
     session && ([session.status, session.error_message, session.error_category] as const);
   const setup = start && { controller: new AbortController(), done: start.promise, prior };
   // Nothing awaits between the holder check above and this claim, so no other send can take the chat.
-  if (setup) claimTurn(sessionId, turnId, setup, sentAt, gateway);
+  if (setup)
+    claimTurn(sessionId, turnId, setup, sentAt, gateway, {
+      model,
+      thinkingLevel: input.thinkingLevel,
+      permissionMode,
+    });
   const working = persistSessionStatus(sessionId, "working");
   if (!working.ok) {
     refuseTurn(sessionId, turnId);

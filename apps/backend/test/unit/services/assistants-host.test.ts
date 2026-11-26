@@ -254,13 +254,6 @@ beforeEach(() => {
   insertWorkspace("w-lead", "lead");
   insertChat("s-lead", "w-lead");
   state.ops = {
-    messages: () => ({
-      messages: [],
-      turns: [],
-      compactions: [],
-      has_older: false,
-      has_newer: false,
-    }),
     diffFiles: () => ({ files: [], total_count: 0 }),
     archiveWorkspace: ({ workspaceId }) => {
       state.db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
@@ -510,8 +503,6 @@ describe("sending and starting", () => {
     const host = createDeusHost();
     const read = vi.fn(state.ops.agentModels);
     state.ops.agentModels = read;
-    const history = vi.fn(state.ops.messages);
-    state.ops.messages = history;
     await expect(
       createOperator(host).call(
         "send_message",
@@ -522,8 +513,6 @@ describe("sending and starting", () => {
       code: "unsupported",
       message: expect.stringContaining('"future-agent" does not run here. Nothing was sent.'),
     });
-    // The operator views the chat at preflight. The host's settings read asks for its last 50.
-    expect(history).not.toHaveBeenCalledWith(expect.objectContaining({ limit: 50 }));
     expect(read).not.toHaveBeenCalled();
     expect(state.sent).toHaveLength(0);
   });
@@ -532,14 +521,14 @@ describe("sending and starting", () => {
     const host = createDeusHost();
     const read = vi.fn();
     state.ops.agentModels = read;
-    state.ops.messages = () => ({
-      turns: [
-        {
-          turnId: "t0",
-          execution: { harness: "claude-code", model: "older-model", thinkingLevel: "low" },
-        },
-      ],
-    });
+    state.db
+      .prepare("INSERT INTO turns (session_id, turn_id, started_at, execution) VALUES (?, ?, ?, ?)")
+      .run(
+        "s-lead",
+        "t0",
+        1,
+        JSON.stringify({ harness: "claude-code", model: "older-model", thinkingLevel: "low" })
+      );
     await host.send(LEAD as never, "s-lead", { turnId: "t1", message: "continue", origin: LEAD });
     expect(read).not.toHaveBeenCalled();
     expect(state.sent[0].input).toMatchObject({
@@ -547,6 +536,21 @@ describe("sending and starting", () => {
       model: "older-model",
       thinkingLevel: "low",
     });
+  });
+
+  it("leaves mode to the engine default on an operator follow-up after a Plan turn", async () => {
+    state.db
+      .prepare(
+        "INSERT INTO turns (session_id, turn_id, ended_at, execution) VALUES ('s-lead', 'plan', 1, ?)"
+      )
+      .run(JSON.stringify({ harness: "claude-code", model: "sonnet", permissionMode: "plan" }));
+    await createOperator(createDeusHost()).call(
+      "send_message",
+      { session: "lead:1", message: "continue", wait: 0 },
+      assistantWho()
+    );
+    expect(state.sent).toHaveLength(1);
+    expect(state.sent[0]!.input).not.toHaveProperty("permissionMode");
   });
 
   it("a send is the app's, with the minted turn id and the sender; a busy chat is refused as busy", async () => {
@@ -1522,10 +1526,10 @@ describe("each commit re-reads what it depends on, with no await before its writ
 
   it("H5: a workspace archived while a send reads its settings gets nothing; a stop and an answer there are refused", async () => {
     const host = createDeusHost();
-    state.ops.messages = () => {
+    // This chat has no recorded turn, so its send reads the default thinking level.
+    vi.mocked(getSetting).mockImplementationOnce(() => {
       state.db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = 'w-lead'").run();
-      return { messages: [], turns: [], compactions: [], has_older: false, has_newer: false };
-    };
+    });
     await expect(
       host.send(LEAD as never, "s-lead", { turnId: "t1", message: "hi", origin: LEAD })
     ).rejects.toMatchObject({ refusal: { code: "archived" } });

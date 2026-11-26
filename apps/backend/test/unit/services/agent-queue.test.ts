@@ -17,6 +17,7 @@ import {
   type SessionLimitsEvent,
   type TurnEndedEvent,
   type TurnStartParams,
+  type TurnStartResult,
   type TurnSteerParams,
   type TurnSteerResult,
 } from "@zvada/agent-server/protocol";
@@ -27,6 +28,12 @@ import * as chatTurns from "../../../src/services/agent/chat-turn";
 import * as gatewayTurn from "../../../src/services/gateways/turn";
 import * as gateways from "../../../src/services/gateways/connections";
 import * as agent from "../../../src/services/agent/service";
+import * as boardStore from "../../../src/services/boards/store";
+import {
+  withReceipts,
+  postBoardMessage,
+  retryBoardMessage,
+} from "../../../src/services/boards/delivery";
 import * as cloud from "../../../src/services/agent/cloud/driver";
 import {
   QueueLimitError,
@@ -38,6 +45,7 @@ import {
 } from "../../../src/services/agent/queue";
 import { sendMessage, stopSession } from "../../../src/services/agent/turns";
 import type { AgentLinkOptions } from "../../../src/services/agent/client";
+import boardHandlers from "../../../src/api/boards";
 import sessionHandlers from "../../../src/api/sessions";
 import { handle, LOCAL_CALLER, Registry } from "../../../src/api/registry";
 import {
@@ -59,7 +67,8 @@ import { assistantCaller, operations } from "../../helpers";
 
 const engine = vi.hoisted(() => ({
   open: vi.fn<(options: AgentLinkOptions) => unknown>(),
-  startTurn: vi.fn<(params: TurnStartParams & { turnId: string }) => Promise<void>>(),
+  startTurn:
+    vi.fn<(params: TurnStartParams & { turnId: string }) => Promise<TurnStartResult | void>>(),
   steerTurn: vi.fn<(params: TurnSteerParams) => Promise<TurnSteerResult>>(),
   cancelTurn: vi.fn<(sessionId: string, turnId?: string) => Promise<TurnCancelResult>>(),
   respondElicitation: vi.fn(),
@@ -2848,6 +2857,331 @@ describe("messages held for a local chat", () => {
     });
     expect(held.items.filter((row) => row.origin)).toHaveLength(5);
   });
+
+  const receipt = (board: string, seq: number) =>
+    withReceipts([boardStore.getPost(board, seq)])[0]!.delivery;
+
+  it("delivers to a newly opened coordinator chat and puts its title on the receipt", async () => {
+    db.exec("UPDATE workspaces SET role='coordinator'");
+    const board = boardStore.createBoard(sessionId, "Desk").id;
+    db.prepare("UPDATE sessions SET is_hidden=1 WHERE id=?").run(sessionId);
+    const { seq } = postBoardMessage(board, crypto.randomUUID(), { body: "Check the release" });
+    expect(boardStore.getPost(board, seq).delivery_refusal).toContain("no open coordinator chat");
+    sessionId = crypto.randomUUID();
+    db.prepare("INSERT INTO sessions(id,workspace_id,title) VALUES(?,'w','Release follow-up')").run(
+      sessionId
+    );
+    db.exec(
+      "INSERT INTO sessions(id,workspace_id,agent_session_id) VALUES('legacy','w','already-started')"
+    );
+    await retryBoardMessage(board, seq);
+    expect(boardStore.getBoard(board).delivery_session_id).toBe(sessionId);
+    expect(withReceipts([boardStore.getPost(board, seq)])[0]).toMatchObject({
+      delivery: "delivered",
+      delivery_session_id: sessionId,
+      delivery_title: "Release follow-up",
+    });
+  });
+
+  it("keeps a board post's full-queue refusal and sends that same post again as the person", async () => {
+    db.exec("UPDATE workspaces SET role = 'coordinator'");
+    await send("first");
+    emit({
+      type: "turn.ended",
+      sessionId,
+      turnId: "first",
+      stopReason: "end_turn",
+      timestamp: seq,
+      execution: {
+        harness: "codex-app-server",
+        model: "model-first",
+        thinkingLevel: "low",
+        permissionMode: "bypass_permissions",
+      },
+    });
+    await run(api.sendMessage, { ...message("busy"), turnId: "busy", thinkingLevel: "high" });
+    const board = boardStore.createBoard(sessionId, "Release").id;
+    boardStore.savePost(board, { body: "Ready" }, { kind: "bot" });
+    for (let i = 0; i < 20; i++) await send(String(i));
+    const { seq: postSeq } = await postBoardMessage(board, crypto.randomUUID(), {
+      thread: 1,
+      body: "Ship it?",
+    });
+    const post = boardStore.getPost(board, postSeq);
+    expect(post.delivery_refusal).toContain("20 messages waiting");
+    expect(post.author_kind).toBe("person");
+    await remove("19");
+    await retryBoardMessage(board, postSeq);
+    expect(boardStore.readThread(board, 1)).toHaveLength(2);
+    expect(boardStore.getPost(board, postSeq).delivery_refusal).toBeNull();
+    expect((await queue()).items.at(-1)).toMatchObject({
+      id: post.id,
+      text: `From #release · thread 1 “Ready”\n\nShip it?`,
+    });
+    for (let i = 0; i < 19; i++) await remove(String(i));
+    end("busy");
+    await vi.waitFor(() => expect(starts().at(-1)).toBe(post.id));
+    expect(engine.startTurn.mock.lastCall![0].config).toMatchObject({
+      model: "model-busy",
+      thinkingLevel: "high",
+      permissionMode: "bypass_permissions",
+    });
+    expect(engine.steerTurn).not.toHaveBeenCalled();
+    await retryBoardMessage(board, postSeq);
+    expect(starts().filter((id) => id === post.id)).toHaveLength(1);
+  });
+
+  it("keeps a board post refused in Plan and delivers it once after a full-access turn", async () => {
+    db.exec("UPDATE workspaces SET role = 'coordinator'");
+    const board = boardStore.createBoard(sessionId, "Desk").id;
+    const remember = async (id: string, mode: "plan" | "bypass_permissions") => {
+      await run(api.sendMessage, { ...message(id), turnId: id, permissionMode: mode });
+      emit({
+        type: "turn.ended",
+        sessionId,
+        turnId: id,
+        stopReason: "end_turn",
+        timestamp: seq,
+        execution: { harness: "codex-app-server", model: "model-" + id, permissionMode: mode },
+      });
+    };
+    await remember("plan", "plan");
+    const id = crypto.randomUUID();
+    const post = postBoardMessage(board, id, { body: "Ready?" });
+    await retryBoardMessage(board, post.seq);
+    expect(boardStore.getPost(board, post.seq).delivery_refusal).toMatch(
+      /Plan mode.*\/plan.*Send again/
+    );
+    expect(starts()).toEqual(["plan"]);
+    expect(await ids()).toEqual([]);
+    expect(receipt(board, post.seq)).toBe("not_delivered");
+
+    await remember("full", "bypass_permissions");
+    await retryBoardMessage(board, post.seq);
+    expect(boardStore.getPost(board, post.seq).delivery_refusal).toBeNull();
+    expect(boardStore.readThreads(board)).toHaveLength(1);
+    expect(starts()).toEqual(["plan", "full", id]);
+    expect(engine.startTurn.mock.lastCall![0].config).toMatchObject({
+      model: "model-full",
+      permissionMode: "bypass_permissions",
+    });
+    expect(receipt(board, post.seq)).toBe("delivered");
+  });
+
+  it.each(["plan", "bypass_permissions"] as const)(
+    "uses the admitted %s board delivery settings before turn.started",
+    async (mode) => {
+      db.exec("UPDATE workspaces SET role = 'coordinator'");
+      await send("previous");
+      emit({
+        type: "turn.ended",
+        sessionId,
+        turnId: "previous",
+        stopReason: "end_turn",
+        timestamp: seq,
+        execution: {
+          harness: "codex-app-server",
+          model: "old",
+          thinkingLevel: "low",
+          permissionMode: mode === "plan" ? "bypass_permissions" : "plan",
+        },
+      });
+      const board = boardStore.createBoard(sessionId, "Desk").id;
+      const release = holdAppSetup();
+      const starting = run(api.sendMessage, {
+        ...message("new"),
+        turnId: "new",
+        thinkingLevel: "high",
+        permissionMode: mode,
+      });
+      await vi.waitFor(() => expect(holdingTurn(sessionId)?.phase).toBe("preparing"));
+      const id = crypto.randomUUID();
+      const post = postBoardMessage(board, id, { body: "Ready?" });
+      const row = boardStore.getPost(board, post.seq);
+      release();
+      await starting;
+      end("new");
+      if (mode === "plan") {
+        expect(row.delivery_refusal).toContain("Plan mode");
+        expect(await ids()).toEqual([]);
+        expect(starts()).not.toContain(id);
+      } else {
+        await vi.waitFor(() => expect(starts().at(-1)).toBe(id));
+        expect(engine.startTurn.mock.lastCall![0].config).toMatchObject({
+          model: "model-new",
+          thinkingLevel: "high",
+          permissionMode: mode,
+        });
+      }
+    }
+  );
+
+  it("keeps a board post waiting after the person stops its holding turn", async () => {
+    db.exec("UPDATE workspaces SET role='coordinator'");
+    await send("busy");
+    const board = boardStore.createBoard(sessionId, "Held work").id;
+    const { seq } = postBoardMessage(board, crypto.randomUUID(), { body: "Follow up" });
+    const { id } = boardStore.getPost(board, seq);
+    expect(receipt(board, seq)).toBe("waiting");
+    await stop();
+    expect(receipt(board, seq)).toBe("waiting");
+    await retryBoardMessage(board, seq);
+    expect(await ids()).toEqual([id]);
+  });
+
+  it("returns the saved channel post after a lost acknowledgement without admitting another turn", async () => {
+    db.exec("UPDATE workspaces SET role='coordinator'");
+    const board = boardStore.createBoard(sessionId, "Delivery").id;
+    const id = "abc5eb2a-50c0-445b-ae2c-6a402c338ea8";
+    const release = holdAppSetup();
+    const first = postBoardMessage(board, id, { body: "Check once" });
+    expect(postBoardMessage(board, id, { body: "Check once" })).toEqual(first);
+    expect(() => postBoardMessage(board, id, { body: "Different post" })).toThrow(
+      /different message/
+    );
+    release();
+    await vi.waitFor(() => expect(starts()).toEqual([id]));
+    expect(postBoardMessage(board, id, { body: "Check once" })).toEqual(first);
+    expect(boardStore.readThreads(board)).toHaveLength(1);
+    expect(starts()).toEqual([id]);
+  });
+
+  it("publishes only the changed board and the first receipt already knows its admission", async () => {
+    serveOperations(new Registry([...sessionHandlers, ...boardHandlers]));
+    db.exec(
+      "UPDATE workspaces SET role='coordinator'; INSERT INTO sessions(id, workspace_id) VALUES ('other-chat','w')"
+    );
+    const first = boardStore.createBoard(sessionId, "First").id;
+    const other = boardStore.createBoard("other-chat", "Other").id;
+    const send = vi.fn();
+    const connection = addConnection({ close() {}, send }, null);
+    for (const boardId of [first, other]) {
+      boardStore.savePost(boardId, { body: "Ready" }, { kind: "bot" });
+      for (const resource of ["boardChannel", "boardThread"])
+        handleFrame(connection, {
+          type: "q:subscribe",
+          id: boardId + resource,
+          resource,
+          params: { boardId, thread: 1 },
+        });
+    }
+    send.mockClear();
+    boardStore.savePost(first, { thread: 1, body: "Update" }, { kind: "bot" });
+    const snapshots = () => send.mock.calls.map(([text]) => JSON.parse(text));
+    expect(snapshots().map((f) => f.id)).toEqual([first + "boardChannel", first + "boardThread"]);
+    send.mockClear();
+    invalidate(["queuedMessages"], { sessionIds: ["other-chat"] });
+    expect(snapshots().map((f) => f.id)).toEqual([other + "boardChannel", other + "boardThread"]);
+    send.mockClear();
+    const release = holdAppSetup();
+    const id = crypto.randomUUID();
+    postBoardMessage(first, id, { thread: 1, body: "Which check?" });
+    try {
+      const replies = snapshots()
+        .flatMap((f) => f.data?.replies ?? [])
+        .filter((row) => row.id === id);
+      expect(replies.length).toBeGreaterThan(0);
+      expect(replies.every((row) => row.delivery === "waiting")).toBe(true);
+      expect(snapshots().every((f) => f.id.startsWith(first))).toBe(true);
+    } finally {
+      release();
+    }
+    await vi.waitFor(() => expect(receipt(first, 3)).toBe("delivered"));
+  });
+
+  it("shows waiting through app setup and requires text from the person's echo", async () => {
+    db.exec("UPDATE workspaces SET role='coordinator'");
+    const board = boardStore.createBoard(sessionId, "Setup").id;
+    const release = holdAppSetup();
+    const { seq: postSeq } = postBoardMessage(board, crypto.randomUUID(), {
+      body: "Checking setup",
+    });
+    const { id } = boardStore.getPost(board, postSeq);
+    const status = () => receipt(board, postSeq);
+    expect(status()).toBe("waiting");
+    db.prepare("INSERT INTO messages (id,session_id,turn_id,role) VALUES (?,?,?,'user')").run(
+      echoMessageId(id),
+      sessionId,
+      id
+    );
+    expect(status()).toBe("waiting");
+    const part = { id: id + "-text", type: "text", text: "Checking setup" };
+    db.prepare(
+      "INSERT INTO parts (id,message_id,session_id,type,data) VALUES (?,?,?,'text',?)"
+    ).run(part.id, echoMessageId(id), sessionId, JSON.stringify(part));
+    expect(status()).toBe("delivered");
+    release();
+    await vi.waitFor(() => expect(starts()).toContain(id));
+  });
+
+  it("recovers a lost queued board post with no turn record exactly once", async () => {
+    db.exec("UPDATE workspaces SET role = 'coordinator'");
+    await send("busy");
+    const board = boardStore.createBoard(sessionId, "Desk").id;
+    const { seq } = await postBoardMessage(board, crypto.randomUUID(), { body: "Ready?" });
+    const post = boardStore.getPost(board, seq);
+    expect(await ids()).toEqual([post.id]);
+    expect(receipt(board, seq)).toBe("waiting");
+    expect(await steerQueuedMessage(sessionId, post.id, "busy", "front")).toBe("own_turn");
+    // Drop the only volatile row before its echo, the same surviving state as a restart.
+    await remove(post.id);
+    end("busy");
+    expect(receipt(board, seq)).toBe("not_delivered");
+    expect(post.delivery_refusal).toBeNull();
+    await Promise.all([retryBoardMessage(board, seq), retryBoardMessage(board, seq)]);
+    expect(receipt(board, seq)).toBe("delivered");
+    await retryBoardMessage(board, seq);
+    expect(starts().filter((id) => id === post.id)).toHaveLength(1);
+    expect(boardStore.readThread(board, seq)).toHaveLength(1);
+  });
+
+  it.each([false, true])(
+    "refuses a used post id with no echo before selecting a recipient (original hidden: %s)",
+    async (archived) => {
+      db.exec("UPDATE workspaces SET role='coordinator'");
+      const board = boardStore.createBoard(sessionId, "Release").id;
+      const id = crypto.randomUUID();
+      const admit = holdAdmission();
+      const post = postBoardMessage(board, id, { body: "Ready?" });
+      await vi.waitFor(() => expect(starts()).toEqual([id]));
+      admit();
+      end(id);
+      await vi.waitFor(() => expect(holdingTurn(sessionId)).toBeUndefined());
+      if (archived) {
+        db.prepare("UPDATE sessions SET is_hidden = 1 WHERE id = ?").run(sessionId);
+        db.exec("INSERT INTO sessions(id,workspace_id) VALUES ('replacement','w')");
+      }
+      // This is the engine's answer if an already ended id ever reaches turn/start again.
+      engine.startTurn.mockResolvedValueOnce({
+        sessionId,
+        turnId: id,
+        headSeq: seq,
+        deduplicated: true,
+        terminal: {
+          type: "turn.ended",
+          turnId: id,
+          sessionId,
+          timestamp: seq,
+          stopReason: "end_turn",
+        },
+      });
+      for (let i = 0; i < 2; i++) {
+        await retryBoardMessage(board, post.seq);
+        expect(withReceipts([boardStore.getPost(board, post.seq)])[0]).toMatchObject({
+          delivery: "not_delivered",
+          delivery_session_id: sessionId,
+          delivery_refusal:
+            "This post's turn already ended in the chat. Open the chat to see what happened, or post it again.",
+        });
+        expect(starts()).toEqual([id]);
+        expect(holdingTurn(sessionId)).toBeUndefined();
+        expect(holdingTurn("replacement")).toBeUndefined();
+      }
+      expect(
+        db.prepare("SELECT delivery_session_id FROM boards WHERE id=?").pluck().get(board)
+      ).toBe(sessionId);
+    }
+  );
 
   it("holds 20 sending, steering and waiting rows and refuses a 21st send or composer steer", async () => {
     await sendInOrder("first", "head");

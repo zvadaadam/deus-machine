@@ -79,6 +79,7 @@ type Turn = {
   turnId: string;
   phase: "preparing" | "starting" | "running";
   sentAt?: number;
+  requested?: { model: string; thinkingLevel?: string; permissionMode?: string };
   lastOutputAt?: number;
   setup?: Setup;
   stops?: Set<Origin>;
@@ -121,13 +122,21 @@ export function claimTurn(
   turnId: string,
   setup?: Setup,
   sentAt?: number,
-  gateway?: GatewayTurn
+  gateway?: GatewayTurn,
+  requested?: Turn["requested"]
 ): boolean {
   const old = chats.get(id);
   if (old?.turn) return false;
   clearTimeout(old?.deadline?.timer);
   const chat: Chat = { pendingStops: 0, last: old?.last, setupStop: old?.setupStop };
-  chat.turn = { turnId, phase: setup ? "preparing" : "starting", setup, sentAt, gateway };
+  chat.turn = {
+    turnId,
+    phase: setup ? "preparing" : "starting",
+    setup,
+    sentAt,
+    gateway,
+    requested,
+  };
   chats.set(id, chat);
   return true;
 }

@@ -1,6 +1,11 @@
 import { z } from "zod";
-import { type Board, type BoardChannelPage, type BoardThreadPage } from "../boards";
-import { live, out } from "./op";
+import {
+  boardPostFields,
+  type Board,
+  type BoardChannelPage,
+  type BoardThreadPage,
+} from "../boards";
+import { live, out, write } from "./op";
 
 const board = z.object({ boardId: z.string().min(1) });
 const sequence = z.number().int().positive();
@@ -15,4 +20,14 @@ export const boardThread = live({
   name: "boardThread",
   input: page.extend({ thread: sequence }),
   output: out<BoardThreadPage>(),
+});
+export const postBoardMessage = write({
+  name: "postBoardMessage",
+  input: board.extend({ ...boardPostFields.shape, postId: z.uuid() }),
+  output: out<{ seq: number }>(),
+});
+export const retryBoardMessage = write({
+  name: "retryBoardMessage",
+  input: board.extend({ seq: sequence }),
+  output: out<{ seq: number }>(),
 });

@@ -4,7 +4,7 @@ import type * as api from "@shared/api/sessions";
 import type { ParsedInputOf } from "@shared/api/op";
 import { knownHarness } from "@shared/harnesses";
 import { uuidv7 } from "@shared/lib/uuid";
-import { encodeOrigin, getTurnsForMessages, sameOrigin, type SessionRow } from "../../db";
+import { encodeOrigin, recentTurns, sameOrigin, type SessionRow } from "../../db";
 import { getDatabase } from "../../lib/database";
 import {
   AppError,
@@ -18,8 +18,9 @@ import { getSetting } from "../settings.service";
 import { toEngineInput } from "./run-config";
 import { steerTurn } from "./service";
 import { holdingTurn, competingEnd, type TurnNotice } from "./chat-turn";
-import { continuedSettings } from "./turn-settings";
+import { continuedPermissionMode, continuedSettings } from "./turn-settings";
 import {
+  type LocalSend,
   previousSend,
   requireSameHarness,
   requireChatRoute,
@@ -29,7 +30,7 @@ import {
 } from "./turns";
 
 type Input = ParsedInputOf<typeof api.sendMessage>;
-type Message = Input & { turnId: string };
+type Message = LocalSend & { turnId: string };
 type LocalChat = Pick<
   SessionRow,
   | "status"
@@ -330,7 +331,7 @@ function append(message: Message, origin: Origin | undefined, chat: LocalChat, s
         item.message.content === message.content
     );
   if (duplicate) return q.items.indexOf(duplicate) + 1;
-  const position = appendRow(q, newRow(q, message, origin, false));
+  const position = appendRow(q, newRow(q, message, origin, !!message.preserveTurnId));
   changed(q);
   if (start) void drain(q);
   return position;
@@ -348,7 +349,14 @@ export async function enqueueMessage(message: Message, origin: Origin) {
   return { position: append(message, origin, chat) };
 }
 
-export async function sendOrQueue(input: Input) {
+export function isSendPending(sessionId: string, turnId: string) {
+  return (
+    holdingTurn(sessionId)?.turnId === turnId ||
+    queues.get(sessionId)?.items.some((item) => item.message.turnId === turnId) === true
+  );
+}
+
+export async function sendOrQueue(input: LocalSend) {
   const { sessionId } = input;
   let chat = localChat(sessionId);
   if (!chat) return sendMessage(input);
@@ -608,23 +616,14 @@ async function continueLimited(q: Queue, turnId: string) {
   const id = q.sessionId;
   const chat = localChat(id);
   if (chat?.status !== "error" || chat.error_category !== "usage_limit" || holdingTurn(id)) return;
-  const db = getDatabase();
-  const recent = db
-    .prepare<[string], { turn_id: string }>(
-      `SELECT turn_id FROM turns WHERE session_id = ?
-       ORDER BY COALESCE(started_at, ended_at) DESC, turn_id DESC LIMIT 50`
-    )
-    .all(id);
-  if (recent[0]?.turn_id !== turnId) return;
+  if (recentTurns(getDatabase(), id, 1)[0]?.turnId !== turnId) return;
   if (q.items.length) return drain(q);
-  const harness = knownHarness(chat.agent_harness);
-  if (!harness) return;
-  const turns = getTurnsForMessages(db, id, recent);
+  if (!knownHarness(chat.agent_harness)) return;
   return sendMessage({
     sessionId: id,
     content: "Continue.",
-    ...continuedSettings(id, harness, turns),
-    permissionMode: turns.at(-1)?.execution?.permissionMode,
+    ...continuedSettings(id),
+    permissionMode: continuedPermissionMode(id),
   });
 }
 
@@ -659,6 +658,8 @@ function returnHead(q: Queue, turnId: string, reuse = false, reason?: string) {
   // A busy reply keeps its retry id even if Stop already returned the head.
   if (head.state === "sending") head.state = "waiting";
   else if (!reuse) return false;
+  // The sender retries a missing exact receipt. The queue must never run it under a new id.
+  if (!reuse && head.message.preserveTurnId) q.items.splice(q.items.indexOf(head), 1);
   head.sentAs.reuse = reuse;
   return true;
 }

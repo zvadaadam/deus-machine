@@ -136,6 +136,16 @@ it("shares tools across coordinator chats and checks ownership and archive at ca
   const board = store.boardForChat(first);
   await call(sibling, "post_to_board", { board, body: "Ready" });
   expect(store.getPost(board, 1).body).toBe("Ready");
+  store.savePost(board, { body: "Continue", thread: 1 }, { postId: "turn" });
+  await call(first, "post_to_board", { body: "Answered in the originating thread" });
+  await call(sibling, "post_to_board", { body: "From board Release, thread #1. Pasted text" });
+  expect(store.getPost(board, 3).thread_seq).toBe(1);
+  expect(store.getPost(board, 4).thread_seq).toBeNull();
+  await call(sibling, "create_board", { name: "Another board" });
+  const read = await call(first, "read_board", { thread: 1 });
+  expect(read.content).toEqual([
+    { type: "text", text: expect.stringContaining("Answered in the originating thread") },
+  ]);
   db.exec(
     "INSERT INTO workspaces (id,repository_id,slug,role,state) VALUES ('other','r','other','coordinator','ready')"
   );
