@@ -551,11 +551,8 @@ export async function resumeQueuedMessages(sessionId: string, by?: Origin) {
     if (hold.limit.resetsAt === undefined) return { outcome: "person_only" } as const;
     if (hold.limit.resetsAt > Date.now()) return { outcome: "before_reset" } as const;
   }
-  if (hold?.reason === "limit" && hold.limit.resetsAt === undefined)
-    return {
-      outcome: "resumed",
-      turnId: (await continueLimited(q, hold.turnId, retry))?.turnId,
-    } as const;
+  if (hold?.reason === "limit" && hold.limit.resetsAt === undefined && !q.items.length)
+    return { outcome: "resumed", turnId: (await continueLimited(q, hold.turnId))?.turnId } as const;
   clearHold(q);
   return { outcome: "resumed", turnId: (await drain(q, retry))?.turnId } as const;
 }
@@ -596,7 +593,7 @@ function checkResets() {
   watchResets();
 }
 
-async function continueLimited(q: Queue, turnId: string, retryBusy = false) {
+async function continueLimited(q: Queue, turnId: string) {
   clearHold(q);
   const id = q.sessionId;
   const chat = localChat(id);
@@ -609,7 +606,7 @@ async function continueLimited(q: Queue, turnId: string, retryBusy = false) {
     )
     .all(id);
   if (recent[0]?.turn_id !== turnId) return;
-  if (q.items.length) return drain(q, retryBusy);
+  if (q.items.length) return drain(q);
   const harness = knownHarness(chat.agent_harness);
   if (!harness) return;
   const turns = getTurnsForMessages(db, id, recent);

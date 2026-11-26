@@ -4864,6 +4864,18 @@ describe("continuing a chat after a usage limit", () => {
     }
   );
 
+  it("starts a waiting row on untimed Resume after the chat leaves the usage limit", async () => {
+    await sendInOrder("T1", "A");
+    fail();
+    // A scoped session invalidation normally clears this hold when a new turn starts.
+    db.prepare("UPDATE sessions SET status = 'idle', error_category = NULL WHERE id = ?").run(
+      sessionId
+    );
+    expect(await queue()).toMatchObject({ paused: "limit", items: [waitingRow("A")] });
+    await resumeInWindow();
+    expect(starts()).toEqual(["T1", "A"]);
+  });
+
   it("uses the latest rejected Claude window reported during the failing turn", async () => {
     const claude = (id: string) =>
       run(api.sendMessage, { ...message(id), turnId: id, agentHarness: "claude-code" });

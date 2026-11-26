@@ -129,6 +129,22 @@ describe("the harnesses a picker offers", () => {
     }
   });
 
+  it("keeps a started chat on its own route when a pick names a missing gateway", () => {
+    const harness = "codex-app-server";
+    const choice = useChatModel({
+      cloud: false,
+      harness,
+      gatewayGeneration: null,
+      turns: [{ turnId: "one", execution: { harness, model: "native-model" } }],
+      picked: "gateway:codex-app-server:gone:other-model",
+    });
+    expect(choice).toMatchObject({
+      model: "codex-app-server:native-model",
+      picked: undefined,
+      unavailable: undefined,
+    });
+  });
+
   it("Home resolves its saved local pick and the cloud default without changing the preference", () => {
     state.cloud = state.local = undefined;
     const storage = new Map<string, string>();

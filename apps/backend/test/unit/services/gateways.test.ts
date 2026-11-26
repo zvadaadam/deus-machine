@@ -13,6 +13,7 @@ import { gatewaySupports } from "@shared/gateways";
 import { SCHEMA_SQL } from "@shared/schema";
 import { LOCAL_CALLER } from "../../../src/api/registry";
 import gatewayHandlers from "../../../src/api/gateways";
+import { ValidationError } from "../../../src/lib/errors";
 import * as gatewayTurn from "../../../src/services/agent/gateway-turn";
 import { claimTurn, holdingTurn, forgetChatTurns } from "../../../src/services/agent/chat-turn";
 import * as service from "../../../src/services/agent/service";
@@ -501,7 +502,7 @@ it("refuses the first credential handoff when its gateway was disconnected after
   );
 });
 
-it.each(["%73ynthetic-fixture", "bad%"])(
+it.each(["%73ynthetic-fixture", "bad%", "%FF"])(
   "rejects a Custom address containing an encoded key or malformed escape (%s)",
   async (path) => {
     const fetch = vi
@@ -516,7 +517,7 @@ it.each(["%73ynthetic-fixture", "bad%"])(
           generation: null,
           formats: ["responses"],
         })
-      ).rejects.toThrow();
+      ).rejects.toThrow(ValidationError);
       expect(fetch).not.toHaveBeenCalled();
     } finally {
       fetch.mockRestore();

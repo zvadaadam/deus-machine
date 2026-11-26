@@ -63,28 +63,13 @@ export function useChatModel({
       unavailable: `This chat's agent, "${storedHarness}", is not one this version of Deus runs.`,
     };
   const selection = picked ? parseModelValue(picked) : undefined;
-  function findGatewayModel(
-    generation: string | null | undefined,
-    runner: AgentHarness,
-    id?: string
-  ) {
-    const gateway = state.gateways?.find((g) => g.generation === generation);
-    const model = gateway?.models.find((m) => m.id === id && gatewaySupports(gateway, m, runner));
-    return gateway && model
-      ? { ...model, thinking: gatewayThinking(gateway, model, runner) }
-      : undefined;
-  }
-  const localGatewayPick = selection?.gatewayGeneration && !scope.cloud;
-  const pickedModel = localGatewayPick
-    ? findGatewayModel(selection.gatewayGeneration, selection.harness, selection.model)
-    : undefined;
   const sameRoute =
     gatewayGeneration === undefined ||
     (selection?.harness === harness && (selection.gatewayGeneration ?? null) === gatewayGeneration);
   const eligible =
     selection &&
     (!selection.gatewayGeneration || !scope.cloud) &&
-    (sameRoute || (localGatewayPick && !pickedModel)) &&
+    sameRoute &&
     state.lists.some((list) => list.harness === selection.harness);
   const agentHarness = eligible ? selection.harness : harness;
   const generation = eligible ? selection.gatewayGeneration : gatewayGeneration;
@@ -92,7 +77,14 @@ export function useChatModel({
     ? selection.model
     : modelForSession(harness, turns, gatewayGeneration ? [] : state.lists);
   const model = id && modelValue(agentHarness, id, generation);
-  const gatewayModel = eligible ? pickedModel : findGatewayModel(generation, agentHarness, id);
+  const gateway = generation ? state.gateways?.find((g) => g.generation === generation) : undefined;
+  const listed = gateway?.models.find(
+    (m) => m.id === id && gatewaySupports(gateway, m, agentHarness)
+  );
+  const gatewayModel =
+    gateway && listed
+      ? { ...listed, thinking: gatewayThinking(gateway, listed, agentHarness) }
+      : undefined;
   const latest = latestTurnExecution(harness, turns);
   let unavailable;
   if (generation && !gatewayModel)
