@@ -93,6 +93,7 @@ import {
 } from "../../lib/errors";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
 import { holdingTurn, setupStop } from "../agent/chat-turn";
+import { persistUndeliveredFirstTask } from "../agent/persistence";
 import { getLocalAgents } from "../agent/service";
 import { QueueLimitError, queuedMessages, enqueueMessage, steerMessage } from "../agent/queue";
 import { answer as answerToolRequest, pendingFor } from "../agent/tool-relay";
@@ -248,6 +249,7 @@ interface TurnRow {
 }
 
 export interface DeusHost extends OperatorHost<Caller> {
+  queueView(caller: Who, sessionId: string): ReturnType<typeof queueView>;
   /** Run one of the app's operations for the call's caller; a write's access read again just before it. */
   act<O extends AnyOp>(caller: Who, op: O, input: InputOf<O>): Promise<OutputOf<O>>;
 }
@@ -305,9 +307,6 @@ const AGENT_NAMES = new Intl.ListFormat("en").format(
   Object.entries(HARNESSES).map(([id, { label }]) => `${JSON.stringify(id)} (${label})`)
 );
 
-/** What a chat the host could not deliver its first task to says, the reason kept safe. */
-const NOT_DELIVERED = "Its first task could not be delivered.";
-
 function limitNote(limit: sessions.QueuedMessages["limit"]) {
   if (!limit) return "stopped on a usage limit";
   const reset =
@@ -319,28 +318,15 @@ function limitNote(limit: sessions.QueuedMessages["limit"]) {
 
 type QueueSenderName = (origin?: Origin) => string;
 
-function queueSenderNames(origins: (Origin | undefined)[], reader?: Origin): QueueSenderName {
-  const ids = new Set(origins.flatMap((o) => (o?.kind === "session" ? [o.sessionId] : [])));
-  const refs = ids.size
-    ? getDatabase()
-        .prepare<[string], { id: string; ref: string }>(
-          `
-    SELECT s.id, (CASE WHEN EXISTS (
-      SELECT 1 FROM workspaces other WHERE other.kind != 'cloud' AND other.id != w.id
-        AND other.slug = w.slug COLLATE NOCASE
-    ) THEN r.name || '/' ELSE '' END) || w.slug || ':' || s.chat AS ref
-    FROM sessions s JOIN workspaces w ON s.workspace_id = w.id JOIN repositories r ON r.id = w.repository_id
-    WHERE s.id IN (SELECT value FROM json_each(?)) AND w.kind != 'cloud'
-  `
-        )
-        .all(JSON.stringify([...ids]))
-    : [];
-  const names = new Map(refs.map(({ id, ref }) => [id, quoted(ref)]));
+function queueSenderNames(entries: () => Entry[], reader?: Origin): QueueSenderName {
+  let all: Entry[] | undefined;
   return (origin) => {
     if (!origin || origin.kind === "person") return "the person";
     if (reader && sameOrigin(reader, origin)) return "you";
     if (origin.kind === "assistant") return quoted(origin.name);
-    return names.get(origin.sessionId) ?? "a chat that is gone";
+    all ??= entries();
+    const entry = all.find((e) => e.id === origin.sessionId);
+    return entry ? quoted(refOf(entry, all)) : "a chat that is gone";
   };
 }
 
@@ -374,13 +360,7 @@ function queueNote(queue: sessions.QueuedMessages, hold?: string) {
     .join(", ");
 }
 
-export function queueView(caller: Who, sessionId: string) {
-  const by = originOf(caller);
-  const queue = queuedMessages(sessionId);
-  const senderName = queueSenderNames(
-    [queue.stoppedBy, ...queue.items.map((row) => row.origin)],
-    by
-  );
+function queueView(queue: sessions.QueuedMessages, by: Origin, senderName: QueueSenderName) {
   const hold = queueHold(queue, senderName);
   return { items: queue.items, by, senderName, hold, note: queueNote(queue, hold) };
 }
@@ -408,24 +388,22 @@ export function createDeusHost(): DeusHost {
     return run(op, input);
   }
 
-  /**
-   * The rows, a workspace with neither a chat nor a first chat's id given one
-   * now (stored once), so it is listed, retried and removed like any other.
-   */
+  function readRows(where = "", ...args: unknown[]): Row[] {
+    return getDatabase()
+      .prepare(`${ROWS} ${where} ORDER BY w.id, COALESCE(s.chat, 1e9), s.id`)
+      .all(...args) as Row[];
+  }
+
+  /** Give a workspace with neither a chat nor a first chat's id one when it is opened. */
   function rows(where = "", ...args: unknown[]): Row[] {
-    const db = getDatabase();
-    const query = () =>
-      db
-        .prepare(`${ROWS} ${where} ORDER BY w.id, COALESCE(s.chat, 1e9), s.id`)
-        .all(...args) as Row[];
-    const found = query();
+    const found = readRows(where, ...args);
     const missing = found.filter((r) => !r.session_id && !r.first_session_id);
     if (!missing.length) return found;
-    for (const r of missing)
-      db.prepare(
-        "UPDATE workspaces SET first_session_id = ? WHERE id = ? AND first_session_id IS NULL"
-      ).run(uuidv7(), r.workspace_id);
-    return query();
+    const assign = getDatabase().prepare(
+      "UPDATE workspaces SET first_session_id = ? WHERE id = ? AND first_session_id IS NULL"
+    );
+    for (const row of missing) assign.run(uuidv7(), row.workspace_id);
+    return readRows(where, ...args);
   }
 
   /** Each chat's last ended turn, in one read. */
@@ -475,10 +453,9 @@ export function createDeusHost(): DeusHost {
   function entriesOf(found: readonly Row[]): Entry[] {
     const ended = lastEnded(found.flatMap((r) => (r.session_id ? [r.session_id] : [])));
     const counted = new Map<string, number>();
-    const limited = new Set<string>();
-    const entries = found.flatMap((row): Entry[] => {
-      const id = row.session_id ?? row.first_session_id;
-      if (!id) return [];
+    return found.map((row): Entry => {
+      // A read for names alone can see a workspace before its first chat has an id.
+      const id = row.session_id ?? row.first_session_id ?? row.workspace_id;
       // Its stored number (made in order, never moved); a chat from before numbers counts on.
       const chat = row.chat ?? (counted.get(row.workspace_id) ?? 0) + 1;
       counted.set(row.workspace_id, chat);
@@ -486,7 +463,6 @@ export function createDeusHost(): DeusHost {
       const stoppedInSetup = setupStop(id);
       const status = statusOf(row, !!stoppedInSetup || last?.turn.outcome === "cancelled");
       const cancelledBy = stoppedInSetup?.by ?? last?.turn.cancelledBy;
-      if (status === "error" && row.error_category === "usage_limit") limited.add(id);
       // The workspace's title and time stand in only for a first chat with no row yet.
       const title = row.session_id ? row.s_title : row.ws_title;
       const sent = epochMs(row.session_id ? row.last_user_message_at : row.ws_updated_at);
@@ -502,46 +478,60 @@ export function createDeusHost(): DeusHost {
         : status === "error" && !row.message_count
           ? row.s_error
           : null;
-      return [
-        {
-          id,
-          project: { id: row.repository_id, name: row.repo_name },
-          workspace: { id: row.workspace_id, name: row.slug },
-          chat,
-          current: row.current_session_id ? row.current_session_id === id : chat === 1,
-          status,
-          ...(status === "stopped" && cancelledBy ? { cancelledBy } : {}),
-          startedBy: readOrigin(row.s_started_by ?? (row.session_id ? null : row.ws_started_by)),
-          harness: knownHarness(row.agent_harness),
-          ...(title ? { title } : {}),
-          ...(activity ? { lastActivityAt: activity } : {}),
-          ...(status === "error" && error ? { error: homeRelative(error, "diagnostic") } : {}),
-          ...(root ? { root } : {}),
-        },
-      ];
+      return {
+        id,
+        project: { id: row.repository_id, name: row.repo_name },
+        workspace: { id: row.workspace_id, name: row.slug },
+        chat,
+        current: row.current_session_id ? row.current_session_id === id : chat === 1,
+        status,
+        ...(status === "stopped" && cancelledBy ? { cancelledBy } : {}),
+        startedBy: readOrigin(row.s_started_by ?? (row.session_id ? null : row.ws_started_by)),
+        harness: knownHarness(row.agent_harness),
+        ...(title ? { title } : {}),
+        ...(activity ? { lastActivityAt: activity } : {}),
+        ...(status === "error" && error ? { error: homeRelative(error, "diagnostic") } : {}),
+        ...(root ? { root } : {}),
+        ...(status === "error" &&
+          row.error_category === "usage_limit" && { note: limitNote(queuedMessages(id).limit) }),
+      };
     });
-    const queues = entries.map((entry) => ({ entry, queue: queuedMessages(entry.id) }));
-    const senderName = queueSenderNames(queues.map(({ queue }) => queue.stoppedBy));
-    for (const { entry, queue } of queues) {
-      const hold =
-        queueHold(queue, senderName) ??
-        (limited.has(entry.id) ? limitNote(queue.limit) : undefined);
-      const note = queueNote(queue, hold);
-      if (note) entry.note = note;
-    }
-    return entries;
+  }
+
+  function senderEntries(origins: (Origin | undefined)[]) {
+    // refOf needs each sender's chats and one representative of each other workspace.
+    const ids = origins.flatMap((o) => (o?.kind === "session" ? [o.sessionId] : []));
+    return entriesOf(
+      readRows(
+        `AND (w.id IN (SELECT workspace_id FROM sessions WHERE id IN (SELECT value FROM json_each(?)))
+         OR s.id IS (SELECT id FROM sessions WHERE workspace_id = w.id ORDER BY chat, id LIMIT 1))`,
+        JSON.stringify(ids)
+      )
+    );
+  }
+
+  function withQueueNote(entry: Entry, all?: Entry[]) {
+    const queue = queuedMessages(entry.id);
+    const name = queueSenderNames(() => all ?? senderEntries([queue.stoppedBy]));
+    const note = queueNote(queue, queueHold(queue, name) ?? entry.note);
+    if (note) entry.note = note;
+    return entry;
   }
 
   /** Every entry, archived ones too (names resolve over them). */
-  const everything = () => entriesOf(rows());
-  const entryById = (id: string) =>
-    entriesOf(
-      rows(
-        "AND w.id = (SELECT workspace_id FROM sessions WHERE id = ? UNION SELECT id FROM workspaces WHERE first_session_id = ?)",
-        id,
-        id
-      )
-    ).find((entry) => entry.id === id);
+  function everything() {
+    const all = entriesOf(rows());
+    return all.map((entry) => withQueueNote(entry, all));
+  }
+  function entryById(id: string) {
+    const members = rows(
+      "AND w.id = (SELECT workspace_id FROM sessions WHERE id = ? UNION SELECT id FROM workspaces WHERE first_session_id = ?)",
+      id,
+      id
+    );
+    const entry = entriesOf(members).find((e) => e.id === id);
+    return entry && withQueueNote(entry);
+  }
 
   /** Workspaces agents started that are being set up now. */
   const agentSetups = () =>
@@ -655,13 +645,9 @@ export function createDeusHost(): DeusHost {
   /** A competing turn owns the chat even before its first message or while still in app setup. */
   function undelivered(sessionId: string, turnId: string, why: string) {
     if (holdingTurn(sessionId)) return;
-    getDatabase()
-      .prepare(
-        `UPDATE sessions SET status = 'error', error_message = ? WHERE id = ? AND message_count = 0
-         AND NOT EXISTS (SELECT 1 FROM turns WHERE session_id = sessions.id AND turn_id != ?)`
-      )
-      .run(`${NOT_DELIVERED}${why ? ` ${why}` : ""}`, sessionId, turnId);
-    invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
+    const message = `Its first task could not be delivered.${why ? ` ${why}` : ""}`;
+    if (persistUndeliveredFirstTask(sessionId, turnId, message))
+      invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
   }
 
   function drop(sessionId: string) {
@@ -773,6 +759,15 @@ export function createDeusHost(): DeusHost {
 
   const host: DeusHost = {
     act,
+    queueView(caller, id) {
+      const queue = queuedMessages(id);
+      const by = originOf(caller);
+      const names = queueSenderNames(
+        () => senderEntries([queue.stoppedBy, ...queue.items.map((row) => row.origin)]),
+        by
+      );
+      return queueView(queue, by, names);
+    },
 
     async list(_caller, filter) {
       const all = everything();

@@ -1,16 +1,4 @@
-// backend/src/services/agent/service.ts
-// Composition root for agent-server communication.
-//
-// Wires AgentLink to the event handler for persistence and WS push, and relays
-// the live turn's questions and plans.
-//
-//   queue → turns → service (this file)
-//                     ├── client         (AgentLink: the in-process engine)
-//                     ├── event-handler  (persistence and WS push)
-//                     ├── run-config     (turn params assembly)
-//                     └── tool-relay     (frontend RPC relay)
-//
-// Initialized once at startup in server.ts via agentService.init().
+// Connect turn notices before the engine admits a turn. Agentless startup uses the same wiring.
 
 import type { AgentHarness } from "@shared/enums";
 import { WireRequestError } from "@zvada/agent-server/client";

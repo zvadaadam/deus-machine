@@ -111,13 +111,13 @@ const steerTarget = {
 export const steerMessage = write({
   name: "steerMessage",
   input: sendMessage.input.extend(steerTarget),
-  output: out<{ outcome: "steered" | "queued" | "sent" | "unconfirmed" }>(),
+  output: out<Record<string, never>>(),
 });
 
 export const steerQueuedMessage = write({
   name: "steerQueuedMessage",
   input: queuedMessageId.extend(steerTarget),
-  output: out<{ outcome: "steered" | "queued" | "gone" | "unconfirmed" }>(),
+  output: out<Record<string, never>>(),
 });
 
 /** Move a waiting row before another waiting row, or to the end with `before: null`. */

@@ -1,6 +1,6 @@
 import { agentOrigin, inputToText, type Origin } from "@zvada/agent-server/protocol";
 import type * as api from "@shared/api/sessions";
-import type { OutputOf, ParsedInputOf } from "@shared/api/op";
+import type { ParsedInputOf } from "@shared/api/op";
 import { knownHarness } from "@shared/harnesses";
 import { uuidv7 } from "@shared/lib/uuid";
 import { encodeOrigin, getTurnsForMessages, sameOrigin, type SessionRow } from "../../db";
@@ -237,7 +237,7 @@ async function drain(q: Queue | undefined, retryBusy = false) {
   if (!q) return;
   if (retryBusy) delete q.busyOn;
   const head = q.items.find((item) => !item.held);
-  if (!head || head.state !== "waiting") return;
+  if (head?.state !== "waiting") return;
   if (q.busyOn && (!q.hold || head.sentAs)) return;
   if (!localChat(q.sessionId)) {
     queues.delete(q.sessionId);
@@ -268,18 +268,13 @@ async function drain(q: Queue | undefined, retryBusy = false) {
 }
 
 function alreadyQueued({ sessionId, turnId, content }: Message, origin?: Origin) {
-  const q = queues.get(sessionId);
-  const held = q?.items.find((item) => item.message.turnId === turnId);
-  if (
-    held &&
-    (held.message.content !== content || encodeOrigin(held.origin) !== encodeOrigin(origin))
-  )
+  const items = queues.get(sessionId)?.items;
+  const index = items?.findIndex((row) => row.message.turnId === turnId) ?? -1;
+  const row = items?.[index];
+  if (!row) return;
+  if (row.message.content !== content || encodeOrigin(row.origin) !== encodeOrigin(origin))
     throw new DifferentTurnMessageError();
-  return held;
-}
-
-function positionOf(sessionId: string, turnId: string) {
-  return (queues.get(sessionId)?.items.findIndex((row) => row.message.turnId === turnId) ?? -1) + 1;
+  return { row, position: index + 1 };
 }
 
 function appendRow(q: Queue, item: Row) {
@@ -314,7 +309,8 @@ function append(message: Message, origin: Origin | undefined, chat: LocalChat, s
 /** The operator commits a row at its access check. Only the drain starts it. */
 export async function enqueueMessage(message: Message, origin: Origin) {
   const { sessionId, turnId } = message;
-  if (alreadyQueued(message, origin)) return { position: positionOf(sessionId, turnId) };
+  const queued = alreadyQueued(message, origin);
+  if (queued) return { position: queued.position };
   const previous = previousSend(message, turnId, origin);
   if (previous) return previous.then(() => ({}));
   const chat = localChat(sessionId);
@@ -349,17 +345,12 @@ export async function sendOrQueue(input: Input) {
   return queued;
 }
 
-type SteerResult = OutputOf<typeof api.steerMessage>;
+type SteerResult = { outcome: "steered" | "queued" | "sent" | "unconfirmed" };
 
 function canSteer(q: Queue, chat: LocalChat, turnId: string | undefined): turnId is string {
+  if (turnId === undefined || q.answered === turnId || chat.status === "error") return false;
   const turn = holdingTurn(q.sessionId);
-  return (
-    turnId !== undefined &&
-    turnId === turn?.turnId &&
-    turn.phase !== "preparing" &&
-    chat.status !== "error" &&
-    q.answered !== turnId
-  );
+  return turn?.turnId === turnId && turn.phase !== "preparing";
 }
 
 function waitingOnCard(chat: LocalChat, sessionId: string, turnId?: string) {
@@ -380,14 +371,8 @@ function putFirst(q: Queue, items: Row[]) {
 }
 
 /** A receipt belongs to its named turn. The row stays in its slot while the wire answers. */
-function steerInto(
-  q: Queue,
-  item: Row,
-  chat: LocalChat,
-  turnId: string,
-  id: string,
-  unread: Placement
-) {
+function steerInto(q: Queue, item: Row, chat: LocalChat, turnId: string, unread: Placement) {
+  const id = item.ownTurn ? item.message.turnId : uuidv7();
   const answer = Promise.withResolvers<SteerReceipt>();
   const live = { unread, answer, acknowledged: false };
   item.steer = { id, turnId, live };
@@ -440,7 +425,7 @@ export async function steerMessage(
   const chat = localChat(sessionId);
   const message = { ...input, turnId: steerId ?? uuidv7() };
   if (steerId !== undefined) {
-    const held = alreadyQueued(message, origin);
+    const held = alreadyQueued(message, origin)?.row;
     if (held) {
       const pending = held.steer;
       if (held.ownTurn && pending && pending.turnId !== turnId)
@@ -450,17 +435,13 @@ export async function steerMessage(
       );
     }
     const sent = previousSend(message, steerId, origin);
-    if (sent) {
-      await sent;
-      return { outcome: "queued" };
-    }
+    if (sent) return sent.then(() => ({ outcome: "queued" }) as const);
     const read = retryReadSteer({ ...input, turnId }, steerId, origin);
     if (read) {
       await read;
       return { outcome: "steered" };
     }
-    // A removed row leaves no id to match, so a retry can send it again. Once the host answers,
-    // an RPC timeout at the caller does not make the package retry.
+    // Removing a row removes the id a later retry could match.
   }
   if (!chat) {
     await sendMessage(steerId === undefined ? input : message, origin);
@@ -477,7 +458,7 @@ export async function steerMessage(
   }
   putFirst(q, [item]);
   if (canSteer(q, chat, turnId)) {
-    const receipt = await steerInto(q, item, chat, turnId, message.turnId, "front");
+    const receipt = await steerInto(q, item, chat, turnId, "front");
     if (receipt !== "refused") return freshOutcome(receipt);
   } else changed(q);
   return { outcome: (await drain(q))?.item === item ? "sent" : "queued" };
@@ -500,7 +481,7 @@ export async function steerQueuedMessage(
   const card = waitingOnCard(chat, sessionId, turnId);
   if (card) return ownTurn ? "own_turn" : card;
   if (!ownTurn && !item.held && canSteer(q, chat, turnId)) {
-    const receipt = await steerInto(q, item, chat, turnId, uuidv7(), fallback);
+    const receipt = await steerInto(q, item, chat, turnId, fallback);
     if (receipt !== "refused") return receipt;
     waiting = "refused";
   }
@@ -541,11 +522,10 @@ export function removeQueuedMessage(sessionId: string, id: string) {
 
 export async function resumeQueuedMessages(sessionId: string, by?: Origin) {
   const q = queues.get(sessionId);
-  if (!q) return { outcome: "open" } as const;
-  const hold = q.hold;
+  const hold = q?.hold;
   const agent = agentOrigin(by);
-  const retry = !!q.busyOn && !agent;
-  if (!hold && !retry) return { outcome: "open" } as const;
+  const retry = !!q?.busyOn && !agent;
+  if (!q || (!hold && !retry)) return { outcome: "open" } as const;
   if (agent && hold?.reason === "stopped" && !agentOrigin(hold.by))
     return { outcome: "person_only" } as const;
   if (agent && hold?.reason === "limit") {

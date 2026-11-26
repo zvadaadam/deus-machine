@@ -254,11 +254,8 @@ export function useSendMessage() {
       // disposes this client; it cannot redirect the pending send to the new host.
       const backend = runtimeForQueryClient(queryClient) ?? { isConnected, connect, call };
       if (!backend.isConnected()) await backend.connect();
-      if (mode === "steer") {
-        await backend.call(api.steerMessage, { ...input, turnId });
-        return;
-      }
-      return backend.call(api.sendMessage, { ...input, turnId });
+      const op = mode === "steer" ? api.steerMessage : api.sendMessage;
+      return backend.call(op, { ...input, turnId });
     },
 
     onMutate: async ({ sessionId, content, model, turnId, mode }) => {

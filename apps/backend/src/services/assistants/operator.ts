@@ -48,7 +48,6 @@ import {
   createDeusHost,
   formatFileChange,
   mayTouch,
-  queueView,
   refusing,
   whereSentence,
   type DeusHost,
@@ -86,7 +85,7 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
     input: { session: sessionArg },
     effect: "read",
     run: async ({ session }, caller) => {
-      const { items, senderName, hold } = queueView(caller, await otherQueue(caller, session));
+      const { items, senderName, hold } = host.queueView(caller, await otherQueue(caller, session));
       const rows = items.map(({ id, text, images, state, origin }, i) => {
         const first = [...text.match(/^[^\n\r\v\f\u0085\u2028\u2029]{0,161}/u)![0]];
         if (first.length > 160) first.splice(159, 2, "…");
@@ -121,7 +120,7 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
       refusing(async () => {
         const sessionId = await otherQueue(caller, session);
         mayTouch(caller, sessionId);
-        const { items, by, hold } = queueView(caller, sessionId);
+        const { items, by, hold } = host.queueView(caller, sessionId);
         if (action === "resume") {
           const result = await resumeQueuedMessages(sessionId, by);
           const empty = items.length ? "" : " Nothing waits.";
@@ -135,7 +134,7 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
                 `Nothing was resumed. The queue is ${hold}.${empty}`
               );
             case "resumed":
-              return `Resumed. ${result.turnId ? `Started turn ${json(result.turnId)}.` : "No new turn started."} ${queueView(caller, sessionId).note ?? "Nothing waits"}.`;
+              return `Resumed. ${result.turnId ? `Started turn ${json(result.turnId)}.` : "No new turn started."} ${host.queueView(caller, sessionId).note ?? "Nothing waits"}.`;
           }
         }
         if (message === undefined)
@@ -151,7 +150,7 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
         if (row.state !== "waiting") return "That message is no longer waiting.";
         if (action === "remove") {
           removeQueuedMessage(sessionId, message);
-          return `Removed. ${queueView(caller, sessionId).note ?? "Nothing waits"}.`;
+          return `Removed. ${host.queueView(caller, sessionId).note ?? "Nothing waits"}.`;
         }
         const turnId = holdingTurn(sessionId)?.turnId;
         const outcome = await steerQueuedMessage(sessionId, message, turnId, "in_place");
@@ -163,7 +162,7 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
         if (outcome === "acknowledged" && turnId)
           return `Sent into turn ${json(turnId)}, not yet read. If the turn ends first, it keeps its place in the queue.`;
         if (outcome === "sent") return "Started as its own turn.";
-        const now = queueView(caller, sessionId);
+        const now = host.queueView(caller, sessionId);
         const index = now.items.findIndex((item) => item.id === message);
         if (index < 0) return "That message is no longer waiting.";
         if (now.items[index]?.state === "sending") return "Starting as its own turn.";

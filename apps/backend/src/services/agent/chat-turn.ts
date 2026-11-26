@@ -258,12 +258,9 @@ export function askStop(id: string, origin: Origin) {
       persistStopCredit(id, turn.turnId, firstStop(turn));
     }
     const settle = () => {
-      if (chat.turn) deadline("settle");
-      else {
-        clearDeadline(chat);
-        if (persistStopStatus(id)) notify(id);
-      }
-      return false;
+      if (chat.turn) return deadline("settle");
+      clearDeadline(chat);
+      if (persistStopStatus(id)) notify(id);
     };
     // The requested turn can end and a successor start during the RPC.
     const unconfirmed =
@@ -275,16 +272,15 @@ export function askStop(id: string, origin: Origin) {
           return true;
         })
         .with({ outcome: "no_active_turn" }, ({ activeTurnId }) => {
-          if (activeTurnId) return false;
+          if (activeTurnId) return;
           if (chat.turn) releaseTurn(id, chat.turn.turnId, { type: "gone" });
           else settle();
           if (chats.get(id) === chat) turnNotices().queue(id, { type: "engine_idle" });
-          return false;
         })
         .exhaustive();
     chat.pendingStops--;
     prune(id, chat);
-    return { unconfirmed };
+    return { unconfirmed: unconfirmed === true };
   };
 }
 
