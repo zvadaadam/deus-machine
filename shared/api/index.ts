@@ -11,6 +11,7 @@ import { isOp, type AnyOp } from "./op";
 import { isStream, type AnyStream } from "./stream";
 import * as assistants from "./assistants";
 import * as automations from "./automations";
+import * as boards from "./boards";
 import * as browser from "./browser";
 import * as deviceHub from "./device-hub";
 import * as gateways from "./gateways";
@@ -27,6 +28,7 @@ import * as workspaces from "./workspaces";
 export const api = {
   ...assistants,
   ...automations,
+  ...boards,
   ...browser,
   ...deviceHub,
   ...gateways,

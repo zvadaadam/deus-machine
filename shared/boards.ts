@@ -41,6 +41,16 @@ export interface BoardThread extends BoardPost {
   last_reply_at: string | null;
 }
 
+export interface BoardChannelPage {
+  board: Board;
+  posts: BoardThread[];
+}
+export interface BoardThreadPage {
+  root: BoardPost;
+  replies: BoardPost[];
+  hasEarlier: boolean;
+}
+
 export function channelName(name: string) {
   return (
     name

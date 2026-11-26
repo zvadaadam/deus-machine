@@ -6,6 +6,7 @@ import {
   type BoardPostInput,
   type BoardThread,
 } from "@shared/boards";
+import { invalidate } from "../query-engine";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../../lib/database";
 import { ConflictError, NotFoundError, ValidationError } from "../../lib/errors";
@@ -50,6 +51,7 @@ export function createBoard(sessionId: string, name: string) {
     SELECT ?, ?, workspace_id, id FROM sessions WHERE id = ?`
     )
     .run(id, name, sessionId);
+  invalidate(["boards"]);
   return getBoard(id);
 }
 
@@ -87,6 +89,7 @@ export function deliveryChat(board: Board) {
     );
   if (chat.id !== board.delivery_session_id) {
     db.prepare("UPDATE boards SET delivery_session_id = ? WHERE id = ?").run(chat.id, board.id);
+    invalidate(["boards"]);
   }
   return chat.id;
 }
@@ -169,6 +172,7 @@ export function savePost(
       ).run(seq, boardId, thread);
     return { post: getPost(boardId, seq), created: true };
   })();
+  if (result.created) invalidate(["boards", "boardChannel", "boardThread"], { boardIds: [boardId] });
   return result;
 }
 
@@ -180,6 +184,20 @@ export function readThread(board: string, thread: number, after = 0) {
       AND m.seq > ? ORDER BY m.seq LIMIT ?`
     )
     .all(board, thread, thread, after, BOARD_PAGE_SIZE);
+}
+
+/** The window reads the newest replies, then pages back. The agent reads forward from its cursor. */
+export function threadPage(board: string, thread: number, before?: number) {
+  const root = rootPost(board, thread);
+  const replies = getDatabase()
+    .prepare<[string, number, number, number], BoardPost>(
+      `SELECT ${postFields} FROM ${posts} WHERE m.board_id = ? AND m.thread_seq = ?
+     AND m.seq < ? ORDER BY m.seq DESC LIMIT ?`
+    )
+    .all(board, thread, before ?? Number.MAX_SAFE_INTEGER, BOARD_PAGE_SIZE + 1);
+  const hasEarlier = replies.length > BOARD_PAGE_SIZE;
+  if (hasEarlier) replies.pop();
+  return { root, replies: replies.reverse(), hasEarlier };
 }
 
 function roots(board: string, activity: boolean, cursor: number) {
