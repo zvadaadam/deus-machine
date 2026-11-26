@@ -4,7 +4,7 @@
 // is not ready is left out and never fails the turn.
 //
 // A turn start does no network work here. An app with an account is named by
-// its gateway address (gateway.ts), which attaches the account's credential
+// its app proxy address (app-proxy.ts), which attaches the account's credential
 // per request, so the config is the same from turn to turn and never holds a
 // provider's token. Local servers and servers with no account are named
 // directly.
@@ -18,7 +18,7 @@ import { getErrorMessage } from "@shared/lib/errors";
 import { cloudHolds } from "./auth/cloud-accounts";
 import { findApp } from "./catalog";
 import { cliRecovered, credentialsFor } from "./credentials";
-import { gatewayServer, usesGateway } from "./gateway";
+import { appProxyServer, usesAppProxy } from "./app-proxy";
 import { getConnection, listInstallations, type InstallationRow } from "./store";
 
 export interface TurnApps {
@@ -34,7 +34,7 @@ async function serverFor(
 ): Promise<{ server: McpServerConfig } | { reason: string }> {
   const connection = row.connectionId ? getConnection(row.connectionId) : null;
 
-  if (usesGateway(app)) {
+  if (usesAppProxy(app)) {
     // A CLI's login is fixed outside Deus (`gh auth login`), so it is looked
     // at again here (the CLI answers locally): the app is back in the first
     // turn after, not after a visit to Customize.
@@ -50,12 +50,12 @@ async function serverFor(
     if (connection.kind === "managed" && !cloudHolds(connection)) {
       return { reason: "Sign in to your Deus account" };
     }
-    const server = gatewayServer(app.id);
+    const server = appProxyServer(app.id);
     return server ? { server } : { reason: "Deus is still starting" };
   }
 
   // A local server's variables: read from the vault, no network (every
-  // remote account takes the gateway).
+  // remote account takes the app proxy).
   const credentials = await credentialsFor(app, connection);
   if (!credentials.ok) return { reason: credentials.reason };
 
@@ -65,7 +65,7 @@ async function serverFor(
 /**
  * An app's own server with what its account gives it: its variables in a
  * local server's environment, its headers on a remote one. What a turn names
- * for a local or open app, and what the gateway and the check connect to.
+ * for a local or open app, and what the app proxy and the check connect to.
  */
 export function directServer(
   app: CatalogApp,
@@ -84,7 +84,7 @@ export function directServer(
     };
   }
   if (app.transport.type === "broker") {
-    // Reached through the gateway and Deus Cloud, never named directly.
+    // Reached through the app proxy and Deus Cloud, never named directly.
     throw new Error(`${app.name} has no server of its own`);
   }
   return {

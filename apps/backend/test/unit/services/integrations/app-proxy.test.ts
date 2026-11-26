@@ -1,7 +1,7 @@
-// The gateway end to end, over real HTTP: an MCP client (as an agent's
-// harness has) → this backend's gateway route → a provider whose tokens
+// The app proxy end to end, over real HTTP: an MCP client (as an agent's
+// harness has) → this backend's app proxy route → a provider whose tokens
 // expire, rotate and get revoked. The agent's side only ever holds the
-// gateway address and this process's key.
+// app proxy address and this process's key.
 
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
@@ -84,7 +84,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   state.db = memoryDatabase();
-  state.dir = scratchDir("deus-gateway-");
+  state.dir = scratchDir("deus-app-proxy-");
   state.mcpUrl = `${provider.base}/mcp`;
   process.env.DEUS_VAULT_KEY = "33".repeat(32);
   __resetVaultKeyForTests();
@@ -126,8 +126,8 @@ const text = (result: unknown) =>
   (result as { content: Array<{ text: string }> }).content.map((part) => part.text).join("");
 const acme = () => composeSnapshot(CATALOG, getState()).apps.find((v) => v.app.id === "acme")!;
 
-describe("the gateway", () => {
-  it("a turn's config holds the gateway and its key, never the account's token", async () => {
+describe("the app proxy", () => {
+  it("a turn's config holds the app proxy and its key, never the account's token", async () => {
     await signIn();
     const { servers } = await resolveTurnApps();
     expect(servers.acme).toMatchObject({

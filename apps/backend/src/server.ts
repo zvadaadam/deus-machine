@@ -119,7 +119,7 @@ const allowAgentless =
 
 async function onListening(port: number): Promise<void> {
   actualServerPort = port;
-  // Customize: app sign-ins return here, and agents reach apps through its gateway.
+  // Customize: app sign-ins return here, and agents reach apps through its app proxy.
   void startIntegrations(port);
 
   await agentService.init({ agentless: allowAgentless });

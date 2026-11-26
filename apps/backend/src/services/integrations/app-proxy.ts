@@ -1,9 +1,9 @@
-// backend/src/services/integrations/gateway.ts
+// backend/src/services/integrations/app-proxy.ts
 // The one door an agent uses to reach an app that has an account.
 //
 // A turn's MCP config names only `http://127.0.0.1:<port>/api/integrations/mcp/<app>`
-// and this process's gateway key. Each request the agent's MCP client makes
-// arrives here; the gateway attaches the account's current credential and
+// and this process's app proxy key. Each request the agent's MCP client makes
+// arrives here; the app proxy attaches the account's current credential and
 // forwards it to the app's real server, streaming the answer back. So:
 //
 //  - A token that expires mid-turn is refreshed on the request that needs it
@@ -26,45 +26,45 @@ import { credentialsFor } from "./credentials";
 import { markNeedsReauth } from "./events";
 import { getConnection, getInstallation } from "./store";
 
-export const GATEWAY_PATH = "/api/integrations/mcp";
+export const APP_PROXY_PATH = "/api/integrations/mcp";
 
 /** This process's key: a turn's config carries it, nothing persists it. */
-const gatewayKey = crypto.randomBytes(32).toString("base64url");
+const appProxyKey = crypto.randomBytes(32).toString("base64url");
 
 let origin: string | null = null;
 
 /** Called once the backend listens. Loopback by address: agents run on this computer. */
-export function setGatewayPort(port: number): void {
+export function setAppProxyPort(port: number): void {
   origin = `http://127.0.0.1:${port}`;
 }
 
 /**
- * Whether an app's requests go through the gateway: it has an account and a
+ * Whether an app's requests go through the app proxy: it has an account and a
  * remote server, its own or its broker's in Deus Cloud.
  */
-export function usesGateway(app: CatalogApp): boolean {
+export function usesAppProxy(app: CatalogApp): boolean {
   if (app.transport.type === "broker") return true;
   return app.transport.type === "http" && app.auth.kind !== "none";
 }
 
-/** The server a turn names for a gateway app, or null before the backend listens. */
-export function gatewayServer(appId: string): McpServerConfig | null {
+/** The app proxy server a turn names, or null before the backend listens. */
+export function appProxyServer(appId: string): McpServerConfig | null {
   if (!origin) return null;
   return {
     type: "http",
-    url: `${origin}${GATEWAY_PATH}/${encodeURIComponent(appId)}`,
-    headers: { Authorization: `Bearer ${gatewayKey}` },
+    url: `${origin}${APP_PROXY_PATH}/${encodeURIComponent(appId)}`,
+    headers: { Authorization: `Bearer ${appProxyKey}` },
     required: false,
   };
 }
 
-export function isGatewayKey(authorization: string | undefined): boolean {
+export function isAppProxyKey(authorization: string | undefined): boolean {
   const given = Buffer.from(authorization?.replace(/^Bearer /i, "") ?? "");
-  const wanted = Buffer.from(gatewayKey);
+  const wanted = Buffer.from(appProxyKey);
   return given.length === wanted.length && crypto.timingSafeEqual(given, wanted);
 }
 
-/** What of the agent's request goes upstream: MCP's own headers, never its gateway key. */
+/** What of the agent's request goes upstream: MCP's own headers, never its app proxy key. */
 const REQUEST_HEADERS = [
   "accept",
   "content-type",
@@ -99,14 +99,14 @@ function signInMessage(app: CatalogApp, reason: string): string {
 
 /**
  * Forward one MCP request to `appId`'s server with its account's credential.
- * The caller has already checked the gateway key.
+ * The caller has already checked the app proxy key.
  */
 export async function proxyMcp(appId: string, request: Request): Promise<Response> {
   const body =
     request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer();
   const app = findApp(appId);
   const row = app ? getInstallation("app", app.id) : null;
-  if (!app || !row || !row.enabled || !usesGateway(app)) {
+  if (!app || !row || !row.enabled || !usesAppProxy(app)) {
     return unavailable(body, `${app?.name ?? appId} is not installed in Deus`);
   }
 
@@ -180,6 +180,6 @@ export async function proxyMcp(appId: string, request: Request): Promise<Respons
 }
 
 /** @internal */
-export function __gatewayKeyForTests(): string {
-  return gatewayKey;
+export function __appProxyKeyForTests(): string {
+  return appProxyKey;
 }

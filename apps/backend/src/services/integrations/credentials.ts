@@ -1,7 +1,7 @@
 // backend/src/services/integrations/credentials.ts
 // What an app's account gives a request, at the moment of the request: the
 // headers for its remote MCP server, or the environment of its local one.
-// The gateway and the readiness check both ask here, so a turn and "Check
+// The app proxy and the readiness check both ask here, so a turn and "Check
 // connection" use an account exactly the same way.
 //
 // Nothing here is cached beyond what its source allows: an OAuth token is

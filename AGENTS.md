@@ -156,7 +156,7 @@ lists equal. Clients use the declaration itself: `call(api.x, input)`,
 `useQuerySubscription(api.x, …)`, `useStream(api.x, filter, onEvent, onReset)` or
 `follow(…)`. There is no second list of names and no HTTP route per operation.
 The HTTP routes left are the ones a socket cannot serve: pairing, OAuth
-callbacks, the MCP gateway, file streaming, and what the CLI and the desktop
+callbacks, the app proxy, file streaming, and what the CLI and the desktop
 shell ask before a socket exists.
 
 **Streams** (`apps/backend/src/services/streams.ts`). Nothing is broadcast. A
@@ -809,9 +809,9 @@ the catalog can move to a package the day Deus Cloud reads it too.
   nothing (the signed-in CLI supplies the token at each use); `managed` is
   held by Deus Cloud. A credential sealed under a lost key opens as null and
   its app asks to connect again.
-- **The gateway is the only door.** A turn's config names an app with an account
+- **The app proxy is the only door.** A turn's config names an app with an account
   as `http://127.0.0.1:<port>/api/integrations/mcp/<app>` plus this process's
-  key (`gateway.ts`). Each request gets the account's current credential
+  key (`app-proxy.ts`). Each request gets the account's current credential
   (`credentials.ts`) and is streamed to the real server; a 401 is retried once
   with a fresh one. So a turn start does no network work for apps, a token
   that expires mid-turn is refreshed on the call that needs it, and no agent
@@ -843,7 +843,7 @@ the catalog can move to a package the day Deus Cloud reads it too.
   an app Deus Cloud does not serve yet is `"soon"`. This computer keeps one
   row per app and Deus account (`auth_kind = managed`, `deus_account_id`, no
   credential), as Deus Cloud keeps one connection per account and app. Its
-  requests go through the gateway to the connection's MCP endpoint in Deus
+  requests go through the app proxy to the connection's MCP endpoint in Deus
   Cloud with the Deus session, read per request. A sign-in returns to
   `/api/integrations/oauth/callback/<attempt>`; whether it worked is asked
   of Deus Cloud, never read from the page. `reconcileCloudAccounts()` follows
