@@ -175,8 +175,9 @@ try {
   const rows = await menu
     .getByRole("menuitem")
     .evaluateAll((es) => es.map((e) => e.innerText.trim().replace(/\s+/g, " ")));
-  // Each organization row: its initial, its name, and the shortcut (⌃1 is the first here).
-  assert.deepEqual(rows, [`S ${ORG_NAME}`, `S ${ORG2_NAME} ⌃2`, "Your computers", "Settings"]);
+  // Each organization row: its initial, its name, and on a Mac the shortcut (⌃1 is the first here).
+  const hint = (await page.evaluate(() => /Mac/.test(navigator.platform))) ? " ⌃2" : "";
+  assert.deepEqual(rows, [`S ${ORG_NAME}`, `S ${ORG2_NAME}${hint}`, "Your computers", "Settings"]);
   assert.equal(await menu.locator(`svg[class*="lucide-check"]`).count(), 1, "one place is checked");
   await menu.evaluate((e) =>
     Promise.all(e.getAnimations({ subtree: true }).map((a) => a.finished))

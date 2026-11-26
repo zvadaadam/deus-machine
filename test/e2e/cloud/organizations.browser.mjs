@@ -162,6 +162,8 @@ const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/serv
   env: {
     ...env,
     PORT: "0",
+    // The cloud driver starts with the engine: never inherit a parent's agentless mode.
+    AGENT_ALLOW_AGENTLESS: "0",
     DATABASE_PATH: path.join(directory, "deus.db"),
     // Never the login Keychain, and git never climbs out of the run into this checkout.
     DEUS_VAULT_NO_KEYCHAIN: "1",
@@ -288,10 +290,12 @@ try {
   await openMenu();
   const rows = await menuRows();
   // Each row: its glyph (the profile's initials, an organization's initial), name and hint.
+  // The ⌃ shortcuts are shown on a Mac only; they work everywhere.
+  const mac = await page.evaluate(() => /Mac/.test(navigator.platform));
   assert.ok(rows[0][0].endsWith(computer), rows[0][0]);
   assert.deepEqual(
     rows.slice(1, 4).map(([text]) => text),
-    ["A Acme ⌃2", "B Beta ⌃3", "G Gamma Not set up"],
+    [mac ? "A Acme ⌃2" : "A Acme", mac ? "B Beta ⌃3" : "B Beta", "G Gamma Not set up"],
     JSON.stringify(rows)
   );
   assert.equal(rows[0][1], "true", "the check is on this computer");

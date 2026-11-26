@@ -105,6 +105,8 @@ const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/serv
   env: {
     ...env,
     PORT: "0",
+    // The cloud driver starts with the engine: never inherit a parent's agentless mode.
+    AGENT_ALLOW_AGENTLESS: "0",
     DATABASE_PATH: path.join(directory, "deus.db"),
     // Never the login Keychain, and git never climbs out of the run into this checkout.
     DEUS_VAULT_NO_KEYCHAIN: "1",

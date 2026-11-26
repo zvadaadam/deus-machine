@@ -78,6 +78,17 @@ jobs:
       - *chromium
       - run: bun run check journeys
 
+  cloud:
+    name: Cloud Journeys
+    runs-on: ubuntu-24.04
+    steps:
+      - *checkout
+      - *node
+      - *bun
+      - *install
+      - *chromium
+      - run: bun run check cloud
+
   backend:
     name: Backend Tests
     runs-on: ubuntu-latest
