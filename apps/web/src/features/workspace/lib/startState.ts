@@ -75,8 +75,7 @@ function completedFetch(issue: InitFetchIssue | null | undefined): StartStep {
   const why = match(issue)
     .with("offline", () => "We couldn’t reach the remote")
     .with("auth", () => "Git couldn’t sign in to the remote repository")
-    .with("failed", () => "We couldn’t get the latest changes")
-    .exhaustive();
+    .otherwise(() => "We couldn’t get the latest changes");
   return {
     key: "fetch",
     label: "Copy may be out of date",
