@@ -28,13 +28,14 @@ export function SetUpEnvironmentWithAgent({
   const organizations = useCloudOrganizations();
   const providers = useProviderAccounts();
   const requestEnvSetup = useUIStore((state) => state.requestEnvSetup);
-  const { model, agentHarness, lists, unavailable } = useChatModel({
+  const { model, agentHarness, gatewayModel, lists, unavailable } = useChatModel({
     picked: getStoredModel(),
     cloud: location === "cloud",
   });
   const provider = agentHarness && HARNESSES[agentHarness].cloudProvider;
   const label =
-    model && agentHarness && modelLabel(lists, agentHarness, turnSelection(model).model);
+    gatewayModel?.label ??
+    (model && agentHarness && modelLabel(lists, agentHarness, turnSelection(model).model));
   function setupProblem() {
     if (!repoId) return "Add this repository to Deus to start a setup workspace.";
     if (unavailable) return unavailable;

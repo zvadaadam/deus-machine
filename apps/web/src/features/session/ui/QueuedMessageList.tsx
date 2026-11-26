@@ -118,7 +118,7 @@ function QueuedRow({
           <div
             className={cn(
               "flex min-w-0 flex-1 items-center gap-1.5",
-              origin && "grid grid-cols-[minmax(0,1fr)_auto] gap-y-0"
+              (origin || reason) && "grid grid-cols-[minmax(0,1fr)_auto] gap-y-0"
             )}
           >
             {origin && (

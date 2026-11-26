@@ -157,6 +157,13 @@ it("links a queued message to its sending chat and leaves the person's row unmar
   expect(html.match(/Sent from/g)).toHaveLength(1);
 });
 
+it("gives the reason its own full-width line on a person's returned row", () => {
+  const html = render({ paused: null, items: [{ ...item, reason: "Connection changed." }] });
+  expect(html).toMatch(
+    /<div class="[^"]*\bgrid [^"]*"><span[^>]*>Review this<\/span><span class="[^"]*col-span-full[^"]*">Connection changed\.<\/span>/
+  );
+});
+
 it.each([
   ["stopped", "Queue paused. The agent was stopped."],
   ["failed", "Queue paused after an error."],

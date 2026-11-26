@@ -187,7 +187,7 @@ async function request(connection: CatalogConnection, path: string, signal: Abor
     throw new GatewayError(`Nothing answers at this address. Is ${name} running?`, "unreachable");
   }
   if (response.ok) return response;
-  await response.body?.cancel();
+  await response.body?.cancel().catch(() => {});
   if (response.status === 401 || response.status === 403)
     throw new GatewayError(name + " rejected the client key.", "client_key");
   throw new GatewayError(

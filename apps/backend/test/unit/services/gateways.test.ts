@@ -13,7 +13,7 @@ import { gatewaySupports } from "@shared/gateways";
 import { SCHEMA_SQL } from "@shared/schema";
 import { LOCAL_CALLER } from "../../../src/api/registry";
 import gatewayHandlers from "../../../src/api/gateways";
-import { ValidationError } from "../../../src/lib/errors";
+import { GatewayError, ValidationError } from "../../../src/lib/errors";
 import * as gatewayTurn from "../../../src/services/agent/gateway-turn";
 import { claimTurn, holdingTurn, forgetChatTurns } from "../../../src/services/agent/chat-turn";
 import * as service from "../../../src/services/agent/service";
@@ -269,14 +269,14 @@ afterAll(async () => {
 
 it("accepts a loopback gateway with a fresh identity and keeps the key out of reads", async () => {
   const input = { preset: "cliproxyapi" as const, address, clientKey: key, generation: null };
-  for (const bad of [
-    "https://localhost",
-    "http://127.1",
-    "http://localhost@localhost",
-    "http://localhost/f",
-    "http://10.0.0.2",
-  ])
-    await expect(run(api.connectGateway, { ...input, address: bad })).rejects.toThrow();
+  const loopback = "Use a loopback address on 127.0.0.1, localhost or [::1].";
+  for (const [bad, reason] of [
+    ["http://127.1", loopback],
+    ["http://localhost@localhost", "Enter the API key in its own field."],
+    ["http://localhost/f", loopback],
+    ["http://10.0.0.2", loopback],
+  ] as const)
+    await expect(run(api.connectGateway, { ...input, address: bad })).rejects.toThrow(reason);
   const beforeReads = probes;
   await expect(run(api.connectGateway, { ...input, clientKey: "refused" })).rejects.toThrow(
     "rejected the client key"
@@ -411,6 +411,7 @@ it("delivers a gateway Claude credential through the engine listener and caps on
   const id = chat(),
     generation = await connectHere();
   await rm(join(dir, "spawn.json"), { force: true });
+  const before = authorizedInference;
   await send(id, generation);
   await vi.waitFor(
     async () =>
@@ -422,7 +423,7 @@ it("delivers a gateway Claude credential through the engine listener and caps on
       }),
     { timeout: 15000 }
   );
-  expect(authorizedInference).toBeGreaterThan(0);
+  expect(authorizedInference).toBeGreaterThan(before);
   expect(stored(id)).toContain(generation);
   await vi.waitFor(() => expect(holdingTurn(id)).toBeUndefined());
   await expect(send(id)).rejects.toThrow("different provider");
@@ -584,6 +585,24 @@ it("keeps a terminal bare 429 when an earlier error only reported the CLI exit",
     gateway
   );
   expect(end.event).toMatchObject({ type: "turn.ended", error });
+});
+
+it("reports a rejected client key even when cancelling the 401 response body fails", async () => {
+  const body = new ReadableStream({ cancel: () => Promise.reject(new Error("stream closed")) });
+  const fetcher = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(new Response(body, { status: 401 }));
+  try {
+    await expect(
+      checkCatalog({ preset: "cliproxyapi", address, clientKey: key, formats: ["messages"] })
+    ).rejects.toMatchObject({
+      constructor: GatewayError,
+      message: "CLIProxyAPI rejected the client key.",
+      details: { kind: "client_key" },
+    });
+  } finally {
+    fetcher.mockRestore();
+  }
 });
 
 it.each(["openrouter", "custom"] as const)(

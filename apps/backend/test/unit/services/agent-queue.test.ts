@@ -447,14 +447,19 @@ it.each(["gap", "watchdog"])(
   "releases the gateway credential at %s settlement and reconciles its late end",
   async (settlement) => {
     const generation = crypto.randomUUID();
-    mockGateway(generation);
+    const delivery = { apiKey: "test-only", baseUrl: "http://localhost/v1" };
+    mockGateway(generation).mockImplementationOnce(async (turn) => {
+      turn.delivery = delivery;
+    });
     const turnId = "active";
+    const request = { sessionId, turnId, harness: "codex-app-server" } as const;
     await run(api.sendMessage, {
       ...message("active"),
       model: "custom:model",
       turnId,
       gatewayGeneration: generation,
     });
+    await expect(gatewayTurn.gatewayCredential(request)).resolves.toMatchObject(delivery);
     if (settlement === "gap") gap("server_restarted");
     else {
       vi.useFakeTimers();
@@ -463,9 +468,7 @@ it.each(["gap", "watchdog"])(
       await vi.advanceTimersByTimeAsync(15_000);
     }
     expect(holdingTurn(sessionId)).toBeUndefined();
-    await expect(
-      gatewayTurn.gatewayCredential({ sessionId, turnId, harness: "codex-app-server" })
-    ).rejects.toThrow();
+    await expect(gatewayTurn.gatewayCredential(request)).rejects.toThrow("no longer active");
     emit({
       type: "turn.ended",
       sessionId,
