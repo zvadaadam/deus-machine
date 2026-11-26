@@ -9,7 +9,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { SidebarHeader as SidebarHeaderUI, useSidebar } from "@/components/ui/sidebar";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ProfileAvatar } from "./ProfileAvatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,34 +33,6 @@ import {
 } from "../lib/location";
 import { OrganizationTile } from "./OrganizationTile";
 import type { SidebarHeaderProps, SidebarProfile } from "../model/types";
-
-const PLACEHOLDER_LABEL = "My Account";
-
-function deriveInitials(profile: SidebarProfile | undefined): string {
-  const source = profile?.displayName || profile?.login || PLACEHOLDER_LABEL;
-  return source.slice(0, 2).toUpperCase();
-}
-
-function ProfileAvatar({
-  profile,
-  label,
-  className,
-}: {
-  profile?: SidebarProfile;
-  label: string;
-  className?: string;
-}) {
-  return (
-    <Avatar shape="square" className={cn("h-6 w-6 shrink-0 rounded-md", className)}>
-      {profile?.avatarUrl && (
-        <AvatarImage src={profile.avatarUrl} alt={label} className="rounded-md" />
-      )}
-      <AvatarFallback shape="square" className="text-2xs rounded-md font-semibold">
-        {deriveInitials(profile)}
-      </AvatarFallback>
-    </Avatar>
-  );
-}
 
 function CloudGlyph({ className }: { className?: string }) {
   return (

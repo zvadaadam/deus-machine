@@ -10,6 +10,9 @@ interface UnreadStore {
   /** Set of session IDs with unseen activity */
   unreadSessionIds: Record<string, true>;
 
+  seenBoards: Record<string, number>;
+  seeBoard: (id: string, seq: number) => void;
+
   /** Mark a session as having unseen activity */
   markUnread: (sessionId: string) => void;
 
@@ -22,6 +25,15 @@ export const useUnreadStore = create<UnreadStore>()(
     persist(
       (set) => ({
         unreadSessionIds: {},
+        seenBoards: {},
+        seeBoard: (id, seq) =>
+          set((state) =>
+            (state.seenBoards[id] ?? 0) >= seq
+              ? state
+              : {
+                  seenBoards: { ...state.seenBoards, [id]: seq },
+                }
+          ),
 
         markUnread: (sessionId) =>
           set(

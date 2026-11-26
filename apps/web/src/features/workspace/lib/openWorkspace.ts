@@ -1,3 +1,4 @@
+import { leaveBoard } from "@/features/board/address";
 import { useSidebarStore } from "@/features/sidebar/store";
 import { uiActions } from "@/shared/stores/uiStore";
 import type { Workspace } from "../types";
@@ -5,6 +6,7 @@ import { useWorkspaceStore } from "../store";
 
 export function showWorkspace(workspaceId: string): void {
   // A notification or link can open a workspace while a full-page view or the palette covers it.
+  leaveBoard(workspaceId);
   uiActions.closeAllModals();
   useWorkspaceStore.getState().selectWorkspace(workspaceId);
 }

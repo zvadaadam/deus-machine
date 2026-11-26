@@ -11,8 +11,8 @@ import { AssistantTurn } from "./AssistantTurn";
 import { CompactionChip } from "./CompactionChip";
 import { WorkspaceEmptyState } from "./WorkspaceEmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
-import { ChevronDown, TriangleAlert, X } from "lucide-react";
+import { JumpToLatest } from "@/components/ui/jump-to-latest";
+import { TriangleAlert, X } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 
@@ -470,26 +470,11 @@ export function Chat({
         )}
       </div>
 
-      {/* Scroll to bottom button — floats over the chat scroll area */}
-      <div
-        className={`pointer-events-auto absolute right-6 bottom-4 z-10 transition-[opacity,scale] ${
-          showScrollButton
-            ? "scale-100 opacity-100"
-            : "pointer-events-none scale-90 opacity-0 motion-reduce:scale-100"
-        }`}
-      >
-        <Button
-          variant="secondary"
-          size="icon"
-          className="rounded-full shadow-lg transition-shadow hover:shadow-xl"
-          onClick={handleScrollToBottomClick}
-          title="Scroll to bottom"
-          aria-label="Scroll to bottom"
-          aria-controls="chat-messages"
-        >
-          <ChevronDown className="h-4 w-4" aria-hidden="true" />
-        </Button>
-      </div>
+      <JumpToLatest
+        visible={showScrollButton}
+        onClick={handleScrollToBottomClick}
+        controls="chat-messages"
+      />
     </div>
   );
 }

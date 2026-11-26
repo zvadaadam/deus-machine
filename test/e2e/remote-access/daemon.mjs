@@ -88,7 +88,7 @@ async function dispatch(cmd, signal, emit, socket) {
     if (busy || phase === "ready") throw new Error("Lab is already up or starting");
     busy = (async () => {
       signal.throwIfAborted();
-      await lab.up();
+      await lab.up({ host: cmd.host });
       signal.throwIfAborted();
       await lab.signIn();
       await lab.connectedAs();

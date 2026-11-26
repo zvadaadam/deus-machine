@@ -292,8 +292,16 @@ export function createStack({ root, agnt, directory }) {
   }
 
   /** `env` adds to the backend's environment (the assistants test's issuer). */
-  async function host({ name, database, dir, relayUrl, authToken, env = {} }) {
-    const owned = run(process.execPath, ["--import", "tsx", "apps/backend/src/server.ts"], name, {
+  async function host({
+    name,
+    database,
+    dir,
+    relayUrl,
+    authToken,
+    env = {},
+    entry = "apps/backend/src/server.ts",
+  }) {
+    const owned = run(process.execPath, ["--import", "tsx", entry], name, {
       env: {
         PORT: "0",
         DATABASE_PATH: database,

@@ -51,6 +51,7 @@ interface MarkdownRendererProps {
   allowHtml?: boolean;
   /** Custom prose classes (default: chat-optimized) */
   proseClassName?: string;
+  transformText?: NonNullable<React.ComponentProps<typeof ReactMarkdown>["remarkPlugins"]>[number];
   resolveFileLink?: (href: string, label: string) => MarkdownFileLinkResolution;
   onFileLinkOpen?: (path: string) => void | Promise<void>;
   onLinkOpen?: (href: string) => void | Promise<void>;
@@ -169,10 +170,15 @@ export function MarkdownRenderer({
   className = "",
   allowHtml = false,
   proseClassName,
+  transformText,
   resolveFileLink,
   onFileLinkOpen,
   onLinkOpen,
 }: MarkdownRendererProps) {
+  const plugins = useMemo(
+    () => (transformText ? [...REMARK_PLUGINS, transformText] : REMARK_PLUGINS),
+    [transformText]
+  );
   const components = useMemo(() => {
     if (!resolveFileLink && !onLinkOpen) return markdownComponents;
 
@@ -254,7 +260,7 @@ export function MarkdownRenderer({
   return (
     <article className={cn(proseClassName, className)}>
       <ReactMarkdown
-        remarkPlugins={REMARK_PLUGINS}
+        remarkPlugins={plugins}
         rehypePlugins={allowHtml ? REHYPE_PLUGINS_HTML : REHYPE_PLUGINS_PLAIN}
         components={components}
       >

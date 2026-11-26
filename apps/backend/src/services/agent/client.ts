@@ -62,14 +62,20 @@ export class AgentLink {
   ) {}
 
   /** Start the engine and connect to it. */
-  static async open(options: AgentLinkOptions): Promise<AgentLink> {
-    const transport = startEngine({
-      credentials: gatewayCredential,
-      hasAgentMessages,
-      request: options.onToolRequest,
-      title: options.onTitle,
-      ...(options.sessionTools ? { sessionTools: options.sessionTools } : {}),
-    });
+  static async open(
+    options: AgentLinkOptions,
+    runtime?: Parameters<typeof startEngine>[1]
+  ): Promise<AgentLink> {
+    const transport = startEngine(
+      {
+        credentials: gatewayCredential,
+        hasAgentMessages,
+        request: options.onToolRequest,
+        title: options.onTitle,
+        ...(options.sessionTools ? { sessionTools: options.sessionTools } : {}),
+      },
+      runtime
+    );
     const developerDir = simulatorEnv().DEVELOPER_DIR;
     if (developerDir) process.env.DEVELOPER_DIR = developerDir;
     // A chat that never closes its agent-device session must not hold the device, or leave agent-device's daemon running, for good.

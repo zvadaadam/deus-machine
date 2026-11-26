@@ -7,12 +7,14 @@ import { createWriteStream } from "node:fs";
 import path from "node:path";
 import { createServer } from "vite";
 import { chromium } from "playwright";
+import { testRelayedBoard } from "./boards.mjs";
 import { testRelayedFiles } from "./files.mjs";
 import { until } from "./stack.mjs";
 
 const CLIENT = "/src/platform/ws/query-protocol-client.ts";
 
 export async function testBrowser({
+  boardChatId,
   root,
   directory,
   output,
@@ -316,8 +318,23 @@ export async function testBrowser({
         15_000,
         "a new code after a device paired"
       );
-      await mac.close();
       check("After a device pairs, it shows as connected and Add device shows a new code");
+
+      await testRelayedBoard({
+        boardChatId,
+        phone: scan,
+        secondTab: tab,
+        desktop: mac,
+        desktopBase: desktopUi.resolvedUrls.local[0],
+        hostDb,
+        hostWrite,
+        machineId,
+        output,
+      });
+      check(
+        "A paired 390px phone opens the board and thread at its computer address, sees its queued post delivered to Release room and the coordinator's reply live, receives a desktop reply and an unread dot, and reopens the address on reload and in a second paired tab"
+      );
+      await mac.close();
 
       const newDevices = (await hostApi("/remote-auth/devices")).devices.filter(
         (device) => !previousIds.has(device.id)

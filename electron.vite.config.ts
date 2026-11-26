@@ -102,6 +102,7 @@ export default defineConfig({
   // Renderer (apps/web/) — React app
   // ---------------------------------------------------------------------------
   renderer: {
+    base: "/",
     root: resolve(__dirname, "apps/web"),
     plugins: [react(), svgr(), tailwindcss(), backendPortPlugin()],
     define: {

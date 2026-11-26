@@ -4,6 +4,12 @@ import type { InputOf } from "@shared/api/op";
 import { getRuntimeClient, runtimeForQueryClient } from "@/platform/ws";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 
+/** A seen mark belongs to the same host and account as this board read. */
+export function useBoardSeenScope() {
+  const runtime = runtimeForQueryClient(useQueryClient()) ?? getRuntimeClient();
+  return JSON.stringify([runtime.identity.host, runtime.identity.account]) + ":";
+}
+
 export function useBoards() {
   const queryKey = [api.boards.name];
   const runtime = runtimeForQueryClient(useQueryClient()) ?? getRuntimeClient();

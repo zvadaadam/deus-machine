@@ -1,4 +1,5 @@
 /** Drafts and notes survive reload under the runtime's host and account, while pictures, pasted cards and oversized text stay in memory. */
+import { uuidv7 } from "@shared/lib/uuid";
 import { createStore } from "zustand";
 import { z } from "zod";
 import { createJSONStorage, persist } from "zustand/middleware";
@@ -24,6 +25,7 @@ function storedObjects<T extends object>() {
 const count = z.number().int().nonnegative().default(0);
 const storedRow = z.object({
   draft: z.string().default(""),
+  pendingSubmission: z.object({ id: z.uuid(), text: z.string() }).optional(),
   fileMentions: storedObjects<FileMention>(),
   skillMentions: storedObjects<SkillMention>(),
   inspectedElements: storedObjects<InspectedElement>(),
@@ -62,7 +64,9 @@ export function emptyComposer(
 
 function hasDraft(row: KeptDraft) {
   const notes = row.fileMentions.length + row.skillMentions.length + row.inspectedElements.length;
-  return Boolean(row.draft || notes || row.missingPictures || row.missingPastedTexts);
+  return Boolean(
+    row.pendingSubmission || row.draft || notes || row.missingPictures || row.missingPastedTexts
+  );
 }
 
 const storedRows = z.object({
@@ -82,6 +86,7 @@ function createDraftStore(name: string) {
             const oversized = content.draft.length > MAX_STORED_DRAFT_LENGTH;
             const row = {
               draft: oversized ? "" : content.draft,
+              pendingSubmission: content.pendingSubmission,
               fileMentions: content.fileMentions,
               skillMentions: content.skillMentions,
               inspectedElements: content.inspectedElements,
@@ -300,6 +305,26 @@ export const sessionComposerActions = {
       c.missingPictures = 0;
       c.missingPastedTexts = 0;
     }),
+
+  beginSubmission(key: Target, text: string) {
+    let id: string;
+    edit(key, (c) => {
+      if (c.pendingSubmission?.text !== text) c.pendingSubmission = { id: uuidv7(), text };
+      id = c.pendingSubmission.id;
+    });
+    return id!;
+  },
+  finishSubmission(key: Target, id: string) {
+    let finished = false;
+    edit(key, (c) => {
+      const pending = c.pendingSubmission;
+      if (pending?.id !== id) return;
+      if (c.draft.startsWith(pending.text)) c.draft = c.draft.slice(pending.text.length);
+      delete c.pendingSubmission;
+      finished = true;
+    });
+    return finished;
+  },
 
   clearSent: (key: Target, sent: StagedContent) =>
     edit(key, (c) => {

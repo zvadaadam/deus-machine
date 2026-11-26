@@ -4,6 +4,7 @@ import type { HistoryLocation, RegisteredRouter } from "@tanstack/react-router";
 const selectionWrites = new WeakSet<HistoryLocation>();
 
 export function writeWorkspaceSelection(router: RegisteredRouter, href: string, replace = false) {
+  if (router.history.location.href === href) return;
   const unsubscribe = router.history.subscribe(({ location, action }) => {
     if (location.href === href && action.type === (replace ? "REPLACE" : "PUSH")) {
       selectionWrites.add(location);

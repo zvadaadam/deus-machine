@@ -33,6 +33,7 @@ lab device call phone repos
 ```
 
 Look for `phone` in the approvals and `Remote test` in the read. Run `lab down` when finished. The lab also shuts down after 30 idle minutes.
+Use `lab up --host board` for a coordinator workspace with the **Remote release** board, two posts and a reply. In the first thread, “Which check comes next?” gets a scripted answer from **Release room**.
 If `up` reports “Lab is already up or starting”, `status` shows the phase, devices and idle timeout.
 After a `kill -9` of the daemon, read `status` before the next `up` replaces `lab.json`. Use `last` to identify and manually remove any surviving lab processes and Postgres container.
 The next `up` starts in a fresh directory with a unique container name and newly allocated ports.
@@ -168,4 +169,4 @@ Hand over the commands, JSON, exit codes, state transitions, follow lines and lo
 - Test phone screens in the iOS app’s own tests, outside this repository.
 - For a deployed-relay report, get the maintainer’s approval before deploying a staging relay by hand.
 - Use a transport-level test for the relay’s view of a dead peer. Under `blackhole`, the device’s socket still answers protocol pings.
-- The lab cannot produce a chat turn, so it cannot test chat event replay or an agent’s question.
+- The default host is agentless. The board host runs scripted coordinator turns.
