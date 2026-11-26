@@ -1017,7 +1017,7 @@ A state change must leave its neighbours in place. Reserve space for a heavier l
 - Never edit outside your worktree directory
 - Never start the app outside your worktree directory
 - Never use npm or yarn
-- Use WebSocket push except for git diffs on working sessions, file changes when a visible local workspace cannot be watched, and device recovery. Because `simctl` sends no reboot event, the Device hub checks every 2.5 s whether a shown iOS simulator has rebooted, and the panel refetches inventory at the same interval for at most 30 s during recovery.
+- Use WebSocket push except for git diffs on working sessions, file changes when a visible local workspace cannot be watched, and device recovery. Because `simctl` sends no reboot event, the hub waits 2.5 s between sweeps of the shown iOS simulators, and the panel polls inventory every 2.5 s only while recovering a device, for at most 30 s.
 - All colors via CSS variables/tokens, never hardcoded
 
 ## Feedback to Deus

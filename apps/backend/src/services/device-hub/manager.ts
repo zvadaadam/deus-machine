@@ -234,6 +234,8 @@ export class DeviceHub {
     }
 
     if (androidSdk) {
+      env.ANDROID_HOME = androidSdk;
+      env.ANDROID_SDK_ROOT = androidSdk;
       env.PATH = [join(androidSdk, "platform-tools"), join(androidSdk, "emulator"), env.PATH]
         .filter(Boolean)
         .join(delimiter);

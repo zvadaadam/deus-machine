@@ -102,16 +102,19 @@ describe("Device Hub lifecycle", () => {
     expect(await readFile(await state("pid"), "utf8")).not.toBe(pid);
   });
 
-  it("starts the hub with the detected Android SDK tools first on PATH", async () => {
+  it("starts the hub with the detected Android SDK in its environment and first on PATH", async () => {
+    vi.stubEnv("ANDROID_HOME", "/stale/home");
+    vi.stubEnv("ANDROID_SDK_ROOT", "/stale/sdk");
     hub.follow(view);
     await wait("ready");
-    expect(await readFile(await state("path"), "utf8")).toBe(
-      [
-        "/fixture/Android SDK/platform-tools",
-        "/fixture/Android SDK/emulator",
-        process.env.PATH,
-      ].join(delimiter)
-    );
+    const root = "/fixture/Android SDK";
+    expect(JSON.parse(await readFile(await state("android-env.json"), "utf8"))).toEqual({
+      ANDROID_HOME: root,
+      ANDROID_SDK_ROOT: root,
+      PATH: [join(root, "platform-tools"), join(root, "emulator"), process.env.PATH].join(
+        delimiter
+      ),
+    });
   });
 
   it("names the most recently shown device and releases it when the viewer disconnects", async () => {

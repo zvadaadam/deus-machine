@@ -8,7 +8,7 @@ import {
 } from "@/features/workspace/store/workspaceLayoutStore";
 import { getBaseURL } from "@/shared/config/api.config";
 import { call } from "@/platform/ws";
-import { canClearMissingDevice, deviceKey } from "./devices";
+import { canClearMissingDevice, deviceKey, needsRecoveryPoll } from "./devices";
 
 const recoveryMs = 30_000;
 
@@ -66,10 +66,9 @@ export function useDeviceSelection(
     queryFn: () => call(api.deviceHubDevices),
     refetchOnMount: "always",
     retry: false,
-    refetchInterval: (q) => {
-      if (!recoverUntil || Date.now() >= recoverUntil) return false;
-      const device = q.state.data?.devices.find((d) => deviceKey(d) === id);
-      return q.state.error || (device && !device.booted) ? 2500 : false;
+    refetchInterval: ({ state: { data, error } }) => {
+      if (!id || !recoverUntil || Date.now() >= recoverUntil) return false;
+      return error || (data && needsRecoveryPoll(id, data)) ? 2500 : false;
     },
   });
   const start = useMutation(startDeviceOptions(workspaceId, instance));
@@ -123,7 +122,7 @@ export function useDeviceSelection(
   useEffect(() => {
     if (!list.isSuccess || !list.isFetchedAfterMount || !id) return;
     if (!selected) {
-      if (canClearMissingDevice(id, list.data.detail)) choose(null);
+      if (canClearMissingDevice(id, list.data)) choose(null);
     } else if (recoverUntil && Date.now() < recoverUntil && selected.booted && start.isIdle) {
       attach(selected, false);
     }
