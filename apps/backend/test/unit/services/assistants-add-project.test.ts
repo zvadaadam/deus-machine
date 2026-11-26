@@ -37,9 +37,7 @@ vi.mock("../../../src/services/query-engine", () => ({
 }));
 vi.mock("../../../src/services/server-name", () => ({ getServerName: () => "Proof Mac" }));
 vi.mock("@sentry/node", () => ({ captureException: state.report }));
-vi.mock("../../../src/services/agent/service", () => ({
-  provideSessionTools: () => {},
-}));
+vi.mock("../../../src/services/agent/service", () => ({}));
 vi.mock("../../../src/services/settings.service", () => ({ getSetting: () => undefined }));
 vi.mock("../../../src/services/streams", () => ({ publish: vi.fn() }));
 vi.mock("../../../src/services/account-session", () => ({

@@ -632,7 +632,7 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   (`tool-relay.ts` `answer`): whoever answers first, the others' question or
   plan card is withdrawn. Settling a local turn withdraws its unanswered cards too.
 - **Chats operate chats.** Every local chat has the same tools as its own
-  (`withSessionTools` in `operator.ts`, registered with the agent service and
+  (`sessionTools` in `services/session-tools.ts`, registered with the agent service and
   handed to the engine with the Deus tools in one source): the chat itself is
   the caller and plan mode reads only. Of the writes that target a chat, only
   `rename` can target the caller. Depth, chats per starter and starts per minute are limited. The turn's

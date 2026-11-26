@@ -1,3 +1,4 @@
+import { sessionTools } from "../../../src/services/session-tools";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventGapError, WireRequestError } from "@zvada/agent-server/client";
@@ -49,7 +50,7 @@ import { subscribe } from "../../../src/services/streams";
 import { addConnection, closeAll } from "../../../src/services/ws.service";
 import { createDeusHost, queueView } from "../../../src/services/assistants/host";
 import * as workspaceInit from "../../../src/services/workspace-init.service";
-import { answerMcp, withSessionTools } from "../../../src/services/assistants/operator";
+import { answerMcp } from "../../../src/services/assistants/operator";
 import * as access from "../../../src/services/assistants/access";
 import * as settings from "../../../src/services/settings.service";
 import * as toolRelay from "../../../src/services/agent/tool-relay";
@@ -170,7 +171,7 @@ async function queueTool(
   caller: string = fromChat.sessionId,
   mode: "plan" | "bypass_permissions" = "bypass_permissions"
 ) {
-  const tools = withSessionTools({ name: "deus", tools: [], call: vi.fn() });
+  const tools = sessionTools(caller).compose({ name: "deus", tools: [], call: vi.fn() });
   const result = await tools.call(
     action === "read_queue" ? action : "manage_queue",
     action === "read_queue" ? { session: sessionId } : { session: sessionId, action, message: id },

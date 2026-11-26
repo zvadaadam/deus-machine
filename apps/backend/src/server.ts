@@ -11,6 +11,7 @@ import {
 import { syncKeepAwake } from "./services/keep-awake.service";
 import { notifyDevicesChanged } from "./services/remote-auth.service";
 import { reconcileRelay, disconnectFromRelay } from "./services/relay.service";
+import { sessionTools } from "./services/session-tools";
 import * as agentService from "./services/agent";
 import { destroyAllPtySessions } from "./services/pty.service";
 import { deviceHub } from "./services/device-hub";
@@ -124,7 +125,7 @@ async function onListening(port: number): Promise<void> {
   // Customize: app sign-ins return here, and agents reach apps through its app proxy.
   void startIntegrations(port);
 
-  await agentService.init({ agentless: allowAgentless });
+  await agentService.init({ agentless: allowAgentless, sessionTools });
 
   // CRITICAL: Machine-readable port output for Electron main process and dev.
   // Emitted after the engine starts so launchers see a fully wired runtime.

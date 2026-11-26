@@ -46,7 +46,7 @@ export interface AgentLinkOptions {
   /** Session title from Claude's own summary. */
   onTitle: (payload: SessionTitle) => void;
   /** A chat's tools: the Deus tools, with the session tools beside them. */
-  sessionTools?: (own: HostToolSource) => HostToolSource;
+  sessionTools?: (sessionId: string, own: HostToolSource) => HostToolSource;
 }
 
 // ============================================================================

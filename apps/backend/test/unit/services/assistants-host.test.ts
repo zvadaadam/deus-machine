@@ -1,3 +1,4 @@
+import { sessionTools } from "../../../src/services/session-tools";
 // This computer as the operator tools' host (LLP 0019), against a scratch
 // SQLite database built from the fresh schema: its chats as sessions, read
 // from their rows; a turn sent, stopped and answered through the app's own
@@ -70,7 +71,6 @@ vi.mock(import("../../../src/services/agent/chat-turn"), async (original) => ({
   setupStop: () => undefined,
 }));
 vi.mock("../../../src/services/agent/service", () => ({
-  provideSessionTools: () => {},
   isConnected: () => false,
 }));
 vi.mock("../../../src/services/agent/tool-relay", () => ({
@@ -150,7 +150,7 @@ import { deleteFailedWorkspace } from "../../../src/services/workspace-lifecycle
 import { createDeusHost } from "../../../src/services/assistants/host";
 import * as access from "../../../src/services/assistants/access";
 import { getSetting } from "../../../src/services/settings.service";
-import { _resetOperator, withSessionTools } from "../../../src/services/assistants/operator";
+import { _resetOperator } from "../../../src/services/assistants/operator";
 import { READ_ONLY } from "../../../src/services/assistants/sentences";
 import { wireTestTurnNotices } from "../../fixtures/turn-notices";
 import { assistantCaller, operations } from "../../helpers";
@@ -859,7 +859,7 @@ describe("through MCP and as a chat's own tools", () => {
     });
 
     it("lets a chat rename itself and its own workspace, and refuses both in plan mode", async () => {
-      const source = withSessionTools(deusTools("s-lead"));
+      const source = sessionTools("s-lead").compose(deusTools("s-lead"));
       const signal = new AbortController().signal;
       for (const target of [{ session: "lead:1" }, { workspace: "lead" }]) {
         const invoke = (permissionMode: "plan" | "bypass_permissions") =>
@@ -981,7 +981,7 @@ describe("through MCP and as a chat's own tools", () => {
     async (caller) => {
       const tools: readonly { name: string }[] =
         caller === "chat"
-          ? withSessionTools(deusTools("s-lead")).tools
+          ? sessionTools("s-lead").compose(deusTools("s-lead")).tools
           : (await mcp({ jsonrpc: "2.0", id: 1, method: "tools/list" }, assistantCaller("operate")))
               .result.tools;
       expect(tools.map((tool) => tool.name).filter((name) => /project|repo/i.test(name))).toEqual([
@@ -993,7 +993,10 @@ describe("through MCP and as a chat's own tools", () => {
   it("keeps each chat's instructions and tool list on the same setting after a change", async () => {
     for (const id of ["before", "after", "later"]) insertChat(id, "w-lead");
     let preference: boolean | null = false;
-    const tools = (id: string) => withSessionTools(deusTools(id)).tools.map((t) => t.name);
+    const tools = (id: string) =>
+      sessionTools(id)
+        .compose(deusTools(id))
+        .tools.map((t) => t.name);
     const instructions = (id: string) =>
       buildTurnStartParams(id, "turn", "gemini", "Check the build", {
         cwd: "/workspace",
@@ -1242,7 +1245,7 @@ describe("through MCP and as a chat's own tools", () => {
       tools: [{ name: "getDiff", description: "d", inputSchema: { type: "object" } }],
       call: vi.fn(async () => ({ content: [{ type: "text" as const, text: "own" }] })),
     };
-    const source = withSessionTools(own);
+    const source = sessionTools("s-lead").compose(own);
     expect(source.tools.map((t) => t.name)).toEqual(
       expect.arrayContaining(["getDiff", "send_message", "archive"])
     );
@@ -2128,7 +2131,11 @@ describe("the acceptance pass (F5, F7, F8, F9, F10)", () => {
   });
 
   it("F10: a caller in plan mode is refused start_session and send_message, which make nothing; list_sessions answers", async () => {
-    const source = withSessionTools({ name: "deus", tools: [], call: vi.fn() } as never);
+    const source = sessionTools("s-lead").compose({
+      name: "deus",
+      tools: [],
+      call: vi.fn(),
+    } as never);
     const caller = {
       sessionId: "s-lead",
       harness: "claude-code",

@@ -3,7 +3,7 @@
 
 import * as path from "path";
 import type { HubDevice } from "@shared/types/device-hub";
-import { OPERATOR_GUIDANCE, quote } from "@zvada/agent-server/operator";
+import { quote } from "@zvada/agent-server/operator";
 import { TELL_USER } from "@shared/agent-message";
 import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
 
@@ -87,8 +87,6 @@ export function buildWorkspaceContext(
     `A built-in browser is available for testing UI changes.\n` +
     AGENT_DEVICE +
     deviceInstructions(device) +
-    // The session tools every chat here has (services/assistants: withSessionTools).
-    `${OPERATOR_GUIDANCE}\n` +
     "You may use `rename` on your own chat and its workspace.\n" +
     "For this computer's workspaces, read a `deus://workspace?id=<workspace id>&session=<chat id>` link with `read_session`. Pass its `session` value as `session`.\n" +
     "Without `session`, pass the link's `id` value as `session` to read the workspace's current chat.\n" +

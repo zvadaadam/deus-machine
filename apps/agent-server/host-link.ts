@@ -28,7 +28,7 @@ export interface DeusHost {
   /** Whether this chat was given the tool for messaging the person. */
   hasAgentMessages?(sessionId: string): boolean;
   /** A chat's tools: the Deus tools `own`, with the session tools the backend adds beside them. */
-  sessionTools?(own: HostToolSource): HostToolSource;
+  sessionTools?(sessionId: string, own: HostToolSource): HostToolSource;
   /** A deus MCP tool's request (getDiff, automation/update, …). */
   request(method: string, params: Record<string, unknown>): Promise<unknown>;
   /** A session's title, to name the session and an untitled workspace. */
@@ -51,8 +51,8 @@ export const heldCredential: CredentialSource = async (request, signal) => {
 };
 
 /** A chat's tools, as the backend composes them; the Deus tools alone when it adds none. */
-export function chatTools(own: HostToolSource): HostToolSource {
-  return host?.sessionTools?.(own) ?? own;
+export function chatTools(sessionId: string, own: HostToolSource): HostToolSource {
+  return host?.sessionTools?.(sessionId, own) ?? own;
 }
 
 /** The backend, or none (it stopped the engine). */
