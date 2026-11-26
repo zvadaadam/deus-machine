@@ -17,10 +17,8 @@ import { returnContentToComposer } from "@/features/session/lib/returnToComposer
 import { ImageDropTarget } from "@/features/session/ui/ImageDropTarget";
 import { MissingAttachments } from "@/features/session/ui/MissingAttachments";
 import { PastedImageCard } from "@/features/session/ui/PastedImageCard";
-import type { RepoGroup, Workspace } from "@/shared/types";
 import type { Repository } from "../types";
 import { tempo } from "@/shared/lib/tempo";
-import { RecentWorkspaces, buildRecentWorkspaceGroups } from "./RecentWorkspaces";
 import { CloudToggle, BranchPickerButton } from "./composer/ComposerControls";
 import { RepoPicker } from "./composer/RepoPicker";
 import { useNewChatSelection } from "./composer/useNewChatSelection";
@@ -66,11 +64,10 @@ const QUICK_PROMPTS = [
 // ── Types ───────────────────────────────────────────────────────────
 interface HomeViewProps {
   repos: Repository[];
-  repoGroups?: RepoGroup[];
+  hasWorkspaces: boolean;
   /** Web-direct discovery state: loading and a failed load are not an empty account. */
   repoGroupsLoading?: boolean;
   repoGroupsError?: string | null;
-  selectedWorkspaceId?: string | null;
   onSendMessage: (
     repoId: string,
     message: string,
@@ -82,7 +79,6 @@ interface HomeViewProps {
     /** In the cloud, the organization it starts in (the composer's). */
     organizationId?: string | null
   ) => Promise<boolean>;
-  onWorkspaceClick?: (workspace: Workspace) => void;
   onOpenProject?: () => void;
   onCloneRepository?: () => void;
   onStartNewProject?: () => void;
@@ -108,12 +104,10 @@ interface HomeViewProps {
  */
 export function HomeView({
   repos = [],
-  repoGroups = [],
+  hasWorkspaces,
   repoGroupsLoading = false,
   repoGroupsError = null,
-  selectedWorkspaceId = null,
   onSendMessage,
-  onWorkspaceClick,
   onOpenProject,
   onCloneRepository,
   onStartNewProject,
@@ -193,8 +187,6 @@ export function HomeView({
     () => repos.find((r) => r.id === selectedRepoId) ?? null,
     [repos, selectedRepoId]
   );
-
-  const recentWorkspaceGroups = useMemo(() => buildRecentWorkspaceGroups(repoGroups), [repoGroups]);
 
   // ── Branch selection ──────────────────────────────────────────────
   // A project with no folder on this computer runs only in the cloud: the
@@ -361,16 +353,10 @@ export function HomeView({
     [setMessage]
   );
 
-  // Fully Mac-closed web: there is no local project to start from — the home
-  // is the user's cloud sessions (the sidebar's rows, surfaced) or an honest
-  // pointer to where new ones come from. Every other affordance on this screen
-  // (repo picker, clone, new project, composer) needs the Mac backend.
   if (isCloudDirectWebMode()) {
     return (
       <CloudSessionsHome
-        groups={recentWorkspaceGroups}
-        selectedWorkspaceId={selectedWorkspaceId}
-        onWorkspaceClick={onWorkspaceClick}
+        hasSessions={hasWorkspaces}
         loading={repoGroupsLoading}
         error={repoGroupsError}
       />
@@ -378,10 +364,7 @@ export function HomeView({
   }
 
   return (
-    <div className="relative flex h-full min-h-0 flex-1 flex-col items-center overflow-hidden">
-      {/* Top spacer — keeps the input high enough that recent workspaces can breathe below. */}
-      <div className="flex-[0_0_14%] shrink-0 sm:flex-[0_0_18%]" />
-
+    <div className="flex h-full min-h-0 flex-1 flex-col items-center overflow-y-auto pt-[14svh] sm:pt-[18svh]">
       <h1
         key={hasRepos ? "has-repos" : "zero-repos"}
         className="enter-step text-text-primary mb-6 w-full max-w-[720px] px-4 text-center text-2xl font-medium tracking-tight [--enter-y:8px] sm:px-6"
@@ -540,9 +523,8 @@ export function HomeView({
         </ImageDropTarget>
       </div>
 
-      {/* Quick Prompts — chip row below input card (only when repos exist) */}
       <AnimatePresence>
-        {hasRepos && !message.trim() && recentWorkspaceGroups.length === 0 && (
+        {hasRepos && !message.trim() && !hasWorkspaces && (
           <motion.div
             key="quick-prompts"
             initial={{ opacity: 0, y: 6 }}
@@ -572,67 +554,49 @@ export function HomeView({
         )}
       </AnimatePresence>
 
-      {/* Scrollable middle — recents (or zero state) get their own scroll container
-       * so the input + header stay pinned at the top. The footer below is absolutely
-       * positioned over this area; pb-32 gives the last item room to scroll past
-       * the button row instead of staying stuck behind the gradient. */}
-      <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto pb-32">
-        <AnimatePresence>
-          {hasRepos && recentWorkspaceGroups.length > 0 && (
-            <RecentWorkspaces
-              groups={recentWorkspaceGroups}
-              selectedWorkspaceId={selectedWorkspaceId}
-              onWorkspaceClick={onWorkspaceClick}
-            />
-          )}
-        </AnimatePresence>
+      {/* Zero-repo state — project action cards replace quick prompts */}
+      <AnimatePresence>
+        {!hasRepos && (
+          <motion.div
+            key="zero-state"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12, transition: tempo.slow.exit }}
+            transition={{ ...tempo.slow, delay: 3 * tempo.step }}
+            className="mt-6 w-full max-w-[560px] px-4 pb-6 sm:px-6"
+          >
+            <p className="text-text-muted mb-4 text-sm">
+              Add a project to start working with your AI coding agent.
+            </p>
 
-        {/* Zero-repo state — project action cards replace quick prompts */}
-        <AnimatePresence>
-          {!hasRepos && (
-            <motion.div
-              key="zero-state"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 12, transition: tempo.slow.exit }}
-              transition={{ ...tempo.slow, delay: 3 * tempo.step }}
-              className="mt-6 w-full max-w-[560px] px-4 sm:px-6"
-            >
-              <p className="text-text-muted mb-4 text-sm">
-                Add a project to start working with your AI coding agent.
-              </p>
+            <div className="border-border-subtle bg-bg-elevated/60 overflow-hidden rounded-xl border">
+              {windowActions.map((action, index) => {
+                const card = addCards[action];
+                const Icon = card.icon;
+                return (
+                  <div key={action}>
+                    {index > 0 && <div className="border-border-subtle/50 mx-4 border-t" />}
+                    <button
+                      type="button"
+                      onClick={card.run}
+                      className="hover:bg-bg-raised/40 flex w-full items-start gap-3.5 px-4 py-3.5 text-left transition-colors"
+                    >
+                      <div className="bg-bg-muted mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
+                        <Icon className="text-text-tertiary h-4 w-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-text-primary text-sm font-medium">{card.title}</h3>
+                        <p className="text-text-muted mt-0.5 text-xs">{card.hint}</p>
+                      </div>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-              <div className="border-border-subtle bg-bg-elevated/60 overflow-hidden rounded-xl border">
-                {windowActions.map((action, index) => {
-                  const card = addCards[action];
-                  const Icon = card.icon;
-                  return (
-                    <div key={action}>
-                      {index > 0 && <div className="border-border-subtle/50 mx-4 border-t" />}
-                      <button
-                        type="button"
-                        onClick={card.run}
-                        className="hover:bg-bg-raised/40 flex w-full items-start gap-3.5 px-4 py-3.5 text-left transition-colors"
-                      >
-                        <div className="bg-bg-muted mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
-                          <Icon className="text-text-tertiary h-4 w-4" />
-                        </div>
-                        <div>
-                          <h3 className="text-text-primary text-sm font-medium">{card.title}</h3>
-                          <p className="text-text-muted mt-0.5 text-xs">{card.hint}</p>
-                        </div>
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Footer actions — absolute so the recents scroll container above
-       * fills the full viewport and items can fade behind the buttons. */}
       <AnimatePresence>
         {hasRepos && (
           <motion.div
@@ -641,24 +605,22 @@ export function HomeView({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, transition: tempo.slow.exit }}
             transition={{ ...tempo.slow, delay: 4 * tempo.step }}
-            className="home-footer-fade pointer-events-none absolute right-0 bottom-0 left-0 z-20 flex w-full justify-center pt-24 pb-6"
+            className="mt-auto flex items-center justify-center gap-3 py-6"
           >
-            <div className="pointer-events-auto flex items-center gap-3">
-              {windowActions.map((action, index) => (
-                <span key={action} className="flex items-center gap-3">
-                  {index > 0 && (
-                    <span className="bg-foreground/10 inline-block h-1 w-1 rounded-full" />
-                  )}
-                  <button
-                    type="button"
-                    onClick={addCards[action].run}
-                    className="text-text-disabled hover:text-text-muted text-xs underline-offset-4 transition-colors hover:underline"
-                  >
-                    {addCards[action].link}
-                  </button>
-                </span>
-              ))}
-            </div>
+            {windowActions.map((action, index) => (
+              <span key={action} className="flex items-center gap-3">
+                {index > 0 && (
+                  <span className="bg-foreground/10 inline-block h-1 w-1 rounded-full" />
+                )}
+                <button
+                  type="button"
+                  onClick={addCards[action].run}
+                  className="text-text-disabled hover:text-text-muted text-xs underline-offset-4 transition-colors hover:underline"
+                >
+                  {addCards[action].link}
+                </button>
+              </span>
+            ))}
           </motion.div>
         )}
       </AnimatePresence>
@@ -669,51 +631,36 @@ export function HomeView({
 // ── Web-direct home ─────────────────────────────────────────────────
 const DESKTOP_DOWNLOAD_URL = "https://github.com/zvadaadam/deus-machine/releases";
 
-/**
- * The home for a browser with no Mac behind it: the cloud sessions discovery
- * found, or — for a brand-new account — where to start one. Sessions are
- * created from the desktop app for now (creation needs the Mac backend), so
- * the empty state says exactly that instead of offering dead controls.
- */
 const CLOUD_HOME_COPY = {
   loading: ["Loading your cloud sessions…", "Fetching them from Deus Cloud."],
   error: ["Couldn't load your cloud sessions", "Discovery failed."],
   sessions: [
     "Your cloud sessions",
-    "Start a session in the Deus desktop app. This list refreshes every minute and when you return to this tab.",
+    "Open one from the sidebar, which refreshes every minute and when you return to this tab. Start a session in the Deus desktop app.",
   ],
   empty: [
     "No cloud sessions yet",
-    "Start one from the Deus desktop app — it shows up here, and you can keep the conversation going from any browser or your phone.",
+    "Start a session in the Deus desktop app, then open it from the sidebar in any browser.",
   ],
 } as const;
 
 function CloudSessionsHome({
-  groups,
-  selectedWorkspaceId,
-  onWorkspaceClick,
+  hasSessions,
   loading,
   error,
 }: {
-  groups: ReturnType<typeof buildRecentWorkspaceGroups>;
-  selectedWorkspaceId: string | null;
-  onWorkspaceClick?: (workspace: Workspace) => void;
+  hasSessions: boolean;
   /** Discovery in flight. */
   loading: boolean;
   /** Discovery failed (the message). */
   error: string | null;
 }) {
   const queryClient = useQueryClient();
-  const hasSessions = groups.length > 0;
-  // Loading and a failed load are NOT the empty state: on a cold load the
-  // groups are [] for a beat, and the empty screen would tell a user with
-  // sessions to go download the desktop app. A failed BACKGROUND refresh
-  // keeps the cached list on screen: the error screen is for having nothing.
+  // A background refresh can fail while the sidebar still has sessions.
   const state = loading ? "loading" : hasSessions ? "sessions" : error ? "error" : "empty";
   const [title, subtitle] = CLOUD_HOME_COPY[state];
   return (
-    <div className="relative flex h-full min-h-0 flex-1 flex-col items-center overflow-hidden">
-      <div className="flex-[0_0_14%] shrink-0 sm:flex-[0_0_18%]" />
+    <div className="flex h-full min-h-0 flex-1 flex-col items-center overflow-y-auto pt-[14svh] sm:pt-[18svh]">
       <h1
         key={state}
         className="enter-step text-text-primary mb-2 w-full max-w-[720px] px-4 text-center text-2xl font-medium tracking-tight [--enter-y:8px] sm:px-6"
@@ -742,17 +689,6 @@ function CloudSessionsHome({
           Download Deus for macOS
         </a>
       )}
-      <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto pb-32">
-        <AnimatePresence>
-          {state === "sessions" && (
-            <RecentWorkspaces
-              groups={groups}
-              selectedWorkspaceId={selectedWorkspaceId}
-              onWorkspaceClick={onWorkspaceClick}
-            />
-          )}
-        </AnimatePresence>
-      </div>
     </div>
   );
 }

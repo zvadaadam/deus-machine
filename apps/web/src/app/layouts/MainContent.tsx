@@ -27,7 +27,7 @@ import { useSettings } from "@/features/settings/api/settings.queries";
 import { SidebarInset, useSidebar } from "@/components/ui";
 import { cn } from "@/shared/lib/utils";
 import { PanelLeft } from "lucide-react";
-import type { Workspace, RepoGroup } from "@/shared/types";
+import type { Workspace } from "@/shared/types";
 import type { PRActionState } from "@/features/workspace/lib/prState";
 import { useUpdateWorkspaceStatus } from "@/features/workspace/api";
 import { REVIEW_CODE } from "@/features/session/lib/sessionPrompts";
@@ -58,8 +58,7 @@ interface MainContentProps {
   addActions: AddProjectAction[];
   /** Repos for the home screen's repo picker */
   repos: Repository[];
-  /** Sidebar workspace groups reused by the home screen recent list. */
-  repoGroups: RepoGroup[];
+  hasWorkspaces: boolean;
   /** Discovery state for the web-direct home: loading and a failed load are
    *  not an empty account. */
   repoGroupsLoading?: boolean;
@@ -77,7 +76,6 @@ interface MainContentProps {
     /** In the cloud, the organization it starts in; the backend's default when absent. */
     organizationId?: string | null
   ) => Promise<boolean>;
-  onWorkspaceClick: (workspace: Workspace) => void;
 }
 
 const toolOpenedEvent = {
@@ -99,11 +97,10 @@ export function MainContent({
   onAddFromGitHub,
   addActions,
   repos,
-  repoGroups,
+  hasWorkspaces,
   repoGroupsLoading,
   repoGroupsError,
   onStartWorkspace,
-  onWorkspaceClick,
 }: MainContentProps) {
   const { open: sidebarOpen, toggleSidebar } = useSidebar();
   const isMobile = useIsMobile();
@@ -385,11 +382,10 @@ export function MainContent({
           <div className="flex min-w-0 flex-1">
             <HomeView
               repos={repos}
-              repoGroups={repoGroups}
+              hasWorkspaces={hasWorkspaces}
               repoGroupsLoading={repoGroupsLoading}
               repoGroupsError={repoGroupsError}
               onSendMessage={onStartWorkspace}
-              onWorkspaceClick={onWorkspaceClick}
               onOpenProject={onOpenProject}
               onCloneRepository={onCloneRepository}
               onStartNewProject={onStartNewProject}

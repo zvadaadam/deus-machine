@@ -148,12 +148,13 @@ try {
   // 1. The hosted app boots signed in, lists the platform's session and opens it.
   // The first load waits for Vite to build the app, which is slow on a busy machine.
   await page.goto(vite.resolvedUrls.local[0], { timeout: 120_000 });
-  await page.getByText("Direct smoke", { exact: true }).first().waitFor();
+  const sidebar = page.locator('[data-slot="sidebar"]').first();
+  const sessionRow = sidebar.getByText("Direct smoke", { exact: true });
+  await sessionRow.waitFor();
   check("the sidebar lists the session the platform reports");
   // The header's location menu lists the account's organizations (no "this computer"
   // here); the window is in the first, and the sidebar lists that organization's sessions.
   const header = page.getByRole("button", { name: /switch where workspaces run/ });
-  const sidebar = page.locator('[data-slot="sidebar"]').first();
   // The trigger reads the organization's initial tile, then its name.
   const headerLabel = async () => (await header.innerText()).trim().split("\n").at(-1);
   const inOrganization = async (name, shown, hidden) => {
@@ -201,7 +202,7 @@ try {
     "the menu lists both organizations (no computer row), the sidebar lists the chosen one's sessions, Ctrl+1 and a row switch",
     { rows }
   );
-  await page.getByText("Direct smoke", { exact: true }).first().click();
+  await sessionRow.click();
   await page.getByText("It checks the hosted web against a scripted platform.").waitFor();
   await page.getByText("What does the smoke check?").waitFor();
   const [first] = platform.socketsFor(SESSION);
