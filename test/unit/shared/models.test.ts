@@ -18,7 +18,15 @@ import {
 } from "@shared/models";
 import { LOCAL_HARNESSES } from "@shared/harnesses";
 import type { GatewayCatalog } from "@shared/gateways";
-import { changesRoute, levelFor, modelPickerView, type PickerOption } from "@/shared/agents/picker";
+import {
+  changesRoute,
+  filterModel,
+  levelFor,
+  modelKeywords,
+  modelPickerView,
+  providerGroups,
+  type PickerOption,
+} from "@/shared/agents/picker";
 
 const row = (
   harness: ModelDescriptor["harness"],
@@ -227,7 +235,7 @@ describe("what a model picker shows", () => {
       ],
     };
     const options = (formats: GatewayCatalog["formats"]) =>
-      modelPickerView([], undefined, "", [{ ...gateway, formats }]).groups.map((g) => [
+      modelPickerView([], undefined, [{ ...gateway, formats }]).groups.map((g) => [
         g.agentHarness,
         g.options.map((o) => o.id),
       ]);
@@ -283,19 +291,22 @@ describe("what a model picker shows", () => {
       ],
     };
     const selected = modelValue("codex-app-server", "internal:one", gateway.revision);
-    const view = modelPickerView(lists, selected, "", [gateway]);
+    const view = modelPickerView(lists, selected, [gateway]);
     const tabs = view.groups.filter((g) => g.source === gateway.ref);
     expect(
-      tabs.map((g) => [g.agentHarness, g.options.map((o) => [o.id, o.heading?.label])])
+      tabs.map((g) => [
+        g.agentHarness,
+        providerGroups(g.options).map(([label, rows]) => [label, rows.map((o) => o.id)]),
+      ])
     ).toEqual([
       [
         "claude-code",
         [
-          ["claude-a", "Anthropic"],
-          ["other", "Kimi"],
+          ["Anthropic", ["claude-a"]],
+          ["Kimi", ["other"]],
         ],
       ],
-      ["codex-app-server", [["internal:one", undefined]]],
+      ["codex-app-server", [["OpenAI", ["internal:one"]]]],
     ]);
     expect(
       view.groups
@@ -304,36 +315,32 @@ describe("what a model picker shows", () => {
         .some((o) => o.gatewayRevision)
     ).toBe(false);
     for (const query of ["FRIEND", "nal:one", "OpenAI"]) {
-      const filtered = modelPickerView(lists, selected, query, [gateway]);
-      const tabs = filtered.groups.filter((g) => g.source === gateway.ref);
-      expect(tabs.map((g) => g.agentHarness)).toEqual(["claude-code", "codex-app-server"]);
-      expect(tabs[0].empty?.message).toBe("No matching models.");
-      expect(tabs[1].options.map((o) => o.value)).toEqual([selected]);
-      expect(filtered.selected).toMatchObject({
-        label: "Friendly",
-        thinking: { levels: ["high"] },
-      });
+      const matches = (options: PickerOption[]) =>
+        options.filter((o) => filterModel(o.value, query, modelKeywords(o)));
+      expect(matches(tabs[0].options)).toEqual([]);
+      expect(matches(tabs[1].options).map((o) => o.value)).toEqual([selected]);
     }
-    expect(modelPickerView(lists, selected, "", null).selected).toMatchObject({
+    expect(view.selected).toMatchObject({ label: "Friendly", thinking: { levels: ["high"] } });
+    expect(modelPickerView(lists, selected, null).selected).toMatchObject({
       value: selected,
       unavailable: true,
     });
     expect(
-      modelPickerView(lists, selected, "", [{ ...gateway, models: gateway.models.slice(0, 1) }])
+      modelPickerView(lists, selected, [{ ...gateway, models: gateway.models.slice(0, 1) }])
         .groups.filter((g) => g.source === gateway.ref)
         .map((g) => g.label)
     ).toEqual(["Codex"]);
   });
 
   it("searches even a short subscription list and carries each result’s own thinking controls", () => {
-    const view = modelPickerView(lists, "claude-code:opus", "sonnet");
-    expect(view.groups[0].options.map((o) => [o.label, o.thinking?.levels])).toEqual([
+    const view = modelPickerView(lists, "claude-code:opus");
+    const matches = (query: string) =>
+      view.groups[0].options.filter((o) => filterModel(o.value, query, modelKeywords(o)));
+    expect(matches("sonnet").map((o) => [o.label, o.thinking?.levels])).toEqual([
       ["Sonnet 5.5", ["low", "medium", "high"]],
     ]);
     expect(view.selected?.label).toBe("Opus 5.5");
-    expect(modelPickerView(lists, "claude-code:opus", "missing").groups[0].empty?.message).toBe(
-      "No matching models."
-    );
+    expect(matches("missing")).toEqual([]);
   });
 
   it("marks nothing for a value that names no harness", () => {
@@ -470,16 +477,13 @@ describe("the thinking level for a model choice", () => {
       "low",
     ],
     ["a started chat opening a gateway uses its default", gateway, {}, true, "medium"],
-  ] as const)("%s", (_name, option, overrides, newChat, expected) => {
-    expect(
-      levelFor(
-        {
-          ...option,
-          thinking: option.thinking && { ...option.thinking, levels: [...option.thinking.levels] },
-        },
-        { ...chat, ...overrides },
-        newChat
-      )
-    ).toBe(expected);
+  ] satisfies [
+    string,
+    PickerOption,
+    Partial<Parameters<typeof levelFor>[1]>,
+    boolean,
+    string | undefined,
+  ][])("%s", (_name, option, overrides, newChat, expected) => {
+    expect(levelFor(option, { ...chat, ...overrides }, newChat)).toBe(expected);
   });
 });

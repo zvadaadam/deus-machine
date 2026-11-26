@@ -224,7 +224,7 @@ it("offers the same raw id over distinct local routes, and keeps the raw owner s
       gatewayRevision: revision,
       turns: [{ turnId: "one", execution: { harness, model: id } }],
     });
-    const view = modelPickerView(local.lists, local.model, "", local.gateways);
+    const view = modelPickerView(local.lists, local.model, local.gateways);
     expect(view.selected).toMatchObject({
       label: "test:model",
       gatewayRevision: revision,

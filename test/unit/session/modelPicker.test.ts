@@ -5,7 +5,7 @@ import { expect, it, vi } from "vitest";
 import type { HarnessModels } from "@shared/models";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { MessageInput } from "@/features/session/ui/MessageInput";
-import { ModelPicker } from "@/features/session/ui/ModelPicker";
+import { ModelPicker } from "@/features/session/ui/model-picker/ModelPicker";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useChatModel } from "@/shared/hooks/useModelLists";
 
@@ -13,16 +13,12 @@ vi.mock("@/shared/hooks/useGateways", () => ({ useGateways: () => ({ data: [] })
 vi.mock("@/assets/agents/cliproxyapi.svg?react", () => ({ default: () => null }));
 vi.mock("@/assets/agents", () => ({ getAgentLogo: () => null }));
 vi.mock("@/features/session/hooks/useCloudSlashItems", () => ({ useCloudSlashItems: () => [] }));
-vi.mock("@/components/ui/dropdown-menu", () => {
+vi.mock("@/components/ui/popover", () => {
   const contents = ({ children }: PropsWithChildren) => children;
   return {
-    DropdownMenu: contents,
-    DropdownMenuTrigger: contents,
-    DropdownMenuContent: ({ children }: PropsWithChildren) =>
-      createElement("section", null, children),
-    DropdownMenuLabel: contents,
-    DropdownMenuItem: contents,
-    DropdownMenuGlide: () => null,
+    Popover: contents,
+    PopoverTrigger: contents,
+    PopoverContent: ({ children }: PropsWithChildren) => createElement("section", null, children),
   };
 });
 
@@ -168,7 +164,7 @@ it("opens a gateway chat on its source and agent, and leaves an unknown effort o
         label: "GPT 6.2 Astra",
         runner: "codex-app-server" as const,
       },
-      { id: "image", provider: "openai", excluded: "hidden" as const },
+      { id: "image", label: "Image", provider: "openai", excluded: "hidden" as const },
       { id: "mystery", provider: "", label: "Mystery" },
     ],
   };
@@ -239,6 +235,7 @@ it("lets a person reach a source beyond the rail and see the search field's keyb
       TooltipProvider,
       null,
       createElement(ModelPicker, {
+        hasMessages: false,
         model: "gateway:codex-app-server:rev:hello",
         agentHarness: "codex-app-server",
         lists: [],
@@ -260,8 +257,6 @@ it("lets a person reach a source beyond the rail and see the search field's keyb
   expect(html.match(/<[^>]+aria-label="Account sources"[^>]*>/)?.[0]).toContain("overflow-y-auto");
   expect(html).toContain("Claude Code");
   expect(html).toContain("Codex");
-  expect(html.match(/<input\b[^>]*aria-label="Search models"[^>]*>/)?.[0]).toContain(
-    "focus-visible:"
-  );
+  expect(html.match(/<input\b[^>]*role="combobox"[^>]*>/)?.[0]).toContain("focus-visible:");
   expect(html).not.toContain("focus-visible:ring-0");
 });

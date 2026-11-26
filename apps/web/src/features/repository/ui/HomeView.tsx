@@ -25,7 +25,7 @@ import { CloudToggle, BranchPickerButton } from "./composer/ComposerControls";
 import { RepoPicker } from "./composer/RepoPicker";
 import { useNewChatSelection } from "./composer/useNewChatSelection";
 import { useComposerLocation } from "./composer/useComposerLocation";
-import { ModelPicker } from "@/features/session/ui/ModelPicker";
+import { ModelPicker } from "@/features/session/ui/model-picker/ModelPicker";
 import type { ThinkingLevel } from "@/shared/agents";
 import { uiActions, useUIStore } from "@/shared/stores/uiStore";
 import { FIRST_MESSAGE_PLACEHOLDER } from "@/features/workspace/lib/newWorkspace";
@@ -506,7 +506,6 @@ export function HomeView({
                 agentHarness={selection.agentHarness}
                 lists={selection.lists}
                 gateways={selection.gateways}
-                previousGateway={selection.previousGateway}
                 thinkingLevel={selection.thinkingLevel}
                 preferredThinking={selection.preferredThinking}
                 defaultThinking={selection.defaultThinking}

@@ -1,9 +1,11 @@
 import { gatewayProvider } from "./gateway-provider";
 import {
+  gatewayLabel,
   gatewayEffort,
   gatewaySupports,
   gatewayThinking,
   type GatewayCatalog,
+  type GatewayPreset,
 } from "@shared/gateways";
 import {
   DEFAULT_THINKING_LEVEL,
@@ -14,6 +16,7 @@ import {
   modelValue,
   parseModelValue,
   pickerModels,
+  thinkingLevelLabel,
   type HarnessModels,
   type ModelDescriptor,
 } from "@shared/models";
@@ -42,7 +45,7 @@ export interface PickerOption {
   agentHarness: AgentHarness;
   gatewayRevision?: string;
   thinking?: ModelDescriptor["thinking"];
-  heading?: { label: string; provider: string };
+  provider?: string;
   unavailable?: boolean;
 }
 
@@ -80,10 +83,10 @@ interface PickerGroup {
   empty?: ReturnType<typeof emptyModelList>;
 }
 
-export function providerGroups<T extends { provider: string }>(models: readonly T[]) {
+export function providerGroups<T extends { provider?: string }>(models: readonly T[]) {
   const groups = new Map<string, T[]>();
   for (const model of models) {
-    const label = gatewayProvider(model.provider).label;
+    const label = gatewayProvider(model.provider ?? "").label;
     const group = groups.get(label);
     if (group) group.push(model);
     else groups.set(label, [model]);
@@ -91,17 +94,26 @@ export function providerGroups<T extends { provider: string }>(models: readonly 
   return [...groups].sort(([a], [b]) => a.localeCompare(b));
 }
 
+export function modelKeywords({ id, label, provider }: PickerOption) {
+  return provider === undefined
+    ? [label, id]
+    : [label, id, provider, gatewayProvider(provider).label];
+}
+
+export function filterModel(_value: string, search: string, keywords: string[] = []) {
+  const query = search.trim().toLowerCase();
+  return keywords.some((word) => word.toLowerCase().includes(query)) ? 1 : 0;
+}
+
 export function modelPickerView(
   lists: readonly PickerModelList[],
   model: string | undefined,
-  search = "",
   gateways?: readonly GatewayCatalog[] | null,
   previousLabel?: string
 ) {
   const current = model ? parseModelValue(model) : undefined;
   const selectedValue =
     current && modelValue(current.harness, current.model, current.gatewayRevision);
-  const query = search.trim().toLowerCase();
   let selected: PickerOption | undefined;
   const groups = lists.flatMap((list): PickerGroup[] => {
     const harness = knownHarness(list.harness);
@@ -132,57 +144,38 @@ export function modelPickerView(
         options.unshift(selected);
       }
     }
-    const matches = query
-      ? options.filter(
-          (o) => o.label.toLowerCase().includes(query) || o.id.toLowerCase().includes(query)
-        )
-      : options;
     return [
       {
         source: "subscriptions",
         agentHarness: harness,
         label: HARNESSES[harness].label,
-        options: matches,
-        empty:
-          empty ??
-          (!matches.length ? { message: "No matching models.", openSettings: false } : undefined),
+        options,
+        empty,
       },
     ];
   });
   for (const gateway of gateways ?? []) {
     for (const agentHarness of LOCAL_HARNESSES) {
-      const providers = providerGroups(
-        gateway.models.filter((m) => gatewaySupports(gateway, m, agentHarness))
-      );
-      if (!providers.length) continue;
-      const options: PickerOption[] = [];
-      for (const [provider, rows] of providers) {
-        let heading = providers.length > 1;
-        for (const row of rows) {
-          const { id, label, provider: rawProvider } = row;
-          const thinking = gatewayThinking(row, agentHarness);
-          const option: PickerOption = {
-            id,
-            value: modelValue(agentHarness, id, gateway.revision),
-            label,
-            thinking,
+      const options = gateway.models
+        .filter((row) => gatewaySupports(gateway, row, agentHarness))
+        .map(
+          (row): PickerOption => ({
+            id: row.id,
+            label: row.label,
+            provider: row.provider,
             agentHarness,
+            value: modelValue(agentHarness, row.id, gateway.revision),
+            thinking: gatewayThinking(row, agentHarness),
             gatewayRevision: gateway.revision,
-          };
-          if (option.value === selectedValue) selected = option;
-          if (![label, id, provider, rawProvider].some((s) => s.toLowerCase().includes(query)))
-            continue;
-          if (heading) option.heading = { label: provider, provider: rawProvider };
-          heading = false;
-          options.push(option);
-        }
-      }
+          })
+        );
+      if (!options.length) continue;
+      selected ??= options.find((option) => option.value === selectedValue);
       groups.push({
         source: gateway.ref,
         agentHarness,
         label: HARNESSES[agentHarness].label,
         options,
-        empty: options.length ? undefined : { message: "No matching models.", openSettings: false },
       });
     }
   }
@@ -198,3 +191,86 @@ export function modelPickerView(
   }
   return { groups, selected };
 }
+
+export interface PickerChat extends ChatEffort {
+  model: string | undefined;
+  agentHarness?: AgentHarness;
+  lists: readonly PickerModelList[];
+  gateways?: readonly GatewayCatalog[];
+  previousGateway?: { ref?: string; label: string };
+  previousLabel?: string;
+  hasMessages: boolean;
+}
+
+export interface PickerTab {
+  value: string;
+  label: string;
+  preset?: GatewayPreset;
+}
+
+export function pickerPage(
+  chat: PickerChat,
+  { groups, selected }: ReturnType<typeof modelPickerView>,
+  browse?: { source: string; agent?: string }
+) {
+  const { model, gateways = [], previousGateway, agentHarness } = chat;
+  const revision = selected?.gatewayRevision;
+  const currentGateway = gateways.find((g) => g.revision === revision);
+  const requested = browse?.source ?? (revision && (currentGateway?.ref ?? previousGateway?.ref));
+  const gateway = gateways.find((g) => g.ref === requested);
+  const source = gateway?.ref ?? "subscriptions";
+  const tabs = groups.filter((group) => group.source === source);
+  const shown =
+    tabs.find((group) => group.agentHarness === (browse?.agent ?? agentHarness)) ?? tabs[0];
+  const newChat =
+    !!agentHarness &&
+    !!shown &&
+    changesRoute(
+      { agentHarness, gatewayRevision: revision },
+      { agentHarness: shown.agentHarness, gatewayRevision: gateway?.revision },
+      chat.hasMessages
+    );
+  const gatewayName = currentGateway
+    ? gatewayLabel(currentGateway, gateways)
+    : (previousGateway?.label ?? "Gateway");
+  const hint =
+    revision && selected
+      ? gatewayName + " · " + HARNESSES[selected.agentHarness].label
+      : "Model and thinking effort";
+  const empty =
+    shown?.empty ??
+    (gateway && !shown ? { message: "No chat models available.", openSettings: true } : undefined);
+  const label = selected?.label ?? model ?? (agentHarness && HARNESSES[agentHarness].label);
+  const effort = selected?.thinking?.levels.length
+    ? thinkingLevelLabel(chat.thinkingLevel)
+    : undefined;
+  const chipName = model
+    ? `Select model, currently ${label}${effort ? ", thinking " + effort : ""}`
+    : `Select a model for ${label}`;
+  const sources: PickerTab[] = [
+    { value: "subscriptions", label: "Your subscriptions" },
+    ...gateways.map((g) => ({ value: g.ref, label: gatewayLabel(g, gateways), preset: g.preset })),
+  ];
+  const agents = tabs.map(({ agentHarness: value, label }) => ({ value, label }));
+  const options = shown?.options ?? [];
+  const initialModel = selected && options.includes(selected) ? selected.value : undefined;
+  const preset = revision ? (currentGateway?.preset ?? "custom") : undefined;
+  return {
+    source,
+    sources,
+    agents,
+    agent: shown?.agentHarness ?? "",
+    selected,
+    options,
+    label,
+    chipName,
+    effort,
+    initialModel,
+    preset,
+    hint,
+    empty,
+    newChat,
+  };
+}
+
+export type PickerPage = ReturnType<typeof pickerPage>;

@@ -9,6 +9,7 @@ import * as ws from "@/platform/ws";
 import { useChatModel } from "@/shared/hooks/useModelLists";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { SessionComposer } from "@/features/session/ui/SessionComposer";
+import type { ModelPicker } from "@/features/session/ui/model-picker/ModelPicker";
 import { MessageInput } from "@/features/session/ui/MessageInput";
 import {
   composerStore,
@@ -20,8 +21,9 @@ import type { SessionStatus } from "@shared/enums";
 
 // Render the actual composer and toolbar; unrelated provider pickers don't
 // need a live settings connection to verify whether a user can stop a turn.
-vi.mock("@/features/session/ui/ModelPicker", () => ({ ModelPicker: () => null }));
+vi.mock("@/features/session/ui/model-picker/ModelPicker", () => ({ ModelPicker: controls.picker }));
 const controls = vi.hoisted(() => ({
+  picker: vi.fn((_props: ComponentProps<typeof ModelPicker>) => null),
   input: vi.fn(),
   button: vi.fn(),
   mobile: vi.fn(() => false),
@@ -137,6 +139,33 @@ it("keeps a draft while there is no model, explains Send and enables it when a l
     sessionComposerActions.discard(sessionId);
   }
 });
+
+it.each(["catalog", "live"] as const)(
+  "keeps the requested level until a native choice has live data (%s)",
+  (source) => {
+    const sessionId = "model-choice-" + source;
+    const harness = "claude-code";
+    const thinking = { levels: ["low", "high"] };
+    client.setQueryData([...queryKeys.settings.agentModels, null], {
+      lists: [{ harness, source, models: [{ harness, id: "next", label: "Next", thinking }] }],
+    });
+    sessionComposerActions.seedIfAbsent(sessionId, emptyComposer("claude-code:opus", "max"));
+    try {
+      renderInput({ sessionId });
+      const choice = controls.picker.mock.lastCall![0];
+      choice.onModelChange!(
+        { value: "claude-code:next", id: "next", label: "Next", agentHarness: harness, thinking },
+        "high"
+      );
+      expect(composerStore().getState().composers[sessionId]).toMatchObject({
+        model: "claude-code:next",
+        thinkingLevel: source === "live" ? "high" : "max",
+      });
+    } finally {
+      sessionComposerActions.discard(sessionId);
+    }
+  }
+);
 
 it("opens a chat from another build with its draft editable and Send disabled", () => {
   const id = "unknown-agent-session";

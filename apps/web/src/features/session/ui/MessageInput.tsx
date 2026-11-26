@@ -59,7 +59,7 @@ import { serializeInspectElement } from "../lib/parseInspectTags";
 import { DEFAULT_THINKING_LEVEL, composerThinking, type ThinkingLevel } from "@/shared/agents";
 import type { ChatModelSelection } from "@/shared/hooks/useModelLists";
 import { gatewayEffort } from "@shared/gateways";
-import { ModelPicker } from "./ModelPicker";
+import { ModelPicker } from "./model-picker/ModelPicker";
 import { PlanModeToggle } from "./PlanModeToggle";
 import { ContextTokenIndicator } from "./ContextTokenIndicator";
 
@@ -534,12 +534,10 @@ export function MessageInput({
               defaultThinking={defaultThinking}
               hasMessages={hasMessages}
               onModelChange={(option, level) => {
-                if (level !== undefined) composer.pickModel(option.value, level);
-                else
-                  composer.setModel(
-                    option.value,
-                    listIsLive(option.agentHarness) ? option.thinking?.levels : undefined
-                  );
+                const live = listIsLive(option.agentHarness);
+                if (level !== undefined && (option.gatewayRevision || live))
+                  composer.pickModel(option.value, level);
+                else composer.setModel(option.value, live ? option.thinking?.levels : undefined);
               }}
               onThinkingLevelChange={composer.setThinkingLevel}
               onOpenNewTab={onOpenNewTab}
