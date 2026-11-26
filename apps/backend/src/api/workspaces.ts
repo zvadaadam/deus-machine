@@ -5,7 +5,7 @@ import { stripVTControlCharacters } from "node:util";
 import { setupFile } from "../services/setup-status";
 import * as api from "@shared/api/workspaces";
 import { getDatabase } from "../lib/database";
-import { AppError, NotFoundError, ValidationError } from "../lib/errors";
+import { AppError, ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 import { groupWorkspacesByRepo, toWorkspace } from "../lib/workspace-grouping";
 import { loadWorkspace } from "../middleware/workspace-loader";
 import {
@@ -14,6 +14,7 @@ import {
   getWorkspaceById,
   getWorkspaceRaw,
   getWorkspacesByRepo,
+  rename,
 } from "../db";
 import { ensureCloudSession } from "../services/agent/cloud/driver";
 import {
@@ -107,9 +108,12 @@ export default [
   handle(api.archiveWorkspace, ({ workspaceId }) => archiveWorkspace(workspaceId)),
   handle(api.updateWorkspaceTitle, ({ workspaceId, title }) => {
     const db = getDatabase();
-    if (!getWorkspaceRaw(db, workspaceId)) throw new NotFoundError("Workspace not found");
-    db.prepare("UPDATE workspaces SET title = ? WHERE id = ?").run(title, workspaceId);
+    const workspace = getWorkspaceRaw(db, workspaceId);
+    if (!workspace) throw new NotFoundError("Workspace not found");
+    if (workspace.state === "archived") throw new ConflictError("This workspace is archived.");
+    rename(db, "workspaces", workspaceId, title);
     invalidate(["workspaces"]);
+    return { previousTitle: workspace.title };
   }),
   handle(api.updateWorkspaceStatus, ({ workspaceId, status }) => {
     setWorkspaceStatus(workspaceId, status);

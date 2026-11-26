@@ -14,9 +14,12 @@ import {
   getTurnsForMessages,
   getWorkspaceRaw,
   hasOlderMessages,
+  rename,
 } from "../db";
 import { cloudAccount } from "../services/agent/cloud/config";
+import { pushCloudSessionFacts } from "../services/agent/cloud/driver";
 import { mintCloudSessionToken } from "../services/agent/cloud/session-token";
+import { SESSION_RESOURCES } from "../services/agent/event-handler";
 import { stopSession } from "../services/agent/turns";
 import * as queue from "../services/agent/queue";
 import { refreshWorkspaceGithubTokenIfStale } from "../services/cloud-workspace-init.service";
@@ -101,6 +104,17 @@ export default [
     const sessionId = db.transaction(() => createChat(db, workspaceId, { select: true }))();
     invalidate(["workspaces", "sessions"]);
     return getSessionRaw(db, sessionId)!;
+  }),
+  handle(api.updateSessionTitle, ({ sessionId, title }) => {
+    const db = getDatabase();
+    const chat = getSessionRaw(db, sessionId);
+    if (!chat) throw new NotFoundError("Session not found");
+    if (chat.is_hidden || getWorkspaceRaw(db, chat.workspace_id)?.state === "archived")
+      throw new ConflictError("This chat is archived.");
+    rename(db, "sessions", sessionId, title);
+    invalidate(SESSION_RESOURCES, { sessionIds: [sessionId] });
+    pushCloudSessionFacts(sessionId, { title });
+    return { previousTitle: chat.title };
   }),
   // A client's send is the person's: no origin comes from the operation's input.
   handle(api.sendMessage, queue.sendOrQueue),

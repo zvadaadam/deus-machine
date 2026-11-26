@@ -67,6 +67,7 @@ const TOOLS = [
   "read_changes",
   "read_queue",
   "manage_queue",
+  "rename",
   "add_project",
   "send_feedback",
 ];

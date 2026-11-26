@@ -657,6 +657,12 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
   });
 
   describe("persistSessionTitle", () => {
+    it("leaves both rows unnamed when the summary's first line is blank", () => {
+      expect(persistSessionTitle(SESSION, " \nSecond line").ok).toBe(true);
+      expect(db.prepare("SELECT title FROM sessions WHERE id = ?").pluck().get(SESSION)).toBeNull();
+      expect(db.prepare("SELECT title FROM workspaces WHERE id = 'w1'").pluck().get()).toBeNull();
+    });
+
     it("sets the session title and adopts it for an untitled workspace", () => {
       persistSessionTitle(SESSION, "Fix login");
 

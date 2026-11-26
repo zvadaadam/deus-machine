@@ -40,9 +40,6 @@ vi.mock("../../../apps/backend/src/services/query-engine", () => ({ invalidate: 
 vi.mock("../../../apps/backend/src/services/pr-snapshot.service", () => ({
   refreshPrSnapshotForSession: vi.fn(),
 }));
-vi.mock("../../../apps/backend/src/services/agent/cloud/driver", () => ({
-  pushCloudSessionTitle: vi.fn(),
-}));
 import {
   admitTurn,
   claimTurn,

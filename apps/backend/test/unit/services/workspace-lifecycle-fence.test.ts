@@ -7,8 +7,11 @@ import { expect, it } from "vitest";
 
 const backend = path.resolve(__dirname, "../../..");
 const owner = "src/services/workspace-lifecycle.ts";
+const titleOwner = "src/db/queries.ts";
 const unknown = "«dynamic»";
 const ownedDeletes = ["workspaces", "repositories"];
+const titledTables = ["workspaces", "sessions"];
+const guardedTables = [...new Set([...ownedDeletes, ...titledTables])];
 const protectedColumns = new Set([
   "state",
   "init_stage",
@@ -21,29 +24,39 @@ const protectedColumns = new Set([
 ]);
 
 // Let SQLite parse the assignments, including tuple SETs and ON CONFLICT.
-// Preparing a write to a generated column fails. A DELETE compiles the
-// trigger and fails on its deliberately missing function. No statement runs.
-function guardedSchema() {
+// Generated columns forbid even INSERTs. UPDATE OF title and DELETE triggers
+// fail on a deliberately missing function at prepare time. No statement runs.
+function guardedSchema(writer = "") {
   const schema = new Database(":memory:");
   schema.exec(SCHEMA_SQL);
   const columns = schema.pragma("table_info(workspaces)") as { name: string; pk: number }[];
   schema.close();
   const guard = new Database(":memory:");
   const definitions = columns.map(({ name, pk }) =>
-    protectedColumns.has(name) ? `${name} AS (NULL)` : pk ? `${name} PRIMARY KEY` : name
+    writer !== owner && protectedColumns.has(name)
+      ? `${name} AS (NULL)`
+      : pk
+        ? `${name} PRIMARY KEY`
+        : name
   );
   guard.exec(`CREATE TABLE workspaces (${definitions.join(", ")})`);
   guard.exec(SCHEMA_SQL);
   guard.pragma("recursive_triggers = ON"); // REPLACE also deletes its conflicting row.
-  for (const table of ownedDeletes) {
+  for (const table of writer === owner ? [] : ownedDeletes) {
     guard.exec(
       `CREATE TRIGGER fence_delete_${table} BEFORE DELETE ON ${table} BEGIN SELECT forbidden_delete(); END`
     );
   }
-  return guard;
+  for (const table of writer === titleOwner ? [] : titledTables) {
+    guard.exec(
+      `CREATE TRIGGER fence_title_${table} BEFORE UPDATE OF title ON ${table} BEGIN SELECT forbidden_title(); END`
+    );
+  }
+  return { db: guard, writer };
 }
 
-function writesLifecycle(sql: string, db: Database.Database, directRun = false) {
+type Guard = ReturnType<typeof guardedSchema>;
+function writesOutsideOwner(sql: string, { db, writer }: Guard, directRun = false) {
   // Keep quoted values and identifiers intact while splitting exec() batches.
   const pieces =
     sql.match(
@@ -58,20 +71,32 @@ function writesLifecycle(sql: string, db: Database.Database, directRun = false) 
     const raw = statement.trim();
     statement = "";
     if (directRun && !/^(?:with|update|insert|replace|delete)\b/i.test(raw)) continue;
-    // An unresolved head or a write target that could resolve to workspaces
+    // An unresolved head or a write target that could resolve to a guarded table
     // cannot establish ownership. Other tables may build their own SQL.
     if (raw.split(/\s+/, 1)[0].includes(unknown)) return true;
     const target =
-      /\b(?:update(?:\s+or\s+\w+)?|(?:insert(?:\s+or\s+\w+)?|replace)\s+into|delete\s+from)\b\s*(?:["'`[]?\w+["'`\]]?\s*\.\s*)?["'`[]?([\w«»]*)/gi;
-    const targets = [...raw.matchAll(target)].map((match) => match[1].toLowerCase());
+      /'(?:''|[^'])*'|"(?:""|[^"])*"|`(?:``|[^`])*`|\[[^\]]*\]|\b(?:update(?:\s+or\s+\w+)?|(?:insert(?:\s+or\s+\w+)?|replace)\s+into|delete\s+from)\b\s*(?:["'`[]?\w+["'`\]]?\s*\.\s*)?["'`[]?([\w«»]*)["'`\]]?/gi;
+    const matches = [...raw.matchAll(target)].filter((match) => match[1] !== undefined);
+    // REPLACE can replace a title even when the statement omits the column.
     if (
-      targets.some(
-        (t) =>
-          t.includes(unknown) && ownedDeletes.some((table) => table.startsWith(t.split(unknown)[0]))
+      writer !== titleOwner &&
+      matches.some(
+        ([verb, table]) =>
+          /^(?:insert\s+or\s+|update\s+or\s+)?replace\b/i.test(verb) &&
+          titledTables.includes(table.toLowerCase())
       )
     )
       return true;
-    if (!ownedDeletes.some((table) => targets.includes(table))) continue;
+    const targets = matches.map((match) => match[1].toLowerCase());
+    if (
+      targets.some(
+        (t) =>
+          t.includes(unknown) &&
+          guardedTables.some((table) => table.startsWith(t.split(unknown)[0]))
+      )
+    )
+      return true;
+    if (!guardedTables.some((table) => targets.includes(table))) continue;
     try {
       db.prepare(`EXPLAIN ${raw.replaceAll(unknown, "?")}`);
     } catch {
@@ -159,15 +184,21 @@ function sqlText(node: ts.Expression, checker: ts.TypeChecker, seen = new Set<ts
   return unknown;
 }
 
-function violations(file: ts.SourceFile, checker: ts.TypeChecker, db: Database.Database): string[] {
+function violations(file: ts.SourceFile, checker: ts.TypeChecker, guard: Guard): string[] {
   const found: string[] = [];
   const relative = path.relative(backend, file.fileName);
   function visit(node: ts.Node): void {
-    if (relative !== "cli.ts" && ts.isIdentifier(node) && node.text === "insertWorkspaceFixture") {
+    if (
+      relative !== owner &&
+      relative !== "cli.ts" &&
+      ts.isIdentifier(node) &&
+      node.text === "insertWorkspaceFixture"
+    ) {
       const line = file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1;
       found.push(`${relative}:${line} only the integration CLI uses insertWorkspaceFixture`);
     }
     if (
+      relative !== owner &&
       relative !== "src/services/setup-status.ts" &&
       ts.isIdentifier(node) &&
       node.text === "writeSetupStatusFile"
@@ -224,7 +255,12 @@ function violations(file: ts.SourceFile, checker: ts.TypeChecker, db: Database.D
         method === "exec" &&
         receiver &&
         checker.typeToString(checker.getTypeAtLocation(receiver)) === "RegExp";
-      if (!schema && !regexExec && !forwardedParameter && writesLifecycle(sql, db, directRun)) {
+      if (
+        !schema &&
+        !regexExec &&
+        !forwardedParameter &&
+        writesOutsideOwner(sql, guard, directRun)
+      ) {
         const line = file.getLineAndCharacterOfPosition(arg.getStart(file)).line + 1;
         found.push(
           `${path.relative(backend, file.fileName)}:${line} ${sql.trim().replace(/\s+/g, " ")}`
@@ -237,7 +273,7 @@ function violations(file: ts.SourceFile, checker: ts.TypeChecker, db: Database.D
   return found;
 }
 
-it("keeps workspace lifecycle writes and project and workspace deletion in the owner", () => {
+it("keeps lifecycle writes, deletions and title updates in their owners", () => {
   // Schema creation/backfill lives in shared/schema.ts. Unit, integration
   // and e2e fixtures live outside src. The integration CLI is checked too.
   const files = ["src", "../agent-server"]
@@ -246,8 +282,7 @@ it("keeps workspace lifecycle writes and project and workspace deletion in the o
         .filter((f) => /\.(?:[cm]?[jt]sx?|sql)$/.test(f) && !f.includes("node_modules/"))
         .map((f) => path.join(dir, f))
     )
-    .concat("cli.ts")
-    .filter((f) => f !== owner);
+    .concat("cli.ts");
   const paths = files.map((f) => path.resolve(backend, f));
   const program = ts.createProgram(
     paths.filter((f) => !f.endsWith(".sql")),
@@ -259,15 +294,16 @@ it("keeps workspace lifecycle writes and project and workspace deletion in the o
     }
   );
   const checker = program.getTypeChecker();
-  const db = guardedSchema();
-  const errors = paths.flatMap((file) =>
-    file.endsWith(".sql")
-      ? writesLifecycle(readFileSync(file, "utf8"), db)
+  const guards = [guardedSchema(), guardedSchema(owner), guardedSchema(titleOwner)];
+  const errors = paths.flatMap((file) => {
+    const guard = guards.find((g) => g.writer === path.relative(backend, file)) ?? guards[0]!;
+    return file.endsWith(".sql")
+      ? writesOutsideOwner(readFileSync(file, "utf8"), guard)
         ? [file]
         : []
-      : violations(program.getSourceFile(file)!, checker, db)
-  );
-  db.close();
+      : violations(program.getSourceFile(file)!, checker, guard);
+  });
+  for (const { db } of guards) db.close();
   expect(errors).toEqual([]);
 });
 
@@ -276,25 +312,27 @@ it("checks assembled statements and distinguishes assignment targets from reads"
   const source = [
     'const table = "work" + "spaces";',
     'const head = "UPDATE " + table + " SET ";',
-    'const safe = ["status = ?", "title = state", "current_session_id = ?"];',
+    'const safe = ["status = ?", "pr_url = state", "current_session_id = ?"];',
     'const edits = ["status = ?"];',
     'edits.push("init_stage = ?");',
-    'const labels = ["status = ?"]; if (rename) labels.push("title = ?");',
+    'const labels = ["status = ?"]; if (rename) labels.push("pr_url = ?");',
     'db.prepare(head + labels.join(", "));',
     'db.prepare(head + safe.join(", "));',
     'db.prepare(head + edits.join(", ")); // reject',
-    'db.exec(`UPDATE ${table} SET (title, "error_detail") = (?, ?) WHERE id = ?`); // reject',
+    'db.exec(`UPDATE ${table} SET (pr_url, "error_detail") = (?, ?) WHERE id = ?`); // reject',
     "db.exec(`INSERT OR IGNORE INTO ${table} (id, init_fetch_issue) VALUES (?, ?)`); // reject",
-    'db.prepare("REPLACE INTO main.[workspaces] (id, title) VALUES (?, ?)"); // reject',
-    'const upsert = "INSERT INTO workspaces (id, title) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET ";',
+    'db.prepare("REPLACE INTO main.[workspaces] (id, pr_url) VALUES (?, ?)"); // reject',
+    'const upsert = "INSERT INTO workspaces (id, pr_url) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET ";',
     'db.prepare(upsert + "status = excluded.status WHERE state = ?");',
-    'db.prepare(upsert + "error_message = excluded.title"); // reject',
+    'db.prepare(upsert + "error_message = excluded.pr_url"); // reject',
     'db.prepare(head + "archived_at = CURRENT_TIMESTAMP"); // reject',
-    'db.prepare(upsert + "archived_by = excluded.title"); // reject',
-    'db.exec("UPDATE workspaces SET title = ?; DELETE /* cleanup */ FROM workspaces"); // reject',
-    "db.prepare(`UPDATE workspaces SET title = ? WHERE state IN (${placeholders})`);",
+    'db.prepare(upsert + "archived_by = excluded.pr_url"); // reject',
+    'db.exec("UPDATE workspaces SET pr_url = ?; DELETE /* cleanup */ FROM workspaces"); // reject',
+    "db.prepare(`UPDATE workspaces SET pr_url = ? WHERE state IN (${placeholders})`);",
     'db.prepare("UPDATE automation_runs SET error_message = ?");',
-    'let sql = head + "title = ?"; sql += ", setup_status = ?";',
+    `db.prepare("UPDATE sessions SET error_message = 'replace into sessions'");`,
+    `db.prepare("REPLACE INTO 'sessions' (id) VALUES (?)"); // reject`,
+    'let sql = head + "pr_url = ?"; sql += ", setup_status = ?";',
     "db.exec(sql); // reject",
     'db.query("DELETE FROM " + table); // reject',
     'db.query("DELETE FROM " + "repositories"); // reject',
@@ -302,11 +340,11 @@ it("checks assembled statements and distinguishes assignment targets from reads"
     'db.prepare("UPDATE repositories SET name = ?");',
     'db.run("/* archived */ UPDATE workspaces SET state = 1"); // reject',
     'db.run("-- note\\nDELETE FROM workspaces"); // reject',
-    'db.run("/* title only */ UPDATE workspaces SET title = state");',
+    'db.run("/* pr_url only */ UPDATE workspaces SET pr_url = state");',
     'db.run("DELETE FROM " + table); // reject',
     'db["prepare"](head + "setup_status = ?"); // reject',
-    'db.exec("UPDATE[workspaces] SET title = state");',
-    'db.exec("UPDATE[workspaces] SET state = title"); // reject',
+    'db.exec("UPDATE[workspaces] SET pr_url = state");',
+    'db.exec("UPDATE[workspaces] SET state = pr_url"); // reject',
     'db.exec(`DELETE FROM"workspaces"`); // reject',
     "db.prepare(`UPDATE ${unresolvedTable} SET state = ?`); // reject",
     "db.prepare(`INSERT INTO workspaces (${unresolvedColumns}) VALUES (?)`); // reject",
@@ -323,11 +361,34 @@ it("checks assembled statements and distinguishes assignment targets from reads"
       getSourceFile: (name) => (name === file ? ast : undefined),
     }
   );
-  const db = guardedSchema();
-  const found = violations(ast, program.getTypeChecker(), db);
-  db.close();
+  const guard = guardedSchema();
+  const found = violations(ast, program.getTypeChecker(), guard);
+  guard.db.close();
   const badLines = source.flatMap((line, index) => (line.endsWith("// reject") ? [index + 1] : []));
   expect(found.map((message) => Number(message.match(/:(\d+) /)?.[1]))).toEqual(badLines);
+});
+
+it.each(["another file", owner, titleOwner])("checks each column's owner for %s", (writer) => {
+  const guard = guardedSchema(writer);
+  try {
+    for (const table of titledTables) {
+      const insert = `INSERT INTO ${table} (id, title) VALUES (?, ?)`;
+      expect(writesOutsideOwner(insert, guard)).toBe(false);
+      for (const sql of [
+        `UPDATE ${table} SET (title, status) = (?, ?)`,
+        `${insert} ON CONFLICT(id) DO UPDATE SET title = excluded.title`,
+        `INSERT OR REPLACE INTO ${table} (id, title) VALUES (?, ?)`,
+      ]) {
+        // Replacing a workspace also deletes it, which belongs to the lifecycle owner.
+        expect(writesOutsideOwner(sql, guard)).toBe(
+          writer !== titleOwner || (sql.includes("REPLACE") && table === "workspaces")
+        );
+      }
+    }
+    expect(writesOutsideOwner("UPDATE workspaces SET state = title", guard)).toBe(writer !== owner);
+  } finally {
+    guard.db.close();
+  }
 });
 
 // The owner can publish changes, reset a chat's stream and write its setup-status

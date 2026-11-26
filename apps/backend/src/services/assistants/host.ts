@@ -80,6 +80,7 @@ import {
   encodeOrigin,
   getMessages,
   getSessionRaw,
+  setInitialTitles,
   sameOrigin,
   hasOlderMessages,
   START_RECOVERABLE,
@@ -624,18 +625,7 @@ export function createDeusHost(): DeusHost {
     if (first) first.claimed = true;
     try {
       mayTouch(caller, sessionId);
-      if (input.title) {
-        // The chat takes it; its workspace only when this is its first chat (a side chat
-        // started in a person's workspace does not rename it).
-        const db = getDatabase();
-        db.prepare("UPDATE sessions SET title = ? WHERE id = ? AND title IS NULL").run(
-          input.title,
-          sessionId
-        );
-        db.prepare(
-          "UPDATE workspaces SET title = ? WHERE first_session_id = ? AND title IS NULL"
-        ).run(input.title, sessionId);
-      }
+      if (input.title) setInitialTitles(getDatabase(), sessionId, input.title, "start");
       await sendMessage(
         { sessionId, content: input.message, turnId: input.turnId, ...settings },
         input.origin

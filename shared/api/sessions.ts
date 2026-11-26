@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { AgentHarnessSchema } from "../enums";
+import { TitleSchema } from "../title";
 import type { PaginatedMessages, Session } from "../types/session";
 import { live, out, read, write } from "./op";
 import { resumableStream, stream } from "./stream";
@@ -54,6 +55,12 @@ export const createSession = write({
   name: "createSession",
   input: workspaceId,
   output: out<Session>(),
+});
+
+export const updateSessionTitle = write({
+  name: "updateSessionTitle",
+  input: sessionId.extend({ title: TitleSchema }),
+  output: out<{ previousTitle: string | null }>(),
 });
 
 /** Start a turn, or hold the message for the next turn in a busy local chat. */
