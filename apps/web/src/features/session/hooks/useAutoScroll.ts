@@ -293,7 +293,7 @@ export function useAutoScroll({
         }
       }
       if (!shouldFollow || isPausedRef.current || chaseRafRef.current !== null) return;
-      if (!isAtBottom(container)) startChase();
+      startChase();
     });
 
     observer.observe(container);

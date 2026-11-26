@@ -65,12 +65,32 @@ async function run() {
     directory
   );
   const chats = {};
+  const workedCases = [
+    [
+      "scroll-worked",
+      "opening a settled Worked fold while following does not chase to the bottom",
+      0,
+    ],
+    [
+      "scroll-resume",
+      "opening Worked after resuming 12 px from the bottom keeps the disclosure in place",
+      12,
+    ],
+    [
+      "scroll-jump",
+      "opening Worked just after Jump while its chase is active keeps the disclosure in place",
+      null,
+    ],
+  ];
   for (const name of [
     "order",
     "long",
     "nested",
     "bubbles",
     "scroll",
+    "scroll-stream",
+    "scroll-next",
+    ...workedCases.map(([name]) => name),
     "paginate",
     "refusal",
     "claude-code",
@@ -92,7 +112,7 @@ async function run() {
       workspace,
       name === "codex-app-server" ? name : "claude-code",
       "Transcript",
-      name === "scroll" ? 1 : 0
+      name.startsWith("scroll") ? 1 : 0
     );
     await mkdir(path.join(directory, ".deus", name), { recursive: true });
   }
@@ -267,14 +287,20 @@ async function run() {
         server.onMessage((raw) => route.send(raw));
       }
     );
-    const page = await context.newPage();
-    page.setDefaultTimeout(12_000);
     const pageErrors = [];
-    page.on("pageerror", (e) => pageErrors.push(e.message));
-    const go = async (name) => {
+    const newLocalPage = async () => {
+      const page = await context.newPage();
+      page.setDefaultTimeout(12_000);
+      page.on("pageerror", (error) => pageErrors.push(error.message));
+      return page;
+    };
+    const page = await newLocalPage();
+    const go = async (name, targetPage = page) => {
       const { workspace, session } = chats[name];
-      await page.goto(`${base}s/local/w/${workspace}?session=${session}`, { timeout: 120_000 });
-      await page.getByRole("log").waitFor();
+      await targetPage.goto(`${base}s/local/w/${workspace}?session=${session}`, {
+        timeout: 120_000,
+      });
+      await targetPage.getByRole("log").waitFor();
     };
     const chooseView = async (command) => {
       await page.keyboard.press("Control+k");
@@ -608,25 +634,60 @@ async function run() {
         .waitFor();
       assert.deepEqual(await corners(), [outside, outside]);
     });
-    const waitForIdleBottom = (targetPage = page) =>
+    const waitForIdleBottom = (targetPage) =>
       targetPage.waitForFunction(async () => {
         const pane = globalThis.document.getElementById("chat-messages");
         const top = pane.scrollTop;
         // The chase retires after ten idle frames at its target.
         for (let i = 0; i < 11; i++) {
-          await new Promise(globalThis.requestAnimationFrame);
+          await new Promise((done) =>
+            globalThis.requestAnimationFrame(() => globalThis.setTimeout(done, 0))
+          );
           if (pane.scrollTop !== top || Math.abs(pane.scrollHeight - pane.clientHeight - top) > 1)
             return false;
         }
         return true;
       });
-    await check(
+    const checkScroll = (chat, name, test) =>
+      check(name, async () => {
+        const { session } = chats[chat];
+        // The transcript must still scroll while the last turn is folded.
+        for (let i = 1; i <= 6; i++) {
+          const earlier = fixture(session, `${chat}-earlier-${i}`);
+          await emit(
+            ...earlier.start(`Question ${i}`),
+            earlier.text(`Answer ${i}`),
+            earlier.end("end_turn")
+          );
+        }
+        const settled = fixture(session, `${chat}-settled`);
+        await emit(
+          ...settled.start("Review the previous changes."),
+          ...Array.from({ length: 16 }, (_, i) => settled.send(`Checked change ${i + 1}.`)),
+          settled.text("Finished the review."),
+          settled.end("end_turn")
+        );
+        const page = await newLocalPage();
+        try {
+          await go(chat, page);
+          const logView = page.getByRole("log");
+          const previous = logView.locator(`[data-message-id="${chat}-settled-reply-1"]`);
+          await previous.getByRole("button", { name: /^Expand activity, Worked/ }).waitFor();
+          await waitForIdleBottom(page);
+          await test({ page, logView, previous, session });
+        } finally {
+          await page.close();
+        }
+      });
+    await backend.write("saveSetting", { key: "chat_view", value: "bubbles" });
+    await checkScroll(
+      "scroll-stream",
       "auto-scroll resumes for in-place streaming growth after idle and stays grounded when the turn folds",
-      async () => {
-        const turn = fixture(chats.bubbles.session, "streaming-scroll");
+      async ({ page, logView, session }) => {
+        const turn = fixture(session, "streaming-scroll");
         await emit(...turn.start("Stream a long update."));
         await logView.getByText("Stream a long update.", { exact: true }).waitFor();
-        await waitForIdleBottom();
+        await waitForIdleBottom(page);
         for (let i = 1; i <= 16; i++) {
           await emit(
             turn.send(`Update ${i}: verifying smooth follow while the existing message grows.`)
@@ -637,10 +698,15 @@ async function run() {
             exact: true,
           })
           .waitFor();
-        await page.waitForFunction(() => {
-          const pane = globalThis.document.getElementById("chat-messages");
-          return pane && pane.scrollHeight - (pane.scrollTop + pane.clientHeight) <= 24;
-        });
+        const waitForBottom = () =>
+          page.waitForFunction(async () => {
+            await new Promise((done) =>
+              globalThis.requestAnimationFrame(() => globalThis.setTimeout(done, 0))
+            );
+            const pane = globalThis.document.getElementById("chat-messages");
+            return pane && pane.scrollHeight - (pane.scrollTop + pane.clientHeight) <= 24;
+          });
+        await waitForBottom();
         assert.equal(
           await page.evaluate(() =>
             globalThis.document
@@ -652,10 +718,7 @@ async function run() {
         );
         await emit(turn.text("Done streaming."), turn.end("end_turn"));
         await logView.getByText("Done streaming.", { exact: true }).waitFor();
-        await page.waitForFunction(() => {
-          const pane = globalThis.document.getElementById("chat-messages");
-          return pane && pane.scrollHeight - (pane.scrollTop + pane.clientHeight) <= 24;
-        });
+        await waitForBottom();
         assert.equal(
           await page.evaluate(() =>
             globalThis.document
@@ -667,19 +730,8 @@ async function run() {
         );
       }
     );
-    for (const [name, gap] of [
-      ["opening a settled Worked fold while following does not chase to the bottom", 0],
-      ["opening Worked after resuming 12 px from the bottom keeps the disclosure in place", 12],
-      [
-        "opening Worked just after Jump while its chase is active keeps the disclosure in place",
-        null,
-      ],
-    ]) {
-      await check(name, async () => {
-        await logView.evaluate((pane) => {
-          pane.scrollTop = pane.scrollHeight;
-        });
-        await waitForIdleBottom();
+    for (const [chat, name, gap] of workedCases) {
+      await checkScroll(chat, name, async ({ page, logView, previous }) => {
         // Gentle 1px upward scroll ticks after idle must still accumulate and pause follow.
         await logView.evaluate((pane) => {
           for (let i = 0; i < 40; i++) {
@@ -692,9 +744,7 @@ async function run() {
             .querySelector('button[aria-label="Scroll to bottom"]')
             .parentElement.classList.contains("opacity-100")
         );
-        const worked = logView
-          .locator('[data-message-id="streaming-scroll-reply-1"]')
-          .getByRole("button", { name: /^Expand activity, Worked/ });
+        const worked = previous.getByRole("button", { name: /^Expand activity, Worked/ });
         const before = await worked.evaluate((btn, gap) => {
           const pane = btn.closest('[role="log"]');
           const jump = globalThis.document.querySelector('button[aria-label="Scroll to bottom"]');
@@ -720,9 +770,7 @@ async function run() {
           }
           return expected;
         }, gap);
-        const collapse = logView
-          .locator('[data-message-id="streaming-scroll-reply-1"]')
-          .getByRole("button", { name: /^Collapse activity, Worked/ });
+        const collapse = previous.getByRole("button", { name: /^Collapse activity, Worked/ });
         await collapse.waitFor();
         await page.waitForFunction(
           (height) =>
@@ -733,6 +781,7 @@ async function run() {
           // Allow the measured expansion and its next chase frame to reach the screen.
           await new Promise(globalThis.requestAnimationFrame);
           await new Promise(globalThis.requestAnimationFrame);
+          await new Promise((done) => globalThis.setTimeout(done, 0));
           const pane = globalThis.document.getElementById("chat-messages");
           return {
             scrollTop: pane.scrollTop,
@@ -756,16 +805,22 @@ async function run() {
         );
       });
     }
-    await check("a new live turn still follows after the reader opens Worked", async () => {
-      const previous = logView.locator('[data-message-id="streaming-scroll-reply-1"]');
-      await previous.getByRole("button", { name: /^Expand activity, Worked/ }).click();
-      await previous.getByRole("button", { name: /^Collapse activity, Worked/ }).waitFor();
-      const next = fixture(chats.bubbles.session, "follow-after-worked");
-      await emit(...next.start("Continue after the fold."), next.send("Checking the next change."));
-      await logView.getByText("Checking the next change.", { exact: true }).waitFor();
-      await waitForIdleBottom();
-      await emit(next.text("Finished checking."), next.end("end_turn"));
-    });
+    await checkScroll(
+      "scroll-next",
+      "a new live turn still follows after the reader opens Worked",
+      async ({ page, logView, previous, session }) => {
+        await previous.getByRole("button", { name: /^Expand activity, Worked/ }).click();
+        await previous.getByRole("button", { name: /^Collapse activity, Worked/ }).waitFor();
+        const next = fixture(session, "follow-after-worked");
+        await emit(
+          ...next.start("Continue after the fold."),
+          next.send("Checking the next change.")
+        );
+        await logView.getByText("Checking the next change.", { exact: true }).waitFor();
+        await waitForIdleBottom(page);
+        await emit(next.text("Finished checking."), next.end("end_turn"));
+      }
+    );
     await check(
       "gentle 1px upward scroll ticks pause an active normal-motion chase on an agent_messages chat",
       async () => {

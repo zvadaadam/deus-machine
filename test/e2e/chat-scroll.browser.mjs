@@ -10,6 +10,7 @@ const fixture = fileURLToPath(new URL("./fixtures/chat-scroll.ts", import.meta.u
 const source = fileURLToPath(new URL("../../apps/web/src", import.meta.url));
 const shared = fileURLToPath(new URL("../../shared", import.meta.url));
 const sessionId = "scroll-fixture";
+const liveTurnStartedAt = Date.now();
 let browser;
 let page;
 let script;
@@ -64,7 +65,7 @@ beforeEach(async () => {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.route("**/*", (route) => route.abort());
-  await page.setContent('<div id="root"></div>');
+  await page.setContent('<meta name="viewport" content="width=device-width"><div id="root"></div>');
   await page.addStyleTag({ content: styles });
   await page.addScriptTag({ content: script });
   assert.deepEqual(errors, []);
@@ -84,7 +85,7 @@ function text(messageId, words) {
   };
 }
 
-function send(messageId, index) {
+function send(messageId, index, message = `Update ${index}`) {
   const id = `send-${messageId}-${index}`;
   return {
     id,
@@ -97,7 +98,7 @@ function send(messageId, index) {
     messageId,
     state: {
       status: "completed",
-      input: { message: `Update ${index}` },
+      input: { message },
       output: "Message sent.",
       time: { start: 1, end: 2 },
     },
@@ -115,6 +116,19 @@ function history(first, last) {
       { ...base, id: reply, seq: n * 2 + 1, role: "assistant", parts: [text(reply, `Reply ${n}`)] },
     ];
   }).flat();
+}
+
+function liveUpdates(count) {
+  const messages = history(1, 7);
+  const reply = messages.at(-1);
+  reply.parts = Array.from({ length: count }, (_, i) =>
+    send(reply.id, i + 1, `Update ${i + 1}\n\nThe agent is still checking.`)
+  );
+  return {
+    messages,
+    sessionStatus: "working",
+    turns: [{ turnId: reply.turn_id, startedAt: liveTurnStartedAt }],
+  };
 }
 
 function renderChat(props, height = 530) {
@@ -140,7 +154,18 @@ function waitFrames(count) {
   return page.evaluate(async (frames) => {
     for (let i = 0; i < frames; i++)
       await new Promise((done) => globalThis.requestAnimationFrame(done));
+    await new Promise((done) => globalThis.setTimeout(done, 0));
   }, count);
+}
+
+function scrollPosition() {
+  return page.locator("#chat-messages").evaluate((pane) => ({
+    top: pane.scrollTop,
+    bottom: pane.scrollHeight - pane.clientHeight,
+    paused: globalThis.document
+      .querySelector('button[aria-label="Scroll to bottom"]')
+      .parentElement.classList.contains("opacity-100"),
+  }));
 }
 
 function rowOffset(id) {
@@ -167,12 +192,74 @@ test("gentle upward movement pauses an active chase", async () => {
       pane.scrollTop -= 1;
       await new Promise((done) => globalThis.requestAnimationFrame(done));
     }
-    return { paused: pane.dataset.paused, bottom, start, end: pane.scrollTop };
+    const readerTop = pane.scrollTop;
+    tail.style.height = "2400px";
+    await new Promise(globalThis.requestAnimationFrame);
+    await new Promise((done) =>
+      globalThis.requestAnimationFrame(() => globalThis.setTimeout(done, 0))
+    );
+    return { paused: pane.dataset.paused, bottom, start, end: pane.scrollTop, readerTop };
   });
   assert.ok(result.start > result.bottom, `chase did not start: ${JSON.stringify(result)}`);
   assert.equal(result.paused, "true");
   assert.ok(result.end < result.start, JSON.stringify(result));
+  assert.equal(result.end, result.readerTop, "more live growth must respect the reader's scroll");
 });
+
+for (const reducedMotion of ["reduce", "no-preference"]) {
+  test(`an idle chat follows a small live resize until the reader scrolls up (${reducedMotion})`, async () => {
+    await page.emulateMedia({ reducedMotion });
+    await renderChat(liveUpdates(15));
+    await waitAtBottom();
+    const before = await scrollPosition();
+    await renderChat(liveUpdates(16));
+    await waitFrames(40);
+    const followed = await scrollPosition();
+    assert.ok(followed.bottom - before.bottom > 24);
+    assert.equal(followed.top, followed.bottom, "follow the newly measured bottom");
+    assert.equal(followed.paused, false);
+
+    await page.locator("#chat-messages").evaluate((pane) => pane.scrollBy(0, -32));
+    await waitFrames(2);
+    const reader = await scrollPosition();
+    assert.equal(reader.top, followed.top - 32);
+    assert.equal(reader.paused, true);
+    await renderChat(liveUpdates(17));
+    await waitFrames(40);
+    const paused = await scrollPosition();
+    assert.ok(paused.bottom > reader.bottom);
+    assert.equal(paused.top, reader.top, "live growth must leave the reader in place");
+    assert.equal(paused.paused, true);
+  });
+
+  test(`a live row growing into view keeps following across two measurements (${reducedMotion})`, async () => {
+    await page.emulateMedia({ reducedMotion });
+    const height = 550;
+    await renderChat(liveUpdates(1), height);
+    await waitAtBottom();
+    const before = await scrollPosition();
+    await page.locator('[data-message-id="reply-7"]').evaluate(
+      (row, { height, first, last }) => {
+        const previousHeight = row.offsetHeight;
+        const measured = new globalThis.ResizeObserver(() => {
+          if (row.offsetHeight === previousHeight) return;
+          measured.disconnect();
+          // The next burst lands after measurement, before the next chase frame.
+          globalThis.queueMicrotask(() => globalThis.window.renderChat("chat", height, last));
+        });
+        measured.observe(row);
+        globalThis.window.renderChat("chat", height, first);
+      },
+      { height, first: liveUpdates(3), last: liveUpdates(22) }
+    );
+    await page.getByText("Update 22", { exact: true }).waitFor();
+    await waitFrames(45);
+    const after = await scrollPosition();
+    assert.ok(after.bottom - before.bottom > height);
+    assert.equal(after.paused, false, "measuring the visible reply must not pause following");
+    assert.equal(after.top, after.bottom, "follow both bursts to the painted bottom");
+  });
+}
 
 test("a height-neutral prepend does not consume the next live resize", async () => {
   await renderPane({ count: 1, height: 900 });

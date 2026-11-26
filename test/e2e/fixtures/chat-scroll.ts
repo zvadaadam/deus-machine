@@ -77,7 +77,7 @@ Object.assign(window, {
     });
     const layout = createElement(
       "div",
-      { style: { height, width: 740, display: "flex", position: "relative" } },
+      { style: { height, width: 740, maxWidth: "100%", display: "flex", position: "relative" } },
       providers
     );
     flushSync(() => root.render(createElement(StrictMode, null, layout)));
