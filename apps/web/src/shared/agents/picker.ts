@@ -1,6 +1,13 @@
 import { gatewayProvider } from "./gateway-provider";
-import { gatewaySupports, gatewayThinking, type GatewayCatalog } from "@shared/gateways";
 import {
+  gatewayEffort,
+  gatewaySupports,
+  gatewayThinking,
+  type GatewayCatalog,
+} from "@shared/gateways";
+import {
+  DEFAULT_THINKING_LEVEL,
+  fitThinkingLevel,
   findModel,
   modelLabel,
   modelThinkingLevels,
@@ -37,6 +44,32 @@ export interface PickerOption {
   thinking?: ModelDescriptor["thinking"];
   heading?: { label: string; provider: string };
   unavailable?: boolean;
+}
+
+type Route = Pick<PickerOption, "agentHarness" | "gatewayRevision">;
+
+export function changesRoute(current: Route, next: Route, hasMessages: boolean) {
+  return (
+    hasMessages &&
+    (current.agentHarness !== next.agentHarness || current.gatewayRevision !== next.gatewayRevision)
+  );
+}
+
+interface ChatEffort {
+  model?: string;
+  thinkingLevel: ThinkingLevel;
+  preferredThinking?: ThinkingLevel | null;
+  defaultThinking?: ThinkingLevel;
+}
+
+export function levelFor(option: PickerOption, chat: ChatEffort, newChat: boolean) {
+  if (option.value === chat.model) return chat.thinkingLevel;
+  if (!option.thinking?.levels.length) return undefined;
+  const { preferredThinking = chat.thinkingLevel, defaultThinking = DEFAULT_THINKING_LEVEL } = chat;
+  const requested = newChat ? undefined : (preferredThinking ?? undefined);
+  return option.gatewayRevision
+    ? gatewayEffort(option.thinking, requested)
+    : fitThinkingLevel(requested ?? defaultThinking, option.thinking.levels, defaultThinking);
 }
 
 interface PickerGroup {

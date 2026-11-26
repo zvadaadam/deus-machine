@@ -9,8 +9,7 @@ import {
 } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import { ArrowUpRight, Check, ChevronDown, Search, UserRound } from "lucide-react";
-import { gatewayLabel, gatewayEffort, type GatewayCatalog } from "@shared/gateways";
-import { DEFAULT_THINKING_LEVEL, fitThinkingLevel } from "@shared/models";
+import { gatewayLabel, type GatewayCatalog } from "@shared/gateways";
 import { getAgentLogo } from "@/assets/agents";
 import { GatewayLogo } from "@/shared/agents/GatewayLogo";
 import { Button } from "@/components/ui/button";
@@ -34,6 +33,8 @@ import {
 } from "@/shared/agents";
 import { GatewayProviderLogo } from "@/shared/agents/GatewayProviderLogo";
 import {
+  changesRoute,
+  levelFor,
   modelPickerView,
   type OpenChatWithModel,
   type PickerModelList,
@@ -79,7 +80,7 @@ export function ModelPicker({
   previousLabel,
   thinkingLevel,
   preferredThinking = thinkingLevel,
-  defaultThinking = DEFAULT_THINKING_LEVEL,
+  defaultThinking,
   hasMessages,
   onModelChange,
   onThinkingLevelChange,
@@ -125,9 +126,8 @@ export function ModelPicker({
       options[0])
     : selected;
   const levels = preview?.thinking?.levels;
-  const changesRoute = (option: PickerOption) =>
-    hasMessages &&
-    (option.agentHarness !== agentHarness || option.gatewayRevision !== selected?.gatewayRevision);
+  const route = { agentHarness, gatewayRevision: selected?.gatewayRevision };
+  const newChatFor = (option: PickerOption) => changesRoute(route, option, hasMessages);
   let chatNotice: string | undefined;
   if (
     !connected &&
@@ -149,21 +149,15 @@ export function ModelPicker({
       getAgentLabel(selected.agentHarness)
     : "Model and thinking effort";
 
-  function levelFor(option: PickerOption) {
-    if (option.value === selected?.value) return thinkingLevel;
-    if (!option.thinking?.levels.length) return undefined;
-    const requested = changesRoute(option) ? undefined : (preferredThinking ?? undefined);
-    return option.gatewayRevision
-      ? gatewayEffort(option.thinking, requested)
-      : fitThinkingLevel(requested ?? defaultThinking, option.thinking.levels, defaultThinking);
-  }
-  const previewLevel = preview && levelFor(preview);
+  const effort = { model: selected?.value, thinkingLevel, preferredThinking, defaultThinking };
+  const pickedLevel = (option: PickerOption) => levelFor(option, effort, newChatFor(option));
+  const previewLevel = preview && pickedLevel(preview);
   function choose(option: PickerOption, level?: ThinkingLevel) {
-    if (changesRoute(option)) onOpenNewTab?.(option.value, level ?? levelFor(option));
+    if (newChatFor(option)) onOpenNewTab?.(option.value, level ?? pickedLevel(option));
     else if (option.value !== selected?.value)
       onModelChange?.(
         option,
-        option.gatewayRevision ? (level ?? levelFor(option) ?? "off") : level
+        option.gatewayRevision ? (level ?? pickedLevel(option) ?? "off") : level
       );
     else if (level !== undefined) onThinkingLevelChange(level);
   }
@@ -471,7 +465,7 @@ export function ModelPicker({
                 )}
                 {options.map((option) => {
                   const current = selected?.value === option.value;
-                  const newChat = changesRoute(option);
+                  const newChat = newChatFor(option);
                   return (
                     <Fragment key={option.value}>
                       {option.heading && (
@@ -529,7 +523,7 @@ export function ModelPicker({
                       role="menuitemradio"
                       aria-checked={level === previewLevel}
                       data-picker-stop={level === (previewLevel ?? levels[0])}
-                      disabled={changesRoute(preview) && !onOpenNewTab}
+                      disabled={newChatFor(preview) && !onOpenNewTab}
                       onSelect={() => choose(preview, level)}
                       className={
                         level === previewLevel ? "text-text-primary" : "text-text-secondary"
@@ -551,7 +545,7 @@ export function ModelPicker({
               )}
               {connected &&
                 preview &&
-                changesRoute(preview) &&
+                newChatFor(preview) &&
                 (onOpenNewTab ? (
                   <DropdownMenuItem
                     data-picker-stop

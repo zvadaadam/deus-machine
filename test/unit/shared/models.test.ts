@@ -18,7 +18,7 @@ import {
 } from "@shared/models";
 import { LOCAL_HARNESSES } from "@shared/harnesses";
 import type { GatewayCatalog } from "@shared/gateways";
-import { modelPickerView } from "@/shared/agents/picker";
+import { changesRoute, levelFor, modelPickerView, type PickerOption } from "@/shared/agents/picker";
 
 const row = (
   harness: ModelDescriptor["harness"],
@@ -379,5 +379,107 @@ it("round-trips the gateway revision and the full model id", () => {
     harness: "codex-app-server",
     model: "vendor/model:variant",
     gatewayRevision: "edition",
+  });
+});
+
+describe("changing a chat's route", () => {
+  const claude = { agentHarness: "claude-code" } as const;
+  const codex = { agentHarness: "codex-app-server" } as const;
+  const office = { ...codex, gatewayRevision: "office" };
+  const home = { ...codex, gatewayRevision: "home" };
+  it.each([
+    ["a fresh chat can change both agent and source", claude, office, false, false],
+    ["another subscription model on the same agent", codex, codex, true, false],
+    ["another model on the same gateway revision", office, office, true, false],
+    ["another subscription agent", claude, codex, true, true],
+    ["the same agent via a gateway", codex, office, true, true],
+    ["the same agent via a subscription", office, codex, true, true],
+    ["the same agent via another gateway", office, home, true, true],
+    [
+      "another revision of a saved gateway, including a missing model",
+      office,
+      { ...office, gatewayRevision: "office-edited" },
+      true,
+      true,
+    ],
+    [
+      "another agent on the same gateway",
+      office,
+      { ...claude, gatewayRevision: "office" },
+      true,
+      true,
+    ],
+  ] as const)("%s", (_name, from, to, started, expected) => {
+    expect(changesRoute(from, to, started)).toBe(expected);
+  });
+});
+
+describe("the thinking level for a model choice", () => {
+  const native: PickerOption = {
+    agentHarness: "codex-app-server",
+    id: "one",
+    label: "One",
+    value: "codex-app-server:one",
+    thinking: { levels: ["low", "high"] },
+  };
+  const gateway = {
+    ...native,
+    value: "gateway:codex-app-server:office:one",
+    gatewayRevision: "office",
+    thinking: { levels: ["medium", "high"], default: "medium" },
+  };
+  const chat = { model: "claude-code:opus", thinkingLevel: "high", defaultThinking: "low" };
+  it.each([
+    [
+      "current model keeps its shown level even without a descriptor",
+      { ...native, value: chat.model, thinking: undefined },
+      {},
+      false,
+      "high",
+    ],
+    ["a model without levels", { ...native, thinking: { levels: [] } }, {}, false, undefined],
+    ["an unknown gateway effort", { ...gateway, thinking: undefined }, {}, true, undefined],
+    ["a native model fits its preference", native, { preferredThinking: "max" }, false, "high"],
+    [
+      "an explicit null uses the configured native default",
+      native,
+      { preferredThinking: null },
+      false,
+      "low",
+    ],
+    [
+      "a new chat on a native route uses the configured default",
+      native,
+      { preferredThinking: "max" },
+      true,
+      "low",
+    ],
+    ["a fresh gateway pick uses the offered preference", gateway, {}, false, "high"],
+    [
+      "an unoffered preference uses the gateway default",
+      gateway,
+      { preferredThinking: "max" },
+      false,
+      "medium",
+    ],
+    [
+      "a gateway with no default uses its first level",
+      { ...gateway, thinking: { levels: ["low", "high"] } },
+      { preferredThinking: "max" },
+      false,
+      "low",
+    ],
+    ["a started chat opening a gateway uses its default", gateway, {}, true, "medium"],
+  ] as const)("%s", (_name, option, overrides, newChat, expected) => {
+    expect(
+      levelFor(
+        {
+          ...option,
+          thinking: option.thinking && { ...option.thinking, levels: [...option.thinking.levels] },
+        },
+        { ...chat, ...overrides },
+        newChat
+      )
+    ).toBe(expected);
   });
 });
