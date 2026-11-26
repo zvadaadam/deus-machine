@@ -2292,6 +2292,27 @@ describe("messages held for a local chat", () => {
     expect(await ids()).toEqual([]);
   });
 
+  it("holds an acknowledged steer when the runtime dies before reporting its unread steers", async () => {
+    await send("T");
+    await expect(
+      steerMessage({ ...message("row"), turnId: "T" }, fromChat, "row")
+    ).resolves.toEqual({
+      outcome: "steered",
+    });
+    emit({
+      type: "turn.ended",
+      sessionId,
+      turnId: "T",
+      stopReason: "error",
+      error: { category: "internal", message: "Agent process exited" },
+      timestamp: seq,
+    });
+    expect(await queue()).toMatchObject({ paused: "failed", items: [waitingRow("row")] });
+    expect(starts()).toEqual(["T"]);
+    await resumeInWindow();
+    expect(starts()).toEqual(["T", "row"]);
+  });
+
   it("a steer echoed after its RPC timed out never runs a second time", async () => {
     await send("first");
     engine.steerTurn.mockRejectedValueOnce(new Error("timed out"));

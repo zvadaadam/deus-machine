@@ -669,7 +669,7 @@ export function onTurnNotice(id: string, event: TurnNotice) {
   }
   const gone = event.type === "end" || event.gone;
   const turnId = event.turnId;
-  const unread = event.type === "end" && event.held ? (event.undeliveredSteers ?? []) : undefined;
+  const unread = event.type === "end" && event.held ? event.undeliveredSteers : undefined;
   if (gone && turnId) recoverSteers(id, turnId, false, unread);
   const missingEcho = gone && turnId !== undefined && returnHead(q, turnId);
   if (event.type === "interrupted") interrupt(q, turnId, event.cause, event.by);
