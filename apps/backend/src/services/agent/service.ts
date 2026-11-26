@@ -34,7 +34,8 @@ import {
 } from "@shared/agent-asks";
 import { isUnknownEvent } from "@shared/protocol-types";
 import { hasAgentMessages } from "./agent-messages";
-import { holdingTurn, wireTurn, forgetChatTurns, turnNotices } from "./chat-turn";
+import { holdingTurn, wireTurn, forgetChatTurns, connectTurnNotices } from "./chat-turn";
+import { onTurnNotice, recoverSteers, userEcho } from "./queue";
 import { AgentLink } from "./client";
 import { LocalAgents } from "./local-agents";
 import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
@@ -87,8 +88,13 @@ export async function init(): Promise<void> {
     console.log(`[AgentService] Settled ${settled.value.length} chat(s) a restart interrupted`);
     invalidate(["workspaces", "sessions", "session"], { sessionIds: settled.value });
   }
-  turnNotices.withdrawCards = (id, turnId) => cancelSessionRelays(id, "turn interrupted", turnId);
   const handler = createAgentEventHandler();
+  connectTurnNotices({
+    queue: onTurnNotice,
+    recover: recoverSteers,
+    withdrawCards: (id, turnId) => cancelSessionRelays(id, "turn interrupted", turnId),
+    stored: handler.turnStored,
+  });
   events = handler;
   // A client that starts following a chat while its agent waits on a question
   // or a plan (a window opened late, a phone) is shown it at once; one that
@@ -107,8 +113,6 @@ export async function init(): Promise<void> {
   // Cloud sessions feed the SAME handler — one fold, one persistence path,
   // two transports.
   initCloudDriver(handler);
-  // The queue sends through this service. Connect its echo reader once both modules are ready.
-  const { userEcho } = await import("./queue");
 
   link = await AgentLink.open({
     onEnvelope: (envelope) => {

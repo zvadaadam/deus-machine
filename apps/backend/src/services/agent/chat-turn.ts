@@ -25,12 +25,17 @@ export type TurnNotice =
   | { type: "engine_idle" }
   | { type: "stop"; turnId?: string; by: Origin }
   | { type: "interrupted"; turnId?: string; gone: boolean; cause: "failure" | "cancelled" };
-export const turnNotices: {
-  queue?: (id: string, notice: TurnNotice) => void;
-  recover?: (id: string, turnId: string, returnHead?: boolean) => string[] | undefined;
-  withdrawCards?: (id: string, turnId: string) => void;
-  stored?: (id: string, turnId: string) => void;
-} = {};
+interface TurnNotices {
+  queue: (id: string, notice: TurnNotice) => void;
+  recover: (id: string, turnId: string, returnHead?: boolean) => string[] | undefined;
+  withdrawCards: (id: string, turnId: string) => void;
+  stored: (id: string, turnId: string) => void;
+}
+export let turnNotices: TurnNotices | undefined;
+export function connectTurnNotices(notices: TurnNotices) {
+  turnNotices = notices;
+}
+
 type Setup = {
   controller: AbortController;
   done: Promise<void>;
@@ -114,8 +119,8 @@ export function reportInterruption(
   gone: boolean,
   cause: "failure" | "cancelled" = "failure"
 ) {
-  if (gone && turnId) turnNotices.withdrawCards?.(id, turnId);
-  turnNotices.queue?.(id, { type: "interrupted", turnId, gone, cause });
+  if (gone && turnId) turnNotices?.withdrawCards(id, turnId);
+  turnNotices?.queue(id, { type: "interrupted", turnId, gone, cause });
 }
 
 type ErrorInfo = NonNullable<TurnOutcomeWrite["error"]>;
@@ -163,7 +168,7 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
   else if (!refused) persistStopStatus(id);
   if (type !== "withdrawn") {
     const interrupted = !refused || !!error || !!turn.stops?.size;
-    const kept = turnNotices.recover?.(id, turnId, interrupted);
+    const kept = turnNotices?.recover(id, turnId, interrupted);
     const cause = type === "cancelled" ? "cancelled" : undefined;
     if (!by && !refused) {
       const saved = persistTurn(id, {
@@ -173,7 +178,7 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
         cancelledBy: firstStop(turn),
         undeliveredSteers: kept,
       });
-      if (saved.ok) turnNotices.stored?.(id, turnId);
+      if (saved.ok) turnNotices?.stored(id, turnId);
     }
     if (interrupted || kept?.length) reportInterruption(id, turnId, true, cause);
   }
@@ -194,7 +199,7 @@ export function askStop(id: string, origin: Origin) {
   chats.set(id, chat);
   const turn = chat.turn;
   if (turn) (turn.stops ??= new Set()).add(by);
-  turnNotices.queue?.(id, { type: "stop", turnId: turn?.turnId, by });
+  turnNotices?.queue(id, { type: "stop", turnId: turn?.turnId, by });
 
   // A confirmed Stop waits for its holder's final echoes, while an unconfirmed Stop still warns after handler loss.
   return (result?: TurnCancelResult | { outcome: "released" }) => {
@@ -228,7 +233,7 @@ export function askStop(id: string, origin: Origin) {
         }, 15_000).unref();
         chat.deadline = { kind, timer };
       }
-      if (absent && chats.get(id) === chat) turnNotices.queue?.(id, { type: "engine_idle" });
+      if (absent && chats.get(id) === chat) turnNotices?.queue(id, { type: "engine_idle" });
     }
     chat.pendingStops--;
     prune(id, chat);
@@ -240,7 +245,7 @@ export function forgetChatTurns(id?: string) {
   if (id === undefined) {
     for (const chat of chats.values()) clearDeadline(chat);
     chats.clear();
-    delete turnNotices.stored;
+    turnNotices = undefined;
   } else {
     const chat = chats.get(id);
     if (chat) {

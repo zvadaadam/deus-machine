@@ -127,7 +127,7 @@ import {
   holdingTurn,
   refuseTurn,
   releaseTurn,
-  turnNotices,
+  connectTurnNotices,
 } from "../../../src/services/agent/chat-turn";
 import { createAgentEventHandler } from "../../../src/services/agent/event-handler";
 import { cloudSaveFailures, sessionEvents } from "@shared/api/sessions";
@@ -212,8 +212,6 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
   beforeEach(() => {
     forgetChatTurns();
-    delete turnNotices.recover;
-    delete turnNotices.queue;
     vi.clearAllMocks();
     outcomes.length = 0;
     mockPersistChanges.mockImplementation(stubPersistChanges as never);
@@ -1141,7 +1139,12 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
   describe("turn admission mirror", () => {
     it("notifies the open chat when its admitted turn with a user message ends locally", () => {
-      turnNotices.recover = () => ["unread"];
+      connectTurnNotices({
+        recover: () => ["unread"],
+        queue: vi.fn(),
+        withdrawCards: vi.fn(),
+        stored: handler.turnStored,
+      });
       claimTurn(SESSION, TURN);
       handler.handle(
         envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })

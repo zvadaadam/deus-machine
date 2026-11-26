@@ -159,7 +159,9 @@ function pushEnvelope(envelope: DecodedWireEventEnvelope): void {
 // ---- Factory ----
 
 /** Create the agent event handler: persistence + WS push per lifecycle event. */
-export function createAgentEventHandler(): AgentEventHandler {
+export function createAgentEventHandler(): AgentEventHandler & {
+  turnStored(sessionId: string, turnId: string): void;
+} {
   const sessions = new Map<string, SessionState>();
   // A client that starts following a chat, or returns to it, first gets the
   // reply still being typed as it stands (see ./open-parts).
@@ -167,15 +169,6 @@ export function createAgentEventHandler(): AgentEventHandler {
   openWith(sessionEvents, ({ sessionId }) =>
     typing.of(sessionId, sessions.get(sessionId)?.conversation)
   );
-
-  turnNotices.stored = (sessionId, turnId) => {
-    const conversation = sessions.get(sessionId)?.conversation;
-    // A message anchors the local footer. Reopen streaming parts after the window rereads it.
-    if (!conversation?.timeline.some((e) => e.kind === "message" && e.turnId === turnId)) return;
-    resetSubscribers(sessionEvents, { sessionId });
-    for (const part of typing.of(sessionId, conversation))
-      publish(sessionEvents, { sessionId }, part, { keep: false });
-  };
 
   const stateFor = (sessionId: string): SessionState => {
     const existing = sessions.get(sessionId);
@@ -186,6 +179,15 @@ export function createAgentEventHandler(): AgentEventHandler {
   };
 
   return {
+    turnStored(sessionId, turnId) {
+      const conversation = sessions.get(sessionId)?.conversation;
+      // A message anchors the local footer. Reopen streaming parts after the window rereads it.
+      if (!conversation?.timeline.some((e) => e.kind === "message" && e.turnId === turnId)) return;
+      resetSubscribers(sessionEvents, { sessionId });
+      for (const part of typing.of(sessionId, conversation))
+        publish(sessionEvents, { sessionId }, part, { keep: false });
+    },
+
     hydrateCloudSnapshot(sessionId, snapshot) {
       const state = stateFor(sessionId);
       const turn = holdingTurn(sessionId);
@@ -246,7 +248,7 @@ export function createAgentEventHandler(): AgentEventHandler {
           type: cause ?? "gone",
           error: { message, category: "network" },
         });
-        if (absent) turnNotices.queue?.(sessionId, { type: "engine_idle" });
+        if (absent) turnNotices?.queue(sessionId, { type: "engine_idle" });
         return;
       }
       const warning = message + " The agent has not confirmed it stopped.";
@@ -434,7 +436,7 @@ export function createAgentEventHandler(): AgentEventHandler {
         .otherwise(() => {});
 
       if (!NOT_PUSHED.has(envelope.event.type)) pushEnvelope(envelope);
-      if (ended) turnNotices.queue?.(sessionId, ended);
+      if (ended) turnNotices?.queue(sessionId, ended);
     },
   };
 }

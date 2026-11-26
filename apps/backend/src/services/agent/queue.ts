@@ -15,7 +15,7 @@ import { invalidate, onInvalidate } from "../query-engine";
 import { getSetting } from "../settings.service";
 import { toEngineInput } from "./run-config";
 import { steerTurn } from "./service";
-import { holdingTurn, competingEnd, turnNotices, type TurnNotice } from "./chat-turn";
+import { holdingTurn, competingEnd, type TurnNotice } from "./chat-turn";
 import { continuedSettings } from "./turn-settings";
 import {
   previousSend,
@@ -717,7 +717,7 @@ function recoverAttempt(q: Queue, turnId: string, state: "busy" | "returned" = "
   return true;
 }
 
-turnNotices.recover = (id, turnId, returnHead) => {
+export function recoverSteers(id: string, turnId: string, returnHead = false) {
   const q = queues.get(id);
   if (!q) return;
   // A read echo lost in a replay gap can come back as a held row.
@@ -736,10 +736,10 @@ turnNotices.recover = (id, turnId, returnHead) => {
   if (front.length) putFirst(q, front);
   if (returnHead) recoverAttempt(q, turnId);
   return kept;
-};
+}
 
 /** A live turn can still echo. Once it is gone, return its unread steers to the queue. */
-turnNotices.queue = (id, event) => {
+export function onTurnNotice(id: string, event: TurnNotice) {
   if (event.type === "engine_idle") return void drain(queues.get(id), true);
   const keepEmpty =
     event.type === "stop" || (event.type === "end" ? !!event.limit : event.cause === "cancelled");
@@ -752,9 +752,9 @@ turnNotices.queue = (id, event) => {
   }
   const gone = event.type === "end" || event.gone;
   const turnId = gone ? event.turnId : undefined;
-  if (turnId !== undefined) turnNotices.recover?.(id, turnId);
+  if (turnId !== undefined) recoverSteers(id, turnId);
   const missingEcho = turnId !== undefined && recoverAttempt(q, turnId);
   changed(q, event.type === "end" ? { ...event, missingEcho } : event);
   const winnerEnded = event.type === "end" && q.busyOn === event.turnId;
   if (winnerEnded || (event.type === "end" ? event.outcome : gone)) void drain(q, winnerEnded);
-};
+}
