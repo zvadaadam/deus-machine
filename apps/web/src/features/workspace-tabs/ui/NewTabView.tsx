@@ -114,7 +114,6 @@ export function NewTabView({
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const latestSubmission = useRef(0);
   const listboxId = useId();
   const optionDomId = (index: number) => `${listboxId}-option-${index}`;
 
@@ -185,15 +184,11 @@ export function NewTabView({
   if (activeResult && activeResult.id !== selectedId) setSelectedId(activeResult.id);
 
   async function openUrl(url: string) {
-    const submission = ++latestSubmission.current;
     const destination = await openAddressFromChat(
       workspace.id,
       url,
       { cloud, folder: localFolder(workspace) },
-      {
-        replaceTabId: tabId,
-        isStale: () => inputRef.current === null || submission !== latestSubmission.current,
-      }
+      { replaceTabId: tabId }
     );
     if (destination === "browser-tab" || destination === "cloud-preview") {
       track("browser_opened", { workspace_id: workspace.id });

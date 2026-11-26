@@ -4,6 +4,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 // browser allows a new tab only while it handles the click.
 const mocks = vi.hoisted(() => ({
   call: vi.fn(),
+  onConnectionChange: vi.fn<(handler: (online: boolean) => void) => void>(),
   runtimeState: vi.fn(() => "online"),
   openExternal: vi.fn(async () => {}),
   openExternalPending: vi.fn(),
@@ -14,6 +15,9 @@ vi.hoisted(() =>
 );
 vi.mock("@/platform/ws", () => ({
   call: mocks.call,
+  follow: vi.fn(),
+  isConnected: () => true,
+  onConnectionChange: mocks.onConnectionChange,
   getRuntimeClient: () => ({ call: mocks.call, getState: mocks.runtimeState }),
 }));
 vi.mock("@/platform/native", () => ({
@@ -25,17 +29,20 @@ vi.mock("@/platform/native", () => ({
   },
 }));
 vi.mock("sonner", () => ({ toast: mocks.toast }));
-vi.mock("@/shared/hooks/use-mobile", () => ({ isMobileViewport: () => false }));
+vi.mock("@/shared/hooks/use-mobile", () => ({ isMobileViewport: vi.fn(() => false) }));
 vi.mock("@/shared/config/webDirectMode", () => ({ isCloudDirectWebMode: () => false }));
 
 import { openAddressFromChat, runChatAction } from "@/features/session/lib/openFromChat";
-import { useCloudPreviewStore } from "@/features/browser/cloud/cloudPreviewStore";
+import {
+  ensureCloudPreviewSubscription,
+  useCloudPreviewStore,
+} from "@/features/browser/cloud/cloudPreviewStore";
 import { CLOUD_LOCALHOST } from "@/features/workspace/lib/reach";
+import { isMobileViewport } from "@/shared/hooks/use-mobile";
 import {
   workspaceLayoutActions,
   resolveWorkspaceTabs,
 } from "@/features/workspace/store/workspaceLayoutStore";
-import { useWorkspaceStore } from "@/features/workspace/store/workspaceStore";
 
 const cloud = { cloud: true, folder: null };
 const TEMPLATE = "https://{{port}}-sbx.e2b.app";
@@ -50,7 +57,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.runtimeState.mockReturnValue("online");
   workspaceLayoutActions.resetAll();
-  useWorkspaceStore.getState().selectWorkspace("ws-1");
   // This window has not heard the computer's preview address.
   useCloudPreviewStore.setState({ byWorkspace: {}, pending: null, generation: 0 });
 });
@@ -79,11 +85,11 @@ describe("an address clicked in a cloud chat", () => {
 
   it("opens a typed localhost address in the cloud preview in place of its New Tab", async () => {
     const launcher = resolveWorkspaceTabs(workspaceLayoutActions.getLayout("ws-1")).activeTabId;
-    mocks.call.mockResolvedValue(TEMPLATE);
-    await openAddressFromChat("ws-1", "http://localhost:5173/dash?a=1", cloud, {
+    mocks.runtimeState.mockReturnValue("connecting");
+    const opening = openAddressFromChat("ws-1", "http://localhost:5173/dash?a=1#top", cloud, {
       replaceTabId: launcher,
     });
-    expect(mocks.call).toHaveBeenCalledWith(expect.anything(), { workspaceId: "ws-1" });
+    expect(mocks.call).not.toHaveBeenCalled();
     expect(workspaceLayoutActions.getLayout("ws-1").workspaceTabs).toEqual([
       expect.objectContaining({ kind: "browser", cloud: true }),
     ]);
@@ -91,34 +97,9 @@ describe("an address clicked in a cloud chat", () => {
     expect(useCloudPreviewStore.getState().pending).toMatchObject({
       workspaceId: "ws-1",
       port: 5173,
-      rest: "/dash?a=1",
+      rest: "/dash?a=1#top",
     });
-  });
-
-  it.each([
-    ["closing New Tab", (id: string) => workspaceLayoutActions.closeWorkspaceTab("ws-1", id)],
-    [
-      "replacing New Tab",
-      (id: string) => workspaceLayoutActions.openFileTab("ws-1", "README.md", { replaceTabId: id }),
-    ],
-    ["selecting another tab", () => workspaceLayoutActions.addNewTab("ws-1")],
-    ["hiding the pane", () => workspaceLayoutActions.setPanelMode("ws-1", "chat")],
-    ["switching workspace", () => useWorkspaceStore.getState().selectWorkspace("another")],
-    ["switching host", () => mocks.runtimeState.mockReturnValue("disposed")],
-  ] as const)("ignores the held preview reply after %s", async (_, leaveLauncher) => {
-    const launcher = workspaceLayoutActions.addNewTab("ws-1");
-    const reply = Promise.withResolvers<string>();
-    mocks.call.mockReturnValue(reply.promise);
-    const opening = openAddressFromChat("ws-1", "http://localhost:5173", cloud, {
-      replaceTabId: launcher,
-    });
-    expect(mocks.call).toHaveBeenCalledOnce();
-    leaveLauncher(launcher);
-    const layout = workspaceLayoutActions.getLayout("ws-1");
-    reply.resolve(TEMPLATE);
-    await opening;
-    expect(workspaceLayoutActions.getLayout("ws-1")).toEqual(layout);
-    expect(useCloudPreviewStore.getState().pending).toBeNull();
+    await expect(opening).resolves.toBe("cloud-preview");
   });
 
   it("asks nothing for a localhost address once this window has heard the address", async () => {
@@ -126,6 +107,14 @@ describe("an address clicked in a cloud chat", () => {
     await openAddressFromChat("ws-1", "http://localhost:5173/", cloud);
     expect(mocks.call).not.toHaveBeenCalled();
     expect(useCloudPreviewStore.getState().pending).toMatchObject({ port: 5173, rest: "/" });
+  });
+
+  it("explains a localhost link on mobile before the preview address is known", async () => {
+    vi.mocked(isMobileViewport).mockReturnValueOnce(true);
+    await expect(openAddressFromChat("ws-1", "http://localhost:5173", cloud)).resolves.toBe("say");
+    expect(mocks.toast).toHaveBeenCalledExactlyOnceWith(CLOUD_LOCALHOST);
+    expect(mocks.call).not.toHaveBeenCalled();
+    expect(mocks.openExternalPending).not.toHaveBeenCalled();
   });
 });
 
@@ -160,5 +149,59 @@ describe("a cloud card's Open in External Browser on a localhost address", () =>
     expect(tab.open).not.toHaveBeenCalled();
     expect(tab.cancel).toHaveBeenCalledOnce();
     expect(mocks.toast).toHaveBeenCalledWith(CLOUD_LOCALHOST);
+  });
+
+  it.each([false, true])(
+    "releases the reserved tab and offers a retry while the address is unknown (mobile=%s)",
+    async (mobile) => {
+      vi.mocked(isMobileViewport).mockReturnValueOnce(mobile);
+      const tab = reservedTab();
+      mocks.call.mockResolvedValue(undefined);
+      await runChatAction("ws-1", external, cloud);
+      expect(tab.cancel).toHaveBeenCalledOnce();
+      expect(tab.open).not.toHaveBeenCalled();
+      expect(mocks.toast).toHaveBeenCalledWith(expect.stringContaining("Try again"));
+    }
+  );
+
+  it("closes the reserved tab and offers a retry when this host reconnects during the read", async () => {
+    ensureCloudPreviewSubscription();
+    const [connectionChanged] = mocks.onConnectionChange.mock.lastCall!;
+    const tab = reservedTab();
+    const reply = Promise.withResolvers<string>();
+    mocks.call.mockReturnValue(reply.promise);
+    connectionChanged(false);
+    const done = runChatAction("ws-1", external, cloud);
+    connectionChanged(true);
+    reply.resolve(TEMPLATE);
+    await done;
+    expect(tab.open).not.toHaveBeenCalled();
+    expect(tab.cancel).toHaveBeenCalledOnce();
+    expect(mocks.toast).toHaveBeenCalledWith(expect.stringContaining("isn't known yet"));
+  });
+
+  it("closes the reserved tab silently when the host is replaced", async () => {
+    const tab = reservedTab();
+    const reply = Promise.withResolvers<string>();
+    mocks.call.mockReturnValue(reply.promise);
+    const done = runChatAction("ws-1", external, cloud);
+    mocks.runtimeState.mockReturnValue("disposed");
+    reply.resolve(TEMPLATE);
+    await done;
+    expect(tab.open).not.toHaveBeenCalled();
+    expect(tab.cancel).toHaveBeenCalledOnce();
+    expect(mocks.toast).not.toHaveBeenCalled();
+  });
+
+  it("uses the address announced while the one-shot read was in flight", async () => {
+    const tab = reservedTab();
+    const reply = Promise.withResolvers<null>();
+    mocks.call.mockReturnValue(reply.promise);
+    const done = runChatAction("ws-1", external, cloud);
+    useCloudPreviewStore.setState({ byWorkspace: { "ws-1": TEMPLATE } });
+    reply.resolve(null);
+    await done;
+    expect(tab.open).toHaveBeenCalledWith("https://3000-sbx.e2b.app/a");
+    expect(tab.cancel).not.toHaveBeenCalled();
   });
 });

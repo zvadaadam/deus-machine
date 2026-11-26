@@ -18,11 +18,7 @@ import {
   cloudPreviewActions,
   useCloudPreviewStore,
 } from "@/features/browser/cloud/cloudPreviewStore";
-import {
-  resolveWorkspaceTabs,
-  workspaceLayoutActions,
-} from "@/features/workspace/store/workspaceLayoutStore";
-import { useWorkspaceStore } from "@/features/workspace/store/workspaceStore";
+import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import {
   needsPreviewAddress,
   openAddress,
@@ -90,17 +86,6 @@ export function chatPlaceNow(
   };
 }
 
-function isCurrentLauncher(workspaceId: string, tabId: string) {
-  const layout = workspaceLayoutActions.getLayout(workspaceId);
-  const { activeTab } = resolveWorkspaceTabs(layout);
-  return (
-    useWorkspaceStore.getState().selectedWorkspaceId === workspaceId &&
-    layout.panelMode !== "chat" &&
-    activeTab.kind === "new-tab" &&
-    activeTab.id === tabId
-  );
-}
-
 /**
  * A browser allows a new tab during the original gesture. If an external action
  * must first ask for the cloud computer's preview address, reserve that tab now.
@@ -109,28 +94,26 @@ export async function openAddressFromChat(
   workspaceId: string,
   url: string,
   base: Pick<ChatPlace, "cloud" | "folder">,
-  {
-    external = false,
-    replaceTabId,
-    isStale,
-  }: { external?: boolean; replaceTabId?: string; isStale?: () => boolean } = {}
+  { external = false, replaceTabId }: { external?: boolean; replaceTabId?: string } = {}
 ) {
   const place = chatPlaceNow(workspaceId, base);
-  const needsTemplate = place.previewTemplate === undefined && needsPreviewAddress(url, place);
-  const tab = needsTemplate && external ? native.window.openExternalPending() : null;
-  if (needsTemplate) {
+  const tab =
+    external && place.previewTemplate === undefined && needsPreviewAddress(url, place)
+      ? native.window.openExternalPending()
+      : null;
+  if (tab) {
     const runtime = getRuntimeClient();
-    place.previewTemplate =
-      (await runtime.call(api.cloudPreview, { workspaceId }).catch(() => null)) ?? null;
+    const generation = useCloudPreviewStore.getState().generation;
+    const template = await runtime.call(api.cloudPreview, { workspaceId }).catch(() => undefined);
+    const latest = useCloudPreviewStore.getState();
     const state = runtime.getState();
-    if (
-      state === "disposed" ||
-      state === "revoked" ||
-      isStale?.() ||
-      (replaceTabId && !isCurrentLauncher(workspaceId, replaceTabId))
-    ) {
-      tab?.cancel();
+    if (state === "disposed" || state === "revoked") {
+      tab.cancel();
       return "none";
+    }
+    if (latest.generation === generation) {
+      place.previewTemplate =
+        workspaceId in latest.byWorkspace ? latest.byWorkspace[workspaceId] : template;
     }
   }
   const opening = openAddress(url, place, external);

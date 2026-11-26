@@ -244,7 +244,6 @@ try {
 
   // 2. The cloud chat. Rule 2: an internet link opens in the person's browser.
   const releasePreview = Promise.withResolvers();
-  let heldLookups = 0;
   await page.routeWebSocket(
     (url) => url.pathname === "/ws",
     (route) => {
@@ -252,7 +251,6 @@ try {
       host.onMessage(async (raw) => {
         const frame = JSON.parse(String(raw));
         if (frame.data === TEMPLATE || frame.event === "cloudPreviewChanges") {
-          if (frame.data === TEMPLATE) heldLookups++;
           await releasePreview.promise;
         }
         route.send(raw);
@@ -269,12 +267,15 @@ try {
 
   const address = page.getByRole("combobox", { name: "Search files or enter a URL" });
   const frame = page.locator('iframe[title="Cloud computer preview"]');
-  for (const path of ["older", "latest"]) {
-    const before = heldLookups;
-    await address.fill(`localhost:5173/${path}`);
-    await address.press("Enter");
-    await until(`the ${path} preview lookup to be held`, () => heldLookups > before);
-  }
+  const addTab = page.getByRole("button", { name: "New tab", exact: true });
+  await address.fill("localhost:5173/older");
+  await address.press("Enter");
+  await page.getByRole("tab", { name: "Browser", selected: true }).waitFor();
+  await page.getByText("Waiting for the computer's address").waitFor();
+  await addTab.click();
+  await address.fill("localhost:5173/latest");
+  await address.press("Enter");
+  await page.getByRole("tab", { name: "Browser", selected: true }).waitFor();
   releasePreview.resolve();
   await until(
     "the latest submission to open",
@@ -282,7 +283,7 @@ try {
   );
   await page.getByRole("tab", { name: "Browser", selected: true }).waitFor();
   check(
-    "two submissions from a cold New Tab open the latest address when the earlier reply arrives first"
+    "a cold New Tab opens the preview immediately and keeps the latest path while its address is pending"
   );
 
   // A localhost link is on the cloud computer: its preview, at that port and path, with
@@ -312,7 +313,6 @@ try {
   );
 
   const tabs = page.getByRole("tablist", { name: "Workspace tabs" });
-  const addTab = page.getByRole("button", { name: "New tab", exact: true });
   await addTab.click();
   await address.fill("localhost:3000/ready?tab=2#result");
   await address.press("Enter");
