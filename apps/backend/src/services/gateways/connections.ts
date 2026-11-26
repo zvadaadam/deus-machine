@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { containsApiKey } from "./api-key";
+import { carriesApiKey } from "./api-key";
 import { checkCatalog, verifyGatewayKey } from "./catalog";
 import {
   GATEWAY_PRESETS,
@@ -126,13 +126,14 @@ export async function connectGateway(input: ParsedInputOf<typeof api.connectGate
   if (!input.apiKey && previous?.baseUrl !== baseUrl)
     throw new ValidationError("Enter the API key for this base URL.");
   const apiKey = input.apiKey ?? previous?.apiKey;
-  let decoded: string;
+  let urlValues: string[];
   try {
-    decoded = decodeURIComponent(baseUrl);
+    const segments = new URL(baseUrl).pathname.split("/").map(decodeURIComponent);
+    urlValues = [baseUrl, decodeURIComponent(baseUrl), ...segments];
   } catch {
     throw new ValidationError(INVALID_BASE_URL);
   }
-  if (!apiKey || containsApiKey(baseUrl, apiKey) || containsApiKey(decoded, apiKey))
+  if (!apiKey || carriesApiKey(urlValues, apiKey))
     throw new ValidationError("Enter the API key in its own field.");
   const same = previous && formats.join() === previous.formats.join();
   const connection = { baseUrl, apiKey, preset, formats };

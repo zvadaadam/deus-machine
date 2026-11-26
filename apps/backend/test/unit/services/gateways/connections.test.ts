@@ -68,13 +68,15 @@ it("accepts a loopback gateway with a fresh identity and keeps the key out of re
 });
 
 it.each([
-  ["synthetic-fixture", "Enter the API key in its own field."],
-  ["%73ynthetic-fixture", "Enter the API key in its own field."],
-  ["bad%", "Enter a gateway base URL without a query or fragment."],
-  ["%FF", "Enter a gateway base URL without a query or fragment."],
+  ["synthetic-fixture", "synthetic-fixture", "Enter the API key in its own field."],
+  ["%73ynthetic-fixture", "synthetic-fixture", "Enter the API key in its own field."],
+  ["team/short/models", "short", "Enter the API key in its own field."],
+  ["team/short%2Fkey/models", "short/key", "Enter the API key in its own field."],
+  ["bad%", "synthetic-fixture", "Enter a gateway base URL without a query or fragment."],
+  ["%FF", "synthetic-fixture", "Enter a gateway base URL without a query or fragment."],
 ])(
   "rejects a Custom address containing the key or a malformed escape (%s)",
-  async (path, message) => {
+  async (path, apiKey, message) => {
     const fetch = vi
       .spyOn(globalThis, "fetch")
       .mockRejectedValue(new Error("unexpected network request"));
@@ -83,7 +85,7 @@ it.each([
         run(api.connectGateway, {
           preset: "custom",
           baseUrl: "https://fixture.invalid/" + path,
-          apiKey: "synthetic-fixture",
+          apiKey,
           revision: null,
           formats: ["responses"],
         })

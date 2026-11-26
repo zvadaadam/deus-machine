@@ -1,6 +1,8 @@
-// A shorter key cannot be distinguished from ordinary text.
-const MIN_REFLECTED_KEY_LENGTH = 16;
+// A shorter key cannot be distinguished from ordinary text, so match it only as a whole value.
+const MIN_SUBSTRING_KEY_LENGTH = 16;
 
-export function containsApiKey(text: string, apiKey: string): boolean {
-  return apiKey.length >= MIN_REFLECTED_KEY_LENGTH && text.includes(apiKey);
+export function carriesApiKey(values: readonly string[], apiKey: string): boolean {
+  return apiKey.length >= MIN_SUBSTRING_KEY_LENGTH
+    ? values.some((value) => value.includes(apiKey))
+    : values.includes(apiKey);
 }

@@ -886,7 +886,8 @@ A gateway is an endpoint the person adds in Settings → AI Providers. `shared/g
 OpenRouter has a pinned origin, CLIProxyAPI takes only loopback, and Custom takes HTTPS (HTTP on loopback) and the formats the person declares.
 With no gateway, `ModelPicker.tsx` shows no source rail and a native turn runs without gateway preparation or delivery.
 `services/gateways/connections.ts` seals the API key with the vault in the private `gateways` setting. A connection edit changes its revision.
-No process environment, turn config or client read contains the key. `gatewayCredential` in `services/gateways/turn.ts`
+No process environment, turn config or client read contains the key. A key shorter than 16 characters matches only a whole
+model id, provider, label or decoded base URL path segment. `gatewayCredential` in `services/gateways/turn.ts`
 hands the engine a held credential with the chat’s binding. The engine’s loopback relay gives the CLI a placeholder.
 The first admitted turn binds the chat to its gateway and agent. `services/agent/persistence.ts` writes `sessions.gateway_revision` with the first turn record.
 `requireChatRoute` and `requireSameHarness` in `services/agent/turns.ts` refuse a different route. The picker offers “Open in new chat”.
