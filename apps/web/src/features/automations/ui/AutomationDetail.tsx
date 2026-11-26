@@ -177,8 +177,9 @@ export function AutomationDetail({
             </span>
             {(runs.data ?? []).length === 0 ? (
               <span className="text-text-muted py-2 text-sm">
-                No runs yet — the first one fires{" "}
-                {active ? "on schedule, or press Run now." : "once you resume it."}
+                {active
+                  ? "No runs yet — the first one fires on schedule, or press Run now."
+                  : "No runs yet. Choose Run now to run once while the schedule is paused."}
               </span>
             ) : (
               <div className="flex flex-col">
