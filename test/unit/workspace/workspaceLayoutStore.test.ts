@@ -35,6 +35,8 @@ describe("workspaceLayoutStore", () => {
   });
 
   it("resets v12 layouts before the next workspace write", async () => {
+    workspaceLayoutActions.openFileTab("open", "before.md");
+    storage.setItem.mockClear();
     storage.getItem.mockReturnValueOnce(
       JSON.stringify({
         version: 12,
@@ -50,6 +52,9 @@ describe("workspaceLayoutStore", () => {
       })
     );
     await useWorkspaceLayoutStore.persist.rehydrate();
+    expect(storage.setItem.mock.calls.map(([name, value]) => [name, JSON.parse(value)])).toEqual([
+      ["workspace-layout-store", { state: { layouts: {} }, version: 13 }],
+    ]);
     expect(useWorkspaceLayoutStore.getState().layouts).toEqual({});
     workspaceLayoutActions.openFileTab("a", "README.md");
     const saved = JSON.parse(storage.setItem.mock.lastCall![1]);

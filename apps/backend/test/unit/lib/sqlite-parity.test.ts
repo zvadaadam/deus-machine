@@ -288,7 +288,7 @@ describe(`the backend's database (${engine})`, () => {
     try {
       owner.exec("BEGIN IMMEDIATE");
       expect(database.initDatabase).toThrow(DatabaseInUseError);
-      expect(stderr).toHaveBeenCalledWith(DATABASE_IN_USE);
+      expect(stderr).toHaveBeenCalledWith(JSON.stringify([DATABASE_IN_USE, database.DB_PATH]));
     } finally {
       owner.close();
       stderr.mockRestore();
@@ -306,12 +306,16 @@ describe(`the backend's database (${engine})`, () => {
     try {
       other.exec("BEGIN IMMEDIATE");
       expect(() => database.initDatabase()).toThrow(/^database is locked$/);
-      expect(stderr).not.toHaveBeenCalledWith(PRELAUNCH_SCHEMA_MISMATCH);
+      expect(stderr).not.toHaveBeenCalledWith(
+        JSON.stringify([PRELAUNCH_SCHEMA_MISMATCH, database.DB_PATH])
+      );
       other.exec("ROLLBACK");
       expect(() => database.initDatabase()).toThrow(
         /Schema initialization failed: no such column: parent_tool_call_id.*deus start --data-dir/
       );
-      expect(stderr).toHaveBeenCalledWith(PRELAUNCH_SCHEMA_MISMATCH);
+      expect(stderr).toHaveBeenCalledWith(
+        JSON.stringify([PRELAUNCH_SCHEMA_MISMATCH, database.DB_PATH])
+      );
     } finally {
       stderr.mockRestore();
       if (other.inTransaction) other.exec("ROLLBACK");
