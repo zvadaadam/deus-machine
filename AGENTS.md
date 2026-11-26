@@ -915,7 +915,7 @@ The desktop, npm CLI and hosted web ship together from a release tag. See [docs/
 
 Run `bun run check` before pushing. It runs the CI groups for this platform and
 reports each command. Use `bun run check <group>` for one group.
-Its `journeys` group runs `test:e2e:workspace-start` and `test:e2e:cloud`. The other `test:e2e:*` runners are outside the gate, so run the ones your change touches (see [test/e2e/README.md](test/e2e/README.md)).
+Its `journeys` group runs `test:e2e:workspace-start` and its `cloud` group `test:e2e:cloud`. The other `test:e2e:*` runners are outside the gate, so run the ones your change touches (see [test/e2e/README.md](test/e2e/README.md)).
 Desktop checks launch the app through `test/e2e/lib/launch-in-background.mjs` and browsers run headless so every local test leaves the foreground to the person.
 The gate runs the packaged Electron smoke only in CI because it opens a window.
 
