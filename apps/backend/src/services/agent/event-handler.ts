@@ -367,12 +367,9 @@ export function createAgentEventHandler(): AgentEventHandler & {
 
       let ended: NativeEnd | undefined;
       if (event.type === "turn.ended") {
-        const { turnId, stopReason } = event;
-        // The server can end a crashed runtime with an error before it collects unread steers.
-        const undeliveredSteers =
-          stopReason === "error" ? undefined : (event.undeliveredSteers ?? []);
-        const cancelled = stopReason === "cancelled";
-        ended = { type: "end", turnId, cancelled, held, outcome, by, undeliveredSteers };
+        const { turnId } = event;
+        const cancelled = event.stopReason === "cancelled";
+        ended = { type: "end", turnId, cancelled, held, outcome, by };
         if (
           (held || deferred) &&
           outcome?.status === "error" &&

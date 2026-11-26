@@ -19,7 +19,6 @@ export type NativeEnd = {
   cancelled: boolean;
   held: boolean;
   by?: Origin;
-  undeliveredSteers?: string[];
   outcome?: TurnOutcomeWrite;
   limit?: { resetsAt?: number };
 };

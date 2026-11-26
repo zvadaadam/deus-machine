@@ -45,7 +45,6 @@ type Row = {
     live?: {
       unread: Placement;
       answer: ReturnType<typeof Promise.withResolvers<SteerReceipt>>;
-      acknowledged: boolean;
     };
   };
 };
@@ -382,7 +381,7 @@ function putFirst(q: Queue, items: Row[]) {
 function steerInto(q: Queue, item: Row, chat: LocalChat, turnId: string, unread: Placement) {
   const id = item.ownTurn ? item.message.turnId : uuidv7();
   const answer = Promise.withResolvers<SteerReceipt>();
-  const live = { unread, answer, acknowledged: false };
+  const live = { unread, answer };
   item.steer = { id, turnId, live };
   item.state = "steering";
   changed(q);
@@ -408,10 +407,7 @@ function steerInto(q: Queue, item: Row, chat: LocalChat, turnId: string, unread:
     if (item.steer?.live !== live) return answer.promise;
     if (queues.get(q.sessionId) !== q) return "queued";
     if (!result) return "unconfirmed";
-    if (result.outcome === "steered") {
-      live.acknowledged = true;
-      return "acknowledged";
-    }
+    if (result.outcome === "steered") return "acknowledged";
     delete item.steer.live;
     item.state = "waiting";
     changed(q);
@@ -637,20 +633,14 @@ function returnHead(q: Queue, turnId: string, reuse = false) {
   return true;
 }
 
-export function recoverSteers(id: string, turnId: string, missingHead = false, unread?: string[]) {
+export function recoverSteers(id: string, turnId: string, missingHead = false) {
   const q = queues.get(id);
   if (!q) return;
   const kept: string[] = [];
   const front: Row[] = [];
-  for (const item of [...q.items]) {
+  for (const item of q.items) {
     const steer = item.steer;
     if (steer?.turnId !== turnId || !steer.live) continue;
-    // The native end accounts for accepted steers even if their user echoes were lost.
-    if (steer.live.acknowledged && unread && !unread.includes(steer.id)) {
-      q.items.splice(q.items.indexOf(item), 1);
-      steer.live.answer.resolve("read");
-      continue;
-    }
     steer.live.answer.resolve("queued");
     if (steer.live.unread === "front") front.push(item);
     delete steer.live;
@@ -678,8 +668,7 @@ export function onTurnNotice(id: string, event: TurnNotice) {
   }
   const gone = event.type === "end" || event.gone;
   const turnId = event.turnId;
-  const unread = event.type === "end" && event.held ? event.undeliveredSteers : undefined;
-  if (gone && turnId) recoverSteers(id, turnId, false, unread);
+  if (gone && turnId) recoverSteers(id, turnId);
   const missingEcho = gone && turnId !== undefined && returnHead(q, turnId);
   if (event.type === "interrupted") interrupt(q, turnId, event.cause, event.by);
   else if (event.held && event.limit) {
