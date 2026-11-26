@@ -4144,7 +4144,13 @@ describe("operating another chat's queue", () => {
       waitingRow("held"),
       waitingRow("last"),
     ]);
-    echo("later");
+    const [started, ...parts] = echoFrames("later", message("later").content);
+    emit(started!);
+    expect(await queueTool("read_queue")).toContain(
+      '1. sending · from the person · "Message later"'
+    );
+    for (const frame of parts) emit(frame);
+    expect(await ids()).toEqual(["held", "last"]);
     end("later");
     await vi.waitFor(() => expect(starts()).toEqual(["A", "later", "last"]));
     expect(await queue()).toMatchObject({ paused: "stopped", items: [waitingRow("held")] });
@@ -4312,7 +4318,15 @@ describe("operating another chat's queue", () => {
     "runs messages arriving after a live %s on an empty queue",
     async (cause) => {
       await send("A");
-      reportInterruption(sessionId, "A", false, cause);
+      engine.cancelTurn.mockResolvedValueOnce(
+        cause === "failure"
+          ? { outcome: "no_active_turn", activeTurnId: "other" }
+          : { outcome: "unconfirmed", turnId: "A" }
+      );
+      gap("replay_failed");
+      await vi.waitFor(async () =>
+        expect(await run(api.session, { sessionId })).toMatchObject({ error_category: "network" })
+      );
       await task("agent");
       await send("person");
       end("A", cause === "failure" ? "error" : "cancelled");
@@ -4321,6 +4335,19 @@ describe("operating another chat's queue", () => {
       await vi.waitFor(() => expect(starts()).toEqual(["A", "agent", "person"]));
     }
   );
+
+  it("queues a steer aimed at the stopped turn after the person's Resume until that turn ends", async () => {
+    await sendInOrder("T", "waiting");
+    await stopped("T");
+    await resumeInWindow();
+    expect(wireTurnId()).toBe("T");
+    await steer("follow-up");
+    const [next] = (await queue()).items;
+    expect(next).toMatchObject({ state: "waiting", text: "Message follow-up" });
+    expect(engine.steerTurn).not.toHaveBeenCalled();
+    end("T", "cancelled");
+    await vi.waitFor(() => expect(starts()).toEqual(["T", next!.id]));
+  });
 
   it("honors an agent's Resume of an attributed Stop while its turn is still ending", async () => {
     await sendInOrder("A", "R");
