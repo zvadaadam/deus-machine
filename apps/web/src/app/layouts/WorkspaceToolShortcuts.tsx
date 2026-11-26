@@ -1,6 +1,6 @@
 import { Settings2 } from "lucide-react";
 import type { ContentTab } from "@/features/workspace/store";
-import type { ContentTabItem } from "./content-tabs";
+import type { ContentTabItem } from "@/features/workspace-tabs/registry";
 
 export function WorkspaceToolShortcuts({
   items,

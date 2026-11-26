@@ -11,6 +11,9 @@ this checkout; start a backend yourself for a runner (`dev:web` below) with
 
 ## Test Files
 
+`node --import tsx test/e2e/database-owner.runtime.mjs` reopens a Node 22 backend after its desktop pipes close
+or a cleanup throws. It checks a stuck agent and its child are gone at backend exit.
+
 ### Transcript scrolling
 
 `chat-scroll.browser.mjs` bundles the transcript and styles in memory and drives

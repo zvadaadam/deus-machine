@@ -68,7 +68,6 @@ interface ContentViewProps {
   /** New Tab launch callbacks */
   onOpenTool: (tool: ContentTab, replaceTabId: string) => void;
   onOpenFile: (path: string, replaceTabId: string) => void;
-  onOpenUrl: (url: string, replaceTabId: string) => void;
 }
 
 export function ContentView({
@@ -83,7 +82,6 @@ export function ContentView({
   onRunTask,
   onOpenTool,
   onOpenFile,
-  onOpenUrl,
 }: ContentViewProps) {
   const cloud = workspace.kind === "cloud";
 
@@ -117,7 +115,6 @@ export function ContentView({
         onRunTask={onRunTask}
         onOpenTool={onOpenTool}
         onOpenFile={onOpenFile}
-        onOpenUrl={onOpenUrl}
       />
     ))
     .with({ kind: "changes" }, () => (

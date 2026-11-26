@@ -95,6 +95,22 @@ describe("GET /workspaces/:id/file-preview", () => {
     );
   });
 
+  it("returns the preview headers on HEAD without opening the file", async () => {
+    const res = await app.request("/workspaces/ws-123/file-preview?path=site/index.html", {
+      method: "HEAD",
+    });
+    expect(res.status).toBe(200);
+    expect(Object.fromEntries(res.headers)).toEqual({
+      "cache-control": "private, max-age=60",
+      "content-disposition": 'inline; filename="index.html"',
+      "content-length": "7",
+      "content-security-policy": "sandbox allow-scripts",
+      "content-type": "text/html; charset=utf-8",
+    });
+    expect(res.body).toBeNull();
+    expect(mockCreateReadStream).not.toHaveBeenCalled();
+  });
+
   it("sandboxes a repository's HTML so its scripts get no origin of the backend's", async () => {
     const res = await app.request("/workspaces/ws-123/file-preview?path=site/index.html");
     expect(res.status).toBe(200);

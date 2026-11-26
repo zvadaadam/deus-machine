@@ -21,6 +21,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MutableRefObject,
   type ReactNode,
+  type SyntheticEvent,
 } from "react";
 import { Plus, X } from "lucide-react";
 import { AnimatePresence, motion, useIsPresent, useReducedMotion } from "framer-motion";
@@ -31,7 +32,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/shared/lib/utils";
 import { tempo } from "@/shared/lib/tempo";
 import { useReorderSensors } from "@/shared/hooks/useReorderSensors";
-import { useCloudSimulatorStore } from "@/features/device/cloud/cloudSimulatorStore";
+import { useDeviceActive } from "@/features/device/useDeviceActive";
 import { PierreFileIcon } from "@/features/file-browser/lib/pierreIcons";
 import { TAB_KIND_ICONS, getWorkspaceTabTitle } from "../registry";
 import type { WorkspaceTab } from "../types";
@@ -54,7 +55,7 @@ export function workspaceTabPanelDomId(tabId: string): string {
 interface WorkspaceTabBarProps {
   tabs: WorkspaceTab[];
   activeTabId: string;
-  workspaceId?: string | null;
+  workspaceId: string;
   fileChangesCount?: number;
   onTabSelect: (tabId: string) => void;
   onTabClose: (tabId: string) => void;
@@ -146,6 +147,9 @@ function WorkspaceTabPill({
   const shortcutLabel = IS_MAC && index < 9 ? `⌘${index + 1}` : null;
   const showChangesBadge = tab.kind === "changes" && fileChangesCount > 0;
   const [tooltipOpen, setTooltipOpen] = useState(false);
+  const hideTooltip = isActive || isDragging;
+  if (hideTooltip && tooltipOpen) setTooltipOpen(false);
+  const skipTooltip = hideTooltip ? (event: SyntheticEvent) => event.preventDefault() : undefined;
 
   return (
     <div
@@ -168,23 +172,19 @@ function WorkspaceTabPill({
         (suppressPillMotion || reducedMotion ? (
           <span
             aria-hidden="true"
-            className="bg-bg-elevated ring-border-subtle dark:bg-bg-raised pointer-events-none absolute inset-0 -z-10 rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] ring-1 ring-inset dark:shadow-none"
+            className="bg-bg-elevated ring-border-subtle dark:bg-bg-raised pointer-events-none absolute inset-0 -z-10 rounded-lg shadow-xs ring-1 ring-inset dark:shadow-none"
           />
         ) : (
           <motion.span
             layoutId={activePillLayoutId}
             transition={tempo.moderate}
             aria-hidden="true"
-            className="bg-bg-elevated ring-border-subtle dark:bg-bg-raised pointer-events-none absolute inset-0 -z-10 rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] ring-1 ring-inset dark:shadow-none"
+            className="bg-bg-elevated ring-border-subtle dark:bg-bg-raised pointer-events-none absolute inset-0 -z-10 rounded-lg shadow-xs ring-1 ring-inset dark:shadow-none"
           />
         ))}
 
-      <Tooltip
-        delayDuration={500}
-        open={!isDragging && tooltipOpen}
-        onOpenChange={(next) => setTooltipOpen(isDragging ? false : next)}
-      >
-        <TooltipTrigger asChild>
+      <Tooltip delayDuration={500} open={tooltipOpen} onOpenChange={setTooltipOpen}>
+        <TooltipTrigger asChild onPointerMove={skipTooltip} onFocus={skipTooltip}>
           <button
             ref={tabRef}
             id={workspaceTabDomId(tab.id)}
@@ -270,10 +270,7 @@ export function WorkspaceTabBar({
   const reducedMotion = useReducedMotion();
   const [isDraggingAny, setIsDraggingAny] = useState(false);
 
-  const cloudSimStatus = useCloudSimulatorStore((s) =>
-    workspaceId ? (s.byWorkspace[workspaceId]?.status ?? null) : null
-  );
-  const deviceLive = cloudSimStatus === "ready";
+  const deviceLive = useDeviceActive(workspaceId);
 
   const sensors = useReorderSensors({ keyboard: false });
   const tabIds = useMemo(() => tabs.map((t) => t.id), [tabs]);
@@ -401,7 +398,7 @@ export function WorkspaceTabBar({
     onTabReorder(draggedId, targetId);
   }
 
-  const activePillLayoutId = `workspace-active-tab-${workspaceId ?? "default"}`;
+  const activePillLayoutId = `workspace-active-tab-${workspaceId}`;
 
   return (
     <div

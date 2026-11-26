@@ -368,7 +368,7 @@ line heights and tracking are the real values; only the outlines differ.
 | `DS/StatusIcon-*`                                                    | `features/sidebar/ui/WorkflowStatusIcon.tsx`                                               |
 | `DS/PixelGrid-Working`                                               | `features/session/ui/CircularPixelGrid.tsx` (`variant="working"`)                          |
 | `DS/SessionTab-Active` / `-Idle`                                     | `components/ui/tab-pill.tsx` via `session/ui/tabs/SessionTab.tsx`                          |
-| `DS/ContentTab-Active` / `-Idle`                                     | `app/layouts/ContentTabBar.tsx`                                                            |
+| `DS/ContentTab-Active` / `-Idle`                                     | `features/workspace-tabs/ui/WorkspaceTabBar.tsx`                                           |
 | `DS/ToolRow`                                                         | `session/ui/tools/components/BaseToolRenderer.tsx` (header row)                            |
 | `DS/TurnStatsHeader`                                                 | `session/ui/TurnStatsHeader.tsx`                                                           |
 | `DS/UserBubble`                                                      | `session/ui/MessageItem.tsx` (`UserMessage`)                                               |

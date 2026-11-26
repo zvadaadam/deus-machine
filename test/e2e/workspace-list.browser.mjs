@@ -210,7 +210,7 @@ test("a linked chat leaves the saved tab unread and shows its background work", 
   await waitForAdditions(1);
 });
 
-test("a reconnect keeps a half-answered question and removes a withdrawn one", async (t) => {
+test("a question blocks tab shortcuts while visible, keeps its draft on reconnect and closes on withdrawal", async (t) => {
   const page = await tab(t);
   const ws = await start(local, "Answer a question");
   const sessionId = ws.current_session_id;
@@ -254,6 +254,9 @@ test("a reconnect keeps a half-answered question and removes a withdrawn one", a
   });
   await page.goto(`${baseUrl}/w/${ws.id}`);
   await page.locator('[data-slot="workspace-chat-pane"] textarea').waitFor();
+  await openWorkspaceTool(page, "Files");
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  const filesTab = page.getByRole("tab", { name: "Files", exact: true });
   await until(() => !!push, 15_000, "the card stream");
   push(question("keep"));
   await page.getByRole("button", { name: "Release", exact: true }).click();
@@ -263,6 +266,16 @@ test("a reconnect keeps a half-answered question and removes a withdrawn one", a
   await note.getByRole("button", { name: "Type a custom answer" }).click();
   const input = note.getByRole("textbox", { name: "Custom answer" });
   await input.fill("Ship after review");
+  await input.press("Meta+Digit1");
+  assert.equal(
+    await filesTab.getAttribute("aria-selected"),
+    "false",
+    "the open question owns input"
+  );
+  await page.getByRole("button", { name: "Expand workspace", exact: true }).click();
+  await page.keyboard.press("Meta+Digit1");
+  await page.getByRole("tab", { name: "Files", exact: true, selected: true }).waitFor();
+  await page.getByRole("button", { name: "Restore split", exact: true }).click();
   await reconnect();
   assert.equal(await input.count(), 1, "the answer field stays mounted until the host replies");
   assert.equal(await input.inputValue(), "Ship after review");

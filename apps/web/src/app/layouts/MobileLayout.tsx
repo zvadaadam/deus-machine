@@ -16,8 +16,8 @@ import { useFileChanges } from "@/features/workspace";
 import { ChangesView } from "@/features/workspace/ui/ChangesView";
 import { CloudSandboxGate } from "@/features/workspace/ui/CloudSandboxGate";
 import { CloudDevicePanel } from "@/features/device/cloud";
-import { useCloudSimulatorStore } from "@/features/device/cloud/cloudSimulatorStore";
-import { isTabVisible, type ContentTabVisibility } from "./content-tabs";
+import { useDeviceActive } from "@/features/device/useDeviceActive";
+import { isTabVisible, type ContentTabVisibility } from "@/features/workspace-tabs/registry";
 import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
 import type { Workspace } from "@/shared/types";
@@ -80,7 +80,7 @@ export function MobileLayout({
   const chatOnly = isCloudDirectWebMode() || failedToStart(workspace);
   const showDevice = !chatOnly && isTabVisible("device", undefined, visibility);
   const cloudStage = cloudGateStage(workspace);
-  const deviceLive = useCloudSimulatorStore((s) => s.byWorkspace[workspace.id]?.status === "ready");
+  const deviceLive = useDeviceActive(workspace.id);
   const tab = chatOnly || (activeTab === "device" && !showDevice) ? "chat" : activeTab;
 
   // File changes -- always queried for the badge count on the code tab,

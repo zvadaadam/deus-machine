@@ -5,6 +5,7 @@ import { Loader2, PanelLeft } from "lucide-react";
 import { getErrorMessage } from "@shared/lib/errors";
 import { SidebarInset, useSidebar } from "@/components/ui/sidebar";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { isTextFieldFocused } from "@/shared/lib/keyboard";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { useTheme } from "@/app/providers";
 import { useUIStore } from "@/shared/stores/uiStore";
@@ -52,16 +53,7 @@ export function SettingsPage() {
       // A dialog, select or menu already took this Escape: Radix prevents the
       // default when it dismisses a layer, and that must not close Settings too.
       if (e.defaultPrevented) return;
-      // Don't close if focus is in an input
-      const ae = document.activeElement as HTMLElement | null;
-      if (
-        ae &&
-        (ae.tagName === "INPUT" ||
-          ae.tagName === "TEXTAREA" ||
-          ae.isContentEditable ||
-          ae.getAttribute("role") === "textbox")
-      )
-        return;
+      if (isTextFieldFocused()) return;
       closeSettings();
     }
 

@@ -4,7 +4,7 @@ import {
   getVisibleTools,
   isTabVisible,
   tabsFor,
-} from "@/app/layouts/content-tabs";
+} from "@/features/workspace-tabs/registry";
 import { capabilities } from "@/platform/capabilities";
 import * as config from "@/shared/config/backend.config";
 

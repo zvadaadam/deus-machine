@@ -6,8 +6,11 @@ import { ValidationError } from "../lib/errors";
 import { fileRange, resolveBrowserFile } from "../services/browser-files";
 
 const app = new Hono();
-const toResponseBody = (stream: fs.ReadStream): BodyInit =>
-  Readable.toWeb(stream) as unknown as BodyInit;
+
+function fileResponse(method: string, init: ResponseInit, open: () => fs.ReadStream): Response {
+  if (method === "HEAD") return new Response(null, init);
+  return new Response(Readable.toWeb(open()) as unknown as BodyInit, init);
+}
 
 app.get("/workspaces/:id/file-preview", (c) => {
   const { realPath, type, stat } = resolveBrowserFile({
@@ -23,7 +26,7 @@ app.get("/workspaces/:id/file-preview", (c) => {
   };
   // A repository's HTML gets an opaque origin so its scripts cannot read the backend.
   if (type.startsWith("text/html")) headers["Content-Security-Policy"] = "sandbox allow-scripts";
-  return new Response(toResponseBody(fs.createReadStream(realPath)), { headers });
+  return fileResponse(c.req.method, { headers }, () => fs.createReadStream(realPath));
 });
 
 app.get("/files/stream", (c) => {
@@ -41,12 +44,11 @@ app.get("/files/stream", (c) => {
       "Cache-Control": "private, max-age=3600",
     },
   };
-  if (c.req.method === "HEAD") return new Response(null, init);
-  const stream =
+  return fileResponse(c.req.method, init, () =>
     range.status === 206
       ? fs.createReadStream(realPath, { start: range.start, end: range.start + range.length - 1 })
-      : fs.createReadStream(realPath);
-  return new Response(toResponseBody(stream), init);
+      : fs.createReadStream(realPath)
+  );
 });
 
 export default app;

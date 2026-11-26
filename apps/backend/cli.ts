@@ -25,7 +25,7 @@
 //   bun run cli:backend -- "Say hello"
 //   bun run cli:backend --db-only           # just dump latest session
 
-import "./dev-env";
+import { DB_PATH, closeDatabase, getDatabase, initDatabase } from "./src/lib/database";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import { AgentLink } from "./src/services/agent/client";
 import { hasAgentMessages } from "./src/services/agent/agent-messages";
@@ -47,7 +47,6 @@ import {
   planAnswer,
   questionAnswer,
 } from "@shared/agent-asks";
-import { DB_PATH, closeDatabase, getDatabase, initDatabase } from "./src/lib/database";
 import { insertWorkspaceFixture } from "./src/services/workspace-lifecycle";
 import { persistChanges } from "./src/services/agent/persistence";
 import type { ConversationChange } from "@zvada/agent-server/protocol";

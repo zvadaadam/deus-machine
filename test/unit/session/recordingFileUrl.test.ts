@@ -1,4 +1,4 @@
-import { createElement, useState, type ReactNode } from "react";
+import { createElement, useState, type ComponentProps } from "react";
 import { toast } from "sonner";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -21,10 +21,17 @@ vi.mock("@/platform/ws", async (original) => ({
   ...(await original<typeof import("@/platform/ws")>()),
   call: vi.fn(),
 }));
-vi.mock("react-dom", async (original) => ({
-  ...(await original<typeof import("react-dom")>()),
-  createPortal: (children: ReactNode) => children,
-}));
+const dialog = vi.hoisted(() => ({ open: false }));
+// Static markup has no portal target. Render in place and let Dialog decide what is open.
+vi.mock("@radix-ui/react-dialog", async (original) => {
+  const radix = await original<typeof import("@radix-ui/react-dialog")>();
+  return {
+    ...radix,
+    Root: (props: ComponentProps<typeof radix.Root>) =>
+      createElement(radix.Root, { ...props, open: dialog.open }),
+    Portal: ({ children }: ComponentProps<typeof radix.Portal>) => children,
+  };
+});
 
 const path = "/tmp/recording.mp4";
 const first = "https://relay.example/files/first";
@@ -68,7 +75,6 @@ afterEach(() => {
   cache.clear();
   vi.restoreAllMocks();
   vi.resetAllMocks();
-  vi.unstubAllGlobals();
 });
 
 it.each([true, false])(
@@ -176,9 +182,7 @@ it("can renew again when the person starts a recovered, paused video at the same
 });
 
 function renderRecording(open: boolean) {
-  // Server rendering has no click or portal target. Start the modal in its clicked state.
-  vi.stubGlobal("document", { body: {} });
-  vi.mocked(useState).mockImplementationOnce(() => [open, vi.fn()]);
+  dialog.open = open;
   return renderToStaticMarkup(
     createElement(
       QueryClientProvider,
@@ -229,7 +233,7 @@ it.each(["refused read", "failed element retry"])(
     const card = renderRecording(false);
     expect.soft(card).toContain("bg-muted absolute inset-0");
     expect.soft(card).not.toContain("<img");
-    expect.soft(card).not.toContain('role="status"');
+    expect.soft(card).not.toMatch(/role="(?:status|alert)"/);
     expect.soft(card).not.toContain(refusal);
     const player = renderRecording(true);
     expect(player).toContain('aria-label="Close player"');

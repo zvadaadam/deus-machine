@@ -74,7 +74,7 @@ Backend ⊃ Agent engine (apps/agent-server/) — in process, the standard wire 
 
 **Electron Main** — Thin shell. Window lifecycle, native dialogs, process spawning. No business logic. It starts the backend and restarts one that exits, five times at most unless one stays up a minute (`backend-process.ts`). The backend stops when the desktop does, however that ends: its stdin is a pipe the desktop holds (`apps/backend/src/lib/parent-stdin.ts`), whose first line is the backend's spawn token. The token is in no process's environment, where every child would inherit it and `ps eww` would show it; the desktop keeps it in memory (`deus-cloud-provision.ts`). The preload offers the window only what the web app calls, and never the backend's spawn token; `test/unit/desktop/ipc-surface.test.ts` holds the preload, the main handlers and the web app's calls equal, so an unused channel is deleted, not kept. Every renderer runs sandboxed, so both preloads are single CommonJS files that require only `electron`. A main-process handler answers only the window's own page, never a Browser-tab guest or a frame inside the window (`index.ts`); web permissions are refused unless listed (`permissions.ts`), so a page in the Browser tab gets no camera, microphone, location, notifications or other apps. Only the packaged app registers `deus://workspace?id=<workspace id>` (with `&session=<chat id>` for a chat). The main process keeps the latest link accepted by `shared/workspace-link.ts` until the window's own page asks, and hands it only the validated ids. The installed app cannot be run as Node, given Node flags or inspected, and loads only its own checked `app.asar` (the fuses in `electron-builder.yml`).
 
-**Backend (Hono)** — All business logic. DB reads/writes, config, agent event persistence, tool relay, PTY, file watching. Operations in `src/api/`, answered over the socket; the few HTTP routes under `/api`. Runs the agent engine in its own process. A request from this computer needs no token, so it must be addressed to `localhost`, `127.0.0.1` or `[::1]` and come from no page or a page whose origin is in `DEUS_WEB_ORIGINS`, which the launcher sets (`shared/web-origins.ts`; `middleware/loopback-origin-gate.ts`): the desktop passes its window's origin (`app://deus` packaged, served by `apps/desktop/main/app-protocol.ts`; Vite's in dev), `dev:web` and the e2e runners `LOOPBACK_WEB_ORIGINS`. A backend started without it trusts no page. The app opens no remote-debugging port; agents' browser tools run their own browser.
+**Backend (Hono)** — All business logic. DB reads/writes, config, agent event persistence, tool relay, PTY, file watching. Operations in `src/api/`, answered over the socket; the few HTTP routes under `/api`. The agent engine runs inside the backend process. A request from this computer needs no token, so it must be addressed to `localhost`, `127.0.0.1` or `[::1]` and come from no page or a page whose origin is in `DEUS_WEB_ORIGINS`, which the launcher sets (`shared/web-origins.ts`; `middleware/loopback-origin-gate.ts`): the desktop passes its window's origin (`app://deus` packaged, served by `apps/desktop/main/app-protocol.ts`; Vite's in dev), `dev:web` and the e2e runners `LOOPBACK_WEB_ORIGINS`. A backend started without it trusts no page. The app opens no remote-debugging port; agents' browser tools run their own browser.
 
 **Agent engine** (`apps/agent-server/`) — Stateless. `@zvada/agent-server` with deus's seams: the Deus tools (one source, `deusTools`, with the session tools the backend adds beside them (`chatTools`), handed to the engine as `hostTools`: the engine gives them to every harness as the MCP server `deus_chat_tools`, in process for Claude and at its own loopback for Codex and Gemini, and each call names the session, the turn and its mode), the tool policy, checkpoint hooks and titles. No DB access, no direct frontend communication; the tools reach the backend through `host-link.ts`, which the backend registers (`startEngine`). Keep blocking work off it: it shares the backend's event loop. A turn does not survive the process (the engine keeps turns in memory), so at engine start every local chat the database still shows working or waiting is settled as an error saying Deus quit mid-turn (`settleInterruptedSessions` in `services/agent/persistence.ts`; cloud chats are the platform's to settle).
 
@@ -751,14 +751,17 @@ in Last Editor", a chat card's Open and Reveal in Finder, and the agent configur
 (`agentConfigOf`: the Agent tab and the `/` menu read the workspace's own folder; a cloud
 agent gets none of this computer's) offer nothing without one. So a project skill, command,
 hook or MCP server added in the Agent tab is a change in the workspace's branch, and the
-tab says so. Rule 2, `openAddress` /
-`openFile`: what a link or file in the chat does. Local is unchanged; in the cloud an
-internet address opens in the person's browser, a localhost one in the cloud preview at
-its port (or says "That address is on the cloud computer"), and a file in the Files tab
-(text) or says it cannot be shown. `session/lib/openFromChat.ts` carries the rule out; the
-`file-preview` route refuses a cloud workspace. The workspace tab registry
-(`features/workspace-tabs/registry.ts`, `tabsFor`) exposes Browser and Device for cloud
-workspaces connected through a backend, regardless of this computer’s settings. "New workspace from a pull request or
+tab says so. Rule 2 (`openAddress` and `openFile`) covers chat links, chat files and
+addresses typed in New Tab. In the cloud an internet address opens in the person's browser.
+A localhost address opens at its port in the cloud preview, or says "That address is on the
+cloud computer". A chat file opens in its own File tab, or in Changes when requested.
+If the cloud computer cannot show the file, the chat says so.
+`session/lib/openFromChat.ts` carries out the rule. For a local file preview, the desktop opens
+its Browser tab. On the web or a phone, the click opens a tab while Deus asks the host for the
+file's address. HTML previews need a direct connection. The `file-preview` route refuses a cloud
+workspace. `tabsFor` in `features/workspace-tabs/registry.ts` decides which tabs each workspace
+has. In a cloud workspace connected through a backend, Browser and Device run on the cloud
+computer regardless of this computer’s settings. "New workspace from a pull request or
 branch" is local (`offersNewFromBranch`). The sidebar row and the place menu read every
 visible chat's activity (`placeActivity` in the menu). A waiting chat or an unseen reply can
 mark the row while another chat's working grid runs. A failed setup has its own mark.
@@ -886,8 +889,8 @@ the catalog can move to a package the day Deus Cloud reads it too.
 
 Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 13 tables: `repositories`, `workspaces`, `sessions`, `messages`, `turns`, `parts`, `compactions`, `paired_devices`, `assistants`, `automations`, `automation_runs`, `extension_installations`, `integration_connections`.
 
-- Checkout launchers and `cli:backend` use `.deus-dev/deus.db` in their checkout by default. They accept `DATABASE_PATH` from a development shell and discard it from a legacy shell marked `DEUS_PACKAGED=1`. The dev desktop uses the same directory for its Electron profile, so each new worktree starts signed out.
-- Before it opens the database, each backend takes a SQLite write lock on the `.owner` sidecar. It waits up to ten seconds for an earlier backend to finish closing. The OS releases the lock on exit, including a crash.
+- The backend source and a checkout's `deus start` default to `.deus-dev/deus.db`. The dev desktop and `dev:web` resolve `DATABASE_PATH` from the backend's working directory. When that path matches the installed default in a legacy `DEUS_PACKAGED=1` shell, the dev launcher or source backend drops the override and logs why. The packaged runtime sets its installed default before loading the backend. The dev desktop keeps its Electron profile in `.deus-dev`, so each new worktree starts signed out.
+- Before it opens the database, each backend takes a SQLite write lock on the `.owner` sidecar. It waits up to twenty seconds so the previous backend can drain a stuck turn and stop its agent processes after a force-quit. The OS releases the lock on exit, including a crash.
 - `repositories.root_path` is nullable (a project not on this computer).
 - Turn accounting, execution, provider account snapshots and outcomes belong to `turns`, keyed by `(session_id, turn_id)`. Messages contain transcript content only.
 - Only the backend writes to DB

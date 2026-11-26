@@ -80,16 +80,14 @@ interface MainContentProps {
   onWorkspaceClick: (workspace: Workspace) => void;
 }
 
-function trackToolOpened(tool: ContentTab, workspaceId: string | null) {
-  const tabEventMap: Partial<Record<ContentTab, () => void>> = {
-    terminal: () => track("terminal_opened", { workspace_id: workspaceId ?? undefined }),
-    browser: () => track("browser_opened", { workspace_id: workspaceId ?? undefined }),
-    device: () => track("device_opened", { workspace_id: workspaceId ?? undefined }),
-    changes: () => track("diff_viewed", { workspace_id: workspaceId ?? undefined }),
-    files: () => track("files_opened", { workspace_id: workspaceId ?? undefined }),
-  };
-  tabEventMap[tool]?.();
-}
+const toolOpenedEvent = {
+  terminal: "terminal_opened",
+  browser: "browser_opened",
+  device: "device_opened",
+  changes: "diff_viewed",
+  files: "files_opened",
+  config: null,
+} as const;
 
 export function MainContent({
   selectedWorkspace,
@@ -111,10 +109,10 @@ export function MainContent({
   const isMobile = useIsMobile();
 
   const selectedWorkspaceId = selectedWorkspace?.id ?? null;
+  // The header chip opens run history for the automation that holds this workspace.
   const workspaceAutomation = useAutomationForWorkspace(selectedWorkspaceId);
   const { panelMode, setPanelMode } = useWorkspacePanelMode(selectedWorkspaceId);
 
-  // Tab visibility gates (local settings/capabilities vs cloud computer)
   const experimentalSettings = useSettings().data;
   const deviceAvailable =
     useDeviceSupport(selectedWorkspace?.kind !== "cloud").data?.liveView === "available";
@@ -129,6 +127,8 @@ export function MainContent({
     [experimentalSettings, tabVisibility]
   );
 
+  // Web-direct has no tools. A failed start has no checkout for them.
+  // Keep the pane during startup so the chat stays in place when the checkout is ready.
   const contentPaneAvailable =
     anyContentTabVisible(experimentalSettings, tabVisibility) &&
     !(selectedWorkspace && failedToStart(selectedWorkspace));
@@ -154,6 +154,7 @@ export function MainContent({
   });
 
   const statusMutation = useUpdateWorkspaceStatus();
+  // Workflow status lives on the Mac. The hosted header omits the menu without a handler.
   const webDirect = isCloudDirectWebMode();
 
   const cloudState =
@@ -162,19 +163,21 @@ export function MainContent({
     if (selectedWorkspaceId) void wakeCloudWorkspace(selectedWorkspaceId);
   }, [selectedWorkspaceId]);
 
+  // Watch only after checkout. Rule 1 gives a cloud workspace no folder on this computer.
   const isReady = selectedWorkspace?.state === "ready";
   const watchedFolder = isReady && selectedWorkspace ? localFolder(selectedWorkspace) : null;
   const isWatched = useFileWatcher(watchedFolder ? selectedWorkspaceId : null);
 
-  // --- Workspace tool shortcut handler (chat-only rail) ---
-  const handleToolShortcutSelect = useCallback(
-    (tool: ContentTab) => {
+  const openTool = useCallback(
+    (tool: ContentTab, replaceTabId?: string) => {
       if (!selectedWorkspaceId) return;
       workspaceLayoutActions.openToolTab(selectedWorkspaceId, tool, {
-        reveal: true,
+        replaceTabId,
+        forceNew: !!replaceTabId,
         cloud: workspaceKind === "cloud",
       });
-      trackToolOpened(tool, selectedWorkspaceId);
+      const event = toolOpenedEvent[tool];
+      if (event) track(event, { workspace_id: selectedWorkspaceId });
     },
     [selectedWorkspaceId, workspaceKind]
   );
@@ -185,12 +188,14 @@ export function MainContent({
     onModeChange: setPanelMode,
   });
 
+  // Write to the composer store so Review also works with the chat pane collapsed.
   const handleInsertReviewPrompt = useCallback(() => {
     if (!selectedWorkspaceId) return;
     const sid = workspaceLayoutActions.getLayout(selectedWorkspaceId).activeChatTabSessionId;
     if (sid) sessionComposerActions.appendDraft(sid, REVIEW_CODE);
   }, [selectedWorkspaceId]);
 
+  // A pull request needs a branch, and a branch needs the checkout.
   const prActions = selectedWorkspace && hasCheckout(selectedWorkspace) && (
     <PRActions
       state={prState}
@@ -213,6 +218,7 @@ export function MainContent({
         className={cn(
           "bg-bg-surface flex h-full min-w-0 flex-1 overflow-hidden transition-[border-radius,border-color,opacity]",
           sidebarOpen ? "tempo-slow" : "tempo-slow-exit",
+          // The phone's sidebar is a sheet, so its content goes edge to edge.
           isMobile
             ? "border-0"
             : cn(
@@ -343,7 +349,7 @@ export function MainContent({
                       {contentPaneAvailable && view === "chat" && (
                         <WorkspaceToolShortcuts
                           items={visibleTools}
-                          onSelect={handleToolShortcutSelect}
+                          onSelect={openTool}
                           onEnvironment={() =>
                             uiActions.openEnvironmentSettings(
                               selectedWorkspace.repository_id,
@@ -362,6 +368,7 @@ export function MainContent({
                       view={view}
                       onModeChange={setPanelMode}
                       visibility={tabVisibility}
+                      onOpenTool={openTool}
                       isWatched={isWatched}
                       onReview={handleInsertReviewPrompt}
                       environmentTasks={environmentTasks}

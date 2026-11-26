@@ -1,6 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  flushWorkspaceLayoutStorage,
   resolveWorkspaceTabs,
   useWorkspaceLayoutStore,
   workspaceLayoutActions,
@@ -8,30 +7,21 @@ import {
 import { DEFAULT_NEW_TAB_ID } from "@/features/workspace-tabs/types";
 import { getTerminalInitialCommand } from "@/features/terminal/store/terminalTaskStore";
 
-function createMemoryStorage(): Storage {
-  const map = new Map<string, string>();
-  return {
-    get length() {
-      return map.size;
-    },
-    clear: () => map.clear(),
-    getItem: (key: string) => map.get(key) ?? null,
-    key: (index: number) => [...map.keys()][index] ?? null,
-    removeItem: (key: string) => {
-      map.delete(key);
-    },
-    setItem: (key: string, value: string) => {
-      map.set(key, value);
-    },
+const storage = vi.hoisted(() => {
+  const storage = {
+    getItem: vi.fn<() => string | null>(() => null),
+    setItem: vi.fn<(key: string, value: string) => void>(),
   };
-}
+  vi.stubGlobal("window", { localStorage: storage });
+  return storage;
+});
 
 describe("workspaceLayoutStore", () => {
   beforeEach(() => {
     workspaceLayoutActions.resetAll();
   });
 
-  afterEach(() => {
+  afterAll(() => {
     vi.unstubAllGlobals();
   });
 
@@ -42,6 +32,33 @@ describe("workspaceLayoutStore", () => {
     expect(resolved.tabs).toHaveLength(1);
     expect(resolved.activeTabId).toBe(DEFAULT_NEW_TAB_ID);
     expect(resolved.activeTab).toEqual({ id: DEFAULT_NEW_TAB_ID, kind: "new-tab" });
+  });
+
+  it.each([12, 13])("resets v%i layouts before the next workspace write", async (version) => {
+    storage.getItem.mockReturnValueOnce(
+      JSON.stringify({
+        version,
+        state: {
+          layouts: {
+            a: {
+              workspaceTabs: [{ id: "old-device", kind: "simulator" }, null],
+              activeWorkspaceTabId: "gone",
+            },
+            b: { workspaceTabs: { broken: true } },
+          },
+        },
+      })
+    );
+    await useWorkspaceLayoutStore.persist.rehydrate();
+    expect(useWorkspaceLayoutStore.getState().layouts).toEqual({});
+    workspaceLayoutActions.openFileTab("a", "README.md");
+    workspaceLayoutActions.openToolTab("a", "device");
+    const saved = JSON.parse(storage.setItem.mock.lastCall![1]);
+    expect(saved.version).toBe(14);
+    expect(saved.state.layouts.a.workspaceTabs).toEqual([
+      { id: expect.any(String), kind: "file", path: "README.md" },
+      { id: expect.any(String), kind: "device" },
+    ]);
   });
 
   it("opens a dedicated file tab when opening a file in files target and queues reveal state", () => {
@@ -205,20 +222,16 @@ describe("workspaceLayoutStore", () => {
   });
 
   it("treats cloud Browser as a singleton and persists URL-less cloud preview tabs", () => {
-    const storage = createMemoryStorage();
-    vi.stubGlobal("localStorage", storage);
-
     const cloudFirst = workspaceLayoutActions.openToolTab("ws-cloud", "browser", { cloud: true });
     const cloudSecond = workspaceLayoutActions.openBrowserTab("ws-cloud", "", { cloud: true });
     expect(cloudSecond).toBe(cloudFirst);
 
     // Also open a blank local browser tab to confirm only cloud URL-less tabs persist.
     workspaceLayoutActions.openBrowserTab("ws-local-blank", "");
-    flushWorkspaceLayoutStorage();
 
-    const raw = storage.getItem("workspace-layout-store");
-    expect(raw).not.toBeNull();
-    const parsed = JSON.parse(raw!);
+    const [key, raw] = storage.setItem.mock.lastCall!;
+    expect(key).toBe("workspace-layout-store");
+    const parsed = JSON.parse(raw);
     expect(parsed.state.layouts["ws-cloud"].workspaceTabs).toHaveLength(1);
     expect(parsed.state.layouts["ws-cloud"].workspaceTabs[0]).toMatchObject({
       id: cloudFirst,
@@ -240,325 +253,6 @@ describe("workspaceLayoutStore", () => {
 
     const { workspaceTabs } = workspaceLayoutActions.getLayout("ws-guard");
     expect(workspaceTabs.map((t) => t.id)).toEqual([browserId, termId, fileId]);
-  });
-
-  it("hydrates v11 persisted state through Zustand persist without erasing saved layouts", async () => {
-    const storage = createMemoryStorage();
-    const v11Payload = {
-      version: 11,
-      state: {
-        layouts: {
-          "ws-browser": {
-            activeContentTab: "browser",
-            selectedFilePath: "src/index.ts",
-            browserTabs: [
-              { id: "b-1", url: "http://localhost:3000", title: "App", isMobileView: true },
-              { id: "b-blank", url: "about:blank", title: "Blank" },
-              { id: "b-2", url: "https://docs.example.com", title: "Docs" },
-            ],
-            activeBrowserTabId: "b-2",
-            panelMode: "content",
-            fileTreePinned: false,
-            chatTabSessionIds: ["sess-a", "sess-b"],
-            activeChatTabSessionId: "sess-b",
-            knownChatSessionIds: ["sess-a", "sess-b"],
-            pendingFileNavigation: { requestId: "stale", path: "old.ts", target: "files" },
-          },
-          "ws-changes": {
-            activeContentTab: "changes",
-            selectedFilePath: "README.md",
-            browserTabs: [{ id: "b-3", url: "http://localhost:5173" }],
-            activeBrowserTabId: "b-3",
-            panelMode: "chat",
-            fileTreePinned: true,
-            chatTabSessionIds: ["sess-c"],
-            activeChatTabSessionId: "sess-c",
-            knownChatSessionIds: ["sess-c"],
-          },
-        },
-      },
-    };
-    storage.setItem("workspace-layout-store", JSON.stringify(v11Payload));
-    vi.stubGlobal("localStorage", storage);
-
-    await useWorkspaceLayoutStore.persist.rehydrate();
-
-    const browserWs = workspaceLayoutActions.getLayout("ws-browser");
-    expect(browserWs.panelMode).toBe("content");
-    expect(browserWs.selectedFilePath).toBe("src/index.ts");
-    expect(browserWs.fileTreePinned).toBe(false);
-    expect(browserWs.chatTabSessionIds).toEqual(["sess-a", "sess-b"]);
-    expect(browserWs.activeChatTabSessionId).toBe("sess-b");
-    expect(browserWs.knownChatSessionIds).toEqual(["sess-a", "sess-b"]);
-    expect(browserWs.pendingFileNavigation).toBeNull();
-    expect(browserWs.nextTerminalNum).toBe(1);
-    expect(browserWs.workspaceTabs).toHaveLength(2);
-    expect(browserWs.workspaceTabs[0]).toMatchObject({
-      id: "b-1",
-      kind: "browser",
-      url: "http://localhost:3000",
-      title: "App",
-      isMobileView: true,
-    });
-    expect(browserWs.workspaceTabs[1]).toMatchObject({
-      id: "b-2",
-      kind: "browser",
-      url: "https://docs.example.com",
-      title: "Docs",
-    });
-    expect(browserWs.activeWorkspaceTabId).toBe("b-2");
-
-    const changesWs = workspaceLayoutActions.getLayout("ws-changes");
-    expect(changesWs.panelMode).toBe("chat");
-    expect(changesWs.selectedFilePath).toBe("README.md");
-    expect(changesWs.workspaceTabs.map((t) => t.kind)).toEqual(["changes", "browser"]);
-    expect(resolveWorkspaceTabs(changesWs).activeTab.kind).toBe("changes");
-  });
-
-  it("preserves v11 selected cloud Browser and Terminal tools until resolved with workspace kind", async () => {
-    const storage = createMemoryStorage();
-    const v11Payload = {
-      version: 11,
-      state: {
-        layouts: {
-          "ws-cloud-browser": {
-            activeContentTab: "browser",
-            browserTabs: [],
-            panelMode: "split",
-          },
-          "ws-term-with-urls": {
-            activeContentTab: "terminal",
-            browserTabs: [{ id: "b-1", url: "http://localhost:3000", title: "App" }],
-            activeBrowserTabId: "b-1",
-            panelMode: "content",
-          },
-        },
-      },
-    };
-    storage.setItem("workspace-layout-store", JSON.stringify(v11Payload));
-    vi.stubGlobal("localStorage", storage);
-
-    await useWorkspaceLayoutStore.persist.rehydrate();
-
-    // Before workspace opens, migratedActiveTool preserves intent without creating fake live tabs.
-    const cloudPre = workspaceLayoutActions.getLayout("ws-cloud-browser");
-    expect(cloudPre.migratedActiveTool).toBe("browser");
-    expect(cloudPre.workspaceTabs).toHaveLength(0);
-
-    const termPre = workspaceLayoutActions.getLayout("ws-term-with-urls");
-    expect(termPre.migratedActiveTool).toBe("terminal");
-    expect(termPre.workspaceTabs.map((t) => t.id)).toEqual(["b-1"]);
-
-    // Opening the cloud workspace resolves to a singleton cloud Browser tab (not New Tab).
-    workspaceLayoutActions.resolveMigratedTool("ws-cloud-browser", { cloud: true });
-    const cloudPost = workspaceLayoutActions.getLayout("ws-cloud-browser");
-    expect(cloudPost.migratedActiveTool).toBeNull();
-    expect(resolveWorkspaceTabs(cloudPost).activeTab).toMatchObject({
-      kind: "browser",
-      cloud: true,
-    });
-
-    // Opening the terminal workspace opens & activates Terminal 1 while preserving saved browser URLs.
-    workspaceLayoutActions.resolveMigratedTool("ws-term-with-urls", { cloud: false });
-    const termPost = workspaceLayoutActions.getLayout("ws-term-with-urls");
-    expect(termPost.migratedActiveTool).toBeNull();
-    expect(termPost.workspaceTabs.map((t) => t.kind)).toEqual(["browser", "terminal"]);
-    expect(resolveWorkspaceTabs(termPost).activeTab.kind).toBe("terminal");
-    expect(termPost.panelMode).toBe("content");
-  });
-
-  it("rejects newer persisted schema versions (v13) without merging or overwriting stored bytes", async () => {
-    const storage = createMemoryStorage();
-    const rawV13 = JSON.stringify({
-      version: 13,
-      state: {
-        layouts: {
-          "ws-future": {
-            panelMode: "content",
-            workspaceTabs: [{ id: "future-1", kind: "future-tool" }],
-            futureSetting: 99,
-          },
-        },
-      },
-    });
-    storage.setItem("workspace-layout-store", rawV13);
-    vi.stubGlobal("localStorage", storage);
-
-    await useWorkspaceLayoutStore.persist.rehydrate();
-
-    // Clean defaults in memory — future payload is NOT merged.
-    expect(useWorkspaceLayoutStore.getState().layouts).toEqual({});
-    expect(resolveWorkspaceTabs(workspaceLayoutActions.getLayout("ws-future")).activeTab.kind).toBe(
-      "new-tab"
-    );
-
-    // Subsequent in-memory edits work locally but must NOT overwrite the stored v13 bytes.
-    workspaceLayoutActions.openToolTab("ws-future", "changes");
-    workspaceLayoutActions.setPanelMode("ws-future", "content");
-    flushWorkspaceLayoutStorage();
-
-    expect(storage.getItem("workspace-layout-store")).toBe(rawV13);
-
-    // Once storage is replaced with a supported v12 payload, hydration resumes cleanly.
-    storage.setItem(
-      "workspace-layout-store",
-      JSON.stringify({
-        version: 12,
-        state: {
-          layouts: {
-            "ws-ok": {
-              workspaceTabs: [{ id: "c-1", kind: "changes" }],
-              activeWorkspaceTabId: "c-1",
-            },
-          },
-        },
-      })
-    );
-    await useWorkspaceLayoutStore.persist.rehydrate();
-    expect(workspaceLayoutActions.getLayout("ws-ok").workspaceTabs).toHaveLength(1);
-  });
-
-  it("validates malformed v12 payloads per-workspace without throwing", async () => {
-    const storage = createMemoryStorage();
-    storage.setItem(
-      "workspace-layout-store",
-      JSON.stringify({
-        version: 12,
-        state: {
-          layouts: {
-            "ws-object-tabs": {
-              workspaceTabs: { broken: true },
-              activeWorkspaceTabId: 123,
-              panelMode: "bogus",
-            },
-            "ws-partial": {
-              workspaceTabs: [
-                { id: "ok-changes", kind: "changes" },
-                { id: "", kind: "files" },
-                { id: "bad-file", kind: "file", path: "../outside.ts" },
-                { id: "bad-kind", kind: "unknown" },
-                null,
-              ],
-              activeWorkspaceTabId: "non-existent",
-            },
-            "ws-not-object": "corrupted",
-          },
-        },
-      })
-    );
-    vi.stubGlobal("localStorage", storage);
-
-    await useWorkspaceLayoutStore.persist.rehydrate();
-
-    const objTabs = workspaceLayoutActions.getLayout("ws-object-tabs");
-    expect(objTabs.workspaceTabs).toEqual([]);
-    expect(objTabs.panelMode).toBe("split");
-    expect(resolveWorkspaceTabs(objTabs).activeTab.kind).toBe("new-tab");
-
-    const partial = workspaceLayoutActions.getLayout("ws-partial");
-    expect(partial.workspaceTabs).toEqual([{ id: "ok-changes", kind: "changes" }]);
-    expect(partial.activeWorkspaceTabId).toBe("ok-changes");
-
-    const nonObj = workspaceLayoutActions.getLayout("ws-not-object");
-    expect(nonObj.workspaceTabs).toEqual([]);
-
-    // Defensive check even if a non-array is passed directly to resolveWorkspaceTabs.
-    expect(
-      resolveWorkspaceTabs({
-        workspaceTabs: {} as unknown as [],
-        activeWorkspaceTabId: null,
-      }).activeTab.kind
-    ).toBe("new-tab");
-  });
-
-  it("coalesces rapid browser title updates before JSON serialization", () => {
-    vi.useFakeTimers();
-    const storage = createMemoryStorage();
-    const setItemSpy = vi.spyOn(storage, "setItem");
-    const stringifySpy = vi.spyOn(JSON, "stringify");
-    vi.stubGlobal("localStorage", storage);
-    vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
-
-    try {
-      const tabId = workspaceLayoutActions.openBrowserTab("ws-perf", "https://example.com");
-      setItemSpy.mockClear();
-      stringifySpy.mockClear();
-
-      for (let i = 1; i <= 5; i += 1) {
-        workspaceLayoutActions.updateWorkspaceTab("ws-perf", tabId, "browser", (tab) => ({
-          ...tab,
-          title: `Title ${i}`,
-        }));
-      }
-
-      // None of the 5 updates should have serialized or written before the debounce window.
-      expect(stringifySpy).not.toHaveBeenCalled();
-      expect(setItemSpy).not.toHaveBeenCalled();
-
-      vi.advanceTimersByTime(250);
-
-      // Exactly one serialization + write carrying the final title.
-      expect(stringifySpy).toHaveBeenCalledTimes(1);
-      expect(setItemSpy).toHaveBeenCalledTimes(1);
-      const persisted = JSON.parse(storage.getItem("workspace-layout-store")!);
-      expect(persisted.state.layouts["ws-perf"].workspaceTabs[0].title).toBe("Title 5");
-    } finally {
-      flushWorkspaceLayoutStorage();
-      stringifySpy.mockRestore();
-      vi.useRealTimers();
-    }
-  });
-
-  it("does not flush a queued v12 save or removeItem over v13 bytes written by another same-origin page", async () => {
-    vi.useFakeTimers();
-    const storage = createMemoryStorage();
-    vi.stubGlobal("localStorage", storage);
-    vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
-
-    try {
-      // Page A hydrates on v12 and queues a debounced save.
-      storage.setItem(
-        "workspace-layout-store",
-        JSON.stringify({
-          version: 12,
-          state: {
-            layouts: {
-              "ws-a": {
-                workspaceTabs: [{ id: "c-1", kind: "changes" }],
-                activeWorkspaceTabId: "c-1",
-              },
-            },
-          },
-        })
-      );
-      await useWorkspaceLayoutStore.persist.rehydrate();
-      workspaceLayoutActions.openToolTab("ws-a", "files");
-
-      // Before Page A's 250ms debounce fires, Page B (v13) writes to the same storage key.
-      const v13FromPageB = JSON.stringify({
-        version: 13,
-        state: {
-          layouts: {
-            "ws-b": { workspaceTabs: [{ id: "next-1", kind: "future" }] },
-          },
-        },
-      });
-      storage.setItem("workspace-layout-store", v13FromPageB);
-
-      // Page A's timer fires, explicit flush runs, and clearStorage runs: v13 bytes must stay intact.
-      vi.advanceTimersByTime(300);
-      flushWorkspaceLayoutStorage();
-      useWorkspaceLayoutStore.persist.clearStorage();
-      expect(storage.getItem("workspace-layout-store")).toBe(v13FromPageB);
-
-      // Rehydrating must also see Page B's v13 bytes (not Page A's cancelled pending write).
-      await useWorkspaceLayoutStore.persist.rehydrate();
-      expect(useWorkspaceLayoutStore.getState().layouts).toEqual({});
-      expect(storage.getItem("workspace-layout-store")).toBe(v13FromPageB);
-    } finally {
-      flushWorkspaceLayoutStorage();
-      vi.useRealTimers();
-    }
   });
 
   it("selects the visible successor when closing an active tab adjacent to a hidden tab", () => {

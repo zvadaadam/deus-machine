@@ -325,6 +325,7 @@ export async function testBrowser({
       assert.equal(newDevices.length, 1);
       await testRelayedFiles({
         root,
+        output,
         hostDb,
         page: pairer,
         workspaceUrl: `${base}s/${machineId}/w/${hostDb.workspace}`,
@@ -332,7 +333,7 @@ export async function testBrowser({
         revoke: () => hostWrite("revokeDevice", { deviceId: newDevices[0].id }),
       });
       check(
-        "A paired phone recovers a recording thumbnail and player after their handles stop working, plays and seeks, reads an exact middle range and decodes a preview. HTML is refused and revocation makes its renewed URL return 404"
+        "A paired 390px phone recovers the recording card and player, plays and seeks above its chapters, reads an exact middle range and decodes a preview. HTML is refused and revocation makes its renewed URL return 404"
       );
     } finally {
       await desktopUi.close();

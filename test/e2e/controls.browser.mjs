@@ -81,6 +81,7 @@ function NoJumps() {
  const [pending, setPending] = useState(false);
  return <QueryClientProvider client={client}><TooltipProvider>
    <WorkspaceTabBar
+     workspaceId="controls"
      tabs={tabs}
      activeTabId={activeTabId}
      onTabSelect={setActiveTabId}
@@ -595,9 +596,28 @@ try {
     await timeline.send("Animation.setPlaybackRate", { playbackRate: 1 });
 
     const changes = strip.getByRole("tab", { name: "Changes" });
-    await changes.click();
+    await changes.evaluate((button) => button.click());
     await expect(changes).toHaveAttribute("aria-selected", "true");
-    await expect(panel).toHaveText("changes");
+    await changes.hover();
+    await sample.clock.runFor(700);
+    await expect(changes).not.toHaveAttribute("aria-describedby", /.+/);
+    // Keep the pointer in the panel. Moving it to Files can dismiss the stale tooltip.
+    await panel.hover();
+    await files.evaluate((button) => button.click());
+    await strip.getByRole("tab", { name: "Files", selected: true }).waitFor();
+    await sample.clock.runFor(700);
+    await expect(sample.locator('[data-slot="tooltip-content"]:visible')).toHaveCount(0);
+
+    await changes.hover();
+    const hint = sample.getByRole("tooltip", { name: "Changes" });
+    await hint.waitFor();
+    await expect(changes).toHaveAttribute("aria-describedby", await hint.getAttribute("id"));
+    await sample.screenshot({ path: path.join(artifacts, `tabs-${reducedMotion}.png`) });
+    await changes.click();
+    await hint.waitFor({ state: "detached" });
+    await panel.hover();
+    await files.hover();
+    await sample.getByRole("tooltip", { name: "Files" }).waitFor();
     await sample.close();
   }
   console.log(
