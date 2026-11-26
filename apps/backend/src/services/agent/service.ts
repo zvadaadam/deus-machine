@@ -1,4 +1,13 @@
-// Connect turn notices before the engine admits a turn. Agentless startup uses the same wiring.
+// Composition root for agent-server communication, initialized once at startup by server.ts.
+//
+//   turns and queue → service
+//                       ├── client         (AgentLink to the in-process engine)
+//                       ├── event-handler  (persistence and WebSocket events)
+//                       ├── queue          (turn notices and user echoes)
+//                       ├── run-config     (turn parameters)
+//                       └── tool-relay     (questions and plans for the window)
+//
+// init connects the four turn notices when it creates the event handler, including on an agentless host.
 
 import type { AgentHarness } from "@shared/enums";
 import { WireRequestError } from "@zvada/agent-server/client";

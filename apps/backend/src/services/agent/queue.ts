@@ -441,7 +441,8 @@ export async function steerMessage(
       await read;
       return { outcome: "steered" };
     }
-    // Removing a row removes the id a later retry could match.
+    // Removing a row removes the id a later retry could match. Once the host answers,
+    // an RPC timeout at the caller does not make the package retry.
   }
   if (!chat) {
     await sendMessage(steerId === undefined ? input : message, origin);

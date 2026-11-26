@@ -198,6 +198,8 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
       notify(id);
     })
     .with("refused", () => {
+      // An unsent claim without its own failure restores the latest the previous turn reported
+      // (its end or a fatal error), otherwise what the claim found.
       writeStatus(prior);
       const interrupted = !!error || !!by;
       const kept = turnNotices().recover(id, turnId, interrupted);
@@ -234,6 +236,7 @@ export function askStop(id: string, origin: Origin) {
   if (turn) (turn.stops ??= new Set()).add(by);
   turnNotices().queue(id, { type: "stop", turnId: turn?.turnId, by });
 
+  // A confirmed Stop waits for its holder's final echoes, while an unconfirmed Stop still warns after handler loss.
   const deadline = (kind: "settle" | "warn") => {
     if (chat.deadline?.kind === "settle" || chat.deadline?.kind === kind) return;
     clearDeadline(chat);
