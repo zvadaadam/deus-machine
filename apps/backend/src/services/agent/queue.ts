@@ -135,6 +135,7 @@ function notify(sessionIds: string[]) {
 }
 
 function changed(q: Queue) {
+  if (queues.get(q.sessionId) !== q) return;
   if (q.hold?.reason !== "limit" && !q.items.some((row) => row.held)) {
     delete q.hold;
     if (!q.items.length && (!q.answered || q.answered !== holdingTurn(q.sessionId)?.turnId))

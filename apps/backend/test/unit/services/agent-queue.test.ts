@@ -2883,6 +2883,22 @@ describe("messages held for a local chat", () => {
     }
   );
 
+  it("keeps the restored workspace's new queue when an archived steer's conflict arrives", async () => {
+    await send("T");
+    const reply = pendingSteer();
+    const conflict = expect(steer("old")).rejects.toThrow("A different message was already sent");
+    db.exec("UPDATE workspaces SET state = 'archived' WHERE id = 'w'");
+    invalidate(["workspaces", "sessions"]);
+    db.exec("UPDATE workspaces SET state = 'ready' WHERE id = 'w'");
+    invalidate(["workspaces", "sessions"]);
+    await send("new");
+    reply.reject(new WireRequestError(WIRE_ERROR_CODES.turnConflict, "different input"));
+    await conflict;
+    expect(await ids()).toEqual(["new"]);
+    end("T");
+    await vi.waitFor(() => expect(starts()).toEqual(["T", "new"]));
+  });
+
   it("publishes the old end before admitting the next turn and pushes the queue to both windows", async () => {
     await send("first");
     const connect = (chatId = sessionId) => {
