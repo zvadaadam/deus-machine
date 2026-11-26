@@ -30,7 +30,7 @@ export function agentDeviceFor(sessionId: string) {
 
 export async function deviceSupport(remote: boolean): Promise<DeviceSupport> {
   if (remote) return { liveView: "remote" };
-  const { installer, xcode, android } = await deviceToolchains();
+  const { installer, xcode, androidSdk } = await deviceToolchains();
   const liveView = liveViewSupport(process.platform, process.arch, installer);
-  return { liveView, xcode, android, hubVersion, agentDeviceVersion };
+  return { liveView, xcode, android: androidSdk !== null, hubVersion, agentDeviceVersion };
 }

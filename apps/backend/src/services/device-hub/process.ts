@@ -6,7 +6,8 @@ import { processGroupsStopped, trackProcessGroup } from "@shared/lib/process-gro
 const graceMs = 1500;
 
 /** On macOS, kill(-pgid, …) succeeds while the hub group has a live member. When nothing can be
- *  signalled, EPERM means only exited, unreaped members remain and ESRCH means the group is empty. */
+ *  signalled, EPERM means only exited, unreaped members remain and ESRCH means the group is empty.
+ *  A stop runs from an abort listener, so a throw here would end the backend. */
 function signalGroup(pid: number, signal: NodeJS.Signals | 0) {
   try {
     process.kill(-pid, signal);

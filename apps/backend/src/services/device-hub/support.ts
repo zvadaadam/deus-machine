@@ -51,7 +51,7 @@ async function probe() {
     findAndroidSdk(),
     hasInstaller(),
   ]);
-  return { xcode, android: androidSdk !== null, androidSdk, installer };
+  return { xcode, androidSdk, installer };
 }
 
 let cache: { until: number; result: ReturnType<typeof probe> } | undefined;

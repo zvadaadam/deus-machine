@@ -43,7 +43,6 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.stubGlobal("fetch", fetch);
   vi.mocked(deviceToolchains).mockResolvedValue({
-    android: true,
     androidSdk: "/fixture/sdk",
     xcode: { available: true, version: null },
     installer: true,
@@ -56,7 +55,6 @@ afterEach(() => vi.unstubAllGlobals());
 describe("Device inventory and startup", () => {
   it("adds only missing iOS simulators and reports independent platform readiness", async () => {
     vi.mocked(deviceToolchains).mockResolvedValue({
-      android: false,
       androidSdk: null,
       xcode: { available: true, version: null },
       installer: true,
