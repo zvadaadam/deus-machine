@@ -1,6 +1,9 @@
+import { getAgentLabel } from "@/shared/agents";
+
 interface BaseChatTab {
   id: string;
-  label: string;
+  title?: string | null;
+  sequence?: number;
   agentHarness: string;
   hasStarted: boolean;
   initialModel?: string;
@@ -17,14 +20,13 @@ export interface PendingChatTab extends BaseChatTab {
 
 export type ChatTab = SessionChatTab | PendingChatTab;
 
-export interface ClosedSessionTab {
-  id: string;
-  label: string;
+export interface ClosedSessionTab extends BaseChatTab {
   sessionId: string;
-  agentHarness: string;
-  hasStarted: boolean;
-  initialModel?: string;
   closedAt: number;
+}
+
+export function chatTabLabel({ title, sequence, agentHarness }: BaseChatTab): string {
+  return title?.trim() || (sequence ? `${getAgentLabel(agentHarness)} #${sequence}` : "New chat");
 }
 
 export function isSessionChatTab(tab: ChatTab | null | undefined): tab is SessionChatTab {

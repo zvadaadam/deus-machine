@@ -775,6 +775,7 @@ branch" is local (`offersNewFromBranch`). The sidebar row and the place menu rea
 visible chat's activity (`placeActivity` in the menu). A waiting chat or an unseen reply can
 mark the row while another chat's working grid runs. A failed setup has its own mark.
 Reopen lists every visible chat without a tab, those closed in this visit first.
+Chat tabs and Reopen show the chat’s title, or its numbered agent label once started and “New chat” before then.
 The sidebar's diff numbers never connect to a cloud
 computer: a `diff.request` to a sandbox whose agent is not connected makes the platform
 resume it, so `diffStats` asks only a session with an open channel that is not asleep.

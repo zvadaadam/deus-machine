@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { it, expect, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { WorkspaceItem } from "@/features/sidebar/ui/WorkspaceItem";
+import { ClosedSessionsPopover } from "@/features/session/ui/tabs/ClosedSessionsPopover";
 import { SessionTab } from "@/features/session/ui/tabs/SessionTab";
 import type { ChatTab } from "@/features/session/ui/tabs/types";
 import type { Workspace } from "@shared/types/workspace";
@@ -15,6 +16,11 @@ vi.mock("@/shared/config/webDirectMode", async (original) => ({
   isCloudDirectWebMode: direct,
 }));
 vi.mock("@/features/automations", () => ({ useAutomationForWorkspace: () => undefined }));
+vi.mock("@/components/ui/popover", async (original) => ({
+  ...(await original<typeof import("@/components/ui/popover")>()),
+  PopoverContent: ({ children }: { children: ReactNode }) =>
+    createElement(Fragment, null, children),
+}));
 // Render the open menu. Browser coverage checks its trigger, focus, clipboard and positioning.
 vi.mock("@/components/ui/context-menu", () => ({
   ContextMenu: ({ trigger, children }: { trigger: ReactNode; children: ReactNode }) =>
@@ -49,7 +55,7 @@ it.each([
     const base = {
       id: "tab",
       agentHarness: "codex-app-server",
-      label: "Review",
+      title: "Review",
       hasStarted: false,
     };
     const tab: ChatTab = hasChat
@@ -75,7 +81,8 @@ it.each([
               workspaceId: workspace.id,
               tab,
               isActive: false,
-              canClose: false,
+              canClose: true,
+              onClose: vi.fn(),
               isWorking: false,
               isUnread: false,
               onSelect: vi.fn(),
@@ -85,6 +92,8 @@ it.each([
         )
       );
       expect(html.match(/Copy link/g) ?? []).toHaveLength(hasChat ? 2 : 1);
+      expect(html).toContain('data-medium-label="Review">Review</span>');
+      expect(html).toContain('aria-label="Close Review tab"');
       expect(html.includes(">Open workspace<")).toBe(true);
       expect(html.includes(">Open chat<")).toBe(hasChat);
       expect(html.includes("Set status")).toBe(!webDirect);
@@ -94,3 +103,22 @@ it.each([
     }
   }
 );
+
+it("shows the chat title and the unnamed chat's numbered fallback in Reopen", () => {
+  const closed = { agentHarness: "codex-app-server", hasStarted: true, closedAt: 1 };
+  const html = renderToStaticMarkup(
+    createElement(
+      TooltipProvider,
+      null,
+      createElement(ClosedSessionsPopover, {
+        closedTabs: [
+          { ...closed, id: "a", sessionId: "a", title: "Review", sequence: 1 },
+          { ...closed, id: "b", sessionId: "b", sequence: 2 },
+        ],
+        onTabRestore: vi.fn(),
+      })
+    )
+  );
+  expect(html).toContain(">Review</span>");
+  expect(html).toContain(">Codex #2</span>");
+});

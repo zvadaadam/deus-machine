@@ -13,6 +13,7 @@
 import type { KeyboardEvent, ReactNode, RefCallback } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 type TabPillPropsBase = {
   /** Whether this tab is currently active. Drives bg + text color. */
@@ -97,23 +98,26 @@ export function TabPill({
       ) : (
         <span className="flex h-full w-7 shrink-0 items-center justify-center">{icon}</span>
       )}
-      <button
-        ref={titleRef}
-        type="button"
-        role="tab"
-        aria-selected={active}
-        tabIndex={titleTabIndex}
-        onClick={onSelect}
-        onKeyDown={onTitleKeyDown}
-        className="control-interaction active:bg-control-pressed flex h-full min-w-0 flex-1 cursor-pointer items-center rounded-r-lg border-none bg-transparent pr-2.5 pl-0.5 text-left text-inherit"
-      >
-        <span
-          className="block truncate"
-          data-medium-label={typeof children === "string" ? children : undefined}
+      <Tooltip delayDuration={300}>
+        <TooltipTrigger
+          ref={titleRef}
+          type="button"
+          role="tab"
+          aria-selected={active}
+          tabIndex={titleTabIndex}
+          onClick={onSelect}
+          onKeyDown={onTitleKeyDown}
+          className="control-interaction active:bg-control-pressed flex h-full min-w-0 flex-1 cursor-pointer items-center rounded-r-lg border-none bg-transparent pr-2.5 pl-0.5 text-left text-inherit"
         >
-          {children}
-        </span>
-      </button>
+          <span
+            className="block truncate"
+            data-medium-label={typeof children === "string" ? children : undefined}
+          >
+            {children}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs wrap-anywhere">{children}</TooltipContent>
+      </Tooltip>
     </div>
   );
 }

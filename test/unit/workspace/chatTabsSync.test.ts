@@ -11,6 +11,7 @@ import {
   sessionToTab,
 } from "@/app/layouts/chatTabsSync";
 import type { Session } from "@/features/session/types";
+import { chatTabLabel } from "@/features/session/ui/tabs/types";
 
 vi.mock("@/features/session/api/session.queries", () => ({
   useWorkspaceSessions: () => ({ data: [] }),
@@ -23,7 +24,7 @@ const closedTab = (sessionId: string) =>
   ({
     id: `c-${sessionId}`,
     sessionId,
-    label: "x",
+    sequence: 1,
     agentHarness: "claude-code",
     hasStarted: true,
     closedAt: 1,
@@ -82,7 +83,18 @@ describe("tabs that follow the live chat list (H9, H21)", () => {
   it("W4: two chats that start in one snapshot get different labels", () => {
     const tabs = [sessionToTab(chat("a", 0), 1), sessionToTab(chat("b", 0), 2)];
     const next = reconcileLive({ tabs, closed: [] }, [chat("a"), chat("b")], new Set(["a", "b"]));
-    expect(new Set(next.tabs.map((t) => t.label)).size).toBe(2);
+    expect(new Set(next.tabs.map(chatTabLabel)).size).toBe(2);
+  });
+
+  it("shows a title before the first message and uses New chat while unnamed", () => {
+    expect(chatTabLabel(createPendingTab())).toBe("New chat");
+    const draft = sessionToTab(chat("draft", 0), 1);
+    expect(chatTabLabel(draft)).toBe("New chat");
+    expect(chatTabLabel({ ...draft, title: "  Review  " })).toBe("Review");
+  });
+
+  it("uses the numbered label for a legacy title containing only spaces", () => {
+    expect(chatTabLabel({ ...sessionToTab(chat("a"), 2), title: "   " })).toBe("Claude Code #2");
   });
 });
 
@@ -133,11 +145,11 @@ it.each([
     const before = {
       ...sessionToTab(chat("moved"), 1),
       hasStarted: true,
-      label: "Claude Code #1",
       agentHarness: "claude-code" as const,
     };
     const actual = { ...chat("moved"), agent_harness: "codex-app-server" as const, ...evidence };
     const next = reconcileLive({ tabs: [before], closed: [] }, [actual], new Set(["moved"]));
-    expect(next.tabs[0]).toMatchObject({ label: "Codex #1", agentHarness: "codex-app-server" });
+    expect(next.tabs[0].agentHarness).toBe("codex-app-server");
+    expect(chatTabLabel(next.tabs[0])).toBe("Codex #1");
   }
 );

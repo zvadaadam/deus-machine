@@ -422,8 +422,19 @@ try {
         .getByRole("button", { name: /Close .* tab/ })
         .click();
       await value(input, "Second chat draft");
-      await page.getByRole("button", { name: "Restore closed session" }).click();
-      await page.getByRole("dialog").getByRole("button").click();
+      const reopen = page.getByRole("button", { name: "Restore closed session" });
+      const dialog = page.getByRole("dialog");
+      const closedChat = dialog.getByRole("button");
+      await reopen.press("Enter");
+      await closedChat.focus();
+      await page
+        .getByRole("tooltip", { name: await closedChat.innerText(), exact: true })
+        .waitFor();
+      await closedChat.press("Escape");
+      await dialog.waitFor({ state: "detached" });
+      await reopen.and(page.locator(":focus")).waitFor();
+      await reopen.press("Enter");
+      await closedChat.click();
       await value(input, "First chat draft");
       await pasted.waitFor();
     }
