@@ -124,7 +124,11 @@ export function useTranscriptVirtualizer({
         const pane = instance.scrollElement;
         const content = list.current;
         if (!pane || !content || (anchor.current && anchorIndex >= 0)) return false;
-        if (isChasing()) return false;
+        if (isChasing()) {
+          // The chase can stop before React commits the new height on a later task.
+          content.style.height = `${instance.getTotalSize() + delta}px`;
+          return false;
+        }
         if (content.offsetTop + item.end > pane.scrollTop) return false;
         // TanStack applies the correction before it publishes the new measured size.
         content.style.height = `${instance.getTotalSize() + delta}px`;

@@ -27,14 +27,27 @@ before(async () => {
       {
         name: "transcript-fixture-data",
         enforce: "pre",
-        resolveId(id) {
+        resolveId(id, importer) {
           if (id.endsWith("/settings.queries")) return "\0fixture-settings";
           if (id === "./CloudEnvProgress") return "\0fixture-cloud-env";
+          if (
+            id === "@tanstack/react-virtual" &&
+            importer?.endsWith("/useTranscriptVirtualizer.ts")
+          )
+            return "\0fixture-virtualizer";
         },
         load(id) {
           if (id === "\0fixture-settings")
             return `export const useSettings = () => ({ data: { chat_view: 'bubbles' } });
               export const useAgentAuth = () => ({ data: undefined });`;
+          if (id === "\0fixture-virtualizer")
+            return `export * from "@tanstack/react-virtual";
+              import { useVirtualizer as useRealVirtualizer } from "@tanstack/react-virtual";
+              export function useVirtualizer(options) {
+                const instance = useRealVirtualizer(options);
+                globalThis.chatVirtualizer = instance;
+                return instance;
+              }`;
           if (id === "\0fixture-cloud-env")
             return `const entries = [];
               export const useCloudEnvEntries = () => entries;
@@ -128,6 +141,16 @@ function liveUpdates(count) {
     messages,
     sessionStatus: "working",
     turns: [{ turnId: reply.turn_id, startedAt: liveTurnStartedAt }],
+  };
+}
+
+function failedCompaction(turnId) {
+  return {
+    compaction_id: "failed",
+    turn_id: turnId,
+    status: "failed",
+    trigger: "auto",
+    created_at: new Date().toISOString(),
   };
 }
 
@@ -326,6 +349,147 @@ test("a reader at the bottom stays there when a row above grows after the chase 
   assert.equal(after.paused, false);
 });
 
+async function resizeAtChaseShutdown(change, holdFrames) {
+  const props = liveUpdates(1);
+  const shrinking = change < 0;
+  if (shrinking) props.compactions = [failedCompaction(props.turns[0].turnId)];
+  await renderChat(props, 300);
+  await waitAtBottom();
+  const row = page.locator(`[data-message-id="${shrinking ? "reply-7" : "reply-4"}"]`);
+  const initial = await scrollPosition();
+  await row.evaluate(
+    (row, height) => {
+      const spacer = globalThis.document.createElement("div");
+      spacer.id = "resizing-content";
+      spacer.style.height = `${height}px`;
+      row.firstElementChild.append(spacer);
+    },
+    shrinking ? -change : 0
+  );
+  if (shrinking) {
+    await page.waitForFunction((bottom) => {
+      const pane = globalThis.document.getElementById("chat-messages");
+      return pane.scrollHeight - pane.clientHeight === bottom;
+    }, initial.bottom - change);
+    await waitAtBottom();
+  }
+
+  const result = await row.evaluate(
+    async (row, { change, holdFrames }) => {
+      const pane = row.closest("#chat-messages");
+      const list = row.parentElement;
+      const last = list.lastElementChild;
+      const frame = () => new Promise(globalThis.requestAnimationFrame);
+      const lastStart = () => last.getBoundingClientRect().top - list.getBoundingClientRect().top;
+      const atBottom = pane.scrollTop;
+      const committedStart = lastStart();
+
+      // A viewport resize wakes the chase at its target. The row changes between ticks 9 and 10.
+      const width = pane.clientWidth;
+      await new Promise((done) => {
+        const resized = new globalThis.ResizeObserver(() => {
+          if (pane.clientWidth === width) return;
+          resized.disconnect();
+          done();
+        });
+        resized.observe(pane);
+        pane.style.right = "1px";
+      });
+      for (let i = 0; i < 9; i++) await frame();
+
+      const backwards = [];
+      const jump = globalThis.document.querySelector(
+        '[aria-label="Scroll to bottom"]'
+      ).parentElement;
+      let jumpShown = false;
+      const watchJump = new globalThis.MutationObserver(() => {
+        if (jump.classList.contains("opacity-100")) jumpShown = true;
+      });
+      watchJump.observe(jump, { attributes: true, attributeFilter: ["class"] });
+      const recordWrite = (top) => {
+        if (top < pane.scrollTop) backwards.push([pane.scrollTop, top]);
+      };
+      const scrollTo = pane.scrollTo.bind(pane);
+      pane.scrollTo = (...args) => {
+        recordWrite(typeof args[0] === "number" ? args[1] : args[0].top);
+        scrollTo(...args);
+      };
+      const scrollTop = Object.getOwnPropertyDescriptor(globalThis.Element.prototype, "scrollTop");
+      Object.defineProperty(pane, "scrollTop", {
+        configurable: true,
+        get: () => scrollTop.get.call(pane),
+        set: (value) => {
+          recordWrite(value);
+          scrollTop.set.call(pane, value);
+        },
+      });
+
+      // TanStack measures and caches the new size immediately. Hold its notification to React.
+      const virtualizer = globalThis.chatVirtualizer;
+      const notify = virtualizer.options.onChange;
+      let publish;
+      virtualizer.options.onChange = (...args) => {
+        publish = () => notify(...args);
+      };
+      const height = row.offsetHeight;
+      await new Promise((done) => {
+        const measured = new globalThis.ResizeObserver(() => {
+          if (row.offsetHeight === height) return;
+          measured.disconnect();
+          done();
+        });
+        measured.observe(row);
+        globalThis.document.getElementById("resizing-content").style.height =
+          `${Math.max(change, 0)}px`;
+      });
+      for (let i = 0; i < holdFrames; i++) await frame();
+      const heldStart = lastStart();
+      virtualizer.options.onChange = notify;
+      publish();
+      for (let i = 0; i < 30; i++) await frame();
+      await new Promise((done) => globalThis.setTimeout(done, 0));
+      watchJump.disconnect();
+      const lastBottom = last.getBoundingClientRect().bottom;
+      return {
+        atBottom,
+        committedStart,
+        heldStart,
+        afterStart: lastStart(),
+        backwards,
+        jumpShown,
+        clipped:
+          lastBottom >
+          Math.min(list.getBoundingClientRect().bottom, pane.getBoundingClientRect().bottom) + 1,
+      };
+    },
+    { change, holdFrames }
+  );
+
+  assert.equal(
+    result.heldStart,
+    result.committedStart,
+    "the last row stayed at its committed position during the hold"
+  );
+  assert.equal(
+    result.afterStart - result.committedStart,
+    change,
+    "React committed the new row position"
+  );
+  assert.deepEqual(result.backwards, [], "no programmatic backward scroll");
+  assert.equal(result.jumpShown, false, "the jump button stayed hidden");
+  const after = await scrollPosition();
+  assert.equal(after.bottom - result.atBottom, change);
+  assert.equal(after.top, after.bottom, "follow the bottom after the delayed commit");
+  assert.equal(after.paused, false);
+  assert.equal(result.clipped, false, "the final row fits inside the list and viewport");
+}
+
+test("an above-row measurement on the chase's last idle frame survives a 30-frame React delay", () =>
+  resizeAtChaseShutdown(64, 30));
+
+test("a shrinking live row keeps the trailing compaction visible through chase shutdown", () =>
+  resizeAtChaseShutdown(-160, 30));
+
 test("prepending with a concurrent append preserves the row through delayed measurement", async () => {
   await renderChat({ messages: history(22, 34), hasOlder: true });
   await waitAtBottom();
@@ -403,15 +567,7 @@ test("same-message growth follows past a trailing failed compaction", async () =
     messages,
     sessionStatus: "working",
     turns: [{ turnId: reply.turn_id, startedAt: Date.now() - 1000 }],
-    compactions: [
-      {
-        compaction_id: "failed",
-        turn_id: reply.turn_id,
-        status: "failed",
-        trigger: "auto",
-        created_at: new Date().toISOString(),
-      },
-    ],
+    compactions: [failedCompaction(reply.turn_id)],
   };
   reply.parts = [send(reply.id, 0)];
   await renderChat(props);
