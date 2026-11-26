@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
   actions: vi.fn(() => ({})),
   retry: vi.fn(),
 }));
+vi.mock("@/shared/hooks/useGateways", () => ({ useGateways: () => ({ data: [] }) }));
 vi.mock("@/features/session/api/session.queries", () => ({
   useSessionWithMessages: () => ({
     session: state.hasSession ? { id: "session", agent_harness: "codex-app-server" } : undefined,

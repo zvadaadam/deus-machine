@@ -166,13 +166,20 @@ describe("a usage limit", () => {
     expect(html).not.toContain(">Continue<");
   });
 
-  it("keeps the provider's message when the reset is unknown or the host restarted", () => {
-    for (const limit of [undefined, { continues: false }]) {
-      const html = card(limit);
-      expect(html).toContain("Usage limit reached");
-      expect(html).toContain(providerMessage);
-      expect(html).not.toMatch(/Resets at|while Deus stays open|<button/);
-    }
+  it("keeps the provider's message after a host restart clears the hold", () => {
+    const html = card();
+    expect(html).toContain(providerMessage);
+    expect(html).not.toMatch(/Resets at|while Deus stays open|<button/);
+  });
+
+  it("offers Try again for an untimed local hold and keeps the diagnostic in Details", () => {
+    const html = card({ continues: false });
+    expect(html).toContain("The provider is rate limiting this chat.");
+    expect(html).toContain(">Try again<");
+    expect(html.slice(0, html.indexOf("<details"))).not.toContain(providerMessage);
+    expect(html.slice(html.indexOf(">Details</summary>"), html.indexOf("</details>"))).toContain(
+      providerMessage
+    );
   });
 
   it("keeps the cloud provider's message without reading the local queue or offering a write", () => {

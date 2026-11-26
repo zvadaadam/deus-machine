@@ -189,6 +189,29 @@ describe("prompt delivery", () => {
     }));
   }
 
+  it("offers a new chat when the selected gateway revision has changed", async () => {
+    const model = "gateway:claude-code:old:opus",
+      onOpenNewTab = vi.fn();
+    sessionComposerActions.seedIfAbsent(SESSION, emptyComposer(model, "high"));
+    try {
+      state.call.mockRejectedValueOnce(
+        new OpError("The gateway connection changed.", 409, { kind: "connection_changed" })
+      );
+      expect(
+        await useSessionActions({ sessionId: SESSION, model, onOpenNewTab }).sendMessage(
+          "Try again"
+        )
+      ).toBe(false);
+      const [message, options] = state.error.mock.lastCall!;
+      expect(message).toContain("connection changed");
+      expect(options.action.label).toBe("Open in new chat");
+      options.action.onClick();
+      expect(onOpenNewTab).toHaveBeenCalledOnce();
+    } finally {
+      sessionComposerActions.discard(SESSION);
+    }
+  });
+
   it.each(["working", "needs_response", "idle"] as const)(
     "keeps a queued send out of the transcript when the window showed %s",
     async (status) => {

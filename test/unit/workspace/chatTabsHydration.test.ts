@@ -9,6 +9,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { uuidv7 } from "@shared/lib/uuid";
 import * as tabSync from "@/app/layouts/chatTabsSync";
+import {
+  composerStore,
+  composerTarget,
+  emptyComposer,
+  sessionComposerActions,
+} from "@/features/session/store/sessionComposerStore";
 import { useChatTabs } from "@/app/layouts/useChatTabs";
 import { useGlobalSessionNotifications } from "@/features/session/hooks/useGlobalSessionNotifications";
 import {
@@ -39,7 +45,7 @@ vi.hoisted(() => {
 });
 vi.mock("@/features/session/api/session.queries", () => ({
   useWorkspaceSessions: () => useList(),
-  useCreateSession: () => ({}),
+  useCreateSession: () => ({ mutateAsync: async () => ({ id: "fresh-choice" }) }),
 }));
 vi.mock("@/platform/notifications", () => ({ sendNotification: vi.fn() }));
 vi.mock("@/platform/capabilities", () => ({ capabilities: { nativeNotifications: true } }));
@@ -91,6 +97,34 @@ afterEach(() => {
 function readList(ids: string[]) {
   act(() => useList.setState({ data: ids.map(chat), dataUpdatedAt: Date.now() }));
 }
+
+it("starts a different runner with the exact model and effort chosen in the previous chat’s picker", async () => {
+  act(() => root.render(createElement(Tabs)));
+  const pick = "gateway:codex-app-server:gen:work";
+  const store = composerStore(tabCache);
+  await act(() => view.handleTabAdd(pick, "low"));
+  expect(view.activeTab?.initialModel).toBe(pick);
+  expect(store.getState().composers["fresh-choice"]).toMatchObject({
+    model: pick,
+    thinkingLevel: "low",
+    draft: "",
+  });
+  expect(store.getState().composers.a).toBeUndefined();
+
+  // A live session read can mount the new chat before creation is acknowledged.
+  const early = composerTarget("fresh-choice", store);
+  store.setState((s) => {
+    delete s.composers[early.id];
+  });
+  sessionComposerActions.seedIfAbsent(early, emptyComposer(undefined, "medium"));
+  sessionComposerActions.setDraft(early, "Keep this draft");
+  await act(() => view.handleTabAdd(pick, "high"));
+  expect(store.getState().composers[early.id]).toMatchObject({
+    model: pick,
+    thinkingLevel: "high",
+    draft: "Keep this draft",
+  });
+});
 
 it("keeps a background tab's session detail current until the tab closes", async () => {
   const socket = new Socket();
@@ -423,10 +457,38 @@ it("reopens a chat that started elsewhere with its live agent and label", () => 
   expect(view.closedTabs[0]).toMatchObject({ hasStarted: false, label: "New chat" });
 
   act(() =>
-    useList.setState({ data: [chat("a"), { ...chat("b"), agent_harness: "codex-app-server" }] })
+    useList.setState({
+      data: [
+        chat("a"),
+        {
+          ...chat("b"),
+          agent_harness: "codex-app-server",
+          message_count: 0,
+          gateway_generation: "bound",
+        },
+      ],
+    })
   );
   const started = { agentHarness: "codex-app-server", hasStarted: true, label: "Codex #1" };
   expect(view.closedTabs[0]).toMatchObject(started);
   act(() => view.handleTabRestore(view.closedTabs[0]));
   expect(view.activeTab).toMatchObject(started);
+});
+
+it("counts a bound chat with a missing echo when numbering reopened and arriving tabs", () => {
+  const bound = (id: string): Session => ({
+    ...chat(id),
+    message_count: 0,
+    gateway_generation: "bound",
+  });
+  workspaceLayoutActions.setChatTabState("w", ["a", "b", "c"], "b");
+  act(() => root.render(createElement(Tabs)));
+  act(() => useList.setState({ data: [chat("a"), bound("b"), chat("c")] }));
+  expect(view.tabs.map((t) => t.label)).toEqual([
+    "Claude Code #1",
+    "Claude Code #2",
+    "Claude Code #3",
+  ]);
+  act(() => useList.setState({ data: [chat("a"), bound("b"), chat("c"), bound("d")] }));
+  expect(view.tabs[3]).toMatchObject({ hasStarted: true, label: "Claude Code #4" });
 });

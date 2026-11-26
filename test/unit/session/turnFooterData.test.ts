@@ -1,3 +1,6 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { TurnFooter } from "@/features/session/ui/TurnFooter";
 import { describe, expect, it } from "vitest";
 import { getTurnFooterData } from "@/features/session/ui/utils/getTurnFooterData";
 import type { Message } from "@/shared/types";
@@ -220,4 +223,23 @@ describe("getTurnFooterData", () => {
       getTurnFooterData([], undefined, { turnId: "zero", tokens: { input: 0, output: 0 }, cost: 0 })
     ).toMatchObject({ tokens: { input: 0, output: 0 }, cost: 0 });
   });
+});
+
+it("shows the route from the turn with one separator between adjacent footer metrics", () => {
+  for (const via of [undefined, "CLIProxyAPI"] as const) {
+    const footer = getTurnFooterData([], undefined, {
+      turnId: "one",
+      startedAt: 1000,
+      endedAt: 7000,
+      cost: 0.0006,
+      execution: { harness: "claude-code", model: "fixture:model", via },
+      tokens: { input: 8, output: 7 },
+    });
+    const text = renderToStaticMarkup(
+      createElement(TurnFooter, { ...footer, workedTime: null })
+    ).replace(/<[^>]+>/g, "");
+    expect(text).toContain((via ? "fixture:model via CLIProxyAPI•" : "") + "6s•15 tok•$0.0006");
+    expect(text.includes("CLIProxyAPI")).toBe(!!via);
+    expect(text).not.toContain("••");
+  }
 });

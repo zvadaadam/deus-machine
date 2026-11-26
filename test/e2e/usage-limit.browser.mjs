@@ -294,7 +294,7 @@ async function journey() {
     await page.goto(base + "/settings");
     await page.getByRole("button", { name: "AI Providers" }).click();
     const setting = page.getByRole("switch", {
-      name: "When a usage limit resets, continue the chats it stopped.",
+      name: "Continue after a usage limit",
     });
     assert.equal(await setting.getAttribute("aria-checked"), "false");
     await setting.click();
@@ -306,9 +306,11 @@ async function journey() {
     await limit(unknown);
     const noTime = await visit(page, unknown);
     await group.getByText("Queue paused. A usage limit was reached.", { exact: true }).waitFor();
-    await noTime.getByText(limitMessage, { exact: true }).waitFor();
-    assert.equal(await noTime.getByRole("button").count(), 0);
+    assert.equal(await noTime.locator("details").getAttribute("open"), null);
+    assert.ok((await noTime.locator("details").textContent()).includes(limitMessage));
     assert.equal(await noTime.getByText(/Resets at/).count(), 0);
+    await noTime.getByRole("button", { name: "Try again" }).click();
+    await page.getByRole("log").getByText(followup, { exact: true }).waitFor();
     await send(automatic, first);
     await limit(automatic, reset);
     const automaticCard = await visit(page, automatic);
@@ -317,7 +319,7 @@ async function journey() {
     // Node runs expired timers at the end of each tick. Visit the host's 05:10 check on time.
     await drive({ type: "tick", milliseconds: reset - start });
     const afterReset = await drive({ type: "tick", milliseconds: 30_000 });
-    assert.equal(afterReset.length, 8, "Only the seven initial sends and the person's message ran");
+    assert.equal(afterReset.length, 9, "The person retried the chat without a reset");
     const reopened = await windowFor("light", { now: reset + 30_000 });
     const lateCard = await visit(reopened, late);
     await lateCard.getByText("Reset at 05:10.").waitFor();
@@ -332,10 +334,10 @@ async function journey() {
     await reopened.getByRole("log").getByText(followup, { exact: true }).waitFor();
 
     const before = await drive({ type: "tick", milliseconds: 29_999 });
-    assert.equal(before.length, 9, "Only the explicit Continue ran before 05:11");
+    assert.equal(before.length, 10, "Only the explicit Continue ran before 05:11");
     await drive({ type: "tick", milliseconds: 1 });
     await until(
-      async () => (await drive({ type: "starts" })).length === 12,
+      async () => (await drive({ type: "starts" })).length === 13,
       15_000,
       "the three scheduled turns"
     );
@@ -346,7 +348,7 @@ async function journey() {
       [automatic, [first, "Continue."]],
       [person, [first, personal]],
       [cancelled, [first]],
-      [unknown, [first]],
+      [unknown, [first, followup]],
       [late, [first, followup]],
     ]) {
       assert.deepEqual(

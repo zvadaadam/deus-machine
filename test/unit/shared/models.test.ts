@@ -8,6 +8,7 @@ import {
   fitThinkingLevel,
   harnessNamed,
   modelLabel,
+  modelValue,
   thinkingLevelLabel,
   modelThinkingLevels,
   parseModelValue,
@@ -16,6 +17,7 @@ import {
   type ModelDescriptor,
 } from "@shared/models";
 import { LOCAL_HARNESSES } from "@shared/harnesses";
+import type { GatewayCatalog } from "@shared/gateways";
 import { modelPickerView } from "@/shared/agents/picker";
 
 const row = (
@@ -203,11 +205,49 @@ describe("what a model picker shows", () => {
       ["Claude Code", ["Sonnet 5.5", "Opus 5.5", "Haiku 4.5"]],
       ["Codex", ["GPT-Next", "GPT-6.1-Sol"]],
     ]);
-    expect(view.selected).toEqual({
+    expect(view.selected).toMatchObject({
       value: "codex-app-server:gpt-6.1-sol",
       label: "GPT-6.1-Sol",
       agentHarness: "codex-app-server",
     });
+  });
+
+  it("shows a Custom model only on formats allowed by its catalog and connection", () => {
+    const gateway: GatewayCatalog = {
+      ref: "custom",
+      preset: "custom",
+      formats: ["responses", "messages"],
+      generation: "rev",
+      address: "http://localhost",
+      models: [
+        { id: "alias", label: "Alias", provider: "" },
+        { id: "responses", label: "Responses only", provider: "", formats: ["responses"] },
+        { id: "image", label: "Image", provider: "", excluded: "non_chat" },
+        { id: "hidden", label: "Hidden", provider: "", excluded: "hidden" },
+      ],
+    };
+    const options = (formats: GatewayCatalog["formats"]) =>
+      modelPickerView([], undefined, "", [{ ...gateway, formats }]).groups.map((g) => [
+        g.agentHarness,
+        g.options.map((o) => o.id),
+      ]);
+    expect(options(gateway.formats)).toEqual([
+      ["claude-code", ["alias"]],
+      ["codex-app-server", ["alias", "responses"]],
+    ]);
+    expect(options(["messages"])).toEqual([["claude-code", ["alias"]]]);
+  });
+
+  it("selects one existing native row for a subscription choice saved by an older client", () => {
+    const old = "codex:gpt-5.3-codex";
+    const current = defaultModelId(CATALOG_MODEL_LISTS, "codex-app-server")!;
+    const view = modelPickerView(CATALOG_MODEL_LISTS, old);
+    expect(view.selected?.value).toBe(modelValue("codex-app-server", current));
+    expect(
+      view.groups
+        .find((group) => group.agentHarness === "codex-app-server")
+        ?.options.filter((option) => option.id === current)
+    ).toHaveLength(1);
   });
 
   it("keeps the chat's model among its harness's rows when no list names it", () => {
@@ -220,6 +260,80 @@ describe("what a model picker shows", () => {
       "claude-code:haiku",
     ]);
     expect(view.groups[1].options).toHaveLength(2);
+  });
+
+  it("places each gateway route in its runner's tab and search keeps the available agents", () => {
+    const gateway: GatewayCatalog = {
+      ref: "fixture-gateway",
+      preset: "cliproxyapi",
+      formats: ["responses", "messages"],
+      generation: "revision",
+      address: "http://localhost",
+      models: [
+        {
+          id: "internal:one",
+          label: "Friendly",
+          provider: "openai",
+          runner: "codex-app-server",
+          thinking: { levels: ["high"] },
+        },
+        { id: "claude-a", label: "Sonnet", provider: "anthropic", runner: "claude-code" },
+        { id: "other", label: "Kimi K3", provider: "kimi", runner: "claude-code" },
+        { id: "unclassified", label: "unclassified", provider: "unknown" },
+      ],
+    };
+    const selected = modelValue("codex-app-server", "internal:one", gateway.generation);
+    const view = modelPickerView(lists, selected, "", [gateway]);
+    const tabs = view.groups.filter((g) => g.source === gateway.ref);
+    expect(
+      tabs.map((g) => [g.agentHarness, g.options.map((o) => [o.id, o.heading?.label])])
+    ).toEqual([
+      [
+        "claude-code",
+        [
+          ["claude-a", "Anthropic"],
+          ["other", "Kimi"],
+        ],
+      ],
+      ["codex-app-server", [["internal:one", undefined]]],
+    ]);
+    expect(
+      view.groups
+        .filter((g) => g.source === "subscriptions")
+        .flatMap((g) => g.options)
+        .some((o) => o.gatewayGeneration)
+    ).toBe(false);
+    for (const query of ["FRIEND", "nal:one", "OpenAI"]) {
+      const filtered = modelPickerView(lists, selected, query, [gateway]);
+      const tabs = filtered.groups.filter((g) => g.source === gateway.ref);
+      expect(tabs.map((g) => g.agentHarness)).toEqual(["claude-code", "codex-app-server"]);
+      expect(tabs[0].empty?.message).toBe("No matching models.");
+      expect(tabs[1].options.map((o) => o.value)).toEqual([selected]);
+      expect(filtered.selected).toMatchObject({
+        label: "Friendly",
+        thinking: { levels: ["high"] },
+      });
+    }
+    expect(modelPickerView(lists, selected, "", null).selected).toMatchObject({
+      value: selected,
+      unavailable: true,
+    });
+    expect(
+      modelPickerView(lists, selected, "", [{ ...gateway, models: gateway.models.slice(0, 1) }])
+        .groups.filter((g) => g.source === gateway.ref)
+        .map((g) => g.label)
+    ).toEqual(["Codex"]);
+  });
+
+  it("searches even a short subscription list and carries each result’s own thinking controls", () => {
+    const view = modelPickerView(lists, "claude-code:opus", "sonnet");
+    expect(view.groups[0].options.map((o) => [o.label, o.thinking?.levels])).toEqual([
+      ["Sonnet 5.5", ["low", "medium", "high"]],
+    ]);
+    expect(view.selected?.label).toBe("Opus 5.5");
+    expect(modelPickerView(lists, "claude-code:opus", "missing").groups[0].empty?.message).toBe(
+      "No matching models."
+    );
   });
 
   it("marks nothing for a value that names no harness", () => {
@@ -255,5 +369,15 @@ describe("harnessNamed", () => {
     expect(harnessNamed("Gemini")).toBe("gemini");
     for (const said of ["unknown-agent", "", "claude-codex", "acp"])
       expect(harnessNamed(said)).toBeUndefined();
+  });
+});
+
+it("round-trips the gateway revision and the full model id", () => {
+  const value = modelValue("codex-app-server", "vendor/model:variant", "edition");
+  expect(value).toBe("gateway:codex-app-server:edition:vendor/model:variant");
+  expect(parseModelValue(value)).toEqual({
+    harness: "codex-app-server",
+    model: "vendor/model:variant",
+    gatewayGeneration: "edition",
   });
 });

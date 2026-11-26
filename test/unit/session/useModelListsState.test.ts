@@ -1,12 +1,17 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import type { GatewayCatalog } from "@shared/gateways";
 
 const state = vi.hoisted(() => ({
   local: undefined as unknown,
   cloud: undefined as unknown,
+  gateway: undefined as GatewayCatalog | undefined,
 }));
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: state.local }) }));
+vi.mock("@/shared/hooks/useGateways", () => ({
+  useGateways: () => ({ data: state.gateway ? [state.gateway] : [] }),
+}));
 vi.mock("@/shared/hooks/useCloudModels", () => ({ useCloudModels: () => ({ data: state.cloud }) }));
 vi.mock("@/platform/ws", () => ({ call: vi.fn() }));
 vi.mock("@/shared/config/webDirectMode", () => ({ isCloudDirectWebMode: () => false }));
@@ -53,6 +58,7 @@ describe("the harnesses a picker offers", () => {
       expect(unavailable).toBe("No models available.");
       expect(modelPickerView(lists, undefined).groups).toContainEqual(
         expect.objectContaining({
+          source: "subscriptions",
           agentHarness: "codex-app-server",
           options: [],
           empty: { message: unavailable, openSettings: true },
@@ -140,4 +146,64 @@ describe("the harnesses a picker offers", () => {
       expect(cloud.live("gemini")).toBe(false);
     }
   );
+});
+
+it("offers the same raw id over distinct local routes, and keeps the raw owner separate from its fallback label", () => {
+  const generation = crypto.randomUUID();
+  const harness = "codex-app-server";
+  const id = "test:model";
+  const native = state.local;
+  state.local = {
+    lists: [
+      {
+        harness,
+        source: "live",
+        models: [{ harness, id, label: "Native model", thinking: { levels: ["medium", "high"] } }],
+      },
+    ],
+  };
+  state.gateway = {
+    ref: "fixture-gateway",
+    preset: "cliproxyapi",
+    formats: ["messages", "responses"],
+    address: "http://localhost",
+    generation,
+    models: [
+      {
+        id,
+        label: id,
+        provider: "",
+        runner: harness,
+        thinking: { levels: ["medium", "high"] },
+      },
+    ],
+  };
+  try {
+    const local = useChatModel({
+      cloud: false,
+      harness,
+      gatewayGeneration: generation,
+      turns: [{ turnId: "one", execution: { harness, model: id } }],
+    });
+    const view = modelPickerView(local.lists, local.model, "", local.gateways);
+    expect(view.selected).toMatchObject({
+      label: "test:model",
+      gatewayGeneration: generation,
+    });
+    expect(local.gatewayModel?.provider).toBe("");
+    const routes = view.groups.flatMap((group) =>
+      group.options
+        .filter((option) => option.id === id)
+        .map((option) => [group.source, group.agentHarness, option.value])
+    );
+    expect(routes).toEqual([
+      ["subscriptions", harness, `${harness}:${id}`],
+      ["fixture-gateway", harness, `gateway:${harness}:${generation}:${id}`],
+    ]);
+    expect(local.thinkingLevels).toEqual(["medium", "high"]);
+    expect(useChatModel({ cloud: true }).gateways).toBeUndefined();
+  } finally {
+    state.local = native;
+    state.gateway = undefined;
+  }
 });

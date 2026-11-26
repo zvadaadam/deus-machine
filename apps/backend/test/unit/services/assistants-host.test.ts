@@ -283,7 +283,7 @@ afterEach(() => state.db.close());
 describe("local agent readiness", () => {
   it.each([
     [undefined, { state: "not_installed", detail: "Not available on this computer" }],
-    ["1.5.14", { state: "unknown", detail: "installs with its first turn" }],
+    ["1.5.14", { state: "unknown", detail: "Installs on first use" }],
   ])("reads all agents once, including a missing CLI with version %s", async (version, gemini) => {
     const read = vi.fn(() => ({
       clis: [

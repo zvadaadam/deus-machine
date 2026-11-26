@@ -157,4 +157,59 @@ describe("getShellEnvironment", () => {
       else process.env.DEUS_PACKAGED = saved.DEUS_PACKAGED;
     }
   });
+
+  it.each(["backend first", "shell first"])(
+    "keeps shell and inherited proxy exclusions in both spellings, %s",
+    async (order) => {
+      vi.stubEnv("NO_PROXY", "inherited.example");
+      vi.stubEnv("no_proxy", "");
+      mockExecFileSync.mockReturnValue(
+        "_SHELL_ENV_DELIMITER_NO_PROXY=.corp.internal\nno_proxy=.lab.internal\n_SHELL_ENV_DELIMITER_"
+      );
+      try {
+        const { configureBackendEnv } = await import("../../backend/runtime-env");
+        const { applyShellEnvironment } = await import("../agents/environment");
+        if (order === "shell first") applyShellEnvironment();
+        configureBackendEnv();
+        expect(process.env.no_proxy?.split(",")).toContain("inherited.example");
+        if (order === "backend first") applyShellEnvironment();
+        expect(new Set(process.env.no_proxy?.split(","))).toEqual(
+          new Set([
+            "inherited.example",
+            ".corp.internal",
+            ".lab.internal",
+            "localhost",
+            "127.0.0.1",
+            "::1",
+            "[::1]",
+          ])
+        );
+        expect(process.env.NO_PROXY).toBe(process.env.no_proxy);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    }
+  );
+
+  it.each(["inherited", "login shell"])(
+    "preserves an explicit wildcard from the %s",
+    async (source) => {
+      vi.stubEnv("NO_PROXY", source === "inherited" ? "*" : "inherited.example");
+      vi.stubEnv("no_proxy", "lower.example");
+      mockExecFileSync.mockReturnValue(
+        "_SHELL_ENV_DELIMITER_no_proxy=" +
+          (source === "login shell" ? "*" : ".corp.internal") +
+          "\n_SHELL_ENV_DELIMITER_"
+      );
+      try {
+        const { configureBackendEnv } = await import("../../backend/runtime-env");
+        const { applyShellEnvironment } = await import("../agents/environment");
+        configureBackendEnv();
+        applyShellEnvironment();
+        expect([process.env.NO_PROXY, process.env.no_proxy]).toEqual(["*", "*"]);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    }
+  );
 });

@@ -27,6 +27,7 @@ const state = vi.hoisted(() => ({
   isError: false,
   isPending: false,
 }));
+vi.mock("@/shared/hooks/useGateways", () => ({ useGateways: () => ({ data: [] }) }));
 vi.mock("@/features/settings/api/provider-accounts.queries", () => ({
   useProviderAccounts: () => state,
 }));

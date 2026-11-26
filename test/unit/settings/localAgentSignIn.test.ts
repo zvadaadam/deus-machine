@@ -14,6 +14,7 @@ const { call, page, openExternalPending, toast } = vi.hoisted(() => {
     toast: { success: vi.fn(), error: vi.fn() },
   };
 });
+vi.mock("@/assets/agents", () => ({ getAgentLogo: () => null }));
 vi.mock("@/platform/ws", () => ({ call }));
 vi.mock("@/platform/native/window", () => ({ openExternalPending }));
 vi.mock("sonner", () => ({ toast }));
@@ -142,13 +143,13 @@ describe("Gemini in Settings", () => {
     [
       { harness: "gemini", state: "missing", version: installed.version },
       googleSignedOut,
-      ["installs with its first turn", "Install"],
+      ["Installs on first use", "Install"],
     ],
     [{ harness: "gemini", state: "failed", error: overrideError }, googleAccount, [overrideError]],
     [
       { harness: "gemini", state: "failed", version: installed.version, error: "Offline" },
       googleSignedOut,
-      ["Couldn’t install", "Try again"],
+      ["Install failed", "its install failed: Offline; the next turn tries again", "Try again"],
     ],
     [
       {
@@ -161,8 +162,8 @@ describe("Gemini in Settings", () => {
       googleSignedOut,
       ["Installing 1.5.14 · 45%"],
     ],
-    [installed, googleSignedOut, ["Not connected", "Sign in"]],
-    [installed, googleAccount, ["Connected", "Google AI Pro", "Sign out"]],
+    [installed, googleSignedOut, ["Not signed in", "Sign in"]],
+    [installed, googleAccount, ["Signed in", "Google AI Pro"]],
   ] satisfies [HarnessCli, HarnessAuth, string[]][])(
     "shows the CLI and login the engine reports (%j)",
     (cli, auth, labels) => {
@@ -171,7 +172,10 @@ describe("Gemini in Settings", () => {
         "gemini"
       );
       const html = renderToStaticMarkup(createElement(LocalAgentRow, { harness: "gemini", state }));
-      for (const label of ["Gemini", "Google", ...labels]) expect(html).toContain(`>${label}<`);
+      expect(html.includes('aria-label="Gemini options"')).toBe(
+        state.status === "signed-in" && state.auth.source === "login"
+      );
+      for (const label of ["Gemini", ...labels]) expect(html).toContain(`>${label}<`);
       for (const action of ["Install", "Try again"]) {
         expect(html.includes(`>${action}</button>`)).toBe(labels.includes(action));
       }
