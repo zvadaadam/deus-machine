@@ -15,9 +15,7 @@
 //  - The config is the same every turn, so a harness need not reconnect its
 //    MCP servers because a token rotated.
 //
-// The same shape as the engine's API-key proxy (@zvada/agent-server/core/proxy),
-// and the shape a cloud gateway takes for sandboxes. Local (stdio) servers and
-// servers with no account are reached directly.
+// Local (stdio) servers and servers with no account are reached directly.
 
 import crypto from "crypto";
 import type { McpServerConfig } from "@zvada/agent-server/protocol";

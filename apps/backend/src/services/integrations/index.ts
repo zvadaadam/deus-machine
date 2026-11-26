@@ -19,6 +19,8 @@
 //   cloud-turns.ts  what a cloud turn carries: apps that reach the cloud, skills
 //   probe.ts        an MCP client that connects and lists tools
 
+import { getSetting } from "../settings.service";
+import { invalidate } from "../query-engine";
 import { getErrorMessage } from "@shared/lib/errors";
 import { setSignInReturnBase } from "./auth/callback";
 import { reconcileCloudAccounts } from "./cloud-apps";
@@ -41,7 +43,9 @@ export async function startIntegrations(port: number): Promise<void> {
   setSignInReturnBase(`http://localhost:${port}`);
   setGatewayPort(port);
   try {
-    if (hasSealedCredentials()) await initVault("read");
+    const gateway = !!getSetting("gateways")?.length;
+    if (hasSealedCredentials() || gateway) await initVault("read");
+    if (gateway) invalidate(["gateways"]);
     resumeSkillInstalls();
   } catch (error) {
     console.warn("[Integrations] Startup failed:", getErrorMessage(error));

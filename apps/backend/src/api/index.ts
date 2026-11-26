@@ -4,6 +4,7 @@ import assistants from "./assistants";
 import automations from "./automations";
 import browser from "./browser";
 import deviceHub from "./device-hub";
+import gateways from "./gateways";
 import devices from "./devices";
 import files from "./files";
 import integrations from "./integrations";
@@ -20,6 +21,7 @@ export const registry = new Registry([
   ...automations,
   ...browser,
   ...deviceHub,
+  ...gateways,
   ...devices,
   ...files,
   ...integrations,

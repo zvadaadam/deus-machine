@@ -1,3 +1,5 @@
+import type { GatewayProblem } from "@shared/gateways";
+
 export class AppError extends Error {
   public readonly statusCode: number;
   public readonly details?: unknown;
@@ -38,6 +40,13 @@ export class ConflictError extends AppError {
   constructor(message: string, details?: unknown) {
     super(409, message, details);
     this.name = "ConflictError";
+  }
+}
+
+export class GatewayError extends ConflictError {
+  declare readonly details: GatewayProblem;
+  constructor(message: string, kind: GatewayProblem["kind"] = "configuration") {
+    super(message, { kind, message });
   }
 }
 
