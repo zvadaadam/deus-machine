@@ -3,8 +3,6 @@
  * The local driver reads Git and the filesystem. The remote driver uses the cloud session socket.
  * See `docs/node-mesh-plan.md`.
  */
-import path from "path";
-import fs from "fs";
 import type { FileDiff } from "@shared/api/workspaces";
 import { getErrorMessage } from "@shared/lib/errors";
 import { GitError, runGit } from "@shared/lib/git-process";
@@ -126,30 +124,8 @@ class LocalNodeDriver implements NodeDriver {
   }
 
   async fsRead(filePath: string): Promise<FsReadOutcome> {
-    const workspacePath = this.workspacePath;
-    const safeRelativePath = gitService.resolveWorkspaceRelativePath(workspacePath, filePath);
-    if (!safeRelativePath) throw new ValidationError("Invalid file path");
-
-    const absolutePath = path.resolve(workspacePath, safeRelativePath);
-    if (!fs.existsSync(absolutePath)) {
-      throw new ValidationError("File not found");
-    }
-
-    let realWorkspacePath: string;
-    let realPath: string;
-    try {
-      realWorkspacePath = fs.realpathSync(workspacePath);
-      realPath = fs.realpathSync(absolutePath);
-    } catch {
-      throw new ValidationError("File not found");
-    }
-
-    const relativeRealPath = path.relative(realWorkspacePath, realPath);
-    if (relativeRealPath.startsWith("..") || path.isAbsolute(relativeRealPath)) {
-      throw new ValidationError("Invalid file path");
-    }
-
-    const content = filesService.readTextFile(realPath);
+    const { realPath } = await filesService.resolveWorkspaceFile(this.workspacePath, filePath);
+    const content = await filesService.readTextFile(realPath);
     if (content === null) {
       return {
         ok: false,

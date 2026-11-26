@@ -1,9 +1,12 @@
 import { runGit } from "@shared/lib/git-process";
 import fs from "fs";
+import { readFile, realpath } from "node:fs/promises";
 import path from "path";
 import { PROJECT_ENVIRONMENT_PATH } from "@deus-hq/api";
 import type { FileMatch, FileTreeNode, FileTreeResponse } from "@shared/types/files";
 import { isBinaryContent } from "../lib/file-content";
+import { ValidationError } from "../lib/errors";
+import { resolveWorkspaceRelativePath } from "./git.service";
 
 /** In-memory cache with TTL to avoid rescanning on every request. */
 const scanCache = new Map<string, { data: Promise<FileTreeResponse>; expiresAt: number }>();
@@ -298,11 +301,24 @@ export function fuzzySearchPaths(
   return scored.slice(0, limit);
 }
 
-/**
- * Read a text file from the working tree.
- * Returns null for binary files (null bytes in first 8KB).
- */
-export function readTextFile(filePath: string): string | null {
-  const buf = fs.readFileSync(filePath);
+/** The selected file must still belong to the checkout after following symlinks. */
+export async function resolveWorkspaceFile(workspacePath: string, file: string) {
+  const relative = resolveWorkspaceRelativePath(workspacePath, file);
+  if (!relative) throw new ValidationError("Invalid file path");
+  const [root, realPath] = await Promise.all([
+    realpath(workspacePath),
+    realpath(path.join(workspacePath, relative)),
+  ]).catch(() => {
+    throw new ValidationError("File not found");
+  });
+  const realRelative = path.relative(root, realPath);
+  if (realRelative && !resolveWorkspaceRelativePath(root, realRelative))
+    throw new ValidationError("Invalid file path");
+  return { realPath, realRelative };
+}
+
+/** A text file from the working tree, or null for binary content. */
+export async function readTextFile(filePath: string): Promise<string | null> {
+  const buf = await readFile(filePath);
   return isBinaryContent(buf) ? null : buf.toString("utf-8");
 }
