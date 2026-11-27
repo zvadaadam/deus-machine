@@ -22,6 +22,7 @@ import { tempo } from "@/shared/lib/tempo";
 import { cn } from "@/shared/lib/utils";
 import { useQueuedMessages } from "../api/session.queries";
 import { hasLimitReset, limitTime } from "../lib/queuedMessages";
+import { QueueTray } from "./ComposerTray";
 import { SentFrom } from "./SentFrom";
 
 type Row = QueuedMessages["items"][number];
@@ -94,9 +95,9 @@ function QueuedRow({
       <Collapse>
         <div
           className={cn(
-            "border-border-subtle bg-bg-muted text-text-secondary mb-1 flex h-8 items-center gap-1 rounded-lg border px-0.5 text-sm pointer-coarse:h-12",
+            "text-text-secondary hover:bg-control-hover my-0.5 flex h-8 items-center gap-1 rounded-lg border border-transparent px-0.5 text-sm pointer-coarse:h-12",
             (origin || reason) && "h-auto min-h-12 py-1 pointer-coarse:min-h-18",
-            isDragging && "border-border-strong shadow-sm"
+            isDragging && "bg-control-surface border-border-strong shadow-sm"
           )}
         >
           <div className="w-7 shrink-0 pointer-coarse:w-11">
@@ -242,12 +243,7 @@ export function QueuedMessageList(controls: QueueControls) {
 
   const position = (id: string | number) => waiting.indexOf(String(id)) + 1;
   return (
-    <div
-      role="group"
-      aria-label="Queued messages"
-      {...(rows.length === 0 && { inert: "" })}
-      className="isolate max-h-[min(12rem,25dvh)] overflow-y-auto pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11"
-    >
+    <QueueTray open={rows.length > 0}>
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -267,7 +263,7 @@ export function QueuedMessageList(controls: QueueControls) {
         <SortableContext items={waiting} strategy={verticalListSortingStrategy}>
           <AnimatePresence initial={false}>
             {rows.length > 0 && data?.paused && (
-              <Collapse key="paused" className="bg-background sticky top-0 z-10">
+              <Collapse key="paused" className="bg-control-surface sticky top-0 z-10 rounded-lg">
                 <div className="text-text-secondary flex min-h-8 items-center justify-between gap-2 px-2 text-xs">
                   <span role="status">{pause[data.paused]}</span>
                   <Button
@@ -286,6 +282,6 @@ export function QueuedMessageList(controls: QueueControls) {
           </AnimatePresence>
         </SortableContext>
       </DndContext>
-    </div>
+    </QueueTray>
   );
 }
