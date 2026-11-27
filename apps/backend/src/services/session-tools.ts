@@ -1,10 +1,13 @@
 import type { HostToolSource } from "@zvada/agent-server/core";
 import { DEUS_TOOLS_SERVER } from "@shared/mcp-servers";
 import { operatorTools } from "./assistants/operator";
+import { withSeenNews } from "./boards/coordinator-wake";
 import { boardSource } from "./boards/tools";
 
 export function sessionTools(sessionId: string) {
-  const operator = operatorTools(boardSource(sessionId));
+  const board = boardSource(sessionId);
+  // A coordinator's wait, start, send or read that shows a worker's news has delivered it.
+  const operator = board ? withSeenNews(operatorTools(board)) : operatorTools();
   return {
     instructions: operator.instructions ?? "",
     compose(base: HostToolSource): HostToolSource {

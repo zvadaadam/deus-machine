@@ -254,6 +254,20 @@ export interface DeusHost extends OperatorHost<Caller> {
   act<O extends AnyOp>(caller: Who, op: O, input: InputOf<O>): Promise<OutputOf<O>>;
 }
 
+/** The chats each call's reads showed, and when: keyed by the call's own signal, which the package hands every read. */
+const views = new WeakMap<AbortSignal, Map<string, number>>();
+
+/** Run a session's tool call and say which chats it read, and when (`performance.now()`). */
+export async function readsDuring<T>(signal: AbortSignal, call: () => Promise<T>) {
+  const read = views.get(signal) ?? new Map<string, number>();
+  views.set(signal, read);
+  try {
+    return { result: await call(), read };
+  } finally {
+    if (views.get(signal) === read) views.delete(signal);
+  }
+}
+
 /** Return the refusal sentence, which OperatorError exposes only in its rendered message. */
 export function refusalSentence(error: OperatorError): string {
   return error.message.split("\n", 1)[0]!.replace(/^refused \([a-z_]+\): /, "");
@@ -307,7 +321,7 @@ const AGENT_NAMES = new Intl.ListFormat("en").format(
   Object.entries(HARNESSES).map(([id, { label }]) => `${JSON.stringify(id)} (${label})`)
 );
 
-function limitNote(limit: sessions.QueuedMessages["limit"]) {
+export function limitNote(limit: sessions.QueuedMessages["limit"]) {
   if (!limit) return "stopped on a usage limit";
   const reset =
     limit.resetsAt === undefined
@@ -761,7 +775,9 @@ export function createDeusHost(): DeusHost {
         .all() as { id: string; name: string }[];
     },
 
-    async view(_caller, sessionId, options): Promise<SessionView> {
+    async view(caller, sessionId, options): Promise<SessionView> {
+      if (caller.kind === "session" && caller.signal)
+        views.get(caller.signal)?.set(sessionId, performance.now());
       const entry = entryById(sessionId);
       if (!entry) throw new OperatorError("not_found", "That session is gone. Nothing was read.");
       const db = getDatabase();

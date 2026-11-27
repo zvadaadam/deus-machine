@@ -360,11 +360,12 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
 }
 
 let operator: Operator<Caller> | null = null;
+let deusHost: DeusHost | null = null;
 
 /** Made on first use: the host reads the app's operations, which are served by then. */
 export function theOperator(): Operator<Caller> {
   if (!operator) {
-    const host = createDeusHost();
+    const host = (deusHost = createDeusHost());
     const made: Operator<Caller> = createOperator<Caller>(host, {
       extra: deusTools(host, () => made),
       // What failed is reported here; the caller is told only the package's sentence.
@@ -376,6 +377,12 @@ export function theOperator(): Operator<Caller> {
     operator = made;
   }
   return operator;
+}
+
+/** The host the session tools read through: for Deus's own reads that must say what a tool would. */
+export function operatorHost(): DeusHost {
+  theOperator();
+  return deusHost!;
 }
 
 /** An outside caller as the package knows it: an assistant speaks as itself, a device or the window as the person. */
@@ -431,5 +438,6 @@ export function operatorTools(additional?: HostToolSource): HostToolSource {
 /** Tests only: build the tools and the MCP handler again (over a new host). */
 export function _resetOperator(): void {
   operator = null;
+  deusHost = null;
   handler = null;
 }

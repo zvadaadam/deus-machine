@@ -36,15 +36,33 @@ export type TurnNotice =
       cause: "failure" | "cancelled";
       by?: Origin;
     };
+/** Someone outside the agent service who follows chats' turns (a coordinator's wake). */
+export interface TurnWatch {
+  /** A turn let go of its chat. `ended` is false when it never ran; `by` is its first Stop. */
+  released(sessionId: string, turnId: string, ended: boolean, by?: Origin): void;
+  /** A chat's agent now waits on a question or a plan approval. */
+  asked(sessionId: string, turnId: string): void;
+}
 interface TurnNotices {
   queue: (id: string, notice: TurnNotice) => void;
   recover: (id: string, turnId: string, returnHead?: boolean) => string[] | undefined;
   withdrawCards: (id: string, turnId: string) => void;
   stored: (id: string, turnId: string) => void;
+  watch?: TurnWatch;
 }
 let connected: TurnNotices | undefined;
 export function connectTurnNotices(notices: TurnNotices) {
   connected = notices;
+}
+/** Tell the watch, if any. Its failure is logged and never stops a release or a prompt. */
+export function tellWatch(tell: (watch: TurnWatch) => void) {
+  const watch = connected?.watch;
+  if (!watch) return;
+  try {
+    tell(watch);
+  } catch (error) {
+    console.error("[TurnWatch] A watcher failed:", error);
+  }
 }
 export function turnNotices() {
   if (!connected) throw new Error("Turn notices have not been connected.");
@@ -263,6 +281,9 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
     .with("gone", () => endLocally("error"))
     .exhaustive();
   prune(id, chat);
+  // A withdrawn claim, or one refused before admission with no stop of its own, never ran.
+  const ended = reason.type !== "withdrawn" && (reason.type !== "refused" || !!error || !!by);
+  tellWatch((watch) => watch.released(id, turnId, ended, by));
   return true;
 }
 
