@@ -408,8 +408,7 @@ async function handleToolRequest(
     const result = persistSessionNeedsResponse(sessionId);
     if (result.ok) invalidate([...sessionResources], { sessionIds: [sessionId] });
   }
-  if (isUserFacing && turnId !== undefined)
-    tellWatch((watch) => watch.asked(sessionId, turnId, requestId));
+  if (isUserFacing && turnId !== undefined) tellWatch((watch) => watch.asked(sessionId, turnId));
 
   try {
     return await relay({

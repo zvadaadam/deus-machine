@@ -1,11 +1,9 @@
 // A coordinator chat hears when a workspace it started finishes, fails, stops or asks.
 // Deus holds the news per coordinator chat, one entry per worker (a newer state
 // replaces the older), and delivers it as one message when that chat is free: at
-// once when it is idle, else at a release. A call that returns having shown the
-// held state (wait, start, send, read) has delivered it. A refused delivery keeps
-// its news for the next release; a hidden or archived coordinator's is dropped.
-// Nothing is persisted.
-import type { HostToolSource } from "@zvada/agent-server/core";
+// once when it is idle, else at a release. Every end and every question wakes it,
+// even one a wait already showed. A refused delivery keeps its news for the next
+// release; a hidden or archived coordinator's is dropped. Nothing is persisted.
 import {
   quote,
   quoted,
@@ -24,11 +22,11 @@ import { holdingTurn, type Released, type TurnWatch } from "../agent/chat-turn";
 import { enqueueMessage, limitHoldOf } from "../agent/queue";
 import { continuedPermissionMode, continuedSettings } from "../agent/turn-settings";
 import { onInvalidate } from "../query-engine";
-import { limitNote, readsDuring, type Shown } from "../assistants/host";
+import { limitNote } from "../assistants/host";
 import { operatorHost } from "../assistants/operator";
 import { coordinatorState } from "./coordinator";
 
-type News = { turnId: string; asked: boolean; requestId?: string } & Omit<Released, "ended">;
+type News = { turnId: string; asked: boolean } & Omit<Released, "ended">;
 /** By coordinator chat, then by worker chat. */
 const held = new Map<string, Map<string, News>>();
 const scheduled = new Set<string>();
@@ -88,8 +86,8 @@ export const turnWatch: TurnWatch = {
     // Any release is when held news goes, a refused delivery's included.
     for (const coordinator of held.keys()) schedule(coordinator);
   },
-  asked(sessionId, turnId, requestId) {
-    const coordinator = hold(sessionId, { turnId, asked: true, requestId });
+  asked(sessionId, turnId) {
+    const coordinator = hold(sessionId, { turnId, asked: true });
     if (coordinator) schedule(coordinator);
   },
 };
@@ -183,10 +181,8 @@ async function describe(caller: SessionCaller, carried: [string, News][]) {
     let state: string | undefined;
     let error: string | undefined;
     if (asked) {
-      const waiting =
-        view.running === turnId
-          ? view.waiting.find((each) => each.request.requestId === news.requestId)
-          : undefined;
+      // Any request still waiting in that turn: an answered question may leave an earlier one open.
+      const waiting = view.running === turnId ? view.waiting[0] : undefined;
       if (waiting?.kind === "question") state = "is waiting on a question";
       else if (waiting?.kind === "plan") state = "is waiting for plan approval";
     } else {
@@ -280,38 +276,6 @@ function closingWords(messages: readonly ViewMessage[]) {
 
 const clip = (text: string) =>
   text.length > WORDS_LIMIT ? text.slice(0, WORDS_LIMIT - 1) + "…" : text;
-
-// read_session is not among them: its page need not show the end, and an extra wake costs little.
-const SEEING = new Set(["wait_for_sessions", "start_session", "send_message"]);
-
-/** Whether a read showed this news: the turn ended and nothing newer runs, or the turn still waits. */
-const showed = ({ turnId, asked, requestId }: News, read: Shown) =>
-  asked
-    ? read.running === turnId && !!requestId && read.waiting.includes(requestId)
-    : !read.running && read.ended === turnId;
-
-/** A coordinator's tools: a call that returns having shown a worker's held state has delivered it. */
-export function withSeenNews(source: HostToolSource): HostToolSource {
-  return {
-    ...source,
-    async call(name, args, caller, signal) {
-      if (!SEEING.has(name)) return source.call(name, args, caller, signal);
-      const { result, read } = await readsDuring(signal, () =>
-        source.call(name, args, caller, signal)
-      );
-      const news = held.get(caller.sessionId);
-      if (!news || result.isError || signal.aborted) return result;
-      // Only the call's last read of a worker is what its answer shows.
-      for (const [worker, reads] of read) {
-        const entry = news.get(worker);
-        const last = reads.at(-1);
-        if (entry && last && showed(entry, last)) news.delete(worker);
-      }
-      if (!news.size) held.delete(caller.sessionId);
-      return result;
-    },
-  };
-}
 
 /** Tests only. */
 export function _heldNews(coordinator: string) {

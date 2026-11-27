@@ -678,12 +678,10 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   message in Deus's words when the coordinator is idle, else at a release. That message carries
   each workspace's closing words or error, quoted, and is queued as the first workspace's
   agent message (`enqueueMessage`), with the chat's recorded model, thinking and mode. A held
-  queue keeps it waiting, and a refusal keeps the news for the next release. A
-  `wait_for_sessions`, `start_session` or `send_message` whose last read of a workspace showed
-  the held state (that turn ended with nothing newer running, or that very question still
-  waiting) delivers it (`readsDuring` in `assistants/host.ts`). An extra wake is acceptable, a
-  lost one is not: `read_session` does not count, and an ended turn always gets a line. The agent service reports releases and prompts through the
-  `TurnWatch` registered at startup (`chat-turn.ts`); a watcher's failure never stops either.
+  queue keeps it waiting, and a refusal keeps the news for the next release. Every end and
+  every question wakes it, even one a wait already showed, and an ended turn always gets a
+  line. The agent service reports releases and prompts through the `TurnWatch` registered at
+  startup (`chat-turn.ts`); a watcher's failure never stops either.
   Nothing survives a quit, and a hidden or archived coordinator's news is dropped.
 
 Admission is checked when a socket opens (no leases), and the relay can still read

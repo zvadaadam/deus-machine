@@ -254,27 +254,6 @@ export interface DeusHost extends OperatorHost<Caller> {
   act<O extends AnyOp>(caller: Who, op: O, input: InputOf<O>): Promise<OutputOf<O>>;
 }
 
-/** The chats each call's reads showed, and when: keyed by the call's own signal, which the package hands every read. */
-const views = new WeakMap<AbortSignal, Map<string, Shown[]>>();
-
-/** What one read of a chat showed: its running turn, its last ended turn, the requests it waits on. */
-export interface Shown {
-  running?: string;
-  ended?: string;
-  waiting: string[];
-}
-
-/** Run a session's tool call and say what each read of a chat showed. */
-export async function readsDuring<T>(signal: AbortSignal, call: () => Promise<T>) {
-  const read = views.get(signal) ?? new Map<string, Shown[]>();
-  views.set(signal, read);
-  try {
-    return { result: await call(), read };
-  } finally {
-    if (views.get(signal) === read) views.delete(signal);
-  }
-}
-
 /** Return the refusal sentence, which OperatorError exposes only in its rendered message. */
 export function refusalSentence(error: OperatorError): string {
   return error.message.split("\n", 1)[0]!.replace(/^refused \([a-z_]+\): /, "");
@@ -785,32 +764,12 @@ export function createDeusHost(): DeusHost {
         .all() as { id: string; name: string }[];
     },
 
-    async view(caller, sessionId, options): Promise<SessionView> {
+    async view(_caller, sessionId, options): Promise<SessionView> {
       const entry = entryById(sessionId);
       if (!entry) throw new OperatorError("not_found", "That session is gone. Nothing was read.");
       const db = getDatabase();
       if (!getSessionRaw(db, sessionId))
         return { status: entry.status, note: entry.note, turns: [], waiting: [] };
-      const running = holdingTurn(sessionId)?.turnId;
-      const prior = setupStop(sessionId);
-      const stopped = prior && {
-        turnId: prior.turnId,
-        cancelledBy: prior.by,
-        outcome: "cancelled" as const,
-      };
-      const last = stopped
-        ? { ...stopped, steers: {} }
-        : lastEnded([sessionId], true).get(sessionId)?.turn;
-      const waiting = pendingFor(sessionId).flatMap((request) => waitingOf(request) ?? []);
-      if (caller.kind === "session" && caller.signal) {
-        const shown = views.get(caller.signal);
-        const state = {
-          running,
-          ended: last?.turnId,
-          waiting: waiting.map((each) => each.request.requestId),
-        };
-        shown?.set(sessionId, [...(shown.get(sessionId) ?? []), state]);
-      }
       // The cursor is where the read ended: the last message of a turn that has ended (a
       // running turn is read again whole), the last stored end and any setup stop's turn id.
       const after = options.after?.match(/^(\d+)\.(\d+)(?:\.(.+))?$/s);
@@ -835,6 +794,16 @@ export function createDeusHost(): DeusHost {
             cancelled_by: null,
           })),
       ];
+      const running = holdingTurn(sessionId)?.turnId;
+      const prior = setupStop(sessionId);
+      const stopped = prior && {
+        turnId: prior.turnId,
+        cancelledBy: prior.by,
+        outcome: "cancelled" as const,
+      };
+      const last = stopped
+        ? { ...stopped, steers: {} }
+        : lastEnded([sessionId], true).get(sessionId)?.turn;
       const turns: ViewTurn[] = facts.map((fact) => {
         const outcome = savedOutcome(fact.outcome);
         const how = fact.turn_id === running || !fact.ended_at ? undefined : endedOf(fact, outcome);
@@ -878,7 +847,7 @@ export function createDeusHost(): DeusHost {
         status: entry.status,
         note: entry.note,
         turns,
-        waiting,
+        waiting: pendingFor(sessionId).flatMap((request) => waitingOf(request) ?? []),
         cursor: `${seq}.${endMark ?? 0}${stoppedId ? `.${stoppedId}` : ""}` as never,
         ...(running ? { running } : {}),
         ...(last ? { lastEnded: last } : {}),

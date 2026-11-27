@@ -54,8 +54,8 @@ export interface Released {
 export interface TurnWatch {
   /** A turn let go of its chat. */
   released(sessionId: string, turnId: string, release: Released): void;
-  /** A chat's agent now waits on a question or a plan approval (`requestId`). */
-  asked(sessionId: string, turnId: string, requestId: string): void;
+  /** A chat's agent now waits on a question or a plan approval. */
+  asked(sessionId: string, turnId: string): void;
 }
 interface TurnNotices {
   queue: (id: string, notice: TurnNotice) => void;

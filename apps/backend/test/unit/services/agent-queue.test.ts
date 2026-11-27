@@ -3528,14 +3528,6 @@ describe("a coordinator hears from the workspaces it started", () => {
     await enqueueMessage({ ...message(turnId), sessionId: id, turnId }, fromLead);
     await vi.waitFor(() => expect(holdingTurn(id)).toMatchObject({ turnId, phase: "running" }));
   }
-  const leadCaller = (turnId: string) =>
-    ({
-      sessionId: lead,
-      turnId,
-      harness: "codex-app-server",
-      permissionMode: "bypass_permissions",
-    }) as const;
-  const leadTools = () => sessionTools(lead).compose({ name: "deus", tools: [], call: vi.fn() });
   const busyLead = (turnId: string) =>
     run(api.sendMessage, { ...message(turnId), sessionId: lead, turnId });
   const endLead = (turnId: string, stopReason: TurnEndedEvent["stopReason"] = "end_turn") =>
@@ -3688,6 +3680,31 @@ describe("a coordinator hears from the workspaces it started", () => {
     expect(wakeText()).toContain('"piece-2:1" finished.');
     expect(wakeText()).not.toContain("piece-1:1");
     vi.restoreAllMocks();
+  });
+
+  it("still says a worker waits when one of two questions in a turn was answered", async () => {
+    await busyLead("L");
+    await brief("p1", "a1");
+    as("p1", () => {
+      question("a1");
+      emit({
+        type: "elicitation.requested",
+        sessionId,
+        turnId: "a1",
+        requestId: "question-2",
+        mode: "question",
+        message: "Which lot next?",
+        questions: [{ id: "q2", question: "Which lot next?" }],
+        timestamp: seq,
+      });
+    });
+    await vi.waitFor(() => expect(pendingFor("p1")).toHaveLength(2));
+    // The person answers only the second; the first still blocks the worker.
+    answer(pendingFor("p1")[1]!.requestId, { result: { answers: { q2: "blue" } } });
+    expect(pendingFor("p1")).toHaveLength(1);
+    endLead("L");
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(2));
+    expect(wakeText()).toContain('"piece-1:1" is waiting on a question.');
   });
 
   it("says a worker waits on a question", async () => {
@@ -3975,130 +3992,6 @@ describe("a coordinator hears from the workspaces it started", () => {
     await settle();
     expect(_heldNews(lead)).toEqual([]);
     expect(leadStarts()).toHaveLength(1);
-  });
-
-  describe("seen through the real operator", () => {
-    async function heldEnd(id: string, turnId: string) {
-      await brief(id, turnId);
-      as(id, () => {
-        reply(turnId, `${id} done.`);
-        end(turnId);
-      });
-      await settle();
-    }
-    const call = (
-      name: string,
-      args: Record<string, unknown>,
-      signal = new AbortController().signal
-    ) => leadTools().call(name, args, leadCaller("L"), signal);
-
-    it("a wait that returns a settled worker has delivered it", async () => {
-      await busyLead("L");
-      await heldEnd("p1", "a1");
-      await heldEnd("p2", "b1");
-      const result = await call("wait_for_sessions", { sessions: ["piece-1:1"], wait: 0 });
-      expect(result.isError).toBeFalsy();
-      expect(_heldNews(lead)).toEqual(["p2"]);
-    });
-
-    it("a wait that shows only the next turn running keeps the news of the turn before it", async () => {
-      await busyLead("L");
-      await brief("p1", "a1");
-      // The worker's queue starts its next turn at once.
-      await enqueueMessage({ ...message("b1"), sessionId: "p1", turnId: "b1" }, fromLead);
-      as("p1", () => end("a1"));
-      await vi.waitFor(() =>
-        expect(holdingTurn("p1")).toMatchObject({ turnId: "b1", phase: "running" })
-      );
-      await settle();
-      expect(_heldNews(lead)).toEqual(["p1"]);
-      const waited = await call("wait_for_sessions", { sessions: ["piece-1:1"], wait: 0 });
-      expect(JSON.stringify(waited.content)).toContain("working");
-      await call("read_session", { session: "piece-1:1" });
-      expect(_heldNews(lead)).toEqual(["p1"]);
-    });
-
-    it("read_session does not count as seen: its page may not show the end", async () => {
-      await busyLead("L");
-      await heldEnd("p1", "a1");
-      expect((await call("read_session", { session: "piece-1:1" })).isError).toBeFalsy();
-      expect(_heldNews(lead)).toEqual(["p1"]);
-    });
-
-    it("a send that reads an idle worker, then starts its next turn, keeps the news of the turn before", async () => {
-      await busyLead("L");
-      await heldEnd("p1", "a1");
-      const sent = await call("send_message", {
-        session: "piece-1:1",
-        message: "Next lot.",
-        wait: 1,
-      });
-      expect(sent.isError).toBeFalsy();
-      expect(holdingTurn("p1")).toBeDefined();
-      expect(_heldNews(lead)).toEqual(["p1"]);
-    });
-
-    it("a read that showed one question does not clear a second asked in the same turn", async () => {
-      await busyLead("L");
-      await brief("p1", "a1");
-      as("p1", () => question("a1"));
-      await vi.waitFor(() => expect(pendingFor("p1")).toHaveLength(1));
-      await settle();
-      expect(_heldNews(lead)).toEqual(["p1"]);
-      // While the wait reads Q1, the same turn asks Q2.
-      const host = operatorHost();
-      const view = host.view.bind(host);
-      vi.spyOn(host, "view").mockImplementationOnce(async (...args) => {
-        const shown = await view(...args);
-        as("p1", () =>
-          emit({
-            type: "elicitation.requested",
-            sessionId,
-            turnId: "a1",
-            requestId: "question-2",
-            mode: "question",
-            message: "Which lot next?",
-            questions: [{ id: "q2", question: "Which lot next?" }],
-            timestamp: seq,
-          })
-        );
-        await vi.waitFor(() => expect(pendingFor("p1")).toHaveLength(2));
-        return shown;
-      });
-      await call("wait_for_sessions", { sessions: ["piece-1:1"], wait: 0 });
-      vi.restoreAllMocks();
-      expect(_heldNews(lead)).toEqual(["p1"]);
-    });
-
-    it("a wait that timed out without reading the end keeps it", async () => {
-      await busyLead("L");
-      await brief("p2", "b1");
-      await heldEnd("p1", "a1");
-      const result = await call("wait_for_sessions", { sessions: ["piece-2:1"], wait: 1 });
-      expect(result.isError).toBeFalsy();
-      expect(JSON.stringify(result.content)).toContain("0 of 1 settled");
-      expect(_heldNews(lead)).toEqual(["p1"]);
-    });
-
-    it("an aborted call and an isError call deliver nothing", async () => {
-      await busyLead("L");
-      await brief("p2", "b1");
-      await heldEnd("p1", "a1");
-      const abort = new AbortController();
-      const waiting = call(
-        "wait_for_sessions",
-        { sessions: ["piece-1:1", "piece-2:1"], until: "all", wait: 30 },
-        abort.signal
-      );
-      await settle();
-      abort.abort();
-      await waiting;
-      expect(_heldNews(lead)).toEqual(["p1"]);
-      // The read is recorded before the bad cursor refuses it.
-      const refused = await call("read_session", { session: "piece-1:1", after: "not-a-cursor" });
-      expect(refused.isError).toBe(true);
-      expect(_heldNews(lead)).toEqual(["p1"]);
-    });
   });
 
   it("a watcher that throws never stops a release or a question", async () => {
