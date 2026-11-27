@@ -18,7 +18,7 @@
 import type { OpenChatWithModel } from "@/shared/agents/picker";
 import { tempo } from "@/shared/lib/tempo";
 import { ComposerTray } from "./ComposerTray";
-import { useEffect, useId } from "react";
+import { useEffect, useId, useMemo } from "react";
 import type { SessionStatus } from "@/shared/types";
 import { agentConfigOf } from "@/features/workspace/lib/reach";
 import { locationOf } from "@/features/sidebar/lib/location";
@@ -328,22 +328,28 @@ export function MessageInput({
     current_session_id: sessionId ?? null,
   });
   const cloudSlashItems = useCloudSlashItems(agentConfig.where === "cloud" && isClaudeAgent);
+  const { togglePlanMode } = composer;
+  const slashActions = useMemo(
+    () =>
+      showPlanMode
+        ? [
+            {
+              kind: "action" as const,
+              name: "plan",
+              description: planModeEnabled ? "Exit plan mode" : "Enter plan mode",
+              run: togglePlanMode,
+            },
+          ]
+        : [],
+    [showPlanMode, planModeEnabled, togglePlanMode]
+  );
   const slashCommand = useSlashCommand({
     value: draft,
     config: agentConfig,
     cloudItems: cloudSlashItems,
     onChange: composer.setDraft,
     includeAgentCommands: isClaudeAgent,
-    actions: showPlanMode
-      ? [
-          {
-            kind: "action",
-            name: "plan",
-            description: planModeEnabled ? "Exit plan mode" : "Enter plan mode",
-            run: composer.togglePlanMode,
-          },
-        ]
-      : [],
+    actions: slashActions,
     onAddSkill: (skill) =>
       composer.addSkillMention({ name: skill.name, description: skill.description }),
   });
@@ -473,6 +479,7 @@ export function MessageInput({
                   loading={slashCommand.loading}
                   selectedIndex={slashCommand.selectedIndex}
                   query={slashCommand.query}
+                  onHighlight={slashCommand.setSelectedIndex}
                   onSelect={slashCommand.selectItem}
                 />
               ) : (

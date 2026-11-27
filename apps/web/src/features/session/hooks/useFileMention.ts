@@ -151,7 +151,7 @@ export function useFileMention({
         // Only apply results if this is still the latest search
         if (searchIdRef.current !== currentSearchId) return;
         setResults(searchResults);
-        setSelectedIndex((index) => Math.min(index, Math.max(0, searchResults.length - 1)));
+        setSelectedIndex(0);
       } catch (err) {
         if (searchIdRef.current !== currentSearchId) return;
         console.error("[useFileMention] Search failed:", err);

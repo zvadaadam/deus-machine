@@ -3,7 +3,7 @@ import { cn } from "@/shared/lib/utils";
 
 type GlideProps = { className: string; selected?: string } & (
   | { rows: string; follow?: never }
-  | { rows?: never; follow: "data-highlighted" | "data-selected" }
+  | { rows?: never; follow: "data-highlighted" | "data-selected" | "aria-selected" }
 );
 
 /** Place inside a relative, isolated list. The caller supplies the row fill and radius. */
@@ -15,7 +15,8 @@ export function Glide({ rows, follow, selected, className }: GlideProps) {
     if (!fill.isConnected) return; // A closed Radix Select lives in a DocumentFragment.
     const list = (fill.offsetParent as HTMLElement | null) ?? fill.parentElement!;
     const { style } = fill;
-    const marker = follow === "data-selected" ? "[data-selected=true]" : "[data-highlighted]";
+    const marker =
+      follow && (follow === "data-highlighted" ? "[data-highlighted]" : `[${follow}=true]`);
     let pointerTravel = false;
     let hovered: HTMLElement | null = null;
     let lit: HTMLElement | null = null;
@@ -25,7 +26,7 @@ export function Glide({ rows, follow, selected, className }: GlideProps) {
     }
 
     function draw(reflow = false) {
-      const row = follow ? list.querySelector<HTMLElement>(marker) : hovered;
+      const row = marker ? list.querySelector<HTMLElement>(marker) : hovered;
       if (!row || !list.contains(row) || (selected && row.matches(selected))) {
         if (!lit) return;
         // Freeze interrupted travel at its painted position for the exit fade.
@@ -61,6 +62,7 @@ export function Glide({ rows, follow, selected, className }: GlideProps) {
 
       // A return during the exit fade continues from the visible fill.
       const travel =
+        !reflow &&
         pointerTravel &&
         row !== lit &&
         (lit !== null || Number(getComputedStyle(fill).opacity) > 0);
@@ -82,7 +84,7 @@ export function Glide({ rows, follow, selected, className }: GlideProps) {
 
     function pointer(event: PointerEvent) {
       pointerTravel = event.pointerType !== "touch";
-      if (!rows) return; // Radix and cmdk own the target, including on touch.
+      if (!rows) return; // In follow mode, the list owns its active row.
       if (!pointerTravel) return leave();
       const target = event.target;
       const hit = target instanceof Element && target.closest<HTMLElement>(rows);

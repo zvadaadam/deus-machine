@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { Glide } from "@/components/ui/glide";
 import type { SlashCommandItem } from "../hooks/useSlashCommand";
 
 interface SlashCommandPopoverProps {
@@ -10,6 +11,7 @@ interface SlashCommandPopoverProps {
   loading: boolean;
   selectedIndex: number;
   query: string;
+  onHighlight: (index: number) => void;
   onSelect: (name: string) => void;
 }
 
@@ -47,9 +49,11 @@ export function SlashCommandPopover({
   loading,
   selectedIndex,
   query,
+  onHighlight,
   onSelect,
 }: SlashCommandPopoverProps) {
   const listRef = useRef<HTMLDivElement>(null);
+  const pointerRow = useRef<HTMLButtonElement | null>(null);
 
   const sections = useMemo<SlashCommandSection[]>(() => {
     const groups: SlashCommandSection[] = [];
@@ -66,8 +70,9 @@ export function SlashCommandPopover({
   useEffect(() => {
     if (!listRef.current) return;
     const selectedEl = listRef.current.querySelector<HTMLElement>('[aria-selected="true"]');
-    selectedEl?.scrollIntoView({ block: "nearest" });
-  }, [selectedIndex]);
+    if (selectedEl !== pointerRow.current) selectedEl?.scrollIntoView({ block: "nearest" });
+    pointerRow.current = null;
+  }, [selectedIndex, results]);
 
   return (
     <>
@@ -87,8 +92,12 @@ export function SlashCommandPopover({
           role="listbox"
           id={listId}
           aria-label="Skills and commands"
-          className="min-h-0 overflow-y-auto overscroll-contain px-2 pb-2"
+          className="relative isolate min-h-0 overflow-y-auto overscroll-contain px-2 pb-2"
         >
+          <Glide
+            follow="aria-selected"
+            className="bg-accent dark:bg-control-surface-pressed rounded-lg"
+          />
           {sections.map((section, sectionIndex) => {
             const showSectionLabel = section.title !== headerTitle || sectionIndex > 0;
 
@@ -117,10 +126,14 @@ export function SlashCommandPopover({
                       aria-selected={isSelected}
                       className={cn(
                         "control-interaction flex w-full items-start rounded-lg px-3 py-2 text-left",
-                        isSelected
-                          ? "bg-accent dark:bg-control-surface-pressed text-accent-foreground"
-                          : "hover:bg-accent/40"
+                        isSelected && "text-accent-foreground"
                       )}
+                      onPointerMove={(event) => {
+                        if (event.pointerType !== "touch" && !isSelected) {
+                          pointerRow.current = event.currentTarget;
+                          onHighlight(itemIndex);
+                        }
+                      }}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => onSelect(item.name)}
                     >

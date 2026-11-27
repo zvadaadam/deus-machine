@@ -52,6 +52,7 @@ interface UseSlashCommandReturn {
   handleKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => boolean;
   /** Index of currently highlighted result (for keyboard navigation) */
   selectedIndex: number;
+  setSelectedIndex: (index: number) => void;
 }
 
 /** Skills first, then commands, then alphabetically within each group. */
@@ -127,7 +128,6 @@ export function useSlashCommand({
   const triggerActive = (includeAgentCommands || actions.length > 0) && /^\/\S*$/.test(value);
   const [open, setIsOpen] = useState(triggerActive);
   const isOpen = triggerActive && open;
-  const [selectedIndex, setSelectedIndex] = useState(0);
 
   // Cached items from backend (fetched per workspace, filtered client-side)
   const [localItems, setLocalItems] = useState<AgentSlashItem[]>([]);
@@ -140,12 +140,7 @@ export function useSlashCommand({
 
   // Open/close based on trigger — query in deps so Escape → continued typing reopens
   useEffect(() => {
-    if (triggerActive) {
-      setIsOpen(true);
-      setSelectedIndex(0);
-    } else {
-      setIsOpen(false);
-    }
+    setIsOpen(triggerActive);
   }, [triggerActive, query]);
 
   // Fetch skills + commands when popover first opens (re-fetches on workspace change)
@@ -186,10 +181,13 @@ export function useSlashCommand({
     );
   }, [isOpen, query, actions, includeAgentCommands, cloud, cloudItems, localItems]);
 
-  // Reset selected index when results change
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [results.length]);
+  // A replacement list starts on its first match in the same render.
+  const [selection, setSelection] = useState<{ rows: SlashCommandItem[]; index: number }>();
+  const selectedIndex = selection?.rows === results ? selection.index : 0;
+  const setSelectedIndex = useCallback(
+    (index: number) => setSelection({ rows: results, index }),
+    [results]
+  );
 
   const selectItem = useCallback(
     (name: string) => {
@@ -227,10 +225,10 @@ export function useSlashCommand({
 
       switch (e.key) {
         case "ArrowDown":
-          setSelectedIndex((prev) => Math.min(prev + 1, results.length - 1));
+          setSelectedIndex(Math.min(selectedIndex + 1, results.length - 1));
           return true;
         case "ArrowUp":
-          setSelectedIndex((prev) => Math.max(prev - 1, 0));
+          setSelectedIndex(Math.max(selectedIndex - 1, 0));
           return true;
         case "Tab":
         case "Enter": {
@@ -245,7 +243,7 @@ export function useSlashCommand({
           return false;
       }
     },
-    [isOpen, results, selectedIndex, selectItem, dismiss]
+    [isOpen, results, selectedIndex, setSelectedIndex, selectItem, dismiss]
   );
 
   return {
@@ -257,5 +255,6 @@ export function useSlashCommand({
     dismiss,
     handleKeyDown,
     selectedIndex,
+    setSelectedIndex,
   };
 }
