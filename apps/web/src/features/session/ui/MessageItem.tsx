@@ -7,13 +7,18 @@ import { bubbleClass, type BubbleJoins } from "./bubble";
 import { SentFrom } from "./SentFrom";
 
 import { cn } from "@/shared/lib/utils";
-import { Copy, ChevronDown, ChevronUp } from "lucide-react";
+import { Check, Copy, ChevronDown, ChevronUp } from "lucide-react";
 import { ActionButton } from "./ActionButton";
 import { useCopyToClipboard } from "@/shared/hooks";
-import { useMemo, memo, useState, useRef, useEffect } from "react";
+import { useMemo, memo, useState, useRef, useLayoutEffect } from "react";
 import { m, useReducedMotion } from "framer-motion";
 
 const COLLAPSE_MAX_HEIGHT = 144;
+/** Require enough overflow beyond COLLAPSE_MAX_HEIGHT so 1–3 extra lines are shown instead of hidden behind "Show more". */
+const COLLAPSE_OVERFLOW_BUFFER = 64;
+const COLLAPSE_THRESHOLD = COLLAPSE_MAX_HEIGHT + COLLAPSE_OVERFLOW_BUFFER;
+const COLLAPSE_FADE_HEIGHT = 28;
+const COLLAPSE_MASK = `linear-gradient(to bottom, var(--mask-solid) calc(100% - ${COLLAPSE_FADE_HEIGHT}px), var(--mask-transparent) 100%)`;
 
 interface MessageItemProps extends BubbleJoins {
   message: Message;
@@ -38,11 +43,22 @@ export const MessageItem = memo(function MessageItem({
   const { images, texts } = useMemo(() => readUserMessageContent(message), [message]);
 
   const hasTextContent = texts.length > 0;
+  const collapsed = shouldCollapse && !isExpanded;
 
-  useEffect(() => {
-    if (contentRef.current) {
-      setShouldCollapse(contentRef.current.scrollHeight > COLLAPSE_MAX_HEIGHT);
-    }
+  useLayoutEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+
+    const measure = () => {
+      setShouldCollapse(el.scrollHeight > COLLAPSE_THRESHOLD);
+    };
+
+    measure();
+
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
   }, [images, texts]);
 
   const handleCopy = () => copy(texts.join("\n"));
@@ -53,23 +69,9 @@ export const MessageItem = memo(function MessageItem({
       <div
         className={cn(
           bubbleClass("user", { previous, next }),
-          "user-bubble bg-user-bubble from-user-bubble to-user-bubble-top ring-user-bubble-border relative ml-auto min-w-0 bg-linear-to-t ring-1 ring-inset"
+          "user-bubble bg-user-bubble from-user-bubble to-user-bubble-top ring-user-bubble-border relative ml-auto min-w-0 bg-linear-to-t shadow-[inset_0_1px_0_var(--user-bubble-highlight),0_1px_2px_var(--user-bubble-shadow)] ring-1 ring-inset"
         )}
       >
-        <div className="pointer-events-none absolute top-1.5 right-1.5 z-10 opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
-          <ActionButton
-            icon={Copy}
-            label={copied ? "Copied" : "Copy"}
-            onClick={handleCopy}
-            active={copied}
-            showLabel={false}
-            className={cn(
-              "bg-user-bubble-top/85 rounded-md backdrop-blur-sm",
-              !copied && "text-secondary-foreground"
-            )}
-          />
-        </div>
-
         {images.length > 0 && (
           <div className={cn("flex flex-wrap gap-1.5", hasTextContent && "mb-2")}>
             {images.map((src, idx) => (
@@ -88,6 +90,9 @@ export const MessageItem = memo(function MessageItem({
             ref={contentRef}
             id={`message-content-${message.id}`}
             className="relative min-w-0 overflow-hidden"
+            style={
+              collapsed ? { WebkitMaskImage: COLLAPSE_MASK, maskImage: COLLAPSE_MASK } : undefined
+            }
             animate={
               shouldCollapse
                 ? { height: isExpanded ? "auto" : COLLAPSE_MAX_HEIGHT }
@@ -101,10 +106,6 @@ export const MessageItem = memo(function MessageItem({
             {texts.map((text, idx) => (
               <TextBlock key={`${message.id}:text:${idx}`} block={text} role="user" />
             ))}
-
-            {shouldCollapse && !isExpanded && (
-              <div className="from-user-bubble via-user-bubble/60 pointer-events-none absolute right-0 bottom-0 left-0 h-12 bg-gradient-to-t to-transparent" />
-            )}
           </m.div>
         )}
 
@@ -130,6 +131,27 @@ export const MessageItem = memo(function MessageItem({
           </button>
         )}
       </div>
+
+      {hasTextContent && (
+        <div
+          className={cn(
+            "pointer-events-none absolute top-full right-0 z-10 pt-1 opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100",
+            copied && "pointer-events-auto opacity-100"
+          )}
+        >
+          <ActionButton
+            icon={copied ? Check : Copy}
+            label={copied ? "Copied" : "Copy"}
+            onClick={handleCopy}
+            active={copied}
+            showLabel={false}
+            className={cn(
+              "h-6 w-6 justify-center rounded-md px-0",
+              next && "bg-background/95 ring-border shadow-xs ring-1 backdrop-blur-sm"
+            )}
+          />
+        </div>
+      )}
     </div>
   );
 });
