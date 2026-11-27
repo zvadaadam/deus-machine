@@ -91,7 +91,9 @@ export function FileMentionPopover({
                 aria-selected={isSelected}
                 className={cn(
                   "control-interaction flex w-full items-start rounded-lg px-3 py-2 text-left",
-                  isSelected ? "bg-accent text-accent-foreground" : "hover:bg-accent/40"
+                  isSelected
+                    ? "bg-accent dark:bg-control-surface-pressed text-accent-foreground"
+                    : "hover:bg-accent/40"
                 )}
                 onMouseDown={(e) => {
                   e.preventDefault();

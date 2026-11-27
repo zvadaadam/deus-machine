@@ -471,13 +471,19 @@ export function MessageInput({
               {showSlash ? (
                 <SlashCommandPopover
                   getOptionId={getOptionId}
-                  {...slashCommand}
+                  results={slashCommand.results}
+                  loading={slashCommand.loading}
+                  selectedIndex={slashCommand.selectedIndex}
+                  query={slashCommand.query}
                   onSelect={slashCommand.selectItem}
                 />
               ) : (
                 <FileMentionPopover
                   getOptionId={getOptionId}
-                  {...fileMention}
+                  results={fileMention.results}
+                  loading={fileMention.loading}
+                  selectedIndex={fileMention.selectedIndex}
+                  query={fileMention.query}
                   onSelect={fileMention.selectFile}
                 />
               )}
