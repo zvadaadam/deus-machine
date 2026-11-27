@@ -1,6 +1,18 @@
 import { expect, test } from "bun:test";
+import { posix } from "node:path";
 
 const index = await Bun.file(new URL("../../out/renderer/index.html", import.meta.url)).text();
+
+function loadsFromAssets(href: string) {
+  if (!href.startsWith("/assets/")) return false;
+  const { pathname } = new URL(href, "https://deus.invalid/b/board");
+  return posix.normalize(decodeURIComponent(pathname)).startsWith("/assets/");
+}
+
+test.each(["./assets/entry.js", "/assets/../entry.js", "/assets/..%2fentry.js"])(
+  "the packaged renderer rejects %s",
+  (href) => expect(loadsFromAssets(href)).toBe(false)
+);
 
 test.each([
   ["script[src]", "src"],
@@ -15,5 +27,5 @@ test.each([
     })
     .transform(index);
   expect(urls.length).toBeGreaterThan(0);
-  for (const url of urls) expect(url).toMatch(/^\/assets\//);
+  for (const url of urls) expect(loadsFromAssets(url), url).toBe(true);
 });
