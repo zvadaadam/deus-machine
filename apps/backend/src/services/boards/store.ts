@@ -25,12 +25,14 @@ function markAwaiting(posts: BoardPost[], awaiting: ReadonlySet<number>) {
   }
 }
 
+const deliveryChatFields =
+  "s.title AS delivery_title, s.chat AS delivery_chat, s.agent_harness AS delivery_harness";
 const boardFields = `b.id, b.name, b.workspace_id, b.last_seq,
-  CASE WHEN NOT s.is_hidden THEN s.id END AS delivery_session_id,
+  s.id AS delivery_session_id, ${deliveryChatFields},
   COALESCE(w.title, w.slug) AS coordinator_name,
   CASE WHEN w.state = 'archived' THEN 'archived' END AS read_only`;
 const boardTables = `FROM boards b JOIN workspaces w ON w.id = b.workspace_id
-  LEFT JOIN sessions s ON s.id = b.delivery_session_id`;
+  LEFT JOIN sessions s ON s.id = b.delivery_session_id AND NOT s.is_hidden`;
 const boardSelect = `SELECT ${boardFields} ${boardTables}`;
 
 export function listBoards(): Board[] {
@@ -151,7 +153,7 @@ export function selectAndRecordDeliveryChat(board: BoardFields) {
 
 const postFields = `m.id, m.seq, m.thread_seq, m.author_kind, m.about_workspace_id,
   m.body, m.created_at, m.reply_count, m.delivery_session_id, m.delivery_refusal,
-  s.title AS delivery_title, s.chat AS delivery_chat, s.agent_harness AS delivery_harness, s.is_hidden AS delivery_hidden`;
+  ${deliveryChatFields}, s.is_hidden AS delivery_hidden`;
 const posts = "board_messages m LEFT JOIN sessions s ON s.id = m.delivery_session_id";
 
 export function getPost(board: string, seq: number): BoardPost {

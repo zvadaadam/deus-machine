@@ -172,6 +172,15 @@ async function checkComposerFocus(textarea) {
   assert.equal(await ring(), resting, "Focusing the composer leaves its surface unchanged");
 }
 
+// Radix makes a newly opened layer the top one a render after it mounts. Let that render land.
+async function dismiss(client, layer) {
+  await client.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  );
+  await client.keyboard.press("Escape");
+  await layer.waitFor({ state: "detached" });
+}
+
 async function run() {
   const parent = process.env.DEUS_BOARD_LAB_ROOT ?? tmpdir();
   await mkdir(parent, { recursive: true });
@@ -323,7 +332,8 @@ async function run() {
     const home = page.getByRole("textbox", { name: "Message to start a new workspace" });
     await home.fill(prompt);
     await home.press("Enter");
-    const boardRow = page.getByRole("button", { name: "release-desk" });
+    const boards = page.getByRole("region", { name: "Boards" });
+    const boardRow = boards.getByRole("button", { name: "release-desk" });
     await boardRow.click();
     const [board] = await host.read("boards");
     const sid = board.delivery_session_id;
@@ -468,9 +478,14 @@ async function run() {
     await thread.getByRole("button", { name: "moved.md" }).click();
     await desktopFile.getByText("This file isn't in Mobile verification any more.").waitFor();
     await desktopFile.getByRole("button", { name: "Close", exact: true }).click();
-    await page.getByRole("button", { name: "1 workspace", exact: true }).click();
-    const workspaces = page.getByRole("menu", { name: "1 workspace" });
-    await workspaces.getByRole("menuitem", { name: "Mobile verification" }).click();
+    // Hovering the board's name shows its details; a workspace there opens it.
+    const title = page.getByRole("heading", { level: 1 }).getByRole("button");
+    const hovered = page.getByRole("region", { name: "Board details" });
+    await title.hover();
+    await hovered.getByRole("link", { name: "Open workspace, " + place }).waitFor();
+    const deliveryChat = hovered.getByRole("link", { name: "Release room", exact: true });
+    assert.ok((await deliveryChat.getAttribute("href")).includes(sid));
+    await hovered.getByRole("button", { name: /^Mobile verification/ }).click();
     await until(
       () =>
         page.evaluate(async (id) => {
@@ -631,6 +646,11 @@ async function run() {
     await phone.getByRole("complementary", { name: "Thread" }).waitFor();
     await phone.goBack();
     await phone.getByRole("region", { name: "Channel messages" }).waitFor();
+    // On a phone a tap on the board's name opens its details.
+    await phone.getByRole("heading", { level: 1 }).getByRole("button").tap();
+    const phoneDetails = phone.getByRole("dialog", { name: "Board details" });
+    await phoneDetails.getByRole("link", { name: "Release room", exact: true }).waitFor();
+    await dismiss(phone, phoneDetails);
     // This phone has never selected a workspace in the fixture's cloud organization.
     await phone.evaluate(async () => {
       const { queryClient } = await import("/src/shared/api/queryClient.ts");
@@ -713,7 +733,7 @@ async function run() {
       model: "sonnet",
       permissionMode: "bypass_permissions",
     });
-    const waitingRow = page.getByRole("button", { name: /release-handoff/ });
+    const waitingRow = boards.getByRole("button", { name: /release-handoff/ });
     const count = waitingRow.getByLabel("1 question waiting");
     const decision = feed.locator("article[data-seq]").filter({ hasText: "Who should sign off" });
     const chip = decision.getByRole("link", { name: /Open workspace, Mobile verification/ });
@@ -726,9 +746,25 @@ async function run() {
     assert.equal(await decision.locator("button a, button button").count(), 0);
     const nameBox = () => waitingRow.getByText("release-handoff", { exact: true }).boundingBox();
     const beforeAnswer = await nameBox();
+    // The workspace count opens the same details to keep, and so do a click and Enter on the name.
+    const details = page.getByRole("dialog", { name: "Board details" });
     await page.getByRole("button", { name: "1 workspace", exact: true }).click();
-    await page.getByRole("menuitem", { name: /Mobile verification Working/ }).waitFor();
-    await page.keyboard.press("Escape");
+    await details.getByRole("button", { name: /Mobile verification Working/ }).waitFor();
+    await details.getByText("1 question", { exact: true }).waitFor();
+    await dismiss(page, details);
+    // A click on the name keeps its hover card where it is, with no second entrance.
+    await title.hover();
+    await hovered.waitFor();
+    await title.click();
+    await details.waitFor();
+    assert.equal(await hovered.count(), 0);
+    assert.equal(await details.evaluate((el) => getComputedStyle(el).animationName), "none");
+    await dismiss(page, details);
+    await title.focus();
+    await page.keyboard.press("Enter");
+    await details.getByText("Your messages go to", { exact: true }).waitFor();
+    await dismiss(page, details);
+    assert.ok(await title.evaluate((el) => el === document.activeElement));
     await decision.hover();
     await decision.getByRole("button", { name: "Reply in thread" }).click();
     await thread.getByRole("button", { name: /1 Ask the release captain/ }).click();

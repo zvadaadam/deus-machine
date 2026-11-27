@@ -11,7 +11,11 @@ it("derives the coordinator's square mark from the board and gives a person a ci
     workspace_id: "mars",
     coordinator_name: "Mobile",
     last_seq: 1,
+    waiting: 0,
     delivery_session_id: null,
+    delivery_title: null,
+    delivery_chat: null,
+    delivery_harness: null,
     read_only: null,
   };
   function avatar(kind: BoardPost["author_kind"], changes: Partial<Board> = {}) {

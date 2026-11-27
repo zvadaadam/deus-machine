@@ -72,11 +72,22 @@ it("pages roots by sequence and agents by last activity, with atomic root summar
 
 it("keeps the board and subject when the chat is archived and selects its newest eligible chat for delivery", () => {
   const { id } = store.createBoard("s", "Release");
+  db.exec("UPDATE sessions SET title = 'Release room' WHERE id = 's'");
+  expect(store.getBoard(id)).toMatchObject({
+    delivery_session_id: "s",
+    delivery_title: "Release room",
+    delivery_chat: 1,
+    delivery_harness: "claude-code",
+  });
   store.savePost(id, { body: "Started" }, { kind: "bot", aboutWorkspaceId: "w" });
   store.savePost(id, { body: "Which checks?" }, { kind: "person", postId: "p" });
   db.exec(`INSERT INTO sessions(id, workspace_id) VALUES ('next', 'w');
     UPDATE sessions SET is_hidden = 1 WHERE id = 's'`);
-  expect(store.getBoard(id)).toMatchObject({ workspace_id: "w", delivery_session_id: null });
+  expect(store.getBoard(id)).toMatchObject({
+    workspace_id: "w",
+    delivery_session_id: null,
+    delivery_title: null,
+  });
   expect(store.boardForChat("next")).toBe(id);
   store.savePost(id, { body: "All green", thread: 1 }, { kind: "bot" });
   expect(store.selectAndRecordDeliveryChat(store.getBoard(id))).toBe("next");
