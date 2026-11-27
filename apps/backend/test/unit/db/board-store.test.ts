@@ -236,12 +236,12 @@ it("resolves the same workspace and chat references as rename and refuses unfami
 
 it("counts distinct subjects across roots and replies and retains the words when a subject goes away", () => {
   const { id } = store.createBoard("s", "Release");
-  expect(store.boardDetail(id)?.workspaces).toEqual({});
+  expect(store.channelPage(id)?.board.workspaces).toEqual({});
   db.exec(`INSERT INTO repositories (id, name) VALUES ('mobile-project','Phone');
     INSERT INTO workspaces(id,repository_id,slug,title,state) VALUES ('mobile','mobile-project','mars','Mobile verification','ready')`);
   store.savePost(id, { body: "Build" }, { kind: "bot" });
   store.savePost(id, { body: "Release" }, { kind: "bot", aboutWorkspaceId: "w" });
-  expect(store.boardDetail(id)?.workspaces).toEqual({});
+  expect(store.channelPage(id)?.board.workspaces).toEqual({});
   store.savePost(
     id,
     { body: "Mobile started", thread: 1 },
@@ -252,20 +252,55 @@ it("counts distinct subjects across roots and replies and retains the words when
     { body: "Mobile passed", thread: 1 },
     { kind: "bot", aboutWorkspaceId: "mobile" }
   ).post;
-  expect(store.boardDetail(id)?.workspaces).toEqual({
+  expect(store.channelPage(id)?.board.workspaces).toEqual({
     mobile: { name: "Mobile verification", archived: false },
   });
   db.exec("UPDATE workspaces SET title='Phone release', state='archived' WHERE id='mobile'");
-  expect(store.boardDetail(id)?.workspaces.mobile).toEqual({
+  expect(store.channelPage(id)?.board.workspaces.mobile).toEqual({
     name: "Phone release",
     archived: true,
   });
   db.exec("DELETE FROM repositories WHERE id='mobile-project'");
-  expect(store.boardDetail(id)?.workspaces).toEqual({});
+  expect(store.channelPage(id)?.board.workspaces).toEqual({});
   expect(store.getPost(id, reply.seq)).toMatchObject({
     about_workspace_id: null,
     body: "Mobile passed",
   });
   db.exec("DELETE FROM repositories WHERE id='r'");
-  expect(store.boardDetail(id)).toBeNull();
+  expect(store.channelPage(id)).toBeNull();
+});
+
+it("counts exactly the marked posts until a person replies after them in the same thread", () => {
+  const { id } = store.createBoard("s", "Release");
+  const bot = { kind: "bot" } as const;
+  const post = (body: string, thread?: number) =>
+    store.savePost(id, { body, thread }, bot).post.seq;
+  const reply = (thread: number) =>
+    store.savePost(id, { body: "Answer", thread }, { kind: "person", postId: crypto.randomUUID() });
+  const root = post("Choose, @You.");
+  const report = post("Documentation for `@you`");
+  const other = store.createBoard("s", "Build").id;
+  store.savePost(other, { body: "@you too?" }, bot);
+  const check = (expected: number[]) => {
+    const page = store.channelPage(id)!;
+    expect(
+      Object.fromEntries(store.listBoards().map((board) => [board.id, board.waiting]))
+    ).toEqual({ [id]: expected.length, [other]: 1 });
+    expect(page.board.waiting).toBe(expected.length);
+    for (const row of page.posts) {
+      const thread = store.threadPage(id, row.seq);
+      expect(row.awaiting).toBe(thread.root.awaiting);
+      for (const post of [thread.root, ...thread.replies])
+        expect(post.awaiting).toBe(expected.includes(post.seq) ? true : undefined);
+    }
+  };
+  check([root]);
+  reply(report);
+  check([root]);
+  const followUp = post("One more for @you", root);
+  check([root, followUp]);
+  reply(root);
+  check([]);
+  const latest = post("And &#64;you?", root);
+  check([latest]);
 });

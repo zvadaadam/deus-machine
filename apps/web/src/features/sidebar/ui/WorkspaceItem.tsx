@@ -14,13 +14,13 @@ import { useAutomationForWorkspace } from "@/features/automations";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
 import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
 import { prefetchWorkspace } from "@/features/workspace/api/prefetch";
-import { canRecoverStart, workspaceStart } from "@/features/workspace/lib/startState";
-import { getWorkspaceActivity } from "../lib/status";
+import { canRecoverStart } from "@/features/workspace/lib/startState";
+import { workspaceRowStatus } from "../lib/status";
 import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "../lib/utils";
 import type { WorkspaceItemProps } from "../model/types";
 import { SidebarRow } from "./SidebarRow";
 import { CoordinatorMark, MakeCoordinator } from "@/features/workspace/ui/CoordinatorRole";
-import { WorkspaceGitIcon } from "./WorkspaceGitIcon";
+import { WorkspaceGitIcon, WorkspaceAttention } from "./WorkspaceGitIcon";
 import { WorkspaceHoverCard } from "./WorkspaceHoverCard";
 import { WorkspaceStatusChoices, WorkspaceStatusMenu } from "./WorkspaceStatusMenu";
 import { ContextMenu, ContextMenuItem, ContextMenuSub } from "@/components/ui/context-menu";
@@ -86,17 +86,14 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
   onArchive,
   onStatusChange,
 }: WorkspaceItemProps) {
-  const isInitializing = workspace.state === "initializing";
   const [menuOpen, setMenuOpen] = React.useState(false);
   // Provenance: automation-born workspaces carry a zap beside the name.
   const automation = useAutomationForWorkspace(workspace.id);
   const queryClient = useQueryClient();
 
   const unread = useUnreadStore((s) => s.unreadSessionIds);
-  const { status, working, running, waiting } = React.useMemo(
-    () => getWorkspaceActivity(workspace, unread),
-    [workspace, unread]
-  );
+  const { status, working, running, isInitializing, isFailed, start, attention, description } =
+    React.useMemo(() => workspaceRowStatus(workspace, unread), [workspace, unread]);
   const { duration } = useWorkingDuration({
     status: running?.status,
     latestMessageSentAt: running?.last_user_message_at,
@@ -108,28 +105,9 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
     status !== "idle" ||
     (!!activeChatTabSessionId && activeChatTabSessionId !== workspace.current_session_id);
 
-  const isFailed = workspace.state === "error";
-  const start = isFailed || isInitializing ? workspaceStart(workspace).brief : null;
   const displayName = getWorkspaceDisplayName(workspace);
   const secondaryText = getWorkspaceSecondaryText(workspace);
-  const attention = match(status)
-    .with("error", () => (isFailed ? null : "error"))
-    .with("unread", () =>
-      match(waiting?.status)
-        .with("needs_response", () => "waiting for your answer")
-        .with("needs_plan_response", () => "waiting for plan approval")
-        .otherwise(() => "unread activity")
-    )
-    .otherwise(() => null);
-  const label = [
-    `Workspace ${displayName}`,
-    working && "working",
-    status === "idle" && "idle",
-    attention,
-    start,
-  ]
-    .filter(Boolean)
-    .join(", ");
+  const label = `Workspace ${displayName}, ${description}`;
 
   const additions = diffStats?.additions ?? 0;
   const deletions = diffStats?.deletions ?? 0;
@@ -254,13 +232,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
             )}
           </>
         ) : attention ? (
-          <span
-            className={cn(
-              "h-2 w-2 rounded-full",
-              status === "error" ? "bg-accent-red" : "bg-accent-gold"
-            )}
-            title={attention}
-          />
+          <WorkspaceAttention status={status} attention={attention} />
         ) : (
           <span
             className={cn(

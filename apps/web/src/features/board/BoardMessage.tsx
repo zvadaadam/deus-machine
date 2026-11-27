@@ -1,5 +1,7 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { postFileWorkspace, type BoardDetail, type BoardRow } from "@shared/boards";
+import { boardOptions } from "./options";
+import { BoardOptions } from "./BoardOptions";
 import { BoardMarkdown } from "./BoardMarkdown";
 import type { SidebarProfile } from "@/features/sidebar/model/types";
 import { profileName } from "@/features/sidebar/ui/ProfileAvatar";
@@ -95,6 +97,20 @@ function BoardMessage({
   const person = profileName(profile);
   const transform = useMemo(() => boardMentions(person), [person]);
   const subject = post.about_workspace_id && board.workspaces[post.about_workspace_id];
+  const choices = useMemo(
+    () => (post.awaiting && !board.read_only ? boardOptions(post.body) : null),
+    [post.awaiting, post.body, board.read_only]
+  );
+  const markdown = (text: string) =>
+    text && (
+      <BoardMarkdown
+        workspaceId={postFileWorkspace(post, board)}
+        transformText={coordinator ? transform : undefined}
+        className="text-foreground wrap-anywhere"
+      >
+        {(choices?.references ?? "") + text}
+      </BoardMarkdown>
+    );
   const time = localDate(post.created_at);
   return (
     <article
@@ -127,13 +143,15 @@ function BoardMessage({
             {clock.format(time)}
           </time>
         </div>
-        <BoardMarkdown
-          workspaceId={postFileWorkspace(post, board)}
-          transformText={coordinator ? transform : undefined}
-          className="text-foreground wrap-anywhere"
-        >
-          {post.body}
-        </BoardMarkdown>
+        {choices ? (
+          <>
+            {markdown(choices.before)}
+            <BoardOptions boardId={board.id} post={post} choices={choices} />
+            {markdown(choices.after)}
+          </>
+        ) : (
+          markdown(post.body)
+        )}
         {!coordinator && <BoardReceipt board={board} post={post} />}
         {children}
       </div>

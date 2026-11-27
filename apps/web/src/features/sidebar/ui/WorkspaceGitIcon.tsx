@@ -12,7 +12,8 @@ import {
 
 import { CircularPixelGrid } from "@/features/session/ui/CircularPixelGrid";
 import type { Workspace } from "@/features/workspace/types";
-import type { DisplayStatus } from "../lib/status";
+import { WORKFLOW_STATUS_CONFIG, type DisplayStatus } from "../lib/status";
+import { cn } from "@/shared/lib/utils";
 import { WorkflowStatusIcon } from "./WorkflowStatusIcon";
 
 /** Where the workspace is in its git journey — drives the icon glyph. */
@@ -111,3 +112,35 @@ export const WorkspaceGitIcon = React.memo(function WorkspaceGitIcon({
 
   return <Glyph className={attentionClass ?? lifecycleClass} size={size} />;
 });
+
+export function WorkspaceAttention({
+  status,
+  attention,
+}: {
+  status: DisplayStatus;
+  attention: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "h-2 w-2 rounded-full",
+        status === "error" ? "bg-accent-red" : "bg-accent-gold"
+      )}
+      title={attention}
+    />
+  );
+}
+
+export function gitLifecycleLabel(workspace: Workspace, lifecycle = deriveGitLifecycle(workspace)) {
+  return match(lifecycle)
+    .with("manual", () => WORKFLOW_STATUS_CONFIG[workspace.status].label)
+    .with("merged", () => "Merged")
+    .with("closed", () => "Closed")
+    .with("conflicts", () => "Conflicts")
+    .with("draft", () => "Draft")
+    .with("changes_requested", () => "Changes requested")
+    .with("open", () => (workspace.pr_review_status === "approved" ? "Approved" : "Open"))
+    .with("linked", () => "PR")
+    .with("local", () => null)
+    .exhaustive();
+}

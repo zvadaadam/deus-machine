@@ -1,16 +1,14 @@
-import { WorkspaceChip } from "./WorkspaceChip";
+import { WorkspaceChip, BoardWorkspaceMenuItem } from "./WorkspaceChip";
 import { BoardAvatar } from "./BoardAvatar";
 import { channelName } from "@shared/boards";
-import { GitBranch, Hash } from "lucide-react";
+import { Hash } from "lucide-react";
 import type { BoardDetail } from "@shared/boards";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
-  DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { showWorkspace } from "@/features/workspace/lib/openWorkspace";
 
 function BoardWorkspaces({ workspaces }: Pick<BoardDetail, "workspaces">) {
   const rows = Object.entries(workspaces);
@@ -27,17 +25,7 @@ function BoardWorkspaces({ workspaces }: Pick<BoardDetail, "workspaces">) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="max-w-72">
         {rows.map(([id, workspace]) => (
-          <DropdownMenuItem
-            key={id}
-            disabled={workspace.archived}
-            onSelect={() => showWorkspace(id)}
-          >
-            <GitBranch aria-hidden />
-            <span className="min-w-0 truncate">{workspace.name}</span>
-            {workspace.archived && (
-              <span className="text-text-muted ml-auto text-xs">Archived</span>
-            )}
-          </DropdownMenuItem>
+          <BoardWorkspaceMenuItem key={id} id={id} {...workspace} />
         ))}
       </DropdownMenuContent>
     </DropdownMenu>

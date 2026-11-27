@@ -17,22 +17,13 @@ import { SETUP_FAILED } from "@/features/workspace/lib/startState";
 import { prTargetBranch } from "@/features/workspace/lib/prState";
 import type { DisplayStatus } from "../lib/status";
 import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "../lib/utils";
-import { WorkspaceGitIcon, derivePrLifecycle } from "./WorkspaceGitIcon";
+import { WorkspaceGitIcon, derivePrLifecycle, gitLifecycleLabel } from "./WorkspaceGitIcon";
 
 /** Compact human label for the PR chip — PR fields only, so a manual
  * backlog/canceled workflow override never hides an existing PR. */
 function prChipLabel(workspace: Workspace): string | null {
   if (!workspace.pr_number) return null;
-  const label = match(derivePrLifecycle(workspace))
-    .with("merged", () => "Merged")
-    .with("closed", () => "Closed")
-    .with("conflicts", () => "Conflicts")
-    .with("draft", () => "Draft")
-    .with("changes_requested", () => "Changes requested")
-    .with("open", () => (workspace.pr_review_status === "approved" ? "Approved" : "Open"))
-    .with("linked", () => "PR")
-    .with("local", () => null)
-    .exhaustive();
+  const label = gitLifecycleLabel(workspace, derivePrLifecycle(workspace));
   return label ? `#${workspace.pr_number} ${label}` : null;
 }
 

@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { getErrorMessage } from "@shared/lib/errors";
 import { native } from "@/platform";
 import { call } from "@/platform/ws";
+import { useRuntimeClient } from "@/platform/ws/useRuntimeClient";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 import type { RepoGroup, DiffStats, Workspace } from "../types";
@@ -34,6 +35,7 @@ const removeWorkspaceKey = ["removeWorkspace"] as const;
 
 // The query reads once for the first paint, and the subscription pushes each new value into the cache.
 export function useWorkspacesByRepo(state: string = SIDEBAR_WORKSPACE_STATE) {
+  const runtime = useRuntimeClient();
   const queryKey = queryKeys.workspaces.byRepo(state);
   const pending = useMutationState({
     filters: { mutationKey: removeWorkspaceKey, status: "pending" },
@@ -51,7 +53,7 @@ export function useWorkspacesByRepo(state: string = SIDEBAR_WORKSPACE_STATE) {
 
   return useQuery({
     queryKey,
-    queryFn: () => call(api.workspaces, { state }),
+    queryFn: () => runtime.call(api.workspaces, { state }),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     // The host publishes the removal before acknowledging it. Until then, hide it only in the view.

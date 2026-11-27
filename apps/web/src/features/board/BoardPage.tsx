@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/shared/lib/utils";
 import { openBoard, type BoardLink } from "./address";
 import { BoardFileViewer } from "./BoardFileViewer";
+import { BoardWorkspaceProvider } from "./WorkspaceChip";
 import { BoardHeader } from "./BoardHeader";
 import { BoardComposer } from "./BoardComposer";
 import { BoardRows, replyCount } from "./BoardMessage";
@@ -221,7 +222,11 @@ export function BoardPage(props: BoardPageProps) {
         ref={container}
         className="border-border-subtle bg-bg-surface relative flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-xl border"
       >
-        {compact !== undefined && <Channel {...props} compact={compact} />}
+        {compact !== undefined && (
+          <BoardWorkspaceProvider>
+            <Channel {...props} compact={compact} />
+          </BoardWorkspaceProvider>
+        )}
       </div>
     </SidebarInset>
   );

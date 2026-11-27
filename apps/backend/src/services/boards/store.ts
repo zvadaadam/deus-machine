@@ -1,7 +1,7 @@
 import {
   BOARD_PAGE_SIZE,
   boardReadOnlyReason,
-  type Board,
+  type Board as BoardSummary,
   type BoardDetail,
   type BoardPost,
   type BoardPostInput,
@@ -13,6 +13,18 @@ import { getDatabase } from "../../lib/database";
 import { ConflictError, NotFoundError, ValidationError } from "../../lib/errors";
 import { HAS_OR_WILL_PIN_BOARD_TOOLS } from "./coordinator";
 
+import { awaitingQuestions, questionCandidates } from "./questions";
+
+type Board = Omit<BoardSummary, "waiting">;
+
+const boardCandidates = `(${questionCandidates("q.board_id = b.id")}) AS candidates`;
+
+function markAwaiting(posts: BoardPost[], awaiting: ReadonlySet<number>) {
+  for (const post of posts) {
+    if (awaiting.has(post.seq)) post.awaiting = true;
+  }
+}
+
 const boardFields = `b.id, b.name, b.workspace_id, b.last_seq,
   CASE WHEN NOT s.is_hidden THEN s.id END AS delivery_session_id,
   COALESCE(w.title, w.slug) AS coordinator_name,
@@ -21,10 +33,13 @@ const boardTables = `FROM boards b JOIN workspaces w ON w.id = b.workspace_id
   LEFT JOIN sessions s ON s.id = b.delivery_session_id`;
 const boardSelect = `SELECT ${boardFields} ${boardTables}`;
 
-export function listBoards(): Board[] {
+export function listBoards(): BoardSummary[] {
   return getDatabase()
-    .prepare<[], Board>(boardSelect + " WHERE w.state != 'archived' ORDER BY b.id")
-    .all();
+    .prepare<[], Board & { candidates: string }>(
+      `SELECT ${boardFields}, ${boardCandidates} ${boardTables} WHERE w.state != 'archived' ORDER BY b.id`
+    )
+    .all()
+    .map(({ candidates, ...board }) => ({ ...board, waiting: awaitingQuestions(candidates).size }));
 }
 
 /** One lookup for all chats whose queues or echoes changed. */
@@ -46,7 +61,7 @@ export function getBoard(id: string): Board {
 }
 
 /** The board and the distinct subjects of all its posts, including replies outside the current page. */
-export function boardDetail(id: string): BoardDetail | null {
+export function channelPage(id: string, before?: number) {
   const subjects = `(SELECT json_group_object(id, json_object('name', name, 'archived', json(archived)))
     FROM (SELECT w.id, COALESCE(w.title, w.slug) AS name,
             CASE w.state WHEN 'archived' THEN 'true' ELSE 'false' END AS archived
@@ -57,10 +72,20 @@ export function boardDetail(id: string): BoardDetail | null {
   const row = getDatabase()
     .prepare<
       [string],
-      Board & { workspaces: string }
-    >(`SELECT ${boardFields}, ${subjects} ${boardTables} WHERE b.id = ?`)
+      Board & { workspaces: string; candidates: string }
+    >(`SELECT ${boardFields}, ${subjects}, ${boardCandidates} ${boardTables} WHERE b.id = ?`)
     .get(id);
-  return row ? { ...row, workspaces: JSON.parse(row.workspaces) } : null;
+  if (!row) return null;
+  const { candidates, workspaces, ...fields } = row;
+  const awaiting = awaitingQuestions(candidates);
+  const board: BoardDetail = {
+    ...fields,
+    waiting: awaiting.size,
+    workspaces: JSON.parse(workspaces),
+  };
+  const posts = readChannel(id, before).reverse();
+  markAwaiting(posts, awaiting);
+  return { board, posts };
 }
 
 function writableBoard(id: string) {
@@ -228,6 +253,13 @@ export function threadPage(board: string, thread: number, before?: number) {
     .all(board, thread, before ?? Number.MAX_SAFE_INTEGER, BOARD_PAGE_SIZE + 1);
   const hasEarlier = replies.length > BOARD_PAGE_SIZE;
   if (hasEarlier) replies.pop();
+  const { candidates } = getDatabase()
+    .prepare<
+      [string, number, number],
+      { candidates: string }
+    >(questionCandidates("q.board_id = ? AND (q.seq = ? OR q.thread_seq = ?)"))
+    .get(board, thread, thread)!;
+  markAwaiting([root, ...replies], awaitingQuestions(candidates));
   return { root, replies: replies.reverse(), hasEarlier };
 }
 

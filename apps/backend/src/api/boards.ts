@@ -6,8 +6,8 @@ import { handle } from "./registry";
 export default [
   handle(api.boards, store.listBoards),
   handle(api.boardChannel, ({ boardId, before }) => {
-    const board = store.boardDetail(boardId);
-    return board && { board, posts: withReceipts(store.readChannel(boardId, before).reverse()) };
+    const page = store.channelPage(boardId, before);
+    return page && { board: page.board, posts: withReceipts(page.posts) };
   }),
   handle(api.boardThread, ({ boardId, thread, before }) => {
     const page = store.threadPage(boardId, thread, before);

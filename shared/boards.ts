@@ -17,6 +17,7 @@ export interface Board {
   delivery_session_id: string | null;
   read_only: keyof typeof boardReadOnlyReason | null;
   last_seq: number;
+  waiting: number;
 }
 
 export interface BoardDetail extends Board {
@@ -32,6 +33,7 @@ export interface BoardPost {
   body: string;
   created_at: string;
   reply_count: number;
+  awaiting?: true;
   delivery_session_id: string | null;
   delivery_refusal: string | null;
   delivery_title: string | null;
