@@ -6,6 +6,7 @@ export const PublicSettings = z
     diff_view_mode: z.string(),
     chat_view: z.enum(["bubbles", "full"]),
     agent_messages: z.boolean(),
+    coordinator_workspaces: z.boolean(),
     onboarding_completed: z.boolean(),
     /** A new chat starts at a level every offered model supports. */
     default_thinking_level: z.enum(["low", "medium", "high"]),

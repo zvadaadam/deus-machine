@@ -34,6 +34,22 @@ export function ExperimentalSection({ settings, saveSetting }: SettingsSectionPr
           onCheckedChange={(checked) => saveSetting("experimental_browser", checked)}
         />
       </Field>
+
+      <Field orientation="horizontal">
+        <FieldContent>
+          <FieldLabel htmlFor="coordinator-workspaces" className="text-sm">
+            Coordinator workspaces
+          </FieldLabel>
+          <FieldDescription>
+            A coordinator hands work to other workspaces and reports to you on a board.
+          </FieldDescription>
+        </FieldContent>
+        <Switch
+          id="coordinator-workspaces"
+          checked={settings.coordinator_workspaces === true}
+          onCheckedChange={(checked) => saveSetting("coordinator_workspaces", checked)}
+        />
+      </Field>
     </FieldGroup>
   );
 }

@@ -456,6 +456,7 @@ web app (see `test/e2e/README.md`).
 
 A coordinator directs work in other local workspaces and reports to the person on a board.
 Only the person can make one, with Home’s Coordinator flag or the workspace menu’s one-way “Make coordinator”.
+Settings → Experimental → Coordinator workspaces (`coordinator_workspaces`, off by default) shows both controls.
 Each chat pins its tools in `sessions.board_tools` before its agent conversation starts.
 A fresh chat in a coordinator workspace gets `create_board`, `read_board` and `post_to_board`
 from `services/boards/tools.ts`. The workspace owns its boards across chats.

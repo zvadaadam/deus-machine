@@ -8,6 +8,7 @@ import { capabilities } from "@/platform/capabilities";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { cn } from "@/shared/lib/utils";
 import { useHomeComposer } from "@/features/session/hooks/useSessionComposer";
+import { useSettings } from "@/features/settings/api/settings.queries";
 import {
   extractImagesFromClipboard,
   buildMessageContent,
@@ -141,7 +142,8 @@ export function HomeView({
     clearSent,
   } = useHomeComposer();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [coordinator, setCoordinator] = useState(false);
+  const coordinatorWorkspaces = useSettings().data?.coordinator_workspaces === true;
+  const [coordinatorSelected, setCoordinatorSelected] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handlePaste = async (e: React.ClipboardEvent) => {
@@ -203,6 +205,7 @@ export function HomeView({
   // switch is on and cannot be turned off, whatever the composer's own choice.
   const lockedReason = cloudOnlyReason(selectedRepo);
   const location = lockedReason ? "cloud" : composerPlace.location;
+  const coordinator = coordinatorWorkspaces && location === "local" && coordinatorSelected;
   const cloudOrganizationId =
     location === "cloud" ? (composerPlace.organization?.id ?? null) : null;
   const ignoreLocation = useCallback(() => {}, []);
@@ -296,7 +299,7 @@ export function HomeView({
         location,
         selection.sentThinkingLevel,
         cloudOrganizationId,
-        ...(location === "local" && coordinator ? ["coordinator" as const] : [])
+        ...(coordinator ? ["coordinator" as const] : [])
       );
       if (!started) return;
       clearSent();
@@ -508,11 +511,11 @@ export function HomeView({
                   side="bottom"
                 />
 
-                {hasRepos && (
+                {hasRepos && coordinatorWorkspaces && (
                   <CoordinatorToggle
                     cloud={location === "cloud"}
-                    enabled={location === "local" && coordinator}
-                    onToggle={() => setCoordinator((on) => !on)}
+                    enabled={coordinator}
+                    onToggle={() => setCoordinatorSelected((on) => !on)}
                   />
                 )}
               </div>
@@ -541,7 +544,7 @@ export function HomeView({
           </div>
         </ImageDropTarget>
         <AnimatePresence initial={false}>
-          {hasRepos && location === "local" && coordinator && (
+          {hasRepos && coordinator && (
             <Collapse key="coordinator">
               <p className="text-text-muted px-2 pt-2 text-sm">{coordinatorDescription}</p>
             </Collapse>

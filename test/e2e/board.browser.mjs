@@ -233,9 +233,16 @@ async function run() {
     page.setDefaultTimeout(18000);
     await page.goto(base);
     const flag = page.getByRole("button", { name: "Coordinator", exact: true });
-    await flag.waitFor();
     for (const name of ["Start new project", "Clone from GitHub", "Open local project"])
       await page.getByRole("button", { name, exact: true }).waitFor();
+    assert.equal(await flag.count(), 0);
+    await page.keyboard.press("Control+,");
+    await page.getByRole("button", { name: "Experimental", exact: true }).click();
+    const coordinatorSetting = page.getByRole("switch", { name: "Coordinator workspaces" });
+    assert.equal(await coordinatorSetting.getAttribute("aria-checked"), "false");
+    await coordinatorSetting.click();
+    await page.getByRole("button", { name: "Back to app" }).click();
+    await flag.waitFor();
     assert.equal(await page.locator("section[aria-label$=' workspaces']").count(), 0);
     assert.equal(await flag.getAttribute("aria-pressed"), "false");
     const openHomeFor = (repoId) =>
@@ -303,6 +310,8 @@ async function run() {
     );
     assert.equal(workspace.role, "coordinator");
     assert.equal(new URL(page.url()).pathname, "/b/" + board.id);
+    // An existing coordinator and its board keep working when creation is switched off.
+    await host.write("saveSetting", { key: "coordinator_workspaces", value: false });
     await page.reload();
     const feed = page.getByRole("region", { name: "Channel messages" });
     await feed
@@ -692,18 +701,22 @@ async function run() {
       .click();
     await thread.getByText("The handoff is ready.", { exact: true }).waitFor();
 
-    const ordinary = await host.write("createWorkspace", { repository_id: "project" });
-    const info = () => host.read("workspace", { workspaceId: ordinary.workspaceId });
-    await until(async () => (await info()).state === "ready", 20000, "ordinary workspace");
-    const before = await info();
-    await host.write("sendMessage", {
-      sessionId: before.current_session_id,
-      turnId: crypto.randomUUID(),
-      content: "Read the project",
-      agentHarness: "claude-code",
-      model: "sonnet",
-      permissionMode: "bypass_permissions",
-    });
+    // Turning the preference off also applies to a coordinator already selected in a draft.
+    await host.write("saveSetting", { key: "coordinator_workspaces", value: true });
+    await openHomeFor("project");
+    await flag.click();
+    const hint = page.locator("p").filter({ hasText: description });
+    await hint.waitFor();
+    await host.write("saveSetting", { key: "coordinator_workspaces", value: false });
+    await flag.waitFor({ state: "detached" });
+    await hint.waitFor({ state: "detached" });
+    await home.fill("Read the project");
+    await home.press("Enter");
+    await page.getByRole("log").getByText("Read the project", { exact: true }).waitFor();
+    const ordinaryRow = page.locator('[data-workspace-id][aria-current="page"]');
+    const workspaceId = await ordinaryRow.getAttribute("data-workspace-id");
+    const before = await host.read("workspace", { workspaceId });
+    assert.equal(before.role, null);
     await until(
       async () =>
         (await host.read("messages", { sessionId: before.current_session_id })).turns.some(
@@ -712,20 +725,19 @@ async function run() {
       10000,
       "ordinary chat's first turn"
     );
-    const ordinaryRow = page
-      .locator("[data-sidebar-row]")
-      .filter({ has: page.getByText(before.slug, { exact: true }) })
-      .first();
-    await ordinaryRow.click();
     await ordinaryRow.click({ button: "right" });
-    await page.getByRole("menuitem", { name: "Make coordinator" }).click();
+    await page.getByRole("menuitem", { name: "Copy link" }).waitFor();
+    const promote = page.getByRole("menuitem", { name: "Make coordinator" });
+    assert.equal(await promote.count(), 0);
+    await host.write("saveSetting", { key: "coordinator_workspaces", value: true });
+    await promote.click();
     await page
       .locator("[data-sonner-toast]")
       .filter({ hasText: "Now a coordinator. New chats here get its tools." })
       .getByRole("button", { name: "New chat", exact: true })
       .click();
     await until(
-      async () => (await host.read("sessions", { workspaceId: ordinary.workspaceId })).length === 2,
+      async () => (await host.read("sessions", { workspaceId })).length === 2,
       10000,
       "new coordinator chat"
     );

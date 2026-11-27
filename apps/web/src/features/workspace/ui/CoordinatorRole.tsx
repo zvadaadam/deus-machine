@@ -3,6 +3,7 @@ import { api } from "@shared/api";
 import type { Workspace } from "@shared/types/workspace";
 import { ContextMenuItem } from "@/components/ui/context-menu";
 import { useCreateSession } from "@/features/session/api/session.queries";
+import { useSettings } from "@/features/settings/api/settings.queries";
 import { openChat } from "@/features/session/lib/openChat";
 import { showWorkspace } from "@/features/workspace/lib/openWorkspace";
 import { getRuntimeClient } from "@/platform/ws";
@@ -20,6 +21,8 @@ export function CoordinatorMark() {
 
 export function MakeCoordinator({ workspace }: { workspace: Workspace }) {
   const createChat = useCreateSession();
+  const { data: settings } = useSettings();
+  if (settings?.coordinator_workspaces !== true) return null;
   if (workspace.kind !== "worktree" || workspace.state !== "ready" || workspace.role) return null;
   async function promote() {
     const runtime = getRuntimeClient();
