@@ -12,6 +12,7 @@ import { native } from "@/platform/native";
 import { capabilities } from "@/platform/capabilities";
 import { readFileUrl } from "@/features/file-browser/api/fileUrl";
 import { getErrorMessage } from "@shared/lib/errors";
+import { visitFile } from "@/features/workspace/lib/fileVisit";
 import { isMobileViewport } from "@/shared/hooks/use-mobile";
 import { isTabVisible, tabsFor } from "@/features/workspace-tabs/registry";
 import {
@@ -70,17 +71,17 @@ export function chatPlaceNow(
   workspaceId: string,
   place: Pick<ChatPlace, "cloud" | "folder">
 ): ChatPlace {
+  const fileTab = !isMobileViewport();
   if (!place.cloud) {
     // This client's Browser tab, as the tab bar decides it (`tabsFor`).
     const settings = getRuntimeClient().queryClient.getQueryData<Settings>(queryKeys.settings.all);
-    const browserTab =
-      !isMobileViewport() && isTabVisible("browser", settings, tabsFor({ kind: "worktree" }));
-    return { ...place, browserTab };
+    const browserTab = fileTab && isTabVisible("browser", settings, tabsFor({ kind: "worktree" }));
+    return { ...place, browserTab, fileTab };
   }
-  const previewTab =
-    !isMobileViewport() && isTabVisible("browser", undefined, tabsFor({ kind: "cloud" }));
+  const previewTab = fileTab && isTabVisible("browser", undefined, tabsFor({ kind: "cloud" }));
   return {
     ...place,
+    fileTab,
     previewTemplate: useCloudPreviewStore.getState().byWorkspace[workspaceId],
     previewTab,
   };
@@ -166,6 +167,7 @@ export async function openFromChat(
         toast.error(getErrorMessage(error));
       }
     })
+    .with({ to: "file-viewer" }, ({ path }) => visitFile(workspaceId, path))
     .with({ to: "files" }, ({ path, target }) =>
       workspaceLayoutActions.openFileInContent(workspaceId, path, target)
     )

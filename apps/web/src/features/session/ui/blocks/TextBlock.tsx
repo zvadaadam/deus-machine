@@ -7,7 +7,7 @@ import type { MarkdownFileLinkResolution } from "@/components/markdown/MarkdownR
 import { ChatMarkdown } from "@/components/markdown";
 import { cn } from "@/shared/lib/utils";
 import { isBrowserPreviewPath, normalizeResourcePath } from "../../lib/chatResources";
-import { openAddressFromChat, openFromChat } from "../../lib/openFromChat";
+import { chatPlaceNow, openAddressFromChat, openFromChat } from "../../lib/openFromChat";
 import { openFile } from "@/features/workspace/lib/reach";
 import { parseUserMessageReferences } from "../../lib/parseUserMessageReferences";
 import { InspectElementPill } from "../InspectElementPill";
@@ -82,7 +82,7 @@ export function TextBlock({
   const handleFileLinkOpen = useCallback(
     async (path: string) => {
       if (!workspaceId) return;
-      const place = { cloud, folder: workspacePath };
+      const place = chatPlaceNow(workspaceId, { cloud, folder: workspacePath });
       await openFromChat(
         workspaceId,
         openFile(path, place, isBrowserPreviewPath(path) ? "preview" : "files")

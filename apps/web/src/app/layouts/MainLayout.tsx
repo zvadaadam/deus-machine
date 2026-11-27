@@ -63,6 +63,7 @@ import {
 } from "@/features/workspace/lib/workspaceAddress";
 import { AutomationsPage, useAutomations } from "@/features/automations";
 import { BoardPage } from "@/features/board/BoardPage";
+import { useFileVisit } from "@/features/workspace/lib/fileVisit";
 import { useBoardAddress } from "@/features/board/address";
 import { CustomizePage } from "@/features/customize";
 import { setupEnvironmentPrompt } from "@/features/session/lib/sessionPrompts";
@@ -119,6 +120,7 @@ export function MainLayout() {
   const expandRepo = useSidebarStore((s) => s.expandRepo);
 
   const board = useBoardAddress();
+  useFileVisit(selectedWorkspaceId);
   const settingsOpen = useUIStore((s) => s.settingsOpen);
   const automationsOpen = useUIStore((s) => s.automationsOpen);
   const openAutomations = useUIStore((s) => s.openAutomations);

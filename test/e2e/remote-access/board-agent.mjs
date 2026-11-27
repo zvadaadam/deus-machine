@@ -2,12 +2,14 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { DEUS_TOOLS_SERVER } from "../../../shared/mcp-servers.ts";
+import { reportReply } from "../lib/chat-file-link.mjs";
 import { installScriptedChat } from "../lib/scripted-chat.mjs";
 import { until } from "./stack.mjs";
 
 const call = (tool, args) => ({ call: { server: DEUS_TOOLS_SERVER, tool, arguments: args } });
 await installScriptedChat(async function* ({ input }) {
   if (input === "Open the remote release board") {
+    yield { say: reportReply };
     yield call("create_board", { name: "Remote release" });
     yield call("post_to_board", { body: "The release candidate is ready for review." });
     yield call("post_to_board", { body: "The smoke checks passed on the fixture Mac." });

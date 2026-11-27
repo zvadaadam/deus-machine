@@ -6,6 +6,7 @@ import { once } from "node:events";
 import { mkdir, mkdtemp, open, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { checkPhoneChatFile, reportReply } from "./lib/chat-file-link.mjs";
 import { installScriptedChat } from "./lib/scripted-chat.mjs";
 import Database from "better-sqlite3";
 import { chromium } from "playwright";
@@ -62,7 +63,7 @@ async function backendProcess() {
         body: "Release checklist\n\nThe build is ready for review.",
       });
       await release.promise;
-      yield { say: "The release checklist is ready." };
+      yield { say: "The release checklist is ready.\n\n" + reportReply };
     } else if (typeof input === "string" && input.endsWith(question)) {
       const { workspace } = await startPosts.promise;
       const sessions = yield call("list_sessions", {});
@@ -278,6 +279,11 @@ async function run() {
     const sid = board.delivery_session_id;
     await host.write("updateSessionTitle", { sessionId: sid, title: "Release room" });
     const workspace = await host.read("workspace", { workspaceId: board.workspace_id });
+    await mkdir(path.join(workspace.workspace_path, ".context"), { recursive: true });
+    await writeFile(
+      path.join(workspace.workspace_path, ".context/report.md"),
+      "# Release verification\n"
+    );
     assert.equal(workspace.role, "coordinator");
     assert.equal(new URL(page.url()).pathname, "/b/" + board.id);
     await page.reload();
@@ -447,6 +453,8 @@ async function run() {
       hasTouch: true,
     });
     const phone = await mobile.newPage();
+    await phone.goto(base + "s/local/w/" + workspace.id + "?session=" + sid);
+    await checkPhoneChatFile(phone);
     await phone.goto(base + "b/" + board.id + "?thread=1");
     await phone
       .getByRole("complementary", { name: "Thread" })

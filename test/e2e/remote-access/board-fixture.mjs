@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { connectBackend } from "../lib/operations.mjs";
 import { until } from "./stack.mjs";
@@ -14,7 +14,9 @@ export function boardChatTurn(write, sessionId, content) {
 }
 
 export async function seedBoard(host, { dir, workspace }) {
-  await mkdir(path.join(dir, ".deus", "remote"), { recursive: true });
+  const context = path.join(dir, ".deus", "remote", ".context");
+  await mkdir(context, { recursive: true });
+  await writeFile(path.join(context, "report.md"), "# Release verification\n");
   const mac = await connectBackend(host.url);
   try {
     await mac.write("makeCoordinator", { workspaceId: workspace });
