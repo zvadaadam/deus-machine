@@ -249,9 +249,9 @@ try {
   check("the local `/` menu lists the skill in the workspace's own folder");
 
   await composer().fill("/");
-  const planAction = page.getByRole("button", { name: /Enter plan mode/ });
+  const planAction = page.getByRole("option", { name: /Enter plan mode/ });
   await planAction.waitFor();
-  assert.equal(await planAction.getAttribute("data-selected"), "true");
+  assert.equal(await planAction.getAttribute("aria-selected"), "true");
   assert.equal(await page.getByText("A project-specific planning command").count(), 0);
   await planAction.click();
   const chip = page.getByRole("button", { name: "Exit plan mode", exact: true });

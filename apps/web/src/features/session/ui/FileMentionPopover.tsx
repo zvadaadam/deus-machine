@@ -1,16 +1,10 @@
-/**
- * FileMentionPopover — Sheet list of file search results for @ mentions
- *
- * Renders inside the InputGroup as a sheet that slides out above the textarea
- * when the user types @ to mention a file. Matches the SlashCommandPopover style.
- */
-
 import { useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import type { FuzzyFileResult } from "../hooks/useFileMention";
 
 interface FileMentionPopoverProps {
+  getOptionId: (value: string) => string;
   results: FuzzyFileResult[];
   loading: boolean;
   selectedIndex: number;
@@ -44,6 +38,7 @@ function highlightMatch(text: string, query: string) {
 }
 
 export function FileMentionPopover({
+  getOptionId,
   results,
   loading,
   selectedIndex,
@@ -55,26 +50,26 @@ export function FileMentionPopover({
   // Auto-scroll selected item into view
   useEffect(() => {
     if (!listRef.current) return;
-    const selectedEl = listRef.current.querySelector<HTMLElement>('[data-selected="true"]');
+    const selectedEl = listRef.current.querySelector<HTMLElement>('[aria-selected="true"]');
     selectedEl?.scrollIntoView({ block: "nearest" });
   }, [selectedIndex]);
 
   if (results.length === 0 && !loading) {
     return (
-      <div className="border-border/50 bg-muted/20 w-full border-b">
-        <div className="text-foreground/80 px-4 py-3 text-sm font-medium">Files</div>
+      <>
+        <div className="text-foreground/80 shrink-0 px-4 py-3 text-sm font-medium">Files</div>
         <div className="px-4 pb-4">
           <p className="text-muted-foreground text-xs">
             {query ? "No files found" : "Type to search files"}
           </p>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="border-border/50 bg-muted/20 w-full border-b">
-      <div className="text-foreground/80 px-4 py-3 text-sm font-medium">Files</div>
+    <>
+      <div className="text-foreground/80 shrink-0 px-4 py-3 text-sm font-medium">Files</div>
 
       {loading && results.length === 0 ? (
         <div className="text-muted-foreground flex items-center gap-1.5 px-4 pb-4 text-xs">
@@ -82,7 +77,7 @@ export function FileMentionPopover({
           <span>Searching...</span>
         </div>
       ) : (
-        <div ref={listRef} className="max-h-[320px] overflow-y-auto px-2 pb-2">
+        <div ref={listRef} className="min-h-0 overflow-y-auto overscroll-contain px-2 pb-2">
           {results.map((result, index) => {
             const dir = getDirectory(result.path);
             const isSelected = index === selectedIndex;
@@ -91,7 +86,9 @@ export function FileMentionPopover({
               <button
                 type="button"
                 key={result.path}
-                data-selected={isSelected ? "true" : undefined}
+                role="option"
+                id={getOptionId(result.path)}
+                aria-selected={isSelected}
                 className={cn(
                   "control-interaction flex w-full items-start rounded-lg px-3 py-2 text-left",
                   isSelected ? "bg-accent text-accent-foreground" : "hover:bg-accent/40"
@@ -131,6 +128,6 @@ export function FileMentionPopover({
           })}
         </div>
       )}
-    </div>
+    </>
   );
 }

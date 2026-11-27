@@ -17,8 +17,8 @@
 
 import type { OpenChatWithModel } from "@/shared/agents/picker";
 import { tempo } from "@/shared/lib/tempo";
-import { Collapse } from "@/components/ui/collapse";
-import { useEffect } from "react";
+import { ComposerTray } from "./ComposerTray";
+import { useEffect, useId } from "react";
 import type { SessionStatus } from "@/shared/types";
 import { agentConfigOf } from "@/features/workspace/lib/reach";
 import { locationOf } from "@/features/sidebar/lib/location";
@@ -348,6 +348,20 @@ export function MessageInput({
       composer.addSkillMention({ name: skill.name, description: skill.description }),
   });
 
+  const composerId = useId();
+  const showSlash =
+    slashCommand.isOpen &&
+    (slashCommand.loading || !!slashCommand.query || slashCommand.results.length > 0);
+  const listId = showSlash
+    ? `${composerId}-slash`
+    : fileMention.isOpen
+      ? `${composerId}-files`
+      : undefined;
+  const getOptionId = (value: string) => `${listId}-${encodeURIComponent(value)}`;
+  const selected = showSlash
+    ? slashCommand.results[slashCommand.selectedIndex]?.name
+    : fileMention.results[fileMention.selectedIndex]?.path;
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Popovers get first pass at arrow/enter/escape.
     if (slashCommand.handleKeyDown(e)) {
@@ -450,162 +464,161 @@ export function MessageInput({
         />
       )}
 
-      <ComposerInputGroup>
-        <MissingAttachments
-          pictures={composer.missingPictures}
-          pastedTexts={composer.missingPastedTexts}
-          onDismiss={composer.dismissMissingAttachments}
-        />
-        {disabledReason &&
-          (sendDisabledReason ||
-            modelLists.find((list) => list.harness === agentHarness)?.unanswered !== "pending") && (
-            <p className="text-text-muted w-full px-4 pt-2 text-xs">{disabledReason}</p>
-          )}
-        <ComposerStagedContent
-          skillMentions={skillMentions}
-          inspectedElements={inspectedElements}
-          fileMentions={fileMentions}
-          imageAttachments={imageAttachments}
-          pastedTexts={pastedTexts}
-          onRemoveSkill={composer.removeSkillMention}
-          onRemoveInspectedElement={composer.removeInspectedElement}
-          onRemoveFileMention={composer.removeFileMention}
-          onRemoveImage={composer.removeImageAttachment}
-          onRemovePastedText={composer.removePastedText}
-        />
-
+      <div className="relative isolate [&>[data-slot=input-group]]:z-10">
         <AnimatePresence initial={false}>
-          {slashCommand.isOpen && (
-            <Collapse key="slash-command-sheet" tier="fast" className="w-full">
-              <SlashCommandPopover
-                results={slashCommand.results}
-                loading={slashCommand.loading}
-                selectedIndex={slashCommand.selectedIndex}
-                query={slashCommand.query}
-                onSelect={slashCommand.selectItem}
-              />
-            </Collapse>
+          {listId && (
+            <ComposerTray id={listId} label={showSlash ? "Skills and commands" : "Files"}>
+              {showSlash ? (
+                <SlashCommandPopover
+                  getOptionId={getOptionId}
+                  {...slashCommand}
+                  onSelect={slashCommand.selectItem}
+                />
+              ) : (
+                <FileMentionPopover
+                  getOptionId={getOptionId}
+                  {...fileMention}
+                  onSelect={fileMention.selectFile}
+                />
+              )}
+            </ComposerTray>
           )}
         </AnimatePresence>
+        <ComposerInputGroup>
+          <MissingAttachments
+            pictures={composer.missingPictures}
+            pastedTexts={composer.missingPastedTexts}
+            onDismiss={composer.dismissMissingAttachments}
+          />
+          {disabledReason &&
+            (sendDisabledReason ||
+              modelLists.find((list) => list.harness === agentHarness)?.unanswered !==
+                "pending") && (
+              <p className="text-text-muted w-full px-4 pt-2 text-xs">{disabledReason}</p>
+            )}
+          <ComposerStagedContent
+            skillMentions={skillMentions}
+            inspectedElements={inspectedElements}
+            fileMentions={fileMentions}
+            imageAttachments={imageAttachments}
+            pastedTexts={pastedTexts}
+            onRemoveSkill={composer.removeSkillMention}
+            onRemoveInspectedElement={composer.removeInspectedElement}
+            onRemoveFileMention={composer.removeFileMention}
+            onRemoveImage={composer.removeImageAttachment}
+            onRemovePastedText={composer.removePastedText}
+          />
 
-        <AnimatePresence initial={false}>
-          {fileMention.isOpen && (
-            <Collapse key="file-mention-sheet" tier="fast" className="w-full">
-              <FileMentionPopover
-                results={fileMention.results}
-                loading={fileMention.loading}
-                selectedIndex={fileMention.selectedIndex}
-                query={fileMention.query}
-                onSelect={fileMention.selectFile}
+          <InputGroupTextarea
+            aria-expanded={listId ? true : undefined}
+            aria-controls={listId}
+            aria-activedescendant={
+              listId && selected !== undefined ? getOptionId(selected) : undefined
+            }
+            value={draft}
+            onChange={(e) => {
+              composer.setDraft(e.target.value);
+              fileMention.handleCursorChange(e);
+            }}
+            onPaste={handlePaste}
+            // @ files and / skills read the Mac backend — web-direct has none, so
+            // the hint would promise pickers that come back empty. A cloud chat's
+            // `/` menu lists only what reaches a cloud turn: named when it has any.
+            placeholder={
+              placeholder ??
+              (isCloudDirectWebMode()
+                ? "Ask a follow-up…"
+                : isClaudeAgent && (agentConfig.where !== "cloud" || cloudSlashItems.length > 0)
+                  ? "Ask a follow-up… (@ files, / skills)"
+                  : "Ask a follow-up… (@ files)")
+            }
+            disabled={sending}
+            onKeyDown={handleKeyDown}
+            onSelect={fileMention.handleCursorChange}
+            onClick={fileMention.handleCursorChange}
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            className="placeholder:text-placeholder max-h-48 min-h-12 overflow-y-auto px-4 py-3"
+          />
+
+          <InputGroupAddon
+            align="block-end"
+            className="flex w-full flex-wrap items-center justify-between gap-x-2 gap-y-1 px-2 pt-0 pb-2"
+          >
+            <div className="flex items-center gap-0.5">
+              <ModelPicker
+                model={model}
+                agentHarness={agentHarness}
+                lists={modelLists}
+                gateways={selection.gateways}
+                previousGateway={selection.previousGateway}
+                previousLabel={selection.previousLabel}
+                thinkingLevel={shownThinking}
+                preferredThinking={thinkingLevel}
+                defaultThinking={defaultThinking}
+                hasMessages={hasMessages}
+                onModelChange={(option, level) => {
+                  if (level !== undefined) composer.pickModel(option.value, level);
+                  else
+                    composer.setModel(
+                      option.value,
+                      listIsLive(option.agentHarness) ? option.thinking?.levels : undefined
+                    );
+                }}
+                onThinkingLevelChange={composer.setThinkingLevel}
+                onOpenNewTab={onOpenNewTab}
               />
-            </Collapse>
-          )}
-        </AnimatePresence>
+              {showPlanMode && planModeEnabled && (
+                <PlanModeToggle onClick={composer.togglePlanMode} />
+              )}
+            </div>
 
-        <InputGroupTextarea
-          value={draft}
-          onChange={(e) => {
-            composer.setDraft(e.target.value);
-            fileMention.handleCursorChange(e);
-          }}
-          onPaste={handlePaste}
-          // @ files and / skills read the Mac backend — web-direct has none, so
-          // the hint would promise pickers that come back empty. A cloud chat's
-          // `/` menu lists only what reaches a cloud turn: named when it has any.
-          placeholder={
-            placeholder ??
-            (isCloudDirectWebMode()
-              ? "Ask a follow-up…"
-              : isClaudeAgent && (agentConfig.where !== "cloud" || cloudSlashItems.length > 0)
-                ? "Ask a follow-up… (@ files, / skills)"
-                : "Ask a follow-up… (@ files)")
-          }
-          disabled={sending}
-          onKeyDown={handleKeyDown}
-          onSelect={fileMention.handleCursorChange}
-          onClick={fileMention.handleCursorChange}
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          className="placeholder:text-placeholder max-h-48 min-h-12 overflow-y-auto px-4 py-3"
-        />
+            <div className="ml-auto flex shrink-0 items-center gap-1">
+              {showCompactButton && (
+                <Button
+                  onClick={onCompact}
+                  disabled={sending}
+                  title="Compact conversation"
+                  variant="ghost"
+                  size="sm"
+                  className="text-warning border"
+                >
+                  <Minimize2 className="size-3.5" />
+                  <span className="text-xs font-normal">Compact</span>
+                </Button>
+              )}
 
-        <InputGroupAddon
-          align="block-end"
-          className="flex w-full flex-wrap items-center justify-between gap-x-2 gap-y-1 px-2 pt-0 pb-2"
-        >
-          <div className="flex items-center gap-0.5">
-            <ModelPicker
-              model={model}
-              agentHarness={agentHarness}
-              lists={modelLists}
-              gateways={selection.gateways}
-              previousGateway={selection.previousGateway}
-              previousLabel={selection.previousLabel}
-              thinkingLevel={shownThinking}
-              preferredThinking={thinkingLevel}
-              defaultThinking={defaultThinking}
-              hasMessages={hasMessages}
-              onModelChange={(option, level) => {
-                if (level !== undefined) composer.pickModel(option.value, level);
-                else
-                  composer.setModel(
-                    option.value,
-                    listIsLive(option.agentHarness) ? option.thinking?.levels : undefined
-                  );
-              }}
-              onThinkingLevelChange={composer.setThinkingLevel}
-              onOpenNewTab={onOpenNewTab}
-            />
-            {showPlanMode && planModeEnabled && (
-              <PlanModeToggle onClick={composer.togglePlanMode} />
-            )}
-          </div>
+              <ContextTokenIndicator
+                contextTokenCount={contextTokenCount}
+                contextUsedPercent={contextUsedPercent}
+                onCompact={onCompact}
+              />
 
-          <div className="ml-auto flex shrink-0 items-center gap-1">
-            {showCompactButton && (
-              <Button
-                onClick={onCompact}
-                disabled={sending}
-                title="Compact conversation"
-                variant="ghost"
-                size="sm"
-                className="text-warning border"
-              >
-                <Minimize2 className="size-3.5" />
-                <span className="text-xs font-normal">Compact</span>
-              </Button>
-            )}
+              {sessionStatus && ACTIVE_TURN_STATUSES.includes(sessionStatus) && (
+                <InputGroupButton
+                  onClick={onStop}
+                  variant="default"
+                  size="icon-sm"
+                  title="Stop execution"
+                  aria-label="Stop execution"
+                  className="rounded-full"
+                >
+                  <Square className="h-3.5 w-3.5 fill-current" />
+                </InputGroupButton>
+              )}
 
-            <ContextTokenIndicator
-              contextTokenCount={contextTokenCount}
-              contextUsedPercent={contextUsedPercent}
-              onCompact={onCompact}
-            />
-
-            {sessionStatus && ACTIVE_TURN_STATUSES.includes(sessionStatus) && (
-              <InputGroupButton
-                onClick={onStop}
-                variant="default"
-                size="icon-sm"
-                title="Stop execution"
-                aria-label="Stop execution"
-                className="rounded-full"
-              >
-                <Square className="h-3.5 w-3.5 fill-current" />
-              </InputGroupButton>
-            )}
-
-            <ComposerSendButton
-              onClick={() => void handleSend()}
-              disabled={!canSend}
-              hasContent={hasContent}
-              title={disabledReason ?? sendTitle}
-              aria-label={sendLabel}
-            />
-          </div>
-        </InputGroupAddon>
-      </ComposerInputGroup>
+              <ComposerSendButton
+                onClick={() => void handleSend()}
+                disabled={!canSend}
+                hasContent={hasContent}
+                title={disabledReason ?? sendTitle}
+                aria-label={sendLabel}
+              />
+            </div>
+          </InputGroupAddon>
+        </ComposerInputGroup>
+      </div>
     </div>
   );
 }

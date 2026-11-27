@@ -495,6 +495,26 @@ describe("the /plan action", () => {
     expect(html).not.toContain('aria-label="Exit plan mode"');
   });
 
+  it("links the textarea to its open list and the option Enter will choose", () => {
+    const draw = (draft: string) => {
+      setDraft(draft);
+      return renderInput({ sessionId, initialModel: model, workspaceKind: "worktree" });
+    };
+    const html = draw("/pl");
+    const field = controls.input.mock.lastCall![0];
+    expect(field["aria-expanded"]).toBe(true);
+    expect(html.match(/<div[^>]*role="listbox"[^>]*>/)?.[0]).toContain(
+      `id="${field["aria-controls"]}"`
+    );
+    const selected = html.match(/<button[^>]*aria-selected="true"[^>]*>/)?.[0];
+    expect(selected).toContain('role="option"');
+    expect(selected).toContain(`id="${field["aria-activedescendant"]}"`);
+    draw("/no-match");
+    expect(controls.input.mock.lastCall![0]["aria-activedescendant"]).toBeUndefined();
+    draw("Continue");
+    expect(controls.input.mock.lastCall![0]["aria-controls"]).toBeUndefined();
+  });
+
   it("runs the Codex menu action, clears the query, and lets the chip or a bare send turn Plan off", () => {
     const send = vi.fn();
     const draw = () =>
