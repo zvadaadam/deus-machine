@@ -3867,6 +3867,23 @@ describe("a coordinator hears from the workspaces it started", () => {
     expect(wakeText()).not.toContain("read_session");
   });
 
+  it("signs a wake with the first worker that still exists", async () => {
+    await busyLead("L");
+    await brief("p1", "a1");
+    await brief("p2", "b1");
+    as("p1", () => end("a1"));
+    as("p2", () => end("b1"));
+    await settle();
+    db.exec("DELETE FROM sessions WHERE id = 'p1'; DELETE FROM workspaces WHERE id = 'w-p1'");
+    endLead("L");
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(2));
+    expect(leadStarts()[1]!.origin).toEqual({ kind: "session", sessionId: "p2" });
+    expect(wakeText()).toContain("A workspace you started (its project was removed) finished.");
+    expect(wakeText()).toMatch(
+      /read_session "piece-2:1" for the rest\.$|e\.g\. read_session "piece-2:1"\.$/
+    );
+  });
+
   it("keeps a recovery's failure when its cancel confirms before the end", async () => {
     await brief("p1", "a1");
     engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "a1" });

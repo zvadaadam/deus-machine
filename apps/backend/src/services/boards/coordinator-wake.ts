@@ -134,8 +134,9 @@ async function flush(coordinator: string) {
     if (!news.size && held.get(coordinator) === news) held.delete(coordinator);
   };
   if (!lines.length) return done();
-  const first = lines[0]!;
-  const named = lines.find((line) => line.ref)?.ref;
+  // Signed by the first worker that still exists; a removed one's chat is gone.
+  const first = lines.find((line) => line.ref) ?? lines[0]!;
+  const named = first.ref;
   const content = [
     "Deus: news about workspaces you started. Deus wrote this, not the workspace.",
     ...lines.map((line) => line.text),
