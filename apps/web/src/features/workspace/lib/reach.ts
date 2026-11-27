@@ -145,10 +145,7 @@ const SHOWN_AS_TEXT = /\.(?:html?|md|mdx|csv|tsv)$/iu;
 
 /** A workspace file from the chat, by what the click asks for. */
 export function openFile(path: string, place: ChatPlace, how: FileHow): ChatOpening {
-  if (place.fileTab === false && (how === "files" || how === "preview")) {
-    return { to: "file-viewer", path };
-  }
-  return match(how)
+  const opening = match(how)
     .with("files", "changes", (target) => ({ to: "files" as const, path, target }))
     .with("preview", () =>
       !place.cloud
@@ -165,4 +162,7 @@ export function openFile(path: string, place: ChatPlace, how: FileHow): ChatOpen
       place.folder ? { to: "finder" as const, path } : { to: "none" as const }
     )
     .exhaustive();
+  return opening.to === "files" && opening.target === "files" && place.fileTab === false
+    ? { to: "file-viewer", path }
+    : opening;
 }

@@ -20,7 +20,8 @@ function isMarkdownFile(filePath: string): boolean {
 interface FileViewerProps {
   workspaceId: string;
   workspaceName?: string;
-  header?: (hasCheckout: boolean) => ReactNode;
+  header?: (hasCheckout: boolean, recheckCheckout: () => Promise<boolean>) => ReactNode;
+  onPreviewBinary?: () => void;
   /** Relative path within the workspace */
   filePath: string;
   /** Optional close handler — renders a close button in the header */
@@ -47,6 +48,7 @@ export function FileViewer({
   workspaceId,
   workspaceName,
   header,
+  onPreviewBinary,
   filePath,
   onClose,
   onRevealInFiles,
@@ -80,6 +82,7 @@ export function FileViewer({
     data: content,
     isLoading: isContentLoading,
     isFetching,
+    refetch,
     error,
   } = useFileContent(workspaceId, filePath);
 
@@ -93,6 +96,14 @@ export function FileViewer({
 
   const failure = error && getErrorMessage(error);
   const filesGone = failure === WORKSPACE_FILES_GONE;
+  const binary = failure === "binary_file";
+  const message = binary
+    ? `${filename} can't be shown here.`
+    : filesGone && workspaceName
+      ? `${workspaceName}'s files are gone.`
+      : workspaceName && failure === "File not found"
+        ? `This file isn't in ${workspaceName} any more.`
+        : failure;
   const isEmpty = content != null && content.length === 0;
   const lines = content?.split("\n") || [];
   const isLoading = isContentLoading || isHighlighting;
@@ -118,7 +129,10 @@ export function FileViewer({
 
   return (
     <div className="bg-background flex h-full flex-col overflow-hidden">
-      {header?.(!isFetching && !filesGone)}
+      {header?.(!isFetching && !filesGone, async () => {
+        const result = await refetch();
+        return getErrorMessage(result.error) !== WORKSPACE_FILES_GONE;
+      })}
       {/* Header - Fixed at top, h-10 matches DiffViewer */}
       <div className="border-border-subtle flex-shrink-0 border-b">
         <div className="flex h-10 items-center justify-between gap-4 px-4">
@@ -219,13 +233,16 @@ export function FileViewer({
         ) : error ? (
           <div className="text-muted-foreground/60 flex h-64 items-center justify-center">
             <div className="flex max-w-sm flex-col items-center gap-2 text-center">
-              <p className="text-sm">
-                {filesGone && workspaceName
-                  ? `${workspaceName}'s files are gone.`
-                  : workspaceName && failure === "File not found"
-                    ? `This file isn't in ${workspaceName} any more.`
-                    : failure}
-              </p>
+              <p className="text-sm">{message}</p>
+              {binary && onPreviewBinary && (
+                <button
+                  type="button"
+                  className="text-foreground text-sm underline"
+                  onClick={onPreviewBinary}
+                >
+                  Open preview
+                </button>
+              )}
             </div>
           </div>
         ) : isEmpty || lines.length === 0 ? (

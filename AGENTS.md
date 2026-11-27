@@ -785,7 +785,8 @@ addresses typed in New Tab. In the cloud an internet address opens in the person
 A localhost address opens at its port in the cloud preview, which waits for the computer's
 address. An external link can be retried once the address arrives. A desktop chat file opens in its
 own File tab, or in Changes when requested. On a phone or a board, a file link opens the
-full-screen file viewer. Back closes it and returns to the same place.
+full-screen file viewer for a Files request. Back closes it and returns to the same place.
+Every board chip requests Files. Chat’s explicit browser previews still open in the browser on a phone.
 If the cloud computer cannot show the file, the chat says so.
 `session/lib/openFromChat.ts` carries out the rule. For a local file preview, the desktop opens
 its Browser tab. On desktop web the click opens a tab while Deus asks the host for the

@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@shared/api";
 import { getErrorMessage } from "@shared/lib/errors";
+import { appHistory } from "@/shared/lib/appHistory";
 import { isMobileViewport } from "@/shared/hooks/use-mobile";
 import { runtimeForQueryClient, getRuntimeClient } from "@/platform/ws";
 import type { MarkdownFileLinkResolution } from "@/components/markdown/MarkdownRenderer";
@@ -42,7 +43,7 @@ export function useWorkspaceLinks(
       const opening = openFile(
         path,
         { cloud, folder, fileTab: !fromBoard && !isMobileViewport() },
-        fileHow(path)
+        fileHow(path, fromBoard)
       );
       const target = opening.to === "file-preview" ? "browser" : "file";
       return {
@@ -59,10 +60,16 @@ export function useWorkspaceLinks(
       if (!workspaceId) return;
       const place = fromBoard ? boardPlace : chatPlaceNow(workspaceId, { cloud, folder });
       if (fromBoard && absolutePath(path)) {
+        const visit = appHistory().location;
         const runtime = runtimeForQueryClient(cache) ?? getRuntimeClient();
         try {
           const workspace = await runtime.call(api.workspace, { workspaceId });
-          if (runtime.getState() === "disposed" || runtime.getState() === "revoked") return;
+          if (
+            visit !== appHistory().location ||
+            runtime.getState() === "disposed" ||
+            runtime.getState() === "revoked"
+          )
+            return;
           const relative = workspace && normalizeResourcePath(path, localFolder(workspace));
           if (!relative) {
             toast(outside);
@@ -70,11 +77,11 @@ export function useWorkspaceLinks(
           }
           path = relative;
         } catch (error) {
-          toast.error(getErrorMessage(error));
+          if (visit === appHistory().location) toast.error(getErrorMessage(error));
           return;
         }
       }
-      await openFromChat(workspaceId, openFile(path, place, fileHow(path)));
+      await openFromChat(workspaceId, openFile(path, place, fileHow(path, fromBoard)));
     },
     [workspaceId, fromBoard, folder, cloud, cache]
   );
@@ -113,7 +120,8 @@ function looksLikeWorkspaceFileHref(href: string): boolean {
   );
 }
 
-const fileHow = (path: string) => (isBrowserPreviewPath(path) ? "preview" : "files");
+const fileHow = (path: string, fromBoard: boolean) =>
+  !fromBoard && isBrowserPreviewPath(path) ? "preview" : "files";
 
 function workspaceLinkPath(href: string): string | null {
   const fileUrl = /^file:\/\//iu.test(href);

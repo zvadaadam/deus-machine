@@ -3,7 +3,17 @@
 import assert from "node:assert/strict";
 import { execFileSync, fork } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, mkdtemp, open, rename, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  open,
+  readFile,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { openBoardReport } from "./lib/board-file.mjs";
@@ -73,7 +83,7 @@ async function backendProcess() {
       yield call("post_to_board", {
         body:
           answer +
-          "\n\n[report.md](.context/report.md) · [outside](../outside.md) · [moved](moved.md) · [linked](linked.md)",
+          "\n\n[report.md](.context/report.md) · [outside](../outside.md) · [moved](moved.md) · [linked](linked.md) · [icon](icon.png)",
         workspace,
       });
     } else if (input === "Publish the checklist history") {
@@ -318,6 +328,10 @@ async function run() {
       path.join(subject.workspace_path, ".context/report.md"),
       "# " + reportTitle + "\n"
     );
+    await copyFile(
+      path.join(root, "apps/web/public/favicon-16x16.png"),
+      path.join(subject.workspace_path, "icon.png")
+    );
     await writeFile(path.join(dir, "outside.md"), "Outside this workspace");
     await symlink(path.join(dir, "outside.md"), path.join(subject.workspace_path, "linked.md"));
     child.send({ workspace: subject.slug, own: workspace.slug });
@@ -391,11 +405,31 @@ async function run() {
     await page.getByRole("heading", { name: reportTitle, exact: true }).waitFor();
     assert.equal(await desktopFile.count(), 0);
     await page.goto(base + "b/" + board.id + "?thread=1");
+    await thread.getByRole("button", { name: "icon.png" }).click();
+    await desktopFile.getByText("icon.png can't be shown here.", { exact: true }).waitFor();
+    await desktopFile.getByRole("button", { name: "Open in workspace" }).click();
+    await page.getByRole("button", { name: "Show in Files" }).waitFor();
+    await page.getByRole("button", { name: "Open preview" }).click();
+    const preview = await page.waitForFunction(async (id) => {
+      const { workspaceLayoutActions: layout } =
+        await import("/src/features/workspace/store/workspaceLayoutStore.ts");
+      const { workspaceTabs, activeWorkspaceTabId } = layout.getLayout(id);
+      const tab = workspaceTabs.find((t) => t.id === activeWorkspaceTabId);
+      return tab?.kind === "browser" && tab.url;
+    }, subject.id);
+    const image = await page.request.get(await preview.jsonValue());
+    assert.equal(image.headers()["content-type"], "image/png");
+    assert.deepEqual(
+      await image.body(),
+      await readFile(path.join(subject.workspace_path, "icon.png"))
+    );
+    await page.goto(base + "b/" + board.id + "?thread=1");
     const outside = thread.getByRole("button", { name: "outside.md .." });
     assert.ok(await outside.isDisabled());
     await thread.getByRole("button", { name: "linked.md" }).click();
     await desktopFile.getByText("Invalid file path", { exact: true }).waitFor();
     await desktopFile.getByRole("button", { name: "Close", exact: true }).click();
+    await page.waitForFunction(() => document.activeElement?.textContent === "linked.md");
     await thread.getByRole("button", { name: "moved.md" }).click();
     await desktopFile.getByText("This file isn't in Mobile verification any more.").waitFor();
     await desktopFile.getByRole("button", { name: "Close", exact: true }).click();
@@ -484,7 +518,30 @@ async function run() {
     });
     const phone = await mobile.newPage();
     await phone.goto(base + "s/local/w/" + workspace.id + "?session=" + sid);
+    await phone.getByRole("log").waitFor();
+    // A returning desktop reader already has two File tabs. A temporary phone visit borrows one.
+    const previousTab = await phone.evaluate(async (id) => {
+      const { workspaceLayoutActions: layout } =
+        await import("/src/features/workspace/store/workspaceLayoutStore.ts");
+      layout.openFileInContent(id, ".context/report.md", "files");
+      const tab = layout.openFileInContent(id, "prior.md", "files");
+      layout.setPendingFileNavigation(id, null);
+      return tab;
+    }, workspace.id);
     await checkPhoneChatFile(phone);
+    const saved = await phone.evaluate(async (id) => {
+      const { workspaceLayoutActions: layout } =
+        await import("/src/features/workspace/store/workspaceLayoutStore.ts");
+      const { workspaceTabs, activeWorkspaceTabId } = layout.getLayout(id);
+      return {
+        files: workspaceTabs.filter((t) => t.kind === "file").map((t) => t.path),
+        activeWorkspaceTabId,
+      };
+    }, workspace.id);
+    assert.deepEqual(saved, {
+      files: [".context/report.md", "prior.md"],
+      activeWorkspaceTabId: previousTab,
+    });
     await phone.goto(base + "b/" + board.id + "?thread=1");
     await phone
       .getByRole("complementary", { name: "Thread" })
@@ -510,7 +567,13 @@ async function run() {
       await openBoardReport(client, "Mobile verification", reportTitle, true);
       await client.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
     }
+    await openBoardReport(phone, "Mobile verification", reportTitle, true);
     await rename(subject.workspace_path, subject.workspace_path + "-away");
+    await phoneFile.getByRole("button", { name: "Restore workspace" }).click();
+    await phoneFile.getByText("Mobile verification's files are gone.").waitFor();
+    assert.equal((await host.read("workspace", { workspaceId: subject.id })).state, "archived");
+    await phone.goBack();
+    await phoneFile.waitFor({ state: "detached" });
     await phone
       .getByRole("complementary", { name: "Thread" })
       .getByRole("button", { name: "report.md .context", exact: true })
