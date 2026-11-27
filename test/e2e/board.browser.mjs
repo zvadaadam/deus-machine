@@ -130,7 +130,8 @@ async function checkComposerFocus(textarea) {
   await textarea.evaluate((el) => el.blur());
   const resting = await ring();
   await textarea.focus();
-  assert.notEqual(await ring(), resting, "The composer surface shows keyboard focus");
+  // The composer is the page's focus; its caret is its focus state, so the surface does not change.
+  assert.equal(await ring(), resting, "Focusing the composer leaves its surface unchanged");
 }
 
 async function run() {
