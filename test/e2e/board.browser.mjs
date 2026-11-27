@@ -24,6 +24,25 @@ const planPrompt = "Read the release board in Plan mode";
 const handoff = "Can the coordinator take the handoff?";
 const historySize = 82; // Two full pages and a partial oldest page.
 
+async function fixtureMessage(child, timeout, send) {
+  if (child.exitCode !== null || child.signalCode !== null)
+    throw new Error(`Board fixture exited (${child.signalCode ?? child.exitCode})`);
+  const controller = new AbortController();
+  const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(timeout)]);
+  try {
+    const received = Promise.race([
+      once(child, "message", { signal }),
+      once(child, "exit", { signal }).then(([code, signal]) => {
+        throw new Error(`Board fixture exited (${signal ?? code})`);
+      }),
+    ]);
+    const [[message]] = await Promise.all([received, Promise.resolve().then(send)]);
+    return message;
+  } finally {
+    controller.abort();
+  }
+}
+
 async function backendProcess() {
   const release = Promise.withResolvers();
   const startPosts = Promise.withResolvers();
@@ -56,6 +75,19 @@ async function backendProcess() {
       yield call("post_to_board", {
         body: "Final checklist update\n\n" + "- Check passed.\n".repeat(12),
       });
+    } else if (input === "Start the handoff chat") {
+      const { own } = await startPosts.promise;
+      yield call("start_session", {
+        project: "Workbench",
+        workspace: own,
+        agent: "claude-code",
+        model: "sonnet",
+        message: "Open the handoff board",
+      });
+    } else if (typeof input === "string" && input.endsWith("Open the handoff board")) {
+      yield call("create_board", { name: "Release handoff" });
+    } else if (typeof input === "string" && input.startsWith("Archive chat ")) {
+      yield call("archive", { sessions: [input.slice("Archive chat ".length)] });
     } else if (input === planPrompt) {
       const read = yield call("read_board", {});
       assert.match(read.output, /Release checklist/);
@@ -70,7 +102,8 @@ async function backendProcess() {
   }
   await installScriptedChat(turn);
   const { getServerPort } = await import("../../apps/backend/src/server.ts");
-  await until(getServerPort);
+  const { isConnected } = await import("../../apps/backend/src/services/agent/index.ts");
+  await until(() => getServerPort() && isConnected(), 45000, "the scripted engine");
   process.send(getServerPort());
 }
 
@@ -87,6 +120,17 @@ function desktopBridge() {
     invoke: async () => null,
     getAppVersion: async () => "test",
   };
+}
+
+async function checkComposerFocus(textarea) {
+  const ring = () =>
+    textarea.evaluate((el) =>
+      getComputedStyle(el.closest("[data-slot=input-group]")).getPropertyValue("--tw-ring-shadow")
+    );
+  await textarea.evaluate((el) => el.blur());
+  const resting = await ring();
+  await textarea.focus();
+  assert.notEqual(await ring(), resting, "The composer surface shows keyboard focus");
 }
 
 async function run() {
@@ -143,7 +187,7 @@ async function run() {
   let host, vite, browser;
   let passed = false;
   try {
-    const [port] = await once(child, "message", { signal: AbortSignal.timeout(45000) });
+    const port = await fixtureMessage(child, 45000);
     host = await connectBackend("http://127.0.0.1:" + port);
     vite = await createServer({
       configFile: path.join(root, "apps/web/vite.config.ts"),
@@ -278,6 +322,7 @@ async function run() {
     await rootRow.getByRole("button", { name: "Reply in thread" }).click();
     const thread = page.getByRole("complementary", { name: "Thread" });
     const reply = thread.getByRole("textbox", { name: "Reply…" });
+    await checkComposerFocus(reply);
     const divider = page.getByRole("separator").and(page.locator("[data-slot=resizable-handle]"));
     await divider.waitFor({ state: "attached" });
     assert.equal(Number(await divider.getAttribute("aria-valuenow")), 55);
@@ -350,6 +395,7 @@ async function run() {
       .waitFor();
     const card = page.getByRole("link", { name: "Open #release-desk" });
     const chatBox = page.locator('[data-slot="main-content"] textarea').first();
+    await checkComposerFocus(chatBox);
     const sendChat = async (text) => {
       await chatBox.fill(text);
       await chatBox.press("Enter");
@@ -368,9 +414,7 @@ async function run() {
         permissionMode: "bypass_permissions",
       });
     await idle();
-    const planRead = once(child, "message", { signal: AbortSignal.timeout(18000) });
-    await sendChat("/plan " + planPrompt);
-    const [outcome] = await planRead;
+    const outcome = await fixtureMessage(child, 18000, () => sendChat("/plan " + planPrompt));
     assert.equal(outcome, "read-in-plan");
     await card.click();
     const channel = page.getByRole("textbox", { name: "Message #release-desk" });
@@ -413,6 +457,21 @@ async function run() {
     await phone.getByRole("complementary", { name: "Thread" }).waitFor();
     await phone.goBack();
     await phone.getByRole("region", { name: "Channel messages" }).waitFor();
+    // This phone has never selected a workspace in the fixture's cloud organization.
+    await phone.evaluate(async () => {
+      const { queryClient } = await import("/src/shared/api/queryClient.ts");
+      queryClient.setQueryData(["cloudOrganizations"], {
+        available: true,
+        accountId: "fixture",
+        defaultOrganizationId: "release",
+        items: [{ id: "release", name: "Release team", role: "owner", ready: true }],
+      });
+    });
+    await phone.getByRole("button", { name: "Toggle Sidebar", exact: true }).click();
+    await phone.getByRole("button", { name: /switch where workspaces run/ }).click();
+    await phone.getByRole("menuitem", { name: /Release team/ }).click();
+    await phone.waitForURL((url) => url.pathname.replace(/\/$/, "") === "/s/local");
+    await phone.locator("[aria-label='Channel messages']").waitFor({ state: "detached" });
 
     await page.setViewportSize({ width: 1024, height: 900 });
     await page.getByRole("button", { name: "Back to channel" }).waitFor();
@@ -463,21 +522,30 @@ async function run() {
     assert.equal(await page.getByRole("form", { name: "Channel message" }).count(), 0);
     await host.write("updateWorkspace", { workspaceId: board.workspace_id, state: "ready" });
     await boardRow.waitFor();
-    // A stored hidden chat is replaced automatically at delivery, including by a brand-new chat.
+    // The agent may archive a chat it started. Its board then delivers to the newest open chat.
+    await publish("Start the handoff chat");
+    await page.getByRole("button", { name: "release-handoff" }).click();
+    const handoffBoard = (await host.read("boards")).find((b) => b.name === "Release handoff");
+    const original = handoffBoard.delivery_session_id;
+    await idle();
     const replacement = await host.write("createSession", { workspaceId: board.workspace_id });
     await host.write("updateSessionTitle", {
       sessionId: replacement.id,
       title: "Release follow-up",
     });
-    const fixture = new Database(database);
-    fixture.prepare("UPDATE sessions SET is_hidden = 1 WHERE id = ?").run(sid);
-    fixture.close();
-    await channel.fill(handoff);
-    await channel.press("Enter");
+    await publish(`Archive chat ${original}`);
+    await until(
+      async () => (await host.read("session", { sessionId: original })).is_hidden,
+      10000,
+      "the agent archiving its board's original chat"
+    );
+    const handoffChannel = page.getByRole("textbox", { name: "Message #release-handoff" });
+    await handoffChannel.fill(handoff);
+    await handoffChannel.press("Enter");
     const switched = feed.getByRole("link", { name: "Sent to Coordinator · Release follow-up" });
     await switched.waitFor();
     assert.ok((await switched.getAttribute("href")).includes(replacement.id));
-    const switchedBoard = (await host.read("boards"))[0];
+    const switchedBoard = (await host.read("boards")).find((b) => b.id === handoffBoard.id);
     assert.equal(switchedBoard.delivery_session_id, replacement.id);
     await switched
       .locator("xpath=ancestor::article")

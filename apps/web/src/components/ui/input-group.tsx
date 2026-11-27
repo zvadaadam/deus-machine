@@ -164,10 +164,7 @@ export {
 /** The input surface and send control shared by chat and channel composers. */
 export function ComposerInputGroup({ children }: { children: React.ReactNode }) {
   return (
-    <InputGroup
-      data-no-ring
-      className="bg-bg-muted/75 ring-border-subtle relative overflow-visible rounded-2xl border-0 shadow-sm ring-1 backdrop-blur-xl"
-    >
+    <InputGroup className="bg-bg-muted/75 ring-border-subtle relative overflow-visible rounded-2xl border-0 shadow-sm ring-1 backdrop-blur-xl">
       {children}
     </InputGroup>
   );

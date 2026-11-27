@@ -82,18 +82,22 @@ export function createBoard(sessionId: string, name: string) {
 
 export function boardForChat(sessionId: string, explicit?: string): string {
   const rows = getDatabase()
-    .prepare<unknown[], { id: string }>(
-      `SELECT b.id FROM boards b
+    .prepare<unknown[], { id: string; name: string }>(
+      `SELECT b.id, b.name FROM boards b
     JOIN sessions s ON s.workspace_id = b.workspace_id WHERE s.id = ? AND NOT s.is_hidden
-    ${explicit === undefined ? "ORDER BY b.id LIMIT 2" : "AND b.id = ?"}`
+    ${explicit === undefined ? "ORDER BY b.name COLLATE NOCASE, b.id" : "AND b.id = ?"}`
     )
     .all(sessionId, ...(explicit === undefined ? [] : [explicit]));
   if (!rows.length)
     throw new NotFoundError(
       explicit ? "This workspace does not coordinate that board." : "Create a board first."
     );
-  if (rows.length > 1)
-    throw new ValidationError("This workspace has several boards. Give the board ID.");
+  if (rows.length > 1) {
+    const choices = rows.map(({ name, id }) => `${name} (${id})`).join("\n");
+    throw new ValidationError(
+      `This workspace has several boards. Pass one of these IDs as board.\n${choices}`
+    );
+  }
   return rows[0]!.id;
 }
 

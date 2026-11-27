@@ -16,6 +16,7 @@ import { useCloudOrganizations } from "@/shared/hooks/useCloudOrganizations";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
 import type { RepoGroup, Workspace } from "@/shared/types";
+import { leaveBoard } from "@/features/board/address";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
 import {
   cloudRowState,
@@ -179,7 +180,10 @@ export function useWindowPlace({
         ? groups.flatMap((g) => g.workspaces).find((w) => w.id === restoreId)
         : undefined;
       if (restore) openWorkspace(restore);
-      else selectWorkspace(null);
+      else {
+        leaveBoard();
+        selectWorkspace(null);
+      }
     },
     [openWorkspace, selectWorkspace]
   );

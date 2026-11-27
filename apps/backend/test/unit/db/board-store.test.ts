@@ -116,6 +116,14 @@ it("pins the chat’s board tools on first use and keeps a resumed conversation 
   expect(boardSource(createChat(db, "w", {}))).toBeDefined();
 });
 
+it("gives a fresh coordinator chat the names and IDs of all its workspace’s boards", () => {
+  const choices = ["Build", "QA", "Release"].map((name) => store.createBoard("s", name));
+  const fresh = createChat(db, "w", {});
+  const listed = choices.map(({ name, id }) => `${name} (${id})`).join("\n");
+  expect(() => store.boardForChat(fresh)).toThrow(listed);
+  for (const { id } of choices) expect(store.boardForChat(fresh, id)).toBe(id);
+});
+
 it("shares tools across coordinator chats and checks ownership and archive at call time", async () => {
   const call = (id: string, name: string, args: Record<string, unknown>) =>
     boardSource(id)!.call(
