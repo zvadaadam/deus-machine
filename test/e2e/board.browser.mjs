@@ -118,6 +118,7 @@ async function backendProcess() {
         body: [
           "@you Who should sign off on the mobile report?",
           ...options,
+          "",
           "The desktop checks have passed.",
         ].join("\n"),
       });

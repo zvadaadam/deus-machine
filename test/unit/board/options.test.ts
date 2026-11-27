@@ -12,9 +12,18 @@ it.each([
   expect(boardOptions(body)?.options.map((o) => o.text) ?? []).toEqual(choices);
 });
 
+it.each([
+  "1. Deploy now\n2. Wait\n   until the checks pass",
+  "1. Review the changes\n   - Check the logs\n2. Deploy now\n3. Stop",
+  "1. Approve\n2. Wait\n3. Run this\n   ```sh\n   check\n   ```",
+  "1. Approve\n2. Wait\nuntil the checks pass",
+])("keeps the whole run as Markdown when an option spans multiple lines in %j", (body) => {
+  expect(boardOptions(body)).toBeNull();
+});
+
 it("keeps the text on either side, including a second run of numbered lines", () => {
   const before = "@you Choose a shipment.";
-  const after = "Everything else continues.\n\n1. Check the logs\n2. File the report";
+  const after = "\nEverything else continues.\n\n1. Check the logs\n2. File the report";
   expect(boardOptions([before, "1) Retail", "2) Bulk", after].join("\n"))).toEqual({
     before,
     references: "",
