@@ -305,8 +305,10 @@ const lab = createLab({ root, agnt, directory });
 let mac;
 try {
   let seeded;
-  await lab.up(({ database, workspace }) => {
-    seeded = seedConversations(database, workspace);
+  await lab.up({
+    seed({ database, workspace }) {
+      seeded = seedConversations(database, workspace);
+    },
   });
   const { cloud, relay, issuer, sessions, hostDb } = lab;
   await lab.signIn();

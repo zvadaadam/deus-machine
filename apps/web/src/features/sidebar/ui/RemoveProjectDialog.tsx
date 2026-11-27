@@ -119,6 +119,7 @@ function RemovalDescription({ rootPath, folderExists, counts }: OutputOf<typeof 
             ? `Deus can’t find the project folder at ${abbreviatePath(rootPath)}.`
             : `The folder ${abbreviatePath(rootPath)}, its checkouts and its Git branches stay on disk.`}
       </p>
+      {archivedWorkspaces > 0 && <p>Deus also deletes any boards owned by those workspaces.</p>}
       {automations > 0 && (
         <p>
           Deus unlinks {automations} {automations === 1 ? "automation" : "automations"} from this

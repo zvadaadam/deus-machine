@@ -117,6 +117,7 @@ export function MobileLayout({
           workspaceId={workspace.id}
           repositoryId={workspace.repository_id}
           title={workspace.title ?? undefined}
+          coordinator={workspace.role === "coordinator"}
           repositoryName={workspace.repo_name}
           branch={workspace.git_branch ?? undefined}
           workspacePath={localFolder(workspace) ?? undefined}

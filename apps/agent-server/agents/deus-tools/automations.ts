@@ -10,7 +10,7 @@
 import { z } from "zod";
 import { getErrorMessage } from "@shared/lib/errors";
 import { HostRpc } from "../../host-link";
-import { type DeusTool, tool } from "./tool";
+import { type DeusTool, tool } from "@shared/host-tool";
 
 function textResult(text: string) {
   return { content: [{ type: "text" as const, text }] };

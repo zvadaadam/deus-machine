@@ -2,22 +2,22 @@ import { z } from "zod";
 import type { HostTool, HostToolResult } from "@zvada/agent-server/core";
 
 /** A Deus tool: what the engine shows the agent, and how it runs. */
-export interface DeusTool extends HostTool {
-  run(args: Record<string, unknown>): Promise<HostToolResult>;
+export interface DeusTool<Context extends unknown[] = []> extends HostTool {
+  run(args: Record<string, unknown>, ...context: Context): Promise<HostToolResult>;
 }
 
 /**
  * A tool from its arguments' zod shape: the agent is shown its JSON Schema,
  * and a call's arguments are checked against it before the handler runs.
  */
-export function tool<Shape extends z.ZodRawShape>(
+export function tool<Shape extends z.ZodRawShape, Context extends unknown[] = []>(
   name: string,
   description: string,
   shape: Shape,
   // An MCP result's shape, which the tool modules build loosely: one cast, here.
-  handler: (args: z.infer<z.ZodObject<Shape>>) => Promise<unknown>,
+  handler: (args: z.infer<z.ZodObject<Shape>>, ...context: Context) => Promise<unknown>,
   annotations?: HostTool["annotations"]
-): DeusTool {
+): DeusTool<Context> {
   const schema = z.object(shape);
   const { $schema: _draft, ...inputSchema } = z.toJSONSchema(schema, { io: "input" });
   return {
@@ -25,6 +25,7 @@ export function tool<Shape extends z.ZodRawShape>(
     description,
     inputSchema,
     annotations,
-    run: async (args) => (await handler(schema.parse(args))) as HostToolResult,
+    run: async (args, ...context) =>
+      (await handler(schema.parse(args), ...context)) as HostToolResult,
   };
 }

@@ -1,3 +1,4 @@
+import { sessionTools } from "../../../src/services/session-tools";
 // This computer as the operator tools' host (LLP 0019), against a scratch
 // SQLite database built from the fresh schema: its chats as sessions, read
 // from their rows; a turn sent, stopped and answered through the app's own
@@ -70,7 +71,6 @@ vi.mock(import("../../../src/services/agent/chat-turn"), async (original) => ({
   setupStop: () => undefined,
 }));
 vi.mock("../../../src/services/agent/service", () => ({
-  provideSessionTools: () => {},
   isConnected: () => false,
 }));
 vi.mock("../../../src/services/agent/tool-relay", () => ({
@@ -150,7 +150,7 @@ import { deleteFailedWorkspace } from "../../../src/services/workspace-lifecycle
 import { createDeusHost } from "../../../src/services/assistants/host";
 import * as access from "../../../src/services/assistants/access";
 import { getSetting } from "../../../src/services/settings.service";
-import { _resetOperator, withSessionTools } from "../../../src/services/assistants/operator";
+import { _resetOperator } from "../../../src/services/assistants/operator";
 import { READ_ONLY } from "../../../src/services/assistants/sentences";
 import { wireTestTurnNotices } from "../../fixtures/turn-notices";
 import { assistantCaller, operations } from "../../helpers";
@@ -254,13 +254,6 @@ beforeEach(() => {
   insertWorkspace("w-lead", "lead");
   insertChat("s-lead", "w-lead");
   state.ops = {
-    messages: () => ({
-      messages: [],
-      turns: [],
-      compactions: [],
-      has_older: false,
-      has_newer: false,
-    }),
     diffFiles: () => ({ files: [], total_count: 0 }),
     archiveWorkspace: ({ workspaceId }) => {
       state.db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
@@ -510,8 +503,6 @@ describe("sending and starting", () => {
     const host = createDeusHost();
     const read = vi.fn(state.ops.agentModels);
     state.ops.agentModels = read;
-    const history = vi.fn(state.ops.messages);
-    state.ops.messages = history;
     await expect(
       createOperator(host).call(
         "send_message",
@@ -522,8 +513,6 @@ describe("sending and starting", () => {
       code: "unsupported",
       message: expect.stringContaining('"future-agent" does not run here. Nothing was sent.'),
     });
-    // The operator views the chat at preflight. The host's settings read asks for its last 50.
-    expect(history).not.toHaveBeenCalledWith(expect.objectContaining({ limit: 50 }));
     expect(read).not.toHaveBeenCalled();
     expect(state.sent).toHaveLength(0);
   });
@@ -532,14 +521,14 @@ describe("sending and starting", () => {
     const host = createDeusHost();
     const read = vi.fn();
     state.ops.agentModels = read;
-    state.ops.messages = () => ({
-      turns: [
-        {
-          turnId: "t0",
-          execution: { harness: "claude-code", model: "older-model", thinkingLevel: "low" },
-        },
-      ],
-    });
+    state.db
+      .prepare("INSERT INTO turns (session_id, turn_id, started_at, execution) VALUES (?, ?, ?, ?)")
+      .run(
+        "s-lead",
+        "t0",
+        1,
+        JSON.stringify({ harness: "claude-code", model: "older-model", thinkingLevel: "low" })
+      );
     await host.send(LEAD as never, "s-lead", { turnId: "t1", message: "continue", origin: LEAD });
     expect(read).not.toHaveBeenCalled();
     expect(state.sent[0].input).toMatchObject({
@@ -547,6 +536,21 @@ describe("sending and starting", () => {
       model: "older-model",
       thinkingLevel: "low",
     });
+  });
+
+  it("leaves mode to the engine default on an operator follow-up after a Plan turn", async () => {
+    state.db
+      .prepare(
+        "INSERT INTO turns (session_id, turn_id, ended_at, execution) VALUES ('s-lead', 'plan', 1, ?)"
+      )
+      .run(JSON.stringify({ harness: "claude-code", model: "sonnet", permissionMode: "plan" }));
+    await createOperator(createDeusHost()).call(
+      "send_message",
+      { session: "lead:1", message: "continue", wait: 0 },
+      assistantWho()
+    );
+    expect(state.sent).toHaveLength(1);
+    expect(state.sent[0]!.input).not.toHaveProperty("permissionMode");
   });
 
   it("a send is the app's, with the minted turn id and the sender; a busy chat is refused as busy", async () => {
@@ -859,7 +863,7 @@ describe("through MCP and as a chat's own tools", () => {
     });
 
     it("lets a chat rename itself and its own workspace, and refuses both in plan mode", async () => {
-      const source = withSessionTools(deusTools("s-lead"));
+      const source = sessionTools("s-lead").compose(deusTools("s-lead"));
       const signal = new AbortController().signal;
       for (const target of [{ session: "lead:1" }, { workspace: "lead" }]) {
         const invoke = (permissionMode: "plan" | "bypass_permissions") =>
@@ -981,7 +985,7 @@ describe("through MCP and as a chat's own tools", () => {
     async (caller) => {
       const tools: readonly { name: string }[] =
         caller === "chat"
-          ? withSessionTools(deusTools("s-lead")).tools
+          ? sessionTools("s-lead").compose(deusTools("s-lead")).tools
           : (await mcp({ jsonrpc: "2.0", id: 1, method: "tools/list" }, assistantCaller("operate")))
               .result.tools;
       expect(tools.map((tool) => tool.name).filter((name) => /project|repo/i.test(name))).toEqual([
@@ -993,7 +997,10 @@ describe("through MCP and as a chat's own tools", () => {
   it("keeps each chat's instructions and tool list on the same setting after a change", async () => {
     for (const id of ["before", "after", "later"]) insertChat(id, "w-lead");
     let preference: boolean | null = false;
-    const tools = (id: string) => withSessionTools(deusTools(id)).tools.map((t) => t.name);
+    const tools = (id: string) =>
+      sessionTools(id)
+        .compose(deusTools(id))
+        .tools.map((t) => t.name);
     const instructions = (id: string) =>
       buildTurnStartParams(id, "turn", "gemini", "Check the build", {
         cwd: "/workspace",
@@ -1236,13 +1243,69 @@ describe("through MCP and as a chat's own tools", () => {
     expect(state.sent).toEqual([]);
   });
 
+  it("a coordinator in Plan can read its board and the package refuses every board write", async () => {
+    const base = { name: "deus", tools: [], call: vi.fn() };
+    const ordinary = new Set(
+      sessionTools("s-lead")
+        .compose(base)
+        .tools.map((tool) => tool.name)
+    );
+    state.db.exec("UPDATE workspaces SET role = 'coordinator' WHERE id = 'w-lead'");
+    insertChat("s-board", "w-lead");
+    const source = sessionTools("s-board").compose(base);
+    const boards = source.tools.filter((tool) => !ordinary.has(tool.name));
+    const caller = {
+      sessionId: "s-board",
+      harness: "claude-code",
+      turnId: "t",
+      permissionMode: "plan",
+    } as const;
+    const signal = new AbortController().signal;
+    const made = await source.call(
+      "create_board",
+      { name: "Release desk" },
+      { ...caller, permissionMode: "bypass_permissions" },
+      signal
+    );
+    expect(made.isError).toBeFalsy();
+    const read = await source.call("read_board", {}, caller, signal);
+    expect(read.isError).toBeFalsy();
+    expect(JSON.stringify(read.content)).toContain("Release desk");
+    expect(boards.filter((tool) => tool.annotations?.readOnly).map((tool) => tool.name)).toEqual([
+      "read_board",
+    ]);
+    const writes = boards.filter((tool) => !tool.annotations?.readOnly);
+    expect(writes.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(["create_board", "post_to_board"])
+    );
+    for (const tool of writes) {
+      expect(await source.call(tool.name, {}, caller, signal)).toMatchObject({
+        isError: true,
+        content: [{ text: expect.stringContaining("refused (read_only)") }],
+      });
+    }
+  });
+
+  it.each(["list_sessions", "post_to_board"])("refuses a base tool colliding with %s", (name) => {
+    state.db.exec("UPDATE workspaces SET role='coordinator' WHERE id='w-lead'");
+    insertChat("new-coordinator", "w-lead");
+    const assembly = sessionTools("new-coordinator");
+    expect(() =>
+      assembly.compose({
+        name: "base",
+        tools: [{ name, description: "base tool", inputSchema: { type: "object" } }],
+        call: vi.fn(),
+      })
+    ).toThrow(`Duplicate chat tool: ${name}`);
+  });
+
   it("a chat's tools are the operator's beside the Deus tools, each run by its own", async () => {
     const own = {
       name: "deus",
       tools: [{ name: "getDiff", description: "d", inputSchema: { type: "object" } }],
       call: vi.fn(async () => ({ content: [{ type: "text" as const, text: "own" }] })),
     };
-    const source = withSessionTools(own);
+    const source = sessionTools("s-lead").compose(own);
     expect(source.tools.map((t) => t.name)).toEqual(
       expect.arrayContaining(["getDiff", "send_message", "archive"])
     );
@@ -1463,10 +1526,10 @@ describe("each commit re-reads what it depends on, with no await before its writ
 
   it("H5: a workspace archived while a send reads its settings gets nothing; a stop and an answer there are refused", async () => {
     const host = createDeusHost();
-    state.ops.messages = () => {
+    // This chat has no recorded turn, so its send reads the default thinking level.
+    vi.mocked(getSetting).mockImplementationOnce(() => {
       state.db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = 'w-lead'").run();
-      return { messages: [], turns: [], compactions: [], has_older: false, has_newer: false };
-    };
+    });
     await expect(
       host.send(LEAD as never, "s-lead", { turnId: "t1", message: "hi", origin: LEAD })
     ).rejects.toMatchObject({ refusal: { code: "archived" } });
@@ -2128,7 +2191,11 @@ describe("the acceptance pass (F5, F7, F8, F9, F10)", () => {
   });
 
   it("F10: a caller in plan mode is refused start_session and send_message, which make nothing; list_sessions answers", async () => {
-    const source = withSessionTools({ name: "deus", tools: [], call: vi.fn() } as never);
+    const source = sessionTools("s-lead").compose({
+      name: "deus",
+      tools: [],
+      call: vi.fn(),
+    } as never);
     const caller = {
       sessionId: "s-lead",
       harness: "claude-code",

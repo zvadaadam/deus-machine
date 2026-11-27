@@ -74,7 +74,8 @@ interface MainContentProps {
     location?: "local" | "cloud",
     thinkingLevel?: ThinkingLevel,
     /** In the cloud, the organization it starts in; the backend's default when absent. */
-    organizationId?: string | null
+    organizationId?: string | null,
+    role?: "coordinator"
   ) => Promise<boolean>;
 }
 
@@ -278,6 +279,7 @@ export function MainContent({
                       workspaceId={selectedWorkspace.id}
                       repositoryId={selectedWorkspace.repository_id}
                       title={selectedWorkspace.title ?? undefined}
+                      coordinator={selectedWorkspace.role === "coordinator"}
                       repositoryName={selectedWorkspace.repo_name}
                       branch={selectedWorkspace.git_branch ?? undefined}
                       workspacePath={openableFolder(selectedWorkspace) ?? undefined}

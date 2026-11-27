@@ -18,6 +18,7 @@ import type { MarkdownFileLinkResolution } from "./MarkdownRenderer";
 interface ChatMarkdownProps {
   children: string;
   className?: string;
+  transformText?: React.ComponentProps<typeof MarkdownRenderer>["transformText"];
   /** Allow raw HTML (secured with sanitization) */
   allowHtml?: boolean;
   resolveFileLink?: (href: string, label: string) => MarkdownFileLinkResolution;
@@ -28,6 +29,7 @@ interface ChatMarkdownProps {
 export function ChatMarkdown({
   children,
   className,
+  transformText,
   allowHtml = false,
   resolveFileLink,
   onFileLinkOpen,
@@ -37,6 +39,7 @@ export function ChatMarkdown({
     <MarkdownRenderer
       allowHtml={allowHtml}
       className={className}
+      transformText={transformText}
       proseClassName="markdown-content"
       resolveFileLink={resolveFileLink}
       onFileLinkOpen={onFileLinkOpen}

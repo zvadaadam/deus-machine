@@ -73,6 +73,7 @@ export function withoutImageParts(input: AgentInput): AgentInput {
 export interface DeusTurnOptions {
   cwd: string;
   agentMessages: boolean;
+  toolInstructions?: string;
   model?: string;
   thinkingLevel?: ThinkingLevel;
   permissionMode?: PermissionMode;
@@ -112,12 +113,9 @@ export function buildTurnStartParams(
       cwd: options.cwd,
       model: options.model,
       thinkingLevel: options.thinkingLevel,
-      systemPromptAppend: buildSystemPromptAppend(
-        options.agentMessages,
-        options.cwd,
-        options.device,
-        options.setup
-      ),
+      systemPromptAppend:
+        buildSystemPromptAppend(options.agentMessages, options.cwd, options.device, options.setup) +
+        (options.toolInstructions ? "\n" + options.toolInstructions : ""),
       // Deus runs with full access by default, like its cloud runtime.
       // Explicit modes (including the composer's plan mode) stay unchanged.
       permissionMode: options.permissionMode ?? "bypass_permissions",

@@ -7,7 +7,7 @@ export const help = `deus-remote-lab — drive a disposable Deus stack on loopba
 Set AGNT_WORKSPACE to a local AGNT checkout with its worker dependencies installed.
 Run bun run deus-remote-lab <command> [--timeout <seconds>].
 
-  up                                      Start and sign in the fixture Mac
+  up [--host board]                       Start and sign in the Mac, optionally with a seeded board
   status                                  Show processes, addresses, logs and idle timeout
   down                                    Stop the lab and its stack
   client-session                          Get Alice's fixture web session for an outside client
@@ -59,6 +59,7 @@ export function parse(argv) {
       timeout: { type: "string", default: "120" },
       since: { type: "string" },
       for: { type: "string" },
+      host: { type: "string" },
     },
   });
   const group = positionals.shift();
@@ -71,6 +72,8 @@ export function parse(argv) {
     throw new Error("--since belongs to device state");
   if (values.for !== undefined && command !== "device follow")
     throw new Error("--for belongs to device follow");
+  if (values.host !== undefined && (command !== "up" || values.host !== "board"))
+    throw new Error("Use --host board with up");
   const timeout = Math.ceil(number(values.timeout, "timeout", 0.001, 2_147_482) * 1000);
   const since = number(values.since ?? "0", "sequence", 0, Number.MAX_SAFE_INTEGER);
   if (!Number.isSafeInteger(since)) throw new Error("Sequence must be an integer");
@@ -78,7 +81,7 @@ export function parse(argv) {
     command === "device follow"
       ? number(values.for, "--for duration", 0.001, 2_147_483) * 1000
       : undefined;
-  return { command, args: positionals, timeout, since, duration };
+  return { command, args: positionals, timeout, since, duration, host: values.host };
 }
 function params(raw) {
   const value = JSON.parse(raw ?? "{}");

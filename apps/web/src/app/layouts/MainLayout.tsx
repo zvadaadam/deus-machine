@@ -62,6 +62,8 @@ import {
   useHasWorkspaceChat,
 } from "@/features/workspace/lib/workspaceAddress";
 import { AutomationsPage, useAutomations } from "@/features/automations";
+import { BoardPage } from "@/features/board/BoardPage";
+import { useBoardAddress } from "@/features/board/address";
 import { CustomizePage } from "@/features/customize";
 import { setupEnvironmentPrompt } from "@/features/session/lib/sessionPrompts";
 import { GitHubPickerModal } from "@/features/sidebar/ui/GitHubPickerModal";
@@ -116,6 +118,7 @@ export function MainLayout() {
   const selectWorkspace = useWorkspaceStore((state) => state.selectWorkspace);
   const expandRepo = useSidebarStore((s) => s.expandRepo);
 
+  const board = useBoardAddress();
   const settingsOpen = useUIStore((s) => s.settingsOpen);
   const automationsOpen = useUIStore((s) => s.automationsOpen);
   const openAutomations = useUIStore((s) => s.openAutomations);
@@ -240,14 +243,16 @@ export function MainLayout() {
       branch?: string,
       location?: "local" | "cloud",
       thinkingLevel?: ThinkingLevel,
-      organizationId?: string | null
+      organizationId?: string | null,
+      role?: "coordinator"
     ) => {
       try {
         const workspace = await welcomeCreateMutation.mutateAsync(
-          branch || location
+          branch || location || role
             ? {
                 repositoryId: repoId,
                 source_branch: branch,
+                ...(role && { role }),
                 location,
                 // A cloud workspace starts in the organization the composer names.
                 ...(location === "cloud" && organizationId
@@ -434,11 +439,11 @@ export function MainLayout() {
       ) : (
         <AppSidebar
           places={places}
-          selectedWorkspaceId={selectedWorkspace?.id || null}
+          selectedWorkspaceId={board ? null : selectedWorkspace?.id || null}
           diffStatsMap={bulkDiffStatsQuery.data}
           onWorkspaceClick={openWorkspace}
           onNewWorkspace={handleNewWorkspace}
-          newWorkspaceActive={!selectedWorkspace && !automationsOpen && !customizeOpen}
+          newWorkspaceActive={!board && !selectedWorkspace && !automationsOpen && !customizeOpen}
           onNewWorkspaceFromGitHub={setGithubPickerRepoId}
           onAddRepository={repoActions.handleOpenProject}
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
@@ -466,6 +471,8 @@ export function MainLayout() {
         <AutomationsPage />
       ) : customizeOpen ? (
         <CustomizePage />
+      ) : board ? (
+        <BoardPage key={board.boardId} address={board} profile={sidebarProfile} />
       ) : (
         <MainContent
           selectedWorkspace={selectedWorkspace}

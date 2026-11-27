@@ -300,7 +300,7 @@ workspaces once their chats settle. When all are archived and one is cloud, hove
 explains why the project must stay.
 The confirmation says when the project's folder is gone.
 After rechecking the recorded path and counts, `workspace-lifecycle.ts` unlinks local automations and deletes
-the project, its workspaces and chats. The folder, checkouts and Git branches stay on disk.
+the project, its workspaces, chats and boards. The folder, checkouts and Git branches stay on disk.
 Startup also clears automation links before deleting empty-named projects with no workspaces.
 
 A workspace is created in one place: Home, whose composer sends the first
@@ -451,6 +451,20 @@ has no composer: nothing typed there could be sent.
 
 `bun run test:e2e:workspace-start` runs these against the real backend, git and
 web app (see `test/e2e/README.md`).
+
+### Coordinator boards
+
+A coordinator directs work in other local workspaces and reports to the person on a board.
+Only the person can make one, with Home’s Coordinator flag or the workspace menu’s one-way “Make coordinator”.
+Each chat pins its tools in `sessions.board_tools` before its agent conversation starts.
+A fresh chat in a coordinator workspace gets `create_board`, `read_board` and `post_to_board`
+from `services/boards/tools.ts`. The workspace owns its boards across chats.
+
+A person’s post ID is the turn ID that delivers it. `preserveTurnId` keeps it through the queue.
+The receipt is waiting while queued or sending, delivered after the initial user echo, or not delivered with “Send again”.
+The channel and open thread follow the live `boardChannel` and `boardThread` reads.
+Archiving the workspace hides its boards from the sidebar and leaves their links readable. Restore brings them back.
+Removing the project deletes its boards. Posts elsewhere about a removed workspace keep their words and lose the workspace link.
 
 ### Remote access (relay)
 
@@ -632,7 +646,7 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   (`tool-relay.ts` `answer`): whoever answers first, the others' question or
   plan card is withdrawn. Settling a local turn withdraws its unanswered cards too.
 - **Chats operate chats.** Every local chat has the same tools as its own
-  (`withSessionTools` in `operator.ts`, registered with the agent service and
+  (`sessionTools` in `services/session-tools.ts`, registered with the agent service and
   handed to the engine with the Deus tools in one source): the chat itself is
   the caller and plan mode reads only. Of the writes that target a chat, only
   `rename` can target the caller. Depth, chats per starter and starts per minute are limited. The turn's
@@ -922,7 +936,7 @@ The backend adds the loopback names to both `NO_PROXY` and `no_proxy` for itself
 
 ## Database
 
-Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 13 tables: `repositories`, `workspaces`, `sessions`, `messages`, `turns`, `parts`, `compactions`, `paired_devices`, `assistants`, `automations`, `automation_runs`, `extension_installations`, `integration_connections`.
+Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. The 15 tables in `shared/schema.ts` are `repositories`, `workspaces`, `sessions`, `messages`, `turns`, `parts`, `compactions`, `paired_devices`, `assistants`, `automations`, `automation_runs`, `extension_installations`, `integration_connections`, `boards` and `board_messages`.
 
 - The backend source and a checkout's `deus start` default to `.deus-dev/deus.db`. The dev desktop and `dev:web` pass a nonempty `DATABASE_PATH` through as written. Relative paths start in the backend's working directory. When that path matches the installed default in a legacy `DEUS_PACKAGED=1` shell, the dev launcher or source backend drops the override and logs why. The packaged runtime sets its installed default before loading the backend. The dev desktop keeps its Electron profile in `.deus-dev`, so each new worktree starts signed out.
 - Before it uses the database, each backend takes a SQLite write lock on the `.owner` sidecar. It waits up to twenty seconds so the previous backend can drain a stuck turn and stop its agent processes after a force-quit. The OS releases the lock on exit, including a crash.

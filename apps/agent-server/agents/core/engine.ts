@@ -45,7 +45,7 @@ export function getRegistry(): AgentRegistry {
         return spawn(command, args, { ...options, env });
       },
     },
-    hostTools: ({ sessionId }) => chatTools(deusTools(sessionId)),
+    hostTools: ({ sessionId }) => chatTools(sessionId, deusTools(sessionId)),
     claudeCode: {
       // Sub-agent text must reach the wire. Claude's own Cron* tools are off by
       // agent-server (CLAUDE_CODE_DISABLE_CRON): scheduling is Automations'

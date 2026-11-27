@@ -25,7 +25,11 @@ export interface ClosedSessionTab extends BaseChatTab {
   closedAt: number;
 }
 
-export function chatTabLabel({ title, sequence, agentHarness }: BaseChatTab): string {
+export function chatTabLabel({
+  title,
+  sequence,
+  agentHarness,
+}: Pick<BaseChatTab, "title" | "sequence" | "agentHarness">): string {
   return title?.trim() || (sequence ? `${getAgentLabel(agentHarness)} #${sequence}` : "New chat");
 }
 

@@ -12,6 +12,7 @@ import { useSidebarStore } from "../store/sidebarStore";
 import type { AppSidebarProps } from "../model/types";
 import { DraggableRepository } from "./DraggableRepository";
 import { SidebarHeader } from "./SidebarHeader";
+import { BoardsSection } from "@/features/board/BoardsSection";
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarRow, SidebarRowMain } from "./SidebarRow";
 
@@ -159,28 +160,29 @@ export function AppSidebar({
       </div>
 
       {/* Repositories List or Empty State */}
-      {repositories.length === 0 ? (
-        <SidebarContent className="flex h-full items-center justify-center">
-          <div className="flex flex-col items-center gap-3 px-6 text-center">
-            {webDirect ? (
-              <Cloud className="text-text-muted/30 h-10 w-10" />
-            ) : (
-              <FolderOpen className="text-text-muted/30 h-10 w-10" />
-            )}
-            <div className="space-y-1">
-              <p className="text-text-secondary text-sm font-medium">
-                {webDirect ? "No cloud sessions yet" : "No projects yet"}
-              </p>
-              <p className="text-text-muted text-xs">
-                {webDirect
-                  ? "Start one from the Deus desktop app"
-                  : "Add your first project to get started"}
-              </p>
+      <SidebarContent className="scrollbar-hidden">
+        {!webDirect && place.location === "local" && <BoardsSection />}
+        {repositories.length === 0 ? (
+          <div className="flex flex-1 items-center justify-center">
+            <div className="flex flex-col items-center gap-3 px-6 text-center">
+              {webDirect ? (
+                <Cloud className="text-text-muted/30 h-10 w-10" />
+              ) : (
+                <FolderOpen className="text-text-muted/30 h-10 w-10" />
+              )}
+              <div className="space-y-1">
+                <p className="text-text-secondary text-sm font-medium">
+                  {webDirect ? "No cloud sessions yet" : "No projects yet"}
+                </p>
+                <p className="text-text-muted text-xs">
+                  {webDirect
+                    ? "Start one from the Deus desktop app"
+                    : "Add your first project to get started"}
+                </p>
+              </div>
             </div>
           </div>
-        </SidebarContent>
-      ) : (
-        <SidebarContent className="scrollbar-hidden">
+        ) : (
           <DndContext
             sensors={sensors}
             accessibility={{
@@ -230,8 +232,8 @@ export function AppSidebar({
               </div>
             </SortableContext>
           </DndContext>
-        </SidebarContent>
-      )}
+        )}
+      </SidebarContent>
 
       <SidebarFooter
         onAddRepository={onAddRepository}

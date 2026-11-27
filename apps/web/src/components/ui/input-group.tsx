@@ -1,4 +1,5 @@
 import * as React from "react";
+import { ArrowUp } from "lucide-react";
 import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/shared/lib/utils";
@@ -159,3 +160,27 @@ export {
   InputGroupInput,
   InputGroupTextarea,
 };
+
+/** The input surface and send control shared by chat and channel composers. */
+export function ComposerInputGroup({ children }: { children: React.ReactNode }) {
+  return (
+    <InputGroup className="bg-bg-muted/75 ring-border-subtle relative overflow-visible rounded-2xl border-0 shadow-sm ring-1 backdrop-blur-xl">
+      {children}
+    </InputGroup>
+  );
+}
+export function ComposerSendButton({
+  hasContent,
+  ...props
+}: React.ComponentProps<typeof InputGroupButton> & { hasContent: boolean }) {
+  return (
+    <InputGroupButton
+      variant={hasContent ? "default" : "outline"}
+      size="icon-sm"
+      className="rounded-full"
+      {...props}
+    >
+      <ArrowUp className="size-4" />
+    </InputGroupButton>
+  );
+}

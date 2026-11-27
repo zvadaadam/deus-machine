@@ -46,6 +46,7 @@ export interface RepositoryWithCountsRow extends RepositoryRow {
 // ─── workspaces ──────────────────────────────────────────────
 
 export interface WorkspaceRow {
+  role?: "coordinator" | null;
   id: string;
   repository_id: string;
   slug: string;

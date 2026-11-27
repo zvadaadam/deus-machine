@@ -32,7 +32,7 @@ const lab = createLab({ root, agnt, directory });
 const { stack, cloudApi, clientTicket, pair, code, signIn, relayStatus, connectedAs, spawnToken } =
   lab;
 try {
-  await lab.up();
+  await lab.up({ host: "board" });
   const { sessions, hostDb, signingKey } = lab;
   for (const session of Object.values(sessions)) {
     const { exp, iat } = decodeJwt(session);
@@ -569,6 +569,7 @@ try {
 
   // ---- 14. The real web app ----
   await testBrowser({
+    boardChatId: lab.boardChatId,
     root,
     directory,
     output,

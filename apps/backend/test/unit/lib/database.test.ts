@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
-import { mkdtempSync, rmSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -118,6 +119,37 @@ describe("database schema check at startup", () => {
       again.prepare("SELECT id, chat FROM sessions ORDER BY workspace_id, chat").all(),
       again.prepare("SELECT id, first_session_id FROM workspaces ORDER BY id").all(),
     ]).toEqual(before);
+    closeDatabase();
+  });
+
+  it("opens the populated v0.3.26 release database and keeps its existing conversation", async () => {
+    // Made with SCHEMA_SQL at tag v0.3.26, then populated with two chats in a local project.
+    const fixture = new URL("../../fixtures/database-v0.3.26.sqlite.gz", import.meta.url);
+    const dbPath = path.join(tempDir, "release.db");
+    writeFileSync(dbPath, gunzipSync(readFileSync(fixture)));
+    process.env.DATABASE_PATH = dbPath;
+    const { initDatabase, closeDatabase } = await open();
+    const db = initDatabase();
+    expect(db.prepare("SELECT title, role FROM workspaces").get()).toEqual({
+      title: "Release checkout",
+      role: null,
+    });
+    expect(
+      db.prepare("SELECT id, agent_session_id, board_tools FROM sessions ORDER BY id").all()
+    ).toEqual([
+      { id: "fresh", agent_session_id: null, board_tools: null },
+      { id: "old", agent_session_id: "native-old", board_tools: null },
+    ]);
+    db.exec(
+      "UPDATE workspaces SET role='coordinator' WHERE id='w'; INSERT INTO boards(id,name,workspace_id,delivery_session_id) VALUES('b','Release','w','fresh')"
+    );
+    closeDatabase();
+    const again = initDatabase();
+    expect(again.prepare("SELECT name, last_seq FROM boards").get()).toEqual({
+      name: "Release",
+      last_seq: 0,
+    });
+    expect(again.pragma("foreign_key_check")).toEqual([]);
     closeDatabase();
   });
 

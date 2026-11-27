@@ -103,7 +103,14 @@ export default defineConfig({
   // ---------------------------------------------------------------------------
   renderer: {
     root: resolve(__dirname, "apps/web"),
-    plugins: [react(), svgr(), tailwindcss(), backendPortPlugin()],
+    plugins: [
+      react(),
+      svgr(),
+      tailwindcss(),
+      backendPortPlugin(),
+      // electron-vite's build preset sets "./". app://deus serves assets from its root on every route.
+      { name: "deus-renderer-origin", apply: "build", config: () => ({ base: "/" }) },
+    ],
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version),
     },

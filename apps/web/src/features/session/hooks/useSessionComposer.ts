@@ -27,6 +27,8 @@ function useComposerTarget(id: string) {
 function useDraftActions(target: ComposerTarget, draft: typeof emptyDraft) {
   const setters = useMemo(
     () => ({
+      beginSubmission: (text: string) => actions.beginSubmission(target, text),
+      finishSubmission: (id: string) => actions.finishSubmission(target, id),
       setDraft: (v: string) => actions.setDraft(target, v),
       addPastedText: (text: string) => actions.addPastedText(target, text),
       removePastedText: (id: string) => actions.removePastedText(target, id),
@@ -47,8 +49,12 @@ function useDraftActions(target: ComposerTarget, draft: typeof emptyDraft) {
 }
 
 export function useHomeComposer() {
-  const target = useComposerTarget(HOME_COMPOSER_ID);
-  const draft = useStore(target.store, (s) => s.pendingContent[HOME_COMPOSER_ID] ?? emptyDraft);
+  return useComposerDraft(HOME_COMPOSER_ID);
+}
+
+export function useComposerDraft(id: string) {
+  const target = useComposerTarget(id);
+  const draft = useStore(target.store, (s) => s.pendingContent[id] ?? emptyDraft);
   return { ...draft, ...useDraftActions(target, draft) };
 }
 

@@ -98,6 +98,7 @@ export const createWorkspace = write({
   name: "createWorkspace",
   input: z.object({
     repository_id: z.string().min(1),
+    role: z.literal("coordinator").optional(),
     /** A local git worktree (the default) or a cloud sandbox. */
     location: z.enum(["local", "cloud"]).optional(),
     /** The remote branch to start from; the repository's default when omitted. */
@@ -131,6 +132,12 @@ export const updateWorkspaceTitle = write({
   name: "updateWorkspaceTitle",
   input: workspaceId.extend({ title: TitleSchema }),
   output: out<{ previousTitle: string | null }>(),
+});
+
+export const makeCoordinator = write({
+  name: "makeCoordinator",
+  input: workspaceId,
+  output: out<void>(),
 });
 
 export const updateWorkspaceStatus = write({

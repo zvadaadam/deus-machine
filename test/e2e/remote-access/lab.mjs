@@ -10,6 +10,7 @@ import { RELAY_PROTOCOL } from "../../../shared/types/relay.ts";
 import { startIssuer } from "../assistants/issuer.mjs";
 import { assistantFromUrl } from "../assistants/clients.mjs";
 import { createStack, freePort, until } from "./stack.mjs";
+import { seedBoard } from "./board-fixture.mjs";
 
 function waitForState(device, wanted, signal) {
   if (!["offline", "connecting", "online", "revoked", "disposed"].includes(wanted))
@@ -47,7 +48,7 @@ export function createLab({ root, agnt, directory }) {
   const started = performance.now();
   const jwtSecret = crypto.randomUUID(),
     spawnToken = crypto.randomUUID();
-  let cloudPort, relayPort, cloudUrl, jwks;
+  let cloudPort, relayPort, cloudUrl, jwks, hostEntry;
   const sessionAccounts = new Map();
   const devices = new Map(),
     assistants = [];
@@ -56,7 +57,7 @@ export function createLab({ root, agnt, directory }) {
     devices,
     spawnToken,
     latencyMs: 0,
-    async up(seed) {
+    async up({ host, seed } = {}) {
       lab.issuer = await startIssuer();
       lab.issuer.signInAs("user_alice", "org_e2e");
       lab.pg = await stack.postgres();
@@ -82,7 +83,9 @@ export function createLab({ root, agnt, directory }) {
       }
       lab.hostDb = await stack.hostDatabase("Studio Mac", "Before restart");
       seed?.(lab.hostDb);
+      if (host === "board") hostEntry = "test/e2e/remote-access/board-agent.mjs";
       await lab.startHost();
+      if (host === "board") lab.boardChatId = await seedBoard(lab.host, lab.hostDb);
     },
     async startRelay() {
       lab.relay = await stack.relay({
@@ -105,6 +108,7 @@ export function createLab({ root, agnt, directory }) {
     async startHost() {
       lab.host = await stack.host({
         name: "Studio Mac",
+        entry: hostEntry,
         ...lab.hostDb,
         relayUrl: lab.relay.ws,
         authToken: spawnToken,

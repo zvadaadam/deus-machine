@@ -4,7 +4,7 @@
 import { OperatorError, type StartInput } from "@zvada/agent-server/operator";
 import { agentModels } from "@shared/api/settings";
 import type { AgentHarness } from "@shared/enums";
-import { HARNESSES } from "@shared/harnesses";
+import { HARNESSES, knownHarness } from "@shared/harnesses";
 import {
   CATALOG_MODEL_LISTS,
   DEFAULT_THINKING_LEVEL,
@@ -16,9 +16,8 @@ import {
   type HarnessModels,
 } from "@shared/models";
 import { readThinkingLevel, type ThinkingLevel } from "@shared/protocol";
-import type { SessionTurn } from "@shared/types/session";
 import { runAsThisComputer as run } from "../query-engine";
-import { getSessionRaw } from "../../db";
+import { getSessionRaw, getTurn, recentTurns } from "../../db";
 import { getDatabase } from "../../lib/database";
 import { holdingTurn } from "./chat-turn";
 import { getSetting } from "../settings.service";
@@ -92,17 +91,27 @@ export async function startSettings(
   };
 }
 
-export function continuedSettings(
-  sessionId: string,
-  harness: AgentHarness,
-  turns: readonly SessionTurn[]
-): TurnSettings {
+export function continuedSettings(sessionId: string): TurnSettings {
+  const db = getDatabase();
+  const session = getSessionRaw(db, sessionId);
+  if (!session) throw new OperatorError("not_found", "That session is gone. Nothing was sent.");
+  const harness = knownHarness(session.agent_harness);
+  if (!harness)
+    throw new OperatorError(
+      "unsupported",
+      `send_message: this chat's agent ${JSON.stringify(session.agent_harness)} does not run here. Nothing was sent.`
+    );
+  const active = holdingTurn(sessionId);
+  const turns = recentTurns(db, sessionId);
+  const recorded = active && turns.find((turn) => turn.turnId === active.turnId)?.execution;
+  // Between admission and turn.started, the holder owns the requested settings.
+  const requested = !recorded?.model ? active?.requested : undefined;
   // The operator does not pass its cutoff, so a send falls back to the catalog, the only list that needs no read.
-  const gateway = holdingTurn(sessionId)?.gateway;
-  const gatewayRevision =
-    gateway?.binding.revision ?? getSessionRaw(getDatabase(), sessionId)?.gateway_revision;
-  const latest = latestTurnExecution(harness, turns);
+  const gateway = active?.gateway;
+  const gatewayRevision = gateway?.binding.revision ?? session.gateway_revision;
+  const latest = recorded?.model ? recorded : latestTurnExecution(harness, turns);
   const model =
+    requested?.model ??
     gateway?.execution.model ??
     latest?.model ??
     (gatewayRevision ? undefined : defaultModelId(CATALOG_MODEL_LISTS, harness));
@@ -115,6 +124,18 @@ export function continuedSettings(
     agentHarness: harness,
     model,
     ...(gatewayRevision && { gatewayRevision }),
-    thinkingLevel: continuedThinkingLevel(latest) ?? defaultThinking(),
+    thinkingLevel:
+      readThinkingLevel(requested?.thinkingLevel) ??
+      continuedThinkingLevel(latest) ??
+      defaultThinking(),
   };
+}
+
+/** A mode belongs to the active turn as soon as it is requested, then to its recorded execution. */
+export function continuedPermissionMode(sessionId: string) {
+  const db = getDatabase();
+  const active = holdingTurn(sessionId);
+  if (!active) return recentTurns(db, sessionId, 1)[0]?.execution?.permissionMode;
+  const execution = getTurn(db, sessionId, active.turnId)?.execution;
+  return execution ? execution.permissionMode : active.requested?.permissionMode;
 }

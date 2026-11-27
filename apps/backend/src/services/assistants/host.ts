@@ -733,18 +733,9 @@ export function createDeusHost(): DeusHost {
     ) => Promise<T>
   ) {
     return refusing(async () => {
-      const session = getSessionRaw(getDatabase(), sessionId);
-      if (!session) throw new OperatorError("not_found", "That session is gone. Nothing was sent.");
-      const harness = knownHarness(session.agent_harness);
-      if (!harness)
-        throw new OperatorError(
-          "unsupported",
-          `send_message: this chat's agent ${JSON.stringify(session.agent_harness)} does not run here. Nothing was sent.`
-        );
       if (firsts.get(sessionId)?.claimed === false)
         throw new Refused({ code: "busy", detail: "This chat is being set up." });
-      const { turns } = await run(sessions.messages, { sessionId, limit: 50 });
-      const settings = continuedSettings(sessionId, harness, turns);
+      const settings = continuedSettings(sessionId);
       mayTouch(caller, sessionId);
       try {
         return await write({ sessionId, content: message, turnId, ...settings }, origin);

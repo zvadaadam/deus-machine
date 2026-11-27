@@ -68,6 +68,23 @@ describe("draft storage", () => {
     vi.stubGlobal("sessionStorage", storage);
   });
 
+  it("keeps a board submission id with its draft and reconciles the accepted prefix once", () => {
+    const cache = new RuntimeClient(
+      { host: "board", account: "test", grant: "one" },
+      { open: vi.fn() }
+    ).queryClient;
+    const target = composerTarget("board:desk:3", composerStore(cache));
+    actions.setDraft(target, "Status?");
+    const id = actions.beginSubmission(target, "Status?");
+    expect(actions.beginSubmission(target, "Status?")).toBe(id);
+    expect(storage.getItem('composer-drafts:["board","test"]')).toContain(id);
+    actions.setDraft(target, "Status? More details.");
+    expect(actions.finishSubmission(target, id)).toBe(true);
+    expect(actions.finishSubmission(target, id)).toBe(false);
+    expect(target.store.getState().pendingContent[target.id]?.draft).toBe(" More details.");
+    expect(actions.beginSubmission(target, "Status?")).not.toBe(id);
+  });
+
   it("scopes drafts only by the runtime's host and account", () => {
     const cache = (host: string, account: string, grant: string) =>
       new RuntimeClient({ host, account, grant }, { open: vi.fn() }).queryClient;

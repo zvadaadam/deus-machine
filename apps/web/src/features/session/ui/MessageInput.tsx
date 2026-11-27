@@ -28,7 +28,7 @@ import { ACTIVE_TURN_STATUSES, type WorkspaceKind } from "@shared/enums";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { AnimatePresence, motion } from "framer-motion";
-import { Minimize2, ArrowUp, Square, Wrench } from "lucide-react";
+import { Minimize2, Square, Wrench } from "lucide-react";
 import { useEditQueuedMessage } from "../api/session.queries";
 import { useFileMention } from "../hooks/useFileMention";
 import { useCloudSlashItems } from "../hooks/useCloudSlashItems";
@@ -41,7 +41,8 @@ import { setupEnvironmentPrompt } from "../lib/sessionPrompts";
 import { willQueueMessage } from "../lib/queuedMessages";
 import { extractImagesFromClipboard, buildMessageContent } from "../lib/imageAttachments";
 import {
-  InputGroup,
+  ComposerInputGroup,
+  ComposerSendButton,
   InputGroupAddon,
   InputGroupButton,
   InputGroupTextarea,
@@ -449,10 +450,7 @@ export function MessageInput({
         />
       )}
 
-      <InputGroup
-        data-no-ring={true}
-        className="bg-bg-muted/75 ring-border-subtle relative overflow-visible rounded-2xl border-0 shadow-sm ring-1 backdrop-blur-xl"
-      >
+      <ComposerInputGroup>
         <MissingAttachments
           pictures={composer.missingPictures}
           pastedTexts={composer.missingPastedTexts}
@@ -598,20 +596,16 @@ export function MessageInput({
               </InputGroupButton>
             )}
 
-            <InputGroupButton
+            <ComposerSendButton
               onClick={() => void handleSend()}
               disabled={!canSend}
-              variant={hasContent ? "default" : "outline"}
-              size="icon-sm"
+              hasContent={hasContent}
               title={disabledReason ?? sendTitle}
               aria-label={sendLabel}
-              className="rounded-full"
-            >
-              <ArrowUp className="h-4 w-4" />
-            </InputGroupButton>
+            />
           </div>
         </InputGroupAddon>
-      </InputGroup>
+      </ComposerInputGroup>
     </div>
   );
 }

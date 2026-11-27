@@ -30,6 +30,7 @@ import {
   redirect,
   type HistoryLocation,
 } from "@tanstack/react-router";
+import { appHistory, boardSearch } from "@/features/board/address";
 import { RootLayout } from "./routes/root";
 import { ConnectPage } from "./routes/connect";
 import { ServerLayout } from "./shells/ServerLayout";
@@ -83,6 +84,14 @@ const workspaceRoute = createRoute({
   component: WorkspaceRoute,
 });
 
+// --- /s/$serverId/b/$boardId ---
+const boardRoute = createRoute({
+  getParentRoute: () => serverRoute,
+  path: "/b/$boardId",
+  validateSearch: boardSearch,
+  component: WorkspaceRoute,
+});
+
 // --- /s/$serverId/settings ---
 const settingsRoute = createRoute({
   getParentRoute: () => serverRoute,
@@ -128,6 +137,22 @@ const directWorkspaceRoute = createRoute({
   component: WorkspaceRoute,
 });
 
+const directBoardRoute = createRoute({
+  getParentRoute: () => directLayoutRoute,
+  path: "/b/$boardId",
+  validateSearch: boardSearch,
+  beforeLoad: ({ params, search }) => {
+    if (getDeploymentMode() === "web-dev")
+      throw redirect({
+        to: "/s/$serverId/b/$boardId",
+        params: { serverId: "local", boardId: params.boardId },
+        search,
+      });
+    if (getDeploymentMode() === "web-direct") throw redirect({ to: "/connect" });
+  },
+  component: WorkspaceRoute,
+});
+
 const directSettingsRoute = createRoute({
   getParentRoute: () => directLayoutRoute,
   path: "/settings",
@@ -154,17 +179,19 @@ const routeTree = rootRoute.addChildren([
   directLayoutRoute.addChildren([
     directIndexRoute,
     directWorkspaceRoute,
+    directBoardRoute,
     directSettingsRoute,
     directLoginRoute,
   ]),
   connectRoute,
   connectServerRoute,
-  serverRoute.addChildren([serverIndexRoute, workspaceRoute, settingsRoute]),
+  serverRoute.addChildren([serverIndexRoute, workspaceRoute, boardRoute, settingsRoute]),
 ]);
 
 // --- Router instance ---
 export const webRouter = createRouter({
   routeTree,
+  ...(typeof window !== "undefined" && { history: appHistory() }),
   defaultPreload: "intent",
 });
 

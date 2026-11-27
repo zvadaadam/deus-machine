@@ -171,6 +171,9 @@ Docker must be running. It checks, in order:
 - Removing a computer from the account keeps it off through a restart and retires
   its relay grants, leaving the account's other computer; turning remote access on
   registers it anew.
+- A paired 390 px browser opens a board and its thread, posts to a scripted
+  coordinator, follows the receipt and reply, sees a desktop post live and its unread
+  dot, then reopens the board address on reload and in another paired tab.
 - In the browser: scanning the QR while signed out (sign in, approve with the
   link's code, connect, secrets scrubbed from the URL); reload and a new tab
   reconnect without a code; reopening a QR link on an approved browser leaves its
@@ -184,6 +187,9 @@ Docker must be running. It checks, in order:
   the Mac's dialog both name the computer with the same id fingerprint; the
   Mac's Remote access settings with the QR, which shows a new code once a
   device has paired with the old one.
+
+The paired-phone board check uses the same seeded coordinator as `bun run deus-remote-lab up --host board`.
+It checks queued and delivered receipts, live replies, unread and reopening the board address.
 
 `REMOTE_ACCESS_E2E_BROWSER_ONLY=1` skips to the browser checks. Logs, Worker
 state, the run's databases and `results.json` go to `.context/remote-access/`,

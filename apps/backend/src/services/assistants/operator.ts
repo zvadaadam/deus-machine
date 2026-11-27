@@ -7,7 +7,7 @@
 // device, this computer's window) through MCP (`answerMcp`, the `agentMcp`
 // operation): the list is the same for everyone, and the host's `authorize`
 // reads an assistant's access per call. Every chat on this computer, as its
-// own tools (`withSessionTools`): the engine delivers them with the Deus
+// own tools (`sessionTools`): the engine delivers them with the Deus
 // tools in one source, and the session's agent is the caller.
 //
 // Text from a repository (file names, diffs) and names are untrusted: a name
@@ -42,7 +42,6 @@ import { sameOrigin } from "../../db";
 import { NotFoundError } from "../../lib/errors";
 import { removeQueuedMessage, resumeQueuedMessages, steerQueuedMessage } from "../agent/queue";
 import { holdingTurn } from "../agent/chat-turn";
-import { provideSessionTools } from "../agent/service";
 import { getServerName } from "../server-name";
 import { currentHost } from "./access";
 import { addProjectTool } from "./add-project";
@@ -71,14 +70,15 @@ const normal = (file: string) =>
   path.posix.normalize(file.replace(/\\/g, "/")).replace(/^\.\//, "");
 
 const words = z.string().trim().min(1, "must not be empty or only spaces");
+export const workspaceArg = words
+  .optional()
+  .describe("A workspace, by the name list_sessions prints after `workspace`");
 const sessionArg = words.describe("The session, as list_sessions prints it");
 
 function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
   const renameInput = {
     session: words.optional().describe("A chat, as list_sessions prints it (workspace:N)"),
-    workspace: words
-      .optional()
-      .describe("A workspace, by the name list_sessions prints after `workspace`"),
+    workspace: workspaceArg,
     name: TitleSchema.describe("The new name: one line, at most 120 characters"),
   };
   const rename = tool<typeof renameInput, Caller>({
@@ -362,7 +362,7 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
 let operator: Operator<Caller> | null = null;
 
 /** Made on first use: the host reads the app's operations, which are served by then. */
-function theOperator(): Operator<Caller> {
+export function theOperator(): Operator<Caller> {
   if (!operator) {
     const host = createDeusHost();
     const made: Operator<Caller> = createOperator<Caller>(host, {
@@ -421,26 +421,12 @@ export function answerMcp(message: unknown, caller: Caller): Promise<unknown> {
   return handler(message, caller);
 }
 
-/**
- * A chat's tools: the operator's (the chat itself the caller, as the engine
- * fills it) beside the Deus tools in one source. The Deus tools run as they
- * always have; the operator's words and rules are the package's. The
- * guidance goes in the turn's instructions, so it is not repeated here.
- */
-export function withSessionTools(own: HostToolSource): HostToolSource {
-  const ops = operatorSessionTools(theOperator(), { name: own.name, instructions: "" });
-  const mine = new Set(own.tools.map((t) => t.name));
-  return {
-    ...own,
+export function operatorTools(additional?: HostToolSource): HostToolSource {
+  return operatorSessionTools(theOperator(), {
     name: DEUS_TOOLS_SERVER,
-    tools: [...ops.tools, ...own.tools],
-    call: (name, args, caller, signal) =>
-      mine.has(name) ? own.call(name, args, caller, signal) : ops.call(name, args, caller, signal),
-  };
+    with: additional,
+  });
 }
-
-// Every chat's tools carry the operator's from the engine's next session on.
-provideSessionTools(withSessionTools);
 
 /** Tests only: build the tools and the MCP handler again (over a new host). */
 export function _resetOperator(): void {

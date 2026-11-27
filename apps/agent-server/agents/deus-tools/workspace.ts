@@ -5,7 +5,7 @@ import path from "node:path";
 import { z } from "zod";
 import { HostRpc } from "../../host-link";
 import { trackedSessions } from "../../session-tracker";
-import { type DeusTool, tool } from "./tool";
+import { type DeusTool, tool } from "@shared/host-tool";
 
 /**
  * Creates the workspace tool definitions for a given session.

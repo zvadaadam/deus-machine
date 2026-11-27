@@ -2,6 +2,7 @@
 
 import assistants from "./assistants";
 import automations from "./automations";
+import boards from "./boards";
 import browser from "./browser";
 import deviceHub from "./device-hub";
 import gateways from "./gateways";
@@ -19,6 +20,7 @@ import { Registry } from "./registry";
 export const registry = new Registry([
   ...assistants,
   ...automations,
+  ...boards,
   ...browser,
   ...deviceHub,
   ...gateways,

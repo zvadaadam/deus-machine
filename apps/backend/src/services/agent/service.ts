@@ -68,12 +68,22 @@ let link: AgentLink | null = null;
 let localAgents: LocalAgents | null = null;
 let events: AgentEventHandler | null = null;
 
+type SessionTools = (sessionId: string) => {
+  instructions: string;
+  compose(base: HostToolSource): HostToolSource;
+};
+let toolkit: SessionTools | undefined;
+
 /** Start the engine and connect the event handler to it. Call once at startup. */
-export async function init({ agentless = false } = {}): Promise<void> {
+export async function init({
+  agentless = false,
+  sessionTools,
+}: { agentless?: boolean; sessionTools?: SessionTools } = {}): Promise<void> {
   if (link || events) {
     console.warn("[AgentService] Already initialized, skipping");
     return;
   }
+  toolkit = sessionTools;
   const handler = createAgentEventHandler();
   connectTurnNotices({
     queue: onTurnNotice,
@@ -128,6 +138,12 @@ export async function init({ agentless = false } = {}): Promise<void> {
       if (!known) return;
       if (event.type === "message.started" && event.role === "user" && event.steerId !== undefined)
         userEcho(sessionId, event.turnId, event.steerId);
+      if (
+        event.type === "message.part" &&
+        event.messageId === echoMessageId(event.turnId) &&
+        event.part.type === "text"
+      )
+        invalidate(["session"], { sessionIds: [sessionId] });
       // The sending head stays until its text is published. A message end carries only ids.
       if (event.type === "message.ended" && event.messageId === echoMessageId(event.turnId))
         userEcho(sessionId, event.turnId);
@@ -138,7 +154,7 @@ export async function init({ agentless = false } = {}): Promise<void> {
       void handler.handleEventGap(gap, (turnId) => link?.cancelTurn(gap.sessionId, turnId)),
     onToolRequest: (method, params) => handleToolRequest(method, params),
     // Every chat here can operate the others (LLP 0019), through the engine's delivery.
-    sessionTools: (own) => sessionTools?.(own) ?? own,
+    sessionTools: (id, own) => toolkit?.(id).compose(own) ?? own,
     onTitle: ({ sessionId, title }) => handler.handleTitle(sessionId, title),
   });
   localAgents = new LocalAgents(link.engine);
@@ -202,6 +218,7 @@ export async function startTurn(
     ...(gateway && { thinkingLevel: gateway.thinkingLevel }),
     ...apps,
     agentMessages: hasAgentMessages(sessionId),
+    toolInstructions: toolkit?.(sessionId).instructions,
     setup: setupForTurn(sessionId),
     agentDeviceSession: device.session,
     device: device.target,
@@ -277,12 +294,6 @@ export async function stopSession(params: {
 /** Check if the agent link is connected. */
 export function isConnected(): boolean {
   return link?.isConnected() ?? false;
-}
-
-/** A chat's tools beside the Deus tools: the operator's, registered by services/assistants. */
-let sessionTools: ((own: HostToolSource) => HostToolSource) | undefined;
-export function provideSessionTools(compose: (own: HostToolSource) => HostToolSource): void {
-  sessionTools = compose;
 }
 
 /**

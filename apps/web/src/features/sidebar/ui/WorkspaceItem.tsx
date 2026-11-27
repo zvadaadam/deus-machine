@@ -33,6 +33,7 @@ import { getWorkspaceActivity } from "../lib/status";
 import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "../lib/utils";
 import type { WorkspaceItemProps } from "../model/types";
 import { SidebarRow } from "./SidebarRow";
+import { CoordinatorMark, MakeCoordinator } from "@/features/workspace/ui/CoordinatorRole";
 import { WorkspaceGitIcon } from "./WorkspaceGitIcon";
 import { WorkspaceHoverCard } from "./WorkspaceHoverCard";
 import { WorkspaceStatusChoices, WorkspaceStatusMenu } from "./WorkspaceStatusMenu";
@@ -236,6 +237,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         >
           {displayName}
         </span>
+        {workspace.role === "coordinator" && <CoordinatorMark />}
         {isSetupFailed && (
           <span className="text-accent-red-muted flex shrink-0" title={SETUP_FAILED}>
             <TriangleAlert size={12} aria-hidden />
@@ -346,6 +348,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         <Link />
         Copy link
       </ContextMenuItem>
+      <MakeCoordinator workspace={workspace} />
       {onStatusChange && (
         <ContextMenuSub
           label={

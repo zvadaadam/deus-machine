@@ -96,6 +96,7 @@ it.each([
       expect(html).toContain('aria-label="Close Review tab"');
       expect(html.includes(">Open workspace<")).toBe(true);
       expect(html.includes(">Open chat<")).toBe(hasChat);
+      expect(html.includes("Make coordinator")).toBe(!webDirect && state === "ready");
       expect(html.includes("Set status")).toBe(!webDirect);
       expect(html.includes(">Archive workspace<")).toBe(!webDirect && state === "ready");
     } finally {

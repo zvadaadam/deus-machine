@@ -15,6 +15,7 @@ function card(part: Part): "keep" | "card" | undefined {
     (part.state.status === "completed" && part.state.content?.some((item) => item.type === "image"))
   )
     return "keep";
+  if (name === "create_board" && part.state.status === "completed") return "keep";
   if (name === "recording_stop") return part.state.status === "completed" ? "keep" : "card";
   if (part.kind === "switch_mode" || QUESTION_AND_PLAN.has(name))
     return part.state.status === "pending" || part.state.status === "in_progress" ? "keep" : "card";

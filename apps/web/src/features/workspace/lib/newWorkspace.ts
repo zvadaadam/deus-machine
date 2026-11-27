@@ -1,3 +1,4 @@
+import { leaveBoard } from "@/features/board/address";
 import { uiActions, type NewWorkspaceRequest } from "@/shared/stores/uiStore";
 import { useWorkspaceStore } from "../store/workspaceStore";
 
@@ -10,6 +11,7 @@ export const FIRST_MESSAGE_PLACEHOLDER = "Describe what you'd like to do...";
  * are optional (a project's "+", a starter prompt, a message handed back).
  */
 export function openNewWorkspace(request?: NewWorkspaceRequest): void {
+  leaveBoard();
   uiActions.requestNewWorkspace(request);
   useWorkspaceStore.getState().selectWorkspace(null);
 }

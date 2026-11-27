@@ -248,6 +248,7 @@ function handleToolResponse(msg: Params): void {
 interface InvalidateContext {
   /** Only these sessions changed: narrows which subscriptions are re-sent, and how. */
   sessionIds?: string[];
+  boardIds?: string[];
 }
 
 /**
@@ -270,7 +271,11 @@ export function invalidate(resources: LiveName[], ctx?: InvalidateContext): void
     }
     for (const [subId, sub] of connSubs) {
       if (!resources.includes(sub.resource)) continue;
-      const { sessionId } = sub.params;
+      const { sessionId, boardId } = sub.params;
+      if (typeof boardId === "string" && ctx?.boardIds && !ctx.boardIds.includes(boardId)) {
+        const input = registry().find(sub.resource)?.input;
+        if (input instanceof z.ZodObject && "boardId" in input.shape) continue;
+      }
       if (
         typeof sessionId === "string" &&
         ctx?.sessionIds?.length &&
