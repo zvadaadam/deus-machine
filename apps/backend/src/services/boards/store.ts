@@ -1,7 +1,7 @@
 import {
   BOARD_PAGE_SIZE,
   boardReadOnlyReason,
-  type Board as BoardSummary,
+  type Board,
   type BoardDetail,
   type BoardPost,
   type BoardPostInput,
@@ -15,7 +15,7 @@ import { HAS_OR_WILL_PIN_BOARD_TOOLS } from "./coordinator";
 
 import { awaitingQuestions, questionCandidates } from "./questions";
 
-type Board = Omit<BoardSummary, "waiting">;
+type BoardFields = Omit<Board, "waiting">;
 
 const boardCandidates = `(${questionCandidates("q.board_id = b.id")}) AS candidates`;
 
@@ -33,9 +33,9 @@ const boardTables = `FROM boards b JOIN workspaces w ON w.id = b.workspace_id
   LEFT JOIN sessions s ON s.id = b.delivery_session_id`;
 const boardSelect = `SELECT ${boardFields} ${boardTables}`;
 
-export function listBoards(): BoardSummary[] {
+export function listBoards(): Board[] {
   return getDatabase()
-    .prepare<[], Board & { candidates: string }>(
+    .prepare<[], BoardFields & { candidates: string }>(
       `SELECT ${boardFields}, ${boardCandidates} ${boardTables} WHERE w.state != 'archived' ORDER BY b.id`
     )
     .all()
@@ -52,9 +52,9 @@ export function boardsForDeliveryChats(sessionIds: string[]) {
     .map((row) => row.id);
 }
 
-export function getBoard(id: string): Board {
+export function getBoard(id: string): BoardFields {
   const row = getDatabase()
-    .prepare<[string], Board>(boardSelect + " WHERE b.id = ?")
+    .prepare<[string], BoardFields>(boardSelect + " WHERE b.id = ?")
     .get(id);
   if (!row) throw new NotFoundError("This board does not exist.");
   return row;
@@ -72,7 +72,7 @@ export function channelPage(id: string, before?: number) {
   const row = getDatabase()
     .prepare<
       [string],
-      Board & { workspaces: string; candidates: string }
+      BoardFields & { workspaces: string; candidates: string }
     >(`SELECT ${boardFields}, ${subjects}, ${boardCandidates} ${boardTables} WHERE b.id = ?`)
     .get(id);
   if (!row) return null;
@@ -128,7 +128,7 @@ export function boardForChat(sessionId: string, explicit?: string): string {
 }
 
 /** Choose the recipient at delivery. A fresh chat in this workspace will pin the board tools on first use. */
-export function selectAndRecordDeliveryChat(board: Board) {
+export function selectAndRecordDeliveryChat(board: BoardFields) {
   if (board.read_only) throw new ConflictError(boardReadOnlyReason[board.read_only]);
   const db = getDatabase();
   const chat = db

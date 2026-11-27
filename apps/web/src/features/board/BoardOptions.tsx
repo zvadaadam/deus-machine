@@ -4,6 +4,7 @@ import type { BoardPost } from "@shared/boards";
 import { api } from "@shared/api";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getErrorMessage } from "@shared/lib/errors";
+import { Button } from "@/components/ui/button";
 import { useRuntimeClient } from "@/platform/ws/useRuntimeClient";
 import type { boardOptions } from "./options";
 
@@ -36,14 +37,16 @@ export function BoardOptions({
   return (
     <div className="my-2 grid w-full max-w-lg gap-1.5">
       {choices.options.map(({ number, text }, index) => (
-        <button
+        <Button
           key={index}
           type="button"
+          variant="outline"
+          size="sm"
           disabled={submitted}
           onClick={() => answer.mutate(`${number}. ${text}`)}
-          className="border-border-default bg-bg-elevated text-text-secondary hover:bg-control-hover hover:text-foreground focus-visible:ring-ring flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-1.5 text-left text-sm transition-colors focus-visible:ring-2 disabled:opacity-60 pointer-coarse:min-h-11"
+          className="h-auto w-full justify-start gap-2.5 py-1.5 text-left whitespace-normal pointer-coarse:min-h-11"
         >
-          <span className="bg-bg-raised grid min-h-5 min-w-5 shrink-0 place-items-center rounded-md px-1 text-xs font-medium tabular-nums">
+          <span className="bg-bg-elevated grid min-h-5 min-w-5 shrink-0 place-items-center rounded-md px-1 text-xs font-medium tabular-nums">
             {number}
           </span>
           <span className="min-w-0 wrap-anywhere">
@@ -51,7 +54,7 @@ export function BoardOptions({
               {choices.references + text}
             </Markdown>
           </span>
-        </button>
+        </Button>
       ))}
       {answer.error && (
         <p role="alert" className="text-accent-red text-sm">

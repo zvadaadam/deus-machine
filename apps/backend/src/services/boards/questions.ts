@@ -1,7 +1,8 @@
 import { mentionsPerson } from "@shared/board-mentions";
 
-// A character reference such as &#64; renders as a literal character in prose.
-export const mentionCandidateSql = "(q.body LIKE '%@you%' OR q.body GLOB '*&*;*')";
+// Markdown can use &commat; for the at sign or numeric references anywhere in @you.
+export const mentionCandidateSql =
+  "(q.body LIKE '%@you%' OR q.body LIKE '%&#%' OR q.body LIKE '%&commat;%')";
 
 // A later post in this thread can only be a reply. The replies index covers the lookup.
 export function questionCandidates(scope: string) {

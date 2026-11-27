@@ -116,14 +116,17 @@ export const WorkspaceGitIcon = React.memo(function WorkspaceGitIcon({
 export function WorkspaceAttention({
   status,
   attention,
+  size,
 }: {
   status: DisplayStatus;
   attention: string;
+  size?: "sm";
 }) {
   return (
     <span
       className={cn(
-        "h-2 w-2 rounded-full",
+        "rounded-full",
+        size === "sm" ? "size-1.5" : "size-2",
         status === "error" ? "bg-accent-red" : "bg-accent-gold"
       )}
       title={attention}

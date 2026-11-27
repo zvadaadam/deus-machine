@@ -38,8 +38,8 @@ function useWorkspaceMark(id: string | null) {
     <span aria-hidden className="relative inline-flex h-4 w-4 shrink-0 items-center justify-center">
       <WorkspaceGitIcon workspace={workspace} displayStatus={status} working={working} size={12} />
       {attention && (
-        <span className="absolute top-0 right-0 flex [&>span]:size-1.5">
-          <WorkspaceAttention status={status} attention={attention} />
+        <span className="absolute top-0 right-0 flex">
+          <WorkspaceAttention status={status} attention={attention} size="sm" />
         </span>
       )}
     </span>
