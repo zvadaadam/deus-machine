@@ -457,17 +457,16 @@ export function MessageInput({
           </motion.div>
         )}
       </AnimatePresence>
-      {localChat && (
-        <QueuedMessageList
-          sessionId={sessionId}
-          canSteer={canSteer}
-          turnId={steerTurnId}
-          editDisabled={sending || editing}
-          onEdit={edit}
-        />
-      )}
-
-      <div className="relative isolate [&>[data-slot=input-group]]:z-10">
+      <div className="relative isolate grid grid-cols-1 [--tray-cap:min(320px,40dvh)] [&>[data-slot=input-group]]:z-10 [&>[data-slot=input-group]]:row-start-2">
+        {localChat && (
+          <QueuedMessageList
+            sessionId={sessionId}
+            canSteer={canSteer}
+            turnId={steerTurnId}
+            editDisabled={sending || editing}
+            onEdit={edit}
+          />
+        )}
         <AnimatePresence initial={false}>
           {listId && (
             <ComposerTray>
