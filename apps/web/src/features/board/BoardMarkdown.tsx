@@ -18,7 +18,9 @@ export function BoardMarkdown({
       return file ? (
         <BoardFileChip link={file} onOpen={onFileLinkOpen} />
       ) : (
-        <a href={href}>{children}</a>
+        <a href={href} target="_blank" rel="noopener noreferrer">
+          {children}
+        </a>
       );
     },
     [resolveFileLink, onFileLinkOpen]

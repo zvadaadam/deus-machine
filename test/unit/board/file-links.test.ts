@@ -14,10 +14,8 @@ it("board: opens a post's file in its subject workspace or the board's workspace
   expect(postFileWorkspace({ about_workspace_id: null }, board)).toBe("coordinator");
 });
 
-function postLink(href: string) {
-  return renderToStaticMarkup(
-    createElement(BoardMarkdown, { workspaceId: "worker", children: `[Read](${href})` })
-  );
+function renderPost(children: string) {
+  return renderToStaticMarkup(createElement(BoardMarkdown, { workspaceId: "worker", children }));
 }
 
 it("chat: an extensionless link keeps its existing anchor", () => {
@@ -43,14 +41,27 @@ it.each([
   ["file://server/x", null],
   ["//server/x", null],
   ["ftp://example.org/report.md", null],
+  ["javascript:alert(1)", null],
+  ["JaVaScRiPt:alert(1)", null],
+  [" javascript:alert(1)", null],
+  ["\tjavascript:alert(1)", null],
+  ["data:text/html,x", null],
+  ["vbscript:x", null],
+  ["blob:x", null],
   ["#section", null],
   ["", null],
 ] as const)("board: %s is a file button without a browser URL", (href, path) => {
-  const chip = postLink(href);
+  const chip = renderPost(`[Read](${href})`);
   expect(chip).toMatch(/<button\b[^>]*type="button"/);
-  expect(chip).not.toMatch(/<(?:a\b|button\b[^>]*\shref=)/);
+  expect(chip).not.toMatch(/<a\b|\shref\s*=/i);
   expect(chip.includes(' disabled=""')).toBe(path === null);
   if (path) expect(chip).toContain(`title="Open ${path}"`);
+});
+
+it("board: an image source still uses the default Markdown URL filter", () => {
+  const image = renderPost("![Preview](javascript:alert(1))");
+  expect(image).toMatch(/<img\b[^>]*alt="Preview"/);
+  expect(image).not.toContain("javascript:");
 });
 
 it.each([
@@ -59,5 +70,7 @@ it.each([
   "mailto:reader@example.org",
   "tel:+12345",
 ])("board: %s stays an external link", (href) => {
-  expect(postLink(href)).toContain(`<a href="${href}">Read</a>`);
+  expect(renderPost(`[Read](${href})`)).toContain(
+    `<a href="${href}" target="_blank" rel="noopener noreferrer">Read</a>`
+  );
 });
