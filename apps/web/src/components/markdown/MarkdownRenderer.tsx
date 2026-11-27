@@ -22,7 +22,7 @@
  * ```
  */
 
-import { isValidElement, useMemo, useRef } from "react";
+import { isValidElement, useMemo, useRef, type ReactNode } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -53,7 +53,8 @@ interface MarkdownRendererProps {
   proseClassName?: string;
   transformText?: NonNullable<React.ComponentProps<typeof ReactMarkdown>["remarkPlugins"]>[number];
   resolveFileLink?: (href: string, label: string) => MarkdownFileLinkResolution;
-  FileLink?: React.ComponentType<{ link: MarkdownFileLink; onOpen: (path: string) => void }>;
+  /** Owns every link, including which raw destinations may become an href. */
+  renderLink?: (href: string, children: ReactNode) => ReactNode;
   onFileLinkOpen?: (path: string) => void | Promise<void>;
   onLinkOpen?: (href: string) => void | Promise<void>;
 }
@@ -174,7 +175,7 @@ export function MarkdownRenderer({
   transformText,
   resolveFileLink,
   onFileLinkOpen,
-  FileLink,
+  renderLink,
   onLinkOpen,
 }: MarkdownRendererProps) {
   const plugins = useMemo(
@@ -182,11 +183,12 @@ export function MarkdownRenderer({
     [transformText]
   );
   const components = useMemo(() => {
-    if (!resolveFileLink && !onLinkOpen) return markdownComponents;
+    if (!renderLink && !resolveFileLink && !onLinkOpen) return markdownComponents;
 
     return {
       ...markdownComponents,
       a({ href, children, ...props }: any) {
+        if (renderLink) return renderLink(href ?? "", children);
         const label = getLinkLabel(children);
         const resolvedLink =
           href && resolveFileLink && onFileLinkOpen ? resolveFileLink(href, label) : null;
@@ -224,8 +226,6 @@ export function MarkdownRenderer({
           );
         }
 
-        if (FileLink && onFileLinkOpen) return <FileLink link={fileLink} onOpen={onFileLinkOpen} />;
-
         if (fileLink.disabled) {
           return (
             <span
@@ -259,17 +259,15 @@ export function MarkdownRenderer({
         );
       },
     };
-  }, [FileLink, onFileLinkOpen, onLinkOpen, resolveFileLink]);
+  }, [renderLink, onFileLinkOpen, onLinkOpen, resolveFileLink]);
 
   return (
     <article className={cn(proseClassName, className)}>
       <ReactMarkdown
         urlTransform={
-          FileLink && onFileLinkOpen
-            ? (url, key) =>
-                key === "href" && /^file:\/\//iu.test(url) && resolveFileLink?.(url, "")
-                  ? url
-                  : defaultUrlTransform(url)
+          renderLink
+            ? (url, key, node) =>
+                node.tagName === "a" && key === "href" ? url : defaultUrlTransform(url)
             : undefined
         }
         remarkPlugins={plugins}

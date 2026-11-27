@@ -5,7 +5,7 @@ import { getErrorMessage } from "@shared/lib/errors";
 import { appHistory } from "@/shared/lib/appHistory";
 import { isMobileViewport } from "@/shared/hooks/use-mobile";
 import { getRuntimeClient } from "@/platform/ws";
-import type { MarkdownFileLinkResolution } from "@/components/markdown/MarkdownRenderer";
+import type { MarkdownFileLink } from "@/components/markdown/MarkdownRenderer";
 import { isBrowserPreviewPath, normalizeResourcePath } from "@/features/session/lib/chatResources";
 import {
   chatPlaceNow,
@@ -25,19 +25,19 @@ export function useWorkspaceLinks(
   const folder = chat?.folder ?? null;
   const cloud = chat?.cloud ?? false;
   const resolveFileLink = useCallback(
-    (href: string): MarkdownFileLinkResolution => {
+    (href: string): MarkdownFileLink | null => {
       const trimmed = href.trim();
-      const raw = workspaceLinkPath(trimmed);
-      if (!raw || !looksLikeWorkspaceFileHref(raw))
-        return /^file:\/\//iu.test(trimmed)
-          ? { path: trimmed, disabled: true, title: outside }
-          : null;
+      // On the board only explicit web, mail and phone links may navigate the browser.
+      if (fromBoard && /^(?:https?|mailto|tel):/iu.test(trimmed) && URL.canParse(trimmed))
+        return null;
+      const fileUrl = fromBoard ? /^file:/iu.test(trimmed) : /^file:\/\//iu.test(trimmed);
+      const raw = workspaceLinkPath(trimmed, fileUrl);
+      const refused =
+        fromBoard || fileUrl ? { path: trimmed || "File", disabled: true, title: outside } : null;
+      if (!raw || !looksLikeWorkspaceFileHref(raw, fromBoard)) return refused;
       // Relative links need no workspace lookup. An absolute board link asks for its root only on click.
       const path = fromBoard && absolutePath(raw) ? raw : normalizeResourcePath(raw, folder);
-      if (!path)
-        return fromBoard || /^file:\/\//iu.test(trimmed)
-          ? { path: trimmed, disabled: true, title: outside }
-          : null;
+      if (!path) return refused;
       const opening = openFile(
         path,
         { cloud, folder, fileTab: !fromBoard && !isMobileViewport() },
@@ -106,11 +106,13 @@ function resolveBrowserLinkUrl(href: string): string | null {
   return null;
 }
 
-function looksLikeWorkspaceFileHref(href: string): boolean {
-  if (!href || /^(?:#|mailto:|tel:)/iu.test(href)) return false;
+function looksLikeWorkspaceFileHref(href: string, fromBoard: boolean): boolean {
+  if (fromBoard && /^[a-z]:[\\/]/iu.test(href)) return true;
+  if (!href || href.startsWith("#")) return false;
   if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|www\.)/iu.test(href)) return false;
 
   return (
+    fromBoard ||
     href.startsWith("./") ||
     href.startsWith("../") ||
     href.includes("/") ||
@@ -121,8 +123,7 @@ function looksLikeWorkspaceFileHref(href: string): boolean {
 const fileHow = (path: string, fromBoard: boolean) =>
   !fromBoard && isBrowserPreviewPath(path) ? "preview" : "files";
 
-function workspaceLinkPath(href: string): string | null {
-  const fileUrl = /^file:\/\//iu.test(href);
+function workspaceLinkPath(href: string, fileUrl: boolean): string | null {
   try {
     if (!fileUrl) return decodeURIComponent(href.replace(/[?#].*$/u, ""));
     const url = new URL(href);

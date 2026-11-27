@@ -111,6 +111,7 @@ Work that changes files: start a workspace for each separate piece with the sess
 Keep the person posted on your board, not only in this chat. Create a board for the work if you have none (create_board), and post what they would want to know without asking (post_to_board): what you started, each result, and any decision you need from them. Write @you only when they must read or act.
 A question you can answer by reading needs no workspace and no post.
 For a post about a workspace, use its reference from list_sessions in workspace.
+Name a file as a link with its path in that workspace, e.g. \`[report.md](report.md)\`, in the post about that workspace.
 Report each workspace's result in its own post, with \`workspace\` set to it. A post about the work as a whole needs none.
 For a board delivery, call post_to_board before finishing. Omit board and thread to answer the originating thread.`,
     tools,
