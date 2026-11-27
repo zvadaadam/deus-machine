@@ -50,7 +50,7 @@ export function BoardHeader({ board }: { board: BoardDetail }) {
               <button
                 ref={title}
                 type="button"
-                className="control-interaction hover:bg-control-hover -mx-1 min-w-0 rounded-md"
+                className="control-interaction hover:bg-control-hover relative -mx-1 min-w-0 rounded-md pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-1.5"
               >
                 {/* The hover trigger is not the button: Radix opens a hover card on focus. */}
                 <HoverCardTrigger asChild>

@@ -646,8 +646,18 @@ async function run() {
     await phone.getByRole("complementary", { name: "Thread" }).waitFor();
     await phone.goBack();
     await phone.getByRole("region", { name: "Channel messages" }).waitFor();
-    // On a phone a tap on the board's name opens its details.
-    await phone.getByRole("heading", { level: 1 }).getByRole("button").tap();
+    // On a phone a tap on the board's name opens its details. The name takes 44px of touch
+    // without moving anything, and the coordinator chip under it keeps its own centre.
+    const phoneTitle = phone.getByRole("heading", { level: 1 }).getByRole("button");
+    assert.equal(await phoneTitle.evaluate((el) => getComputedStyle(el, "::after").height), "44px");
+    const coordinatorChip = phone.getByRole("link", { name: "Open workspace, " + place });
+    assert.ok(
+      await coordinatorChip.evaluate((el) => {
+        const { x, y, width, height } = el.getBoundingClientRect();
+        return el.contains(document.elementFromPoint(x + width / 2, y + height / 2));
+      })
+    );
+    await phoneTitle.tap();
     const phoneDetails = phone.getByRole("dialog", { name: "Board details" });
     await phoneDetails.getByRole("link", { name: "Release room", exact: true }).waitFor();
     await dismiss(phone, phoneDetails);
