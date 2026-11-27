@@ -4,19 +4,11 @@ import { OperatorError, refuse, type SessionCaller } from "@zvada/agent-server/o
 import { boardPostFields, boardReadOnlyReason } from "@shared/boards";
 import { tool } from "@shared/host-tool";
 import { TitleSchema } from "@shared/title";
-import { getDatabase } from "../../lib/database";
 import { AppError } from "../../lib/errors";
 import * as store from "./store";
+import { coordinatorState, pinBoardTools } from "./coordinator";
+import { COORDINATOR_GUIDE } from "./guide";
 import { theOperator, workspaceArg } from "../assistants/operator";
-
-function coordinatorState(sessionId: string) {
-  return getDatabase()
-    .prepare<[string], { state: string }>(
-      `SELECT w.state FROM sessions s JOIN workspaces w ON w.id = s.workspace_id
-       WHERE s.id = ? AND NOT s.is_hidden AND w.role = 'coordinator'`
-    )
-    .get(sessionId)?.state;
-}
 
 const boardArg = z
   .string()
@@ -24,21 +16,7 @@ const boardArg = z
   .optional()
   .describe("Board ID. Omit when this workspace has one board.");
 export function boardSource(sessionId: string): HostToolSource | undefined {
-  const db = getDatabase();
-  const read = db.prepare<[string], { board_tools: number | null }>(
-    "SELECT board_tools FROM sessions WHERE id = ?"
-  );
-  let pin = read.get(sessionId)?.board_tools;
-  if (pin === null) {
-    // A resumed conversation must find the same tools it started with, including chats from older builds.
-    db.prepare(
-      `UPDATE sessions SET board_tools = (agent_session_id IS NULL AND EXISTS (
-      SELECT 1 FROM workspaces WHERE id = sessions.workspace_id AND role = 'coordinator'
-    )) WHERE id = ? AND board_tools IS NULL`
-    ).run(sessionId);
-    pin = read.get(sessionId)?.board_tools;
-  }
-  if (pin !== 1 || coordinatorState(sessionId) !== "ready") return;
+  if (!pinBoardTools(sessionId) || coordinatorState(sessionId) !== "ready") return;
   const result = (value: unknown) => ({ content: [{ type: "text", text: JSON.stringify(value) }] });
   const tools = [
     tool(
@@ -106,14 +84,7 @@ export function boardSource(sessionId: string): HostToolSource | undefined {
   ];
   return {
     name: "boards",
-    instructions: `You are this workspace's coordinator. The person made it one so that work happens in other workspaces while they follow it on a board, without reading every chat.
-Work that changes files: start a workspace for each separate piece with the session tools, tell it what to do, wait for it and check its result. Keep this checkout for reading; the changes belong to the workspaces you start.
-Keep the person posted on your board, not only in this chat. Create a board for the work if you have none (create_board), and post what they would want to know without asking (post_to_board): what you started, each result, and any decision you need from them. Write @you only when they must read or act.
-A question you can answer by reading needs no workspace and no post.
-For a post about a workspace, use its reference from list_sessions in workspace.
-Name a file as a link with its path in that workspace, e.g. \`[report.md](report.md)\`, in the post about that workspace.
-Report each workspace's result in its own post, with \`workspace\` set to it. A post about the work as a whole needs none.
-For a board delivery, call post_to_board before finishing. Omit board and thread to answer the originating thread.`,
+    instructions: COORDINATOR_GUIDE,
     tools,
     async call(name, args, caller, signal) {
       const state = caller.sessionId === sessionId ? coordinatorState(sessionId) : undefined;

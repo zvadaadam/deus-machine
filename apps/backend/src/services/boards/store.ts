@@ -11,6 +11,7 @@ import { invalidate } from "../query-engine";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../../lib/database";
 import { ConflictError, NotFoundError, ValidationError } from "../../lib/errors";
+import { HAS_OR_WILL_PIN_BOARD_TOOLS } from "./coordinator";
 
 const boardFields = `b.id, b.name, b.workspace_id, b.last_seq,
   CASE WHEN NOT s.is_hidden THEN s.id END AS delivery_session_id,
@@ -108,7 +109,7 @@ export function deliveryChat(board: Board) {
   const chat = db
     .prepare<[string, string | null], { id: string }>(
       `SELECT id FROM sessions WHERE workspace_id = ? AND NOT is_hidden
-     AND (board_tools = 1 OR (board_tools IS NULL AND agent_session_id IS NULL))
+     AND ${HAS_OR_WILL_PIN_BOARD_TOOLS}
      ORDER BY (id IS ?) DESC, chat DESC LIMIT 1`
     )
     .get(board.workspace_id, board.delivery_session_id);

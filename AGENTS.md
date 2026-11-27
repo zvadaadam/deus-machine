@@ -670,6 +670,19 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   In local Claude and Codex composers, `/plan` toggles Plan mode and `/plan <text>`
   sends the text in Plan mode and leaves it on. The Plan chip turns it off.
   Composer actions appear first in the `/` menu and take precedence over disk commands of the same name.
+- **A coordinator hears from its workspaces.** When a chat with board tools started a
+  workspace, each turn there that ends or asks becomes news for it: finished, failed, stopped
+  (and by whom), at a usage limit (its reset and whether it continues), or waiting on a
+  question. A turn the coordinator stopped is not news. `services/boards/coordinator-wake.ts`
+  holds the news in memory, one entry per workspace, the newest state winning. It goes as one
+  message in Deus's words when the coordinator is idle, else at a release. That message carries
+  each workspace's closing words or error, quoted, and is queued as the first workspace's
+  agent message (`enqueueMessage`), with the chat's recorded model, thinking and mode. A held
+  queue keeps it waiting, and a refusal keeps the news for the next release. Every end and
+  every question wakes it, even one a wait already showed, and an ended turn always gets a
+  line. The agent service reports releases and prompts through the `TurnWatch` registered at
+  startup (`chat-turn.ts`); a watcher's failure never stops either.
+  Nothing survives a quit, and a hidden or archived coordinator's news is dropped.
 
 Admission is checked when a socket opens (no leases), and the relay can still read
 `q:` frames: end-to-end encryption is separate work. `DEUS_RELAY_URL` points the

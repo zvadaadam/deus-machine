@@ -151,6 +151,8 @@ export interface SessionRow {
   context_token_count: number;
   context_used_percent: number;
   is_hidden: boolean; // SQLite stores as INTEGER 0/1, coerced by coerceSessionBooleans
+  /** Who started the chat, as the engine's origin (JSON); null for the person. */
+  started_by?: string | null;
   updated_at: string;
 }
 

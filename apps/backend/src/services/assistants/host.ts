@@ -307,12 +307,15 @@ const AGENT_NAMES = new Intl.ListFormat("en").format(
   Object.entries(HARNESSES).map(([id, { label }]) => `${JSON.stringify(id)} (${label})`)
 );
 
-function limitNote(limit: sessions.QueuedMessages["limit"]) {
-  if (!limit) return "stopped on a usage limit";
-  const reset =
-    limit.resetsAt === undefined
-      ? "no reset time was reported, the person decides when to resume"
-      : `resets ${new Date(limit.resetsAt).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+/** A usage limit in words; without `continues`, nothing is said about continuing. */
+export function limitNote(limit?: { resetsAt?: number; continues?: boolean }) {
+  const resets =
+    limit?.resetsAt !== undefined &&
+    `resets ${new Date(limit.resetsAt).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+  // Without the queue's hold: only the reset, if one was reported, and no word on resuming.
+  if (limit?.continues === undefined)
+    return resets ? `stopped on a usage limit, ${resets}` : "stopped on a usage limit";
+  const reset = resets || "no reset time was reported, the person decides when to resume";
   return `stopped on a usage limit, ${reset}, ${limit.continues ? "continues by itself" : "automatic continuation is off"}`;
 }
 

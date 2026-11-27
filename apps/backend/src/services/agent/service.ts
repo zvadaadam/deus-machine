@@ -33,7 +33,14 @@ import { isUnknownEvent } from "@shared/protocol-types";
 import { hasAgentMessages } from "./agent-messages";
 import { prepareGatewayTurn } from "../gateways/turn";
 import { requireRevision } from "../gateways/connections";
-import { holdingTurn, wireTurn, forgetChatTurns, connectTurnNotices } from "./chat-turn";
+import {
+  holdingTurn,
+  wireTurn,
+  forgetChatTurns,
+  connectTurnNotices,
+  tellWatch,
+  type TurnWatch,
+} from "./chat-turn";
 import { onTurnNotice, recoverSteers, userEcho } from "./queue";
 import { AgentLink } from "./client";
 import { LocalAgents } from "./local-agents";
@@ -78,7 +85,12 @@ let toolkit: SessionTools | undefined;
 export async function init({
   agentless = false,
   sessionTools,
-}: { agentless?: boolean; sessionTools?: SessionTools } = {}): Promise<void> {
+  turnWatch,
+}: {
+  agentless?: boolean;
+  sessionTools?: SessionTools;
+  turnWatch?: TurnWatch;
+} = {}): Promise<void> {
   if (link || events) {
     console.warn("[AgentService] Already initialized, skipping");
     return;
@@ -90,6 +102,7 @@ export async function init({
     recover: recoverSteers,
     withdrawCards: (id, turnId) => cancelSessionRelays(id, "turn interrupted", turnId),
     stored: handler.turnStored,
+    watch: turnWatch,
   });
   events = handler;
   if (agentless) {
@@ -395,6 +408,7 @@ async function handleToolRequest(
     const result = persistSessionNeedsResponse(sessionId);
     if (result.ok) invalidate([...sessionResources], { sessionIds: [sessionId] });
   }
+  if (isUserFacing && turnId !== undefined) tellWatch((watch) => watch.asked(sessionId, turnId));
 
   try {
     return await relay({

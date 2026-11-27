@@ -36,15 +36,47 @@ export type TurnNotice =
       cause: "failure" | "cancelled";
       by?: Origin;
     };
+/** What a release says about its turn, for a watcher. */
+export interface Released {
+  /** False when the turn never ran (withdrawn, or refused before admission with no stop). */
+  ended: boolean;
+  /** Who stopped it: only when the release is that Stop's cancel, not a finish that beat it. */
+  stoppedBy?: Origin;
+  /** Its usage limit, as the end reported it. */
+  limit?: { resetsAt?: number };
+  /** It failed; `error` says why when the release itself knows (a refusal, a lost turn, an incomplete transcript). */
+  failed?: true;
+  error?: string;
+  /** The engine ended it normally. */
+  finished?: true;
+}
+/** Someone outside the agent service who follows chats' turns (a coordinator's wake). */
+export interface TurnWatch {
+  /** A turn let go of its chat. */
+  released(sessionId: string, turnId: string, release: Released): void;
+  /** A chat's agent now waits on a question or a plan approval. */
+  asked(sessionId: string, turnId: string): void;
+}
 interface TurnNotices {
   queue: (id: string, notice: TurnNotice) => void;
   recover: (id: string, turnId: string, returnHead?: boolean) => string[] | undefined;
   withdrawCards: (id: string, turnId: string) => void;
   stored: (id: string, turnId: string) => void;
+  watch?: TurnWatch;
 }
 let connected: TurnNotices | undefined;
 export function connectTurnNotices(notices: TurnNotices) {
   connected = notices;
+}
+/** Tell the watch, if any. Its failure is logged and never stops a release or a prompt. */
+export function tellWatch(tell: (watch: TurnWatch) => void) {
+  const watch = connected?.watch;
+  if (!watch) return;
+  try {
+    tell(watch);
+  } catch (error) {
+    console.error("[TurnWatch] A watcher failed:", error);
+  }
 }
 export function turnNotices() {
   if (!connected) throw new Error("Turn notices have not been connected.");
@@ -263,6 +295,25 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
     .with("gone", () => endLocally("error"))
     .exhaustive();
   prune(id, chat);
+  // A withdrawn claim, or one refused before admission with no stop of its own, never ran.
+  const ended = reason.type !== "withdrawn" && (reason.type !== "refused" || !!error || !!by);
+  const cancelled =
+    reason.type === "cancelled" ||
+    (reason.type === "end" && reason.cancelled) ||
+    (reason.type === "refused" && !error);
+  const failed =
+    reason.type === "end" ? reason.outcome?.status === "error" : !!error || reason.type === "gone";
+  const failure = reason.type === "end" ? reason.outcome?.error : error;
+  const finished = reason.type === "end" && !reason.cancelled && reason.outcome?.status === "idle";
+  tellWatch((watch) =>
+    watch.released(id, turnId, {
+      ended,
+      ...(cancelled && by && { stoppedBy: by }),
+      ...(reason.type === "end" && reason.limit && { limit: reason.limit }),
+      ...(failed && { failed: true, ...(failure && { error: failure.message }) }),
+      ...(finished && { finished: true }),
+    })
+  );
   return true;
 }
 

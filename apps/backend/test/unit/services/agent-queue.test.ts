@@ -1,4 +1,5 @@
 import { sessionTools } from "../../../src/services/session-tools";
+import { _heldNews, _resetWake, turnWatch } from "../../../src/services/boards/coordinator-wake";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventGapError, WireRequestError } from "@zvada/agent-server/client";
@@ -58,7 +59,7 @@ import { subscribe } from "../../../src/services/streams";
 import { addConnection, closeAll } from "../../../src/services/ws.service";
 import { createDeusHost, queueView } from "../../../src/services/assistants/host";
 import * as workspaceInit from "../../../src/services/workspace-init.service";
-import { answerMcp } from "../../../src/services/assistants/operator";
+import { answerMcp, operatorHost } from "../../../src/services/assistants/operator";
 import * as access from "../../../src/services/assistants/access";
 import * as settings from "../../../src/services/settings.service";
 import * as toolRelay from "../../../src/services/agent/tool-relay";
@@ -345,11 +346,12 @@ beforeEach(async () => {
     outcome: "steered",
     steerId: steerId!,
   }));
-  await agent.init();
+  await agent.init({ turnWatch });
 });
 
 afterEach(async () => {
   vi.useRealTimers();
+  _resetWake();
   clearAll();
   await agent.shutdown();
   closeAll();
@@ -3498,6 +3500,536 @@ describe("messages held for a local chat", () => {
     expect(snapshot).not.toHaveBeenCalled();
     invalidate([perChat.name], { sessionIds: [sessionId] });
     expect(snapshot).toHaveBeenCalledOnce();
+  });
+});
+
+describe("a coordinator hears from the workspaces it started", () => {
+  const lead = "lead";
+  const fromLead = { kind: "session", sessionId: lead } as const;
+  const workers = ["p1", "p2", "p3", "p4", "p5", "p6"];
+  const as = <T>(id: string, work: () => T): T => {
+    const previous = sessionId;
+    sessionId = id;
+    try {
+      return work();
+    } finally {
+      sessionId = previous;
+    }
+  };
+  const leadStarts = () =>
+    engine.startTurn.mock.calls.map(([p]) => p).filter((p) => p.sessionId === lead);
+  const wakeText = (n = -1) => String(leadStarts().at(n)?.input);
+  const tick = () => new Promise((resolve) => setImmediate(resolve));
+  const settle = async () => {
+    await tick();
+    await tick();
+  };
+  async function brief(id: string, turnId: string) {
+    await enqueueMessage({ ...message(turnId), sessionId: id, turnId }, fromLead);
+    await vi.waitFor(() => expect(holdingTurn(id)).toMatchObject({ turnId, phase: "running" }));
+  }
+  const busyLead = (turnId: string) =>
+    run(api.sendMessage, { ...message(turnId), sessionId: lead, turnId });
+  const endLead = (turnId: string, stopReason: TurnEndedEvent["stopReason"] = "end_turn") =>
+    as(lead, () => {
+      emit({ type: "turn.started", sessionId, turnId, timestamp: seq });
+      end(turnId, stopReason);
+    });
+
+  beforeEach(() => {
+    db.exec(`
+      INSERT INTO workspaces (id, repository_id, slug, state, role) VALUES ('c', 'r', 'desk', 'ready', 'coordinator');
+      INSERT INTO sessions (id, workspace_id, agent_harness, board_tools) VALUES ('lead', 'c', 'codex-app-server', 1);
+    `);
+    for (const [i, id] of workers.entries()) {
+      db.prepare(
+        "INSERT INTO workspaces (id, repository_id, slug, state) VALUES (?, 'r', ?, 'ready')"
+      ).run(`w-${id}`, `piece-${i + 1}`);
+      db.prepare(
+        "INSERT INTO sessions (id, workspace_id, agent_harness, started_by) VALUES (?, ?, 'codex-app-server', ?)"
+      ).run(id, `w-${id}`, JSON.stringify(fromLead));
+    }
+    db.prepare("UPDATE sessions SET started_by = ? WHERE id = ?").run(
+      JSON.stringify(fromLead),
+      sessionId
+    );
+    // A coordinator's turn stays open until a test ends it; a worker's starts as usual.
+    engine.startTurn.mockImplementation(async ({ sessionId: id, turnId, input, origin }) => {
+      if (id === lead) return;
+      as(id!, () => {
+        emit({ type: "turn.started", sessionId, turnId: turnId!, timestamp: seq });
+        echo(turnId!, undefined, input, origin);
+      });
+    });
+  });
+
+  it("runs a wake with the coordinator's recorded model, thinking and mode, as a board post does", async () => {
+    await run(api.sendMessage, {
+      ...message("L1"),
+      sessionId: lead,
+      turnId: "L1",
+      model: "lead-model",
+      thinkingLevel: "high",
+      permissionMode: "plan",
+    });
+    as(lead, () => {
+      emit({ type: "turn.started", sessionId, turnId: "L1", timestamp: seq });
+      emit({
+        type: "turn.ended",
+        sessionId,
+        turnId: "L1",
+        stopReason: "end_turn",
+        timestamp: seq,
+        execution: {
+          harness: "codex-app-server",
+          model: "lead-model",
+          thinkingLevel: "high",
+          permissionMode: "plan",
+        },
+      });
+    });
+    await send("W1");
+    reply("W1", "amber shipment: 17 crates.");
+    end("W1");
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(2));
+    expect(leadStarts()[1]).toMatchObject({
+      config: { model: "lead-model", thinkingLevel: "high", permissionMode: "plan" },
+      origin: { kind: "session", sessionId },
+    });
+    // The person sent this worker's turn, not the coordinator.
+    expect(wakeText()).toBe(
+      [
+        "Deus: news about workspaces you started. Deus wrote this, not the workspace.",
+        '"checkout:1" finished (in a turn started by a message from the person).',
+        "  Closing words:",
+        "  | amber shipment: 17 crates.",
+        'read_session "checkout:1" for the rest.',
+      ].join("\n")
+    );
+  });
+
+  it("gives six ends in one tick one message with six entries, the first worker as its sender", async () => {
+    for (const id of workers) await brief(id, `t-${id}`);
+    for (const id of workers)
+      as(id, () => {
+        reply(`t-${id}`, `${id} done.`);
+        end(`t-${id}`);
+      });
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(1));
+    await settle();
+    expect(leadStarts()).toHaveLength(1);
+    expect(leadStarts()[0]!.origin).toEqual({ kind: "session", sessionId: "p1" });
+    const text = wakeText();
+    for (const [i, id] of workers.entries())
+      expect(text).toContain(`"piece-${i + 1}:1" finished.\n  Closing words:\n  | ${id} done.`);
+    expect(text).not.toContain("started by");
+    expect(text).toMatch(
+      /read_session any of them for the rest, e\.g\. read_session "piece-1:1"\.$/
+    );
+    expect(_heldNews(lead)).toEqual([]);
+  });
+
+  it("holds news while the coordinator works and delivers the newest state at its release", async () => {
+    await busyLead("L");
+    await brief("p1", "a1");
+    as("p1", () => question("a1"));
+    await settle();
+    as("p1", () => {
+      answer("question", { result: { answers: { q: "main" } } });
+      end("a1");
+    });
+    await settle();
+    expect(leadStarts()).toHaveLength(1);
+    expect(_heldNews(lead)).toEqual(["p1"]);
+    endLead("L");
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(2));
+    expect(wakeText()).toContain('"piece-1:1" finished.');
+    expect(wakeText()).not.toContain("question");
+  });
+
+  it("runs one flush at a time per coordinator: a release during a flush's reads sends no second wake", async () => {
+    await brief("p1", "a1");
+    await brief("p2", "b1");
+    // Hold the first flush inside its reads, across ticks.
+    const host = operatorHost();
+    const list = host.list.bind(host);
+    const reads = Promise.withResolvers<void>();
+    vi.spyOn(host, "list").mockImplementationOnce(async (...args) => {
+      await reads.promise;
+      return list(...args);
+    });
+    as("p1", () => end("a1"));
+    await settle();
+    as("p2", () => end("b1"));
+    await settle();
+    reads.resolve();
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(1));
+    await settle();
+    expect(leadStarts()).toHaveLength(1);
+    expect(wakeText()).toContain('"piece-1:1" finished.');
+    expect(wakeText()).not.toContain("piece-2:1");
+    expect(_heldNews(lead)).toEqual(["p2"]);
+    // The wake turn runs and ends as a real one does, with its user echo.
+    const wake = leadStarts()[0]!;
+    as(lead, () => {
+      emit({ type: "turn.started", sessionId, turnId: wake.turnId!, timestamp: seq });
+      echo(wake.turnId!, undefined, wake.input, wake.origin);
+      end(wake.turnId!);
+    });
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(2));
+    expect(wakeText()).toContain('"piece-2:1" finished.');
+    expect(wakeText()).not.toContain("piece-1:1");
+    vi.restoreAllMocks();
+  });
+
+  it("still says a worker waits when one of two questions in a turn was answered", async () => {
+    await busyLead("L");
+    await brief("p1", "a1");
+    as("p1", () => {
+      question("a1");
+      emit({
+        type: "elicitation.requested",
+        sessionId,
+        turnId: "a1",
+        requestId: "question-2",
+        mode: "question",
+        message: "Which lot next?",
+        questions: [{ id: "q2", question: "Which lot next?" }],
+        timestamp: seq,
+      });
+    });
+    await vi.waitFor(() => expect(pendingFor("p1")).toHaveLength(2));
+    // The person answers only the second; the first still blocks the worker.
+    answer(pendingFor("p1")[1]!.requestId, { result: { answers: { q2: "blue" } } });
+    expect(pendingFor("p1")).toHaveLength(1);
+    endLead("L");
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(2));
+    expect(wakeText()).toContain('"piece-1:1" is waiting on a question.');
+  });
+
+  it("says a worker waits on a question", async () => {
+    await brief("p1", "a1");
+    as("p1", () => question("a1"));
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(1));
+    expect(wakeText()).toContain('"piece-1:1" is waiting on a question.');
+  });
+
+  function limitEnd(id: string, turnId: string, resetsAt: number) {
+    as(id, () => {
+      emit({
+        type: "session.limits",
+        sessionId,
+        turnId,
+        windows: [{ id: "primary", usedPercent: 100, resetsAt }],
+        status: "limited",
+        timestamp: seq,
+      });
+      const error = { category: "usage_limit", message: "You've hit your limit" };
+      emit({ type: "error", sessionId, turnId, ...error, recoverable: false, timestamp: seq });
+      emit({ type: "turn.ended", sessionId, turnId, stopReason: "error", error, timestamp: seq });
+    });
+  }
+  const resetWords = (at: number) => new Date(at).toISOString().slice(0, 16).replace("T", " ");
+
+  // The flush runs after the event handler's synchronous handle(): the queue has decided the hold.
+  // A gap between releaseTurn and the queue's notice (a macrotask) fails this test.
+  it.each([false, true])(
+    "pins the limit line's order through the real event handler (continue_after_usage_limit %s)",
+    async (on) => {
+      vi.spyOn(settings, "getSetting").mockImplementation(
+        (key) => key === "continue_after_usage_limit" && on
+      );
+      const resetsAt = Date.now() + 120_000;
+      await brief("p1", "a1");
+      limitEnd("p1", "a1", resetsAt);
+      await vi.waitFor(() => expect(leadStarts()).toHaveLength(1));
+      expect(wakeText()).toContain(
+        `"piece-1:1" stopped on a usage limit, resets ${resetWords(resetsAt)} UTC, ${on ? "continues by itself" : "automatic continuation is off"}.\n  Error:\n  | You've hit your limit`
+      );
+      vi.restoreAllMocks();
+    }
+  );
+
+  it("leaves continuation out once the queue no longer holds for the limited turn", async () => {
+    const resetsAt = Date.now() + 120_000;
+    await busyLead("L");
+    await brief("p1", "a1");
+    limitEnd("p1", "a1", resetsAt);
+    await settle();
+    // The person carries on in the worker's chat: its queue no longer holds for that limit.
+    await run(api.sendMessage, { ...message("b1"), sessionId: "p1", turnId: "b1" });
+    await vi.waitFor(() => expect(holdingTurn("p1")?.turnId).toBe("b1"));
+    endLead("L");
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(2));
+    expect(wakeText()).toContain(
+      `"piece-1:1" stopped on a usage limit, resets ${resetWords(resetsAt)} UTC.\n  Error:`
+    );
+    expect(wakeText()).not.toContain("continu");
+  });
+
+  it("delivers a finish that beat the coordinator's pending Stop", async () => {
+    await brief("p1", "a1");
+    const cancel = Promise.withResolvers<TurnCancelResult>();
+    engine.cancelTurn.mockReturnValueOnce(cancel.promise);
+    const stopping = stopSession({ sessionId: "p1" }, fromLead);
+    await vi.waitFor(() => expect(engine.cancelTurn).toHaveBeenCalled());
+    as("p1", () => {
+      reply("a1", "p1 done.");
+      end("a1");
+    });
+    cancel.resolve({ outcome: "no_active_turn" });
+    await stopping;
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(1));
+    expect(wakeText()).toContain('"piece-1:1" finished.');
+  });
+
+  it("reports a turn whose transcript could not be recovered as failed, not finished", async () => {
+    await brief("p1", "a1");
+    engine.cancelTurn.mockResolvedValueOnce({ outcome: "unconfirmed", turnId: "a1" });
+    as("p1", () => gap("replay_failed"));
+    await vi.waitFor(() => expect(engine.cancelTurn).toHaveBeenCalled());
+    await settle();
+    as("p1", () => end("a1"));
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(1));
+    expect(wakeText()).toContain(
+      '"piece-1:1" failed.\n  Error:\n  | Some agent output could not be recovered'
+    );
+  });
+
+  it("still delivers the finish of a workspace archived before delivery", async () => {
+    await busyLead("L");
+    await brief("p1", "a1");
+    as("p1", () => end("a1"));
+    await settle();
+    db.exec("UPDATE workspaces SET state = 'archived' WHERE id = 'w-p1'");
+    endLead("L");
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(2));
+    expect(wakeText()).toContain('"piece-1:1" finished.');
+  });
+
+  it("drops a refused wake's news when its coordinator is archived, so a restore does not revive it", async () => {
+    await busyLead("L");
+    for (let i = 0; i < 5; i++)
+      await enqueueMessage(
+        { ...message(`r${i}`), sessionId: lead, turnId: `r${i}` },
+        fromAssistant
+      );
+    engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "L" });
+    await stopSession({ sessionId: lead }, fromPerson);
+    endLead("L", "cancelled");
+    const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await brief("p1", "a1");
+    as("p1", () => end("a1"));
+    await settle();
+    expect(_heldNews(lead)).toEqual(["p1"]);
+    expect(warned).toHaveBeenCalled();
+    db.exec("UPDATE workspaces SET state = 'archived' WHERE id = 'c'");
+    invalidate(["workspaces"]);
+    db.exec("UPDATE workspaces SET state = 'ready' WHERE id = 'c'");
+    invalidate(["workspaces"]);
+    // An unrelated chat's release.
+    db.exec(`INSERT INTO workspaces (id, repository_id, slug, state) VALUES ('u', 'r', 'unrelated', 'ready');
+      INSERT INTO sessions (id, workspace_id, agent_harness) VALUES ('u1', 'u', 'codex-app-server');`);
+    await run(api.sendMessage, { ...message("u"), sessionId: "u1", turnId: "u" });
+    as("u1", () => end("u"));
+    await settle();
+    expect(_heldNews(lead)).toEqual([]);
+    expect(leadStarts()).toHaveLength(1);
+    const rows = (await run(api.queuedMessages, { sessionId: lead })).items;
+    expect(rows.some((row) => row.text.startsWith("Deus: news"))).toBe(false);
+    warned.mockRestore();
+  });
+
+  it("says who stopped a turn that never ran and left no record of how it ended", async () => {
+    chatTurns.claimTurn("p1", "s1");
+    chatTurns.askStop("p1", fromPerson);
+    chatTurns.refuseTurn("p1", "s1");
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(1));
+    expect(wakeText()).toContain('"piece-1:1" was stopped by the person.');
+  });
+
+  it("says a turn ended when its release left no record of how", async () => {
+    chatTurns.claimTurn("p2", "s2");
+    chatTurns.releaseTurn("p2", "s2", { type: "snapshot" });
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(1));
+    expect(wakeText()).toContain('"piece-2:1" ended its turn.');
+  });
+
+  it("still says something when the workspace was removed before delivery", async () => {
+    await busyLead("L");
+    await brief("p1", "a1");
+    as("p1", () => end("a1"));
+    await settle();
+    db.exec("DELETE FROM sessions WHERE id = 'p1'; DELETE FROM workspaces WHERE id = 'w-p1'");
+    endLead("L");
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(2));
+    expect(wakeText()).toContain("A workspace you started (its project was removed) finished.");
+    expect(wakeText()).not.toContain("read_session");
+  });
+
+  it("signs a wake with the first worker that still exists", async () => {
+    await busyLead("L");
+    await brief("p1", "a1");
+    await brief("p2", "b1");
+    as("p1", () => end("a1"));
+    as("p2", () => end("b1"));
+    await settle();
+    db.exec("DELETE FROM sessions WHERE id = 'p1'; DELETE FROM workspaces WHERE id = 'w-p1'");
+    endLead("L");
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(2));
+    expect(leadStarts()[1]!.origin).toEqual({ kind: "session", sessionId: "p2" });
+    expect(wakeText()).toContain("A workspace you started (its project was removed) finished.");
+    expect(wakeText()).toMatch(
+      /read_session "piece-2:1" for the rest\.$|e\.g\. read_session "piece-2:1"\.$/
+    );
+  });
+
+  it("keeps a recovery's failure when its cancel confirms before the end", async () => {
+    await brief("p1", "a1");
+    engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "a1" });
+    as("p1", () => gap("replay_failed"));
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(1));
+    expect(wakeText()).toContain(
+      '"piece-1:1" was stopped.\n  Error:\n  | Some agent output could not be recovered'
+    );
+  });
+
+  it("keeps a failure's reason when the error end carries none", async () => {
+    await brief("p1", "a1");
+    as("p1", () => {
+      const error = { category: "internal", message: "Disk full while writing report.md" };
+      emit({
+        type: "error",
+        sessionId,
+        turnId: "a1",
+        ...error,
+        recoverable: false,
+        timestamp: seq,
+      });
+      emit({ type: "turn.ended", sessionId, turnId: "a1", stopReason: "error", timestamp: seq });
+    });
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(1));
+    expect(wakeText()).toContain(
+      '"piece-1:1" failed.\n  Error:\n  | Disk full while writing report.md'
+    );
+  });
+
+  it("says nothing about resuming once the queue no longer holds for a limit with no reset", async () => {
+    await busyLead("L");
+    await brief("p1", "a1");
+    as("p1", () => {
+      const error = { category: "usage_limit", message: "You've hit your limit" };
+      emit({
+        type: "error",
+        sessionId,
+        turnId: "a1",
+        ...error,
+        recoverable: false,
+        timestamp: seq,
+      });
+      emit({
+        type: "turn.ended",
+        sessionId,
+        turnId: "a1",
+        stopReason: "error",
+        error,
+        timestamp: seq,
+      });
+    });
+    await settle();
+    await run(api.sendMessage, { ...message("b1"), sessionId: "p1", turnId: "b1" });
+    await vi.waitFor(() => expect(holdingTurn("p1")?.turnId).toBe("b1"));
+    endLead("L");
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(2));
+    expect(wakeText()).toContain('"piece-1:1" stopped on a usage limit.\n  Error:');
+    expect(wakeText()).not.toContain("resume");
+  });
+
+  it("is not news when the coordinator stopped the turn", async () => {
+    await brief("p1", "a1");
+    engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "a1" });
+    await stopSession({ sessionId: "p1" }, fromLead);
+    as("p1", () => end("a1", "cancelled"));
+    await settle();
+    expect(leadStarts()).toEqual([]);
+    expect(_heldNews(lead)).toEqual([]);
+  });
+
+  it("says who stopped a turn the coordinator did not", async () => {
+    await brief("p1", "a1");
+    engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "a1" });
+    await stopSession({ sessionId: "p1" }, fromPerson);
+    as("p1", () => end("a1", "cancelled"));
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(1));
+    expect(wakeText()).toContain('"piece-1:1" was stopped by the person.');
+  });
+
+  it("keeps a refused delivery and delivers it at the next release; a held queue keeps it waiting", async () => {
+    // The person stops the coordinator with five agent messages waiting: its queue holds, full.
+    await busyLead("L");
+    for (let i = 0; i < 5; i++)
+      await enqueueMessage(
+        { ...message(`r${i}`), sessionId: lead, turnId: `r${i}` },
+        fromAssistant
+      );
+    engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "L" });
+    await stopSession({ sessionId: lead }, fromPerson);
+    endLead("L", "cancelled");
+    const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await brief("p1", "a1");
+    as("p1", () => end("a1"));
+    await settle();
+    expect(_heldNews(lead)).toEqual(["p1"]);
+    expect(String(warned.mock.calls[0]?.[1])).toContain("5 messages from agents waiting");
+    await run(api.removeQueuedMessage, { sessionId: lead, id: "r0" });
+    await brief("p2", "b1");
+    as("p2", () => end("b1"));
+    await vi.waitFor(() => expect(_heldNews(lead)).toEqual([]));
+    const rows = (await run(api.queuedMessages, { sessionId: lead })).items;
+    expect(rows.at(-1)).toMatchObject({ state: "waiting", origin: { sessionId: "p1" } });
+    expect(rows.at(-1)!.text).toContain('"piece-1:1" finished.');
+    expect(rows.at(-1)!.text).toContain('"piece-2:1" finished.');
+    expect((await run(api.queuedMessages, { sessionId: lead })).paused).toBe("stopped");
+    expect(leadStarts()).toHaveLength(1);
+    warned.mockRestore();
+  });
+
+  it.each([
+    ["hidden", "UPDATE sessions SET is_hidden = 1 WHERE id = 'lead'"],
+    ["archived", "UPDATE workspaces SET state = 'archived' WHERE id = 'c'"],
+  ])("drops held news once its coordinator is %s, at any release", async (_, change) => {
+    await busyLead("L");
+    await brief("p1", "a1");
+    as("p1", () => end("a1"));
+    await settle();
+    expect(_heldNews(lead)).toEqual(["p1"]);
+    db.exec(change);
+    await brief("p2", "b1");
+    as("p2", () => end("b1"));
+    await settle();
+    expect(_heldNews(lead)).toEqual([]);
+    expect(leadStarts()).toHaveLength(1);
+  });
+
+  it("a watcher that throws never stops a release or a question", async () => {
+    const released = vi.spyOn(turnWatch, "released").mockImplementation(() => {
+      throw new Error("watcher fixture");
+    });
+    const asked = vi.spyOn(turnWatch, "asked").mockImplementation(() => {
+      throw new Error("watcher fixture");
+    });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    await send("A");
+    question("A");
+    await vi.waitFor(() => expect(pendingFor(sessionId)).toHaveLength(1));
+    end("A");
+    expect(holdingTurn(sessionId)).toBeUndefined();
+    await send("B");
+    expect(wireTurnId()).toBe("B");
+    expect(released).toHaveBeenCalled();
+    expect(asked).toHaveBeenCalled();
+    expect(logged).toHaveBeenCalledWith("[TurnWatch] A watcher failed:", expect.any(Error));
+    vi.restoreAllMocks();
   });
 });
 
