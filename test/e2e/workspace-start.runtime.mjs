@@ -225,6 +225,7 @@ try {
   const modules = {
     client: "/src/platform/ws/query-protocol-client.ts",
     pending: "/src/features/workspace/store/workspaceStartStore.ts",
+    selection: "/src/features/workspace/store/workspaceStore.ts",
     agents: "/src/shared/agents/index.ts",
   };
   const attach = async (page) => {
@@ -663,6 +664,19 @@ try {
   await notice.getByRole("button", { name: "View", exact: true }).click();
   await panel(a).getByText("Workspace didn't start").waitFor();
   await keep(a, doomed.id, "Rename the billing page");
+  // The live list can take the reader Home before the delete acknowledgment arrives.
+  await a.evaluate(async (selection) => {
+    const { useWorkspaceStore } = await import(selection);
+    const client = window.testClient;
+    const call = client.call.bind(client);
+    client.call = async (op, ...args) => {
+      if (op.name !== "deleteWorkspace") return call(op, ...args);
+      client.call = call;
+      const result = await call(op, ...args);
+      useWorkspaceStore.getState().selectWorkspace(null);
+      return result;
+    };
+  }, modules.selection);
   await panel(a).getByRole("button", { name: "Delete", exact: true }).click();
   const deleted = toast(a, "Workspace deleted");
   await deleted.waitFor();
@@ -678,7 +692,7 @@ try {
   await main(a).getByRole("button", { name: "project", exact: true }).waitFor({ timeout: 3000 });
   await shot(a, "deleted");
   check(
-    "A failure elsewhere toasts; Delete removes it and hands its message back to Home, in its project"
+    "Delete hands the failed workspace’s message back to Home in its project even if the live list moves the reader there first"
   );
 
   // ── 9. A workspace that cannot be created: the message stays where it was typed.

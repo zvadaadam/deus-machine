@@ -24,14 +24,19 @@ export function useStartRecovery(workspaceId: string, repoId?: string) {
   // from the list, which unmounts whoever asked, and callbacks given to
   // `mutate` are dropped with the component.
   const deleteWorkspace = useCallback(async () => {
+    // Removing the row can take the reader Home before the write is acknowledged,
+    // so whether it was on screen is read before the delete.
+    const { selectWorkspace } = useWorkspaceStore.getState();
+    const wasOnScreen = useWorkspaceStore.getState().selectedWorkspaceId === workspaceId;
     try {
       await remove(workspaceId);
     } catch (error) {
       toast.error(getErrorMessage(error));
       return;
     }
-    const { selectedWorkspaceId, selectWorkspace } = useWorkspaceStore.getState();
-    const onScreen = selectedWorkspaceId === workspaceId;
+    // A reader who opened another workspace meanwhile stays there.
+    const now = useWorkspaceStore.getState().selectedWorkspaceId;
+    const onScreen = wasOnScreen && (now === workspaceId || now === null);
     // What was typed in its start page's composer goes with it.
     sessionComposerActions.discard(workspaceId);
     const pending = pendingFirstMessages.get(workspaceId);
