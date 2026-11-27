@@ -1,11 +1,10 @@
 import { useCallback } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@shared/api";
 import { getErrorMessage } from "@shared/lib/errors";
 import { appHistory } from "@/shared/lib/appHistory";
 import { isMobileViewport } from "@/shared/hooks/use-mobile";
-import { runtimeForQueryClient, getRuntimeClient } from "@/platform/ws";
+import { getRuntimeClient } from "@/platform/ws";
 import type { MarkdownFileLinkResolution } from "@/components/markdown/MarkdownRenderer";
 import { isBrowserPreviewPath, normalizeResourcePath } from "@/features/session/lib/chatResources";
 import {
@@ -22,7 +21,6 @@ export function useWorkspaceLinks(
   workspaceId: string | null,
   chat?: Pick<ChatPlace, "cloud" | "folder">
 ) {
-  const cache = useQueryClient();
   const fromBoard = !chat;
   const folder = chat?.folder ?? null;
   const cloud = chat?.cloud ?? false;
@@ -61,7 +59,7 @@ export function useWorkspaceLinks(
       const place = fromBoard ? boardPlace : chatPlaceNow(workspaceId, { cloud, folder });
       if (fromBoard && absolutePath(path)) {
         const visit = appHistory().location;
-        const runtime = runtimeForQueryClient(cache) ?? getRuntimeClient();
+        const runtime = getRuntimeClient();
         try {
           const workspace = await runtime.call(api.workspace, { workspaceId });
           if (
@@ -83,7 +81,7 @@ export function useWorkspaceLinks(
       }
       await openFromChat(workspaceId, openFile(path, place, fileHow(path, fromBoard)));
     },
-    [workspaceId, fromBoard, folder, cloud, cache]
+    [workspaceId, fromBoard, folder, cloud]
   );
 
   const onLinkOpen = useCallback(
