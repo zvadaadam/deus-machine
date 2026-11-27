@@ -200978,13 +200978,13 @@
       "type": "color",
       "value": [
         {
-          "value": "#EEDCE5",
+          "value": "#F3E6ED",
           "theme": {
             "mode": "light"
           }
         },
         {
-          "value": "#32282E",
+          "value": "#362E33",
           "theme": {
             "mode": "dark"
           }
@@ -200995,13 +200995,13 @@
       "type": "color",
       "value": [
         {
-          "value": "#F7EAF1",
+          "value": "#FBF5F8",
           "theme": {
             "mode": "light"
           }
         },
         {
-          "value": "#493A42",
+          "value": "#43393E",
           "theme": {
             "mode": "dark"
           }
@@ -201012,13 +201012,13 @@
       "type": "color",
       "value": [
         {
-          "value": "#C274A12E",
+          "value": "#C174A221",
           "theme": {
             "mode": "light"
           }
         },
         {
-          "value": "#E1A0C333",
+          "value": "#E0A2C121",
           "theme": {
             "mode": "dark"
           }
@@ -201029,13 +201029,13 @@
       "type": "color",
       "value": [
         {
-          "value": "#EFEFED",
+          "value": "#ECECEA",
           "theme": {
             "mode": "light"
           }
         },
         {
-          "value": "#131313",
+          "value": "#171717",
           "theme": {
             "mode": "dark"
           }

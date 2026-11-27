@@ -146,9 +146,12 @@ function App() {
           <button onClick={() => setPhase(p => p + 1)}>Advance turn</button>
           <button onClick={() => setLaterTool(true)}>Run another tool</button>
           <SessionProvider sessionId="s" sessionStatus={phase === 1 ? "idle" : "working"} workspaceId="workspace" subagentMessages={new Map()}>
+            <MessageItem message={{id: "joined-prompt", session_id: "s", turn_id: "turn", role: "user", seq: 0, parts: [
+              {type: "text", id: "joined-prompt-text", text: "First in a pair of user messages.", state: "done"},
+            ]}} next />
             <MessageItem message={{id: "medium-prompt", session_id: "s", turn_id: "turn", role: "user", seq: 0, parts: [
               {type: "text", id: "medium-prompt-text", text: Array.from({length: 8}, (_, i) => \`Line \${i + 1} of a message that only overflows by a line.\`).join("\\n"), state: "done"},
-            ]}} />
+            ]}} previous />
             <MessageItem message={{id: "prompt", session_id: "s", turn_id: "turn", role: "user", seq: 0, parts: [
               {type: "text", id: "prompt-text", text: "Please check this change. ".repeat(100), state: "done"},
             ]}} />
@@ -531,7 +534,7 @@ try {
     .locator("#message-content-medium-prompt")
     .evaluate((content) => {
       const bubble = content.closest(".user-bubble");
-      const copy = bubble?.parentElement?.querySelector('button[aria-label="Copy"]');
+      const copy = bubble?.closest(".group")?.querySelector('button[aria-label="Copy"]');
       return (
         !!bubble &&
         !!copy &&
@@ -540,6 +543,20 @@ try {
       );
     });
   assert(copyBelowBubble, "User message Copy button sits in a footer below the bubble");
+  const joinedCopyBesideBubble = await page
+    .locator("#message-content-joined-prompt")
+    .evaluate((content) => {
+      const bubble = content.closest(".user-bubble");
+      const copy = bubble?.closest(".group")?.querySelector('button[aria-label="Copy"]');
+      if (!bubble || !copy || bubble.contains(copy)) return false;
+      const b = bubble.getBoundingClientRect();
+      const c = copy.getBoundingClientRect();
+      return c.right <= b.left && c.top >= b.top && c.bottom <= b.bottom;
+    });
+  assert(
+    joinedCopyBesideBubble,
+    "A consecutive user message keeps Copy inside its row beside the bubble"
+  );
   const longMessage = page.getByRole("button", { name: /^Show (more|less)$/ });
   await longMessage.click();
   await bash.click();

@@ -63,93 +63,99 @@ export const MessageItem = memo(function MessageItem({
 
   const handleCopy = () => copy(texts.join("\n"));
 
+  const copyAction = hasTextContent && (
+    <ActionButton
+      icon={copied ? Check : Copy}
+      label={copied ? "Copied" : "Copy"}
+      onClick={handleCopy}
+      active={copied}
+      showLabel={false}
+      className="h-6 w-6 justify-center rounded-md px-0"
+    />
+  );
+
+  const copyVisibility = cn(
+    "pointer-events-none opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100",
+    copied && "pointer-events-auto opacity-100"
+  );
+
   return (
     <div className="group relative flex flex-col items-end gap-1">
       {message.origin && <SentFrom origin={message.origin} />}
-      <div
-        className={cn(
-          bubbleClass("user", { previous, next }),
-          "user-bubble bg-user-bubble from-user-bubble to-user-bubble-top ring-user-bubble-border relative ml-auto min-w-0 bg-linear-to-t shadow-[inset_0_1px_0_var(--user-bubble-highlight),0_1px_2px_var(--user-bubble-shadow)] ring-1 ring-inset"
+      <div className="flex w-full items-center justify-end">
+        {copyAction && next && (
+          <div className={cn("shrink-0 pr-1.5", copyVisibility)}>{copyAction}</div>
         )}
-      >
-        {images.length > 0 && (
-          <div className={cn("flex flex-wrap gap-1.5", hasTextContent && "mb-2")}>
-            {images.map((src, idx) => (
-              <div
-                key={`${message.id}:img:${idx}`}
-                className="border-border/60 h-[80px] w-[80px] shrink-0 overflow-hidden rounded-lg border"
-              >
-                <img src={src} alt="Pasted image" className="h-full w-full object-cover" />
-              </div>
-            ))}
-          </div>
-        )}
-
-        {hasTextContent && (
-          <m.div
-            ref={contentRef}
-            id={`message-content-${message.id}`}
-            className="relative min-w-0 overflow-hidden"
-            style={
-              collapsed ? { WebkitMaskImage: COLLAPSE_MASK, maskImage: COLLAPSE_MASK } : undefined
-            }
-            animate={
-              shouldCollapse
-                ? { height: isExpanded ? "auto" : COLLAPSE_MAX_HEIGHT }
-                : { height: "auto" }
-            }
-            initial={false}
-            transition={
-              reduced ? { type: false } : isExpanded ? tempo.moderate : tempo.moderate.exit
-            }
-          >
-            {texts.map((text, idx) => (
-              <TextBlock key={`${message.id}:text:${idx}`} block={text} role="user" />
-            ))}
-          </m.div>
-        )}
-
-        {shouldCollapse && (
-          <button
-            type="button"
-            onClick={toggle}
-            className="text-secondary-foreground hover:text-foreground mt-2 flex items-center gap-1 text-xs font-normal transition-colors"
-            aria-expanded={isExpanded}
-            aria-controls={`message-content-${message.id}`}
-          >
-            {isExpanded ? (
-              <>
-                Show less
-                <ChevronUp className="h-3 w-3" />
-              </>
-            ) : (
-              <>
-                Show more
-                <ChevronDown className="h-3 w-3" />
-              </>
-            )}
-          </button>
-        )}
-      </div>
-
-      {hasTextContent && (
         <div
           className={cn(
-            "pointer-events-none absolute top-full right-0 z-10 pt-1 opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100",
-            copied && "pointer-events-auto opacity-100"
+            bubbleClass("user", { previous, next }),
+            "user-bubble bg-user-bubble from-user-bubble to-user-bubble-top ring-user-bubble-border relative min-w-0 bg-linear-to-t shadow-[inset_0_1px_0_var(--user-bubble-highlight),0_1px_2px_var(--user-bubble-shadow)] ring-1 ring-inset"
           )}
         >
-          <ActionButton
-            icon={copied ? Check : Copy}
-            label={copied ? "Copied" : "Copy"}
-            onClick={handleCopy}
-            active={copied}
-            showLabel={false}
-            className={cn(
-              "h-6 w-6 justify-center rounded-md px-0",
-              next && "bg-background/95 ring-border shadow-xs ring-1 backdrop-blur-sm"
-            )}
-          />
+          {images.length > 0 && (
+            <div className={cn("flex flex-wrap gap-1.5", hasTextContent && "mb-2")}>
+              {images.map((src, idx) => (
+                <div
+                  key={`${message.id}:img:${idx}`}
+                  className="border-border/60 h-[80px] w-[80px] shrink-0 overflow-hidden rounded-lg border"
+                >
+                  <img src={src} alt="Pasted image" className="h-full w-full object-cover" />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {hasTextContent && (
+            <m.div
+              ref={contentRef}
+              id={`message-content-${message.id}`}
+              className="relative min-w-0 overflow-hidden"
+              style={
+                collapsed ? { WebkitMaskImage: COLLAPSE_MASK, maskImage: COLLAPSE_MASK } : undefined
+              }
+              animate={
+                shouldCollapse
+                  ? { height: isExpanded ? "auto" : COLLAPSE_MAX_HEIGHT }
+                  : { height: "auto" }
+              }
+              initial={false}
+              transition={
+                reduced ? { type: false } : isExpanded ? tempo.moderate : tempo.moderate.exit
+              }
+            >
+              {texts.map((text, idx) => (
+                <TextBlock key={`${message.id}:text:${idx}`} block={text} role="user" />
+              ))}
+            </m.div>
+          )}
+
+          {shouldCollapse && (
+            <button
+              type="button"
+              onClick={toggle}
+              className="text-secondary-foreground hover:text-foreground mt-2 flex items-center gap-1 text-xs font-normal transition-colors"
+              aria-expanded={isExpanded}
+              aria-controls={`message-content-${message.id}`}
+            >
+              {isExpanded ? (
+                <>
+                  Show less
+                  <ChevronUp className="h-3 w-3" />
+                </>
+              ) : (
+                <>
+                  Show more
+                  <ChevronDown className="h-3 w-3" />
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {copyAction && !next && (
+        <div className={cn("absolute top-full right-0 z-10 pt-1", copyVisibility)}>
+          {copyAction}
         </div>
       )}
     </div>
