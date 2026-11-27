@@ -1,3 +1,5 @@
+import { match } from "ts-pattern";
+import { workspaceStart } from "@/features/workspace/lib/startState";
 import type { Workspace } from "@/features/workspace/types";
 import { workspaceChats, type WorkspaceChat } from "@shared/types/workspace";
 import type { WorkspaceStatus } from "@shared/enums";
@@ -66,4 +68,38 @@ export function sortByStatusPriority<T extends Workspace>(
     }))
     .sort((a, b) => b.priority - a.priority || b.updatedAt - a.updatedAt)
     .map(({ workspace }) => workspace);
+}
+
+/** The activity and attention shown on a workspace row. */
+export function workspaceRowStatus(
+  workspace: Workspace,
+  unread: Readonly<Record<string, boolean>>
+) {
+  const { status, working, waiting, running } = getWorkspaceActivity(workspace, unread);
+  const isInitializing = workspace.state === "initializing";
+  const isFailed = workspace.state === "error";
+  const start = isFailed || isInitializing ? workspaceStart(workspace).brief : null;
+  const attention = match(status)
+    .with("error", () => (isFailed ? null : "error"))
+    .with("unread", () =>
+      match(waiting?.status)
+        .with("needs_response", () => "waiting for your answer")
+        .with("needs_plan_response", () => "waiting for plan approval")
+        .otherwise(() => "unread activity")
+    )
+    .otherwise(() => null);
+  const description = [working && "working", status === "idle" && "idle", attention, start]
+    .filter(Boolean)
+    .join(", ");
+
+  return {
+    status,
+    working,
+    running,
+    isInitializing,
+    isFailed,
+    start,
+    attention,
+    description,
+  };
 }

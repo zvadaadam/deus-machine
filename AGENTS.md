@@ -464,6 +464,9 @@ from `services/boards/tools.ts`. The workspace owns its boards across chats.
 A person’s post ID is the turn ID that delivers it. `preserveTurnId` keeps it through the queue.
 The receipt is waiting while queued or sending, delivered after the initial user echo, or not delivered with “Send again”.
 The channel and open thread follow the live `boardChannel` and `boardThread` reads.
+The host counts coordinator posts that mention `@you` in prose until the person replies later in the same thread.
+On a writable board, the first consecutive run of numbered options on a waiting post lets the person answer in one tap.
+Workspace chips carry the sidebar’s live status marks, and the workspace menu names the state.
 A file chip opens the working file in the post’s subject workspace, or in the board’s workspace when the post has no subject.
 The board viewer stays over the channel or thread. An archived workspace’s files remain readable while its checkout exists.
 Archiving the workspace hides its boards from the sidebar and leaves their links readable. Restore brings them back.

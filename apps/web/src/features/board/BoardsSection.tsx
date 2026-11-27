@@ -46,12 +46,23 @@ export function BoardsSection() {
                       <Hash size={14} className="text-text-muted shrink-0" />
                       <span className="truncate text-sm">{channelName(board.name)}</span>
                     </SidebarRowMain>
-                    {board.last_seq > (seen[scope + board.id] ?? 0) && (
-                      <span
-                        className="bg-accent-gold size-1.5 shrink-0 rounded-full"
-                        aria-label="Unread posts"
-                      />
-                    )}
+                    <span className="flex shrink-0 items-center gap-1.5 empty:hidden">
+                      {board.waiting > 0 && (
+                        <span
+                          role="img"
+                          aria-label={`${board.waiting} ${board.waiting === 1 ? "question" : "questions"} waiting`}
+                          className="bg-warning/15 text-warning grid h-4.5 min-w-4.5 place-items-center rounded-full px-1 text-center text-xs font-medium tabular-nums"
+                        >
+                          {board.waiting}
+                        </span>
+                      )}
+                      {board.last_seq > (seen[scope + board.id] ?? 0) && (
+                        <span
+                          className="bg-accent-gold size-1.5 shrink-0 rounded-full"
+                          aria-label="Unread posts"
+                        />
+                      )}
+                    </span>
                   </button>
                 </SidebarRow>
               ))}

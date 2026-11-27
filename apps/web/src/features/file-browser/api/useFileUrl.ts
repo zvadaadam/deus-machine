@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getRuntimeClient, runtimeForQueryClient } from "@/platform/ws";
+import { skipToken, useQuery } from "@tanstack/react-query";
+import { useRuntimeClient } from "@/platform/ws/useRuntimeClient";
 import { readMediaUrl, type FileLocation } from "./fileUrl";
 
 type Media = HTMLImageElement | HTMLVideoElement;
@@ -12,7 +12,7 @@ interface Recovery {
 }
 
 export function useFileUrl(...file: FileLocation | [kind: "recording", path: undefined]) {
-  const runtime = runtimeForQueryClient(useQueryClient()) ?? getRuntimeClient();
+  const runtime = useRuntimeClient();
   const {
     data: url,
     isError,

@@ -13,6 +13,18 @@ import { getDatabase } from "../../lib/database";
 import { ConflictError, NotFoundError, ValidationError } from "../../lib/errors";
 import { HAS_OR_WILL_PIN_BOARD_TOOLS } from "./coordinator";
 
+import { awaitingQuestions, questionCandidates } from "./questions";
+
+type BoardFields = Omit<Board, "waiting">;
+
+const boardCandidates = `(SELECT ${questionCandidates("q.board_id = b.id")}) AS candidates`;
+
+function markAwaiting(posts: BoardPost[], awaiting: ReadonlySet<number>) {
+  for (const post of posts) {
+    if (awaiting.has(post.seq)) post.awaiting = true;
+  }
+}
+
 const boardFields = `b.id, b.name, b.workspace_id, b.last_seq,
   CASE WHEN NOT s.is_hidden THEN s.id END AS delivery_session_id,
   COALESCE(w.title, w.slug) AS coordinator_name,
@@ -23,8 +35,11 @@ const boardSelect = `SELECT ${boardFields} ${boardTables}`;
 
 export function listBoards(): Board[] {
   return getDatabase()
-    .prepare<[], Board>(boardSelect + " WHERE w.state != 'archived' ORDER BY b.id")
-    .all();
+    .prepare<[], BoardFields & { candidates: string }>(
+      `SELECT ${boardFields}, ${boardCandidates} ${boardTables} WHERE w.state != 'archived' ORDER BY b.id`
+    )
+    .all()
+    .map(({ candidates, ...board }) => ({ ...board, waiting: awaitingQuestions(candidates).size }));
 }
 
 /** One lookup for all chats whose queues or echoes changed. */
@@ -37,16 +52,16 @@ export function boardsForDeliveryChats(sessionIds: string[]) {
     .map((row) => row.id);
 }
 
-export function getBoard(id: string): Board {
+export function getBoard(id: string): BoardFields {
   const row = getDatabase()
-    .prepare<[string], Board>(boardSelect + " WHERE b.id = ?")
+    .prepare<[string], BoardFields>(boardSelect + " WHERE b.id = ?")
     .get(id);
   if (!row) throw new NotFoundError("This board does not exist.");
   return row;
 }
 
 /** The board and the distinct subjects of all its posts, including replies outside the current page. */
-export function boardDetail(id: string): BoardDetail | null {
+export function channelPage(id: string, before?: number) {
   const subjects = `(SELECT json_group_object(id, json_object('name', name, 'archived', json(archived)))
     FROM (SELECT w.id, COALESCE(w.title, w.slug) AS name,
             CASE w.state WHEN 'archived' THEN 'true' ELSE 'false' END AS archived
@@ -57,10 +72,20 @@ export function boardDetail(id: string): BoardDetail | null {
   const row = getDatabase()
     .prepare<
       [string],
-      Board & { workspaces: string }
-    >(`SELECT ${boardFields}, ${subjects} ${boardTables} WHERE b.id = ?`)
+      BoardFields & { workspaces: string; candidates: string }
+    >(`SELECT ${boardFields}, ${subjects}, ${boardCandidates} ${boardTables} WHERE b.id = ?`)
     .get(id);
-  return row ? { ...row, workspaces: JSON.parse(row.workspaces) } : null;
+  if (!row) return null;
+  const { candidates, workspaces, ...fields } = row;
+  const awaiting = awaitingQuestions(candidates);
+  const board: BoardDetail = {
+    ...fields,
+    waiting: awaiting.size,
+    workspaces: JSON.parse(workspaces),
+  };
+  const posts = readChannel(id, before).reverse();
+  markAwaiting(posts, awaiting);
+  return { board, posts };
 }
 
 function writableBoard(id: string) {
@@ -103,7 +128,7 @@ export function boardForChat(sessionId: string, explicit?: string): string {
 }
 
 /** Choose the recipient at delivery. A fresh chat in this workspace will pin the board tools on first use. */
-export function deliveryChat(board: Board) {
+export function selectAndRecordDeliveryChat(board: BoardFields) {
   if (board.read_only) throw new ConflictError(boardReadOnlyReason[board.read_only]);
   const db = getDatabase();
   const chat = db
@@ -151,12 +176,12 @@ function rootPost(board: string, seq: number) {
 export function savePost(
   boardId: string,
   input: BoardPostInput,
-  by: { kind: "bot"; aboutWorkspaceId?: string } | { postId: string }
+  by: { kind: "bot"; aboutWorkspaceId?: string } | { kind: "person"; postId: string }
 ) {
   const db = getDatabase();
   const { body, thread } = input;
   const result = db.transaction(() => {
-    if ("postId" in by) {
+    if (by.kind === "person") {
       const existing = db
         .prepare<
           [string],
@@ -176,7 +201,7 @@ export function savePost(
       }
     }
     const board = writableBoard(boardId);
-    const recipient = "postId" in by ? board.delivery_session_id : null;
+    const recipient = by.kind === "person" ? board.delivery_session_id : null;
     if (thread) rootPost(boardId, thread);
     const seq = board.last_seq + 1;
     db.prepare("UPDATE boards SET last_seq = ? WHERE id = ?").run(seq, boardId);
@@ -185,12 +210,12 @@ export function savePost(
       about_workspace_id, body, last_seq, delivery_session_id)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
-      "postId" in by ? by.postId : uuidv7(),
+      by.kind === "person" ? by.postId : uuidv7(),
       boardId,
       seq,
       thread ?? null,
-      "kind" in by ? "bot" : "person",
-      "kind" in by ? (by.aboutWorkspaceId ?? null) : null,
+      by.kind,
+      by.kind === "bot" ? (by.aboutWorkspaceId ?? null) : null,
       body,
       thread ? null : seq,
       recipient
@@ -202,7 +227,7 @@ export function savePost(
       ).run(seq, boardId, thread);
     return { post: getPost(boardId, seq), created: true };
   })();
-  if (result.created && "kind" in by)
+  if (result.created && by.kind === "bot")
     invalidate(["boards", "boardChannel", "boardThread"], { boardIds: [boardId] });
   return result;
 }
@@ -228,6 +253,12 @@ export function threadPage(board: string, thread: number, before?: number) {
     .all(board, thread, before ?? Number.MAX_SAFE_INTEGER, BOARD_PAGE_SIZE + 1);
   const hasEarlier = replies.length > BOARD_PAGE_SIZE;
   if (hasEarlier) replies.pop();
+  const { candidates } = getDatabase()
+    .prepare<[string, number, number], { candidates: string }>(
+      `SELECT ${questionCandidates("q.board_id = ? AND (q.seq = ? OR q.thread_seq = ?)")}`
+    )
+    .get(board, thread, thread)!;
+  markAwaiting([root, ...replies], awaitingQuestions(candidates));
   return { root, replies: replies.reverse(), hasEarlier };
 }
 

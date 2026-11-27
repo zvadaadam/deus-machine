@@ -35,6 +35,10 @@ const answer = "@you The release captain can review it today.";
 const reportTitle = "Phone verification results";
 const planPrompt = "Read the release board in Plan mode";
 const handoff = "Can the coordinator take the handoff?";
+const options = [
+  "1. Ask the **release captain**",
+  "2. Recheck `report.md` in [Mobile verification](.context/report.md)",
+];
 const historySize = 82; // Two full pages and a partial oldest page.
 
 async function fixtureMessage(child, timeout, send) {
@@ -60,10 +64,12 @@ async function backendProcess() {
   const release = Promise.withResolvers();
   const startPosts = Promise.withResolvers();
   const finishPlan = Promise.withResolvers();
+  const finishReview = Promise.withResolvers();
   process.on("message", (command) => {
     if (command?.workspace) startPosts.resolve(command);
     if (command === "release") release.resolve();
     if (command === "finish-plan") finishPlan.resolve();
+    if (command === "finish-review") finishReview.resolve();
   });
   const call = (tool, args) => ({ call: { server: DEUS_TOOLS_SERVER, tool, arguments: args } });
   async function* turn({ input }) {
@@ -91,7 +97,9 @@ async function backendProcess() {
         yield call("post_to_board", { body: "Checklist item " + i });
     } else if (input === "Publish the latest update") {
       yield call("post_to_board", {
-        body: "Final checklist update\n\n" + "- Check passed.\n".repeat(12),
+        body:
+          "Final checklist update\n\n@you Where should I send the results?\n1. The release desk\n2. Mobile verification\n\n" +
+          "- Check passed.\n".repeat(12),
       });
     } else if (input === "Start the handoff chat") {
       const { own } = await startPosts.promise;
@@ -103,7 +111,19 @@ async function backendProcess() {
         message: "Open the handoff board",
       });
     } else if (typeof input === "string" && input.endsWith("Open the handoff board")) {
-      yield call("create_board", { name: "Release handoff" });
+      const created = yield call("create_board", { name: "Release handoff" });
+      yield call("post_to_board", {
+        board: JSON.parse(created.output).id,
+        workspace: (await startPosts.promise).workspace,
+        body: [
+          "@you Who should sign off on the mobile report?",
+          ...options,
+          "",
+          "The desktop checks have passed.",
+        ].join("\n"),
+      });
+    } else if (input === "Check the release candidate") {
+      await finishReview.promise;
     } else if (typeof input === "string" && input.startsWith("Archive chat ")) {
       yield call("archive", { sessions: [input.slice("Archive chat ".length)] });
     } else if (input === planPrompt) {
@@ -186,12 +206,18 @@ async function run() {
     path.join(dir, "preferences.json"),
     JSON.stringify({ onboarding_completed: true, remote_access_enabled: false, chat_view: "full" })
   );
+  // The fixture supplies the GitHub CLI and a fresh home for every provider lookup.
+  const bin = path.join(dir, "bin");
+  await mkdir(bin);
+  await writeFile(path.join(bin, "gh"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
   const log = await open(path.join(dir, "backend.log"), "w");
   const child = fork(new URL(import.meta.url), [], {
     execArgv: ["--import", "tsx"],
     stdio: ["ignore", log.fd, log.fd, "ipc"],
     env: {
-      ...process.env,
+      PATH: process.env.PATH,
+      HOME: dir,
+      DEUS_BUNDLED_BIN_DIR: bin,
       PORT: "0",
       DATABASE_PATH: database,
       DEUS_USER_DATA_DIR: dir,
@@ -662,19 +688,74 @@ async function run() {
     await boardRow.locator("[aria-label='Unread posts']").waitFor({ state: "detached" });
 
     await idle();
+    const sendResults = feed.getByRole("button", { name: "1 The release desk" });
+    await sendResults.waitFor();
     await host.write("archiveWorkspace", { workspaceId: board.workspace_id });
     await boardRow.waitFor({ state: "hidden" });
     await page.reload();
     await page.getByText("The coordinator workspace is archived.", { exact: true }).waitFor();
     await feed.getByText("Final checklist update", { exact: true }).waitFor();
     assert.equal(await page.getByRole("form", { name: "Channel message" }).count(), 0);
+    assert.equal(await sendResults.count(), 0);
     await host.write("updateWorkspace", { workspaceId: board.workspace_id, state: "ready" });
     await boardRow.waitFor();
     // The agent may archive a chat it started. Its board then delivers to the newest open chat.
+    await host.write("saveSetting", { key: "coordinator_workspaces", value: true });
     await publish("Start the handoff chat");
     await page.getByRole("button", { name: "release-handoff" }).click();
     const handoffBoard = (await host.read("boards")).find((b) => b.name === "Release handoff");
     const original = handoffBoard.delivery_session_id;
+    await host.write("sendMessage", {
+      sessionId: subject.current_session_id,
+      turnId: crypto.randomUUID(),
+      content: "Check the release candidate",
+      agentHarness: "claude-code",
+      model: "sonnet",
+      permissionMode: "bypass_permissions",
+    });
+    const waitingRow = page.getByRole("button", { name: /release-handoff/ });
+    const count = waitingRow.getByLabel("1 question waiting");
+    const decision = feed.locator("article[data-seq]").filter({ hasText: "Who should sign off" });
+    const chip = decision.getByRole("link", { name: /Open workspace, Mobile verification/ });
+    await count.waitFor();
+    await chip.locator("canvas").waitFor();
+    assert.match(await chip.getAttribute("title"), /working/i);
+    assert.equal(await chip.innerText(), "Mobile verification");
+    const pick = decision.getByRole("button", { name: /1 Ask the release captain/ });
+    await pick.waitFor();
+    assert.equal(await decision.locator("button a, button button").count(), 0);
+    const nameBox = () => waitingRow.getByText("release-handoff", { exact: true }).boundingBox();
+    const beforeAnswer = await nameBox();
+    await page.getByRole("button", { name: "1 workspace", exact: true }).click();
+    await page.getByRole("menuitem", { name: /Mobile verification Working/ }).waitFor();
+    await page.keyboard.press("Escape");
+    await decision.hover();
+    await decision.getByRole("button", { name: "Reply in thread" }).click();
+    await thread.getByRole("button", { name: /1 Ask the release captain/ }).click();
+    await count.waitFor({ state: "detached" });
+    await decision.getByRole("list").waitFor();
+    assert.equal(await pick.count(), 0);
+    await thread.getByRole("list").first().waitFor();
+    await thread.getByRole("button", { name: "Close thread" }).click();
+    assert.deepEqual(await nameBox(), beforeAnswer);
+    const decisionThread = await host.read("boardThread", { boardId: handoffBoard.id, thread: 1 });
+    assert.deepEqual(
+      decisionThread.replies.map((post) => post.body),
+      [options[0]]
+    );
+    child.send("finish-review");
+    await chip.locator("canvas").waitFor({ state: "detached" });
+    const subjectRow = page.locator(`[data-workspace-id="${subject.id}"]`);
+    const state = (await subjectRow.getAttribute("aria-label")).split(", ").at(-1);
+    assert.match(state, /^(idle|unread activity)$/);
+    assert.equal((await chip.getAttribute("title")).toLowerCase(), `mobile verification, ${state}`);
+    assert.equal(
+      await chip.getByTitle("unread activity").count(),
+      state === "unread activity" ? 1 : 0
+    );
+    await until(
+      async () => (await host.read("session", { sessionId: original })).status === "idle"
+    );
     await idle();
     const replacement = await host.write("createSession", { workspaceId: board.workspace_id });
     await host.write("updateSessionTitle", {

@@ -11,8 +11,19 @@ import { ConflictError } from "../../lib/errors";
 import { isSendPending, sendOrQueue } from "../agent/queue";
 import { continuedPermissionMode, continuedSettings } from "../agent/turn-settings";
 import { requireUnusedTurn } from "../agent/turns";
-import { invalidate } from "../query-engine";
+import { invalidate, onInvalidate } from "../query-engine";
 import * as store from "./store";
+
+onInvalidate((resources, ctx) => {
+  if (ctx?.sessionIds?.length) {
+    if (resources.some((r) => r === "queuedMessages" || r === "session" || r === "sessions")) {
+      const boardIds = store.boardsForDeliveryChats(ctx.sessionIds);
+      if (boardIds.length) invalidate(["boardChannel", "boardThread"], { boardIds });
+    }
+  } else if (resources.includes("workspaces") || resources.includes("sessions")) {
+    invalidate(["boards", "boardChannel", "boardThread"]);
+  }
+});
 
 /** Read the exact initial echoes for this page in one query, even across a change of recipient. */
 export function withReceipts<T extends BoardPost>(posts: T[]): BoardRow<T>[] {
@@ -42,7 +53,7 @@ async function deliver(boardId: string, post: BoardPost, retry = false) {
     // Refuse a used turn there before a retry can select a replacement.
     if (retry && recipient) requireUnusedTurn(recipient, post.id);
     recipient = null;
-    recipient = store.deliveryChat(board);
+    recipient = store.selectAndRecordDeliveryChat(board);
     store.recordDelivery(boardId, post.seq, recipient, null);
     const permissionMode = continuedPermissionMode(recipient);
     if (permissionMode === "plan")
@@ -73,7 +84,7 @@ async function deliver(boardId: string, post: BoardPost, retry = false) {
 }
 
 export function postBoardMessage(boardId: string, postId: string, input: BoardPostInput) {
-  const { post, created } = store.savePost(boardId, input, { postId });
+  const { post, created } = store.savePost(boardId, input, { kind: "person", postId });
   if (created)
     void deliver(boardId, post).catch((error) =>
       console.error("[Boards] Could not record delivery", error)

@@ -1,75 +1,16 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@shared/api";
-import { postFileWorkspace, type Board, type BoardDetail, type BoardRow } from "@shared/boards";
-import { getErrorMessage } from "@shared/lib/errors";
+import { postFileWorkspace, type BoardDetail, type BoardRow } from "@shared/boards";
+import { boardOptions } from "./options";
+import { BoardOptions } from "./BoardOptions";
 import { BoardMarkdown } from "./BoardMarkdown";
-import { chatTabLabel } from "@/features/session/ui/tabs/types";
-import { openChat } from "@/features/session/lib/openChat";
 import type { SidebarProfile } from "@/features/sidebar/model/types";
 import { profileName } from "@/features/sidebar/ui/ProfileAvatar";
-import { linkToWorkspace } from "@/features/workspace/lib/workspaceAddress";
-import { getRuntimeClient, runtimeForQueryClient } from "@/platform/ws";
 import { cn } from "@/shared/lib/utils";
 import { openBoard } from "./address";
 import { BoardAvatar } from "./BoardAvatar";
-import { WorkspaceChip } from "./BoardHeader";
+import { BoardReceipt } from "./BoardReceipt";
+import { WorkspaceChip } from "./WorkspaceChip";
 import { boardMentions } from "./mentions";
-
-function Receipt({ board, post }: { board: Board; post: BoardRow }) {
-  const runtime = runtimeForQueryClient(useQueryClient()) ?? getRuntimeClient();
-  const retry = useMutation({
-    mutationFn: () => runtime.call(api.retryBoardMessage, { boardId: board.id, seq: post.seq }),
-  });
-  if (!post.delivery) return null;
-  if (post.delivery === "not_delivered")
-    return (
-      <div role="status" className="text-text-muted mt-1.5 text-xs">
-        {post.delivery_refusal
-          ? "Not delivered: " + post.delivery_refusal
-          : "Not delivered: the coordinator chat didn't get this."}
-        {!board.read_only && (
-          <button
-            type="button"
-            className="text-foreground ml-2 underline underline-offset-2"
-            disabled={retry.isPending}
-            onClick={() => retry.mutate()}
-          >
-            Send again
-          </button>
-        )}
-        {retry.error && <span role="alert"> {getErrorMessage(retry.error)}</span>}
-      </div>
-    );
-  const chatTitle = chatTabLabel({
-    title: post.delivery_title,
-    sequence: post.delivery_chat ?? undefined,
-    agentHarness: post.delivery_harness ?? "",
-  });
-  const title = `${post.delivery === "waiting" ? "Queued for" : "Sent to"} Coordinator · ${chatTitle}`;
-  const chat = post.delivery_session_id;
-  return (
-    <div role="status" className="text-text-muted mt-1.5 flex items-center gap-1.5 text-xs">
-      <BoardAvatar kind="bot" board={board} className="size-3.5" />
-      {chat && !post.delivery_hidden && !board.read_only ? (
-        <a
-          href={linkToWorkspace({ workspaceId: board.workspace_id, sessionId: chat })}
-          className="hover:text-foreground hover:underline"
-          onClick={(event) => {
-            if (event.button || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey)
-              return;
-            event.preventDefault();
-            openChat(board.workspace_id, chat);
-          }}
-        >
-          {title}
-        </a>
-      ) : (
-        title
-      )}
-    </div>
-  );
-}
 
 const clock = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
 function localDate(stamp: string) {
@@ -156,6 +97,20 @@ function BoardMessage({
   const person = profileName(profile);
   const transform = useMemo(() => boardMentions(person), [person]);
   const subject = post.about_workspace_id && board.workspaces[post.about_workspace_id];
+  const choices = useMemo(
+    () => (post.awaiting && !board.read_only ? boardOptions(post.body) : null),
+    [post.awaiting, post.body, board.read_only]
+  );
+  const markdown = (text: string) =>
+    text && (
+      <BoardMarkdown
+        workspaceId={postFileWorkspace(post, board)}
+        transformText={coordinator ? transform : undefined}
+        className="text-foreground wrap-anywhere"
+      >
+        {(choices?.references ?? "") + text}
+      </BoardMarkdown>
+    );
   const time = localDate(post.created_at);
   return (
     <article
@@ -188,14 +143,16 @@ function BoardMessage({
             {clock.format(time)}
           </time>
         </div>
-        <BoardMarkdown
-          workspaceId={postFileWorkspace(post, board)}
-          transformText={coordinator ? transform : undefined}
-          className="text-foreground wrap-anywhere"
-        >
-          {post.body}
-        </BoardMarkdown>
-        {!coordinator && <Receipt board={board} post={post} />}
+        {choices ? (
+          <>
+            {markdown(choices.before)}
+            <BoardOptions boardId={board.id} post={post} choices={choices} />
+            {markdown(choices.after)}
+          </>
+        ) : (
+          markdown(post.body)
+        )}
+        {!coordinator && <BoardReceipt board={board} post={post} />}
         {children}
       </div>
     </article>
