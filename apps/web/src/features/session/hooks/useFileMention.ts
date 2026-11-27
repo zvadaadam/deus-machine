@@ -151,6 +151,7 @@ export function useFileMention({
         // Only apply results if this is still the latest search
         if (searchIdRef.current !== currentSearchId) return;
         setResults(searchResults);
+        setSelectedIndex(0);
       } catch (err) {
         if (searchIdRef.current !== currentSearchId) return;
         console.error("[useFileMention] Search failed:", err);
@@ -226,7 +227,12 @@ export function useFileMention({
   // Returns true if the event was handled (caller should preventDefault)
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
-      if (!isOpen || results.length === 0) return false;
+      if (!isOpen) return false;
+      if (e.key === "Escape") {
+        dismiss();
+        return true;
+      }
+      if (results.length === 0) return false;
 
       switch (e.key) {
         case "ArrowDown":
@@ -245,9 +251,6 @@ export function useFileMention({
           }
           return true;
         }
-        case "Escape":
-          dismiss();
-          return true;
         default:
           return false;
       }

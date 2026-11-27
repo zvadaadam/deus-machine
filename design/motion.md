@@ -39,7 +39,8 @@ Opening details uses the entrance curve. Switch workspace, chat or tab content i
 - In a keyframe class, read the tokens. A menu uses `data-[state=open]:animate-[dropdown-enter_var(--tempo-moderate)_var(--tempo-ease)]` and `data-[state=closed]:animate-[dropdown-exit_var(--tempo-moderate-exit)_var(--tempo-ease)]`. [DropdownMenuContent](../apps/web/src/components/ui/dropdown-menu.tsx)
 - In Framer use `transition={tempo.moderate}` and `exit={{ opacity: 0, transition: tempo.moderate.exit }}`. Each tier supplies the move curve for layout changes. Only the pairing success mark uses a spring (stiffness 300, damping 20) to confirm the device is paired. [Tempo](../apps/web/src/shared/lib/tempo.ts) · [Chat](../apps/web/src/features/session/ui/Chat.tsx) · [Pairing success](../apps/web/src/features/auth/ui/PairGatePage.tsx)
 - Stage page entrances with `enter-step`. The first sibling starts at step 0. Use `[--step:1]`, `[--step:2]` and so on for whole 60ms delays. [ServerOfflinePage](../apps/web/src/features/connection/ui/ServerOfflinePage.tsx)
-- Use `fold-row` for a row that folds in place and stays mounted, with its content and spacing in one `min-h-0 overflow-clip` child. For details that leave the DOM, put `Collapse` inside `AnimatePresence`. The composer's two suggestion lists pass `tier="fast"`. [Fold rows](../apps/web/src/global.css) · [Collapse](../apps/web/src/components/ui/collapse.tsx) · [MessageInput](../apps/web/src/features/session/ui/MessageInput.tsx)
+- Use `fold-row` for a row that folds in place and stays mounted, with its content and spacing in one `min-h-0 overflow-clip` child. For details that leave the DOM, put `Collapse` inside `AnimatePresence`. The composer’s slash and file trays rise 4px and fade on `tempo.fast`. Filtering snaps their height and keeps the transcript and input in place. [Fold rows](../apps/web/src/global.css) · [Collapse](../apps/web/src/components/ui/collapse.tsx) · [Composer tray](../apps/web/src/features/session/ui/ComposerTray.tsx)
+- The queue takes space above the input. Its back card fades on `tempo.moderate` with the first and last row. Each row owns its height through `Collapse`, so the transcript edge follows the row directly until the queue reaches its scroll cap. A dragged row follows the pointer. Its neighbours make room on `moderate` with `ease-move`. When the person lets go, the row settles the remaining distance on the same curve. Reduced motion places it immediately. [Queued messages](../apps/web/src/features/session/ui/QueuedMessageList.tsx)
 
 Use the chat activity header's current class when reviewing a control. [TurnStatsHeader](../apps/web/src/features/session/ui/TurnStatsHeader.tsx)
 
@@ -68,10 +69,13 @@ Keep per-row hover in the transcript, on cards separated by gutters, in another 
 and where results move under a resting pointer. A travelling fill could point at the wrong item.
 The file tree leaves hover to Pierre. The composer's changing file matches keep their own row fill. [FileTree](../apps/web/src/features/file-browser/ui/components/FileTree.tsx) · [FileMentionPopover](../apps/web/src/features/session/ui/FileMentionPopover.tsx)
 
+The slash tray's `Glide` follows `aria-selected`. Moving the pointer onto a row selects it, and crossing a section gap keeps that selection. Keyboard movement and a new result set snap the fill to the active option. Each replacement slash or file list starts on its first match, keeping surviving rows keyed by command or file path. [Slash rows](../apps/web/src/features/session/ui/SlashCommandPopover.tsx)
+
 ```text
 Who picks the active row?
 ├─ Radix menu or select → follow="data-highlighted".
 ├─ cmdk → follow="data-selected". Its true marker identifies what Enter will choose.
+├─ Composer slash list → follow="aria-selected". Enter uses the same option.
 └─ App-owned pointer list → pass rows with the row selector. Keep keyboard focus visible on the row.
 ```
 

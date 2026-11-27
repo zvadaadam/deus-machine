@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { Glide } from "@/components/ui/glide";
 import type { SlashCommandItem } from "../hooks/useSlashCommand";
 
 interface SlashCommandPopoverProps {
+  listId: string;
+  getOptionId: (value: string) => string;
   results: SlashCommandItem[];
   loading: boolean;
   selectedIndex: number;
   query: string;
+  onHighlight: (index: number) => void;
   onSelect: (name: string) => void;
 }
 
@@ -39,13 +43,17 @@ function highlightMatch(text: string, query: string) {
 }
 
 export function SlashCommandPopover({
+  listId,
+  getOptionId,
   results,
   loading,
   selectedIndex,
   query,
+  onHighlight,
   onSelect,
 }: SlashCommandPopoverProps) {
   const listRef = useRef<HTMLDivElement>(null);
+  const pointerRow = useRef<HTMLButtonElement | null>(null);
 
   const sections = useMemo<SlashCommandSection[]>(() => {
     const groups: SlashCommandSection[] = [];
@@ -61,33 +69,35 @@ export function SlashCommandPopover({
 
   useEffect(() => {
     if (!listRef.current) return;
-    const selectedEl = listRef.current.querySelector<HTMLElement>('[data-selected="true"]');
-    selectedEl?.scrollIntoView({ block: "nearest" });
-  }, [selectedIndex]);
-
-  if (results.length === 0 && !loading) {
-    if (!query) return null;
-    return (
-      <div className="border-border/50 bg-muted/20 w-full border-b">
-        <div className="text-foreground/80 px-4 py-3 text-sm font-medium">{headerTitle}</div>
-        <div className="px-4 pb-4">
-          <p className="text-muted-foreground text-xs">No matching skills or commands</p>
-        </div>
-      </div>
-    );
-  }
+    const selectedEl = listRef.current.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (selectedEl !== pointerRow.current) selectedEl?.scrollIntoView({ block: "nearest" });
+    pointerRow.current = null;
+  }, [selectedIndex, results]);
 
   return (
-    <div className="border-border/50 bg-muted/20 w-full border-b">
-      <div className="text-foreground/80 px-4 py-3 text-sm font-medium">{headerTitle}</div>
+    <>
+      <div className="text-foreground/80 shrink-0 px-4 py-3 text-sm font-medium">{headerTitle}</div>
 
-      {loading && results.length === 0 ? (
-        <div className="text-muted-foreground flex items-center gap-1.5 px-4 pb-4 text-xs">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          <span>Loading skills...</span>
+      {results.length === 0 ? (
+        <div
+          role="status"
+          className="text-muted-foreground flex items-center gap-1.5 px-4 pb-4 text-xs"
+        >
+          {loading && <Loader2 className="h-3 w-3 animate-spin" />}
+          {loading ? "Loading skills..." : "No matching skills or commands"}
         </div>
       ) : (
-        <div ref={listRef} className="max-h-[320px] overflow-y-auto px-2 pb-2">
+        <div
+          ref={listRef}
+          role="listbox"
+          id={listId}
+          aria-label="Skills and commands"
+          className="relative isolate min-h-0 overflow-y-auto overscroll-contain px-2 pb-2"
+        >
+          <Glide
+            follow="aria-selected"
+            className="bg-accent dark:bg-control-surface-pressed rounded-lg"
+          />
           {sections.map((section, sectionIndex) => {
             const showSectionLabel = section.title !== headerTitle || sectionIndex > 0;
 
@@ -110,11 +120,20 @@ export function SlashCommandPopover({
                     <button
                       type="button"
                       key={`${item.kind}-${item.name}`}
-                      data-selected={isSelected ? "true" : undefined}
+                      role="option"
+                      tabIndex={-1}
+                      id={getOptionId(item.name)}
+                      aria-selected={isSelected}
                       className={cn(
                         "control-interaction flex w-full items-start rounded-lg px-3 py-2 text-left",
-                        isSelected ? "bg-accent text-accent-foreground" : "hover:bg-accent/40"
+                        isSelected && "text-accent-foreground"
                       )}
+                      onPointerMove={(event) => {
+                        if (event.pointerType !== "touch" && !isSelected) {
+                          pointerRow.current = event.currentTarget;
+                          onHighlight(itemIndex);
+                        }
+                      }}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => onSelect(item.name)}
                     >
@@ -153,6 +172,6 @@ export function SlashCommandPopover({
           })}
         </div>
       )}
-    </div>
+    </>
   );
 }

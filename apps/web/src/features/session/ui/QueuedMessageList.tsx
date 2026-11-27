@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -22,10 +22,13 @@ import { tempo } from "@/shared/lib/tempo";
 import { cn } from "@/shared/lib/utils";
 import { useQueuedMessages } from "../api/session.queries";
 import { hasLimitReset, limitTime } from "../lib/queuedMessages";
+import { QueueTray } from "./ComposerTray";
 import { SentFrom } from "./SentFrom";
 
 type Row = QueuedMessages["items"][number];
 type Move = { id: string; before: string | null };
+// dnd-kit and the Web Animations API take this tier in milliseconds.
+const duration = tempo.moderate.duration * 1000;
 
 function showError(error: unknown) {
   toast.error(getErrorMessage(error));
@@ -66,7 +69,6 @@ function QueuedRow({
   const waiting = state === "waiting";
   const present = useIsPresent();
   const sortable = waiting && present;
-  const duration = tempo.moderate.duration * 1000;
   const {
     attributes,
     listeners,
@@ -84,6 +86,7 @@ function QueuedRow({
   return (
     <div
       ref={setNodeRef}
+      data-queued-row=""
       {...(!present && { inert: "" })}
       style={{
         transform: CSS.Translate.toString(waiting && transform ? { ...transform, x: 0 } : null),
@@ -94,9 +97,9 @@ function QueuedRow({
       <Collapse>
         <div
           className={cn(
-            "border-border-subtle bg-bg-muted text-text-secondary mb-1 flex h-8 items-center gap-1 rounded-lg border px-0.5 text-sm pointer-coarse:h-12",
+            "text-text-secondary hover:bg-control-hover my-0.5 flex h-8 items-center gap-1 rounded-lg border border-transparent px-0.5 text-sm pointer-coarse:h-12",
             (origin || reason) && "h-auto min-h-12 py-1 pointer-coarse:min-h-18",
-            isDragging && "border-border-strong shadow-sm"
+            isDragging && "bg-control-surface border-border-strong shadow-sm"
           )}
         >
           <div className="w-7 shrink-0 pointer-coarse:w-11">
@@ -215,6 +218,7 @@ export function QueuedMessageList(controls: QueueControls) {
   const { sessionId } = controls;
   const { data } = useQueuedMessages(sessionId);
   const [pending, setPending] = useState<Move | null>(null);
+  const settling = useRef<Animation>();
   const rows = previewMove(data?.items ?? [], pending);
   const waiting = rows.filter((row) => row.state === "waiting").map((row) => row.id);
   const sensors = useReorderSensors();
@@ -226,7 +230,7 @@ export function QueuedMessageList(controls: QueueControls) {
     limit: until ? `Queue paused until ${until}.` : "Queue paused. A usage limit was reached.",
   };
 
-  function drop({ active, over }: DragEndEvent) {
+  function drop({ active, over, activatorEvent }: DragEndEvent) {
     if (!over || over.id === active.id || pending) return;
     const id = String(active.id);
     const from = waiting.indexOf(id);
@@ -234,6 +238,27 @@ export function QueuedMessageList(controls: QueueControls) {
     if (from < 0 || to < 0) return;
     const before = arrayMove(waiting, from, to)[to + 1] ?? null;
     const move = { id, before };
+    const target = activatorEvent.target;
+    const row = target instanceof Element && target.closest<HTMLElement>("[data-queued-row]");
+    if (
+      row &&
+      activatorEvent.type !== "keydown" &&
+      !matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      // The sortable commits its slot immediately. Carry the pointer's remaining offset into it.
+      const top = row.getBoundingClientRect().top;
+      requestAnimationFrame(() => {
+        const offset = top - row.getBoundingClientRect().top;
+        if (!row.isConnected || !offset) return;
+        settling.current = row.firstElementChild?.animate(
+          [{ translate: `0 ${offset}px` }, { translate: "0 0" }],
+          {
+            duration,
+            easing: getComputedStyle(row).getPropertyValue("--ease-move"),
+          }
+        );
+      });
+    }
     setPending(move);
     void call(api.moveQueuedMessage, { sessionId, ...move })
       .catch(showError)
@@ -242,15 +267,11 @@ export function QueuedMessageList(controls: QueueControls) {
 
   const position = (id: string | number) => waiting.indexOf(String(id)) + 1;
   return (
-    <div
-      role="group"
-      aria-label="Queued messages"
-      {...(rows.length === 0 && { inert: "" })}
-      className="max-h-[min(12rem,25dvh)] overflow-y-auto pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11"
-    >
+    <QueueTray open={rows.length > 0}>
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
+        onDragStart={() => settling.current?.cancel()}
         onDragEnd={drop}
         accessibility={{
           announcements: {
@@ -267,7 +288,7 @@ export function QueuedMessageList(controls: QueueControls) {
         <SortableContext items={waiting} strategy={verticalListSortingStrategy}>
           <AnimatePresence initial={false}>
             {rows.length > 0 && data?.paused && (
-              <Collapse key="paused" className="bg-background sticky top-0 z-10">
+              <Collapse key="paused" className="bg-control-surface sticky top-0 z-10 rounded-lg">
                 <div className="text-text-secondary flex min-h-8 items-center justify-between gap-2 px-2 text-xs">
                   <span role="status">{pause[data.paused]}</span>
                   <Button
@@ -286,6 +307,6 @@ export function QueuedMessageList(controls: QueueControls) {
           </AnimatePresence>
         </SortableContext>
       </DndContext>
-    </div>
+    </QueueTray>
   );
 }

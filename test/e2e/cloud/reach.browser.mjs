@@ -101,16 +101,9 @@ const repo = path.join(directory, "repository");
 await mkdir(repo);
 const git = (...args) => execFileSync("git", args, { cwd: repo, stdio: "pipe" });
 git("init", "-b", "main");
-git(
-  "-c",
-  "user.email=e2e@deus.test",
-  "-c",
-  "user.name=e2e",
-  "commit",
-  "--allow-empty",
-  "-m",
-  "init"
-);
+await writeFile(path.join(repo, "README.md"), "# Reach\n");
+git("add", "README.md");
+git("-c", "user.email=e2e@deus.test", "-c", "user.name=e2e", "commit", "-m", "init");
 git("worktree", "add", "-b", "local-reach", path.join(repo, ".deus", "local-reach"));
 // A skill in the worktree's own folder: the local `/` menu must list it, the cloud one not.
 const skillDir = path.join(repo, ".deus", "local-reach", ".claude", "skills", LOCAL_SKILL);
@@ -249,9 +242,9 @@ try {
   check("the local `/` menu lists the skill in the workspace's own folder");
 
   await composer().fill("/");
-  const planAction = page.getByRole("button", { name: /Enter plan mode/ });
+  const planAction = page.getByRole("option", { name: /Enter plan mode/ });
   await planAction.waitFor();
-  assert.equal(await planAction.getAttribute("data-selected"), "true");
+  assert.equal(await planAction.getAttribute("aria-selected"), "true");
   assert.equal(await page.getByText("A project-specific planning command").count(), 0);
   await planAction.click();
   const chip = page.getByRole("button", { name: "Exit plan mode", exact: true });
@@ -260,6 +253,25 @@ try {
   await chip.click();
   await chip.waitFor({ state: "detached" });
   check("the /plan action comes before project skills and wins over a project plan command");
+
+  const phone = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  await phone.goto(`${appUrl}s/local/w/${localWorkspace}`);
+  const draft = phone.locator('[data-slot="main-content"] textarea');
+  for (const [query, name, chipLabel] of [
+    [`/${LOCAL_SKILL}`, LOCAL_SKILL, `Remove skill ${LOCAL_SKILL}`],
+    ["@README", "README.md", "Remove file mention README.md"],
+  ]) {
+    await draft.fill(query);
+    await phone.getByRole("option").filter({ hasText: name }).tap();
+    await phone.getByRole("button", { name: chipLabel, exact: true }).waitFor();
+    assert.equal(await draft.inputValue(), "");
+  }
+  await phone.close();
+  check("tapping a slash skill and an @ file on a phone adds both mentions to the draft");
 
   // 2. The cloud chat. Rule 2: an internet link opens in the person's browser.
   const releasePreview = Promise.withResolvers();
