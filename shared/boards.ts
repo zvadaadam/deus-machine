@@ -15,6 +15,9 @@ export interface Board {
   workspace_id: string;
   coordinator_name: string;
   delivery_session_id: string | null;
+  delivery_title: string | null;
+  delivery_chat: number | null;
+  delivery_harness: string | null;
   read_only: keyof typeof boardReadOnlyReason | null;
   last_seq: number;
   waiting: number;

@@ -8,7 +8,6 @@ import {
   WorkspaceGitIcon,
   WorkspaceAttention,
 } from "@/features/sidebar/ui/WorkspaceGitIcon";
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { GitBranch } from "lucide-react";
 import { LabelPill } from "@/components/ui/label-pill";
 import { linkToWorkspace } from "@/features/workspace/lib/workspaceAddress";
@@ -47,7 +46,7 @@ function useWorkspaceMark(id: string | null) {
   return { icon, label };
 }
 
-export function BoardWorkspaceMenuItem({
+export function BoardWorkspaceRow({
   id,
   name,
   archived,
@@ -58,11 +57,18 @@ export function BoardWorkspaceMenuItem({
 }) {
   const { icon, label } = useWorkspaceMark(archived ? null : id);
   return (
-    <DropdownMenuItem disabled={archived} onSelect={() => showWorkspace(id)}>
+    <button
+      type="button"
+      disabled={archived}
+      onClick={() => showWorkspace(id)}
+      className="control-interaction flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm pointer-coarse:min-h-11 [&>svg]:size-3.5 [&>svg]:shrink-0"
+    >
       {icon}
       <span className="min-w-0 truncate">{name}</span>
-      <span className="text-text-muted ml-auto text-xs">{archived ? "Archived" : label}</span>
-    </DropdownMenuItem>
+      <span className="text-text-muted ml-auto shrink-0 text-xs">
+        {archived ? "Archived" : label}
+      </span>
+    </button>
   );
 }
 
