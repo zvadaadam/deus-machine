@@ -237,8 +237,7 @@ try {
       )
       .toBeLessThan(1);
   }
-  // Radix and cmdk own the Enter target. Capture transitionrun so this assertion
-  // still sees the pointer travel when the entire 80 ms elapses between test calls.
+  // Radix and cmdk own the Enter target. Glide follows their marked row.
   for (const [slot, itemRole, marker, expected] of [
     ["dropdown-menu-content", "menuitem", "[data-highlighted]", "Menu inspect"],
     ["command-list", "option", "[data-selected=true]", "Command Inspect branch"],
@@ -248,17 +247,14 @@ try {
     else await page.getByPlaceholder("Branch command").focus();
     const list = page.locator(`[data-slot="${slot}"]`);
     const rows = list.getByRole(itemRole);
+    const fill = list.locator('[data-slot="glide"][data-lit]');
     await rows.first().hover();
     await list.locator(marker).filter({ hasText: "Choose branch" }).waitFor();
     await assertFill(list, marker, false);
-    await list.evaluate((el) => {
-      el.querySelector('[data-slot="glide"]').addEventListener("transitionrun", (event) => {
-        if (event.propertyName === "transform") el.dataset.sawTravel = "";
-      });
-    });
     await rows.nth(1).hover();
     await list.locator(marker).filter({ hasText: "Rename branch" }).waitFor();
-    await page.locator(`[data-slot="${slot}"][data-saw-travel]`).waitFor();
+    await expect(fill).toHaveAttribute("data-travel", "");
+    await expect(fill).toHaveCSS("transition-property", /transform/);
     if (itemRole === "option") {
       await page.getByPlaceholder("Branch command").hover();
       await assertFill(list, marker, false);
@@ -272,6 +268,17 @@ try {
     await page.keyboard.press("Enter");
     await page.getByTestId("picked").filter({ hasText: expected }).waitFor();
     if (itemRole === "menuitem") await list.waitFor({ state: "detached" });
+    else {
+      await rows.nth(1).hover();
+      await expect(fill).toHaveAttribute("data-travel", "");
+      // Paste without a keydown or pointer move. Rename disappears beneath the pointer.
+      await page.keyboard.insertText("s");
+      await expect(rows).toHaveCount(2);
+      await expect(rows.first()).toHaveAttribute("data-selected", "true");
+      await expect(fill).not.toHaveAttribute("data-travel", "");
+      await assertFill(list, marker);
+      await page.getByPlaceholder("Branch command").fill("");
+    }
   }
   // Select opens on its value. A radio menu can open on an unchecked item.
   await page.mouse.move(0, 0);
