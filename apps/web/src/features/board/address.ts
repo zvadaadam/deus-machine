@@ -1,13 +1,10 @@
-import { createBrowserHistory } from "@tanstack/react-router";
+import { appHistory } from "@/shared/lib/appHistory";
 import { useSyncExternalStore } from "react";
 import { isWorkspaceLinkId } from "@shared/workspace-link";
 import { capabilities } from "@/platform/capabilities";
 import { getServerIdFromUrl } from "@/shared/config/backend.config";
 import { workspaceAddress, workspaceChatId } from "@/features/workspace/lib/workspaceAddress";
 import { uiActions } from "@/shared/stores/uiStore";
-
-let history: ReturnType<typeof createBrowserHistory> | undefined;
-export const appHistory = () => (history ??= createBrowserHistory());
 
 export interface BoardLink {
   boardId: string;

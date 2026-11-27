@@ -11,6 +11,7 @@ import { tempo } from "@/shared/lib/tempo";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/shared/lib/utils";
 import { openBoard, type BoardLink } from "./address";
+import { BoardFileViewer } from "./BoardFileViewer";
 import { BoardHeader } from "./BoardHeader";
 import { BoardComposer } from "./BoardComposer";
 import { BoardRows, replyCount } from "./BoardMessage";
@@ -141,6 +142,7 @@ function Channel({
   const channel = (
     <main className={cn("mx-auto flex h-full w-full min-w-0 flex-col", !thread && "max-w-[880px]")}>
       <BoardHeader board={board} />
+      <BoardFileViewer board={board} />
       <BoardScroll
         label="Channel messages"
         posts={posts}

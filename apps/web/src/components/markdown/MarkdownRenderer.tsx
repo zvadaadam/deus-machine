@@ -22,8 +22,8 @@
  * ```
  */
 
-import { isValidElement, useMemo, useRef } from "react";
-import ReactMarkdown from "react-markdown";
+import { isValidElement, useMemo, useRef, type ReactNode } from "react";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
@@ -53,6 +53,8 @@ interface MarkdownRendererProps {
   proseClassName?: string;
   transformText?: NonNullable<React.ComponentProps<typeof ReactMarkdown>["remarkPlugins"]>[number];
   resolveFileLink?: (href: string, label: string) => MarkdownFileLinkResolution;
+  /** Owns every link, including which raw destinations may become an href. */
+  renderLink?: (href: string, children: ReactNode) => ReactNode;
   onFileLinkOpen?: (path: string) => void | Promise<void>;
   onLinkOpen?: (href: string) => void | Promise<void>;
 }
@@ -173,6 +175,7 @@ export function MarkdownRenderer({
   transformText,
   resolveFileLink,
   onFileLinkOpen,
+  renderLink,
   onLinkOpen,
 }: MarkdownRendererProps) {
   const plugins = useMemo(
@@ -180,11 +183,12 @@ export function MarkdownRenderer({
     [transformText]
   );
   const components = useMemo(() => {
-    if (!resolveFileLink && !onLinkOpen) return markdownComponents;
+    if (!renderLink && !resolveFileLink && !onLinkOpen) return markdownComponents;
 
     return {
       ...markdownComponents,
       a({ href, children, ...props }: any) {
+        if (renderLink) return renderLink(href ?? "", children);
         const label = getLinkLabel(children);
         const resolvedLink =
           href && resolveFileLink && onFileLinkOpen ? resolveFileLink(href, label) : null;
@@ -255,11 +259,17 @@ export function MarkdownRenderer({
         );
       },
     };
-  }, [onFileLinkOpen, onLinkOpen, resolveFileLink]);
+  }, [renderLink, onFileLinkOpen, onLinkOpen, resolveFileLink]);
 
   return (
     <article className={cn(proseClassName, className)}>
       <ReactMarkdown
+        urlTransform={
+          renderLink
+            ? (url, key, node) =>
+                node.tagName === "a" && key === "href" ? url : defaultUrlTransform(url)
+            : undefined
+        }
         remarkPlugins={plugins}
         rehypePlugins={allowHtml ? REHYPE_PLUGINS_HTML : REHYPE_PLUGINS_PLAIN}
         components={components}

@@ -1,9 +1,9 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/api";
-import type { Board, BoardDetail, BoardRow } from "@shared/boards";
+import { postFileWorkspace, type Board, type BoardDetail, type BoardRow } from "@shared/boards";
 import { getErrorMessage } from "@shared/lib/errors";
-import { ChatMarkdown } from "@/components/markdown";
+import { BoardMarkdown } from "./BoardMarkdown";
 import { chatTabLabel } from "@/features/session/ui/tabs/types";
 import { openChat } from "@/features/session/lib/openChat";
 import type { SidebarProfile } from "@/features/sidebar/model/types";
@@ -188,12 +188,13 @@ function BoardMessage({
             {clock.format(time)}
           </time>
         </div>
-        <ChatMarkdown
+        <BoardMarkdown
+          workspaceId={postFileWorkspace(post, board)}
           transformText={coordinator ? transform : undefined}
           className="text-foreground wrap-anywhere"
         >
           {post.body}
-        </ChatMarkdown>
+        </BoardMarkdown>
         {!coordinator && <Receipt board={board} post={post} />}
         {children}
       </div>

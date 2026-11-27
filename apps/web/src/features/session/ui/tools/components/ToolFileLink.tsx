@@ -2,10 +2,9 @@ import { ArrowUpRight } from "lucide-react";
 import { useMemo } from "react";
 import { useSession } from "@/features/session/context";
 import { normalizeWorkspaceRelativePath } from "@/features/workspace/lib/normalizeWorkspaceRelativePath";
-import {
-  workspaceLayoutActions,
-  type FileNavigationTarget,
-} from "@/features/workspace/store/workspaceLayoutStore";
+import type { FileNavigationTarget } from "@/features/workspace/store/workspaceLayoutStore";
+import { chatPlaceNow, openFromChat } from "@/features/session/lib/openFromChat";
+import { openFile } from "@/features/workspace/lib/reach";
 import { cn } from "@/shared/lib/utils";
 
 interface ToolFileLinkProps {
@@ -41,7 +40,7 @@ function normalizeToolFilePath(path: string, workspacePath: string | null): stri
 }
 
 export function ToolFileLink({ path, target, className }: ToolFileLinkProps) {
-  const { workspaceId, workspacePath } = useSession();
+  const { workspaceId, workspacePath, cloud } = useSession();
 
   const normalizedPath = useMemo(
     () => normalizeToolFilePath(path, workspacePath),
@@ -60,7 +59,8 @@ export function ToolFileLink({ path, target, className }: ToolFileLinkProps) {
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        workspaceLayoutActions.openFileInContent(workspaceId, normalizedPath, target);
+        const place = chatPlaceNow(workspaceId, { cloud, folder: workspacePath });
+        void openFromChat(workspaceId, openFile(normalizedPath, place, target));
       }}
       onKeyDown={(event) => {
         event.stopPropagation();

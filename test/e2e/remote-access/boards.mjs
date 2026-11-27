@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
+import { openBoardReport } from "../lib/board-file.mjs";
+import { checkPhoneChatFile } from "../lib/chat-file-link.mjs";
 import { boardChatTurn } from "./board-fixture.mjs";
 
 export async function testRelayedBoard({
@@ -33,6 +35,9 @@ export async function testRelayedBoard({
   const thread = phone.getByRole("complementary", { name: "Thread" });
   await thread.getByText(root, { exact: true }).waitFor();
   await thread.getByText("The release notes are ready to check.", { exact: true }).waitFor();
+  const viewer = await openBoardReport(phone, "Report check", "Paired device results");
+  await phone.goBack();
+  await viewer.waitFor({ state: "detached" });
   await boardChatTurn(hostWrite, boardChatId, "Wait for the paired phone");
   const documentStarted = () => phone.evaluate(() => performance.timeOrigin);
   const started = await documentStarted();
@@ -43,7 +48,10 @@ export async function testRelayedBoard({
   await writeFile(path.join(hostDb.dir, "release-coordinator"), "");
   const receipt = thread.getByRole("link", { name: "Sent to Coordinator · Release room" }).first();
   await receipt.waitFor();
-  assert.equal(new URL(await receipt.getAttribute("href")).searchParams.get("session"), boardChatId);
+  assert.equal(
+    new URL(await receipt.getAttribute("href")).searchParams.get("session"),
+    boardChatId
+  );
   await thread.getByText("Please check the release notes on the phone.", { exact: true }).waitFor();
   assert.equal(await documentStarted(), started);
   await phone.getByRole("button", { name: "Back to channel" }).click();
@@ -70,6 +78,7 @@ export async function testRelayedBoard({
     animations: "disabled",
   });
   await receipt.click();
+  await checkPhoneChatFile(phone);
   await phone.getByRole("button", { name: "Expand sidebar", exact: true }).click();
   await row.getByLabel("Unread posts").waitFor();
   await row.click();

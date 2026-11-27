@@ -30,7 +30,8 @@ import {
   redirect,
   type HistoryLocation,
 } from "@tanstack/react-router";
-import { appHistory, boardSearch } from "@/features/board/address";
+import { appHistory } from "@/shared/lib/appHistory";
+import { boardSearch } from "@/features/board/address";
 import { RootLayout } from "./routes/root";
 import { ConnectPage } from "./routes/connect";
 import { ServerLayout } from "./shells/ServerLayout";

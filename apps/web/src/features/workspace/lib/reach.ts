@@ -56,6 +56,8 @@ export interface ChatPlace {
   cloud: boolean;
   /** Rule 1's answer for the chat's workspace. */
   folder: string | null;
+  /** This surface can show a dedicated File tab. */
+  fileTab?: boolean;
   /** Cloud only: the computer's preview address (`{{port}}` placeholder), when it reported
    *  one; null when it reported none, undefined when this window has not heard it. */
   previewTemplate?: string | null;
@@ -76,7 +78,9 @@ export type ChatOpening =
   | { to: "external"; url: string }
   /** This computer's file, previewed in the Browser tab (`/workspaces/:id/file-preview`). */
   | { to: "file-preview"; path: string }
-  /** The Files (or Changes) tab's viewer, wherever the workspace's files are. */
+  /** A surface without a File tab shows the working file full-screen. */
+  | { to: "file-viewer"; path: string }
+  /** The Files (or Changes) tab of the workspace. */
   | { to: "files"; path: string; target: "files" | "changes" }
   | { to: "default-app"; path: string }
   | { to: "finder"; path: string }
@@ -141,7 +145,7 @@ const SHOWN_AS_TEXT = /\.(?:html?|md|mdx|csv|tsv)$/iu;
 
 /** A workspace file from the chat, by what the click asks for. */
 export function openFile(path: string, place: ChatPlace, how: FileHow): ChatOpening {
-  return match(how)
+  const opening = match(how)
     .with("files", "changes", (target) => ({ to: "files" as const, path, target }))
     .with("preview", () =>
       !place.cloud
@@ -158,4 +162,7 @@ export function openFile(path: string, place: ChatPlace, how: FileHow): ChatOpen
       place.folder ? { to: "finder" as const, path } : { to: "none" as const }
     )
     .exhaustive();
+  return opening.to === "files" && opening.target === "files" && place.fileTab === false
+    ? { to: "file-viewer", path }
+    : opening;
 }

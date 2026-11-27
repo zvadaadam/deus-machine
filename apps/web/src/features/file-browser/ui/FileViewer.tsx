@@ -1,11 +1,16 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, type ReactNode } from "react";
 import { Loader2, X, Code, BookOpen, FolderOpen, ArrowUpRight } from "lucide-react";
 import { CopyIcon } from "@/components/ui/copy-icon";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { highlightFileLines } from "@/shared/lib/syntaxHighlighter";
 import { detectLanguageFromPath } from "@/features/session/ui/tools/utils/detectLanguage";
 import { MarkdownRenderer } from "@/components/markdown/MarkdownRenderer";
+import { WORKSPACE_FILES_GONE } from "@shared/types/files";
+import { cn } from "@/shared/lib/utils";
+import { getErrorMessage } from "@shared/lib/errors";
 import { useTheme } from "@/app/providers";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
+import { CLOUD_FILE_UNSHOWN } from "@/features/workspace/lib/reach";
 import { useFileContent } from "../api/useFileContent";
 import { PierreFileIcon } from "../lib/pierreIcons";
 import { useQuery } from "@tanstack/react-query";
@@ -16,6 +21,9 @@ function isMarkdownFile(filePath: string): boolean {
 
 interface FileViewerProps {
   workspaceId: string;
+  workspaceName?: string;
+  header?: (hasCheckout: boolean, recheckCheckout: () => Promise<boolean>) => ReactNode;
+  onPreviewBinary?: () => void;
   /** Relative path within the workspace */
   filePath: string;
   /** Optional close handler — renders a close button in the header */
@@ -29,7 +37,7 @@ interface FileViewerProps {
 /**
  * FileViewer - Display full file content with syntax highlighting
  *
- * Reads from the working tree via backend HTTP.
+ * Reads from the working tree via the runtime socket.
  * Shows current file state including unsaved/uncommitted changes.
  *
  * Features:
@@ -40,6 +48,9 @@ interface FileViewerProps {
  */
 export function FileViewer({
   workspaceId,
+  workspaceName,
+  header,
+  onPreviewBinary,
   filePath,
   onClose,
   onRevealInFiles,
@@ -68,12 +79,15 @@ export function FileViewer({
    */
   const language = filePath ? detectLanguageFromPath(filePath) : "text";
 
-  // Fetch file content via backend HTTP
+  // The hosted chat has no fileContent operation. A Mac-backed cloud workspace does.
+  const hosted = isCloudDirectWebMode();
   const {
     data: content,
     isLoading: isContentLoading,
+    isFetching,
+    refetch,
     error,
-  } = useFileContent(workspaceId, filePath);
+  } = useFileContent(hosted ? null : workspaceId, filePath, !!header);
 
   // Highlight entire file at once (single Shiki call instead of per-line)
   const { data: highlightedLines, isLoading: isHighlighting } = useQuery({
@@ -83,6 +97,16 @@ export function FileViewer({
     staleTime: Infinity, // Don't refetch highlighting for same content
   });
 
+  const failure = hosted ? CLOUD_FILE_UNSHOWN : error && getErrorMessage(error);
+  const filesGone = failure === WORKSPACE_FILES_GONE;
+  const binary = failure === "binary_file";
+  const message = binary
+    ? `${filename} can't be shown here.`
+    : filesGone && workspaceName
+      ? `${workspaceName}'s files are gone.`
+      : workspaceName && failure === "File not found"
+        ? `This file isn't in ${workspaceName} any more.`
+        : failure;
   const isEmpty = content != null && content.length === 0;
   const lines = content?.split("\n") || [];
   const isLoading = isContentLoading || isHighlighting;
@@ -108,6 +132,10 @@ export function FileViewer({
 
   return (
     <div className="bg-background flex h-full flex-col overflow-hidden">
+      {header?.(!isFetching && !filesGone, async () => {
+        const result = await refetch();
+        return getErrorMessage(result.error) !== WORKSPACE_FILES_GONE;
+      })}
       {/* Header - Fixed at top, h-10 matches DiffViewer */}
       <div className="border-border-subtle flex-shrink-0 border-b">
         <div className="flex h-10 items-center justify-between gap-4 px-4">
@@ -197,7 +225,7 @@ export function FileViewer({
       </div>
 
       {/* File content - Scrollable */}
-      <div className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto scroll-smooth motion-reduce:scroll-auto">
+      <div className="relative min-h-0 flex-1 overflow-auto scroll-smooth motion-reduce:scroll-auto">
         {isLoading ? (
           <div className="text-muted-foreground/60 flex h-64 items-center justify-center">
             <div className="flex flex-col items-center gap-3">
@@ -205,16 +233,19 @@ export function FileViewer({
               <span className="text-sm">Loading file...</span>
             </div>
           </div>
-        ) : error ? (
+        ) : message ? (
           <div className="text-muted-foreground/60 flex h-64 items-center justify-center">
             <div className="flex max-w-sm flex-col items-center gap-2 text-center">
-              <p className="text-sm">
-                {error instanceof Error
-                  ? error.message
-                  : typeof error === "string"
-                    ? error
-                    : "Failed to load file"}
-              </p>
+              <p className="text-sm">{message}</p>
+              {binary && onPreviewBinary && (
+                <button
+                  type="button"
+                  className="text-foreground text-sm underline"
+                  onClick={onPreviewBinary}
+                >
+                  Open preview
+                </button>
+              )}
             </div>
           </div>
         ) : isEmpty || lines.length === 0 ? (
@@ -222,11 +253,19 @@ export function FileViewer({
             <p className="text-sm">Empty file</p>
           </div>
         ) : isMarkdown && !showRawMarkdown ? (
-          <div className="markdown-content px-6 py-4">
+          <div
+            className={cn(
+              "markdown-content px-6 py-4",
+              header &&
+                "mx-auto max-w-[96ch] [&_table]:block [&_table]:overflow-x-auto [&_table]:[word-break:normal] [&_th]:whitespace-nowrap"
+            )}
+          >
             <MarkdownRenderer allowHtml>{content!}</MarkdownRenderer>
           </div>
         ) : (
-          <div>{highlightedLines?.map((html, idx) => renderLine(html, idx + 1))}</div>
+          <div className="w-max min-w-full">
+            {highlightedLines?.map((html, idx) => renderLine(html, idx + 1))}
+          </div>
         )}
       </div>
     </div>

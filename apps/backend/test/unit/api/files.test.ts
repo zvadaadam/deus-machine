@@ -48,7 +48,13 @@ const { realpath } = vi.hoisted(() => ({ realpath: vi.fn(async (p: string) => p)
 vi.mock("node:fs/promises", async (original) => ({
   ...(await original<typeof import("node:fs/promises")>()),
   realpath,
-  stat: async () => ({ isFile: () => true, size: 7, dev: 1, ino: 2 }),
+  stat: async (p: string) => ({
+    isFile: () => p !== WORKSPACE_PATH,
+    isDirectory: () => p === WORKSPACE_PATH,
+    size: 7,
+    dev: 1,
+    ino: 2,
+  }),
 }));
 
 import fileHandlers from "../../../src/api/files";
@@ -136,7 +142,7 @@ describe("fileContent", () => {
   });
 
   it("reports a missing file", async () => {
-    realpath.mockRejectedValueOnce(new Error("missing"));
+    realpath.mockResolvedValueOnce(WORKSPACE_PATH).mockRejectedValueOnce(new Error("missing"));
 
     await expect(run(api.fileContent, { ...workspace, path: "gone.ts" })).rejects.toMatchObject({
       statusCode: 400,

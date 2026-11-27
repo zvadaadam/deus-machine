@@ -206,6 +206,27 @@ describe("needsPreviewAddress", () => {
 describe("openFile", () => {
   it.each([
     [
+      "phone chat PNG preview",
+      "shot.png",
+      { ...local, fileTab: false },
+      "preview",
+      { to: "file-preview", path: "shot.png" },
+    ],
+    [
+      "board PNG chip",
+      "shot.png",
+      { ...local, fileTab: false },
+      "files",
+      { to: "file-viewer", path: "shot.png" },
+    ],
+    [
+      "cloud text preview without a File tab",
+      "site.html",
+      { ...cloud, fileTab: false },
+      "preview",
+      { to: "file-viewer", path: "site.html" },
+    ],
+    [
       "local html preview",
       "site/index.html",
       local,
