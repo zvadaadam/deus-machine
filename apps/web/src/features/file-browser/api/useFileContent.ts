@@ -7,14 +7,12 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@shared/api";
 import { call } from "@/platform/ws";
 
-/**
- * Read file content from the working tree (current disk state).
- * Unlike git-based reading, this shows unsaved/uncommitted changes.
- *
- * @param workspaceId - The workspace ID
- * @param relativePath - File path relative to the workspace root
- */
-export function useFileContent(workspaceId: string | null, relativePath: string | null) {
+/** Full-screen visits recheck the checkout on open. Desktop tabs can reuse a recent read. */
+export function useFileContent(
+  workspaceId: string | null,
+  relativePath: string | null,
+  refreshOnOpen = false
+) {
   return useQuery({
     queryKey: ["file-content", workspaceId, relativePath],
     queryFn: async () => {
@@ -23,7 +21,7 @@ export function useFileContent(workspaceId: string | null, relativePath: string 
       return content;
     },
     enabled: !!workspaceId && !!relativePath,
-    refetchOnMount: "always",
+    staleTime: refreshOnOpen ? 0 : 5000,
     refetchOnWindowFocus: false,
   });
 }

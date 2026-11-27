@@ -9,6 +9,8 @@ import { WORKSPACE_FILES_GONE } from "@shared/types/files";
 import { cn } from "@/shared/lib/utils";
 import { getErrorMessage } from "@shared/lib/errors";
 import { useTheme } from "@/app/providers";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
+import { CLOUD_FILE_UNSHOWN } from "@/features/workspace/lib/reach";
 import { useFileContent } from "../api/useFileContent";
 import { PierreFileIcon } from "../lib/pierreIcons";
 import { useQuery } from "@tanstack/react-query";
@@ -77,14 +79,15 @@ export function FileViewer({
    */
   const language = filePath ? detectLanguageFromPath(filePath) : "text";
 
-  // Fetch file content via the runtime socket
+  // The hosted chat has no fileContent operation. A Mac-backed cloud workspace does.
+  const hosted = isCloudDirectWebMode();
   const {
     data: content,
     isLoading: isContentLoading,
     isFetching,
     refetch,
     error,
-  } = useFileContent(workspaceId, filePath);
+  } = useFileContent(hosted ? null : workspaceId, filePath, !!header);
 
   // Highlight entire file at once (single Shiki call instead of per-line)
   const { data: highlightedLines, isLoading: isHighlighting } = useQuery({
@@ -94,7 +97,7 @@ export function FileViewer({
     staleTime: Infinity, // Don't refetch highlighting for same content
   });
 
-  const failure = error && getErrorMessage(error);
+  const failure = hosted ? CLOUD_FILE_UNSHOWN : error && getErrorMessage(error);
   const filesGone = failure === WORKSPACE_FILES_GONE;
   const binary = failure === "binary_file";
   const message = binary
@@ -230,7 +233,7 @@ export function FileViewer({
               <span className="text-sm">Loading file...</span>
             </div>
           </div>
-        ) : error ? (
+        ) : message ? (
           <div className="text-muted-foreground/60 flex h-64 items-center justify-center">
             <div className="flex max-w-sm flex-col items-center gap-2 text-center">
               <p className="text-sm">{message}</p>

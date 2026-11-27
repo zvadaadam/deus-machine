@@ -50,7 +50,11 @@ const history = [
     role: "assistant",
     createdAt: T + 1000,
     parts: [
-      text("p_agent_1", "m_agent_1", "It checks the hosted web against a scripted platform."),
+      text(
+        "p_agent_1",
+        "m_agent_1",
+        "It checks the hosted web against a scripted platform.\n\n[Read the report](report.md)"
+      ),
     ],
   },
 ];
@@ -343,6 +347,16 @@ try {
     sockets: platform.sockets.length,
     tokens: platform.tokens,
   });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("link", { name: "Read the report" }).click();
+  const file = page.getByRole("dialog");
+  await file
+    .getByText("This file is on the cloud computer and can't be shown here", { exact: true })
+    .waitFor();
+  await page.goBack();
+  await file.waitFor({ state: "detached" });
+  check("a hosted phone chat explains why the file is unavailable and Back returns to the chat");
 
   assert.deepEqual(errors, [], "no page errors");
   assert.deepEqual(

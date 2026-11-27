@@ -459,7 +459,11 @@ async function run() {
     assert.deepEqual(boardType, chatType);
     await page.getByRole("log").getByRole("link", { name: "Read the release report" }).click();
     await page.getByRole("heading", { name: "Release verification", exact: true }).waitFor();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator("#mobile-panel-chat").waitFor();
     assert.equal(await desktopFile.count(), 0);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.getByRole("tab", { name: "report.md", selected: true }).waitFor();
     await page
       .getByText(/From #release-desk · thread 1/)
       .first()
@@ -531,7 +535,9 @@ async function run() {
     const chatFile = phone.getByRole("dialog");
     await chatFile.getByRole("heading", { name: "Release verification" }).waitFor();
     await phone.setViewportSize({ width: 1440, height: 900 });
-    await chatFile.getByRole("button", { name: "Close", exact: true }).click();
+    await phone.locator('[role="tab"]').filter({ hasText: "prior.md" }).waitFor();
+    assert.ok(await chatFile.isVisible());
+    await phone.goBack();
     await chatFile.waitFor({ state: "detached" });
     await phone.getByRole("tab", { name: "prior.md", selected: true }).waitFor();
     await phone.getByRole("tab", { name: "report.md", selected: false }).waitFor();
