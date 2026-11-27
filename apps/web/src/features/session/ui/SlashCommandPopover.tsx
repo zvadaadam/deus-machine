@@ -1,10 +1,3 @@
-/**
- * SlashCommandPopover — Sheet list of available skills & commands
- *
- * Renders inside the InputGroup as a sheet that slides out above the textarea
- * when the user types `/` to invoke a skill or command.
- */
-
 import { useEffect, useMemo, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
@@ -23,6 +16,8 @@ interface SlashCommandSection {
   items: SlashCommandItem[];
   startIndex: number;
 }
+
+const sectionTitles = { action: "Actions", skill: "Skills", command: "Commands" };
 
 /** Highlight matched substring in item name */
 function highlightMatch(text: string, query: string) {
@@ -52,27 +47,17 @@ export function SlashCommandPopover({
 }: SlashCommandPopoverProps) {
   const listRef = useRef<HTMLDivElement>(null);
 
-  const skillItems = useMemo(() => results.filter((item) => item.kind === "skill"), [results]);
-  const commandItems = useMemo(() => results.filter((item) => item.kind === "command"), [results]);
-
-  const headerTitle =
-    skillItems.length > 0 ? "Skills" : commandItems.length > 0 ? "Commands" : "Skills & commands";
-
   const sections = useMemo<SlashCommandSection[]>(() => {
-    const nextSections: SlashCommandSection[] = [];
-    let startIndex = 0;
-
-    if (skillItems.length > 0) {
-      nextSections.push({ title: "Skills", items: skillItems, startIndex });
-      startIndex += skillItems.length;
+    const groups: SlashCommandSection[] = [];
+    for (const [index, item] of results.entries()) {
+      const title = sectionTitles[item.kind];
+      const last = groups.at(-1);
+      if (last?.title === title) last.items.push(item);
+      else groups.push({ title, items: [item], startIndex: index });
     }
-
-    if (commandItems.length > 0) {
-      nextSections.push({ title: "Commands", items: commandItems, startIndex });
-    }
-
-    return nextSections;
-  }, [commandItems, skillItems]);
+    return groups;
+  }, [results]);
+  const headerTitle = sections[0]?.title ?? "Skills & commands";
 
   useEffect(() => {
     if (!listRef.current) return;
@@ -130,10 +115,8 @@ export function SlashCommandPopover({
                         "control-interaction flex w-full items-start rounded-lg px-3 py-2 text-left",
                         isSelected ? "bg-accent text-accent-foreground" : "hover:bg-accent/40"
                       )}
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        onSelect(item.name);
-                      }}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => onSelect(item.name)}
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex min-w-0 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
