@@ -221,6 +221,12 @@ function newRow(q: Queue, message: Message, origin: Origin | undefined, ownTurn:
   };
 }
 
+/** The usage-limit hold a turn left, while the queue still holds for that turn. */
+export function limitHoldOf(sessionId: string, turnId: string) {
+  const hold = queues.get(sessionId)?.hold;
+  return hold?.reason === "limit" && hold.turnId === turnId ? hold.limit : undefined;
+}
+
 export function queuedMessages(sessionId: string): api.QueuedMessages {
   const q = queues.get(sessionId);
   if (!q) return { paused: null, items: [] };

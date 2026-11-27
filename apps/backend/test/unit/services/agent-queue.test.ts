@@ -3697,49 +3697,131 @@ describe("a coordinator hears from the workspaces it started", () => {
     expect(wakeText()).toContain('"piece-1:1" is waiting on a question.');
   });
 
+  function limitEnd(id: string, turnId: string, resetsAt: number) {
+    as(id, () => {
+      emit({
+        type: "session.limits",
+        sessionId,
+        turnId,
+        windows: [{ id: "primary", usedPercent: 100, resetsAt }],
+        status: "limited",
+        timestamp: seq,
+      });
+      const error = { category: "usage_limit", message: "You've hit your limit" };
+      emit({ type: "error", sessionId, turnId, ...error, recoverable: false, timestamp: seq });
+      emit({ type: "turn.ended", sessionId, turnId, stopReason: "error", error, timestamp: seq });
+    });
+  }
+  const resetWords = (at: number) => new Date(at).toISOString().slice(0, 16).replace("T", " ");
+
+  // The flush runs after the event handler's synchronous handle(): the queue has decided the hold.
+  // A gap between releaseTurn and the queue's notice (a macrotask) fails this test.
   it.each([false, true])(
-    "says whether a worker at its usage limit continues by itself (%s), through the real event handler",
+    "pins the limit line's order through the real event handler (continue_after_usage_limit %s)",
     async (on) => {
       vi.spyOn(settings, "getSetting").mockImplementation(
         (key) => key === "continue_after_usage_limit" && on
       );
       const resetsAt = Date.now() + 120_000;
       await brief("p1", "a1");
-      as("p1", () => {
-        emit({
-          type: "session.limits",
-          sessionId,
-          turnId: "a1",
-          windows: [{ id: "primary", usedPercent: 100, resetsAt }],
-          status: "limited",
-          timestamp: seq,
-        });
-        const error = { category: "usage_limit", message: "You've hit your limit" };
-        emit({
-          type: "error",
-          sessionId,
-          turnId: "a1",
-          ...error,
-          recoverable: false,
-          timestamp: seq,
-        });
-        emit({
-          type: "turn.ended",
-          sessionId,
-          turnId: "a1",
-          stopReason: "error",
-          error,
-          timestamp: seq,
-        });
-      });
+      limitEnd("p1", "a1", resetsAt);
       await vi.waitFor(() => expect(leadStarts()).toHaveLength(1));
-      const reset = new Date(resetsAt).toISOString().slice(0, 16).replace("T", " ");
       expect(wakeText()).toContain(
-        `"piece-1:1" stopped on a usage limit, resets ${reset} UTC, ${on ? "continues by itself" : "automatic continuation is off"}.\n  Error:\n  | You've hit your limit`
+        `"piece-1:1" stopped on a usage limit, resets ${resetWords(resetsAt)} UTC, ${on ? "continues by itself" : "automatic continuation is off"}.\n  Error:\n  | You've hit your limit`
       );
       vi.restoreAllMocks();
     }
   );
+
+  it("leaves continuation out once the queue no longer holds for the limited turn", async () => {
+    const resetsAt = Date.now() + 120_000;
+    await busyLead("L");
+    await brief("p1", "a1");
+    limitEnd("p1", "a1", resetsAt);
+    await settle();
+    // The person carries on in the worker's chat: its queue no longer holds for that limit.
+    await run(api.sendMessage, { ...message("b1"), sessionId: "p1", turnId: "b1" });
+    await vi.waitFor(() => expect(holdingTurn("p1")?.turnId).toBe("b1"));
+    endLead("L");
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(2));
+    expect(wakeText()).toContain(
+      `"piece-1:1" stopped on a usage limit, resets ${resetWords(resetsAt)} UTC.\n  Error:`
+    );
+    expect(wakeText()).not.toContain("continu");
+  });
+
+  it("delivers a finish that beat the coordinator's pending Stop", async () => {
+    await brief("p1", "a1");
+    const cancel = Promise.withResolvers<TurnCancelResult>();
+    engine.cancelTurn.mockReturnValueOnce(cancel.promise);
+    const stopping = stopSession({ sessionId: "p1" }, fromLead);
+    await vi.waitFor(() => expect(engine.cancelTurn).toHaveBeenCalled());
+    as("p1", () => {
+      reply("a1", "p1 done.");
+      end("a1");
+    });
+    cancel.resolve({ outcome: "no_active_turn" });
+    await stopping;
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(1));
+    expect(wakeText()).toContain('"piece-1:1" finished.');
+  });
+
+  it("reports a turn whose transcript could not be recovered as failed, not finished", async () => {
+    await brief("p1", "a1");
+    engine.cancelTurn.mockResolvedValueOnce({ outcome: "unconfirmed", turnId: "a1" });
+    as("p1", () => gap("replay_failed"));
+    await vi.waitFor(() => expect(engine.cancelTurn).toHaveBeenCalled());
+    await settle();
+    as("p1", () => end("a1"));
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(1));
+    expect(wakeText()).toContain(
+      '"piece-1:1" failed.\n  Error:\n  | Some agent output could not be recovered'
+    );
+  });
+
+  it("still delivers the finish of a workspace archived before delivery", async () => {
+    await busyLead("L");
+    await brief("p1", "a1");
+    as("p1", () => end("a1"));
+    await settle();
+    db.exec("UPDATE workspaces SET state = 'archived' WHERE id = 'w-p1'");
+    endLead("L");
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(2));
+    expect(wakeText()).toContain('"piece-1:1" finished.');
+  });
+
+  it("drops a refused wake's news when its coordinator is archived, so a restore does not revive it", async () => {
+    await busyLead("L");
+    for (let i = 0; i < 5; i++)
+      await enqueueMessage(
+        { ...message(`r${i}`), sessionId: lead, turnId: `r${i}` },
+        fromAssistant
+      );
+    engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "L" });
+    await stopSession({ sessionId: lead }, fromPerson);
+    endLead("L", "cancelled");
+    const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await brief("p1", "a1");
+    as("p1", () => end("a1"));
+    await settle();
+    expect(_heldNews(lead)).toEqual(["p1"]);
+    expect(warned).toHaveBeenCalled();
+    db.exec("UPDATE workspaces SET state = 'archived' WHERE id = 'c'");
+    invalidate(["workspaces"]);
+    db.exec("UPDATE workspaces SET state = 'ready' WHERE id = 'c'");
+    invalidate(["workspaces"]);
+    // An unrelated chat's release.
+    db.exec(`INSERT INTO workspaces (id, repository_id, slug, state) VALUES ('u', 'r', 'unrelated', 'ready');
+      INSERT INTO sessions (id, workspace_id, agent_harness) VALUES ('u1', 'u', 'codex-app-server');`);
+    await run(api.sendMessage, { ...message("u"), sessionId: "u1", turnId: "u" });
+    as("u1", () => end("u"));
+    await settle();
+    expect(_heldNews(lead)).toEqual([]);
+    expect(leadStarts()).toHaveLength(1);
+    const rows = (await run(api.queuedMessages, { sessionId: lead })).items;
+    expect(rows.some((row) => row.text.startsWith("Deus: news"))).toBe(false);
+    warned.mockRestore();
+  });
 
   it("is not news when the coordinator stopped the turn", async () => {
     await brief("p1", "a1");
@@ -3829,6 +3911,23 @@ describe("a coordinator hears from the workspaces it started", () => {
       const result = await call("wait_for_sessions", { sessions: ["piece-1:1"], wait: 0 });
       expect(result.isError).toBeFalsy();
       expect(_heldNews(lead)).toEqual(["p2"]);
+    });
+
+    it("a wait that shows only the next turn running keeps the news of the turn before it", async () => {
+      await busyLead("L");
+      await brief("p1", "a1");
+      // The worker's queue starts its next turn at once.
+      await enqueueMessage({ ...message("b1"), sessionId: "p1", turnId: "b1" }, fromLead);
+      as("p1", () => end("a1"));
+      await vi.waitFor(() =>
+        expect(holdingTurn("p1")).toMatchObject({ turnId: "b1", phase: "running" })
+      );
+      await settle();
+      expect(_heldNews(lead)).toEqual(["p1"]);
+      const waited = await call("wait_for_sessions", { sessions: ["piece-1:1"], wait: 0 });
+      expect(JSON.stringify(waited.content)).toContain("working");
+      await call("read_session", { session: "piece-1:1" });
+      expect(_heldNews(lead)).toEqual(["p1"]);
     });
 
     it("read_session after the end has delivered it", async () => {

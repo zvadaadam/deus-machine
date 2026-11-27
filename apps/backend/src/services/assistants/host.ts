@@ -255,11 +255,18 @@ export interface DeusHost extends OperatorHost<Caller> {
 }
 
 /** The chats each call's reads showed, and when: keyed by the call's own signal, which the package hands every read. */
-const views = new WeakMap<AbortSignal, Map<string, number>>();
+const views = new WeakMap<AbortSignal, Map<string, Shown[]>>();
 
-/** Run a session's tool call and say which chats it read, and when (`performance.now()`). */
+/** What one read of a chat showed: its running turn, its last ended turn, whether it waits on an answer. */
+export interface Shown {
+  running?: string;
+  ended?: string;
+  waiting: boolean;
+}
+
+/** Run a session's tool call and say what each read of a chat showed. */
 export async function readsDuring<T>(signal: AbortSignal, call: () => Promise<T>) {
-  const read = views.get(signal) ?? new Map<string, number>();
+  const read = views.get(signal) ?? new Map<string, Shown[]>();
   views.set(signal, read);
   try {
     return { result: await call(), read };
@@ -321,12 +328,14 @@ const AGENT_NAMES = new Intl.ListFormat("en").format(
   Object.entries(HARNESSES).map(([id, { label }]) => `${JSON.stringify(id)} (${label})`)
 );
 
-export function limitNote(limit: sessions.QueuedMessages["limit"]) {
+/** A usage limit in words; without `continues`, nothing is said about continuing. */
+export function limitNote(limit?: { resetsAt?: number; continues?: boolean }) {
   if (!limit) return "stopped on a usage limit";
   const reset =
     limit.resetsAt === undefined
       ? "no reset time was reported, the person decides when to resume"
       : `resets ${new Date(limit.resetsAt).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+  if (limit.continues === undefined) return `stopped on a usage limit, ${reset}`;
   return `stopped on a usage limit, ${reset}, ${limit.continues ? "continues by itself" : "automatic continuation is off"}`;
 }
 
@@ -776,13 +785,27 @@ export function createDeusHost(): DeusHost {
     },
 
     async view(caller, sessionId, options): Promise<SessionView> {
-      if (caller.kind === "session" && caller.signal)
-        views.get(caller.signal)?.set(sessionId, performance.now());
       const entry = entryById(sessionId);
       if (!entry) throw new OperatorError("not_found", "That session is gone. Nothing was read.");
       const db = getDatabase();
       if (!getSessionRaw(db, sessionId))
         return { status: entry.status, note: entry.note, turns: [], waiting: [] };
+      const running = holdingTurn(sessionId)?.turnId;
+      const prior = setupStop(sessionId);
+      const stopped = prior && {
+        turnId: prior.turnId,
+        cancelledBy: prior.by,
+        outcome: "cancelled" as const,
+      };
+      const last = stopped
+        ? { ...stopped, steers: {} }
+        : lastEnded([sessionId], true).get(sessionId)?.turn;
+      const waiting = pendingFor(sessionId).flatMap((request) => waitingOf(request) ?? []);
+      if (caller.kind === "session" && caller.signal) {
+        const shown = views.get(caller.signal);
+        const state = { running, ended: last?.turnId, waiting: waiting.length > 0 };
+        shown?.set(sessionId, [...(shown.get(sessionId) ?? []), state]);
+      }
       // The cursor is where the read ended: the last message of a turn that has ended (a
       // running turn is read again whole), the last stored end and any setup stop's turn id.
       const after = options.after?.match(/^(\d+)\.(\d+)(?:\.(.+))?$/s);
@@ -807,16 +830,6 @@ export function createDeusHost(): DeusHost {
             cancelled_by: null,
           })),
       ];
-      const running = holdingTurn(sessionId)?.turnId;
-      const prior = setupStop(sessionId);
-      const stopped = prior && {
-        turnId: prior.turnId,
-        cancelledBy: prior.by,
-        outcome: "cancelled" as const,
-      };
-      const last = stopped
-        ? { ...stopped, steers: {} }
-        : lastEnded([sessionId], true).get(sessionId)?.turn;
       const turns: ViewTurn[] = facts.map((fact) => {
         const outcome = savedOutcome(fact.outcome);
         const how = fact.turn_id === running || !fact.ended_at ? undefined : endedOf(fact, outcome);
@@ -860,7 +873,7 @@ export function createDeusHost(): DeusHost {
         status: entry.status,
         note: entry.note,
         turns,
-        waiting: pendingFor(sessionId).flatMap((request) => waitingOf(request) ?? []),
+        waiting,
         cursor: `${seq}.${endMark ?? 0}${stoppedId ? `.${stoppedId}` : ""}` as never,
         ...(running ? { running } : {}),
         ...(last ? { lastEnded: last } : {}),

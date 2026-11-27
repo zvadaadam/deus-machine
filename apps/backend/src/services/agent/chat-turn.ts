@@ -37,9 +37,20 @@ export type TurnNotice =
       by?: Origin;
     };
 /** Someone outside the agent service who follows chats' turns (a coordinator's wake). */
+/** What a release says about its turn, for a watcher. */
+export interface Released {
+  /** False when the turn never ran (withdrawn, or refused before admission with no stop). */
+  ended: boolean;
+  /** Who stopped it: only when the release is that Stop's cancel, not a finish that beat it. */
+  stoppedBy?: Origin;
+  /** Its usage limit, as the end reported it. */
+  limit?: { resetsAt?: number };
+  /** Why it failed, when the release itself says (a refusal, a lost turn, an incomplete transcript). */
+  error?: string;
+}
 export interface TurnWatch {
-  /** A turn let go of its chat. `ended` is false when it never ran; `by` is its first Stop. */
-  released(sessionId: string, turnId: string, ended: boolean, by?: Origin): void;
+  /** A turn let go of its chat. */
+  released(sessionId: string, turnId: string, release: Released): void;
   /** A chat's agent now waits on a question or a plan approval. */
   asked(sessionId: string, turnId: string): void;
 }
@@ -283,7 +294,20 @@ export function releaseTurn(id: string, turnId: string, reason: Release) {
   prune(id, chat);
   // A withdrawn claim, or one refused before admission with no stop of its own, never ran.
   const ended = reason.type !== "withdrawn" && (reason.type !== "refused" || !!error || !!by);
-  tellWatch((watch) => watch.released(id, turnId, ended, by));
+  const cancelled =
+    reason.type === "cancelled" ||
+    (reason.type === "end" && reason.cancelled) ||
+    (reason.type === "refused" && !error);
+  const failure =
+    reason.type === "end" ? reason.outcome?.status === "error" && reason.outcome.error : error;
+  tellWatch((watch) =>
+    watch.released(id, turnId, {
+      ended,
+      ...(cancelled && by && { stoppedBy: by }),
+      ...(reason.type === "end" && reason.limit && { limit: reason.limit }),
+      ...(failure && { error: failure.message }),
+    })
+  );
   return true;
 }
 

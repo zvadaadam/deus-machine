@@ -680,8 +680,8 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   agent message (`enqueueMessage`), with the chat's recorded model, thinking and mode. A held
   queue keeps it waiting, and a refusal keeps the news for the next release. A
   `wait_for_sessions`, `start_session`, `send_message` or `read_session` that returns having
-  read a workspace after its news was held delivers it (`readsDuring` in
-  `assistants/host.ts`). The agent service reports releases and prompts through the
+  shown the held state (that turn ended with nothing newer running, or that turn still asking)
+  delivers it (`readsDuring` in `assistants/host.ts`). The agent service reports releases and prompts through the
   `TurnWatch` registered at startup (`chat-turn.ts`); a watcher's failure never stops either.
   Nothing survives a quit, and a hidden or archived coordinator's news is dropped.
 
