@@ -24,7 +24,7 @@ import { enqueueMessage, queuedMessages } from "../agent/queue";
 import { continuedPermissionMode, continuedSettings } from "../agent/turn-settings";
 import { limitNote, readsDuring } from "../assistants/host";
 import { operatorHost } from "../assistants/operator";
-import { coordinatorState } from "./tools";
+import { coordinatorState } from "./coordinator";
 
 type News = { turnId: string; asked: boolean; at: number };
 /** By coordinator chat, then by worker chat. */

@@ -114,6 +114,10 @@ it("pins the chat’s board tools on first use and keeps a resumed conversation 
   expect(boardSource(resumed)).toBeUndefined();
   expect(boardSource(empty)).toBeDefined();
   expect(boardSource(createChat(db, "w", {}))).toBeDefined();
+  // A chat that will not get them is pinned off (0), never left unpinned.
+  const pin = (id: string) =>
+    db.prepare("SELECT board_tools FROM sessions WHERE id = ?").pluck().get(id);
+  expect([pin(used), pin(resumed), pin(empty)]).toEqual([0, 0, 1]);
 });
 
 it("gives a fresh coordinator chat the names and IDs of all its workspace’s boards", () => {
