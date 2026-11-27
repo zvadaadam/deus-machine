@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { match } from "ts-pattern";
-import { Cloud, ClockFading, GitBranch, Laptop } from "lucide-react";
+import { Cloud, ClockFading, GitBranch, Laptop, TriangleAlert } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@/shared/lib/utils";
@@ -203,7 +203,9 @@ export function WorkspaceHoverCard({
               )}
             </span>
             {workspace.setup_status === "failed" && (
-              <span className="text-accent-red-muted text-xs">{SETUP_FAILED}</span>
+              <span className="bg-warning/10 text-warning text-2xs flex items-center gap-1 rounded-full px-2 py-0.5 font-medium">
+                <TriangleAlert className="h-2.5 w-2.5" /> {SETUP_FAILED}
+              </span>
             )}
             {automation && (
               <button

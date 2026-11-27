@@ -62,6 +62,7 @@ interface ChatProps {
   workspaceId?: string | null;
   /** Cloud workspaces get sandbox copy in the empty state. */
   workspaceKind?: WorkspaceKind;
+  onSendAgentMessage?: (text: string) => void;
   className?: string;
 }
 
@@ -92,6 +93,7 @@ export function Chat({
   userSendCount = 0,
   workspaceId,
   workspaceKind,
+  onSendAgentMessage,
   className,
 }: ChatProps) {
   // Chat owns its scroll behavior entirely — refs, hook, and button.
@@ -394,7 +396,11 @@ export function Chat({
                           .with({ type: "cloudEnv" }, (t) => <CloudEnvGroup entries={t.entries} />)
                           .with({ type: "start" }, (t) =>
                             workspaceId ? (
-                              <WorkspaceStartGroup workspaceId={workspaceId} start={t.start} />
+                              <WorkspaceStartGroup
+                                workspaceId={workspaceId}
+                                start={t.start}
+                                onSendAgentMessage={onSendAgentMessage}
+                              />
                             ) : null
                           )
                           .exhaustive()}

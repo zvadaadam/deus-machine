@@ -126,6 +126,7 @@ export function MobileLayout({
           onCloudWake={onCloudWake}
           setupStatus={workspace.setup_status}
           setupError={workspace.error_message}
+          setupErrorDetail={workspace.error_detail}
           onSendAgentMessage={sendAgentMessageHandler ? handleSendAgentMessage : undefined}
           workspaceStatus={workspace.status}
           onStatusChange={onStatusChange}

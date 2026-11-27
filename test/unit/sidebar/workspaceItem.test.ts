@@ -48,7 +48,7 @@ function render(workspace: Partial<Workspace>) {
 }
 
 it.each(["completed", "failed"] as const)(
-  "shows the working grid and duration with setup %s",
+  "shows the working grid and duration cleanly with setup %s",
   (setup_status) => {
     for (const [current, sibling] of [
       ["working", "idle"],
@@ -65,11 +65,9 @@ it.each(["completed", "failed"] as const)(
         ],
       });
       expect(html).toMatch(/<canvas[^>]*aria-hidden="true"/);
-      expect(html).toContain(
-        `aria-label="Workspace Orbit, working${setup_status === "failed" ? ", setup failed" : ""}"`
-      );
+      expect(html).toContain('aria-label="Workspace Orbit, working"');
       expect(html).toContain("5s");
-      expect(html.includes('title="Setup failed"')).toBe(setup_status === "failed");
+      expect(html).not.toContain('title="Setup failed"');
       expect(useWorkingDuration).toHaveBeenLastCalledWith({
         status: "working",
         latestMessageSentAt: sibling === "working" ? early : late,
@@ -78,7 +76,7 @@ it.each(["completed", "failed"] as const)(
   }
 );
 
-it("shows a background question's dot beside the working grid and failed setup", () => {
+it("shows a background question's dot beside the working grid without sidebar setup clutter", () => {
   const html = render({
     setup_status: "failed",
     session_status: "working",
@@ -87,10 +85,8 @@ it("shows a background question's dot beside the working grid and failed setup",
       { id: "sibling", status: "needs_response", last_user_message_at: late, error_category: null },
     ],
   });
-  expect(html).toContain(
-    'aria-label="Workspace Orbit, working, waiting for your answer, setup failed"'
-  );
+  expect(html).toContain('aria-label="Workspace Orbit, working, waiting for your answer"');
   expect(html).toMatch(/<canvas[^>]*aria-hidden="true"/);
   expect(html).toContain("bg-accent-gold");
-  expect(html).toContain('title="Setup failed"');
+  expect(html).not.toContain('title="Setup failed"');
 });

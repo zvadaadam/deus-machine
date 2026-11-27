@@ -5,11 +5,7 @@ import {
   ArrowUpRight,
   ChevronDown,
   PanelLeft,
-  AlertTriangle,
   Loader2,
-  RotateCw,
-  ScrollText,
-  Sparkles,
   Check,
   Cloud as CloudIcon,
   CloudOff,
@@ -28,7 +24,6 @@ import { cn } from "@/shared/lib/utils";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { copyWorkspaceLink, currentChatLink, useHasWorkspaceChat } from "../lib/workspaceAddress";
 import { CopyIcon } from "@/components/ui/copy-icon";
-import { SETUP_FAILED, SETUP_RUNNING } from "../lib/startState";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { native } from "@/platform";
 import type { InstalledApp } from "@/platform";
@@ -38,13 +33,11 @@ import type { WorkspaceKind, WorkspaceStatus } from "@shared/enums";
 import type { ProjectTask } from "@shared/types/project-environment";
 import { CoordinatorMark } from "./CoordinatorRole";
 import { HeaderRunButton } from "./HeaderRunButton";
-import { SetupLogDialog } from "./SetupLogDialog";
-import { useSetupActions } from "../hooks/useSetupActions";
+import { WorkspaceSetupStatus } from "./WorkspaceSetupStatus";
 import { WorkflowStatusIcon } from "@/features/sidebar/ui/WorkflowStatusIcon";
 import { WorkspaceStatusMenu } from "@/features/sidebar/ui/WorkspaceStatusMenu";
 import { AppIcon, groupAppsByCategory } from "@/shared/lib/appIcons";
 import { useLastOpenInApp } from "@/shared/hooks/useLastOpenInApp";
-import { fixSetupErrorPrompt } from "@/features/session/lib/sessionPrompts";
 import { uiActions } from "@/shared/stores/uiStore";
 
 interface WorkspaceHeaderProps {
@@ -59,6 +52,7 @@ interface WorkspaceHeaderProps {
   workspacePath?: string;
   setupStatus?: SetupStatus;
   setupError?: string | null;
+  setupErrorDetail?: string | null;
   onSendAgentMessage?: (text: string) => void;
   workspaceStatus?: WorkspaceStatus;
   onStatusChange?: (status: WorkspaceStatus) => void;
@@ -93,6 +87,7 @@ export function WorkspaceHeader({
   workspacePath,
   setupStatus,
   setupError,
+  setupErrorDetail,
   onSendAgentMessage,
   workspaceStatus,
   onStatusChange,
@@ -106,7 +101,6 @@ export function WorkspaceHeader({
   onOpenAutomation,
 }: WorkspaceHeaderProps) {
   const { state: sidebarState, toggleSidebar } = useSidebar();
-  const { retry, retrying } = useSetupActions(workspaceId);
   const sidebarCollapsed = sidebarState === "collapsed";
   const showSidebarToggle = sidebarCollapsed || mobile;
 
@@ -274,68 +268,13 @@ export function WorkspaceHeader({
           </span>
         )}
 
-        {setupStatus === "running" && (
-          <span className="text-text-muted flex items-center gap-1 text-sm">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            <span>{SETUP_RUNNING}</span>
-          </span>
-        )}
-        {setupStatus === "failed" && (
-          <div className="flex items-center gap-1">
-            <span className="text-accent-red-muted flex items-center gap-1 text-sm font-medium">
-              <AlertTriangle className="h-3 w-3" />
-              <span>{SETUP_FAILED}</span>
-            </span>
-            <Tooltip delayDuration={200}>
-              <SetupLogDialog workspaceId={workspaceId}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="View setup logs"
-                    className="control-interaction text-text-muted hover:text-text-secondary rounded-lg px-1.5 py-0.5 text-sm"
-                  >
-                    <ScrollText className="h-3 w-3" />
-                  </button>
-                </TooltipTrigger>
-              </SetupLogDialog>
-              <TooltipContent side="bottom">
-                <p className="text-xs">View setup logs</p>
-              </TooltipContent>
-            </Tooltip>
-            {onSendAgentMessage && (
-              <Tooltip delayDuration={200}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => onSendAgentMessage(fixSetupErrorPrompt(setupError ?? null))}
-                    className="control-interaction text-text-muted hover:text-text-secondary rounded-lg px-1.5 py-0.5 text-sm"
-                  >
-                    <Sparkles className="h-3 w-3" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p className="text-xs">Ask AI to fix</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-            <Tooltip delayDuration={200}>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Retry setup"
-                  disabled={retrying}
-                  onClick={retry}
-                  className="control-interaction text-text-muted hover:text-text-secondary rounded-lg px-1.5 py-0.5 text-sm"
-                >
-                  <RotateCw className="h-3 w-3" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <p className="text-xs">Retry setup</p>
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        )}
+        <WorkspaceSetupStatus
+          workspaceId={workspaceId}
+          setupStatus={setupStatus}
+          setupError={setupError}
+          setupErrorDetail={setupErrorDetail}
+          onSendAgentMessage={onSendAgentMessage}
+        />
       </div>
 
       {/* Right: Run + Open buttons (desktop only) */}

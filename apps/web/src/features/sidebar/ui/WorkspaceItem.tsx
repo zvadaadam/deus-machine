@@ -1,15 +1,6 @@
 import React from "react";
 import { match } from "ts-pattern";
-import {
-  Archive,
-  Cloud,
-  CloudOff,
-  ClockFading,
-  FolderOpen,
-  Link,
-  Loader2,
-  TriangleAlert,
-} from "lucide-react";
+import { Archive, Cloud, CloudOff, ClockFading, FolderOpen, Link, Loader2 } from "lucide-react";
 import NumberFlow from "@number-flow/react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -23,12 +14,7 @@ import { useAutomationForWorkspace } from "@/features/automations";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
 import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
 import { prefetchWorkspace } from "@/features/workspace/api/prefetch";
-import {
-  canRecoverStart,
-  SETUP_FAILED,
-  SETUP_RUNNING,
-  workspaceStart,
-} from "@/features/workspace/lib/startState";
+import { canRecoverStart, workspaceStart } from "@/features/workspace/lib/startState";
 import { getWorkspaceActivity } from "../lib/status";
 import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "../lib/utils";
 import type { WorkspaceItemProps } from "../model/types";
@@ -123,8 +109,6 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
     (!!activeChatTabSessionId && activeChatTabSessionId !== workspace.current_session_id);
 
   const isFailed = workspace.state === "error";
-  const isSetupFailed = workspace.setup_status === "failed";
-  const isSetupRunning = workspace.setup_status === "running";
   const start = isFailed || isInitializing ? workspaceStart(workspace).brief : null;
   const displayName = getWorkspaceDisplayName(workspace);
   const secondaryText = getWorkspaceSecondaryText(workspace);
@@ -143,24 +127,20 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
     status === "idle" && "idle",
     attention,
     start,
-    isSetupFailed && "setup failed",
-    isSetupRunning && !start && "running setup",
   ]
     .filter(Boolean)
     .join(", ");
 
   const additions = diffStats?.additions ?? 0;
   const deletions = diffStats?.deletions ?? 0;
-  const showDiff = status === "idle" && !isSetupRunning && (additions > 0 || deletions > 0);
+  const showDiff = status === "idle" && (additions > 0 || deletions > 0);
   const metaText =
     start ??
     (running
       ? duration > 0
         ? formatDuration(duration, false)
         : "Working..."
-      : isSetupRunning
-        ? SETUP_RUNNING
-        : formatTimeAgo(workspace.updated_at));
+      : formatTimeAgo(workspace.updated_at));
   const icon = <WorkspaceGitIcon workspace={workspace} displayStatus={status} working={working} />;
 
   const handleArchive = (e: React.MouseEvent) => {
@@ -238,11 +218,6 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
           {displayName}
         </span>
         {workspace.role === "coordinator" && <CoordinatorMark />}
-        {isSetupFailed && (
-          <span className="text-accent-red-muted flex shrink-0" title={SETUP_FAILED}>
-            <TriangleAlert size={12} aria-hidden />
-          </span>
-        )}
         {workspace.kind === "cloud" && <CloudLivenessIcon workspace={workspace} />}
         {automation && (
           <span
@@ -291,13 +266,10 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
             className={cn(
               "text-text-disabled flex items-center gap-1",
               running && "text-text-tertiary",
-              (isInitializing || isSetupRunning) && "text-text-muted",
+              isInitializing && "text-text-muted",
               isFailed && "text-accent-red-muted"
             )}
           >
-            {isSetupRunning && !running && (
-              <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
-            )}
             {metaText}
           </span>
         )}

@@ -296,7 +296,9 @@ try {
   const startLine = (page) =>
     page
       .locator('[data-slot="env-group"]')
-      .filter({ has: page.getByRole("button", { name: "Workspace ready", exact: true }) });
+      .filter({
+        has: page.getByRole("button", { name: /^(?:Setting up workspace…|Workspace ready)/ }),
+      });
   const status = (section, text) => section.getByRole("status").filter({ hasText: text });
 
   // The first navigation also transforms the app against this run's empty Vite cache.
@@ -503,7 +505,7 @@ try {
   await startLine(a).waitFor();
   await status(startLine(a), "Running setup…").waitFor();
   await writeFile(path.join(checkoutPath, "finish-setup"), "");
-  await status(startLine(a), "Running setup…").waitFor({ state: "detached" });
+  await startLine(a).locator('[data-env-step="setup"]').waitFor({ state: "detached" });
   assert.equal(await startLine(a).innerText(), "Workspace ready");
   await startLine(a).getByRole("button", { name: "Workspace ready", exact: true }).click();
   await startLine(a).getByText("Ran setup").waitFor();
@@ -536,7 +538,10 @@ try {
   // Off the row and out of focus, so its hover card is not in the picture.
   await a.mouse.move(1100, 600);
   await a.evaluate(() => document.activeElement?.blur());
-  await startLine(a).getByRole("button", { name: "Copy may be out of date" }).click();
+  await startLine(a)
+    .getByRole("button", { name: "Workspace ready, with warning", exact: true })
+    .click();
+  await startLine(a).locator('[data-env-step="fetch"]').getByText("Copy may be out of date", { exact: true }).waitFor();
   await startLine(a)
     .getByText("We couldn’t reach the remote, so this copy may be out of date.")
     .waitFor();
@@ -766,29 +771,22 @@ try {
   await checkSetupWarning(a, startLine(a), evidence);
   await checkSetupWarning(b, startLine(b), evidence, true);
   const failedCheckout = checkout(failedRow.slug);
-  const retrySetup = a.getByRole("button", { name: "Retry setup", exact: true });
-  await retrySetup.hover();
-  await a.getByRole("tooltip", { name: "Retry setup" }).waitFor();
+  const headerWarning = a
+    .locator('[data-slot="workspace-header"]')
+    .getByRole("button", { name: "Setup failed", exact: true });
+  await headerWarning.hover();
+  await a.getByRole("tooltip", { name: /Setup failed/ }).waitFor();
   const group = startLine(a);
   const step = group.locator('[data-env-step="setup"]');
-  const original = await step.elementHandle();
-  const rowTop = () =>
-    step.evaluate(
-      (el) =>
-        el.getBoundingClientRect().top -
-        el.closest('[data-slot="env-group"]').getBoundingClientRect().top
-    );
-  const failedTop = await rowTop();
-  // A slow write locks both actions on the phone, even before React can paint disabled.
+  // A slow write locks retry on the phone, even before React can paint disabled.
+  await startLine(b).getByRole("button", { name: "Workspace ready, with warning" }).click();
   const phoneRetry = startLine(b).getByRole("button", { name: "Run again" });
   await phoneRetry.evaluate((button) => {
     button.click();
     button.click();
-    document.querySelector('button[aria-label="Retry setup"]').click();
   });
   await until("the phone’s retry to be on the wire", () => heldRetry.writes() > 0);
   assert(await phoneRetry.isDisabled());
-  assert(await b.getByRole("button", { name: "Retry setup" }).isDisabled());
   await openOnPhone(home);
   await phoneRetry.waitFor({ state: "detached" });
 
@@ -802,19 +800,27 @@ try {
       setup: `seq 80; while [ ! -e finish-failed-retry ]; do sleep 0.1; done; ${failSetup}`,
     })
   );
-  await retrySetup.click();
-  await status(step, "Running setup…").waitFor();
+  await headerWarning.click();
+  await a
+    .locator('[data-slot="popover-content"]')
+    .getByRole("button", { name: "Run again" })
+    .click();
+  await status(group, "Running setup…").waitFor();
   heldRetry.release();
   await toast(b, "Setup is not in a failed state.").waitFor();
   assert.equal(heldRetry.writes(), 1, "one retry write across both buttons");
   await writeFile(path.join(failedCheckout, "finish-failed-retry"), "");
-  await step.getByRole("button", { name: /^Setup failed/ }).waitFor();
-  assert(await original.evaluate((el) => el.isConnected));
+  await status(group, "Setup failed").waitFor();
   await openOnPhone(failedSetup.id);
+  await startLine(b).getByRole("button", { name: "Workspace ready, with warning" }).click();
   await phoneRetry.waitFor();
   assert(await phoneRetry.isEnabled());
   // A new run replaces the file. Its full log can be read and scrolled from the keyboard.
-  await a.getByRole("button", { name: "View setup logs" }).click();
+  await headerWarning.click();
+  await a
+    .locator('[data-slot="popover-content"]')
+    .getByRole("button", { name: "View log" })
+    .click();
   const retriedLog = a.getByRole("region", { name: "Setup output" }).filter({ hasText: "80" });
   await retriedLog.focus();
   await retriedLog.press("End");
@@ -828,12 +834,11 @@ try {
       setup: "while [ ! -e finish-retry ]; do sleep 0.1; done; echo repaired",
     })
   );
+  await group.getByRole("button", { name: "Workspace ready, with warning" }).click();
   await group.getByRole("button", { name: "Run again", exact: true }).press("Enter");
-  await status(step, "Running setup…").waitFor();
-  assert(await original.evaluate((el) => el.isConnected), "retry keeps the same step");
-  assert.equal(await rowTop(), failedTop, "retry stays in the same row");
+  await status(group, "Running setup…").waitFor();
   const phoneStep = startLine(b).locator('[data-env-step="setup"]');
-  await status(phoneStep, "Running setup…").waitFor();
+  await status(startLine(b), "Running setup…").waitFor();
   assert.equal(
     await phoneStep.locator("svg").evaluate((el) => window.getComputedStyle(el).animationName),
     "none"
@@ -841,7 +846,7 @@ try {
   assert.equal(await step.getByRole("button").count(), 0);
   assert(
     await group
-      .getByRole("button", { name: "Workspace ready" })
+      .getByRole("button", { name: "Setting up workspace…" })
       .evaluate((el) => el === document.activeElement)
   );
   for (const theme of ["dark", "light"]) {

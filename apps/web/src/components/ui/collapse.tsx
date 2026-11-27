@@ -21,7 +21,7 @@ export function Collapse({
       initial={initial && closed}
       animate={open}
       exit={{ ...closed, transition: tempo[tier].exit }}
-      transition={tempo[tier]}
+      transition={reduced ? tempo[tier] : tempo.spring[tier]}
       className={cn("overflow-hidden", className)}
       {...props}
     />
