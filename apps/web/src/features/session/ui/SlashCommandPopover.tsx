@@ -4,6 +4,7 @@ import { cn } from "@/shared/lib/utils";
 import type { SlashCommandItem } from "../hooks/useSlashCommand";
 
 interface SlashCommandPopoverProps {
+  listId: string;
   getOptionId: (value: string) => string;
   results: SlashCommandItem[];
   loading: boolean;
@@ -40,6 +41,7 @@ function highlightMatch(text: string, query: string) {
 }
 
 export function SlashCommandPopover({
+  listId,
   getOptionId,
   results,
   loading,
@@ -67,30 +69,26 @@ export function SlashCommandPopover({
     selectedEl?.scrollIntoView({ block: "nearest" });
   }, [selectedIndex]);
 
-  if (results.length === 0 && !loading) {
-    return (
-      <>
-        <div className="text-foreground/80 shrink-0 px-4 py-3 text-sm font-medium">
-          {headerTitle}
-        </div>
-        <div className="px-4 pb-4">
-          <p className="text-muted-foreground text-xs">No matching skills or commands</p>
-        </div>
-      </>
-    );
-  }
-
   return (
     <>
       <div className="text-foreground/80 shrink-0 px-4 py-3 text-sm font-medium">{headerTitle}</div>
 
-      {loading && results.length === 0 ? (
-        <div className="text-muted-foreground flex items-center gap-1.5 px-4 pb-4 text-xs">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          <span>Loading skills...</span>
+      {results.length === 0 ? (
+        <div
+          role="status"
+          className="text-muted-foreground flex items-center gap-1.5 px-4 pb-4 text-xs"
+        >
+          {loading && <Loader2 className="h-3 w-3 animate-spin" />}
+          {loading ? "Loading skills..." : "No matching skills or commands"}
         </div>
       ) : (
-        <div ref={listRef} className="min-h-0 overflow-y-auto overscroll-contain px-2 pb-2">
+        <div
+          ref={listRef}
+          role="listbox"
+          id={listId}
+          aria-label="Skills and commands"
+          className="min-h-0 overflow-y-auto overscroll-contain px-2 pb-2"
+        >
           {sections.map((section, sectionIndex) => {
             const showSectionLabel = section.title !== headerTitle || sectionIndex > 0;
 
@@ -114,6 +112,7 @@ export function SlashCommandPopover({
                       type="button"
                       key={`${item.kind}-${item.name}`}
                       role="option"
+                      tabIndex={-1}
                       id={getOptionId(item.name)}
                       aria-selected={isSelected}
                       className={cn(

@@ -246,7 +246,7 @@ export function QueuedMessageList(controls: QueueControls) {
       role="group"
       aria-label="Queued messages"
       {...(rows.length === 0 && { inert: "" })}
-      className="max-h-[min(12rem,25dvh)] overflow-y-auto pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11"
+      className="isolate max-h-[min(12rem,25dvh)] overflow-y-auto pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11"
     >
       <DndContext
         sensors={sensors}

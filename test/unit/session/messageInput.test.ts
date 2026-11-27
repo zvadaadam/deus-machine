@@ -498,19 +498,30 @@ describe("the /plan action", () => {
   it("links the textarea to its open list and the option Enter will choose", () => {
     const draw = (draft: string) => {
       setDraft(draft);
-      return renderInput({ sessionId, initialModel: model, workspaceKind: "worktree" });
+      return renderInput({
+        sessionId,
+        initialModel: "claude-code:opus",
+        workspaceKind: "worktree",
+      });
     };
     const html = draw("/pl");
     const field = controls.input.mock.lastCall![0];
-    expect(field["aria-expanded"]).toBe(true);
+    expect(field["aria-expanded"]).toBeUndefined();
     expect(html.match(/<div[^>]*role="listbox"[^>]*>/)?.[0]).toContain(
       `id="${field["aria-controls"]}"`
     );
     const selected = html.match(/<button[^>]*aria-selected="true"[^>]*>/)?.[0];
     expect(selected).toContain('role="option"');
     expect(selected).toContain(`id="${field["aria-activedescendant"]}"`);
-    draw("/no-match");
-    expect(controls.input.mock.lastCall![0]["aria-activedescendant"]).toBeUndefined();
+    const empty = draw("/no-match");
+    expect(empty).toMatch(/role="status"[^>]*>No matching skills or commands/);
+    expect(empty).not.toContain('role="listbox"');
+    const emptyField = controls.input.mock.lastCall![0];
+    expect(emptyField["aria-controls"]).toBeUndefined();
+    expect(emptyField["aria-activedescendant"]).toBeUndefined();
+    const preventDefault = vi.fn();
+    emptyField.onKeyDown({ key: "Escape", preventDefault });
+    expect(preventDefault).toHaveBeenCalledOnce();
     draw("Continue");
     expect(controls.input.mock.lastCall![0]["aria-controls"]).toBeUndefined();
   });

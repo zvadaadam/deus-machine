@@ -4,6 +4,7 @@ import { cn } from "@/shared/lib/utils";
 import type { FuzzyFileResult } from "../hooks/useFileMention";
 
 interface FileMentionPopoverProps {
+  listId: string;
   getOptionId: (value: string) => string;
   results: FuzzyFileResult[];
   loading: boolean;
@@ -38,6 +39,7 @@ function highlightMatch(text: string, query: string) {
 }
 
 export function FileMentionPopover({
+  listId,
   getOptionId,
   results,
   loading,
@@ -54,30 +56,26 @@ export function FileMentionPopover({
     selectedEl?.scrollIntoView({ block: "nearest" });
   }, [selectedIndex]);
 
-  if (results.length === 0 && !loading) {
-    return (
-      <>
-        <div className="text-foreground/80 shrink-0 px-4 py-3 text-sm font-medium">Files</div>
-        <div className="px-4 pb-4">
-          <p className="text-muted-foreground text-xs">
-            {query ? "No files found" : "Type to search files"}
-          </p>
-        </div>
-      </>
-    );
-  }
-
   return (
     <>
       <div className="text-foreground/80 shrink-0 px-4 py-3 text-sm font-medium">Files</div>
 
-      {loading && results.length === 0 ? (
-        <div className="text-muted-foreground flex items-center gap-1.5 px-4 pb-4 text-xs">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          <span>Searching...</span>
+      {results.length === 0 ? (
+        <div
+          role="status"
+          className="text-muted-foreground flex items-center gap-1.5 px-4 pb-4 text-xs"
+        >
+          {loading && <Loader2 className="h-3 w-3 animate-spin" />}
+          {loading ? "Searching..." : query ? "No files found" : "Type to search files"}
         </div>
       ) : (
-        <div ref={listRef} className="min-h-0 overflow-y-auto overscroll-contain px-2 pb-2">
+        <div
+          ref={listRef}
+          role="listbox"
+          id={listId}
+          aria-label="Files"
+          className="min-h-0 overflow-y-auto overscroll-contain px-2 pb-2"
+        >
           {results.map((result, index) => {
             const dir = getDirectory(result.path);
             const isSelected = index === selectedIndex;
@@ -87,6 +85,7 @@ export function FileMentionPopover({
                 type="button"
                 key={result.path}
                 role="option"
+                tabIndex={-1}
                 id={getOptionId(result.path)}
                 aria-selected={isSelected}
                 className={cn(
@@ -95,10 +94,8 @@ export function FileMentionPopover({
                     ? "bg-accent dark:bg-control-surface-pressed text-accent-foreground"
                     : "hover:bg-accent/40"
                 )}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  onSelect(result.path);
-                }}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onSelect(result.path)}
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-center gap-2">

@@ -218,7 +218,12 @@ export function useSlashCommand({
   // Keyboard navigation — returns true if the event was consumed
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
-      if (!isOpen || results.length === 0) return false;
+      if (!isOpen) return false;
+      if (e.key === "Escape") {
+        dismiss();
+        return true;
+      }
+      if (results.length === 0) return false;
 
       switch (e.key) {
         case "ArrowDown":
@@ -236,9 +241,6 @@ export function useSlashCommand({
           }
           return true;
         }
-        case "Escape":
-          dismiss();
-          return true;
         default:
           return false;
       }

@@ -358,17 +358,14 @@ export function MessageInput({
       ? `${composerId}-files`
       : undefined;
   const getOptionId = (value: string) => `${listId}-${encodeURIComponent(value)}`;
+  const activeList = showSlash ? slashCommand : fileMention;
   const selected = showSlash
     ? slashCommand.results[slashCommand.selectedIndex]?.name
     : fileMention.results[fileMention.selectedIndex]?.path;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Popovers get first pass at arrow/enter/escape.
-    if (slashCommand.handleKeyDown(e)) {
-      e.preventDefault();
-      return;
-    }
-    if (fileMention.handleKeyDown(e)) {
+    if (listId && activeList.handleKeyDown(e)) {
       e.preventDefault();
       return;
     }
@@ -467,9 +464,10 @@ export function MessageInput({
       <div className="relative isolate [&>[data-slot=input-group]]:z-10">
         <AnimatePresence initial={false}>
           {listId && (
-            <ComposerTray id={listId} label={showSlash ? "Skills and commands" : "Files"}>
+            <ComposerTray>
               {showSlash ? (
                 <SlashCommandPopover
+                  listId={listId}
                   getOptionId={getOptionId}
                   results={slashCommand.results}
                   loading={slashCommand.loading}
@@ -479,6 +477,7 @@ export function MessageInput({
                 />
               ) : (
                 <FileMentionPopover
+                  listId={listId}
                   getOptionId={getOptionId}
                   results={fileMention.results}
                   loading={fileMention.loading}
@@ -516,8 +515,7 @@ export function MessageInput({
           />
 
           <InputGroupTextarea
-            aria-expanded={listId ? true : undefined}
-            aria-controls={listId}
+            aria-controls={activeList.results.length ? listId : undefined}
             aria-activedescendant={
               listId && selected !== undefined ? getOptionId(selected) : undefined
             }
@@ -540,6 +538,7 @@ export function MessageInput({
             }
             disabled={sending}
             onKeyDown={handleKeyDown}
+            onBlur={listId ? activeList.dismiss : undefined}
             onSelect={fileMention.handleCursorChange}
             onClick={fileMention.handleCursorChange}
             autoCorrect="off"
