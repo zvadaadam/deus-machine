@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { it, expect, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { queryKeys } from "@/shared/api/queryKeys";
 import { WorkspaceItem } from "@/features/sidebar/ui/WorkspaceItem";
 import { ClosedSessionsPopover } from "@/features/session/ui/tabs/ClosedSessionsPopover";
 import { SessionTab } from "@/features/session/ui/tabs/SessionTab";
@@ -62,6 +63,7 @@ it.each([
       ? { ...base, kind: "session", sessionId: "session" }
       : { ...base, kind: "pending" };
     const client = new QueryClient();
+    client.setQueryData(queryKeys.settings.all, { coordinator_workspaces: true });
     try {
       const html = renderToStaticMarkup(
         createElement(
