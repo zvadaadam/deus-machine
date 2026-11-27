@@ -3823,6 +3823,94 @@ describe("a coordinator hears from the workspaces it started", () => {
     warned.mockRestore();
   });
 
+  it("says who stopped a turn that never ran and left no record of how it ended", async () => {
+    chatTurns.claimTurn("p1", "s1");
+    chatTurns.askStop("p1", fromPerson);
+    chatTurns.refuseTurn("p1", "s1");
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(1));
+    expect(wakeText()).toContain('"piece-1:1" was stopped by the person.');
+  });
+
+  it("says a turn ended when its release left no record of how", async () => {
+    chatTurns.claimTurn("p2", "s2");
+    chatTurns.releaseTurn("p2", "s2", { type: "snapshot" });
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(1));
+    expect(wakeText()).toContain('"piece-2:1" ended its turn.');
+  });
+
+  it("still says something when the workspace was removed before delivery", async () => {
+    await busyLead("L");
+    await brief("p1", "a1");
+    as("p1", () => end("a1"));
+    await settle();
+    db.exec("DELETE FROM sessions WHERE id = 'p1'; DELETE FROM workspaces WHERE id = 'w-p1'");
+    endLead("L");
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(2));
+    expect(wakeText()).toContain("A workspace you started (its project was removed) finished.");
+    expect(wakeText()).not.toContain("read_session");
+  });
+
+  it("keeps a recovery's failure when its cancel confirms before the end", async () => {
+    await brief("p1", "a1");
+    engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "a1" });
+    as("p1", () => gap("replay_failed"));
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(1));
+    expect(wakeText()).toContain(
+      '"piece-1:1" was stopped.\n  Error:\n  | Some agent output could not be recovered'
+    );
+  });
+
+  it("keeps a failure's reason when the error end carries none", async () => {
+    await brief("p1", "a1");
+    as("p1", () => {
+      const error = { category: "internal", message: "Disk full while writing report.md" };
+      emit({
+        type: "error",
+        sessionId,
+        turnId: "a1",
+        ...error,
+        recoverable: false,
+        timestamp: seq,
+      });
+      emit({ type: "turn.ended", sessionId, turnId: "a1", stopReason: "error", timestamp: seq });
+    });
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(1));
+    expect(wakeText()).toContain(
+      '"piece-1:1" failed.\n  Error:\n  | Disk full while writing report.md'
+    );
+  });
+
+  it("says nothing about resuming once the queue no longer holds for a limit with no reset", async () => {
+    await busyLead("L");
+    await brief("p1", "a1");
+    as("p1", () => {
+      const error = { category: "usage_limit", message: "You've hit your limit" };
+      emit({
+        type: "error",
+        sessionId,
+        turnId: "a1",
+        ...error,
+        recoverable: false,
+        timestamp: seq,
+      });
+      emit({
+        type: "turn.ended",
+        sessionId,
+        turnId: "a1",
+        stopReason: "error",
+        error,
+        timestamp: seq,
+      });
+    });
+    await settle();
+    await run(api.sendMessage, { ...message("b1"), sessionId: "p1", turnId: "b1" });
+    await vi.waitFor(() => expect(holdingTurn("p1")?.turnId).toBe("b1"));
+    endLead("L");
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(2));
+    expect(wakeText()).toContain('"piece-1:1" stopped on a usage limit.\n  Error:');
+    expect(wakeText()).not.toContain("resume");
+  });
+
   it("is not news when the coordinator stopped the turn", async () => {
     await brief("p1", "a1");
     engine.cancelTurn.mockResolvedValueOnce({ outcome: "cancelled", turnId: "a1" });
@@ -3930,11 +4018,56 @@ describe("a coordinator hears from the workspaces it started", () => {
       expect(_heldNews(lead)).toEqual(["p1"]);
     });
 
-    it("read_session after the end has delivered it", async () => {
+    it("read_session does not count as seen: its page may not show the end", async () => {
       await busyLead("L");
       await heldEnd("p1", "a1");
       expect((await call("read_session", { session: "piece-1:1" })).isError).toBeFalsy();
-      expect(_heldNews(lead)).toEqual([]);
+      expect(_heldNews(lead)).toEqual(["p1"]);
+    });
+
+    it("a send that reads an idle worker, then starts its next turn, keeps the news of the turn before", async () => {
+      await busyLead("L");
+      await heldEnd("p1", "a1");
+      const sent = await call("send_message", {
+        session: "piece-1:1",
+        message: "Next lot.",
+        wait: 1,
+      });
+      expect(sent.isError).toBeFalsy();
+      expect(holdingTurn("p1")).toBeDefined();
+      expect(_heldNews(lead)).toEqual(["p1"]);
+    });
+
+    it("a read that showed one question does not clear a second asked in the same turn", async () => {
+      await busyLead("L");
+      await brief("p1", "a1");
+      as("p1", () => question("a1"));
+      await vi.waitFor(() => expect(pendingFor("p1")).toHaveLength(1));
+      await settle();
+      expect(_heldNews(lead)).toEqual(["p1"]);
+      // While the wait reads Q1, the same turn asks Q2.
+      const host = operatorHost();
+      const view = host.view.bind(host);
+      vi.spyOn(host, "view").mockImplementationOnce(async (...args) => {
+        const shown = await view(...args);
+        as("p1", () =>
+          emit({
+            type: "elicitation.requested",
+            sessionId,
+            turnId: "a1",
+            requestId: "question-2",
+            mode: "question",
+            message: "Which lot next?",
+            questions: [{ id: "q2", question: "Which lot next?" }],
+            timestamp: seq,
+          })
+        );
+        await vi.waitFor(() => expect(pendingFor("p1")).toHaveLength(2));
+        return shown;
+      });
+      await call("wait_for_sessions", { sessions: ["piece-1:1"], wait: 0 });
+      vi.restoreAllMocks();
+      expect(_heldNews(lead)).toEqual(["p1"]);
     });
 
     it("a wait that timed out without reading the end keeps it", async () => {

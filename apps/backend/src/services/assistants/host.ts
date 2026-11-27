@@ -257,11 +257,11 @@ export interface DeusHost extends OperatorHost<Caller> {
 /** The chats each call's reads showed, and when: keyed by the call's own signal, which the package hands every read. */
 const views = new WeakMap<AbortSignal, Map<string, Shown[]>>();
 
-/** What one read of a chat showed: its running turn, its last ended turn, whether it waits on an answer. */
+/** What one read of a chat showed: its running turn, its last ended turn, the requests it waits on. */
 export interface Shown {
   running?: string;
   ended?: string;
-  waiting: boolean;
+  waiting: string[];
 }
 
 /** Run a session's tool call and say what each read of a chat showed. */
@@ -330,12 +330,13 @@ const AGENT_NAMES = new Intl.ListFormat("en").format(
 
 /** A usage limit in words; without `continues`, nothing is said about continuing. */
 export function limitNote(limit?: { resetsAt?: number; continues?: boolean }) {
-  if (!limit) return "stopped on a usage limit";
-  const reset =
-    limit.resetsAt === undefined
-      ? "no reset time was reported, the person decides when to resume"
-      : `resets ${new Date(limit.resetsAt).toISOString().slice(0, 16).replace("T", " ")} UTC`;
-  if (limit.continues === undefined) return `stopped on a usage limit, ${reset}`;
+  const resets =
+    limit?.resetsAt !== undefined &&
+    `resets ${new Date(limit.resetsAt).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+  // Without the queue's hold: only the reset, if one was reported, and no word on resuming.
+  if (limit?.continues === undefined)
+    return resets ? `stopped on a usage limit, ${resets}` : "stopped on a usage limit";
+  const reset = resets || "no reset time was reported, the person decides when to resume";
   return `stopped on a usage limit, ${reset}, ${limit.continues ? "continues by itself" : "automatic continuation is off"}`;
 }
 
@@ -803,7 +804,11 @@ export function createDeusHost(): DeusHost {
       const waiting = pendingFor(sessionId).flatMap((request) => waitingOf(request) ?? []);
       if (caller.kind === "session" && caller.signal) {
         const shown = views.get(caller.signal);
-        const state = { running, ended: last?.turnId, waiting: waiting.length > 0 };
+        const state = {
+          running,
+          ended: last?.turnId,
+          waiting: waiting.map((each) => each.request.requestId),
+        };
         shown?.set(sessionId, [...(shown.get(sessionId) ?? []), state]);
       }
       // The cursor is where the read ended: the last message of a turn that has ended (a

@@ -28,7 +28,7 @@ import { limitNote, readsDuring, type Shown } from "../assistants/host";
 import { operatorHost } from "../assistants/operator";
 import { coordinatorState } from "./coordinator";
 
-type News = { turnId: string; asked: boolean } & Pick<Released, "limit" | "error">;
+type News = { turnId: string; asked: boolean; requestId?: string } & Omit<Released, "ended">;
 /** By coordinator chat, then by worker chat. */
 const held = new Map<string, Map<string, News>>();
 const scheduled = new Set<string>();
@@ -78,13 +78,18 @@ function watchClosing() {
 }
 
 export const turnWatch: TurnWatch = {
-  released(sessionId, turnId, { ended, stoppedBy, limit, error }) {
-    if (ended) hold(sessionId, { turnId, asked: false, limit, error }, stoppedBy);
+  released(sessionId, turnId, { ended, ...facts }) {
+    if (ended) {
+      // A failure keeps its reason: the chat's stored error, read now, when the end carried none.
+      const stored = facts.failed && !facts.error && getSessionRaw(getDatabase(), sessionId);
+      const error = facts.error ?? (stored ? (stored.error_message ?? undefined) : undefined);
+      hold(sessionId, { turnId, asked: false, ...facts, ...(error && { error }) }, facts.stoppedBy);
+    }
     // Any release is when held news goes, a refused delivery's included.
     for (const coordinator of held.keys()) schedule(coordinator);
   },
-  asked(sessionId, turnId) {
-    const coordinator = hold(sessionId, { turnId, asked: true });
+  asked(sessionId, turnId, requestId) {
+    const coordinator = hold(sessionId, { turnId, asked: true, requestId });
     if (coordinator) schedule(coordinator);
   },
 };
@@ -132,12 +137,15 @@ async function flush(coordinator: string) {
   };
   if (!lines.length) return done();
   const first = lines[0]!;
+  const named = lines.find((line) => line.ref)?.ref;
   const content = [
     "Deus: news about workspaces you started. Deus wrote this, not the workspace.",
     ...lines.map((line) => line.text),
-    lines.length === 1
-      ? `read_session ${first.ref} for the rest.`
-      : `read_session any of them for the rest, e.g. read_session ${first.ref}.`,
+    ...(!named
+      ? []
+      : lines.length === 1
+        ? [`read_session ${named} for the rest.`]
+        : [`read_session any of them for the rest, e.g. read_session ${named}.`]),
   ].join("\n");
   // An agent's message: it joins a standing hold, and counts against the agents' five.
   await enqueueMessage(
@@ -155,19 +163,30 @@ async function describe(caller: SessionCaller, carried: [string, News][]) {
     const entry = all.find((each) => each.id === id);
     return entry ? quoted(refOf(entry, all)) : undefined;
   };
-  const lines: { worker: string; ref: string; text: string }[] = [];
+  const lines: { worker: string; ref?: string; text: string }[] = [];
   for (const [worker, news] of carried) {
     const { turnId, asked } = news;
     const entry = all.find((each) => each.id === worker);
-    // An archived workspace's end is still news; a question it can no longer ask is not.
-    if (!entry || (asked && entry.status === "archived")) continue;
+    // An end is always news, even of a chat removed since; a question that cannot be answered is not.
+    if (!entry) {
+      if (!asked) {
+        let text = `A workspace you started (its project was removed) ${factsState(news, refs)}.`;
+        if (news.error) text += `\n  Error:\n${quote(clip(news.error))}`;
+        lines.push({ worker, text });
+      }
+      continue;
+    }
+    if (asked && entry.status === "archived") continue;
     const ref = refs(worker)!;
     const view = await host.view(caller, worker, { last: 20 });
     const turn = view.turns.find((each) => each.turnId === turnId);
     let state: string | undefined;
     let error: string | undefined;
     if (asked) {
-      const waiting = view.running === turnId ? view.waiting[0] : undefined;
+      const waiting =
+        view.running === turnId
+          ? view.waiting.find((each) => each.request.requestId === news.requestId)
+          : undefined;
       if (waiting?.kind === "question") state = "is waiting on a question";
       else if (waiting?.kind === "plan") state = "is waiting for plan approval";
     } else {
@@ -190,25 +209,37 @@ async function endOf(
   caller: SessionCaller,
   entry: Entry,
   turn: ViewTurn | undefined,
-  { turnId, limit, error }: News,
+  news: News,
   refs: Refs
 ) {
+  const { turnId, stoppedBy, limit, error } = news;
   // The limit as the end reported it; continuation only while the queue still holds for that turn.
   if (limit)
     return {
-      state: limitNote(limitHoldOf(entry.id, turnId) ?? limit),
+      state: limitNote(limitHoldOf(entry.id, turnId) ?? { resetsAt: limit.resetsAt }),
       error: error ?? turn?.error,
     };
   const fact = turn ? undefined : await operatorHost().turn(caller, entry.id, turnId);
   const outcome = turn?.outcome ?? (fact?.state === "ended" ? fact.outcome : undefined);
-  const by = turn?.cancelledBy ?? (fact?.state === "ended" ? fact.cancelledBy : undefined);
+  const by =
+    turn?.cancelledBy ?? (fact?.state === "ended" ? fact.cancelledBy : undefined) ?? stoppedBy;
+  // A recovery's failure stays with the stop that its cancel recorded.
   if (outcome === "cancelled")
-    return { state: `was stopped${by ? ` by ${sender(by, refs)}` : ""}` };
+    return { state: `was stopped${by ? ` by ${sender(by, refs)}` : ""}`, error };
   // The release's own failure (a refusal, a lost turn, an incomplete transcript) outranks a done.
   if (error) return { state: "failed", error };
   if (outcome === "done") return { state: "finished" };
   if (outcome === "failed") return { state: "failed", error: turn?.error };
-  return {};
+  // No record of how it ended (a Stop before it ran, a snapshot's end): say what is known, never nothing.
+  return { state: factsState(news, refs), error };
+}
+
+/** What the release itself said, for a turn with no record or a chat that is gone. */
+function factsState({ limit, stoppedBy, failed, error, finished }: News, refs: Refs) {
+  if (limit) return limitNote({ resetsAt: limit.resetsAt });
+  if (stoppedBy) return `was stopped by ${sender(stoppedBy, refs)}`;
+  if (failed || error) return "failed";
+  return finished ? "finished" : "ended its turn";
 }
 
 type Refs = (id: string) => string | undefined;
@@ -250,11 +281,14 @@ function closingWords(messages: readonly ViewMessage[]) {
 const clip = (text: string) =>
   text.length > WORDS_LIMIT ? text.slice(0, WORDS_LIMIT - 1) + "…" : text;
 
-const SEEING = new Set(["wait_for_sessions", "start_session", "send_message", "read_session"]);
+// read_session is not among them: its page need not show the end, and an extra wake costs little.
+const SEEING = new Set(["wait_for_sessions", "start_session", "send_message"]);
 
 /** Whether a read showed this news: the turn ended and nothing newer runs, or the turn still waits. */
-const showed = ({ turnId, asked }: News, read: Shown) =>
-  asked ? read.running === turnId && read.waiting : !read.running && read.ended === turnId;
+const showed = ({ turnId, asked, requestId }: News, read: Shown) =>
+  asked
+    ? read.running === turnId && !!requestId && read.waiting.includes(requestId)
+    : !read.running && read.ended === turnId;
 
 /** A coordinator's tools: a call that returns having shown a worker's held state has delivered it. */
 export function withSeenNews(source: HostToolSource): HostToolSource {
@@ -267,9 +301,11 @@ export function withSeenNews(source: HostToolSource): HostToolSource {
       );
       const news = held.get(caller.sessionId);
       if (!news || result.isError || signal.aborted) return result;
+      // Only the call's last read of a worker is what its answer shows.
       for (const [worker, reads] of read) {
         const entry = news.get(worker);
-        if (entry && reads.some((each) => showed(entry, each))) news.delete(worker);
+        const last = reads.at(-1);
+        if (entry && last && showed(entry, last)) news.delete(worker);
       }
       if (!news.size) held.delete(caller.sessionId);
       return result;
