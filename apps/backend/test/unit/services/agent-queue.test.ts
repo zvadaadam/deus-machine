@@ -59,7 +59,7 @@ import { subscribe } from "../../../src/services/streams";
 import { addConnection, closeAll } from "../../../src/services/ws.service";
 import { createDeusHost, queueView } from "../../../src/services/assistants/host";
 import * as workspaceInit from "../../../src/services/workspace-init.service";
-import { answerMcp } from "../../../src/services/assistants/operator";
+import { answerMcp, operatorHost } from "../../../src/services/assistants/operator";
 import * as access from "../../../src/services/assistants/access";
 import * as settings from "../../../src/services/settings.service";
 import * as toolRelay from "../../../src/services/agent/tool-relay";
@@ -3653,6 +3653,41 @@ describe("a coordinator hears from the workspaces it started", () => {
     await vi.waitFor(() => expect(leadStarts()).toHaveLength(2));
     expect(wakeText()).toContain('"piece-1:1" finished.');
     expect(wakeText()).not.toContain("question");
+  });
+
+  it("runs one flush at a time per coordinator: a release during a flush's reads sends no second wake", async () => {
+    await brief("p1", "a1");
+    await brief("p2", "b1");
+    // Hold the first flush inside its reads, across ticks.
+    const host = operatorHost();
+    const list = host.list.bind(host);
+    const reads = Promise.withResolvers<void>();
+    vi.spyOn(host, "list").mockImplementationOnce(async (...args) => {
+      await reads.promise;
+      return list(...args);
+    });
+    as("p1", () => end("a1"));
+    await settle();
+    as("p2", () => end("b1"));
+    await settle();
+    reads.resolve();
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(1));
+    await settle();
+    expect(leadStarts()).toHaveLength(1);
+    expect(wakeText()).toContain('"piece-1:1" finished.');
+    expect(wakeText()).not.toContain("piece-2:1");
+    expect(_heldNews(lead)).toEqual(["p2"]);
+    // The wake turn runs and ends as a real one does, with its user echo.
+    const wake = leadStarts()[0]!;
+    as(lead, () => {
+      emit({ type: "turn.started", sessionId, turnId: wake.turnId!, timestamp: seq });
+      echo(wake.turnId!, undefined, wake.input, wake.origin);
+      end(wake.turnId!);
+    });
+    await vi.waitFor(() => expect(leadStarts()).toHaveLength(2));
+    expect(wakeText()).toContain('"piece-2:1" finished.');
+    expect(wakeText()).not.toContain("piece-1:1");
+    vi.restoreAllMocks();
   });
 
   it("says a worker waits on a question", async () => {

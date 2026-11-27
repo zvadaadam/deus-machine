@@ -30,6 +30,8 @@ type News = { turnId: string; asked: boolean; at: number };
 /** By coordinator chat, then by worker chat. */
 const held = new Map<string, Map<string, News>>();
 const scheduled = new Set<string>();
+const flushing = new Set<string>();
+const again = new Set<string>();
 const WORDS_LIMIT = 800;
 
 const open = (coordinator: string) => coordinatorState(coordinator) === "ready";
@@ -74,9 +76,15 @@ function schedule(coordinator: string) {
   // After the event that released the turn: the queue settles that end, and decides a limit's hold, first.
   setImmediate(() => {
     scheduled.delete(coordinator);
-    flush(coordinator).catch((error) =>
-      console.warn("[CoordinatorWake] Kept for the next release:", error)
-    );
+    // One flush at a time: a release during one only runs it again after, when its message holds the chat.
+    if (flushing.has(coordinator)) return void again.add(coordinator);
+    flushing.add(coordinator);
+    flush(coordinator)
+      .catch((error) => console.warn("[CoordinatorWake] Kept for the next release:", error))
+      .finally(() => {
+        flushing.delete(coordinator);
+        if (again.delete(coordinator)) schedule(coordinator);
+      });
   });
 }
 
@@ -246,4 +254,6 @@ export function _heldNews(coordinator: string) {
 export function _resetWake() {
   held.clear();
   scheduled.clear();
+  flushing.clear();
+  again.clear();
 }
