@@ -6,7 +6,7 @@ export const mentionCandidateSql =
 
 // A later post in this thread can only be a reply. The replies index covers the lookup.
 export function questionCandidates(scope: string) {
-  return `SELECT json_group_array(json_array(q.seq, q.body)) AS candidates FROM board_messages q
+  return `json_group_array(json_array(q.seq, q.body)) AS candidates FROM board_messages q
     WHERE ${scope} AND q.author_kind = 'bot' AND ${mentionCandidateSql}
     AND NOT EXISTS (SELECT 1 FROM board_messages reply WHERE reply.board_id = q.board_id
       AND reply.thread_seq = COALESCE(q.thread_seq, q.seq) AND reply.seq > q.seq

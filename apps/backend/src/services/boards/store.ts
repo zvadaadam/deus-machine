@@ -17,7 +17,7 @@ import { awaitingQuestions, questionCandidates } from "./questions";
 
 type BoardFields = Omit<Board, "waiting">;
 
-const boardCandidates = `(${questionCandidates("q.board_id = b.id")}) AS candidates`;
+const boardCandidates = `(SELECT ${questionCandidates("q.board_id = b.id")}) AS candidates`;
 
 function markAwaiting(posts: BoardPost[], awaiting: ReadonlySet<number>) {
   for (const post of posts) {
@@ -254,10 +254,9 @@ export function threadPage(board: string, thread: number, before?: number) {
   const hasEarlier = replies.length > BOARD_PAGE_SIZE;
   if (hasEarlier) replies.pop();
   const { candidates } = getDatabase()
-    .prepare<
-      [string, number, number],
-      { candidates: string }
-    >(questionCandidates("q.board_id = ? AND (q.seq = ? OR q.thread_seq = ?)"))
+    .prepare<[string, number, number], { candidates: string }>(
+      `SELECT ${questionCandidates("q.board_id = ? AND (q.seq = ? OR q.thread_seq = ?)")}`
+    )
     .get(board, thread, thread)!;
   markAwaiting([root, ...replies], awaitingQuestions(candidates));
   return { root, replies: replies.reverse(), hasEarlier };
