@@ -57,6 +57,13 @@ export interface BoardThreadPage {
   hasEarlier: boolean;
 }
 
+export function postFileWorkspace(
+  post: Pick<BoardPost, "about_workspace_id">,
+  board: Pick<Board, "workspace_id">
+) {
+  return post.about_workspace_id ?? board.workspace_id;
+}
+
 export function channelName(name: string) {
   return (
     name

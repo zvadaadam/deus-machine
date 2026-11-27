@@ -463,6 +463,8 @@ from `services/boards/tools.ts`. The workspace owns its boards across chats.
 A person’s post ID is the turn ID that delivers it. `preserveTurnId` keeps it through the queue.
 The receipt is waiting while queued or sending, delivered after the initial user echo, or not delivered with “Send again”.
 The channel and open thread follow the live `boardChannel` and `boardThread` reads.
+A file chip opens the working file in the post’s subject workspace, or in the board’s workspace when the post has no subject.
+The board viewer stays over the channel or thread. An archived workspace’s files remain readable while its checkout exists.
 Archiving the workspace hides its boards from the sidebar and leaves their links readable. Restore brings them back.
 Removing the project deletes its boards. Posts elsewhere about a removed workspace keep their words and lose the workspace link.
 
@@ -781,11 +783,12 @@ hook or MCP server added in the Agent tab is a change in the workspace's branch,
 tab says so. Rule 2 (`openAddress` and `openFile`) covers chat links, chat files and
 addresses typed in New Tab. In the cloud an internet address opens in the person's browser.
 A localhost address opens at its port in the cloud preview, which waits for the computer's
-address. An external link can be retried once the address arrives. A chat file opens in its
-own File tab, or in Changes when requested.
+address. An external link can be retried once the address arrives. A desktop chat file opens in its
+own File tab, or in Changes when requested. On a phone or a board, a file link opens the
+full-screen file viewer. Back closes it and returns to the same place.
 If the cloud computer cannot show the file, the chat says so.
 `session/lib/openFromChat.ts` carries out the rule. For a local file preview, the desktop opens
-its Browser tab. On the web or a phone, the click opens a tab while Deus asks the host for the
+its Browser tab. On desktop web the click opens a tab while Deus asks the host for the
 file's address. HTML previews need a direct connection. The `file-preview` route refuses a cloud
 workspace. `tabsFor` in `features/workspace-tabs/registry.ts` decides which tabs each workspace
 has. In a cloud workspace connected through a backend, Browser and Device run on the cloud

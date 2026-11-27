@@ -8,16 +8,22 @@ declare module "@tanstack/react-router" {
   }
 }
 
-/** A phone file has its own history entry. Back and Forward close and open the same File tab. */
+/** A full-screen file gets its own entry. Back returns to the chat or board at the same address. */
 export function visitFile(workspaceId: string, path: string) {
   const history = appHistory();
+  // A workspace selected by the same click must get its own Back destination first.
+  history.flush();
   history.push(history.location.href, { workspaceFile: { workspaceId, path } });
 }
 
 const subscribe = (notify: () => void) => appHistory().subscribe(notify);
 const current = () => appHistory().location.state.workspaceFile;
+export function useCurrentFileVisit() {
+  return useSyncExternalStore(subscribe, current, () => undefined);
+}
+
 export function useFileVisit(workspaceId: string | null) {
-  const visit = useSyncExternalStore(subscribe, current, () => undefined);
+  const visit = useCurrentFileVisit();
   const path = visit?.workspaceId === workspaceId ? visit?.path : undefined;
   useLayoutEffect(() => {
     if (!workspaceId || !path) return;

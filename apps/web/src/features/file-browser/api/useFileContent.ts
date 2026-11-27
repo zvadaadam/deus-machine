@@ -23,7 +23,7 @@ export function useFileContent(workspaceId: string | null, relativePath: string 
       return content;
     },
     enabled: !!workspaceId && !!relativePath,
-    staleTime: 5000,
+    refetchOnMount: "always",
     refetchOnWindowFocus: false,
   });
 }

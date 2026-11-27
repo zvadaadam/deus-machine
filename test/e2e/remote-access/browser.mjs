@@ -332,7 +332,7 @@ export async function testBrowser({
         output,
       });
       check(
-        "A paired 390px phone opens the board and thread at its computer address, sees its queued post delivered to Release room and the coordinator's reply live, receives a desktop reply and an unread dot, and reopens the address on reload and in a second paired tab"
+        "A paired 390px phone reads a subject’s file from the board, reads a chat file and goes Back to its scroll position, exchanges live replies and reopens its thread on reload and in a second paired tab"
       );
       await mac.close();
 

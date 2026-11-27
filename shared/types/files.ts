@@ -1,5 +1,8 @@
 /** What a client reads about a workspace's files. */
 
+/** A file read whose checkout is missing. Read refusals travel as text over the socket. */
+export const WORKSPACE_FILES_GONE = "This workspace's files are gone.";
+
 /** One file or folder in a workspace's tree. */
 export interface FileTreeNode {
   name: string;

@@ -136,7 +136,7 @@ describe("fileContent", () => {
   });
 
   it("reports a missing file", async () => {
-    realpath.mockRejectedValueOnce(new Error("missing"));
+    realpath.mockResolvedValueOnce(WORKSPACE_PATH).mockRejectedValueOnce(new Error("missing"));
 
     await expect(run(api.fileContent, { ...workspace, path: "gone.ts" })).rejects.toMatchObject({
       statusCode: 400,

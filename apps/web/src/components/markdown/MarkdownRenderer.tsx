@@ -23,7 +23,7 @@
  */
 
 import { isValidElement, useMemo, useRef } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
@@ -53,6 +53,7 @@ interface MarkdownRendererProps {
   proseClassName?: string;
   transformText?: NonNullable<React.ComponentProps<typeof ReactMarkdown>["remarkPlugins"]>[number];
   resolveFileLink?: (href: string, label: string) => MarkdownFileLinkResolution;
+  FileLink?: React.ComponentType<{ link: MarkdownFileLink; onOpen: (path: string) => void }>;
   onFileLinkOpen?: (path: string) => void | Promise<void>;
   onLinkOpen?: (href: string) => void | Promise<void>;
 }
@@ -173,6 +174,7 @@ export function MarkdownRenderer({
   transformText,
   resolveFileLink,
   onFileLinkOpen,
+  FileLink,
   onLinkOpen,
 }: MarkdownRendererProps) {
   const plugins = useMemo(
@@ -222,6 +224,8 @@ export function MarkdownRenderer({
           );
         }
 
+        if (FileLink && onFileLinkOpen) return <FileLink link={fileLink} onOpen={onFileLinkOpen} />;
+
         if (fileLink.disabled) {
           return (
             <span
@@ -255,11 +259,19 @@ export function MarkdownRenderer({
         );
       },
     };
-  }, [onFileLinkOpen, onLinkOpen, resolveFileLink]);
+  }, [FileLink, onFileLinkOpen, onLinkOpen, resolveFileLink]);
 
   return (
     <article className={cn(proseClassName, className)}>
       <ReactMarkdown
+        urlTransform={
+          FileLink && onFileLinkOpen
+            ? (url, key) =>
+                key === "href" && /^file:\/\//iu.test(url) && resolveFileLink?.(url, "")
+                  ? url
+                  : defaultUrlTransform(url)
+            : undefined
+        }
         remarkPlugins={plugins}
         rehypePlugins={allowHtml ? REHYPE_PLUGINS_HTML : REHYPE_PLUGINS_PLAIN}
         components={components}

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
+import { openBoardReport } from "../lib/board-file.mjs";
 import { checkPhoneChatFile } from "../lib/chat-file-link.mjs";
 import { boardChatTurn } from "./board-fixture.mjs";
 
@@ -34,6 +35,9 @@ export async function testRelayedBoard({
   const thread = phone.getByRole("complementary", { name: "Thread" });
   await thread.getByText(root, { exact: true }).waitFor();
   await thread.getByText("The release notes are ready to check.", { exact: true }).waitFor();
+  const viewer = await openBoardReport(phone, "Report check", "Paired device results");
+  await phone.goBack();
+  await viewer.waitFor({ state: "detached" });
   await boardChatTurn(hostWrite, boardChatId, "Wait for the paired phone");
   const documentStarted = () => phone.evaluate(() => performance.timeOrigin);
   const started = await documentStarted();

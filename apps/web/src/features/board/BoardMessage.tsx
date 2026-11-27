@@ -1,8 +1,10 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/api";
-import type { Board, BoardDetail, BoardRow } from "@shared/boards";
+import { postFileWorkspace, type Board, type BoardDetail, type BoardRow } from "@shared/boards";
 import { getErrorMessage } from "@shared/lib/errors";
+import { useWorkspaceLinks } from "@/features/workspace/lib/useWorkspaceLinks";
+import { BoardFileChip } from "./BoardFileChip";
 import { ChatMarkdown } from "@/components/markdown";
 import { chatTabLabel } from "@/features/session/ui/tabs/types";
 import { openChat } from "@/features/session/lib/openChat";
@@ -152,6 +154,7 @@ function BoardMessage({
   selected?: boolean;
   children?: ReactNode;
 }) {
+  const links = useWorkspaceLinks(postFileWorkspace(post, board));
   const coordinator = post.author_kind === "bot";
   const person = profileName(profile);
   const transform = useMemo(() => boardMentions(person), [person]);
@@ -189,6 +192,8 @@ function BoardMessage({
           </time>
         </div>
         <ChatMarkdown
+          {...links}
+          FileLink={BoardFileChip}
           transformText={coordinator ? transform : undefined}
           className="text-foreground wrap-anywhere"
         >

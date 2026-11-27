@@ -78,8 +78,9 @@ export type ChatOpening =
   | { to: "external"; url: string }
   /** This computer's file, previewed in the Browser tab (`/workspaces/:id/file-preview`). */
   | { to: "file-preview"; path: string }
-  /** The Files (or Changes) tab's viewer, wherever the workspace's files are. */
+  /** A surface without a File tab shows the working file full-screen. */
   | { to: "file-viewer"; path: string }
+  /** The Files (or Changes) tab of the workspace. */
   | { to: "files"; path: string; target: "files" | "changes" }
   | { to: "default-app"; path: string }
   | { to: "finder"; path: string }

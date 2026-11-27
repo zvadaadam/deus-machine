@@ -1,10 +1,13 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, type ReactNode } from "react";
 import { Loader2, X, Code, BookOpen, FolderOpen, ArrowUpRight } from "lucide-react";
 import { CopyIcon } from "@/components/ui/copy-icon";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { highlightFileLines } from "@/shared/lib/syntaxHighlighter";
 import { detectLanguageFromPath } from "@/features/session/ui/tools/utils/detectLanguage";
 import { MarkdownRenderer } from "@/components/markdown/MarkdownRenderer";
+import { WORKSPACE_FILES_GONE } from "@shared/types/files";
+import { cn } from "@/shared/lib/utils";
+import { getErrorMessage } from "@shared/lib/errors";
 import { useTheme } from "@/app/providers";
 import { useFileContent } from "../api/useFileContent";
 import { PierreFileIcon } from "../lib/pierreIcons";
@@ -16,6 +19,8 @@ function isMarkdownFile(filePath: string): boolean {
 
 interface FileViewerProps {
   workspaceId: string;
+  workspaceName?: string;
+  header?: (hasCheckout: boolean) => ReactNode;
   /** Relative path within the workspace */
   filePath: string;
   /** Optional close handler — renders a close button in the header */
@@ -29,7 +34,7 @@ interface FileViewerProps {
 /**
  * FileViewer - Display full file content with syntax highlighting
  *
- * Reads from the working tree via backend HTTP.
+ * Reads from the working tree via the runtime socket.
  * Shows current file state including unsaved/uncommitted changes.
  *
  * Features:
@@ -40,6 +45,8 @@ interface FileViewerProps {
  */
 export function FileViewer({
   workspaceId,
+  workspaceName,
+  header,
   filePath,
   onClose,
   onRevealInFiles,
@@ -68,10 +75,11 @@ export function FileViewer({
    */
   const language = filePath ? detectLanguageFromPath(filePath) : "text";
 
-  // Fetch file content via backend HTTP
+  // Fetch file content via the runtime socket
   const {
     data: content,
     isLoading: isContentLoading,
+    isFetching,
     error,
   } = useFileContent(workspaceId, filePath);
 
@@ -83,6 +91,8 @@ export function FileViewer({
     staleTime: Infinity, // Don't refetch highlighting for same content
   });
 
+  const failure = error && getErrorMessage(error);
+  const filesGone = failure === WORKSPACE_FILES_GONE;
   const isEmpty = content != null && content.length === 0;
   const lines = content?.split("\n") || [];
   const isLoading = isContentLoading || isHighlighting;
@@ -108,6 +118,7 @@ export function FileViewer({
 
   return (
     <div className="bg-background flex h-full flex-col overflow-hidden">
+      {header?.(!isFetching && !filesGone)}
       {/* Header - Fixed at top, h-10 matches DiffViewer */}
       <div className="border-border-subtle flex-shrink-0 border-b">
         <div className="flex h-10 items-center justify-between gap-4 px-4">
@@ -197,7 +208,7 @@ export function FileViewer({
       </div>
 
       {/* File content - Scrollable */}
-      <div className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto scroll-smooth motion-reduce:scroll-auto">
+      <div className="relative min-h-0 flex-1 overflow-auto scroll-smooth motion-reduce:scroll-auto">
         {isLoading ? (
           <div className="text-muted-foreground/60 flex h-64 items-center justify-center">
             <div className="flex flex-col items-center gap-3">
@@ -209,11 +220,11 @@ export function FileViewer({
           <div className="text-muted-foreground/60 flex h-64 items-center justify-center">
             <div className="flex max-w-sm flex-col items-center gap-2 text-center">
               <p className="text-sm">
-                {error instanceof Error
-                  ? error.message
-                  : typeof error === "string"
-                    ? error
-                    : "Failed to load file"}
+                {filesGone && workspaceName
+                  ? `${workspaceName}'s files are gone.`
+                  : workspaceName && failure === "File not found"
+                    ? `This file isn't in ${workspaceName} any more.`
+                    : failure}
               </p>
             </div>
           </div>
@@ -222,11 +233,19 @@ export function FileViewer({
             <p className="text-sm">Empty file</p>
           </div>
         ) : isMarkdown && !showRawMarkdown ? (
-          <div className="markdown-content px-6 py-4">
+          <div
+            className={cn(
+              "markdown-content px-6 py-4",
+              header &&
+                "mx-auto max-w-[96ch] [&_table]:block [&_table]:overflow-x-auto [&_table]:[word-break:normal] [&_th]:whitespace-nowrap"
+            )}
+          >
             <MarkdownRenderer allowHtml>{content!}</MarkdownRenderer>
           </div>
         ) : (
-          <div>{highlightedLines?.map((html, idx) => renderLine(html, idx + 1))}</div>
+          <div className="w-max min-w-full">
+            {highlightedLines?.map((html, idx) => renderLine(html, idx + 1))}
+          </div>
         )}
       </div>
     </div>

@@ -3,9 +3,10 @@
 import assert from "node:assert/strict";
 import { execFileSync, fork } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, mkdtemp, open, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, open, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { openBoardReport } from "./lib/board-file.mjs";
 import { checkPhoneChatFile, reportReply } from "./lib/chat-file-link.mjs";
 import { installScriptedChat } from "./lib/scripted-chat.mjs";
 import Database from "better-sqlite3";
@@ -21,6 +22,7 @@ const root = path.resolve(import.meta.dirname, "../..");
 const prompt = "Open the release board";
 const question = "Who should review the checklist?";
 const answer = "@you The release captain can review it today.";
+const reportTitle = "Phone verification results";
 const planPrompt = "Read the release board in Plan mode";
 const handoff = "Can the coordinator take the handoff?";
 const historySize = 82; // Two full pages and a partial oldest page.
@@ -68,7 +70,12 @@ async function backendProcess() {
       const { workspace } = await startPosts.promise;
       const sessions = yield call("list_sessions", {});
       assert.ok(sessions.output.includes(workspace));
-      yield call("post_to_board", { body: answer, workspace });
+      yield call("post_to_board", {
+        body:
+          answer +
+          "\n\n[report.md](.context/report.md) · [outside](../outside.md) · [moved](moved.md) · [linked](linked.md)",
+        workspace,
+      });
     } else if (input === "Publish the checklist history") {
       for (let i = 1; i <= historySize; i++)
         yield call("post_to_board", { body: "Checklist item " + i });
@@ -306,6 +313,13 @@ async function run() {
       workspaceId: subject.id,
       title: "Mobile verification",
     });
+    await mkdir(path.join(subject.workspace_path, ".context"), { recursive: true });
+    await writeFile(
+      path.join(subject.workspace_path, ".context/report.md"),
+      "# " + reportTitle + "\n"
+    );
+    await writeFile(path.join(dir, "outside.md"), "Outside this workspace");
+    await symlink(path.join(dir, "outside.md"), path.join(subject.workspace_path, "linked.md"));
     child.send({ workspace: subject.slug, own: workspace.slug });
     const rootRow = feed.locator("article[data-seq='1']");
     await rootRow.getByText("Coordinator", { exact: true }).waitFor();
@@ -372,6 +386,19 @@ async function run() {
       .locator("article[data-seq='3']")
       .getByRole("link", { name: "Open workspace, Mobile verification" });
     assert.ok((await subjectChip.getAttribute("href")).includes(subject.id));
+    const desktopFile = await openBoardReport(page, "Mobile verification", reportTitle);
+    await desktopFile.getByRole("button", { name: "Open in workspace" }).click();
+    await page.getByRole("heading", { name: reportTitle, exact: true }).waitFor();
+    assert.equal(await desktopFile.count(), 0);
+    await page.goto(base + "b/" + board.id + "?thread=1");
+    const outside = thread.getByRole("button", { name: "outside.md .." });
+    assert.ok(await outside.isDisabled());
+    await thread.getByRole("button", { name: "linked.md" }).click();
+    await desktopFile.getByText("Invalid file path", { exact: true }).waitFor();
+    await desktopFile.getByRole("button", { name: "Close", exact: true }).click();
+    await thread.getByRole("button", { name: "moved.md" }).click();
+    await desktopFile.getByText("This file isn't in Mobile verification any more.").waitFor();
+    await desktopFile.getByRole("button", { name: "Close", exact: true }).click();
     await page.getByRole("button", { name: "1 workspace", exact: true }).click();
     const workspaces = page.getByRole("menu", { name: "1 workspace" });
     await workspaces.getByRole("menuitem", { name: "Mobile verification" }).click();
@@ -396,6 +423,9 @@ async function run() {
       .first()
       .evaluate((el) => [getComputedStyle(el).fontSize, getComputedStyle(el).lineHeight]);
     assert.deepEqual(boardType, chatType);
+    await page.getByRole("log").getByRole("link", { name: "Read the release report" }).click();
+    await page.getByRole("heading", { name: "Release verification", exact: true }).waitFor();
+    assert.equal(await desktopFile.count(), 0);
     await page
       .getByText(/From #release-desk · thread 1/)
       .first()
@@ -460,6 +490,40 @@ async function run() {
       .getByRole("complementary", { name: "Thread" })
       .getByText(/release captain/)
       .waitFor();
+    const phoneFile = await openBoardReport(phone, "Mobile verification", reportTitle);
+    await phone.goBack();
+    await phoneFile.waitFor({ state: "detached" });
+    await phone.goForward();
+    await phoneFile.getByRole("button", { name: "Open in workspace" }).click();
+    await phone.waitForURL(
+      (url) => url.pathname.endsWith("/w/" + subject.id) && url.searchParams.has("session")
+    );
+    await phoneFile.getByRole("heading", { name: reportTitle, exact: true }).waitFor();
+    assert.equal(await phoneFile.getByRole("button", { name: "Open in workspace" }).count(), 0);
+    await phone.goBack();
+    await phoneFile.waitFor({ state: "detached" });
+    assert.ok(new URL(phone.url()).pathname.endsWith("/w/" + subject.id));
+    await phone.goto(base + "b/" + board.id + "?thread=1");
+    await host.write("archiveWorkspace", { workspaceId: subject.id });
+    await page.goto(base + "b/" + board.id + "?thread=1");
+    for (const client of [page, phone]) {
+      await openBoardReport(client, "Mobile verification", reportTitle, true);
+      await client.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+    }
+    await rename(subject.workspace_path, subject.workspace_path + "-away");
+    await phone
+      .getByRole("complementary", { name: "Thread" })
+      .getByRole("button", { name: "report.md .context", exact: true })
+      .click();
+    await phoneFile.getByText("Mobile verification's files are gone.").waitFor();
+    assert.equal(await phoneFile.getByRole("button", { name: "Restore workspace" }).count(), 0);
+    await phone.goBack();
+    await phoneFile.waitFor({ state: "detached" });
+    await rename(subject.workspace_path + "-away", subject.workspace_path);
+    await openBoardReport(page, "Mobile verification", reportTitle, true);
+    await desktopFile.getByRole("button", { name: "Restore workspace" }).click();
+    await desktopFile.getByRole("button", { name: "Open in workspace" }).waitFor();
+    await desktopFile.getByRole("button", { name: "Close", exact: true }).click();
     assert.match(phone.url(), /\/s\/local\/b\/[^?]+\?thread=1/);
     await phone.getByRole("button", { name: "Back to channel" }).click();
     await phone.getByRole("button", { name: /2 replies/ }).click();

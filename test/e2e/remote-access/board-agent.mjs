@@ -9,11 +9,15 @@ import { until } from "./stack.mjs";
 const call = (tool, args) => ({ call: { server: DEUS_TOOLS_SERVER, tool, arguments: args } });
 await installScriptedChat(async function* ({ input }) {
   if (input === "Open the remote release board") {
-    yield { say: reportReply };
     yield call("create_board", { name: "Remote release" });
     yield call("post_to_board", { body: "The release candidate is ready for review." });
     yield call("post_to_board", { body: "The smoke checks passed on the fixture Mac." });
-    yield call("post_to_board", { thread: 1, body: "The release notes are ready to check." });
+    yield call("post_to_board", {
+      thread: 1,
+      workspace: "report-check",
+      body: "The release notes are ready to check.\n\n[report.md](.context/report.md)",
+    });
+    yield { say: reportReply };
   } else if (input === "Wait for the paired phone") {
     const marker = path.join(path.dirname(process.env.DATABASE_PATH), "release-coordinator");
     await until(() => existsSync(marker), 90_000, "the paired phone's queued reply");

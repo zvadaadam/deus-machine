@@ -120,7 +120,7 @@ export function MainLayout() {
   const expandRepo = useSidebarStore((s) => s.expandRepo);
 
   const board = useBoardAddress();
-  useFileVisit(selectedWorkspaceId);
+  useFileVisit(board ? null : selectedWorkspaceId);
   const settingsOpen = useUIStore((s) => s.settingsOpen);
   const automationsOpen = useUIStore((s) => s.automationsOpen);
   const openAutomations = useUIStore((s) => s.openAutomations);

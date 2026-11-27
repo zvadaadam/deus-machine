@@ -11,7 +11,8 @@ export function writeWorkspaceSelection(router: RegisteredRouter, href: string, 
     }
     unsubscribe();
   });
-  void router.navigate({ href, replace }).finally(unsubscribe);
+  // Adding the active chat to this visit's URL keeps its full-screen file open.
+  void router.navigate({ href, replace, state: replace ? true : undefined }).finally(unsubscribe);
 }
 
 export function isWorkspaceSelectionWrite(visit: HistoryLocation): boolean {
