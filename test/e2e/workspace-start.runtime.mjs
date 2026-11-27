@@ -225,6 +225,7 @@ try {
   const modules = {
     client: "/src/platform/ws/query-protocol-client.ts",
     pending: "/src/features/workspace/store/workspaceStartStore.ts",
+    selection: "/src/features/workspace/store/workspaceStore.ts",
     agents: "/src/shared/agents/index.ts",
   };
   const attach = async (page) => {
@@ -664,8 +665,8 @@ try {
   await panel(a).getByText("Workspace didn't start").waitFor();
   await keep(a, doomed.id, "Rename the billing page");
   // The live list can take the reader Home before the delete acknowledgment arrives.
-  await a.evaluate(async () => {
-    const { useWorkspaceStore } = await import("/src/features/workspace/store/workspaceStore.ts");
+  await a.evaluate(async (selection) => {
+    const { useWorkspaceStore } = await import(selection);
     const client = window.testClient;
     const call = client.call.bind(client);
     client.call = async (op, ...args) => {
@@ -675,7 +676,7 @@ try {
       useWorkspaceStore.getState().selectWorkspace(null);
       return result;
     };
-  });
+  }, modules.selection);
   await panel(a).getByRole("button", { name: "Delete", exact: true }).click();
   const deleted = toast(a, "Workspace deleted");
   await deleted.waitFor();
