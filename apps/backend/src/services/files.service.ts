@@ -1,6 +1,6 @@
 import { runGit } from "@shared/lib/git-process";
 import fs from "fs";
-import { readFile, realpath } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import path from "path";
 import { PROJECT_ENVIRONMENT_PATH } from "@deus-hq/api";
 import {
@@ -306,16 +306,20 @@ export function fuzzySearchPaths(
   return scored.slice(0, limit);
 }
 
+function checkoutReadError(error: NodeJS.ErrnoException): never {
+  if (error.code === "ENOENT" || error.code === "ENOTDIR")
+    throw new AppError(410, WORKSPACE_FILES_GONE);
+  throw error;
+}
+
 /** The selected file must still belong to the checkout after following symlinks. */
 export async function resolveWorkspaceFile(workspacePath: string, file: string) {
   const relative = resolveWorkspaceRelativePath(workspacePath, file);
   if (!relative) throw new ValidationError("Invalid file path");
-  const root = await realpath(workspacePath).catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "ENOENT" || error.code === "ENOTDIR")
+  const root = await realpath(workspacePath).catch(checkoutReadError);
+  const realPath = await realpath(path.join(root, relative)).catch(async () => {
+    if (!(await stat(workspacePath).catch(checkoutReadError)).isDirectory())
       throw new AppError(410, WORKSPACE_FILES_GONE);
-    throw error;
-  });
-  const realPath = await realpath(path.join(root, relative)).catch(() => {
     throw new ValidationError("File not found");
   });
   const realRelative = path.relative(root, realPath);

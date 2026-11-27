@@ -563,11 +563,14 @@ async function run() {
     }
     await openBoardReport(phone, "Mobile verification", reportTitle, true);
     await rename(subject.workspace_path, subject.workspace_path + "-away");
+    await writeFile(subject.workspace_path, "A regular file replaced the archived checkout.");
     await phoneFile.getByRole("button", { name: "Restore workspace" }).click();
     await phoneFile.getByText("Mobile verification's files are gone.").waitFor();
+    assert.equal(await phoneFile.getByRole("button", { name: "Restore workspace" }).count(), 0);
     assert.equal((await host.read("workspace", { workspaceId: subject.id })).state, "archived");
     await phone.goBack();
     await phoneFile.waitFor({ state: "detached" });
+    await rm(subject.workspace_path);
     await phone
       .getByRole("complementary", { name: "Thread" })
       .getByRole("button", { name: "report.md .context", exact: true })

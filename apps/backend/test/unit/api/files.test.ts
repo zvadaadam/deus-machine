@@ -48,7 +48,13 @@ const { realpath } = vi.hoisted(() => ({ realpath: vi.fn(async (p: string) => p)
 vi.mock("node:fs/promises", async (original) => ({
   ...(await original<typeof import("node:fs/promises")>()),
   realpath,
-  stat: async () => ({ isFile: () => true, size: 7, dev: 1, ino: 2 }),
+  stat: async (p: string) => ({
+    isFile: () => p !== WORKSPACE_PATH,
+    isDirectory: () => p === WORKSPACE_PATH,
+    size: 7,
+    dev: 1,
+    ino: 2,
+  }),
 }));
 
 import fileHandlers from "../../../src/api/files";
