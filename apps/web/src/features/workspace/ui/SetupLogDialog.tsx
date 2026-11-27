@@ -7,16 +7,23 @@ import { call } from "@/platform/ws";
 
 export function SetupLogDialog({
   workspaceId,
+  open,
+  onOpenChange,
+  onCloseAutoFocus,
   children,
 }: {
   workspaceId: string;
-  children: ReactElement;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onCloseAutoFocus?: (event: Event) => void;
+  children?: ReactElement;
 }) {
   return (
-    <Dialog key={workspaceId}>
-      <DialogTrigger asChild>{children}</DialogTrigger>
+    <Dialog key={workspaceId} open={open} onOpenChange={onOpenChange}>
+      {children && <DialogTrigger asChild>{children}</DialogTrigger>}
       <DialogContent
         aria-describedby={undefined}
+        onCloseAutoFocus={onCloseAutoFocus}
         className="gap-3 sm:max-w-xl pointer-coarse:[&>[data-slot=dialog-close]]:before:absolute pointer-coarse:[&>[data-slot=dialog-close]]:before:-inset-2"
       >
         <DialogTitle className="pe-6">Setup log</DialogTitle>

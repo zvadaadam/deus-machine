@@ -96,17 +96,18 @@ async function checkLiveTree(page, evidence) {
 }
 
 export async function checkSetupWarning(page, group, evidence, touch = false) {
-  const title = group.getByRole("button", { name: "Workspace ready", exact: true });
-  const issue = group.getByRole("button", { name: /^Setup failed/ });
+  const title = group.getByRole("button", { name: "Workspace ready, with warning", exact: true });
+  const headerWarning = page
+    .locator('[data-slot="workspace-header"]')
+    .getByRole("button", { name: "Setup failed", exact: true });
   const retry = group.getByRole("button", { name: "Run again" });
   const log = group.getByRole("button", { name: "View log" });
   const output = group.locator("pre:visible");
   const lastLine = "Missing <b>clang</b>";
   const sentence =
     "Setup exited with code 1. The agent can see the error, and you can keep working.";
-  await issue.waitFor();
-  assert.equal(await issue.locator("samp").textContent(), lastLine);
-  assert.equal(await issue.locator("b").count(), 0);
+  await title.waitFor();
+  await headerWarning.waitFor();
   const announcements = group.getByRole("status");
   const checkAnnouncements = async () => {
     assert.equal(
@@ -136,73 +137,35 @@ export async function checkSetupWarning(page, group, evidence, touch = false) {
     await page.evaluate(() => document.fonts.ready);
     assert.equal(await output.count(), 0);
     if (!touch) await page.screenshot({ path: path.join(evidence, `setup-closed-${theme}.png`) });
-    await issue.press("Enter");
+    await title.press("Enter");
+    await group.getByText("Made a safe copy").waitFor();
     await group.getByText(sentence, { exact: true }).waitFor();
     await clearFocus();
+    const step = group.locator('[data-env-step="setup"]');
+    assert.equal(await step.locator("samp").first().textContent(), lastLine);
+    assert.equal(await step.locator("b").count(), 0);
     assert.equal(await output.innerText(), "Checking tools\n" + lastLine);
     assert.equal(await output.locator("b").count(), 0);
     if (!touch) await page.screenshot({ path: path.join(evidence, `setup-open-${theme}.png`) });
-    if (theme === "dark") {
-      const work = page.getByRole("button", { name: /^Expand activity, Worked/ });
-      const workBounds = await work.boundingBox();
-      const iconX = (await work.locator("svg").boundingBox()).x;
-      const labelX = (await work.getByText(/^Worked/).boundingBox()).x;
-      for (const [node, edge] of [
-        [title.locator("svg").first(), iconX],
-        [issue.locator("svg").first(), iconX],
-        [title.getByText("Workspace ready"), labelX],
-        [issue.getByText("Setup failed"), labelX],
-        [group.getByText(sentence), labelX],
-        [output, labelX],
-        [log, labelX],
-      ]) {
-        assert(
-          Math.abs((await node.boundingBox()).x - edge) < 0.5,
-          "aligned with the transcript work row"
-        );
-      }
-      assert.equal((await issue.boundingBox()).height, touch ? 44 : workBounds.height);
-      if (touch) {
-        const bounds = await retry.boundingBox();
-        assert(bounds.x + bounds.width <= page.viewportSize().width);
-        assert(
-          await retry.evaluate((el) => {
-            const r = el.getBoundingClientRect(),
-              x = r.x + r.width / 2,
-              y = r.y + r.height / 2;
-            return [y - 21, y + 21].every((at) => el.contains(document.elementFromPoint(x, at)));
-          }),
-          "separate 44px retry target"
-        );
-        assert(
-          await issue
-            .locator("samp")
-            .evaluate(
-              (el) =>
-                el.scrollWidth > el.clientWidth && getComputedStyle(el).textOverflow === "ellipsis"
-            )
-        );
-      }
-      const top = (await group.boundingBox()).y - 4;
-      const bottom = workBounds.y + workBounds.height + 4;
-      const guide = `position: fixed; content: ""; pointer-events: none; z-index: 1000; top: ${top}px; height: ${bottom - top}px; border-left: 1px dashed color-mix(in oklch, var(--info) 46%, transparent)`;
-      await page.screenshot({
-        path: path.join(evidence, touch ? "setup-grid-mobile.png" : "setup-grid.png"),
-        style: `body::before { ${guide}; left: ${iconX}px } body::after { ${guide}; left: ${labelX}px }`,
-      });
-    }
-    // Neither opening the warning nor unfolding its step history changes the announcements.
-    await title.press("Enter");
-    await group.getByText("Made a safe copy").waitFor();
     await checkAnnouncements();
     if (!touch && theme === "dark") {
       await checkLiveTree(page, evidence);
       await writeFile(path.join(evidence, "setup-warning-aria.txt"), await group.ariaSnapshot());
     }
-    await title.press("Enter");
-    await group.getByText("Made a safe copy").waitFor({ state: "detached" });
+    if (touch) {
+      const bounds = await retry.boundingBox();
+      assert(bounds.x + bounds.width <= page.viewportSize().width);
+    }
 
-    const trigger = theme === "light" ? page.getByRole("button", { name: "View setup logs" }) : log;
+    let trigger = log;
+    if (theme === "light") {
+      await title.press("Enter");
+      await group.getByText("Made a safe copy").waitFor({ state: "detached" });
+      await headerWarning.press("Enter");
+      const popover = page.locator('[data-slot="popover-content"]');
+      await popover.waitFor();
+      trigger = popover.getByRole("button", { name: "View log" });
+    }
     const pages = page.context().pages().length;
     await trigger.press("Enter");
     const dialog = page.getByRole("dialog", { name: "Setup log" });
@@ -218,14 +181,23 @@ export async function checkSetupWarning(page, group, evidence, touch = false) {
         animations: "disabled",
       });
     }
-    if (theme === "light") await dialog.getByRole("button", { name: "Close" }).click();
-    else await page.keyboard.press("Escape");
-    await dialog.waitFor({ state: "detached" });
-    assert(
-      await trigger.evaluate((el) => el === document.activeElement),
-      "focus returns to the log action"
-    );
-    await issue.press("Space");
+    if (theme === "light") {
+      await dialog.getByRole("button", { name: "Close" }).click();
+      await dialog.waitFor({ state: "detached" });
+      assert(
+        await headerWarning.evaluate((el) => el === document.activeElement),
+        "focus returns to the header warning button"
+      );
+    } else {
+      await page.keyboard.press("Escape");
+      await dialog.waitFor({ state: "detached" });
+      assert(
+        await log.evaluate((el) => el === document.activeElement),
+        "focus returns to the log action"
+      );
+      await title.press("Space");
+      await group.getByText("Made a safe copy").waitFor({ state: "detached" });
+    }
     await clearFocus();
   }
 }

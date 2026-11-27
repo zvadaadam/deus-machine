@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { WorkspaceStartGroup } from "@/features/session/ui/WorkspaceStartGroup";
+import { WorkspaceSetupStatus } from "@/features/workspace/ui/WorkspaceSetupStatus";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 // Which kind of window this is: a browser tab unless a test says the desktop app.
 const platform = vi.hoisted(() => ({ singleWindow: false }));
@@ -73,19 +75,59 @@ describe("a starting workspace", () => {
 describe("a workspace that started", () => {
   const ready = { ...local, state: "ready", init_stage: "done", current_session_id: "s" } as const;
 
-  it("renders a running step in the live chat and only the ready title once it finishes", () => {
-    const render = (setup_status: "running" | "completed") =>
+  it("keeps setup inside the unified card while running and folds cleanly once settled", () => {
+    const render = (setup_status: "running" | "completed" | "failed") =>
       renderToStaticMarkup(
         createElement(WorkspaceStartGroup, {
           workspaceId: "w",
-          start: workspaceStart({ ...ready, setup_status }),
+          start: workspaceStart({
+            ...ready,
+            setup_status,
+            error_message: setup_status === "failed" ? "Setup exited with code 1." : null,
+          }),
         })
       );
-    expect(render("running")).toContain("Running setup…");
+    const running = render("running");
+    expect(running).toContain("Setting up workspace…");
+    expect(running).toContain('aria-expanded="true"');
+    expect(running).toContain("Checked for the latest changes");
+    expect(running).toContain("Made a safe copy");
+    expect(running).toContain("Running setup…");
+    // Step 3 lives chronologically after step 2 inside the same card.
+    expect(running.indexOf("Made a safe copy")).toBeLessThan(running.indexOf("Running setup…"));
+
     const settled = render("completed");
     expect(settled).toContain("Workspace ready");
     expect(settled).toContain('aria-expanded="false"');
     expect(settled).not.toMatch(/Running setup|Ran setup|setup finished/i);
+
+    const warned = render("failed");
+    expect(warned).toContain("Workspace ready");
+    expect(warned).toContain('aria-label="Workspace ready, with warning"');
+    expect(warned).toContain('aria-expanded="false"');
+    expect(warned).toContain("Setup failed");
+  });
+
+  it("renders a single progressive setup indicator in the header", () => {
+    const renderHeader = (setupStatus: "running" | "failed" | "completed" | "none") =>
+      renderToStaticMarkup(
+        createElement(
+          TooltipProvider,
+          null,
+          createElement(WorkspaceSetupStatus, {
+            workspaceId: "w",
+            setupStatus,
+            setupError: setupStatus === "failed" ? "Setup exited with code 1." : null,
+          })
+        )
+      );
+    expect(renderHeader("running")).toContain('aria-label="Running setup…"');
+    expect(renderHeader("running")).not.toContain(">Running setup…<");
+    const failed = renderHeader("failed");
+    expect(failed).toContain('aria-label="Setup failed"');
+    expect(failed).not.toContain("View log");
+    expect(renderHeader("completed")).toBe("");
+    expect(renderHeader("none")).toBe("");
   });
 
   it("has a usable checkout and chat while its setup step is still running", () => {
@@ -94,8 +136,8 @@ describe("a workspace that started", () => {
     const start = workspaceStart(workspace);
     expect(start).toMatchObject({
       phase: "ready",
-      summary: "Workspace ready",
-      brief: "Running setup…",
+      summary: "Setting up workspace…",
+      brief: null,
     });
     expect(warnings(start)).toEqual([]);
     expect(labels(start)).toEqual([
@@ -184,7 +226,7 @@ describe("a workspace that started", () => {
         output: "Checking tools\r\nMissing <b>clang</b>\n",
       },
     ]);
-    expect(start.brief).toBe("Setup failed");
+    expect(start.brief).toBeNull();
   });
 
   it("handles interrupted setup and older rows without an exit code or a tail", () => {
@@ -258,12 +300,12 @@ describe("a start in a few words, for the sidebar row", () => {
     );
   });
 
-  it("says nothing once ready, unless the setup script is running or failed", () => {
+  it("says nothing once ready, keeping setup status out of the sidebar row", () => {
     expect(workspaceStart(ready).brief).toBeNull();
     expect(workspaceStart({ ...ready, kind: "cloud" }).brief).toBeNull();
     expect(workspaceStart({ ...ready, setup_status: "completed" }).brief).toBeNull();
-    expect(workspaceStart({ ...ready, setup_status: "running" }).brief).toBe("Running setup…");
-    expect(workspaceStart({ ...ready, setup_status: "failed" }).brief).toBe("Setup failed");
+    expect(workspaceStart({ ...ready, setup_status: "running" }).brief).toBeNull();
+    expect(workspaceStart({ ...ready, setup_status: "failed" }).brief).toBeNull();
   });
 });
 

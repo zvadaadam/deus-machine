@@ -198,6 +198,10 @@ export function SessionPanel({
     onStop?.(() => composerRef.current?.stopSession());
   }, [onCompact, onCreatePR, onSendAgentMessage, onStop]);
 
+  const handleSendAgentMessage = useCallback((content: string) => {
+    void composerRef.current?.sendMessage(content);
+  }, []);
+
   const handleSendComplete = useCallback(() => {
     setUserSendCount((c) => c + 1);
     onSessionStarted?.();
@@ -265,6 +269,7 @@ export function SessionPanel({
         userSendCount={userSendCount}
         workspaceId={workspaceId ?? null}
         workspaceKind={workspaceKind}
+        onSendAgentMessage={handleSendAgentMessage}
       />
 
       {session && (

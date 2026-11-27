@@ -84,7 +84,15 @@ function completedFetch(issue: InitFetchIssue | null | undefined): StartStep {
   };
 }
 
-function setupWarning({ state, error_message, error_detail }: StartFields): StartWarning {
+export function setupWarning({
+  state,
+  error_message,
+  error_detail,
+}: {
+  state?: Workspace["state"];
+  error_message?: string | null;
+  error_detail?: string | null;
+}): StartWarning {
   const reason = error_message
     ?.trim()
     .replace(/ (?:View the setup log for details|Run it again)\.$/, "");
@@ -218,20 +226,14 @@ export function workspaceStart(workspace: StartFields): WorkspaceStart {
     cloud: false,
     summary: match(phase)
       .with("starting", () => "Setting up workspace…")
-      .with("ready", () => "Workspace ready")
+      .with("ready", () => (active ? "Setting up workspace…" : "Workspace ready"))
       .with("failed", () => "Workspace didn't start")
       .exhaustive(),
     brief: match(phase)
       .with("failed", () => "Failed")
       .with("starting", () => active?.short ?? active?.label ?? "Starting…")
-      // Setup can be running on the first turn or on a later retry.
-      .with("ready", () =>
-        active
-          ? (active.short ?? active.label)
-          : workspace.setup_status === "failed"
-            ? SETUP_FAILED
-            : null
-      )
+      // Once the checkout is usable, setup stays out of the sidebar row.
+      .with("ready", () => null)
       .exhaustive(),
     steps,
     failure,

@@ -296,6 +296,7 @@ export function MainContent({
                       onCloudWake={isCloudDirectWebMode() ? undefined : handleCloudWake}
                       setupStatus={selectedWorkspace.setup_status}
                       setupError={selectedWorkspace.error_message}
+                      setupErrorDetail={selectedWorkspace.error_detail}
                       onSendAgentMessage={
                         sendAgentMessageHandler ? handleSendAgentMessage : undefined
                       }
