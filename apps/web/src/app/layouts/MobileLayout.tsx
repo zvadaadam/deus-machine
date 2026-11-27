@@ -27,7 +27,6 @@ import type { ProjectTask } from "@shared/types/project-environment";
 import { cn } from "@/shared/lib/utils";
 import { failedToStart, hasCheckout } from "@/features/workspace/lib/startState";
 import { ChatArea } from "./ChatArea";
-import { MobileFileSheet } from "./MobileFileSheet";
 import { MobileTabBar } from "./MobileTabBar";
 import type { MobileTab } from "./MobileTabBar";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
@@ -112,7 +111,6 @@ export function MobileLayout({
 
   return (
     <div className="flex h-dvh min-w-0 flex-1 flex-col overflow-hidden">
-      <MobileFileSheet workspace={workspace} />
       {/* Header row -- workspace title on left, compact Create PR pill on right */}
       <div className="flex min-w-0 flex-shrink-0 items-center justify-between pr-2">
         <WorkspaceHeader

@@ -289,10 +289,6 @@ export const workspaceLayoutActions = {
     store.setLayout(workspaceId, {
       workspaceTabs: next.tabs,
       activeWorkspaceTabId: next.activeTabId,
-      ...(next.closedTab.kind === "file" &&
-        layout.pendingFileNavigation?.path === next.closedTab.path && {
-          pendingFileNavigation: null,
-        }),
     });
   },
 
@@ -472,6 +468,5 @@ export const workspaceLayoutActions = {
         target,
       },
     });
-    return next.activeTabId;
   },
 };

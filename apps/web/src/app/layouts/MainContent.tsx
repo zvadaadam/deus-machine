@@ -36,6 +36,7 @@ import { ConnectionBanner, useConnectionState } from "@/features/connection";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { ChatArea } from "./ChatArea";
 import { MobileLayout } from "./MobileLayout";
+import { WorkspaceFileSheet } from "./WorkspaceFileSheet";
 import { useAutomationForWorkspace } from "@/features/automations";
 import { uiActions } from "@/shared/stores/uiStore";
 import { useWorkspaceActions } from "./hooks/useWorkspaceActions";
@@ -211,6 +212,7 @@ export function MainContent({
   return (
     <SidebarInset className="min-w-0">
       <ConnectionBanner />
+      {selectedWorkspace && <WorkspaceFileSheet workspace={selectedWorkspace} />}
 
       <div
         data-slot="main-content"

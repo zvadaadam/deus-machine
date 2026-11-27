@@ -519,29 +519,23 @@ async function run() {
     const phone = await mobile.newPage();
     await phone.goto(base + "s/local/w/" + workspace.id + "?session=" + sid);
     await phone.getByRole("log").waitFor();
-    // A returning desktop reader already has two File tabs. A temporary phone visit borrows one.
-    const previousTab = await phone.evaluate(async (id) => {
+    // This reader already has the report open in a desktop tab, with another file selected.
+    await phone.evaluate(async (id) => {
       const { workspaceLayoutActions: layout } =
         await import("/src/features/workspace/store/workspaceLayoutStore.ts");
-      layout.openFileInContent(id, ".context/report.md", "files");
-      const tab = layout.openFileInContent(id, "prior.md", "files");
-      layout.setPendingFileNavigation(id, null);
-      return tab;
+      layout.openFileTab(id, ".context/report.md");
+      layout.openFileTab(id, "prior.md");
     }, workspace.id);
     await checkPhoneChatFile(phone);
-    const saved = await phone.evaluate(async (id) => {
-      const { workspaceLayoutActions: layout } =
-        await import("/src/features/workspace/store/workspaceLayoutStore.ts");
-      const { workspaceTabs, activeWorkspaceTabId } = layout.getLayout(id);
-      return {
-        files: workspaceTabs.filter((t) => t.kind === "file").map((t) => t.path),
-        activeWorkspaceTabId,
-      };
-    }, workspace.id);
-    assert.deepEqual(saved, {
-      files: [".context/report.md", "prior.md"],
-      activeWorkspaceTabId: previousTab,
-    });
+    await phone.getByRole("link", { name: "Read the release report" }).tap();
+    const chatFile = phone.getByRole("dialog");
+    await chatFile.getByRole("heading", { name: "Release verification" }).waitFor();
+    await phone.setViewportSize({ width: 1440, height: 900 });
+    await chatFile.getByRole("button", { name: "Close", exact: true }).click();
+    await chatFile.waitFor({ state: "detached" });
+    await phone.getByRole("tab", { name: "prior.md", selected: true }).waitFor();
+    await phone.getByRole("tab", { name: "report.md", selected: false }).waitFor();
+    await phone.setViewportSize({ width: 390, height: 844 });
     await phone.goto(base + "b/" + board.id + "?thread=1");
     await phone
       .getByRole("complementary", { name: "Thread" })
