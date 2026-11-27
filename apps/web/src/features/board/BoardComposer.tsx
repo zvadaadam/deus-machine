@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { api } from "@shared/api";
 import { boardReadOnlyReason, channelName, type Board, type BoardPost } from "@shared/boards";
 import { getErrorMessage } from "@shared/lib/errors";
@@ -10,7 +10,7 @@ import {
   InputGroupAddon,
 } from "@/components/ui/input-group";
 import { useComposerDraft } from "@/features/session/hooks/useSessionComposer";
-import { getRuntimeClient, runtimeForQueryClient } from "@/platform/ws";
+import { useRuntimeClient } from "@/platform/ws/useRuntimeClient";
 
 export function BoardComposer({
   board,
@@ -25,7 +25,7 @@ export function BoardComposer({
 }) {
   const { draft, setDraft, beginSubmission, finishSubmission, pendingSubmission } =
     useComposerDraft(thread ? `board:${board.id}:${thread}` : `board:${board.id}`);
-  const runtime = runtimeForQueryClient(useQueryClient()) ?? getRuntimeClient();
+  const runtime = useRuntimeClient();
   const send = useMutation({
     mutationFn: ({ id, body }: { id: string; body: string }) =>
       runtime.call(api.postBoardMessage, { boardId: board.id, thread, body, postId: id }),

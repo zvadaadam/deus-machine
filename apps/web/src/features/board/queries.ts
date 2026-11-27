@@ -1,40 +1,28 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@shared/api";
 import type { InputOf } from "@shared/api/op";
-import { getRuntimeClient, runtimeForQueryClient } from "@/platform/ws";
+import { useRuntimeClient } from "@/platform/ws/useRuntimeClient";
+import type { CallArgs } from "@/platform/ws/runtime-client";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 
 /** A seen mark belongs to the same host and account as this board read. */
 export function useBoardSeenScope() {
-  const runtime = runtimeForQueryClient(useQueryClient()) ?? getRuntimeClient();
-  return JSON.stringify([runtime.identity.host, runtime.identity.account]) + ":";
+  const { identity } = useRuntimeClient();
+  return JSON.stringify([identity.host, identity.account]) + ":";
 }
 
-export function useBoards() {
-  const queryKey = [api.boards.name];
-  const runtime = runtimeForQueryClient(useQueryClient()) ?? getRuntimeClient();
-  useQuerySubscription(api.boards, { queryKey });
-  return useQuery({ queryKey, queryFn: () => runtime.call(api.boards), staleTime: Infinity });
+type BoardRead = typeof api.boards | typeof api.boardChannel | typeof api.boardThread;
+
+function useBoardRead<O extends BoardRead>(op: O, ...args: CallArgs<O>) {
+  const runtime = useRuntimeClient();
+  const [params] = args;
+  const queryKey = params ? [op.name, params] : [op.name];
+  useQuerySubscription(op, { queryKey, params });
+  return useQuery({ queryKey, queryFn: () => runtime.call(op, ...args), staleTime: Infinity });
 }
 
-export function useBoardChannel(params: InputOf<typeof api.boardChannel>) {
-  const runtime = runtimeForQueryClient(useQueryClient()) ?? getRuntimeClient();
-  const queryKey = [api.boardChannel.name, params];
-  useQuerySubscription(api.boardChannel, { queryKey, params });
-  return useQuery({
-    queryKey,
-    queryFn: () => runtime.call(api.boardChannel, params),
-    staleTime: Infinity,
-  });
-}
-
-export function useBoardThread(params: InputOf<typeof api.boardThread>) {
-  const runtime = runtimeForQueryClient(useQueryClient()) ?? getRuntimeClient();
-  const queryKey = [api.boardThread.name, params];
-  useQuerySubscription(api.boardThread, { queryKey, params });
-  return useQuery({
-    queryKey,
-    queryFn: () => runtime.call(api.boardThread, params),
-    staleTime: Infinity,
-  });
-}
+export const useBoards = () => useBoardRead(api.boards);
+export const useBoardChannel = (params: InputOf<typeof api.boardChannel>) =>
+  useBoardRead(api.boardChannel, params);
+export const useBoardThread = (params: InputOf<typeof api.boardThread>) =>
+  useBoardRead(api.boardThread, params);

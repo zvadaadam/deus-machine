@@ -103,7 +103,7 @@ export function boardForChat(sessionId: string, explicit?: string): string {
 }
 
 /** Choose the recipient at delivery. A fresh chat in this workspace will pin the board tools on first use. */
-export function deliveryChat(board: Board) {
+export function selectAndRecordDeliveryChat(board: Board) {
   if (board.read_only) throw new ConflictError(boardReadOnlyReason[board.read_only]);
   const db = getDatabase();
   const chat = db
@@ -151,12 +151,12 @@ function rootPost(board: string, seq: number) {
 export function savePost(
   boardId: string,
   input: BoardPostInput,
-  by: { kind: "bot"; aboutWorkspaceId?: string } | { postId: string }
+  by: { kind: "bot"; aboutWorkspaceId?: string } | { kind: "person"; postId: string }
 ) {
   const db = getDatabase();
   const { body, thread } = input;
   const result = db.transaction(() => {
-    if ("postId" in by) {
+    if (by.kind === "person") {
       const existing = db
         .prepare<
           [string],
@@ -176,7 +176,7 @@ export function savePost(
       }
     }
     const board = writableBoard(boardId);
-    const recipient = "postId" in by ? board.delivery_session_id : null;
+    const recipient = by.kind === "person" ? board.delivery_session_id : null;
     if (thread) rootPost(boardId, thread);
     const seq = board.last_seq + 1;
     db.prepare("UPDATE boards SET last_seq = ? WHERE id = ?").run(seq, boardId);
@@ -185,12 +185,12 @@ export function savePost(
       about_workspace_id, body, last_seq, delivery_session_id)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
-      "postId" in by ? by.postId : uuidv7(),
+      by.kind === "person" ? by.postId : uuidv7(),
       boardId,
       seq,
       thread ?? null,
-      "kind" in by ? "bot" : "person",
-      "kind" in by ? (by.aboutWorkspaceId ?? null) : null,
+      by.kind,
+      by.kind === "bot" ? (by.aboutWorkspaceId ?? null) : null,
       body,
       thread ? null : seq,
       recipient
@@ -202,7 +202,7 @@ export function savePost(
       ).run(seq, boardId, thread);
     return { post: getPost(boardId, seq), created: true };
   })();
-  if (result.created && "kind" in by)
+  if (result.created && by.kind === "bot")
     invalidate(["boards", "boardChannel", "boardThread"], { boardIds: [boardId] });
   return result;
 }
