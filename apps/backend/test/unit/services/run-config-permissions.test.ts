@@ -10,13 +10,32 @@ it.each(LOCAL_HARNESSES)(
   (harness) => {
     const { config } = buildTurnStartParams("chat", "turn", harness, "Read this chat", workspace);
     expect(config.systemPromptAppend).toContain(
-      "You may use `rename` on your own chat and its workspace."
+      "Once the task is clear, use `rename` to give your chat and its workspace a short title (3–6 words) that names the outcome. Rename again only if the task changes."
     );
     expect(config.systemPromptAppend).toContain(
       "For this computer's workspaces, read a `deus://workspace?id=<workspace id>&session=<chat id>` link with `read_session`. Pass its `session` value as `session`.\nWithout `session`, pass the link's `id` value as `session` to read the workspace's current chat."
     );
   }
 );
+
+it("tells a chat in an already-named workspace to rename only the chat", () => {
+  const { config } = buildTurnStartParams("chat-2", "turn", "claude-code", "Investigate logs", {
+    ...workspace,
+    workspaceHasTitle: true,
+  });
+  expect(config.systemPromptAppend).toContain(
+    "Once the task is clear, use `rename` to give your chat a short title (3–6 words) that names the outcome, and rename it again only if the task changes. Leave the workspace title as it is unless asked."
+  );
+  expect(config.systemPromptAppend).not.toContain("give your chat and its workspace");
+});
+
+it("omits proactive rename guidance in Plan mode", () => {
+  const { config } = buildTurnStartParams("chat", "turn", "claude-code", "Plan the rollout", {
+    ...workspace,
+    permissionMode: "plan",
+  });
+  expect(config.systemPromptAppend).not.toContain("use `rename`");
+});
 
 it.each([
   ["ios", "0123-4567", "--udid"],

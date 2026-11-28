@@ -88,6 +88,8 @@ export interface DeusTurnOptions {
   /** The device this workspace is showing when the turn starts. */
   device?: WorkspaceDevice | null;
   setup?: WorkspaceSetup | null;
+  /** Whether the chat's workspace already has a non-empty title. */
+  workspaceHasTitle?: boolean;
   /** The workspace's agent-device session (`agentDeviceFor`); the chat's id without one. */
   agentDeviceSession?: string;
   /** Who sent the message when not the person: set by the operator's host only, never a client. */
@@ -103,6 +105,9 @@ export function buildTurnStartParams(
   options: DeusTurnOptions
 ): TurnStartParams {
   const input = toEngineInput(prompt);
+  // Deus runs with full access by default, like its cloud runtime.
+  // Explicit modes (including the composer's plan mode) stay unchanged.
+  const permissionMode = options.permissionMode ?? "bypass_permissions";
   return {
     sessionId,
     turnId,
@@ -114,11 +119,11 @@ export function buildTurnStartParams(
       model: options.model,
       thinkingLevel: options.thinkingLevel,
       systemPromptAppend:
-        buildSystemPromptAppend(options.agentMessages, options.cwd, options.device, options.setup) +
-        (options.toolInstructions ? "\n" + options.toolInstructions : ""),
-      // Deus runs with full access by default, like its cloud runtime.
-      // Explicit modes (including the composer's plan mode) stay unchanged.
-      permissionMode: options.permissionMode ?? "bypass_permissions",
+        buildSystemPromptAppend(options.agentMessages, options.cwd, options.device, options.setup, {
+          workspaceHasTitle: options.workspaceHasTitle,
+          canRename: permissionMode !== "plan",
+        }) + (options.toolInstructions ? "\n" + options.toolInstructions : ""),
+      permissionMode,
       maxTurns: 1000,
       // The agent's questions reach the question card (the service answers
       // `elicitation.requested`), Claude's and Codex's alike.

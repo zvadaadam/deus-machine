@@ -63,6 +63,7 @@ export function SessionTab({
       active={isActive}
       icon={renderStatusIcon(tab, isWorking, isUnread)}
       onSelect={onSelect}
+      titleKey={tab.id}
       onTitleKeyDown={onKeyDown}
       titleTabIndex={isActive ? 0 : -1}
       titleRef={tabRef}

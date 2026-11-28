@@ -24,6 +24,7 @@ import { WorkspaceGitIcon, WorkspaceAttention } from "./WorkspaceGitIcon";
 import { WorkspaceHoverCard } from "./WorkspaceHoverCard";
 import { WorkspaceStatusChoices, WorkspaceStatusMenu } from "./WorkspaceStatusMenu";
 import { ContextMenu, ContextMenuItem, ContextMenuSub } from "@/components/ui/context-menu";
+import { AnimatedTitle } from "@/components/ui/animated-title";
 import { copyWorkspaceLink } from "@/features/workspace/lib/workspaceAddress";
 import { WorkflowStatusIcon } from "./WorkflowStatusIcon";
 
@@ -193,7 +194,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
                 : "text-text-tertiary font-normal"
           )}
         >
-          {displayName}
+          <AnimatedTitle text={displayName} entityId={workspace.id} />
         </span>
         {workspace.role === "coordinator" && <CoordinatorMark />}
         {workspace.kind === "cloud" && <CloudLivenessIcon workspace={workspace} />}

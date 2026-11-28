@@ -24,6 +24,7 @@ import { cn } from "@/shared/lib/utils";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { copyWorkspaceLink, currentChatLink, useHasWorkspaceChat } from "../lib/workspaceAddress";
 import { CopyIcon } from "@/components/ui/copy-icon";
+import { AnimatedTitle } from "@/components/ui/animated-title";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { native } from "@/platform";
 import type { InstalledApp } from "@/platform";
@@ -155,7 +156,7 @@ export function WorkspaceHeader({
               !mobile && "max-w-[200px]"
             )}
           >
-            {title}
+            <AnimatedTitle text={title} entityId={workspaceId} />
           </span>
         )}
 

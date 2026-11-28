@@ -284,4 +284,20 @@ describe("agentService.startTurn", () => {
     expect(params.config.harness).toBe("codex-app-server");
     expect(params.input).toEqual([image]);
   });
+
+  it("tells a chat to leave an already-named workspace's title alone", async () => {
+    mockLinkStartTurn.mockResolvedValue({ sessionId: SESSION, turnId: TURN });
+    await start();
+    expect(mockLinkStartTurn.mock.calls[0]![0].config.systemPromptAppend).toContain(
+      "give your chat and its workspace a short title"
+    );
+
+    db.prepare("UPDATE workspaces SET title = ? WHERE id = 'w'").run("Release planning");
+    await agentService.startTurn(SESSION, "turn-2", "claude-code", "check logs", {
+      cwd: "/tmp/nonexistent-ws",
+    });
+    const secondPrompt = mockLinkStartTurn.mock.calls[1]![0].config.systemPromptAppend;
+    expect(secondPrompt).toContain("Leave the workspace title as it is unless asked.");
+    expect(secondPrompt).not.toContain("give your chat and its workspace");
+  });
 });
