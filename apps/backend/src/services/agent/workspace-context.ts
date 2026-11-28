@@ -55,6 +55,24 @@ const AGENT_DEVICE =
   "and end with `agent-device close` (`close --shutdown` if you booted it) so another workspace can use the device. " +
   "`agent-device help <topic>` has more (`dogfood` for exploratory QA, `debugging`, `react-native`).\n";
 
+export interface WorkspaceContextOptions {
+  /** Whether the chat's workspace already has a non-empty title. */
+  workspaceHasTitle?: boolean;
+  /** Whether `rename` is permitted in this turn (false in Plan mode). */
+  canRename?: boolean;
+}
+
+const RENAME_BOTH_GUIDANCE =
+  "Once the task is clear, use `rename` to give your chat and its workspace a short title (3–6 words) that names the outcome. Rename again only if the task changes.\n";
+
+const RENAME_CHAT_ONLY_GUIDANCE =
+  "Once the task is clear, use `rename` to give your chat a short title (3–6 words) that names the outcome, and rename it again only if the task changes. Leave the workspace title as it is unless asked.\n";
+
+function renameInstructions(options?: WorkspaceContextOptions): string {
+  if (options?.canRename === false) return "";
+  return options?.workspaceHasTitle ? RENAME_CHAT_ONLY_GUIDANCE : RENAME_BOTH_GUIDANCE;
+}
+
 export const AGENT_MESSAGES = `
 # Messages to the person
 
@@ -73,7 +91,8 @@ Until you finish, the person sees only what you send with the \`${TELL_USER}\` t
 export function buildWorkspaceContext(
   cwd?: string,
   device?: WorkspaceDevice | null,
-  setup?: WorkspaceSetup | null
+  setup?: WorkspaceSetup | null,
+  options?: WorkspaceContextOptions
 ): string {
   if (!cwd) return "";
 
@@ -87,7 +106,7 @@ export function buildWorkspaceContext(
     `A built-in browser is available for testing UI changes.\n` +
     AGENT_DEVICE +
     deviceInstructions(device) +
-    "You may use `rename` on your own chat and its workspace.\n" +
+    renameInstructions(options) +
     "For this computer's workspaces, read a `deus://workspace?id=<workspace id>&session=<chat id>` link with `read_session`. Pass its `session` value as `session`.\n" +
     "Without `session`, pass the link's `id` value as `session` to read the workspace's current chat.\n" +
     `You can render live HTML+CSS previews inline in chat using the \`html-preview\` code fence — it renders in an isolated Shadow DOM instead of showing code. Use this naturally whenever showing is clearer than describing (design options, component variations, layout ideas).`

@@ -7,6 +7,7 @@
 import {
   AGENT_MESSAGES,
   buildWorkspaceContext,
+  type WorkspaceContextOptions,
   type WorkspaceDevice,
   type WorkspaceSetup,
 } from "./workspace-context";
@@ -35,8 +36,10 @@ export function buildSystemPromptAppend(
   agentMessages: boolean,
   cwd?: string,
   device?: WorkspaceDevice | null,
-  setup?: WorkspaceSetup | null
+  setup?: WorkspaceSetup | null,
+  contextOptions?: WorkspaceContextOptions
 ): string {
-  const workspaceContext = buildWorkspaceContext(cwd, device, setup) || FALLBACK_CONTEXT;
+  const workspaceContext =
+    buildWorkspaceContext(cwd, device, setup, contextOptions) || FALLBACK_CONTEXT;
   return `${workspaceContext}\n${SCREEN_RECORDING}${agentMessages ? AGENT_MESSAGES : ""}`.trim();
 }

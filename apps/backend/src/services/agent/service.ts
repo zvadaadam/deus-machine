@@ -222,7 +222,15 @@ export async function startTurn(
   ]).finally(() => signal?.removeEventListener("abort", onAbort));
   // Stop can arrive after the apps resolve and before this turn is registered.
   signal?.throwIfAborted();
-  if (!getDatabase().prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId)) {
+  const row = getDatabase()
+    .prepare(
+      `SELECT w.title AS workspace_title
+       FROM sessions s
+       LEFT JOIN workspaces w ON w.id = s.workspace_id
+       WHERE s.id = ?`
+    )
+    .get(sessionId) as { workspace_title: string | null } | undefined;
+  if (!row) {
     throw new NotFoundError("This chat no longer exists.");
   }
   const device = agentDeviceFor(sessionId);
@@ -233,6 +241,7 @@ export async function startTurn(
     agentMessages: hasAgentMessages(sessionId),
     toolInstructions: toolkit?.(sessionId).instructions,
     setup: setupForTurn(sessionId),
+    workspaceHasTitle: Boolean(row.workspace_title?.trim()),
     agentDeviceSession: device.session,
     device: device.target,
     // Negotiated at the handshake, not guessed from a harness list.

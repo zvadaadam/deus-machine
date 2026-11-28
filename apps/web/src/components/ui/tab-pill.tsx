@@ -13,6 +13,7 @@
 import type { KeyboardEvent, ReactNode, RefCallback } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { AnimatedTitle } from "./animated-title";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 type TabPillPropsBase = {
@@ -25,6 +26,8 @@ type TabPillPropsBase = {
   onSelect: () => void;
   /** Title content. Truncates by default. */
   children: ReactNode;
+  /** Stable entity id for animating live string title renames. */
+  titleKey?: string;
   /** Forwarded keyboard handler on the title button (arrow-key tab nav). */
   onTitleKeyDown?: (event: KeyboardEvent<HTMLButtonElement>) => void;
   /** Forwarded tabIndex for the title button (used for roving focus). */
@@ -58,6 +61,7 @@ export function TabPill({
   onClose,
   closeAriaLabel,
   children,
+  titleKey,
   onTitleKeyDown,
   titleTabIndex,
   titleRef,
@@ -113,7 +117,11 @@ export function TabPill({
             className="block truncate"
             data-medium-label={typeof children === "string" ? children : undefined}
           >
-            {children}
+            {titleKey && typeof children === "string" ? (
+              <AnimatedTitle text={children} entityId={titleKey} />
+            ) : (
+              children
+            )}
           </span>
         </TooltipTrigger>
         <TooltipContent className="max-w-xs wrap-anywhere">{children}</TooltipContent>
