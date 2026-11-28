@@ -82,9 +82,9 @@ export async function start(options: StartOptions): Promise<void> {
     const napi = Number(process.versions.napi);
     hint(
       !Number.isFinite(napi) || napi < REQUIRED_NAPI
-        ? "Upgrade to Node.js 22.14.0 or newer, then start again."
+        ? "Upgrade to Node.js 22.14+ (or 23.6+ / 24+), then start again."
         : devRoot
-          ? `Run ${c.cyan("bun run setup")} from the monorepo root, then start again.`
+          ? `Delete ${c.cyan("node_modules/better-sqlite3")}, run ${c.cyan("bun run setup")} from the monorepo root, then start again.`
           : `Reinstall Deus with ${c.cyan("npm install -g deus-machine")}, then start again.`
     );
     blank();
@@ -218,7 +218,7 @@ const REQUIRED_NAPI = 10;
 function sqliteLoadFailure(): string | null {
   const napi = Number(process.versions.napi);
   if (!Number.isFinite(napi) || napi < REQUIRED_NAPI) {
-    return `requires Node-API ${REQUIRED_NAPI} (Node 22.14.0 or newer), got Node-API ${process.versions.napi ?? "unknown"}`;
+    return `requires Node-API ${REQUIRED_NAPI} (Node 22.14+ or 23.6+), got Node-API ${process.versions.napi ?? "unknown"}`;
   }
   try {
     const Database = createRequire(import.meta.url)("better-sqlite3") as new (filename: string) => {

@@ -30,7 +30,7 @@ function check(level, name, ok, detail, fix) {
 
 // ── Required ────────────────────────────────────────────────────────────
 // The native modules are Node-API prebuilds (better-sqlite3@13 builds with
-// NAPI_VERSION=10, requiring Node 22.14.0+); CI runs the pinned major.
+// NAPI_VERSION=10, requiring Node ^22.14.0 || >=23.6.0); CI runs the pinned major.
 const nodeInfo = out("node", ["-p", "process.versions.node + ' ' + process.versions.napi"]);
 const [rawNodeVersion, rawNapi] = nodeInfo?.split(" ") ?? [];
 const nodeVersion = rawNodeVersion ? `v${rawNodeVersion}` : null;
@@ -39,12 +39,12 @@ const nodeNapi = Number(rawNapi);
 const nodeOk = nodeMajor >= Number(wantNodeMajor) && nodeNapi >= 10;
 check(
   "required",
-  `Node ${wantNodeMajor}.14+ (Node-API 10)`,
+  `Node ${wantNodeMajor}.14+ / 23.6+ (Node-API 10)`,
   nodeOk,
   nodeVersion
     ? `${nodeVersion}${nodeNapi < 10 ? ` (Node-API ${rawNapi ?? "?"}, needs 10)` : nodeMajor > Number(wantNodeMajor) ? ` (CI runs ${wantNodeMajor})` : ""}`
     : "not found",
-  `Install Node ${wantNodeMajor}.14 or newer (brew install node, or a version manager that reads .node-version such as fnm/mise).`
+  `Install Node ${wantNodeMajor}.14+ or 23.6+ (brew install node, or a version manager that reads .node-version such as fnm/mise).`
 );
 
 const bunVersion = out("bun", ["--version"]);
