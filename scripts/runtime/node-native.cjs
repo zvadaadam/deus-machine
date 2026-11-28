@@ -16,6 +16,17 @@ for (const target of fs.existsSync(ptyPrebuilds) ? fs.readdirSync(ptyPrebuilds) 
   if (fs.existsSync(helper)) fs.chmodSync(helper, 0o755);
 }
 
+const REQUIRED_NAPI = 10;
+const napi = Number(process.versions.napi);
+if (!Number.isFinite(napi) || napi < REQUIRED_NAPI) {
+  console.error(
+    `[native:node] better-sqlite3 requires Node-API ${REQUIRED_NAPI} (Node 22.14.0 or newer), ` +
+      `but this process is Node ${process.version} (Node-API ${process.versions.napi ?? "unknown"}).\n` +
+      "  Upgrade Node (brew install node, or fnm/mise); `bun run doctor` checks the rest."
+  );
+  process.exit(1);
+}
+
 try {
   require("better-sqlite3")(":memory:").close();
 } catch (error) {

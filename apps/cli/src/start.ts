@@ -79,10 +79,13 @@ export async function start(options: StartOptions): Promise<void> {
   if (sqliteFailure) {
     error(`SQLite (better-sqlite3) does not load under Node ${process.version}: ${sqliteFailure}`);
     blank();
+    const napi = Number(process.versions.napi);
     hint(
-      devRoot
-        ? `Run ${c.cyan("bun run setup")} from the monorepo root, then start again.`
-        : `Reinstall Deus with ${c.cyan("npm install -g deus-machine")}, then start again.`
+      !Number.isFinite(napi) || napi < REQUIRED_NAPI
+        ? "Upgrade to Node.js 22.14.0 or newer, then start again."
+        : devRoot
+          ? `Run ${c.cyan("bun run setup")} from the monorepo root, then start again.`
+          : `Reinstall Deus with ${c.cyan("npm install -g deus-machine")}, then start again.`
     );
     blank();
     process.exit(1);
@@ -209,8 +212,14 @@ export async function start(options: StartOptions): Promise<void> {
 
 // ── SQLite ───────────────────────────────────────────────────────────
 
+const REQUIRED_NAPI = 10;
+
 /** Why better-sqlite3 cannot open a database under this Node, or null if it can. */
 function sqliteLoadFailure(): string | null {
+  const napi = Number(process.versions.napi);
+  if (!Number.isFinite(napi) || napi < REQUIRED_NAPI) {
+    return `requires Node-API ${REQUIRED_NAPI} (Node 22.14.0 or newer), got Node-API ${process.versions.napi ?? "unknown"}`;
+  }
   try {
     const Database = createRequire(import.meta.url)("better-sqlite3") as new (filename: string) => {
       close(): void;
