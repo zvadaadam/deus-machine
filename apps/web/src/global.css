@@ -664,10 +664,12 @@
   --text-disabled: oklch(0.75 0 0);
 
   /* --- Component surface tokens (light mode) --- */
-  --user-bubble: color-mix(in oklch, var(--primary) 13%, #faf7f8);
-  --user-bubble-top: color-mix(in oklch, var(--primary) 7%, #ffffff);
-  --user-bubble-border: color-mix(in oklch, var(--primary) 13%, transparent);
-  --agent-bubble: #ececea;
+  --user-bubble: color-mix(in oklch, var(--primary) 16%, #f5f0f2);
+  --user-bubble-top: color-mix(in oklch, var(--primary) 11%, #fdf9fb);
+  --user-bubble-border: color-mix(in oklch, var(--primary) 18%, transparent);
+  --user-bubble-highlight: rgb(255 255 255 / 0.55);
+  --user-bubble-shadow: color-mix(in oklch, var(--primary) 10%, rgb(0 0 0 / 0.05));
+  --agent-bubble: #efefed;
   --destructive-surface: var(--destructive);
   --destructive-tint: color-mix(in oklch, var(--destructive) 10%, transparent);
   --button-primary: #242424;
@@ -853,10 +855,12 @@
   --text-disabled: oklch(0.32 0 0);
 
   /* --- Component surface tokens (dark mode) --- */
-  --user-bubble: color-mix(in oklch, var(--primary) 15%, #1d1d1d);
-  --user-bubble-top: color-mix(in oklch, var(--primary) 19%, #232323);
-  --user-bubble-border: color-mix(in oklch, var(--primary) 13%, transparent);
-  --agent-bubble: #171717;
+  --user-bubble: color-mix(in oklch, var(--primary) 14%, #1a181a);
+  --user-bubble-top: color-mix(in oklch, var(--primary) 21%, #262225);
+  --user-bubble-border: color-mix(in oklch, var(--primary) 20%, transparent);
+  --user-bubble-highlight: color-mix(in oklch, var(--primary) 26%, rgb(255 255 255 / 0.09));
+  --user-bubble-shadow: rgb(0 0 0 / 0.32);
+  --agent-bubble: #131313;
   --destructive-surface: color-mix(in oklch, var(--destructive) 60%, transparent);
   --destructive-tint: color-mix(in oklch, var(--destructive) 20%, transparent);
   --button-primary: #ffffff;
