@@ -5,14 +5,14 @@ description: Drive a disposable remote-access stack (a fixture Mac, the relay, D
 
 # Deus remote lab
 
-From the Deus checkout with Node 22 and Bun, check that Docker prints its server version and Node’s SQLite binding prints `1`.
+From the Deus checkout with Node 22+ and Bun, check that Docker prints its server version and Node’s SQLite binding prints `1`.
 
 ```sh
 docker info --format '{{.ServerVersion}}'
 node -e 'const db = require("better-sqlite3")(":memory:"); console.log(db.prepare("select 1").pluck().get()); db.close()'
 ```
 
-Use a local Docker socket and start its daemon only if it is down. If Node cannot load the binding, run `bun run native:node` and repeat the check.
+Use a local Docker socket and start its daemon only if it is down. If Node cannot load the binding, run `bun run setup` and repeat the check.
 Set `AGNT_WORKSPACE` in the environment to a local AGNT checkout’s absolute path, with worker dependencies installed and `packages/api` and `packages/sdk` built.
 Pairing and restart run headless. Only the browser suite needs Chromium (`bunx playwright install chromium`, see `test/e2e/README.md`).
 

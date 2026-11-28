@@ -18,8 +18,8 @@
 //    exercise the multi-turn path at all and would report PASS regardless).
 // 6. Dumps the DB to verify everything stored correctly
 //
-// Runs on Bun, so the DB goes through bun:sqlite (see lib/sqlite.ts) —
-// better-sqlite3's native addon crashes the Bun process.
+// Runs on Bun, so the DB goes through bun:sqlite (see lib/sqlite.ts)
+// rather than Node's better-sqlite3 native addon.
 //
 // Usage:
 //   bun run cli:backend -- "Say hello"

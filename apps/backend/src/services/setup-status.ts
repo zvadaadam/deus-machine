@@ -10,6 +10,14 @@ export function setupFile(workspaceId: string, extension: "log" | "status"): str
   return path.join(os.tmpdir(), `deus-${workspaceId}-setup.${extension}`);
 }
 
+export function clearSetupLog(workspaceId: string): void {
+  try {
+    fs.rmSync(setupFile(workspaceId, "log"), { force: true });
+  } catch {
+    // The temp directory may be unwritable; runSetupCommand surfaces that if a script runs.
+  }
+}
+
 export function writeSetupStatusFile(
   workspaceId: string,
   status: SetupStatus,

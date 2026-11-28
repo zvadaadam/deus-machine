@@ -29,16 +29,22 @@ function check(level, name, ok, detail, fix) {
 }
 
 // ── Required ────────────────────────────────────────────────────────────
-const nodeVersion = out("node", ["--version"]);
-const nodeMajor = nodeVersion?.replace(/^v/, "").split(".")[0];
+// The native modules are Node-API prebuilds (better-sqlite3@13 builds with
+// NAPI_VERSION=10, requiring Node ^22.14.0 || >=23.6.0); CI runs the pinned major.
+const nodeInfo = out("node", ["-p", "process.versions.node + ' ' + process.versions.napi"]);
+const [rawNodeVersion, rawNapi] = nodeInfo?.split(" ") ?? [];
+const nodeVersion = rawNodeVersion ? `v${rawNodeVersion}` : null;
+const nodeMajor = Number(rawNodeVersion?.split(".")[0]);
+const nodeNapi = Number(rawNapi);
+const nodeOk = nodeMajor >= Number(wantNodeMajor) && nodeNapi >= 10;
 check(
   "required",
-  `Node ${wantNodeMajor}.x`,
-  nodeMajor === wantNodeMajor,
-  nodeVersion ?? "not found",
-  `better-sqlite3 and node-pty are compiled against Node ${wantNodeMajor}. ` +
-    `Install it (brew install node@${wantNodeMajor} && brew link --overwrite --force node@${wantNodeMajor}) ` +
-    "or use a version manager that reads .node-version (fnm, mise)."
+  `Node ${wantNodeMajor}.14+ / 23.6+ (Node-API 10)`,
+  nodeOk,
+  nodeVersion
+    ? `${nodeVersion}${nodeNapi < 10 ? ` (Node-API ${rawNapi ?? "?"}, needs 10)` : nodeMajor > Number(wantNodeMajor) ? ` (CI runs ${wantNodeMajor})` : ""}`
+    : "not found",
+  `Install Node ${wantNodeMajor}.14+ or 23.6+ (brew install node, or a version manager that reads .node-version such as fnm/mise).`
 );
 
 const bunVersion = out("bun", ["--version"]);
@@ -120,7 +126,7 @@ check(
   existsSync(join(rootDir, "node_modules", "electron", "path.txt")),
   existsSync(join(rootDir, "node_modules", "electron", "path.txt"))
     ? "present"
-    : "missing (interrupted install)",
+    : "not downloaded yet (bun run dev downloads it)",
   "bun run electron:install"
 );
 

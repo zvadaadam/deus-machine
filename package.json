@@ -11,7 +11,7 @@
   "repository": "github:zvadaadam/deus-machine",
   "packageManager": "bun@1.3.14",
   "engines": {
-    "node": "22.x"
+    "node": "^22.14.0 || >=23.6.0"
   },
   "type": "module",
   "main": "./out/main/index.js",
@@ -37,7 +37,7 @@
     "package:mac": "bun run build:all && electron-builder --mac",
     "package:mac:dir": "node scripts/runtime/package-mac-dir.cjs",
     "package:linux": "bun run build:all && electron-builder --linux",
-    "native:node": "node scripts/runtime/rebuild-node-native.cjs",
+    "native:node": "node scripts/runtime/node-native.cjs",
     "electron:install": "node node_modules/electron/install.js",
     "prepare:gh-cli": "node scripts/prepare-gh-cli.mjs",
     "prepare:agent-clis": "bun scripts/runtime/prepare-agent-clis.ts",
@@ -99,7 +99,7 @@
     "@zvada/agent-server": "0.3.34",
     "agent-browser": "^0.21.4",
     "agent-device": "0.21.39",
-    "better-sqlite3": "^12.4.1",
+    "better-sqlite3": "^13.2.0",
     "croner": "^10.0.1",
     "electron-updater": "^6.0.0",
     "hono": "^4.11.7",

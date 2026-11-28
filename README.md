@@ -176,7 +176,7 @@ bun run dev        # Desktop: Electron + backend + agent-server
 bun run dev:web    # Web: backend + frontend (no Electron)
 ```
 
-Use Node.js 22.x and the [Bun](https://bun.sh) version pinned in `package.json`. Do not use npm or yarn for installation.
+Use Node.js 22 or newer (22.14+ for Node-API v10) and the [Bun](https://bun.sh) version pinned in `package.json`. Do not use npm or yarn for installation.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and [CLAUDE.md](CLAUDE.md) for architecture details.
 

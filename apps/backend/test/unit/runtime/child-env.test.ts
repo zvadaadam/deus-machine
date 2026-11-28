@@ -1,7 +1,11 @@
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearInheritedPackagedEnv, createBackendChildEnv } from "@shared/lib/child-env";
+import {
+  allowAgentlessForEnv,
+  clearInheritedPackagedEnv,
+  createBackendChildEnv,
+} from "@shared/lib/child-env";
 import { resolveDefaultDatabasePath } from "@shared/runtime";
 
 const originalEnv = { ...process.env };
@@ -76,4 +80,34 @@ describe("backend child process environment", () => {
     expect(env.NODE_ENV).toBeUndefined();
     expect(env.PORT).toBeUndefined();
   });
+
+  it.each([
+    [undefined, "1", true, false],
+    [undefined, "true", true, false],
+    [undefined, "0", false, false],
+    [undefined, undefined, false, false],
+    ["1", "1", false, true],
+    ["1", "true", false, true],
+    ["1", "0", false, false],
+    ["1", undefined, false, false],
+  ])(
+    "evaluates AGENT_ALLOW_AGENTLESS=%s with DEUS_PACKAGED=%s",
+    (packaged, flag, expected, shouldWarn) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        expect(allowAgentlessForEnv({ DEUS_PACKAGED: packaged, AGENT_ALLOW_AGENTLESS: flag })).toBe(
+          expected
+        );
+        if (shouldWarn) {
+          expect(warn).toHaveBeenCalledExactlyOnceWith(
+            expect.stringMatching(/ignored.*AGENT_ALLOW_AGENTLESS.*packaged/i)
+          );
+        } else {
+          expect(warn).not.toHaveBeenCalled();
+        }
+      } finally {
+        warn.mockRestore();
+      }
+    }
+  );
 });

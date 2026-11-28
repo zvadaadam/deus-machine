@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/node";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
 import { stopProcessGroups } from "@shared/lib/process-groups";
+import { allowAgentlessForEnv } from "@shared/lib/child-env";
 import { beforeBreadcrumb } from "@shared/lib/sentry-breadcrumb";
 import {
   closeAll as closeAllWsConnections,
@@ -118,8 +119,7 @@ export function getServerPort() {
 
 // Start server with dynamic port allocation
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 0;
-const allowAgentless =
-  process.env.AGENT_ALLOW_AGENTLESS === "1" || process.env.AGENT_ALLOW_AGENTLESS === "true";
+const allowAgentless = allowAgentlessForEnv();
 
 async function onListening(port: number): Promise<void> {
   actualServerPort = port;

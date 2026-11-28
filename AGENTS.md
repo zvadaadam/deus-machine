@@ -21,7 +21,7 @@ bun run dev       # Desktop: Vite + backend + Electron
 
 Never run `bun run dev:frontend` alone — it skips the backend.
 
-New machine or broken toolchain? `bun run doctor` checks Node (22.x, see `.node-version`), Bun, Xcode and the rest; `bun run setup` installs the root, `apps/cloud-relay` and `apps/landing` dependencies.
+New machine or broken toolchain? `bun run doctor` checks Node (22 or newer; CI runs `.node-version`), Bun, Xcode and the rest; `bun run setup` installs the root, `apps/cloud-relay` and `apps/landing` dependencies.
 
 - Frontend: http://localhost:1420 (Vite auto-increments if taken)
 - Backend: dynamic port (check terminal output)
@@ -45,7 +45,7 @@ bun run test:agent-server
 bun run dev:web
 ```
 
-`bun run dev:web` is the preferred cloud smoke. It checks that Node can open SQLite, repairs the native module if needed, starts the backend (including the agent engine), and points Vite at the port the backend reports. Confirm the terminal shows `[AgentService] Engine started, agents: [claude-code, codex-app-server, gemini]`, `[BACKEND_PORT]...` and `Server ready!` before opening the frontend URL.
+`bun run dev:web` is the preferred cloud smoke. It checks that Node can open SQLite, starts the backend (including the agent engine), and points Vite at the port the backend reports. Confirm the terminal shows `[AgentService] Engine started, agents: [claude-code, codex-app-server, gemini]`, `[BACKEND_PORT]...` and `Server ready!` before opening the frontend URL.
 
 For browser-based UI smoke tests, install the Playwright browser after dependencies are installed:
 

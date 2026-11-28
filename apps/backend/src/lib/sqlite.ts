@@ -27,11 +27,10 @@ type BunSqliteDatabaseConstructor = new (
 
 /**
  * Bun, in any shape: the packaged deus-runtime executable AND `bun` running
- * backend code directly (the verification CLI). better-sqlite3 is a V8-API
- * native addon — under Bun it does not fail to load, it HARD-CRASHES the
- * process on construction, so "am I on Bun" is the whole question. Gating this
- * on DEUS_PACKAGED as well meant every other Bun entry point took the branch
- * that crashes.
+ * backend code directly (the verification CLI). Under Bun, the backend uses
+ * `bun:sqlite` rather than Node's `better-sqlite3` native addon (Node-API in
+ * 13+), so "am I on Bun" is the whole question. Gating this on DEUS_PACKAGED
+ * as well meant every other Bun entry point tried to load the Node addon.
  */
 function isBunRuntime(): boolean {
   return Boolean(process.versions.bun);

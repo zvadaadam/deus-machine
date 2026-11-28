@@ -349,7 +349,7 @@ describe("local project environment journey", () => {
           setup_status: "failed",
           error_message:
             end === "timeout"
-              ? "Setup timed out after five minutes."
+              ? "Setup timed out after 5 minutes without output."
               : "Setup was stopped when the workspace was archived.",
           error_detail: end === "timeout" ? "installing\nMissing compiler" : null,
         });
@@ -367,6 +367,100 @@ describe("local project environment journey", () => {
       }
     }
   );
+  it("clears the previous setup log when a retry fails before running a command", async () => {
+    await project({ version: 1, setup: "echo 'old attempt output'\nexit 1" });
+    await prepareLocalEnvironment(workspaceId, root);
+    const logPath = setupFile(workspaceId, "log");
+    expect(fs.readFileSync(logPath, "utf8")).toContain("old attempt output");
+
+    await project({ version: 1, setup: "true", requiredEnv: ["MISSING_SETUP_TOKEN"] });
+    await prepareLocalEnvironment(workspaceId, root);
+    expect(row()).toMatchObject({
+      setup_status: "failed",
+      error_message: "Add the missing local environment variables: MISSING_SETUP_TOKEN",
+    });
+    expect(fs.existsSync(logPath)).toBe(false);
+  });
+  it("resets the 5-minute idle timeout on stdout and stderr output", async () => {
+    const tickScript = `node -e '
+      const fs = require("node:fs");
+      let step = 0;
+      const emit = (stream) => { stream.write("tick-" + step + "\\n"); step++; };
+      emit(process.stdout);
+      setInterval(() => {
+        if (fs.existsSync("done")) process.exit(0);
+        if (fs.existsSync("go-stdout-" + step)) emit(process.stdout);
+        if (fs.existsSync("go-stderr-" + step)) emit(process.stderr);
+      }, 10);
+    '`;
+    const logPath = setupFile(workspaceId, "log");
+    const waitForTick = (n: number) =>
+      vi.waitFor(() => {
+        expect(fs.existsSync(logPath) ? fs.readFileSync(logPath, "utf8") : "").toContain(
+          `tick-${n}\n`
+        );
+      });
+
+    await project({ version: 1, setup: tickScript });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const slow = prepareLocalEnvironment(workspaceId, root);
+      await waitForTick(0);
+      vi.advanceTimersByTime(4 * 60_000);
+      fs.writeFileSync(path.join(root, "go-stdout-1"), "");
+      await waitForTick(1);
+      vi.advanceTimersByTime(4 * 60_000);
+      fs.writeFileSync(path.join(root, "go-stderr-2"), "");
+      await waitForTick(2);
+      vi.advanceTimersByTime(4 * 60_000);
+      expect(row().setup_status).toBe("running");
+      fs.writeFileSync(path.join(root, "done"), "");
+      await slow;
+      expect(row().setup_status).toBe("completed");
+    } finally {
+      vi.useRealTimers();
+      await stopWorkspaceSetup(workspaceId);
+    }
+  });
+  it("stops a noisy setup at the 30-minute ceiling", async () => {
+    const tickScript = `node -e '
+      const fs = require("node:fs");
+      let step = 0;
+      const emit = () => { process.stdout.write("tick-" + step + "\\n"); step++; };
+      emit();
+      setInterval(() => {
+        if (fs.existsSync("go-" + step)) emit();
+      }, 10);
+    '`;
+    const logPath = setupFile(workspaceId, "log");
+    const waitForTick = (n: number) =>
+      vi.waitFor(() => {
+        expect(fs.existsSync(logPath) ? fs.readFileSync(logPath, "utf8") : "").toContain(
+          `tick-${n}\n`
+        );
+      });
+
+    await project({ version: 1, setup: tickScript });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const runaway = prepareLocalEnvironment(workspaceId, root);
+      await waitForTick(0);
+      for (let i = 1; i <= 7; i++) {
+        vi.advanceTimersByTime(4 * 60_000);
+        fs.writeFileSync(path.join(root, `go-${i}`), "");
+        await waitForTick(i);
+      }
+      vi.advanceTimersByTime(2 * 60_000);
+      await runaway;
+      expect(row()).toMatchObject({
+        setup_status: "failed",
+        error_message: "Setup timed out after 30 minutes.",
+      });
+    } finally {
+      vi.useRealTimers();
+      await stopWorkspaceSetup(workspaceId);
+    }
+  });
   it("stops the setup shell and its descendant when the log stream fails", async () => {
     let shellPid: number | undefined;
     let childPid: number | undefined;
