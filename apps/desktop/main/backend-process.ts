@@ -106,8 +106,8 @@ function findDevNode(...searchPaths: string[]): string {
   }
   throw new Error(
     "The dev backend runs on Node.js, and no `node` is on the PATH. " +
-      "Install Node 22 (brew install node@22 && brew link --overwrite --force node@22, " +
-      "or a version manager that reads .node-version), then run `bun run dev` again. " +
+      "Install Node 22 or newer (brew install node, or a version manager that reads " +
+      ".node-version), then run `bun run dev` again. " +
       "`bun run doctor` checks the rest."
   );
 }
@@ -204,8 +204,8 @@ export async function spawnBackend(hooks: BackendSpawnHooks = {}): Promise<{ por
     sharedEnv.NODE_ENV = "production";
   }
   // Packaged: the bundled deus-runtime. Dev: the backend runs on the system
-  // Node, as `bun run dev:web` and the tests do, so the native modules are
-  // built once, for that Node (`bun run native:node`), never for Electron.
+  // Node, as `bun run dev:web` and the tests do, so native modules load under
+  // Node (`bun run native:node` checks them), never under Electron.
   // That is the terminal's `node`, so the PATH the app started with is
   // searched first: the login shell's PATH (shell sync) may put another Node
   // ahead. An app started from Finder has none there and uses the synced PATH.

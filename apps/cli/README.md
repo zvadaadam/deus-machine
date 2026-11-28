@@ -75,7 +75,7 @@ Shows a QR code and a text code. Open [app.deusmachine.ai](https://app.deusmachi
 ## Docker
 
 ```dockerfile
-FROM node:20-slim
+FROM node:22-slim
 RUN npm install -g deus-machine
 EXPOSE 3000
 CMD ["deus", "start"]

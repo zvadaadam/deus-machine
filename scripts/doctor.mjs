@@ -29,16 +29,18 @@ function check(level, name, ok, detail, fix) {
 }
 
 // ── Required ────────────────────────────────────────────────────────────
+// The native modules are Node-API prebuilds, so any Node from the pinned
+// major on loads them; CI runs the pinned one.
 const nodeVersion = out("node", ["--version"]);
-const nodeMajor = nodeVersion?.replace(/^v/, "").split(".")[0];
+const nodeMajor = Number(nodeVersion?.replace(/^v/, "").split(".")[0]);
 check(
   "required",
-  `Node ${wantNodeMajor}.x`,
-  nodeMajor === wantNodeMajor,
-  nodeVersion ?? "not found",
-  `better-sqlite3 and node-pty are compiled against Node ${wantNodeMajor}. ` +
-    `Install it (brew install node@${wantNodeMajor} && brew link --overwrite --force node@${wantNodeMajor}) ` +
-    "or use a version manager that reads .node-version (fnm, mise)."
+  `Node ${wantNodeMajor} or newer`,
+  nodeMajor >= Number(wantNodeMajor),
+  nodeVersion
+    ? `${nodeVersion}${nodeMajor > Number(wantNodeMajor) ? ` (CI runs ${wantNodeMajor})` : ""}`
+    : "not found",
+  `Install Node ${wantNodeMajor} or newer (brew install node, or a version manager that reads .node-version such as fnm/mise).`
 );
 
 const bunVersion = out("bun", ["--version"]);
@@ -120,7 +122,7 @@ check(
   existsSync(join(rootDir, "node_modules", "electron", "path.txt")),
   existsSync(join(rootDir, "node_modules", "electron", "path.txt"))
     ? "present"
-    : "missing (interrupted install)",
+    : "not downloaded yet (bun run dev downloads it)",
   "bun run electron:install"
 );
 

@@ -20,7 +20,7 @@ import { runGit } from "@shared/lib/git-process";
 import { cloudAccount, cloudOrg, requireCloudOrg } from "./agent/cloud/config";
 import { getCloudEnvironmentInfo } from "./cloud-environment.service";
 import { createBackendChildEnv } from "@shared/lib/child-env";
-import { SETUP_INTERRUPTED, SETUP_LOG_SUFFIX, setupFile } from "./setup-status";
+import { clearSetupLog, SETUP_INTERRUPTED, SETUP_LOG_SUFFIX, setupFile } from "./setup-status";
 import { setSetupStatus } from "./workspace-lifecycle";
 import type { WorkspaceSetup } from "./agent/workspace-context";
 import type { WorkspaceWithDetailsRow } from "../db";
@@ -211,6 +211,8 @@ export async function prepareLocalEnvironment(
   const { signal } = run.controller;
   const current = () => runs.get(workspaceId) === run;
   try {
+    // Retire any previous attempt's log before announcing `running` so a retry never shows stale output.
+    clearSetupLog(workspaceId);
     setSetupStatus(workspaceId, "running");
     const { project } = await readLocalProjectEnvironment(directory, repoUrl);
     signal.throwIfAborted();
@@ -259,6 +261,16 @@ async function setupLogTail(logPath: string): Promise<string | null> {
   }
 }
 
+const SETUP_IDLE_TIMEOUT_MS = 5 * 60_000;
+const SETUP_MAX_TIMEOUT_MS = 30 * 60_000;
+
+type SetupTimeoutKind = "idle-timeout" | "max-timeout";
+
+const TIMEOUT_MESSAGE: Record<SetupTimeoutKind, string> = {
+  "idle-timeout": "Setup timed out after 5 minutes without output.",
+  "max-timeout": "Setup timed out after 30 minutes.",
+};
+
 export async function runSetupCommand(
   workspaceId: string,
   command: string,
@@ -268,7 +280,7 @@ export async function runSetupCommand(
 ): Promise<void> {
   if (processGroupsStopped()) throw new Error("Deus is closing.");
   const logPath = setupFile(workspaceId, "log");
-  type SetupExit = number | null | "timeout";
+  type SetupExit = number | null | SetupTimeoutKind;
   const result = await new Promise<SetupExit>((resolve, reject) => {
     const log = fs.createWriteStream(logPath);
     const child = spawn("/bin/sh", ["-ec", command], {
@@ -297,18 +309,27 @@ export async function runSetupCommand(
       }, 250);
     };
     signal?.addEventListener("abort", killProcessGroup, { once: true });
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      killProcessGroup();
-    }, 300_000);
+    let timedOut: SetupTimeoutKind | null = null;
     let settled = false;
+    const deadline = (ms: number, kind: SetupTimeoutKind) =>
+      setTimeout(() => {
+        timedOut ??= kind;
+        killProcessGroup();
+      }, ms);
+    const idle = deadline(SETUP_IDLE_TIMEOUT_MS, "idle-timeout");
+    const max = deadline(SETUP_MAX_TIMEOUT_MS, "max-timeout");
+    const refreshIdle = () => {
+      if (!settled && !timedOut) idle.refresh();
+    };
+    child.stdout.on("data", refreshIdle);
+    child.stderr.on("data", refreshIdle);
     const finish = (result: Error | SetupExit) => {
       if (settled) return;
       settled = true;
       signal?.removeEventListener("abort", killProcessGroup);
       untrack();
-      clearTimeout(timer);
+      clearTimeout(idle);
+      clearTimeout(max);
       if (result instanceof Error) reject(result);
       else resolve(finished(log).then(() => result));
       log.end();
@@ -322,14 +343,14 @@ export async function runSetupCommand(
       clearTimeout(drain);
       if (signal?.aborted) return finish(signal.reason);
       if (processGroupsStopped()) return finish(new Error(SETUP_INTERRUPTED));
-      finish(timedOut ? "timeout" : code);
+      finish(timedOut ?? code);
     });
   });
   if (result !== 0) {
     const detail = result === null ? null : await setupLogTail(logPath).catch(() => null);
     const message =
-      result === "timeout"
-        ? "Setup timed out after five minutes."
+      typeof result === "string"
+        ? TIMEOUT_MESSAGE[result]
         : `Setup exited with code ${result}.${detail ? "" : SETUP_LOG_SUFFIX}`;
     throw Object.assign(new Error(message), {
       detail,

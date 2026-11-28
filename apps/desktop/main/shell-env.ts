@@ -21,9 +21,9 @@ const execFileAsync = promisify(execFile);
 let launchPath: string | undefined;
 
 /**
- * The PATH the app was started with: the terminal's for `bun run dev` (whose
- * `node` the native modules were built for by `bun run native:node`), Finder's
- * minimal one otherwise. The current PATH when no sync has replaced it.
+ * The PATH the app was started with: the terminal's for `bun run dev` (the
+ * `node` `bun run native:node` checked), Finder's minimal one otherwise. The
+ * current PATH when no sync has replaced it.
  */
 export function getLaunchPath(): string {
   return launchPath ?? process.env.PATH ?? "";

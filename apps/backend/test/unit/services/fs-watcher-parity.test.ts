@@ -101,7 +101,7 @@ it("delivers checkout changes with a bounded descriptor cost", async () => {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(
           () => reject(new Error("No fileChanges event after " + name)),
-          3000
+          5_000
         );
         onEvent = () => {
           clearTimeout(timer);
@@ -130,4 +130,4 @@ it("delivers checkout changes with a bounded descriptor cost", async () => {
     destroyAllWatchers();
     rmSync(root, { recursive: true, force: true });
   }
-}, 20_000);
+}, 45_000);

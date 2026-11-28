@@ -312,7 +312,7 @@ bun run test:e2e:cloud
 ```
 
 The journeys run under `node --import tsx` (Playwright hangs under Bun); the Mac
-lane's backend needs `better-sqlite3` built for Node (`native:node`). Screenshots, the backend log and
+lane's backend loads `better-sqlite3` on Node (`native:node` checks it). Screenshots, the backend log and
 the run's database go to `.context/cloud-e2e/`. No sandbox, model, Deus Cloud
 or production service is involved, so this does not cover a live sandbox or
 the real platform's behaviour, only the app's side of its contract.

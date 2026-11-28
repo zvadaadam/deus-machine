@@ -56,6 +56,17 @@ export function defaultDatabasePathForEnv(env: NodeJS.ProcessEnv, devRoot?: stri
   });
 }
 
+/** A packaged desktop app must never inherit a test/lab shell's AGENT_ALLOW_AGENTLESS flag. */
+export function allowAgentlessForEnv(env: NodeJS.ProcessEnv = process.env): boolean {
+  const requested = env.AGENT_ALLOW_AGENTLESS === "1" || env.AGENT_ALLOW_AGENTLESS === "true";
+  if (!requested) return false;
+  if (env.DEUS_PACKAGED === "1") {
+    console.warn("Ignored inherited AGENT_ALLOW_AGENTLESS in packaged mode.");
+    return false;
+  }
+  return true;
+}
+
 /** Older installed versions passed their own runtime settings to agent shells. */
 export function clearInheritedPackagedEnv(env: NodeJS.ProcessEnv, cwd = process.cwd()): void {
   if (env.DEUS_PACKAGED !== "1") return;

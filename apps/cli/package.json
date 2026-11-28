@@ -33,7 +33,7 @@
   ],
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "os": [
     "darwin",
@@ -48,7 +48,7 @@
     "@napi-rs/canvas": "^0.1.97",
     "@sentry/node": "^10.40.0",
     "agent-browser": "^0.21.4",
-    "better-sqlite3": "^12.4.1",
+    "better-sqlite3": "^13.2.0",
     "node-pty": "^1.0.0",
     "ws": "^8.19.0"
   }

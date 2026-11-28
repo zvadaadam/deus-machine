@@ -81,7 +81,7 @@ export async function start(options: StartOptions): Promise<void> {
     blank();
     hint(
       devRoot
-        ? `Run ${c.cyan("bun run native:node")} from the monorepo root, then start again.`
+        ? `Run ${c.cyan("bun run setup")} from the monorepo root, then start again.`
         : `Reinstall Deus with ${c.cyan("npm install -g deus-machine")}, then start again.`
     );
     blank();

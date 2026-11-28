@@ -1,4 +1,7 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const desktopSmoke = "bun run smoke:packaged-desktop";
 export const groups = {
@@ -58,6 +61,18 @@ if (import.meta.main) {
   const args = process.argv.slice(2);
   if (args.length > 1 || (args.length && !Object.hasOwn(groups, args[0]))) {
     console.error(`Usage: bun run check [${Object.keys(groups).join(" | ")}]`);
+    process.exit(1);
+  }
+  const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
+  const wantBun = String(
+    JSON.parse(readFileSync(join(rootDir, "package.json"), "utf8")).packageManager ?? ""
+  ).replace(/^bun@/, "");
+  const actualBun = process.versions.bun;
+  if (wantBun && actualBun && actualBun !== wantBun) {
+    console.error(
+      `[check] Bun ${wantBun} is required (packageManager in package.json), but running ${actualBun}.\n` +
+        `  curl -fsSL https://bun.sh/install | bash -s bun-v${wantBun}`
+    );
     process.exit(1);
   }
 
